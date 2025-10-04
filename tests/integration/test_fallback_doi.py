@@ -112,6 +112,7 @@ def test_main_pubmed__without_fallback_csv(
 
     exit_code = get_document_data.main(
         [
+            "--mode",
             "pubmed",
             "--config",
             str(config_path),
@@ -132,7 +133,7 @@ def test_main_pubmed__without_fallback_csv(
         for level, event, payload in document_cli_logger.events
         if level == "info" and event == "document_pubmed_start"
     )
-    assert start_event["fallback_doi"]["value"] is False
+    assert start_event["fallback_doi_enabled"] is False
     assert any(
         event == "document_pubmed_done" for _level, event, _payload in document_cli_logger.events
     )
@@ -169,6 +170,7 @@ def test_main_pubmed__with_fallback_csv(
 
     exit_code = get_document_data.main(
         [
+            "--mode",
             "pubmed",
             "--config",
             str(config_path),
@@ -178,7 +180,8 @@ def test_main_pubmed__with_fallback_csv(
             str(output_path.parent),
             "--final-out",
             str(output_path),
-            "--fallback-doi-csv",
+            "--fallback-doi-enabled",
+            "--fallback-doi-path",
             str(fallback_csv),
         ]
     )
@@ -190,7 +193,7 @@ def test_main_pubmed__with_fallback_csv(
         for level, event, payload in document_cli_logger.events
         if level == "info" and event == "document_pubmed_start"
     )
-    assert start_event["fallback_doi"]["value"] is True
+    assert start_event["fallback_doi_enabled"] is True
 
 
 @pytest.mark.integration
@@ -225,6 +228,7 @@ def test_main_pubmed__skip_existing_conflict(
     monkeypatch.setattr(get_document_data, "normalize_documents", lambda frame: frame)
 
     args = [
+        "--mode",
         "pubmed",
         "--config",
         str(config_path),

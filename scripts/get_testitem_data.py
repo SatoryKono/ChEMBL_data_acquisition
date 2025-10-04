@@ -118,6 +118,9 @@ from library.testitem_pipeline import (
 from library.testitem_pipeline import catalog as pipeline_catalog
 from library.testitem_pipeline import pubchem as pipeline_pubchem
 
+
+configure_logger = cli.configure_logger
+
 LoadMoleculeHierarchyLookup = pipeline.LoadMoleculeHierarchyLookup
 load_molecule_hierarchy_lookup = pipeline.load_molecule_hierarchy_lookup
 attach_parent_molecule_ids = pipeline.attach_parent_molecule_ids

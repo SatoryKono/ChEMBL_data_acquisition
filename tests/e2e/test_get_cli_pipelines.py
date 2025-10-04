@@ -216,12 +216,14 @@ def test_get_document_run_all_success(
         return 0
 
     monkeypatch.setattr(get_document_data, "run_all", _stub_all)
+    monkeypatch.setitem(get_document_data.MODE_HANDLERS, "all", _stub_all)
 
     args = argparse.Namespace(
         input_csv=input_csv,
         output_csv=output_csv,
         skip_existing=False,
         force=False,
+        mode="all",
         command="all",
         func=_stub_all,
         timeout=None,
@@ -269,7 +271,7 @@ def test_get_document_run_missing_handler(
 
     assert rc == 1
     events = [event for _, event, _ in logger_stub.events]
-    assert "missing_subcommand_handler" in events
+    assert "unknown_mode" in events
 
 
 @pytest.mark.e2e
@@ -290,12 +292,14 @@ def test_get_document_run_all_failure(
         return 1
 
     monkeypatch.setattr(get_document_data, "run_all", _failing_all)
+    monkeypatch.setitem(get_document_data.MODE_HANDLERS, "all", _failing_all)
 
     args = argparse.Namespace(
         input_csv=input_csv,
         output_csv=output_csv,
         skip_existing=False,
         force=False,
+        mode="all",
         command="all",
         func=_failing_all,
     )

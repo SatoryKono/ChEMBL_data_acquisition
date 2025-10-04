@@ -71,12 +71,13 @@ def _stub_logging(tmp_path: Path) -> Callable[[object], object]:
 @pytest.mark.unit
 def test_build_parser__pubmed_defaults() -> None:
     parser, _log_cfg = get_document_data.build_parser()
-    args = parser.parse_args(["pubmed"])
+    args = parser.parse_args(["--mode", "pubmed"])
 
-    assert args.command == "pubmed"
+    assert args.mode == "pubmed"
     assert args.batch_size == 100
     assert args.limit is None
-    assert args.fallback_doi_csv is None
+    assert args.fallback_doi_path is None
+    assert args.fallback_doi_enabled is False
     assert args.offset == 0
 
 
@@ -94,6 +95,7 @@ def test_main__cli_overrides_config(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     with _stub_logging(tmp_path):
         exit_code = get_document_data.main(
             [
+                "--mode",
                 "pubmed",
                 "--config",
                 str(config_path),
@@ -129,6 +131,7 @@ def test_main__config_overrides_defaults(
     with _stub_logging(tmp_path):
         exit_code = get_document_data.main(
             [
+                "--mode",
                 "pubmed",
                 "--config",
                 str(config_path),
@@ -171,7 +174,7 @@ def test_main__negative_values_raise(
     monkeypatch.setattr(get_document_data, "run_cli_command", _fail)
 
     with pytest.raises(SystemExit) as excinfo:
-        get_document_data.main(["pubmed", option, value])
+        get_document_data.main(["--mode", "pubmed", option, value])
 
     assert excinfo.value.code == 2
     assert called is False

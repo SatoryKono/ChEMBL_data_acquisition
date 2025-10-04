@@ -1862,6 +1862,18 @@
           "title": "Data Dir",
           "type": "string"
         },
+        "chunk_size": {
+          "default": 100,
+          "minimum": 1,
+          "title": "Chunk Size",
+          "type": "integer"
+        },
+        "timeout": {
+          "default": 30.0,
+          "exclusiveMinimum": 0,
+          "title": "Timeout",
+          "type": "number"
+        },
         "limit": {
           "anyOf": [
             {
@@ -1880,12 +1892,6 @@
           "minimum": 0,
           "title": "Offset",
           "type": "integer"
-        },
-        "data_dir": {
-          "default": "../config/dictionary/_target/_uniprot",
-          "format": "path",
-          "title": "Data Dir",
-          "type": "string"
         }
       },
       "title": "TargetUniprotCfg",

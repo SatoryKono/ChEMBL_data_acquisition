@@ -151,7 +151,7 @@ def test_prepare_export_frame__renames_and_coalesces() -> None:
 
 def test_run__skip_existing(cfg: Config, tmp_path: Path, logger_stub: _MemoryLogger, monkeypatch: pytest.MonkeyPatch) -> None:
     input_csv = tmp_path / "input.csv"
-    input_csv.write_text("id\n1\n", encoding="utf-8")
+    input_csv.write_text("document_chembl_id\nCHEMBL1\n", encoding="utf-8")
     output_csv = tmp_path / "output.csv"
     output_csv.write_text("existing", encoding="utf-8")
 
@@ -183,7 +183,7 @@ def test_run__skip_existing(cfg: Config, tmp_path: Path, logger_stub: _MemoryLog
 
 def test_run__missing_handler_logs_error(cfg: Config, tmp_path: Path, logger_stub: _MemoryLogger) -> None:
     input_csv = tmp_path / "input.csv"
-    input_csv.write_text("id\n1\n", encoding="utf-8")
+    input_csv.write_text("document_chembl_id\nCHEMBL1\n", encoding="utf-8")
     output_csv = tmp_path / "output.csv"
 
     args = argparse.Namespace(
@@ -191,6 +191,7 @@ def test_run__missing_handler_logs_error(cfg: Config, tmp_path: Path, logger_stu
         output_csv=output_csv,
         skip_existing=False,
         force=False,
+        mode=None,
         command="all",
         func=None,
         timeout=None,
@@ -199,16 +200,12 @@ def test_run__missing_handler_logs_error(cfg: Config, tmp_path: Path, logger_stu
     exit_code = get_document_data.run(cfg, args)
 
     assert exit_code == 1
-    assert (
-        "error",
-        "missing_subcommand_handler",
-        {"command": "all"},
-    ) in logger_stub.events
+    assert ("error", "unknown_mode", {"mode": None}) in logger_stub.events
 
 
 def test_run__propagates_timeout(cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     input_csv = tmp_path / "input.csv"
-    input_csv.write_text("id\n1\n", encoding="utf-8")
+    input_csv.write_text("document_chembl_id\nCHEMBL1\n", encoding="utf-8")
     output_csv = tmp_path / "output.csv"
 
     called: list[float | None] = []
@@ -218,12 +215,14 @@ def test_run__propagates_timeout(cfg: Config, tmp_path: Path, monkeypatch: pytes
         return 0
 
     monkeypatch.setattr(get_document_data, "run_all", fake_run)
+    monkeypatch.setitem(get_document_data.MODE_HANDLERS, "all", fake_run)
 
     args = argparse.Namespace(
         input_csv=input_csv,
         output_csv=output_csv,
         skip_existing=False,
         force=False,
+        mode="all",
         command="all",
         func=fake_run,
         timeout=42.5,
