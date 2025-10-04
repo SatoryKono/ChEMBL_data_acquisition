@@ -19,6 +19,8 @@ import shutil
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+import inspect
+import math
 from functools import partial
 from itertools import islice
 from pathlib import Path
@@ -112,6 +114,28 @@ from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
 
 
+try:
+    from library.postprocessing.target import process_targets as _process_targets_impl
+except ImportError as _process_targets_exc:  # pragma: no cover - compatibility
+    _process_targets_impl = None
+    for _fallback_name in ("process_targest", "process_target"):  # legacy typo fallback
+        candidate = getattr(target_pp, _fallback_name, None)
+        if callable(candidate):
+            _process_targets_impl = candidate
+            break
+    if _process_targets_impl is None:  # pragma: no cover - defensive guard
+        raise _process_targets_exc
+else:  # pragma: no cover - compatibility bridge
+    setattr(target_pp, "process_targets", _process_targets_impl)
+
+try:
+    _TARGET_PROCESS_SIGNATURE = inspect.signature(_process_targets_impl)
+except (TypeError, ValueError):  # pragma: no cover - unexpected callable
+    _TARGET_PROCESS_PARAMETERS: set[str] = set()
+else:
+    _TARGET_PROCESS_PARAMETERS = set(_TARGET_PROCESS_SIGNATURE.parameters)
+
+
 @contextmanager
 def _override_cli_meta_writer() -> Iterator[None]:
     """Temporarily patch CLI metadata writer used by ``run_pipeline``."""
@@ -198,6 +222,100 @@ class ParameterLogEntry:
     name: str
     value: object
     source: str
+
+
+@dataclass
+class IsoformPostprocessContext:
+    args: argparse.Namespace | None = None
+    http_requests: int | None = None
+
+
+def _bool_from_cli(value: object) -> bool | None:
+    """Return boolean representation for CLI flags, tolerating ``None``."""
+
+    if value in (None, argparse.SUPPRESS):
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"", "none", "null"}:
+            return None
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off"}:
+            return False
+    return bool(value)
+
+
+def _postprocess_isoform_export(
+    source: Path,
+    *,
+    cfg: Config,
+    context: IsoformPostprocessContext | None = None,
+    ambiguous_classifications: int | None = None,
+) -> Path | None:
+    """Invoke the isoform post-processing helper with CLI/config overrides."""
+
+    if _process_targets_impl is None:
+        return None
+
+    kwargs: dict[str, Any] = {}
+    if "sep" in _TARGET_PROCESS_PARAMETERS:
+        kwargs["sep"] = cfg.io.csv_sep
+
+    args = context.args if context else None
+    isoform_output_dir: Path | None = None
+    if args is not None:
+        for attr in ("isoform_out", "isoform_output_dir"):
+            candidate = getattr(args, attr, None)
+            if candidate not in (None, argparse.SUPPRESS):
+                isoform_output_dir = Path(candidate)
+                break
+    if isoform_output_dir is not None and "output_dir" in _TARGET_PROCESS_PARAMETERS:
+        kwargs["output_dir"] = isoform_output_dir
+
+    verbose_flag: bool | None = None
+    if args is not None:
+        verbose_flag = _bool_from_cli(getattr(args, "verbose", None))
+    if verbose_flag is None:
+        log_cfg = getattr(cfg.system, "log", None)
+        level_value = getattr(log_cfg, "level", "") if log_cfg is not None else ""
+        if isinstance(level_value, str) and level_value:
+            verbose_flag = level_value.upper() == "DEBUG"
+    if verbose_flag is not None and "verbose" in _TARGET_PROCESS_PARAMETERS:
+        kwargs["verbose"] = verbose_flag
+
+    offline_flag: bool | None = None
+    if args is not None:
+        offline_flag = _bool_from_cli(getattr(args, "offline", None))
+    if offline_flag is None:
+        offline_flag = _bool_from_cli(getattr(cfg, "offline", None))
+    if offline_flag is None:
+        offline_flag = _bool_from_cli(getattr(cfg.system, "offline", None))
+    if offline_flag is not None and "offline" in _TARGET_PROCESS_PARAMETERS:
+        kwargs["offline"] = offline_flag
+
+    try:
+        isoform_path = Path(_process_targets_impl(str(source), **kwargs))
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.exception(
+            "target_isoform_postprocess_failed",
+            path=str(source),
+            error=str(exc),
+        )
+        return None
+
+    payload: dict[str, Any] = {
+        "path": str(isoform_path),
+        "source": str(source),
+    }
+    if context and context.http_requests is not None:
+        payload["http_requests"] = context.http_requests
+    if ambiguous_classifications is not None:
+        payload["ambiguous_classifications"] = ambiguous_classifications
+    logger.info("target_isoform_postprocess_done", **payload)
+    return isoform_path
 
 
 def _resolve_parameter(
@@ -1460,7 +1578,11 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             encoding=cfg.io.csv_encoding,
             key_cols=["uniprot_id"],
         )
-        target_pp.process_targets(str(csv_path), verbose=True)
+        _postprocess_isoform_export(
+            Path(csv_path),
+            cfg=cfg,
+            context=IsoformPostprocessContext(args=args),
+        )
         rows_dropped = max(rows_total - rows_kept, 0)
         stats: Stats = {
             "rows_total": rows_total,
@@ -1613,11 +1735,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     fetched_rows_total = 0
     raw_dump_rows_total = 0
+    chembl_http_requests = 0
 
     if not normalize_at_export:
 
         def _raw_fetcher() -> Iterator[pd.DataFrame]:
-            nonlocal fetched_rows_total, raw_dump_rows_total
+            nonlocal fetched_rows_total, raw_dump_rows_total, chembl_http_requests
             try:
                 with ChemblClient(
                     cfg.api,
@@ -1633,6 +1756,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         chunk_size=cfg.target.chembl.chunk_size,
                         timeout=cfg.target.chembl.timeout,
                     ):
+                        chembl_http_requests += 1
                         raw_dump_rows_total += len(raw_chunk)
                         fetched_rows_total += len(parsed_chunk)
                         if raw_chunk.empty:
@@ -1697,6 +1821,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 )
                 return 1
 
+        _postprocess_isoform_export(
+            destination,
+            cfg=cfg,
+            context=IsoformPostprocessContext(
+                args=args,
+                http_requests=chembl_http_requests,
+            ),
+        )
         if limit is not None:
             logger.info("process_limit", limit=processed_ids)
         logger.info(
@@ -1779,7 +1911,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     def fetcher() -> Iterator[pd.DataFrame]:
 
-        nonlocal fetched_rows_total, raw_dump_rows_total
+        nonlocal fetched_rows_total, raw_dump_rows_total, chembl_http_requests
 
         try:
             with ChemblClient(
@@ -1796,6 +1928,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     chunk_size=cfg.target.chembl.chunk_size,
                     timeout=cfg.target.chembl.timeout,
                 ):
+                    chembl_http_requests += 1
                     raw_dump_rows_total += len(raw_chunk)
                     try:
                         raw_dump_writer.write(raw_chunk)
@@ -1845,7 +1978,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 final_path = final_output
             else:
                 final_path = raw_path
-            target_pp.process_targets(str(final_path), verbose=True)
+            _postprocess_isoform_export(
+                final_path,
+                cfg=cfg,
+                context=IsoformPostprocessContext(
+                    args=args,
+                    http_requests=chembl_http_requests,
+                ),
+            )
             return final_path
 
         frames: list[pd.DataFrame] = []
@@ -1902,7 +2042,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 key_cols=resolved_keys or None,
                 col_order=TARGETS_COLUMN_ORDER,
             )
-        target_pp.process_targets(str(final_path), verbose=True)
+        _postprocess_isoform_export(
+            final_path,
+            cfg=cfg,
+            context=IsoformPostprocessContext(
+                args=args,
+                http_requests=chembl_http_requests,
+            ),
+        )
         return final_path
 
     failure_path = normalized_output.with_name(
@@ -2832,6 +2979,7 @@ def validate_and_write(
     id_cols: Sequence[str] | None = None,
     raw_format: str = "csv",
     reindex_raw: bool = True,
+    postprocess_context: IsoformPostprocessContext | None = None,
 ) -> int:
     """Normalise, validate and export the target table.
 
@@ -3001,7 +3149,26 @@ def validate_and_write(
         col_order=TARGETS_COLUMN_ORDER,
         key_cols=key_columns or None,
     )
-    target_pp.process_targets(str(normalized_output), verbose=True)
+    ambiguous_count = 0
+    if "protein_class_pred_rule_id" in final_df.columns:
+        ambiguous_count = int(
+            final_df["protein_class_pred_rule_id"].fillna("").astype(str).str.lower().eq("ambiguous").sum()
+        )
+    http_requests = postprocess_context.http_requests if postprocess_context else None
+    if http_requests is None:
+        chembl_cfg = getattr(getattr(cfg, "target", None), "chembl", None)
+        chunk_value = getattr(chembl_cfg, "chunk_size", 0) if chembl_cfg is not None else 0
+        if chunk_value:
+            http_requests = int(math.ceil(max(input_rows, 0) / chunk_value))
+    _postprocess_isoform_export(
+        normalized_output,
+        cfg=cfg,
+        context=IsoformPostprocessContext(
+            args=postprocess_context.args if postprocess_context else None,
+            http_requests=http_requests,
+        ),
+        ambiguous_classifications=ambiguous_count,
+    )
     if final_df.empty:
         logger.info(
             "quality_report_skipped",
@@ -3112,6 +3279,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             id_cols=key_columns,
             raw_format=raw_format,
             reindex_raw=reindex_raw,
+            postprocess_context=IsoformPostprocessContext(args=args),
         )
         return exit_code
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
