@@ -9,6 +9,10 @@ The test suite is organised around the key scenarios of the ChEMBL data acquisit
 
 Shared fixtures live in `tests/conftest.py`. They configure a deterministic environment, disable outbound HTTP calls and expose helpers such as `sample_input_csv` and `snapshot_resource`.
 
+## Post-processing helper coverage
+
+`tests/postprocessing/test_target_postprocessing.py` provides deterministic unit tests for the target isoform post-processing helpers. The scenarios cover CSV decoding fallbacks, normalisation rules, synonym tokenisation, duplicate elimination and the structure of the exported tables, ensuring the Power Query parity logic stays regression-free.
+
 ## Integration enrichment checklist
 
 - [x] PubChem augmentation: cache hits/misses, polymer handling and TTL expiry (`tests/integration/test_pubchem_augmentation.py`).
