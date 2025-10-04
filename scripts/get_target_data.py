@@ -24,6 +24,8 @@ from itertools import islice
 from pathlib import Path
 from typing import IO, Any, cast
 
+import inspect
+
 from datetime import datetime, timezone
 
 try:
@@ -84,6 +86,18 @@ from library.pipelines.target import protein_classification as pc
 from library.pipelines.target import postprocessing as tp
 from library.pipelines.target.defaults import ModeDefaults, TARGET_MODE_DEFAULTS
 from library.postprocessing import target as target_pp
+
+try:
+    from library.postprocessing.target import process_targets as _process_targets
+except ImportError as exc:  # pragma: no cover - compatibility shim
+    try:
+        from library.postprocessing.target import process_target as _process_targets  # type: ignore[attr-defined]
+    except ImportError:
+        raise exc
+
+_PROCESS_TARGETS_SIGNATURE = inspect.signature(_process_targets)
+if not hasattr(target_pp, "process_targets"):
+    target_pp.process_targets = _process_targets  # type: ignore[attr-defined]
 from library.clients import ChemblClient
 from library.common.rate_limiter import get_global_limiter
 from library.cli_utils import PipelineError, run_cli_command, run_pipeline
@@ -152,6 +166,31 @@ DEFAULT_OUTPUT_STEM = "targets"
 RAW_SUFFIX = "_raw"
 NORMALIZED_SUFFIX = "_normalized"
 COMMAND_CHOICES: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
+
+
+def _run_target_postprocessing(
+    source: Path,
+    *,
+    cfg: Config | None = None,
+    output_dir: Path | None = None,
+    verbose: bool | None = None,
+    offline: bool | None = None,
+) -> Path:
+    """Invoke ``process_targets`` with backwards-compatible arguments."""
+
+    kwargs: dict[str, object] = {}
+    parameters = _PROCESS_TARGETS_SIGNATURE.parameters
+    if "output_dir" in parameters and output_dir is not None:
+        kwargs["output_dir"] = output_dir
+    if "sep" in parameters:
+        separator = cfg.io.csv_sep if cfg is not None else ","
+        kwargs.setdefault("sep", separator)
+    if "verbose" in parameters and verbose is not None:
+        kwargs["verbose"] = verbose
+    if "offline" in parameters and offline is not None:
+        kwargs["offline"] = offline
+    result = _process_targets(source, **kwargs)
+    return Path(result)
 
 
 class StoreWithSource(argparse.Action):
@@ -1460,7 +1499,19 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             encoding=cfg.io.csv_encoding,
             key_cols=["uniprot_id"],
         )
-        target_pp.process_targets(str(csv_path), verbose=True)
+        verbose_flag = getattr(args, "postprocess_verbose", getattr(args, "verbose", None))
+        offline_flag = getattr(args, "offline", None)
+        isoform_path = _run_target_postprocessing(
+            csv_path,
+            cfg=cfg,
+            verbose=verbose_flag if isinstance(verbose_flag, bool) else None,
+            offline=offline_flag if isinstance(offline_flag, bool) else None,
+        )
+        logger.info(
+            "target_isoform_postprocess_done",
+            source=str(csv_path),
+            isoform=str(isoform_path),
+        )
         rows_dropped = max(rows_total - rows_kept, 0)
         stats: Stats = {
             "rows_total": rows_total,
@@ -1613,11 +1664,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     fetched_rows_total = 0
     raw_dump_rows_total = 0
+    http_requests_total = 0
 
     if not normalize_at_export:
 
         def _raw_fetcher() -> Iterator[pd.DataFrame]:
-            nonlocal fetched_rows_total, raw_dump_rows_total
+            nonlocal fetched_rows_total, raw_dump_rows_total, http_requests_total
             try:
                 with ChemblClient(
                     cfg.api,
@@ -1633,6 +1685,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         chunk_size=cfg.target.chembl.chunk_size,
                         timeout=cfg.target.chembl.timeout,
                     ):
+                        http_requests_total += 1
                         raw_dump_rows_total += len(raw_chunk)
                         fetched_rows_total += len(parsed_chunk)
                         if raw_chunk.empty:
@@ -1704,6 +1757,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             output=str(destination),
             rows=raw_dump_rows_total,
         )
+        logger.info("chembl_http_requests", total=http_requests_total)
         return 0
 
 
@@ -1779,7 +1833,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     def fetcher() -> Iterator[pd.DataFrame]:
 
-        nonlocal fetched_rows_total, raw_dump_rows_total
+        nonlocal fetched_rows_total, raw_dump_rows_total, http_requests_total
 
         try:
             with ChemblClient(
@@ -1796,6 +1850,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     chunk_size=cfg.target.chembl.chunk_size,
                     timeout=cfg.target.chembl.timeout,
                 ):
+                    http_requests_total += 1
                     raw_dump_rows_total += len(raw_chunk)
                     try:
                         raw_dump_writer.write(raw_chunk)
@@ -1828,6 +1883,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     ) -> Path:
         resolved_keys = list(key_cols) if key_cols else key_columns
         column_order: Sequence[str] | None = col_order if reindex_raw else None
+        verbose_flag = getattr(
+            args, "postprocess_verbose", getattr(args, "verbose", None)
+        )
+        offline_flag = getattr(args, "offline", None)
 
         if raw_format == "csv" and not normalize_at_export:
             raw_path = io.write_csv(
@@ -1845,7 +1904,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 final_path = final_output
             else:
                 final_path = raw_path
-            target_pp.process_targets(str(final_path), verbose=True)
+            isoform_path = _run_target_postprocessing(
+                final_path,
+                cfg=cfg,
+                verbose=verbose_flag if isinstance(verbose_flag, bool) else None,
+                offline=offline_flag if isinstance(offline_flag, bool) else None,
+            )
+            logger.info(
+                "target_isoform_postprocess_done",
+                source=str(final_path),
+                isoform=str(isoform_path),
+            )
             return final_path
 
         frames: list[pd.DataFrame] = []
@@ -1902,7 +1971,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 key_cols=resolved_keys or None,
                 col_order=TARGETS_COLUMN_ORDER,
             )
-        target_pp.process_targets(str(final_path), verbose=True)
+        isoform_path = _run_target_postprocessing(
+            final_path,
+            cfg=cfg,
+            verbose=verbose_flag if isinstance(verbose_flag, bool) else None,
+            offline=offline_flag if isinstance(offline_flag, bool) else None,
+        )
+        logger.info(
+            "target_isoform_postprocess_done",
+            source=str(final_path),
+            isoform=str(isoform_path),
+        )
         return final_path
 
     failure_path = normalized_output.with_name(
@@ -1971,6 +2050,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         "chembl_placeholder_replacements",
         total=placeholder_replacements,
     )
+    logger.info("chembl_http_requests", total=http_requests_total)
 
     return exit_code
 
@@ -2832,6 +2912,8 @@ def validate_and_write(
     id_cols: Sequence[str] | None = None,
     raw_format: str = "csv",
     reindex_raw: bool = True,
+    postprocess_verbose: bool | None = None,
+    postprocess_offline: bool | None = None,
 ) -> int:
     """Normalise, validate and export the target table.
 
@@ -2992,6 +3074,20 @@ def validate_and_write(
     before_dedup = len(final_df)
     final_df = final_df.drop_duplicates()
     logger.info("deduplicated_rows", dropped=before_dedup - len(final_df))
+    ambiguous_count = 0
+    if "protein_class_pred_rule_id" in final_df.columns:
+        rule_series = (
+            final_df["protein_class_pred_rule_id"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+        )
+        ambiguous_count = int(rule_series.isin({"ambiguous", "-", "n/a"}).sum())
+    logger.info(
+        "protein_classification_ambiguous",
+        count=ambiguous_count,
+        total=len(final_df),
+    )
     io.write_csv(
         final_df,
         normalized_output,
@@ -3001,7 +3097,17 @@ def validate_and_write(
         col_order=TARGETS_COLUMN_ORDER,
         key_cols=key_columns or None,
     )
-    target_pp.process_targets(str(normalized_output), verbose=True)
+    isoform_path = _run_target_postprocessing(
+        normalized_output,
+        cfg=cfg,
+        verbose=postprocess_verbose,
+        offline=postprocess_offline,
+    )
+    logger.info(
+        "target_isoform_postprocess_done",
+        source=str(normalized_output),
+        isoform=str(isoform_path),
+    )
     if final_df.empty:
         logger.info(
             "quality_report_skipped",
@@ -3104,6 +3210,16 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
         merged = merge_results(combined_df, iuphar_df, cfg)
+        cfg_verbose = getattr(cfg.target.all, "postprocess_verbose", None)
+        cfg_offline = getattr(cfg.target.all, "postprocess_offline", None)
+        cli_verbose = getattr(args, "postprocess_verbose", getattr(args, "verbose", None))
+        cli_offline = getattr(args, "offline", None)
+        verbose_flag = cli_verbose if isinstance(cli_verbose, bool) else None
+        offline_flag = cli_offline if isinstance(cli_offline, bool) else None
+        if verbose_flag is None and isinstance(cfg_verbose, bool):
+            verbose_flag = cfg_verbose
+        if offline_flag is None and isinstance(cfg_offline, bool):
+            offline_flag = cfg_offline
         exit_code = validate_and_write(
             merged,
             final_output,
@@ -3112,6 +3228,8 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             id_cols=key_columns,
             raw_format=raw_format,
             reindex_raw=reindex_raw,
+            postprocess_verbose=verbose_flag,
+            postprocess_offline=offline_flag,
         )
         return exit_code
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
