@@ -113,8 +113,15 @@ def _distinct(values: Iterable[str]) -> list[str]:
 
 
 def _transform_reaction_ec_numbers(value: Any) -> list[str]:
-    if value is None or (isinstance(value, float) and pd.isna(value)):
+    if value is None or value is pd.NA:
         return []
+    try:
+        if isinstance(value, float) and pd.isna(value):
+            return []
+        if pd.isna(value):
+            return []
+    except (TypeError, ValueError):
+        pass
     text = str(value)
     parts = text.split("|")
     parts = _distinct(parts)
