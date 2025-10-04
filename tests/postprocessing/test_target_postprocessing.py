@@ -18,6 +18,12 @@ def test_split_pipes__removes_empty_segments() -> None:
 
 
 @pytest.mark.unit
+def test_matches_expected_input_name__accepts_suffixes() -> None:
+    assert target._matches_expected_input_name("targets_20251002_chembl.csv")
+    assert target._matches_expected_input_name("targets_20251002_chembl_normalized.csv")
+
+
+@pytest.mark.unit
 def test_make_triples__pads_shorter_sequences() -> None:
     triples = target._make_triples(
         names=["n1"],
@@ -208,6 +214,23 @@ def test_process_targets__accepts_normalized_targets_file(
     output_path = target.process_targets(str(working), verbose=False)
 
     assert output_path.name == "isoform.targets_20250101_normalized.csv"
+    result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
+    expected_frame = pd.read_csv(expected, dtype=str, keep_default_na=False)
+    pdt.assert_frame_equal(result, expected_frame)
+
+
+@pytest.mark.unit
+def test_process_targets__accepts_targets_file_with_suffix(
+    tmp_path: Path, snapshot_resource: Path
+) -> None:
+    source = snapshot_resource / "target_isoform_minimal.csv"
+    expected = snapshot_resource / "target_isoform_minimal_expected.csv"
+    working = tmp_path / "targets_20250101_chembl.csv"
+    shutil.copy(source, working)
+
+    output_path = target.process_targets(str(working), verbose=False)
+
+    assert output_path.name == "isoform.targets_20250101_chembl.csv"
     result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
     expected_frame = pd.read_csv(expected, dtype=str, keep_default_na=False)
     pdt.assert_frame_equal(result, expected_frame)
