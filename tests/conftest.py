@@ -7,7 +7,7 @@ import random
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable, Sequence
 
 import sys
 
@@ -116,6 +116,40 @@ def sample_input_csv(tmp_path: Path) -> Path:
 @pytest.fixture()
 def snapshot_resource() -> Path:
     return Path(__file__).parent / "resources"
+
+
+@pytest.fixture()
+def make_fallback_doi_csv(tmp_path: Path) -> Callable[..., Path]:
+    """Return a factory producing deterministic fallback DOI CSV files."""
+
+    def _factory(
+        rows: Iterable[tuple[str, str]],
+        *,
+        columns: Sequence[str] = ("PMID", "DOI"),
+        filename: str = "fallback_doi.csv",
+    ) -> Path:
+        path = tmp_path / filename
+        with path.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(list(columns))
+            for pmid, doi in rows:
+                writer.writerow([pmid, doi])
+        return path
+
+    return _factory
+
+
+@pytest.fixture()
+def fallback_doi_csv(
+    make_fallback_doi_csv: Callable[..., Path]
+) -> Path:
+    """Provide a default fallback DOI CSV used across tests."""
+
+    default_rows = (
+        ("123456", "10.1000/default-one"),
+        ("789012", "10.1000/default-two"),
+    )
+    return make_fallback_doi_csv(default_rows)
 
 
 @pytest.fixture()

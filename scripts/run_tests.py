@@ -17,6 +17,9 @@ RAW_REPORT_FILE = REPORTS_DIR / "pytest_raw_report.json"
 REPORT_FILE = REPORTS_DIR / "test_report.json"
 LOG_FILE = REPORTS_DIR / "test_run.log"
 SUMMARY_FILE = REPORTS_DIR / "test_summary.md"
+COVERAGE_DIR = REPORTS_DIR / "coverage"
+COVERAGE_XML = COVERAGE_DIR / "coverage.xml"
+COVERAGE_HTML = COVERAGE_DIR / "html"
 REPO_SLUG = "SatoryKono/ChEMBL_data_acquisition"
 
 PYTEST_COMMAND: tuple[str, ...] = (
@@ -27,6 +30,11 @@ PYTEST_COMMAND: tuple[str, ...] = (
     "--json-report-file",
     str(RAW_REPORT_FILE),
     "--durations=0",
+    "--cov=library",
+    "--cov=scripts",
+    "--cov-report=term",
+    f"--cov-report=xml:{COVERAGE_XML}",
+    f"--cov-report=html:{COVERAGE_HTML}",
     "-vv",
 )
 
@@ -35,6 +43,7 @@ def ensure_reports_directory() -> None:
     """Ensure the reports directory exists."""
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    COVERAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def run_pytest() -> int:
