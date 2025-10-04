@@ -17,6 +17,7 @@ from . import organism_classification
 from ...config import Config, IoCfg
 from ...common.csv_utils import write_csv_deterministic
 from ...common.log import logger
+from ...postprocessing import target as target_pp
 
 # Columns removed in the final export
 REMOVE_COLUMNS: list[str] = []
@@ -720,7 +721,7 @@ def finalise_file(
         phylum_col=phylum_col,
         class_col=class_col,
     )
-    write_csv_deterministic(
+    final_path = write_csv_deterministic(
         processed,
         output_path,
         col_order=list(processed.columns),
@@ -729,3 +730,5 @@ def finalise_file(
         encoding=encoding,
         cfg=cfg,
     )
+    if final_path.suffix.lower() == ".csv":
+        target_pp.process_targets(str(final_path), verbose=True)

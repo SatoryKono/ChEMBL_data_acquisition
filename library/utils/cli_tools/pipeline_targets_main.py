@@ -43,6 +43,7 @@ from library.pipelines.common import pipeline_metadata
 from library.pipelines.target.pipeline import run_pipeline
 from library.schemas import TargetsSchema
 from library.schemas.targets import TARGETS_COLUMN_ORDER
+from library.postprocessing import target as target_pp
 
 
 class PipelineConfig(BaseModel):
@@ -432,7 +433,7 @@ def _validate_and_write(
     path.parent.mkdir(parents=True, exist_ok=True)
     key_cols = resolved_key_cols
     col_order: Sequence[str] | None = TARGETS_COLUMN_ORDER if normalize else None
-    write_csv(
+    final_path = write_csv(
         _validated_stream(),
         path,
         cfg=cfg,
@@ -441,7 +442,9 @@ def _validate_and_write(
         key_cols=key_cols,
         col_order=col_order,
     )
-    return path
+    if final_path.suffix.lower() == ".csv":
+        target_pp.process_targets(str(final_path), verbose=True)
+    return final_path
 
 
 def _resolve_optional_output(
