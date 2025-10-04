@@ -58,7 +58,9 @@ from library.pipelines.common import (
 )
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 
-__all__ = ["ap", "main", "run", "run_chembl"]
+configure_logger = cli.configure_logger
+
+__all__ = ["ap", "configure_logger", "main", "run", "run_chembl"]
 
 
 DEFAULT_INPUT_NAME = "assay.csv"
