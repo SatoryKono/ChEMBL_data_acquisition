@@ -13,6 +13,7 @@ aliases are supported; see ``_ALIAS_MAP`` for the full list.
 
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 import re
