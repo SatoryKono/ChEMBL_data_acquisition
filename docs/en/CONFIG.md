@@ -1,149 +1,312 @@
-# Configuration Reference
+# Configuration reference
 
-This document provides a comprehensive reference for all configuration options used by the ChEMBL Data Acquisition utilities.
+The pipelines load configuration from three layers (lowest precedence first):
 
-## Configuration Layers
+1. Built-in defaults defined in [`library/config.py`](../library/config.py).
+2. YAML files (`config/config.yaml` plus optional overrides such as
+   `config/config.local.yaml`).
+3. Environment variables and CLI arguments.
 
-The configuration is resolved by stacking successive layers. Later layers override
-earlier ones. The resulting precedence is:
+Environment variables use the `CHEMBL_DA__SECTION__KEY` pattern, where nested
+keys are joined with double underscores. Short aliases exist for frequently used
+fields (see `_ALIAS_MAP` in `library/config.py`).
 
-1.  **Built-in defaults** defined by the Pydantic models in `library/config.py`.
-    They supply baseline values even when the YAML files omit a key.
-2.  **Configuration files** starting with the packaged `config/config.yaml` and
-    optionally extending it via `config/config.local.yaml`. Environment variables
-    prefixed with `CHEMBL_DA__` act as patches on top of the merged YAML data.
-3.  **CLI arguments** specified at runtime. These have the highest priority and
-    are typically accompanied by provenance metadata emitted through
-    `--print-config`.
+```bash
+# Example: increase the UniProt rate limit during a smoke run
+export CHEMBL_DA__SOURCES__UNIPROT__API__RPS=50
+export CHEMBL_DA_UNIPROT_RPS=50  # equivalent short alias
+```
 
-### YAML Configuration
+## YAML skeleton
 
-The primary configuration is driven by `config/config.yaml`. You can create a `config.local.yaml` file to store local overrides, which is useful for keeping personal settings (like API keys or different paths) separate from the version-controlled base configuration.
+```yaml
+sources:
+  chembl:
+    api:
+      chembl_base: https://www.ebi.ac.uk/chembl/api/data
+      user_agent: "chembl-da/1.0 (mailto:team@example.org)"
+    pipelines:
+      document:
+        pubmed:
+          column: PMID
+local:
+  io:
+    output_dir: "$CHEMBL_DA_BASE_PATH/output"
+  resources:
+    dictionary_dir: config/dictionary
+system:
+  log:
+    level: INFO
+```
 
-### Environment Variables
+Fields not listed inherit the defaults from `library/config.py`. Create a
+`config/config.local.yaml` file to keep environment-specific overrides outside
+version control.
 
-Any configuration key can be overridden using environment variables. The variable name is constructed by prefixing with `CHEMBL_DA__`, joining nested keys with a double underscore (`__`), and converting to uppercase.
+## Top-level sections
 
-**Example:**
-To override the logging level, you would set the following environment variable:
-`export CHEMBL_DA__SYSTEM__LOG__LEVEL=DEBUG`
+| Section | Description |
+|---------|-------------|
+| `sources` | Connection settings, rate limits and pipeline defaults for external services. |
+| `local` | File-system paths and helper scripts (initialisation utilities). |
+| `activity_enrichment` | Rules mapping activity metrics to action types and summary columns. |
+| `testitem_molecule_enrichment` | Parent/child lookups for molecule metadata. |
+| `activity_bounds` | Rules for inferring lower/upper bounds from values and relations. |
+| `system` | Logging, retry, rate limiting and quality report controls. |
 
-### CLI Arguments
+The subsections below list all available keys with their defaults and indicate
+whether user input is required (`Yes` = must be provided explicitly).
 
-Command-line arguments have the highest precedence. Common settings like `--config`, `--input`, and `--log-level` can be passed directly. Use `--print-config` to see the final, effective configuration after all layers have been merged.
+## `sources`
 
----
+### `sources.chembl.api`
 
-## `config.yaml` Structure
+| Key | Required | Default | Notes |
+|-----|----------|---------|-------|
+| `chembl_base` | No | `https://www.ebi.ac.uk/chembl/api/data` | Base URL of the REST API. |
+| `timeout_connect` | No | `5` | Connection timeout (seconds). |
+| `timeout_read` | No | `30` | Read timeout (seconds). |
+| `retries` | No | `3` | HTTP retry attempts. |
+| `backoff_factor` | No | `0.5` | Exponential backoff multiplier. |
+| `rps` | No | `20` | Requests-per-second limit. |
+| `burst` | No | `20` | Token bucket burst capacity. |
+| `user_agent` | **Yes** | `chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)` | Replace with your team contact before production. |
 
-The configuration is organized into three main sections:
+### `sources.chembl.cache`
 
-| Section | Purpose |
-|---|---|
-| `sources` | Connection and behavior settings for external data sources (ChEMBL, UniProt, PubChem, etc.). |
-| `local` | Paths for local file system resources, I/O defaults, and cache locations. |
-| `system` | Cross-cutting concerns like logging, network retry policies, and global rate limiting. |
+| Key | Required | Default | Notes |
+|-----|----------|---------|-------|
+| `cache_ttl` | No | `3600` | Seconds to cache responses. |
+| `cache_maxsize` | No | `1024` | Maximum entries in the cache. |
 
----
+### `sources.chembl.molecule_catalog`
 
-## Detailed Configuration Options
+| Key | Required | Default | Notes |
+|-----|----------|---------|-------|
+| `cache_path` | No | `$CHEMBL_DA_BASE_PATH/cache/molecule_parent_catalog.json` | JSON cache for parent relationships. |
+| `sqlite_path` | No | `$CHEMBL_DA_BASE_PATH/cache/molecule_parent_catalog.sqlite` | SQLite cache alternative. |
+| `endpoint` | No | `molecule` | API resource providing parent links. |
+| `child_field` | No | `molecule_chembl_id` | Column storing child identifiers. |
+| `parent_field` | No | `parent_molecule_chembl_id` | Column storing parent identifiers. |
+| `hierarchy_lookup_path` | No | `config/dictionary/_testitem/molecule_hierarchy.csv` | Local fallback hierarchy. |
+| `hierarchy_lookup_encoding` | No | `utf-8-sig` | Encoding for the hierarchy CSV. |
+| `hierarchy_lookup_delimiter` | No | `,` | Delimiter for the hierarchy CSV. |
+| `page_size` | No | `500` | API pagination size. |
 
-### `sources`
+### `sources.chembl.pipelines`
 
-#### `sources.chembl.api`
+Each pipeline inherits defaults from `library/config.py`. All keys are optional
+and may be overridden via CLI or environment variables.
+
+#### `activity`
+
+| Key | Default | Notes |
+|-----|---------|-------|
+| `column` | `activity_chembl_id` | Input identifier column. |
+| `batch_size` | `50` | Identifiers per request. |
+| `workers` | `1` | Worker threads. |
+| `timeout` | `30.0` | Read timeout (seconds). |
+| `limit` | `null` | Max records; `null` processes all. |
+| `dry_run` | `false` | Enable CLI `--dry-run`. |
+
+#### `assay`
+
+| Key | Default | Notes |
+|-----|---------|-------|
+| `column` | `assay_chembl_id` | Input column. |
+| `batch_size` | `50` | Identifiers per request. |
+| `timeout` | `30.0` | Read timeout. |
+| `limit` | `null` | Record limit. |
+
+#### `testitem`
+
+| Key | Default | Notes |
+|-----|---------|-------|
+| `column` | `molecule_chembl_id` | Input column. |
+| `batch_size` | `1000` | Identifiers per request. |
+| `timeout` | `30.0` | Read timeout. |
+| `limit` | `null` | Max records. |
+| `offset` | `0` | Start offset. |
+| `request_limit` | `1000` | Hard cap for API requests. |
+| `retries` | `5` | Batch retries. |
+| `backoff_factor` | `0.5` | Retry backoff multiplier. |
+| `batch_retry.enable` | `false` | Enable shrinking batches on repeated failures. |
+| `batch_retry.shrink_factor` | `0.5` | Reduction factor per retry. |
+| `batch_retry.min_size` | `1` | Minimum batch size. |
+| `fields` | list | Fields requested from the API (see config for full list, includes `parent_molecule`, PubChem columns, etc.). |
+
+#### `document`
+
+`document.pubmed`, `document.chembl` and `document.all` expose mode-specific
+options matching the CLI defaults; see [`docs/en/USAGE.md`](./USAGE.md).
+
+#### `target`
+
+`target.uniprot`, `target.chembl`, `target.iuphar`, `target.all` define column
+names, limits and paths to dictionary CSVs. Defaults mirror the CLI reference.
+
+### External services
+
+The following blocks share the same structure: connection timeouts, rate limits
+and optional mailto/user-agent fields. Replace placeholder email addresses before
+production use.
+
+| Block | Required fields | Notes |
+|-------|-----------------|-------|
+| `sources.openalex` | `mailto` (**Yes**) | Provide a valid contact email; OpenAlex rejects placeholder domains. |
+| `sources.crossref` | `mailto` (**Yes**) | CrossRef requires a contact email. |
+| `sources.uniprot.api` | None | Contains `base`, `timeout_connect`, `timeout_read`, `rps`, `burst`, `delay`. |
+| `sources.uniprot.mapping` | None | Controls polling interval, timeout and cache TTL. |
+| `sources.iuphar` | None | Base URL and rate limits for the Guide to Pharmacology API. |
+| `sources.pubchem` | `user_agent` (**Yes**), `mailto` implicit via contact string | Configure enable flag, base URL, rate limits, resolution order and caches. |
+| `sources.pubmed` | None | E-utilities base URL, timeouts, retries and optional rate limits. |
+| `sources.semantic_scholar` | None | API base, timeouts and rate limits for the Semantic Scholar enrichment stage. |
+
+## `local`
+
+### `local.resources`
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `dictionary_dir` | No | `config/dictionary` | Root for CSV dictionaries. |
+| `iuphar_target_csv` | No | `config/dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Source mapping table. |
+| `iuphar_family_csv` | No | `config/dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Family hierarchy table. |
+| `uniprot_data_dir` | No | `config/dictionary/_target/_uniprot` | Cached UniProt JSON responses. |
+| `targets_type_csv` | No | `config/dictionary/_target/targets_type.csv` | Target type lookup used in QA. |
+
+### `local.io`
+
+| Key | Default | Notes |
+|-----|---------|-------|
+| `output_dir` | `$CHEMBL_DA_BASE_PATH/output` | Output root (placeholders expanded relative to `--base-path`). |
+| `cache_dir` | `~/.cache/chembl-da` | HTTP cache directory. |
+| `csv_sep` | `,` | Default CSV delimiter. |
+| `csv_encoding` | `utf-8-sig` | Default encoding. |
+| `csv_fallback_separators` | `["\t", ";"]` | Tried sequentially when auto-detecting separators. |
+| `csv_chunksize` | `10000` | Chunk size for streaming writes. |
+| `na_markers` | `[#N/A]` | Values treated as NA. |
+| `keep_na_markers` | `false` | Preserve NA markers instead of dropping rows. |
+| `exist_ok` | `true` | Automatically create missing directories. |
+
+### `local.init`
+
+Targets the `get-input-initialisation` helper.
 
 | Key | Default | Description |
-|---|---|---|
-| `chembl_base` | `https://www.ebi.ac.uk/chembl/api/data` | Base URL for the ChEMBL REST API. |
-| `timeout_connect` | `5` | Connection timeout in seconds. |
-| `timeout_read` | `30` | Read timeout in seconds. |
-| `rps` | `20` | Requests per second for the ChEMBL API. |
-| `user_agent` | `chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)` | User-Agent header. **Must be changed** to a real contact for production use. |
+|-----|---------|-------------|
+| `same_doc` | `$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_same_document_20_05.xlsx` | Source workbook with same-document mappings. |
+| `all_doc` | `$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx` | Additional workbook. |
+| `output_dir` | `$CHEMBL_DA_BASE_PATH/output/ChEMBL/processed` | Output directory for processed Excel merges. |
 
-#### `sources.chembl.pipelines.*`
-This section contains pipeline-specific settings for `activity`, `assay`,
-`document`, `target`, and `testitem` pipelines.
+## `activity_enrichment`
 
-##### Document pipeline defaults
+Controls post-processing of activity tables.
 
-| Key | Default | Mode |
-|-----|---------|------|
-| `column` | `PMID` | `document.pubmed` |
-| `sleep` | `5.0` | `document.pubmed` |
-| `workers` | `1` | `document.pubmed` |
-| `batch_size` | `5` | `document.pubmed` |
-| `limit` | `null` | `document.pubmed` |
-| `column` | `document_chembl_id` | `document.chembl` |
-| `chunk_size` | `50` | `document.chembl` |
-| `timeout` | `30.0` | `document.chembl` |
-| `limit` | `null` | `document.chembl` |
-| `column` | `document_chembl_id` | `document.all` |
-| `chunk_size` | `5` | `document.all` |
-| `sleep` | `5.0` | `document.all` |
-| `workers` | `1` | `document.all` |
-| `batch_size` | `5` | `document.all` |
-| `timeout` | `30.0` | `document.all` |
-| `limit` | `null` | `document.all` |
-
-Other pipelines expose comparable keys such as `column`, `chunk_size`,
-`batch_size`, `timeout`, `limit`, and optional offsets or staging toggles.
-
-#### Other Sources (`openalex`, `crossref`, `uniprot`, `pubchem`, etc.)
-Each external source has its own configuration block under `sources` defining its base URL, rate limits (`rps`), and timeouts.
-
-**Example: `sources.pubchem`**
-| Key | Default | Description |
-|---|---|---|
-| `base` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | Base URL for the PubChem PUG REST API. |
-| `rps` | `5` | Requests per second for the PubChem API. |
-| `resolve_order` | `cache → smiles → inchikey → inchi → pref_name` | The order of strategies used to find a PubChem CID. |
-| `cid_cache_path`| `.../pubchem_cid_cache.json` | Path to the persistent PubChem CID cache. |
-
----
-
-### `local`
-
-#### `local.io`
+### `activity_enrichment.action_type`
 
 | Key | Default | Description |
-|---|---|---|
-| `output_dir` | `"$CHEMBL_DA_BASE_PATH/output"` | Default base directory for all generated files. |
-| `cache_dir` | `"~/.cache/chembl-da"` | Default directory for the HTTP request cache. |
-| `csv_sep` | `,` | Default delimiter for reading and writing CSV files. |
-| `csv_encoding`| `utf-8-sig` | Default character encoding for CSV files. |
-| `exist_ok` | `true` | If `true`, output directories are created automatically. |
+|-----|---------|-------------|
+| `enabled` | `true` | Toggle derived action type calculation. |
+| `column` | `action_type` | Destination column. |
+| `log_missing` | `true` | Log missing action type values. |
+| `log_distribution` | `true` | Emit distribution summary. |
+| `metrics` | mapping | Map measurement types (`ic50`, `ki`, …) to canonical action labels. |
+| `triages` | `{}` | Optional triage overrides. |
+| `functionality` | mapping | Text-to-action rules based on functional annotations. |
+| `mechanism` | `{}` | Reserved for custom mechanism mapping. |
+| `triage_fields` | list | Source columns scanned for triage hints. |
+| `functionality_fields` | list | Source columns scanned for functionality hints. |
+| `mechanism_fields` | list | Source columns scanned for mechanism hints. |
+| `allowlist` | list | Allowed action labels. |
+| `positive_label` | `PAM` | Label used for positive classification. |
+| `negative_label` | `NAM` | Label used for negative classification. |
+| `fallback` | `unknown` | Default label when rules do not match. |
 
-#### `local.resources`
-This section defines paths to local data files, such as dictionaries and mapping tables used for data enrichment.
-
-| Key | Example Default | Description |
-|---|---|---|
-| `dictionary_dir` | `../config/dictionary` | Root directory for all dictionary files. |
-| `iuphar_target_csv` | `.../_IUPHAR_target.csv` | Path to the IUPHAR target mapping table. |
-
----
-
-### `system`
-
-#### `system.log`
+### `activity_enrichment.activity_properties`
 
 | Key | Default | Description |
-|---|---|---|
-| `level` | `INFO` | The default logging level. Can be overridden by `--log-level`. |
+|-----|---------|-------------|
+| `enabled` | `true` | Enable property summarisation. |
+| `column` | `activity_properties` | Source column containing JSON-like payloads. |
+| `summary_column` | `activity_property_summary` | Destination column with the flattened summary. |
+| `name_field` | `type` | Field used as the property name. |
+| `value_field` | `value` | Field used as the property value. |
+| `units_field` | `units` | Field containing units. |
+| `separator` | `; ` | Joiner between properties. |
+| `pair_separator` | `=` | Joiner between name/value pairs. |
+| `drop_source_column` | `true` | Drop the original column after summarisation. |
+| `log_missing` | `false` | Log missing property blocks. |
+| `log_distribution` | `false` | Emit distribution summary. |
+| `allowlist` | list | Permitted property categories. |
+| `hash_column` | `properties_hash` | Column storing a hash of the parsed structure. |
 
-#### `system.rate`
+## `testitem_molecule_enrichment`
 
 | Key | Default | Description |
-|---|---|---|
-| `global_rps` | `100` | A global rate limit applied across all API clients. |
-| `global_burst` | `100` | Global token bucket burst capacity. |
+|-----|---------|-------------|
+| `enable` | `true` | Toggle the enrichment stage. |
+| `sources.molecule_catalog_path` | `config/dictionary/_testitem/molecule_catalog.csv` | Parent/child lookup. |
+| `sources.molecule_hierarchy_path` | `config/dictionary/_testitem/molecule_hierarchy.csv` | Hierarchical relationships. |
+| `output.salt_as_null_when_absent` | `true` | Write `NULL` instead of empty salt identifiers. |
+| `flags.coerce_to_bool` | `true` | Normalise boolean-like fields. |
+| `flags.parent_fallback` | `true` | Derive parent IDs when absent in API payloads. |
+| `logging.warn_missing_molecule` | `true` | Log missing catalog entries. |
+| `logging.warn_inconsistent_flags` | `true` | Warn about conflicting boolean flags. |
 
-#### `system.retry`
+## `activity_bounds`
 
 | Key | Default | Description |
-|---|---|---|
-| `max_attempts` | `3` | Default number of retry attempts for failed network requests. |
-| `backoff_factor`| `0.5` | A multiplier used to calculate the delay between retries. |
-| `status_forcelist`| `[429, 500, 502, 503, 504]` | HTTP status codes that will trigger a retry. |
+|-----|---------|-------------|
+| `enable_from_relation` | `true` | Derive bounds from relation/value pairs. |
+| `enable_from_uncertainty` | `false` | Parse `±` uncertainty ranges. |
+| `rounding_digits` | `3` | Decimal precision for derived bounds. |
+| `clamp_nonnegative` | `true` | Clamp negative bounds. |
+| `log_unknown_relations` | `true` | Log unknown relation symbols. |
 
-For a complete and detailed list of every available option, please refer to the source file [`config/config.yaml`](../config/config.yaml) and the Pydantic models in [`library/config.py`](../library/config.py).
+## `system`
+
+### `system.log`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `level` | `INFO` | Default logging level (overridable via `--log-level`). |
+
+### `system.rate`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `global_rps` | `100` | Global requests-per-second limit shared across clients. |
+| `global_burst` | `100` | Burst capacity. |
+| `limiter_cache_maxsize` | `128` | Cached limiter objects. |
+| `limiter_cache_ttl` | `600` | Expiration for cached limiters (seconds). |
+
+### `system.retry`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `max_attempts` | `3` | Maximum retry attempts (including initial request). |
+| `backoff_factor` | `0.5` | Exponential backoff multiplier. |
+| `backoff_cap` | `null` | Optional cap for backoff delay. |
+| `status_forcelist` | `[429,500,502,503,504]` | Status codes triggering a retry. |
+
+### `system.doc_quality`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enable` | `true` | Enable table-quality reports. |
+| `sample_rows` | `null` | Limit analysed rows. |
+| `include_columns` | `null` | Whitelist of columns to profile. |
+| `exclude_columns` | `null` | Blacklist of columns. |
+| `fatal_on_error` | `false` | Raise when profiling fails. |
+
+### `system.doc_type`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `weights` | `{pubmed:4, openalex:3, scholar:2}` | Voting weights per source. |
+| `thresholds` | `{review:1, experimental:1, unknown:2}` | Score thresholds for classifications. |
+| `limit` | `null` | Optional cap on processed rows. |
+
+For further customisation consult the Pydantic models in
+[`library/config.py`](../library/config.py); the documentation above mirrors the
+available fields and their default values.

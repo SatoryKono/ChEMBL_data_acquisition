@@ -53,11 +53,13 @@ def test_apply_config_overrides__missing_config_attribute(monkeypatch: pytest.Mo
 
     assert cfg.sources.chembl.pipelines.target.all.column == "target_chembl_id"
     assert args.column == "target_chembl_id"
-    expected_event = (
-        "config_missing_attribute",
-        {
-            "argument": "column",
-            "path": "sources.chembl.pipelines.target.all.legacy_column",
-        },
-    )
-    assert expected_event in spy.events
+    event_name = "config_attribute_missing"
+    matching = [
+        payload
+        for name, payload in (spy.events)
+        if name == event_name
+        and payload.get("argument") == "column"
+        and payload.get("path")
+        == "sources.chembl.pipelines.target.all.legacy_column"
+    ]
+    assert matching, f"expected {event_name!r} log entry not found in {spy.events!r}"

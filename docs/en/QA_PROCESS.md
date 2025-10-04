@@ -1,89 +1,109 @@
-# Quality Assurance Process (Living Document)
+# Quality assurance and validation
 
-This document is the canonical checklist for validating the ChEMBL data acquisition stack. Keep it up to date when adding new
-services, pipelines or policies so other guides can simply link here instead of duplicating instructions.
+This document summarises the checks applied by the pipelines, how to interpret
+the generated reports and how to troubleshoot validation failures.
 
-## 1. Environment
+## Validation pipeline
 
-1. Bootstrap the virtual environment and development extras:
-   ```bash
-   make init
-   ```
-2. Export deterministic defaults that the smoke suite and reporting wrapper rely on:
-   ```bash
-   export CHEMBL_DA_BASE_PATH=$(pwd)/tests/data
-   export PYTHONHASHSEED=${PYTHONHASHSEED:-0}
-   export PYTHONPATH=.
-   ```
-   These values mirror the CI configuration and make the log/report locations reproducible.
-3. Ensure required optional dependencies (``responses``, ``hypothesis``, ``psutil``, ``pytest-benchmark``) are available when you
-   expect those test suites to run; otherwise they will be skipped.
+1. **Input schema validation** – Pandera schemas located in
+   `library/schemas/normalize.py` and per-entity modules validate required
+   columns, allowed dtypes and nullability before any API calls.
+2. **Enrichment validation** – After data is fetched from external services the
+   resulting frames are validated again using the target schemas documented in
+   [`OUTPUT.md`](./OUTPUT.md).
+3. **Post-processing checks** – Post-processing functions (`library/postprocessing`)
+   normalise column order, ensure deterministic sorting based on identifier
+   columns and attach metadata sidecars.
+4. **Table quality profiling** – `library/table_quality.analyze_table_quality`
+   calculates coverage metrics, pattern matches (DOI/ISSN/email/URL) and numeric
+   summaries. Configuration toggles reside under `system.doc_quality`.
+5. **Action type and bounds validation** – Activity enrichment ensures
+   `action_type` and `standard_value` obey the configured constraints.
+6. **Molecule parent reconciliation** – Test item enrichment checks that parent
+   relationships and boolean flags are consistent with local dictionary data.
+7. **Determinism checks** – Optional CI step (`scripts/check_determinism.py` or
+   the `check-determinism` CLI) compares file hashes between consecutive runs.
 
-## 2. Static analysis and formatting
+## Logs and severity levels
 
-Run these commands from the repository root. They should finish without diagnostics.
+Logging uses structured messages emitted via `library/common/logging_setup`. Key
+fields:
 
-```bash
-ruff check .
-ruff format --check .
-mypy --strict
-```
+| Field | Meaning |
+|-------|---------|
+| `event` | High-level event name (e.g. `quality_report_failed`, `api_request`). |
+| `pipeline` | Pipeline name (`document`, `target`, etc.). |
+| `run_id` | UUID assigned by the orchestrator. |
+| `level` | Standard logging level (`INFO`, `WARN`, `ERROR`). |
+| `details` | Extra context such as identifiers, offsets or retry counts. |
 
-## 3. Test execution
+Quality-related logs adopt the following severity conventions:
 
-1. Fast failure signal for regressions:
-   ```bash
-   pytest --maxfail=1 --durations=10
-   ```
-2. Generate the aggregated reports (JSON + Markdown + logs) for certification runs:
-   ```bash
-   make test-report
-   ```
-   The command wraps `python -m scripts.run_test_suite`, executes the entire suite, and stores artifacts under `reports/`.
-3. When iterating locally you can still run vanilla `pytest` with `-q` or `-vv` depending on the desired verbosity.
+- **INFO** – normal operation, progress updates, counts and timings.
+- **WARN** – unexpected but recoverable conditions (e.g. missing DOI, empty
+  fallback CSV, profile skipping columns). Warnings are mirrored in the JSON
+  quality report.
+- **ERROR** – validation failure, unrecoverable HTTP errors or inability to write
+  outputs. Pipelines abort unless `fatal_on_error` is disabled.
 
-## 4. Determinism and CLI smoke checks
+## Quality configuration
 
-1. Verify deterministic CSV rendering:
-   ```bash
-   PYTHONPATH=. python -m library.utils.cli_tools.check_determinism --log-level DEBUG
-   ```
-2. Exercise at least one pipeline CLI in dry-run mode to ensure argument wiring stays intact. For example:
-   ```bash
-   PYTHONHASHSEED=0 get-activity-data --input tests/data/activity_ids_small.csv \
-       --final-out /tmp/activities.csv --limit 10 --dry-run --log-level INFO
-   ```
-   Replace the script with other pipelines as needed to cover recent changes.
-3. The pytest suite enforces an offline sandbox via `tests/conftest.py`. Any real HTTP request attempts will raise immediately, so fix fixtures instead of trying to reach external services.
+| Setting | Location | Effect |
+|---------|----------|--------|
+| `system.doc_quality.enable` | `config/config.yaml` | Enable/disable table-quality profiling. |
+| `system.doc_quality.sample_rows` | `config/config.yaml` | Limit profiling to the first N rows. |
+| `system.doc_quality.include_columns` / `exclude_columns` | `config/config.yaml` | Control analysed columns. |
+| `system.doc_quality.fatal_on_error` | `config/config.yaml` | Raise exceptions when profiling fails. |
+| `activity_enrichment.action_type.*` | `config/config.yaml` | Define mappings and allowlist for `action_type`. |
+| `activity_bounds.*` | `config/config.yaml` | Configure derived lower/upper bounds. |
+| CLI `--force` / `--skip-existing` | Pipeline scripts | Control whether existing outputs trigger early exit. |
 
-## 5. Reporting
+## Troubleshooting checklist
 
-The reporting helper writes three artifacts by default:
+1. **Schema errors (`SchemaError`)**
+   - Inspect the Pandera error message to identify the column and offending
+     value. The `.quality.json` file includes column-wise failure summaries.
+   - Verify the input CSV delimiter/encoding (`--sep`, `--encoding`).
+   - Confirm that upstream preprocessing preserves column names.
 
-- `reports/test_report.json` – machine-readable per-test metadata. Each record describes the node identifier, outcome, cumulative duration, failure/skip message, and the location of the combined log file.
-- `reports/test_summary.md` – human-friendly digest with high-level counts and enumerations of failed/skipped tests.
-- `reports/logs/<suite>.log` – aggregated log captured from the pytest session.
+2. **Quality profile failures**
+   - Check logs for `quality_report_failed`. If `fatal_on_error` is `true`, the
+     pipeline stops; otherwise the failure is recorded in the JSON report.
+   - Ensure the output directory is writable and there is enough disk space.
 
-Refer to `tests/README.md` for a detailed field-by-field explanation and an example Markdown payload.
+3. **API throttling**
+   - Review `WARN` logs mentioning `rate_limit_hit` or `retry_attempt`. Adjust
+     rate limits via configuration or environment variables (`CHEMBL_DA_RPS`,
+     etc.).
+   - For persistent 429 errors, increase `backoff_factor` or reduce `batch_size`.
 
-Record the command output (pass/fail status, failure counts, timestamps) in the audit trail — typically `docs/code_review.md` — whenever you re-certify the repository. When sharing summaries, link back to this living document instead of copying the checklist.
+4. **Determinism differences**
+   - Run `check-determinism --baseline <dir1> --candidate <dir2>` to compare
+     hashes. Differences in metadata timestamps are expected; focus on CSV hash
+     mismatches.
+   - Ensure `--limit` and `--offset` were identical across runs.
 
-## 6. Document post-processing QA
+5. **Activity enrichment mismatches**
+   - Verify that custom metrics added to `activity_enrichment.action_type.metrics`
+     are included in the allowlist.
+   - Check whether missing measurement units cause `action_type` to fall back to
+     `unknown`.
 
-The document export now includes an automated regression check against the legacy Power Query workbook.
+## Integrating into CI
 
-1. Populate `data/input/full/document.csv` with the authoritative export.
-2. Run the document pipeline (`get-document-data all ...`) and confirm it produces:
-   * `output.document_YYYYMMDD.csv`
-   * `qa_document_postprocessing_report_YYYYMMDD.json`
-   * `qa_document_postprocessing_report_YYYYMMDD.md`
-   * `qa_document_postprocessing_diff_YYYYMMDD.csv` (only when mismatches are present)
-3. Alternatively execute the QA script directly:
-   ```bash
-   python -m library.qa.check_document_postprocessing \
-       --base-path data \
-       --ref input\\full\\document.csv \
-       --actual output\\document\\preprocessed_output.document_YYYYMMDD.csv \
-       --out output\\document\\output.document_YYYYMMDD.csv
-   ```
-4. Treat a non-zero exit code as a blocking failure; consult the Markdown summary and diff extract for remediation.
+The default CI workflow (see [`docs/en/development/CI_CD.md`](./development/CI_CD.md))
+performs:
+
+- Static analysis and linting.
+- `pytest --json-report` producing `reports/test_report.json` and Markdown
+  summaries.
+- Optional smoke execution of the pipelines using the sample data followed by
+  `check-determinism`.
+- Threshold enforcement: success rate ≥ 95% (configurable via pipeline policy).
+
+Quality reports should be uploaded as CI artefacts to aid manual review. For
+regressions create an issue labelled `data-quality` including:
+
+- Pipeline name and run ID.
+- Offending CSV rows (attach redacted snippets if necessary).
+- Steps to reproduce (input files, config overrides).

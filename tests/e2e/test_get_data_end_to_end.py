@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import io
 import json
 import shutil
 from collections import deque
 from collections.abc import Callable
+from datetime import UTC
 from pathlib import Path
 
 import pandas as pd
@@ -26,6 +28,8 @@ def _build_stub_pipeline(
     *,
     accept_subcommand: bool = False,
     accept_mode: bool = False,
+    optional_columns: list[str] | None = None,
+    post_process: Callable[[Path], None] | None = None,
 ) -> PipelineFunc:
     """Return a stub ``main`` function emulating a pipeline step."""
 
@@ -50,7 +54,12 @@ def _build_stub_pipeline(
             get_data._LOGGER.error(f"{name}_schema_invalid", missing=missing)
             return 1
 
-        frame = frame[required_columns].copy()
+        selected_columns = list(required_columns)
+        if optional_columns:
+            selected_columns.extend(
+                column for column in optional_columns if column in frame.columns
+            )
+        frame = frame[selected_columns].copy()
         if key_column not in frame.columns:
             get_data._LOGGER.error(
                 f"{name}_missing_key_column", column=key_column
@@ -74,8 +83,11 @@ def _build_stub_pipeline(
             )
             return 1
 
-        Path(args.final_out).parent.mkdir(parents=True, exist_ok=True)
-        transformed.to_csv(Path(args.final_out), index=False)
+        destination = Path(args.final_out)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        transformed.to_csv(destination, index=False)
+        if post_process is not None:
+            post_process(destination)
         return 0
 
     return _main
@@ -137,6 +149,8 @@ def _activities_transform(frame: pd.DataFrame, logger: get_data.Logger) -> pd.Da
     missing = values.isna() | (values == "")
     if int(missing.sum()):
         logger.error("activity_missing_value", count=int(missing.sum()))
+    if "force_failure" in frame.columns and frame["force_failure"].any():
+        raise RuntimeError("activity_forced_failure")
     cleaned = values.fillna("")
     numeric = pd.to_numeric(cleaned.replace("", pd.NA), errors="coerce").astype("Float64")
     frame = frame.copy()
@@ -155,6 +169,57 @@ def _activities_transform(frame: pd.DataFrame, logger: get_data.Logger) -> pd.Da
             "is_valid",
         ]
     ]
+
+
+def _make_report_writer(step_count: int) -> Callable[[Path], None]:
+    def _writer(working_output: Path) -> None:
+        base_dir = working_output.parent.parent
+        reports_dir = base_dir / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        run_id = get_data._LOGGER._cfg.run_id or "unknown"
+        timestamp = dt.datetime.now(UTC).isoformat()
+        payload = {
+            "meta": {
+                "repo": "SatoryKono/ChEMBL_data_acquisition",
+                "commit": "0000000",
+                "branch": "test",
+                "ts_utc": timestamp,
+                "run_id": run_id,
+                "python": "3.11",
+                "pytest": "7.0",
+                "duration_sec": 0.0,
+            },
+            "summary": {
+                "total": step_count,
+                "passed": step_count,
+                "failed": 0,
+                "skipped": 0,
+                "xfailed": 0,
+                "xpassed": 0,
+                "error": 0,
+                "success_rate": 1.0,
+            },
+            "tests": [],
+        }
+        (reports_dir / "test_report.json").write_text(
+            json.dumps(payload, indent=2), encoding="utf-8"
+        )
+        summary_md = (
+            "# Test Summary\n\n"
+            "- Repo: `SatoryKono/ChEMBL_data_acquisition`\n"
+            "- Commit: 0000000\n"
+            "- Branch: test\n"
+            f"- Timestamp (UTC): {timestamp}\n"
+            "- Duration: 0.0 s\n"
+            "- Success rate: 100.0%\n\n"
+            "| total | passed | failed | skipped | xfailed | xpassed | error |\n"
+            "|------:|-------:|-------:|--------:|--------:|--------:|------:|\n"
+            f"|{step_count:6d}|{step_count:7d}|{0:7d}|{0:8d}|{0:8d}|{0:8d}|{0:6d}|\n"
+            "\n## Failed / Error details\n"
+        )
+        (reports_dir / "test_summary.md").write_text(summary_md, encoding="utf-8")
+
+    return _writer
 
 
 @pytest.mark.e2e
@@ -182,10 +247,11 @@ def test_get_data_end_to_end__miniature_pipeline(
     def _configure_logger_stub(cfg: get_data.LoggerConfig) -> get_data.Logger:
         stream = io.StringIO()
         log_streams.append(stream)
+        run_id = "e2e-run"
         return get_data.Logger(
             get_data.LoggerConfig(
                 level=cfg.level,
-                run_id=cfg.run_id,
+                run_id=run_id,
                 redact_secrets=cfg.redact_secrets,
                 stream=stream,
             )
@@ -193,6 +259,7 @@ def test_get_data_end_to_end__miniature_pipeline(
 
     monkeypatch.setattr(get_data, "configure_logger", _configure_logger_stub)
 
+    report_writer = _make_report_writer(5)
     stub_steps = (
         get_data.PipelineStep(
             "document",
@@ -255,6 +322,8 @@ def test_get_data_end_to_end__miniature_pipeline(
                     "standard_units",
                 ],
                 _activities_transform,
+                optional_columns=["force_failure"],
+                post_process=report_writer,
             ),
             None,
         ),
@@ -329,6 +398,44 @@ def test_get_data_end_to_end__miniature_pipeline(
     hashes_after = {name: sha256_file(path) for name, path in output_paths.items()}
     assert hashes_before == hashes_after
 
+    reports_dir = base_path / "reports"
+    report_json_path = reports_dir / "test_report.json"
+    summary_md_path = reports_dir / "test_summary.md"
+    assert report_json_path.exists()
+    assert summary_md_path.exists()
+    report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
+    assert report_payload["meta"]["repo"] == "SatoryKono/ChEMBL_data_acquisition"
+    assert report_payload["meta"]["run_id"] == "e2e-run"
+    assert report_payload["meta"]["ts_utc"] == "2020-01-01T00:00:00+00:00"
+    assert report_payload["summary"]["total"] == 5
+    assert report_payload["summary"]["passed"] == 5
+    summary_md = summary_md_path.read_text(encoding="utf-8")
+    assert "Success rate: 100.0%" in summary_md
+    assert "|     5|      5|" in summary_md
+
+    new_date_prefix = "20240103"
+    new_run_argv = [
+        "--base-path",
+        str(base_path),
+        "--input-dir",
+        "input",
+        "--output-dir",
+        "output",
+        "--config",
+        str(config_path),
+        "--date",
+        new_date_prefix,
+        "--log-level",
+        "INFO",
+        "--force",
+    ]
+
+    new_exit_code, _ = _invoke(new_run_argv)
+    assert new_exit_code == 0
+    for step_name, stem in get_data._DEFAULT_OUTPUT_STEMS.items():
+        new_path = output_dir / f"output.{stem}_{new_date_prefix}.csv"
+        assert new_path.exists()
+
     degraded_input_dir = base_path / "degraded_input"
     degraded_output_dir = base_path / "degraded_output"
     shutil.copytree(input_dir, degraded_input_dir)
@@ -361,3 +468,70 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert degraded_events["document_schema_invalid"].get("level") == "ERROR"
     assert "workflow_failed" in degraded_events
     assert not any(degraded_output_dir.glob("*.csv"))
+
+    partial_base = base_path / "partial"
+    partial_input = partial_base / "input"
+    partial_output = partial_base / "output"
+    partial_input.mkdir(parents=True)
+    partial_output.mkdir()
+    for stem in ("document", "target", "assay", "testitem", "activity"):
+        shutil.copy(fixture_dir / f"{stem}.csv", partial_input / f"{stem}.csv")
+    activity_partial = pd.read_csv(partial_input / "activity.csv")
+    activity_partial["force_failure"] = True
+    activity_partial.to_csv(partial_input / "activity.csv", index=False)
+    partial_config = partial_base / "config.yaml"
+    partial_config.write_text("io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n")
+    partial_argv = [
+        "--base-path",
+        str(partial_base),
+        "--input-dir",
+        "input",
+        "--output-dir",
+        "output",
+        "--config",
+        str(partial_config),
+        "--date",
+        date_prefix,
+        "--log-level",
+        "INFO",
+        "--force",
+    ]
+    partial_exit_code, partial_logs = _invoke(partial_argv)
+    assert partial_exit_code == 1
+    partial_events = {record.get("event"): record for record in partial_logs if "event" in record}
+    assert "step_exception" in partial_events
+    assert (partial_output / f"output.documents_{date_prefix}.csv").exists()
+    activity_sentinel = partial_output / f"output.activities_{date_prefix}.csv.failed"
+    assert activity_sentinel.exists()
+
+    missing_base = base_path / "missing"
+    missing_input = missing_base / "input"
+    missing_output = missing_base / "output"
+    missing_input.mkdir(parents=True)
+    missing_output.mkdir()
+    for stem in ("document", "assay", "testitem", "activity"):
+        shutil.copy(fixture_dir / f"{stem}.csv", missing_input / f"{stem}.csv")
+    config_missing = missing_base / "config.yaml"
+    config_missing.write_text("io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n")
+    missing_argv = [
+        "--base-path",
+        str(missing_base),
+        "--input-dir",
+        "input",
+        "--output-dir",
+        "output",
+        "--config",
+        str(config_missing),
+        "--date",
+        date_prefix,
+        "--log-level",
+        "INFO",
+    ]
+    missing_exit_code, missing_logs = _invoke(missing_argv)
+    assert missing_exit_code == 1
+    missing_events = {record.get("event"): record for record in missing_logs if "event" in record}
+    assert missing_events.get("step_input_missing") is not None
+    missing_target = missing_output / f"output.targets_{date_prefix}.csv"
+    assert not missing_target.exists()
+    sentinel_path = missing_output / f"output.targets_{date_prefix}.csv.failed"
+    assert sentinel_path.exists()
