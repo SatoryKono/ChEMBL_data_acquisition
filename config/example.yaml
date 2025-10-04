@@ -24,7 +24,7 @@ local:
     cache_dir: "./data/cache"
   resources:
     dictionary_dir: "./dictionary"
-    uniprot_data_dir: "./uniprot"
+    uniprot_data_dir: "./dictionary/_target/_uniprot"
 
 system:
   log:
