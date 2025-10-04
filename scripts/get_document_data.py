@@ -145,6 +145,20 @@ DOCUMENT_FRAME_CONCAT_STRIDE = 16
 _OPTION_UNSET = object()
 
 
+class _FallbackPathAction(argparse.Action):
+    """Store fallback DOI CSV path under both legacy and new attribute names."""
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: object,
+        option_string: str | None = None,
+    ) -> None:
+        setattr(namespace, self.dest, values)
+        setattr(namespace, "fallback_doi_csv", values)
+
+
 def _option(
     metadata: ConfigMetadata | None,
     *,
@@ -1836,6 +1850,11 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
     )
     fallback_enabled = getattr(args, "fallback_doi_enabled", False)
     fallback_path_arg = getattr(args, "fallback_doi_path", None)
+    metadata_obj = getattr(args, "_config_metadata", None)
+    if not isinstance(metadata_obj, ConfigMetadata):
+        metadata_obj = None
+    fallback_overwrite = getattr(args, "fallback_doi_overwrite", False)
+    fallback_path_text = str(fallback_path_arg) if fallback_path_arg else None
     logger.info(
         "document_pubmed_start",
         input=str(args.input_csv),
@@ -1846,8 +1865,29 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         batch_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
         sleep=getattr(args, "sleep", pubmed_defaults.sleep),
         fallback_doi_enabled=fallback_enabled,
-        fallback_doi_overwrite=getattr(args, "fallback_doi_overwrite", False),
-        fallback_doi_path=str(fallback_path_arg) if fallback_path_arg else None,
+        fallback_doi_overwrite=fallback_overwrite,
+        fallback_doi_path=fallback_path_text,
+        fallback_doi=_option(
+            metadata_obj,
+            argument="fallback_doi_enabled",
+            path="document.pubmed.fallback_doi_enabled",
+            value=fallback_enabled,
+            default_source="cli",
+        ),
+        fallback_doi_overwrite_meta=_option(
+            metadata_obj,
+            argument="fallback_doi_overwrite",
+            path="document.pubmed.fallback_doi_overwrite",
+            value=fallback_overwrite,
+            default_source="cli",
+        ),
+        fallback_doi_path_meta=_option(
+            metadata_obj,
+            argument="fallback_doi_path",
+            path="document.pubmed.fallback_doi_path",
+            value=fallback_path_text,
+            default_source="cli",
+        ),
     )
     try:
         pmids_iter = io.read_ids(
@@ -2476,6 +2516,8 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     )
     args.output_csv = output_path
     mode = getattr(args, "mode", None)
+    if mode in (None, ""):
+        mode = getattr(args, "command", None)
     timeout_value = None
     if mode == "chembl":
         timeout_value = getattr(args, "timeout", None)
@@ -2488,11 +2530,18 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0
+    if hasattr(args, "func") and getattr(args, "func", None) is None:
+        logger.error(
+            "missing_subcommand_handler",
+            command=getattr(args, "command", None),
+        )
+        return 1
     handler = MODE_HANDLERS.get(str(mode))
     if handler is None:
         logger.error("unknown_mode", mode=mode)
         return 1
-    result = handler(cfg, args)
+    current_handler = getattr(sys.modules[__name__], handler.__name__, handler)
+    result = current_handler(cfg, args)
     return int(result)
 
 
@@ -2512,8 +2561,15 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     pipeline_group.add_argument(
         "--mode",
         choices=("chembl", "pubmed", "all"),
-        required=True,
+        required=False,
+        default=None,
         help="Document pipeline to execute",
+    )
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=("chembl", "pubmed", "all"),
+        help=argparse.SUPPRESS,
     )
     pipeline_group.add_argument(
         "--column",
@@ -2668,8 +2724,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         action="store_true",
         help="Enable lookup of DOI overrides from a CSV file",
     )
+    parser.set_defaults(fallback_doi_csv=None)
     fallback_group.add_argument(
         "--fallback-doi-path",
+        "--fallback-doi-csv",
+        dest="fallback_doi_path",
+        action=_FallbackPathAction,
         type=path_argument,
         default=None,
         help="CSV file containing DOI overrides keyed by PMID",
@@ -2724,7 +2784,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         execution.
     """
     parser, log_cfg = build_parser()
-    args = parser.parse_args(argv)
+    if argv is None:
+        argv_list: list[str] = list(sys.argv[1:])
+    else:
+        argv_list = [str(item) for item in argv]
+    args = parser.parse_args(argv_list)
     prepare_io_paths(
         args,
         input_default=DEFAULT_INPUT_NAME,
@@ -2734,7 +2798,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     if limit_value == 0:
         logger.info("pipeline_skip_limit", limit=limit_value)
         return 0
-    mode = getattr(args, "mode", "")
+    mode = getattr(args, "mode", None)
+    command_value = getattr(args, "command", None)
+    if not mode and command_value:
+        mode = command_value
+        setattr(args, "mode", mode)
+    if not mode:
+        parser.error("--mode is required")
+    if command_value is None and mode is not None:
+        setattr(args, "command", mode)
+    mode = str(mode)
     if limit_value is not None and limit_value < 0:
         parser.error("--limit must be zero or a positive integer")
     offset_value = getattr(args, "offset", 0)
@@ -2742,8 +2815,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--offset must be zero or a positive integer")
     if mode in {"pubmed", "all"}:
         fallback_enabled_cli = getattr(args, "fallback_doi_enabled", False)
+        fallback_path_cli = getattr(args, "fallback_doi_path", None)
+        if fallback_path_cli is not None and not fallback_enabled_cli:
+            fallback_enabled_cli = True
+            setattr(args, "fallback_doi_enabled", True)
         if fallback_enabled_cli:
-            fallback_path_cli = getattr(args, "fallback_doi_path", None)
             if fallback_path_cli is None:
                 parser.error(
                     "--fallback-doi-path is required when fallback DOI overrides are enabled"

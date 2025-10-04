@@ -3219,6 +3219,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if offset_value < 0:
                 subparser.error("--offset must be zero or a positive integer")
             mapping: dict[str, str] = {}
+            args_namespace: argparse.Namespace = args
             if args.command == "uniprot":
                 mapping = {
                     "column": "target.uniprot.column",
@@ -3297,8 +3298,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args_dict["output_csv"] = candidate
                 else:
                     args_dict["output_csv"] = Path(output_candidate)
+                args_namespace = argparse.Namespace(**args_dict)
+            if mapping:
                 exit_code = run_cli_command(
-                    args=argparse.Namespace(**args_dict),
+                    args=args_namespace,
                     parser=subparser,
                     base_parser=parser,
                     log_cfg=logging_ctx.log_cfg,
