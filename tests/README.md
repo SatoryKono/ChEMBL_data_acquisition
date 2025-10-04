@@ -13,6 +13,17 @@ Shared fixtures live in `tests/conftest.py`. They configure a deterministic envi
 
 - [x] PubChem augmentation: cache hits/misses, polymer handling and TTL expiry (`tests/integration/test_pubchem_augmentation.py`).
 
+## CLI pipeline orchestration
+
+End-to-end smoke tests now cover every `scripts/get_*` entrypoint via `tests/e2e/test_get_cli_pipelines.py`. Each scenario patches the network-heavy stages with deterministic stubs and asserts that the orchestrator:
+
+- loads miniature CSV fixtures and normalises core columns,
+- emits structured WARN/ERROR events for missing or duplicated records,
+- writes the derived tables with deterministic ordering and derived fields, and
+- honours `--skip-existing` semantics without invoking the pipeline.
+
+The tests exercise success and failure paths for `get_testitem_data`, `get_document_data`, `get_target_data`, `get_assay_data` and `get_activity_data`, bringing the CLI surface under the deterministic test umbrella.
+
 ## Running tests and generating reports
 
 Install dependencies (see the repository `README.md`) and run the suite via the reporting wrapper:
