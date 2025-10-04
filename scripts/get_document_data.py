@@ -2,21 +2,21 @@
 
 The tool integrates :mod:`library.integration.pubmed_library` and
 :mod:`library.integration.chembl_library` to collect information about publications from
-several public APIs.  The interface mirrors :mod:`scripts.get_target_data` and
-provides three sub-commands:
+several public APIs.  The interface mirrors :mod:`scripts.get_target_data` and exposes a
+single entry point configured via ``--mode``:
 
-``pubmed``
+``--mode pubmed``
     Query PubMed, Semantic Scholar, OpenAlex and CrossRef for a list of PMIDs.
-``chembl``
+``--mode chembl``
     Retrieve document information from the ChEMBL API.
-``all``
+``--mode all``
     Run the ChEMBL and PubMed pipelines and merge the results.
 
 Example
 -------
 Fetch PubMed metadata for identifiers listed in ``pmids.csv``::
 
-    python scripts/get_document_data.py pubmed --config config/config.yaml --input pmids.csv --final-out output.csv
+    python scripts/get_document_data.py --mode pubmed --config config/config.yaml --input pmids.csv --final-out output.csv
 
 The input file must contain a ``PMID`` column.
 
@@ -90,6 +90,7 @@ from library.integration import chembl_library as cl
 from library.integration import openalex_crossref_library as ocl
 from library.integration import pubmed_library as pl
 from library.integration import semantic_scholar_library as ssl
+from library.document_defaults import ALL_DEFAULTS, CHEMBL_DEFAULTS, PUBMED_DEFAULTS
 from library.pipelines.document import postprocessing as dp
 from library.postprocessing import document as document_export_postprocessing
 from library.clients import ChemblClient, _chunked
@@ -1803,7 +1804,7 @@ def _finalise_export(
 
 
 def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
-    """Execute the ``pubmed`` sub-command.
+    """Execute the ``pubmed`` mode.
 
     Parameters
     ----------
@@ -1997,7 +1998,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
-    """Execute the ``chembl`` sub-command.
+    """Execute the ``chembl`` mode.
 
     Parameters
     ----------
@@ -2138,7 +2139,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def run_all(cfg: Config, args: argparse.Namespace) -> int:
-    """Run ChEMBL and PubMed pipelines and merge their outputs.
+    """Execute the ``all`` mode by merging ChEMBL and PubMed outputs.
 
     Parameters
     ----------
@@ -2460,6 +2461,13 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     return exit_code
 
 
+MODE_HANDLERS: Mapping[str, Callable[[Config, argparse.Namespace], int]] = {
+    "chembl": run_chembl,
+    "pubmed": run_pubmed,
+    "all": run_all,
+}
+
+
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the selected document pipeline with CLI-specific hooks."""
 
@@ -2467,278 +2475,232 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     )
     args.output_csv = output_path
-    timeout_value = getattr(args, "timeout", None)
+    mode = getattr(args, "mode", None)
+    timeout_value = None
+    if mode == "chembl":
+        timeout_value = getattr(args, "timeout", None)
+    elif mode == "all":
+        timeout_value = getattr(args, "chembl_timeout", None)
+        if timeout_value is None:
+            timeout_value = getattr(args, "timeout", None)
     if timeout_value is not None:
         cfg.api.timeout_read = timeout_value
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0
-    func = getattr(args, "func", None)
-    if func is None:
-        logger.error(
-            "missing_subcommand_handler", command=getattr(args, "command", "")
-        )
+    handler = MODE_HANDLERS.get(str(mode))
+    if handler is None:
+        logger.error("unknown_mode", mode=mode)
         return 1
-    result = func(cfg, args)
+    result = handler(cfg, args)
     return int(result)
 
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
-    """Create the argument parser for document utilities.
+    """Create the argument parser for document utilities."""
 
-    Returns
-    -------
-    tuple[argparse.ArgumentParser, LoggerConfig]
-        Parser populated with all sub-commands and default logging
-        configuration used by :func:`main`.
-    """
-    root, shared, log_cfg = build_root_parser()
+    root, _, log_cfg = build_root_parser()
     root.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
     parser = argparse.ArgumentParser(
-        description="Document data utilities", parents=[root]
+        description="Document data utilities",
+        parents=[root],
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
 
-    pubmed = sub.add_parser(
-        "pubmed", parents=[shared], help="Fetch data from PubMed and related APIs"
+    pipeline_group = parser.add_argument_group("Pipeline selection")
+    pipeline_group.add_argument(
+        "--mode",
+        choices=("chembl", "pubmed", "all"),
+        required=True,
+        help="Document pipeline to execute",
     )
-    pubmed.add_argument(
-        "--column", default="PMID", help="Column name containing identifiers"
+    pipeline_group.add_argument(
+        "--column",
+        default=PUBMED_DEFAULTS.column,
+        help=(
+            "Input column containing identifiers (defaults: "
+            f"pubmed={PUBMED_DEFAULTS.column}, chembl={CHEMBL_DEFAULTS.column}, "
+            f"all={ALL_DEFAULTS.column})"
+        ),
     )
-    pubmed.add_argument(
-        "--sleep", type=float, default=5.0, help="Seconds to sleep between requests"
-    )
-    pubmed.add_argument(
-        "--workers", type=int, default=1, help="Number of concurrent requests"
-    )
-    pubmed.add_argument(
-        "--batch-size",
-        type=positive_int,
-        default=100,
-        help="Maximum PMIDs per PubMed request",
-    )
-    pubmed.add_argument(
+    pipeline_group.add_argument(
         "--limit",
         type=int,
         default=None,
-        help=(
-            "Maximum number of identifiers to process; use 0 to skip processing"
-        ),
+        help="Maximum number of identifiers to process (default: no limit)",
     )
-    pubmed.add_argument(
+    pipeline_group.add_argument(
         "--offset",
         type=int,
         default=0,
         help="Number of identifiers to skip before processing",
     )
-    pubmed.add_argument(
+    pipeline_group.add_argument(
         "--openalex-rps",
         type=float,
         default=None,
-        help="Requests per second limit for OpenAlex",
+        help="Requests per second limit for OpenAlex lookups",
     )
-    pubmed.add_argument(
+    pipeline_group.add_argument(
         "--crossref-rps",
         type=float,
         default=None,
-        help="Requests per second limit for CrossRef",
+        help="Requests per second limit for CrossRef lookups",
     )
-    pubmed_fallback = pubmed.add_argument_group("Fallback DOI overrides")
-    pubmed_fallback.add_argument(
-        "--fallback-doi-enabled",
-        action="store_true",
-        help="Enable lookup of DOI overrides from a CSV file",
-    )
-    pubmed_fallback.add_argument(
-        "--fallback-doi-path",
-        type=path_argument,
-        default=None,
-        help="CSV file containing DOI overrides keyed by PMID",
-    )
-    pubmed_fallback.add_argument(
-        "--fallback-doi-col-pmid",
-        default="PMID",
-        help="Column containing PubMed identifiers in the fallback CSV",
-    )
-    pubmed_fallback.add_argument(
-        "--fallback-doi-col-doi",
-        default="DOI",
-        help="Column containing DOI values in the fallback CSV",
-    )
-    pubmed_fallback.add_argument(
-        "--fallback-doi-delimiter",
-        default=None,
-        help="Delimiter used when reading the fallback CSV (default: io.csv_sep)",
-    )
-    pubmed_fallback.add_argument(
-        "--fallback-doi-encoding",
-        default=None,
-        help="Encoding used for the fallback CSV (default: io.csv_encoding)",
-    )
-    pubmed_fallback.add_argument(
-        "--fallback-doi-overwrite",
-        action="store_true",
-        help="Allow replacing existing DOIs with fallback values",
-    )
-    pubmed.set_defaults(func=run_pubmed)
 
-    chembl = sub.add_parser(
-        "chembl", parents=[shared], help="Fetch document information from ChEMBL"
-    )
-    chembl.add_argument(
-        "--column",
-        default="document_chembl_id",
-        help="Column name containing identifiers",
-    )
-    chembl.add_argument(
-        "--chunk-size",
+    single_group = parser.add_argument_group("Single pipeline options")
+    single_group.add_argument(
+        "--batch-size",
         type=positive_int,
-        default=5,
-        help="Maximum number of IDs per request",
-    )
-    chembl.add_argument(
-        "--timeout",
-        type=float,
-        default=30.0,
-        help="Timeout in seconds for each HTTP request",
-    )
-    chembl.add_argument(
-        "--limit",
-        type=int,
-        default=None,
+        default=PUBMED_DEFAULTS.batch_size,
         help=(
-            "Maximum number of identifiers to process; use 0 to skip processing"
+            "Maximum PMIDs per PubMed request when running in pubmed mode "
+            f"(default: {PUBMED_DEFAULTS.batch_size})"
         ),
     )
-    chembl.add_argument(
-        "--offset",
+    single_group.add_argument(
+        "--sleep",
+        type=float,
+        default=PUBMED_DEFAULTS.sleep,
+        help=(
+            "Seconds to sleep between PubMed requests when running in pubmed mode "
+            f"(default: {PUBMED_DEFAULTS.sleep})"
+        ),
+    )
+    single_group.add_argument(
+        "--workers",
         type=int,
-        default=0,
-        help="Number of identifiers to skip before processing",
+        default=PUBMED_DEFAULTS.workers,
+        help=(
+            "Number of concurrent PubMed requests when running in pubmed mode "
+            f"(default: {PUBMED_DEFAULTS.workers})"
+        ),
     )
-    chembl.set_defaults(func=run_chembl)
-
-    all_cmd = sub.add_parser(
-        "all", parents=[shared], help="Run both ChEMBL and PubMed pipelines"
-    )
-    all_cmd.add_argument(
-        "--column",
-        default="document_chembl_id",
-        help="Column in the input CSV",
-    )
-    all_cmd.add_argument(
-        "--chembl-chunk-size",
+    single_group.add_argument(
         "--chunk-size",
+        type=positive_int,
+        default=CHEMBL_DEFAULTS.chunk_size,
+        help=(
+            "Maximum identifiers per ChEMBL request when running in chembl mode "
+            f"(default: {CHEMBL_DEFAULTS.chunk_size})"
+        ),
+    )
+    single_group.add_argument(
+        "--timeout",
+        type=float,
+        default=CHEMBL_DEFAULTS.timeout,
+        help=(
+            "HTTP read timeout in seconds (defaults: chembl/all="
+            f"{CHEMBL_DEFAULTS.timeout}, pubmed={PUBMED_DEFAULTS.timeout})"
+        ),
+    )
+
+    combined_group = parser.add_argument_group("Combined pipeline overrides")
+    combined_group.add_argument(
+        "--chembl-chunk-size",
+        "--chembl-batch-size",
         dest="chembl_chunk_size",
         type=positive_int,
-        default=5,
-        help="Maximum identifiers per ChEMBL request",
-    )
-    all_cmd.add_argument(
-        "--pubmed-sleep",
-        "--sleep",
-        dest="pubmed_sleep",
-        type=float,
-        default=5.0,
-        help="Seconds to sleep between PubMed requests",
-    )
-    all_cmd.add_argument(
-        "--pubmed-workers",
-        "--workers",
-        dest="pubmed_workers",
-        type=int,
-        default=1,
-        help="Number of concurrent PubMed requests",
-    )
-    all_cmd.add_argument(
-        "--pubmed-batch-size",
-        "--batch-size",
-        dest="pubmed_batch_size",
-        type=positive_int,
-        default=50,
-        help="Maximum PMIDs per PubMed request",
-    )
-    all_cmd.add_argument(
-        "--chembl-timeout",
-        "--timeout",
-        dest="chembl_timeout",
-        type=float,
-        default=30.0,
-        help="Timeout in seconds for each ChEMBL HTTP request",
-    )
-    all_cmd.add_argument(
-        "--limit",
-        type=int,
-        default=None,
+        default=ALL_DEFAULTS.chunk_size,
         help=(
-            "Maximum number of identifiers to process; use 0 to skip processing"
+            "Maximum identifiers per ChEMBL request when running in all mode "
+            f"(default: {ALL_DEFAULTS.chunk_size})"
         ),
     )
-    all_cmd.add_argument(
-        "--offset",
+    combined_group.add_argument(
+        "--chembl-timeout",
+        dest="chembl_timeout",
+        type=float,
+        default=ALL_DEFAULTS.timeout,
+        help=(
+            "Timeout in seconds for ChEMBL requests when running in all mode "
+            f"(default: {ALL_DEFAULTS.timeout})"
+        ),
+    )
+    combined_group.add_argument(
+        "--pubmed-sleep",
+        "--chembl-sleep",
+        dest="pubmed_sleep",
+        type=float,
+        default=ALL_DEFAULTS.sleep,
+        help=(
+            "Seconds to sleep between PubMed requests when running in all mode "
+            f"(default: {ALL_DEFAULTS.sleep})"
+        ),
+    )
+    combined_group.add_argument(
+        "--pubmed-workers",
+        "--chembl-workers",
+        dest="pubmed_workers",
         type=int,
-        default=0,
-        help="Number of identifiers to skip before processing",
+        default=ALL_DEFAULTS.workers,
+        help=(
+            "Number of concurrent PubMed requests when running in all mode "
+            f"(default: {ALL_DEFAULTS.workers})"
+        ),
     )
-    all_cmd.add_argument(
-        "--openalex-rps",
+    combined_group.add_argument(
+        "--pubmed-batch-size",
+        "--pubmed-chunk-size",
+        dest="pubmed_batch_size",
+        type=positive_int,
+        default=ALL_DEFAULTS.batch_size,
+        help=(
+            "Maximum PMIDs per PubMed request when running in all mode "
+            f"(default: {ALL_DEFAULTS.batch_size})"
+        ),
+    )
+    combined_group.add_argument(
+        "--pubmed-timeout",
+        dest="pubmed_timeout",
         type=float,
-        default=None,
-        help="Requests per second limit for OpenAlex",
+        default=PUBMED_DEFAULTS.timeout,
+        help=(
+            "Timeout in seconds for PubMed requests when running in all mode "
+            f"(default: {PUBMED_DEFAULTS.timeout})"
+        ),
     )
-    all_cmd.add_argument(
-        "--crossref-rps",
-        type=float,
-        default=None,
-        help="Requests per second limit for CrossRef",
-    )
-    all_fallback = all_cmd.add_argument_group("Fallback DOI overrides")
-    all_fallback.add_argument(
+
+    fallback_group = parser.add_argument_group("Fallback DOI overrides")
+    fallback_group.add_argument(
         "--fallback-doi-enabled",
         action="store_true",
         help="Enable lookup of DOI overrides from a CSV file",
     )
-    all_fallback.add_argument(
+    fallback_group.add_argument(
         "--fallback-doi-path",
         type=path_argument,
         default=None,
         help="CSV file containing DOI overrides keyed by PMID",
     )
-    all_fallback.add_argument(
+    fallback_group.add_argument(
         "--fallback-doi-col-pmid",
         default="PMID",
         help="Column containing PubMed identifiers in the fallback CSV",
     )
-    all_fallback.add_argument(
+    fallback_group.add_argument(
         "--fallback-doi-col-doi",
         default="DOI",
         help="Column containing DOI values in the fallback CSV",
     )
-    all_fallback.add_argument(
+    fallback_group.add_argument(
         "--fallback-doi-delimiter",
         default=None,
         help="Delimiter used when reading the fallback CSV (default: io.csv_sep)",
     )
-    all_fallback.add_argument(
+    fallback_group.add_argument(
         "--fallback-doi-encoding",
         default=None,
         help="Encoding used for the fallback CSV (default: io.csv_encoding)",
     )
-    all_fallback.add_argument(
+    fallback_group.add_argument(
         "--fallback-doi-overwrite",
         action="store_true",
         help="Allow replacing existing DOIs with fallback values",
     )
-    all_cmd.set_defaults(func=run_all)
-
-    parser.subparsers_map = {  # type: ignore[attr-defined]
-        "pubmed": pubmed,
-        "chembl": chembl,
-        "all": all_cmd,
-    }
 
     return parser, log_cfg
-
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults.
@@ -2772,19 +2734,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     if limit_value == 0:
         logger.info("pipeline_skip_limit", limit=limit_value)
         return 0
-    subparser_map = getattr(parser, "subparsers_map", {})
-    subparser = subparser_map.get(args.command, parser)
+    mode = getattr(args, "mode", "")
     if limit_value is not None and limit_value < 0:
-        subparser.error("--limit must be zero or a positive integer")
+        parser.error("--limit must be zero or a positive integer")
     offset_value = getattr(args, "offset", 0)
     if offset_value < 0:
-        subparser.error("--offset must be zero or a positive integer")
-    if args.command in {"pubmed", "all"}:
+        parser.error("--offset must be zero or a positive integer")
+    if mode in {"pubmed", "all"}:
         fallback_enabled_cli = getattr(args, "fallback_doi_enabled", False)
         if fallback_enabled_cli:
             fallback_path_cli = getattr(args, "fallback_doi_path", None)
             if fallback_path_cli is None:
-                subparser.error(
+                parser.error(
                     "--fallback-doi-path is required when fallback DOI overrides are enabled"
                 )
             fallback_path = (
@@ -2793,53 +2754,57 @@ def main(argv: Sequence[str] | None = None) -> int:
                 else Path(str(fallback_path_cli))
             )
             if not fallback_path.exists():
-                subparser.error("--fallback-doi-path must point to an existing file")
+                parser.error("--fallback-doi-path must point to an existing file")
             if not fallback_path.is_file():
-                subparser.error("--fallback-doi-path must be a file")
+                parser.error("--fallback-doi-path must be a file")
             if not os.access(fallback_path, os.R_OK):
-                subparser.error("--fallback-doi-path must be readable")
+                parser.error("--fallback-doi-path must be readable")
             delimiter_cli = getattr(args, "fallback_doi_delimiter", None)
             if delimiter_cli is not None:
                 delimiter_text = str(delimiter_cli)
                 if not delimiter_text:
-                    subparser.error("--fallback-doi-delimiter must not be empty")
+                    parser.error("--fallback-doi-delimiter must not be empty")
                 if len(delimiter_text) > 1:
-                    subparser.error("--fallback-doi-delimiter must be a single character")
+                    parser.error("--fallback-doi-delimiter must be a single character")
             encoding_cli = getattr(args, "fallback_doi_encoding", None)
             if encoding_cli is not None and not str(encoding_cli).strip():
-                subparser.error("--fallback-doi-encoding must not be empty")
+                parser.error("--fallback-doi-encoding must not be empty")
             for attr_name in ("fallback_doi_col_pmid", "fallback_doi_col_doi"):
                 attr_value = getattr(args, attr_name, None)
                 if attr_value is None or not str(attr_value).strip():
                     option = attr_name.replace("_", "-")
-                    subparser.error(f"--{option} must not be empty")
+                    parser.error(f"--{option} must not be empty")
     mapping = {
-        "column": f"document.{args.command}.column",
-        "limit": f"document.{args.command}.limit",
+        "column": f"document.{mode}.column",
+        "limit": f"document.{mode}.limit",
     }
-    if args.command == "pubmed":
+    if mode == "pubmed":
         mapping.update(
             {
                 "sleep": "document.pubmed.sleep",
                 "workers": "document.pubmed.workers",
                 "batch_size": "document.pubmed.batch_size",
+                "timeout": "sources.pubmed.timeout_read",
             }
         )
-    elif args.command == "chembl":
+    elif mode == "chembl":
         mapping.update(
             {
                 "chunk_size": "document.chembl.chunk_size",
                 "timeout": "document.chembl.timeout",
             }
         )
-    elif args.command == "all":
+    elif mode == "all":
         mapping.update(
             {
+                "chunk_size": "document.all.chunk_size",
+                "timeout": "document.all.timeout",
                 "chembl_chunk_size": "document.all.chunk_size",
                 "pubmed_sleep": "document.all.sleep",
                 "pubmed_workers": "document.all.workers",
                 "pubmed_batch_size": "document.all.batch_size",
                 "chembl_timeout": "document.all.timeout",
+                "pubmed_timeout": "sources.pubmed.timeout_read",
             }
         )
     mapping |= {
@@ -2851,8 +2816,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ) as logging_ctx:
         exit_code = run_cli_command(
             args=args,
-            parser=subparser,
-            base_parser=parser,
+            parser=parser,
             log_cfg=logging_ctx.log_cfg,
             mapping=mapping,
             run=run,
