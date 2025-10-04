@@ -153,6 +153,7 @@ UNIPROT_OUTPUT_COLUMNS: list[str] = [
 
 
 _GTOP_JSON_FAILURE_CACHE: set[tuple[str, str]] = set()
+_GTOP_NON_JSON_CONTENT_TYPE_CACHE: set[tuple[str, str]] = set()
 
 
 def _collect_name_fields(name_obj: dict[str, Any]) -> Iterable[str]:
@@ -890,14 +891,6 @@ def _fetch_gtop_endpoint(
             response.raise_for_status()
             raw_content_type = response.headers.get("Content-Type")
             content_type = raw_content_type if isinstance(raw_content_type, str) else ""
-            if "json" not in content_type.lower():
-                logger.warning(
-                    "gtop_non_json_response",
-                    gtop_id=gtop_id,
-                    endpoint=endpoint,
-                    content_type=raw_content_type,
-                )
-                return None
             body = response.content
             if isinstance(body, (bytes, bytearray)):
                 body_is_empty = not body.strip()
@@ -911,18 +904,32 @@ def _fetch_gtop_endpoint(
                     gtop_id=gtop_id,
                     endpoint=endpoint,
                     error="empty response body",
+                    content_type=raw_content_type,
                 )
                 _GTOP_JSON_FAILURE_CACHE.add(cache_key)
                 return None
-            return response.json()
-    except (json.JSONDecodeError, ValueError) as exc:
-        logger.warning(
-            "gtop_json_decode_failed",
-            gtop_id=gtop_id,
-            endpoint=endpoint,
-            error=str(exc),
-        )
-        _GTOP_JSON_FAILURE_CACHE.add(cache_key)
+            try:
+                payload = response.json()
+            except (json.JSONDecodeError, ValueError) as exc:
+                logger.warning(
+                    "gtop_json_decode_failed",
+                    gtop_id=gtop_id,
+                    endpoint=endpoint,
+                    error=str(exc),
+                    content_type=raw_content_type,
+                )
+                _GTOP_JSON_FAILURE_CACHE.add(cache_key)
+                return None
+            if "json" not in content_type.lower():
+                if cache_key not in _GTOP_NON_JSON_CONTENT_TYPE_CACHE:
+                    logger.warning(
+                        "gtop_non_json_response",
+                        gtop_id=gtop_id,
+                        endpoint=endpoint,
+                        content_type=raw_content_type,
+                    )
+                    _GTOP_NON_JSON_CONTENT_TYPE_CACHE.add(cache_key)
+            return payload
     except requests.RequestException as exc:  # pragma: no cover - network failures
         logger.warning(
             "gtop_request_failed", gtop_id=gtop_id, endpoint=endpoint, error=str(exc)
