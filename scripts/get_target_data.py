@@ -94,6 +94,7 @@ from library.cli import (
     positive_int,
     prepare_io_paths,
 )
+from library.cli.logging import setup_cli_logging
 from library.config import (
     Config,
     _serialize_paths,
@@ -148,9 +149,6 @@ DEFAULT_INPUT_NAME = "target.csv"
 DEFAULT_OUTPUT_STEM = "targets"
 RAW_SUFFIX = "_raw"
 NORMALIZED_SUFFIX = "_normalized"
-DEFAULT_LOG_DIR = Path("data") / "logs"
-
-
 COMMAND_CHOICES: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
 
 _RUSSIAN_KEYBOARD_MAP: dict[str, str] = {
@@ -227,38 +225,6 @@ COMMAND_ALIAS_TO_CANONICAL: dict[str, str] = {
     for alias in aliases
 }
 
-
-class _TeeStream:
-    """Mirror writes to multiple text streams without closing them."""
-
-    def __init__(self, *streams: IO[str] | None) -> None:
-        unique_streams: list[IO[str]] = []
-        for stream in streams:
-            if stream is None:
-                continue
-            if any(stream is existing for existing in unique_streams):
-                continue
-            unique_streams.append(stream)
-        self._streams: tuple[IO[str], ...] = tuple(unique_streams)
-
-    def write(self, data: str) -> int:  # pragma: no cover - direct delegation
-        for stream in self._streams:
-            stream.write(data)
-        return len(data)
-
-    def flush(self) -> None:  # pragma: no cover - direct delegation
-        for stream in self._streams:
-            flush = getattr(stream, "flush", None)
-            if callable(flush):
-                flush()
-
-    def writable(self) -> bool:  # pragma: no cover - interface helper
-        if not self._streams:
-            return False
-        return all(getattr(stream, "writable", lambda: True)() for stream in self._streams)
-
-    def isatty(self) -> bool:  # pragma: no cover - interface helper
-        return any(getattr(stream, "isatty", lambda: False)() for stream in self._streams)
 
 
 @dataclass(frozen=True)
@@ -2907,24 +2873,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not isinstance(date_value, str) or not date_value:
         date_value = datetime.now(timezone.utc).strftime("%Y%m%d")
         setattr(args, "date", date_value)
-    log_dir = DEFAULT_LOG_DIR
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / f"get_target_data_{date_value}.log"
     exit_code = 0
 
-    original_stream = log_cfg.stream
-    with log_path.open("a", encoding="utf-8") as log_stream:
-        tee_stream = _TeeStream(log_stream, original_stream)
-        log_cfg.stream = tee_stream
-        configure_logger(log_cfg)
-        console_stream = original_stream or sys.stdout
-        if console_stream is None:  # pragma: no cover - defensive fallback
-            console_stream = sys.stdout
-        print(
-            f"[INFO] Structured logs are mirrored to '{log_path}'.",
-            file=console_stream,
-            flush=True,
-        )
+    with setup_cli_logging(
+        Path(__file__).with_suffix("").name, log_cfg, date_value
+    ) as logging_ctx:
+        configure_logger(logging_ctx.log_cfg)
+        console_stream = logging_ctx.console_stream
+        log_path = logging_ctx.log_path
         try:
 
             limit_value = getattr(args, "limit", None)
@@ -2997,7 +2953,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args=argparse.Namespace(**args_dict),
                     parser=subparser,
                     base_parser=parser,
-                    log_cfg=log_cfg,
+                    log_cfg=logging_ctx.log_cfg,
                     mapping=mapping,
                     run=run,
                     logger=logger,
@@ -3006,9 +2962,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             exit_code = 2
             logger.error("pipeline_error", error=str(exc))
             print(f"[ERROR] {exc}", file=console_stream, flush=True)
-        finally:
-            log_cfg.stream = original_stream
-            configure_logger(log_cfg)
+    configure_logger(log_cfg)
 
 
     return exit_code

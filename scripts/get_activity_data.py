@@ -80,6 +80,7 @@ from library.cli import (
 from library.cli import (
     build_parser as base_parser,
 )
+from library.cli.logging import setup_cli_logging
 from library.cli_utils import (
     PipelineError,
     resolve_invocation,
@@ -602,22 +603,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--limit must be zero or a positive integer")
     if args.offset < 0:
         parser.error("--offset must be zero or a positive integer")
-    return run_cli_command(
-        args=args,
-        parser=parser,
-        log_cfg=log_cfg,
-        mapping={
-            "timeout": "activity.timeout",
-            "column": "activity.column",
-            "batch_size": "activity.batch_size",
-            "limit": "activity.limit",
-            "offset": "activity.offset",
-            "dry_run": "activity.dry_run",
-            "workers": "activity.workers",
-        },
-        run=run,
-        logger=logger,
-    )
+    with setup_cli_logging(
+        Path(__file__).with_suffix("").name, log_cfg, getattr(args, "date", None)
+    ) as logging_ctx:
+        exit_code = run_cli_command(
+            args=args,
+            parser=parser,
+            log_cfg=logging_ctx.log_cfg,
+            mapping={
+                "timeout": "activity.timeout",
+                "column": "activity.column",
+                "batch_size": "activity.batch_size",
+                "limit": "activity.limit",
+                "offset": "activity.offset",
+                "dry_run": "activity.dry_run",
+                "workers": "activity.workers",
+            },
+            run=run,
+            logger=logger,
+        )
+    configure_logger(log_cfg)
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

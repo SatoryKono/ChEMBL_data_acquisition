@@ -1,0 +1,195 @@
+"""End-to-end checks for CLI logging helpers."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from scripts import (
+    get_activity_data,
+    get_assay_data,
+    get_document_data,
+    get_target_data,
+    get_testitem_data,
+)
+
+_SCRIPT_CASES = (
+    {
+        "module": get_activity_data,
+        "command": None,
+        "input_flag": "--input",
+        "output_flag": "--output",
+        "output_attr": "output_csv",
+        "prefix": "activity_pipeline",
+        "extra_args": (),
+    },
+    {
+        "module": get_assay_data,
+        "command": None,
+        "input_flag": "--input",
+        "output_flag": "--output",
+        "output_attr": "output_csv",
+        "prefix": "assay_pipeline",
+        "extra_args": (),
+    },
+    {
+        "module": get_document_data,
+        "command": "pubmed",
+        "input_flag": "--input",
+        "output_flag": "--output",
+        "output_attr": "output_csv",
+        "prefix": "document_pipeline",
+        "extra_args": (),
+    },
+    {
+        "module": get_target_data,
+        "command": "chembl",
+        "input_flag": "--input",
+        "output_flag": "--final-out",
+        "output_attr": "final_out",
+        "prefix": "target_pipeline",
+        "extra_args": ("--date", "20240102"),
+    },
+    {
+        "module": get_testitem_data,
+        "command": None,
+        "input_flag": "--input",
+        "output_flag": "--output",
+        "output_attr": "output_csv",
+        "prefix": "testitem_pipeline",
+        "extra_args": (),
+    },
+)
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("case", _SCRIPT_CASES, ids=lambda c: Path(c["module"].__file__).stem)
+def test_cli_logging__creates_log_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: dict[str, Any]
+) -> None:
+    base_path = tmp_path
+    data_dir = base_path / "data"
+    log_dir = data_dir / "logs"
+    log_dir.mkdir(parents=True)
+
+    config_path = base_path / "config.yaml"
+    config_path.write_text("io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n", encoding="utf-8")
+
+    input_path = base_path / "input.csv"
+    input_path.write_text("identifier\nCHEMBL1\n", encoding="utf-8")
+
+    output_path = base_path / "output.csv"
+
+    monkeypatch.chdir(base_path)
+    monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
+    monkeypatch.setattr(
+        "library.cli.logging._current_date_str", lambda: "20240102"
+    )
+
+    module = case["module"]
+    prefix = case["prefix"]
+    command = case["command"]
+    input_flag = case["input_flag"]
+    output_flag = case["output_flag"]
+    output_attr = case["output_attr"]
+    extra_args = list(case["extra_args"])
+
+    def _run_cli_command_stub(
+        *,
+        args: Any,
+        parser: Any,
+        log_cfg: Any,
+        mapping: Any,
+        run: Any,
+        logger: Any,
+        base_parser: Any | None = None,
+    ) -> int:
+        module.configure_logger(log_cfg)
+        logger.info(
+            "pipeline_start",
+            run_id=log_cfg.run_id,
+            command=getattr(args, "command", command or Path(module.__file__).stem),
+        )
+        logger.info(
+            "pipeline_parameters",
+            input=str(getattr(args, "input_csv", "")),
+            output=str(getattr(args, output_attr, "")),
+            limit=getattr(args, "limit", None),
+            offset=getattr(args, "offset", None),
+        )
+        exit_code = run(object(), args)
+        if exit_code == 0:
+            logger.info("pipeline_done", run_id=log_cfg.run_id)
+        else:
+            logger.info("pipeline_fail", run_id=log_cfg.run_id, exit_code=exit_code)
+        return int(exit_code)
+
+    monkeypatch.setattr(module, "run_cli_command", _run_cli_command_stub)
+
+    def _stub_run(_cfg: Any, args: Any) -> int:
+        module.logger.info(
+            f"{prefix}_start",
+            stage="ingest",
+            input=str(getattr(args, "input_csv", "")),
+        )
+        module.logger.info(
+            f"{prefix}_records",
+            processed=2,
+            discarded=1,
+            stage="ingest",
+        )
+        module.logger.info(
+            f"{prefix}_done",
+            output=str(getattr(args, output_attr, "")),
+        )
+        return 0
+
+    monkeypatch.setattr(module, "run", _stub_run)
+
+    argv: list[str] = []
+    if command:
+        argv.append(command)
+    argv.extend(["--config", str(config_path)])
+    if input_flag:
+        argv.extend([input_flag, str(input_path)])
+    if output_flag:
+        target_output = output_path if output_flag != "--final-out" else base_path / "targets.csv"
+        argv.extend([output_flag, str(target_output)])
+    argv.extend(extra_args)
+
+    exit_code = module.main(argv)
+    assert exit_code == 0
+
+    log_files = sorted(log_dir.glob("*.log"))
+    assert len(log_files) == 1
+    log_path = log_files[0]
+    expected_name = f"{Path(module.__file__).stem}_20240102.log"
+    assert log_path.name == expected_name
+
+    events = []
+    with log_path.open(encoding="utf-8") as handle:
+        for line in handle:
+            record = json.loads(line)
+            events.append(record)
+
+    event_names = {record.get("event") for record in events}
+    expected_events = {
+        "pipeline_start",
+        "pipeline_parameters",
+        f"{prefix}_start",
+        f"{prefix}_records",
+        f"{prefix}_done",
+        "pipeline_done",
+    }
+    assert expected_events.issubset(event_names)
+
+    record_entry = next(
+        record
+        for record in events
+        if record.get("event") == f"{prefix}_records"
+    )
+    assert record_entry.get("processed") == 2
+    assert record_entry.get("discarded") == 1
