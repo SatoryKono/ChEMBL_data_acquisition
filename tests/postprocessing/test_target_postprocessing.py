@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import importlib.util
+import sys
+import types
 from pathlib import Path
 
 import importlib.util
 import sys
 import types
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -57,6 +61,28 @@ from library.schemas.targets import CELLULARITY_COLUMN_NAME, TARGETS_COLUMN_ORDE
 
 INPUT_FILE = "target_postprocess_power_query_input.csv"
 EXPECTED_FILE = "target_postprocess_power_query_expected.csv"
+
+_ROOT = Path(__file__).resolve().parents[2]
+
+if "library.postprocessing" not in sys.modules:
+    postprocessing_pkg = types.ModuleType("library.postprocessing")
+    postprocessing_pkg.__path__ = [str(_ROOT / "library/postprocessing")]
+    sys.modules["library.postprocessing"] = postprocessing_pkg
+
+if "library.postprocessing.target" not in sys.modules:
+    target_pkg = types.ModuleType("library.postprocessing.target")
+    target_pkg.__path__ = [str(_ROOT / "library/postprocessing/target")]
+    sys.modules["library.postprocessing.target"] = target_pkg
+
+_SPEC = importlib.util.spec_from_file_location(
+    "library.postprocessing.target.cellularity",
+    _ROOT / "library/postprocessing/target/cellularity.py",
+)
+assert _SPEC is not None and _SPEC.loader is not None
+_cellularity_module = importlib.util.module_from_spec(_SPEC)
+sys.modules[_SPEC.name] = _cellularity_module
+_SPEC.loader.exec_module(_cellularity_module)
+Cellularity = _cellularity_module.Cellularity
 
 
 @pytest.mark.unit
@@ -197,3 +223,23 @@ def test_append_multifunctional_flag__detects_keywords(snapshot_resource: Path) 
     assert "multifunctional_enzyme" in result.columns
     assert result["multifunctional_enzyme"].dtype == "boolean"
     assert result["multifunctional_enzyme"].tolist() == [True, False, False]
+
+
+@pytest.mark.unit
+def test_classify_by_fetch__trailing_spaces_remain_ambiguous() -> None:
+    lineage = [
+        "Cellular organisms",
+        "Eukaryota ",
+        "Chordata ",
+        "Homo sapiens   ",
+    ]
+
+    def _fetcher(tax_id: Any, email: str | None) -> list[str]:
+        return list(lineage)
+
+    classifier = Cellularity(fetcher=_fetcher)
+
+    result = classifier.classify_by_fetch("9606")
+
+    assert result == "ambiguous"
+    assert classifier.get_lineage_names("9606") == lineage

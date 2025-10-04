@@ -126,6 +126,9 @@ _SOURCE_FALLBACKS: dict[str, tuple[str, ...]] = {
         "uniprotkb_Id",
         "uniProtkbId",
         "uniProtkbIdFallback",
+    ),
+}
+
 _SOURCE_COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
     "uniprot_id_primary": (
         "uniprot_id",

@@ -172,12 +172,12 @@ class Cellularity:
         if lineage_text:
             lineage_names = [segment.strip() for segment in lineage_text.split(";")]
         lineage_names = [name for name in lineage_names if name]
-        if sci_name and sci_name.strip() and sci_name not in lineage_names:
-            lineage_names.append(sci_name.strip())
+        if sci_name is not None and sci_name not in lineage_names:
+            lineage_names.append(sci_name)
         return lineage_names
 
     def classify_by_fetch(self, tax_id: Any, email: str | None = None) -> str:
-        names = [normalize_text(name) for name in self.get_lineage_names(tax_id, email)]
+        names = [self._lower_token(name) for name in self.get_lineage_names(tax_id, email)]
         if "viruses" in names:
             return "acellular (virus)"
         if "bacteria" in names or "archaea" in names:
@@ -205,6 +205,16 @@ class Cellularity:
             if candidate in lookup:
                 return True
         return False
+
+    @staticmethod
+    def _lower_token(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, float) and pd.isna(value):
+            return ""
+        if value is pd.NA:
+            return ""
+        return str(value).lower()
 
 
 def add_cellularity_smart(
