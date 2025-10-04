@@ -400,14 +400,14 @@
         },
         "timeout": {
           "default": 30.0,
-          "minimum": 0,
+          "exclusiveMinimum": 0,
           "title": "Timeout",
           "type": "number"
         },
         "limit": {
           "anyOf": [
             {
-              "minimum": 0,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -416,6 +416,12 @@
           ],
           "default": null,
           "title": "Limit"
+        },
+        "offset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
         }
       },
       "title": "AssayCfg",
@@ -878,14 +884,14 @@
         },
         "timeout": {
           "default": 30.0,
-          "minimum": 0,
+          "exclusiveMinimum": 0,
           "title": "Timeout",
           "type": "number"
         },
         "limit": {
           "anyOf": [
             {
-              "minimum": 0,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -894,6 +900,12 @@
           ],
           "default": null,
           "title": "Limit"
+        },
+        "offset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
         }
       },
       "title": "DocumentChemblCfg",
@@ -1621,6 +1633,11 @@
     "TargetAllCfg": {
       "additionalProperties": false,
       "properties": {
+        "column": {
+          "default": "target_chembl_id",
+          "title": "Column",
+          "type": "string"
+        },
         "data_dir": {
           "default": "../dictionary/_target/_uniprot",
           "format": "path",
@@ -1647,7 +1664,7 @@
         },
         "timeout": {
           "default": 30.0,
-          "minimum": 0,
+          "exclusiveMinimum": 0,
           "title": "Timeout",
           "type": "number"
         },
@@ -1698,7 +1715,7 @@
         "limit": {
           "anyOf": [
             {
-              "minimum": 0,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1707,6 +1724,12 @@
           ],
           "default": null,
           "title": "Limit"
+        },
+        "offset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
         }
       },
       "title": "TargetAllCfg",
@@ -1748,14 +1771,14 @@
         },
         "timeout": {
           "default": 30.0,
-          "minimum": 0,
+          "exclusiveMinimum": 0,
           "title": "Timeout",
           "type": "number"
         },
         "limit": {
           "anyOf": [
             {
-              "minimum": 0,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1764,6 +1787,12 @@
           ],
           "default": null,
           "title": "Limit"
+        },
+        "offset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
         }
       },
       "title": "TargetChemblCfg",
@@ -1772,6 +1801,42 @@
     "TargetIupharCfg": {
       "additionalProperties": false,
       "properties": {
+        "column": {
+          "default": "uniprot_id",
+          "title": "Column",
+          "type": "string"
+        },
+        "chunk_size": {
+          "default": 100,
+          "minimum": 1,
+          "title": "Chunk Size",
+          "type": "integer"
+        },
+        "timeout": {
+          "default": 30.0,
+          "exclusiveMinimum": 0,
+          "title": "Timeout",
+          "type": "number"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
+        },
+        "offset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
         "target_csv": {
           "default": "../dictionary/_target/_IUPHAR/_IUPHAR_target.csv",
           "format": "path",
@@ -1783,19 +1848,6 @@
           "format": "path",
           "title": "Family Csv",
           "type": "string"
-        },
-        "limit": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Limit"
         }
       },
       "title": "TargetIupharCfg",
@@ -1805,20 +1857,26 @@
       "additionalProperties": false,
       "properties": {
         "column": {
-          "default": "mapping_uniprot_id",
+          "default": "uniprot_id",
           "title": "Column",
           "type": "string"
         },
-        "data_dir": {
-          "default": "../dictionary/_target/_uniprot",
-          "format": "path",
-          "title": "Data Dir",
-          "type": "string"
+        "chunk_size": {
+          "default": 100,
+          "minimum": 1,
+          "title": "Chunk Size",
+          "type": "integer"
+        },
+        "timeout": {
+          "default": 30.0,
+          "exclusiveMinimum": 0,
+          "title": "Timeout",
+          "type": "number"
         },
         "limit": {
           "anyOf": [
             {
-              "minimum": 0,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1827,6 +1885,18 @@
           ],
           "default": null,
           "title": "Limit"
+        },
+        "offset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "data_dir": {
+          "default": "../dictionary/_target/_uniprot",
+          "format": "path",
+          "title": "Data Dir",
+          "type": "string"
         }
       },
       "title": "TargetUniprotCfg",

@@ -73,6 +73,7 @@ from library.integration import pubchem_library as pl
 from library.cli import LoggerConfig, ConfigMetadata
 from library.cli import build_parser as base_parser
 from library.cli_utils import run_cli_command
+from library.cli.logging import setup_cli_logging
 from library.config import (
     ApiCfg,
     Config,
@@ -744,14 +745,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         "limit": "testitem.limit",
         "offset": "testitem.offset",
     }
-    return run_cli_command(
-        args=args,
-        parser=parser,
-        log_cfg=log_cfg,
-        mapping=mapping,
-        run=run,
-        logger=logger,
-    )
+    with setup_cli_logging(
+        Path(__file__).with_suffix("").name, log_cfg, getattr(args, "date", None)
+    ) as logging_ctx:
+        exit_code = run_cli_command(
+            args=args,
+            parser=parser,
+            log_cfg=logging_ctx.log_cfg,
+            mapping=mapping,
+            run=run,
+            logger=logger,
+        )
+    configure_logger(log_cfg)
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

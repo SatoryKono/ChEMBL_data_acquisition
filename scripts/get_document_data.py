@@ -95,10 +95,12 @@ from library.cli import (
     LoggerConfig,
     ConfigMetadata,
     build_root_parser,
+    configure_logger,
     path_argument,
     positive_int,
     prepare_io_paths,
 )
+from library.cli.logging import setup_cli_logging
 from library.cli.utils import run_cli_command
 from library.config import (
     Config,
@@ -2542,15 +2544,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         "openalex_rps": "openalex.rps",
         "crossref_rps": "crossref.rps",
     }
-    return run_cli_command(
-        args=args,
-        parser=subparser,
-        base_parser=parser,
-        log_cfg=log_cfg,
-        mapping=mapping,
-        run=run,
-        logger=logger,
-    )
+    with setup_cli_logging(
+        Path(__file__).with_suffix("").name, log_cfg, getattr(args, "date", None)
+    ) as logging_ctx:
+        exit_code = run_cli_command(
+            args=args,
+            parser=subparser,
+            base_parser=parser,
+            log_cfg=logging_ctx.log_cfg,
+            mapping=mapping,
+            run=run,
+            logger=logger,
+        )
+    configure_logger(log_cfg)
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
