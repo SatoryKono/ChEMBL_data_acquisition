@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from ...common.log import logger
 from .cellularity import add_cellularity_smart, FetchLineageCallable
 from .multifunctional import compute_multifunctional
 
@@ -27,17 +28,29 @@ def postprocess_target_table(
     path = Path(input_path)
     source = pd.read_csv(path, dtype=str, keep_default_na=False)
 
-    source_base = source[
-        [
-            "target_chembl_id",
-            "uniprot_id_primary",
-            "organism",
-            "taxon_id",
-            "lineage_superkingdom",
-            "lineage_phylum",
-            "lineage_class",
-        ]
-    ].copy()
+    base_columns = [
+        "target_chembl_id",
+        "uniprot_id_primary",
+        "organism",
+        "taxon_id",
+        "lineage_superkingdom",
+        "lineage_phylum",
+        "lineage_class",
+    ]
+    missing_columns = [
+        column for column in base_columns if column not in source.columns
+    ]
+    if missing_columns:
+        source = source.copy()
+        for column in missing_columns:
+            source[column] = ""
+        logger.warning(
+            "target_postprocess_missing_columns",
+            path=str(path),
+            columns=missing_columns,
+        )
+
+    source_base = source[base_columns].copy()
 
     for column in ("lineage_superkingdom", "lineage_phylum", "lineage_class"):
         source_base[column] = _lowercase_column(source_base[column])

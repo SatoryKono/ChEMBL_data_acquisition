@@ -36,3 +36,41 @@ def test_postprocess_target_table__produces_power_query_equivalent_csv(
     )
     assert str(bool_frame["multifunctional_enzyme"].dtype) == "boolean"
 
+
+@pytest.mark.unit
+def test_postprocess_target_table__fills_missing_columns(tmp_path: Path) -> None:
+    input_path = tmp_path / "targets_minimal.csv"
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1"],
+            "taxon_id": ["9606"],
+            "reaction_ec_numbers": ["1.1.1.1|2.2.2.2"],
+        }
+    )
+    frame.to_csv(input_path, index=False)
+
+    fetch_calls: list[tuple[object, object | None]] = []
+
+    def _fake_fetcher(tax_id: object, email: str | None) -> list[str]:
+        fetch_calls.append((tax_id, email))
+        return ["Eukaryota", "Chordata"]
+
+    output_location = postprocess_target_table(input_path, fetcher=_fake_fetcher)
+    output_path = Path(output_location)
+
+    result_frame = pd.read_csv(output_path, dtype=str, keep_default_na=False)
+
+    for column in [
+        "uniprot_id_primary",
+        "organism",
+        "lineage_superkingdom",
+        "lineage_phylum",
+        "lineage_class",
+    ]:
+        assert column in result_frame.columns
+        assert result_frame.at[0, column] == ""
+
+    assert fetch_calls == [("9606", None)]
+    assert result_frame.at[0, "cellularity"] == "multicellular"
+    assert result_frame.at[0, "multifunctional_enzyme"] == "True"
+
