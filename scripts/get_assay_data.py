@@ -40,6 +40,7 @@ from library.common.rate_limiter import get_global_limiter
 from library.cli import (
     LoggerConfig,
     ConfigMetadata,
+    configure_logger,
 )
 from library.cli import build_parser as base_parser
 from library.cli_utils import run_cli_command, run_pipeline
