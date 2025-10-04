@@ -38,6 +38,21 @@ outputs.
 | `reports/` | Location where JSON/Markdown test reports are emitted by CI and local runs. |
 | `Makefile` | Convenience targets for formatting, linting, tests and documentation checks. |
 
+
+## Pipelines
+
+### Targets
+
+The targets pipeline produces a deterministic CSV named
+`output.target_<date>.csv` (the date reflects the UTC execution time). After
+the export completes, the repository's post-processing step
+(`library.postprocessing.target.process_targets`) derives an additional file
+`isoform.output.target_<date>.csv` located alongside the main output. The
+helper mirrors the legacy Power Query workbook by normalising
+isoform-specific names, splitting pipe-separated lists and removing duplicate
+`(id, name)` combinations. Both artefacts are written using UTF-8 without BOM
+and share the same metadata sidecars described in the output reference.
+
 A detailed breakdown of sub-packages, glossary and extended guides is available
 in [`docs/en/SUMMARY.md`](./docs/en/SUMMARY.md) and
 [`docs/ru/SUMMARY.md`](./docs/ru/SUMMARY.md).

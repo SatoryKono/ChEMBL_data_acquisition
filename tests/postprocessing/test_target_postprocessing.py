@@ -1,6 +1,7 @@
+
 from __future__ import annotations
 
-import io
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -10,337 +11,236 @@ from library.postprocessing import target
 
 
 @pytest.mark.unit
-def test_normalise_series__strips_and_normalises():
-    series = pd.Series(["  Alpha  ", "n/a", None, " NA "])
-
-    result = target._normalise_series(series, lowercase=False)
-
-    assert result.tolist() == ["Alpha", "", "", ""]
+def test_split_pipes__handles_empty_and_whitespace():
+    assert target._split_pipes("") == []
+    assert target._split_pipes("a|b") == ["a", "b"]
+    assert target._split_pipes(" a | | b ") == ["a", "b"]
 
 
 @pytest.mark.unit
-def test_normalise_series__applies_lowercase():
-    series = pd.Series(["Beta", " Mixed Case ", "NONE"])
-
-    result = target._normalise_series(series, lowercase=True)
-
-    assert result.tolist() == ["beta", "mixed case", ""]
-
-
-@pytest.mark.unit
-def test_normalise_series__empty_series_returns_copy():
-    series = pd.Series(dtype=str)
-
-    result = target._normalise_series(series, lowercase=True)
-
-    assert result.empty
-    assert result.dtype == series.dtype
+def test_make_triples__pads_shorter_lists():
+    triples = target._make_triples(["alpha", "beta"], ["ID1"], ["syn1", "syn2", "syn3"])
+    assert triples == [
+        {"name": "alpha", "id": "ID1", "synonym": "syn1"},
+        {"name": "beta", "id": None, "synonym": "syn2"},
+        {"name": None, "id": None, "synonym": "syn3"},
+    ]
 
 
 @pytest.mark.unit
-def test_split_pipe__filters_whitespace_and_blanks():
-    assert target._split_pipe(" value | |second|") == ["value", "second"]
-    assert target._split_pipe("") == []
-    assert target._split_pipe(None) == []  # type: ignore[arg-type]
+def test_syn_expand__produces_variants():
+    assert target._syn_expand("PDE3A") == ["pde3a", "3a"]
+    assert target._syn_expand("PLD2A") == ["pld2a", "2a"]
 
 
 @pytest.mark.unit
-def test_split_synonyms__deduplicates_and_skips_placeholders():
-    value = "Alpha : beta : NA : Beta : none"
-
-    assert target._split_synonyms(value) == ["Alpha", "beta", "Beta"]
-    assert target._split_synonyms(None) == []  # type: ignore[arg-type]
+def test_tokenize_synonym__pde3a_alpha():
+    assert target._tokenize_synonym("PDE3A:alpha") == ["pde3a", "3a", "alpha"]
 
 
-@pytest.mark.unit
-def test_syn_expand__tokenises_and_deduplicates():
-    term = "Alpha-beta gamma Alpha"
-
-    assert target._syn_expand(term) == ["alpha", "beta", "gamma"]
-
-
-@pytest.mark.unit
-def test_read_csv__tries_multiple_encodings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    attempted: list[str] = []
-
-    def fake_read_csv(path: Path, *, dtype, encoding: str, sep: str):  # type: ignore[override]
-        attempted.append(encoding)
-        if encoding != "utf-8":
-            raise UnicodeDecodeError("utf-8", b"", 0, 1, "boom")
-        return pd.DataFrame({"column": ["value"]})
-
-    monkeypatch.setattr(pd, "read_csv", fake_read_csv)
-
-    csv_path = tmp_path / "input.csv"
-    csv_path.write_text("column\nvalue\n", encoding="utf-8")
-
-    frame = target._read_csv(csv_path, encodings=("utf-8-sig", "utf-8"), sep=",")
-
-    assert attempted == ["utf-8-sig", "utf-8"]
-    assert frame.to_dict(orient="list") == {"column": ["value"]}
-
-
-@pytest.mark.unit
-def test_read_csv__raises_last_unicode_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    def failing_read_csv(path: Path, *, dtype, encoding: str, sep: str):  # type: ignore[override]
-        raise UnicodeDecodeError(encoding, b"", 0, 1, "boom")
-
-    monkeypatch.setattr(pd, "read_csv", failing_read_csv)
-
-    csv_path = tmp_path / "input.csv"
-    csv_path.write_text("column\nvalue\n", encoding="utf-8")
-
-    with pytest.raises(UnicodeDecodeError):
-        target._read_csv(csv_path, encodings=("utf-8",), sep=",")
-
-
-@pytest.mark.unit
-def test_process_targets__produces_expected_csv_structure(tmp_path: Path):
-    input_path = tmp_path / "targets.csv"
-    frame = pd.DataFrame(
+def _build_sample_frame() -> pd.DataFrame:
+    return pd.DataFrame(
         [
             {
-                "target_chembl_id": "CHEMBL_T1",
-                "isoform_ids": "ENSP0001",
-                "isoform_names": "Alpha",
-                "isoform_synonyms": "Alpha:Alpha Variant",
+                "isoform_synonyms": "PDE3A:Alpha|Beta Variant",
+                "isoform_names": "Alpha|Beta",
+                "isoform_ids": "EnSp1|ENSP2",
+                "uniprot_id_primary": "U1",
+                "target_chembl_id": "CHEMBL1",
             }
         ]
     )
-    frame.to_csv(input_path, index=False, encoding="utf-8")
-
-    output_path = target.process_targets(input_path)
-    result = pd.read_csv(output_path)
-
-    assert list(result.columns) == [
-        "target_chembl_id",
-        "isoform_id",
-        "isoform_name",
-        "term",
-        "token",
-    ]
-    assert result.to_dict(orient="records") == [
-        {
-            "target_chembl_id": "CHEMBL_T1",
-            "isoform_id": "ENSP0001",
-            "isoform_name": "Alpha",
-            "term": "Alpha",
-            "token": "alpha",
-        },
-        {
-            "target_chembl_id": "CHEMBL_T1",
-            "isoform_id": "ENSP0001",
-            "isoform_name": "Alpha",
-            "term": "alpha",
-            "token": "alpha",
-        },
-        {
-            "target_chembl_id": "CHEMBL_T1",
-            "isoform_id": "ENSP0001",
-            "isoform_name": "Alpha",
-            "term": "alpha variant",
-            "token": "alpha",
-        },
-        {
-            "target_chembl_id": "CHEMBL_T1",
-            "isoform_id": "ENSP0001",
-            "isoform_name": "Alpha",
-            "term": "alpha variant",
-            "token": "variant",
-        },
-    ]
 
 
 @pytest.mark.unit
-def test_process_targets__filters_rows_without_terms(tmp_path: Path):
-    input_path = tmp_path / "targets.csv"
+def test_transform_frame__normalises_names_preserves_ids():
+    frame = _build_sample_frame()
+    result, _ = target._transform_frame(frame)
+
+    assert all(name == name.lower() for name in result["name"])
+    assert "EnSp1" in result["id"].tolist()
+
+
+@pytest.mark.unit
+def test_transform_frame__filters_placeholder_names():
     frame = pd.DataFrame(
         [
             {
-                "target_chembl_id": "CHEMBL_T2",
-                "isoform_ids": "",
-                "isoform_names": "",
-                "isoform_synonyms": "",
+                "isoform_synonyms": "SynA|None|n/a",
+                "isoform_names": "Alpha|n/a|none|",
+                "isoform_ids": "ID1|ID2|ID3",
+                "uniprot_id_primary": "U1",
+                "target_chembl_id": "CHEMBL1",
             }
         ]
     )
-    frame.to_csv(input_path, index=False, encoding="utf-8")
+    result, _ = target._transform_frame(frame)
 
-    output_path = target.process_targets(input_path)
-    result = pd.read_csv(output_path)
-
-    assert result.empty
-    assert list(result.columns) == [
-        "target_chembl_id",
-        "isoform_id",
-        "isoform_name",
-        "term",
-        "token",
-    ]
+    assert "n/a" not in result["name"].values
+    assert "none" not in result["name"].values
+    assert "" not in result["name"].values
 
 
 @pytest.mark.unit
-def test_process_targets__drops_duplicate_rows(tmp_path: Path):
-    input_path = tmp_path / "targets.csv"
-    frame = pd.DataFrame(
+def test_dedup_stage1__matches_table_distinct():
+    combined = pd.DataFrame(
         [
             {
-                "target_chembl_id": "CHEMBL_T3",
-                "isoform_ids": "ENSP0003",
-                "isoform_names": "Gamma",
-                "isoform_synonyms": "Gamma",
+                "id": "ID1",
+                "name": "alpha",
+                "target_chembl_id": "CHEMBL1",
+                "uniprot_id_primary": "U1",
             },
             {
-                "target_chembl_id": "CHEMBL_T3",
-                "isoform_ids": "ENSP0003",
-                "isoform_names": "Gamma",
-                "isoform_synonyms": "Gamma",
+                "id": "ID1",
+                "name": "alpha",
+                "target_chembl_id": "CHEMBL1",
+                "uniprot_id_primary": "U1",
+            },
+            {
+                "id": "ID1",
+                "name": "alpha",
+                "target_chembl_id": "CHEMBL1",
+                "uniprot_id_primary": "U2",
             },
         ]
     )
-    frame.to_csv(input_path, index=False, encoding="utf-8")
+    expected = combined.drop_duplicates(
+        subset=["id", "name", "target_chembl_id", "uniprot_id_primary"], keep="first"
+    )
+    assert target._dedupe_stage1(combined).equals(expected)
 
-    output_path = target.process_targets(input_path)
-    result = pd.read_csv(output_path)
 
-    assert result.to_dict(orient="records") == [
-        {
-            "target_chembl_id": "CHEMBL_T3",
-            "isoform_id": "ENSP0003",
-            "isoform_name": "Gamma",
-            "term": "Gamma",
-            "token": "gamma",
-        },
-        {
-            "target_chembl_id": "CHEMBL_T3",
-            "isoform_id": "ENSP0003",
-            "isoform_name": "Gamma",
-            "term": "gamma",
-            "token": "gamma",
-        },
+@pytest.mark.unit
+def test_stable_sort__preserves_relative_order():
+    df = pd.DataFrame(
+        [
+            {"uniprot_id_primary": "U2", "id": "B", "marker": 1},
+            {"uniprot_id_primary": "U1", "id": "B", "marker": 2},
+            {"uniprot_id_primary": "U1", "id": "A", "marker": 3},
+            {"uniprot_id_primary": "U1", "id": "A", "marker": 4},
+        ]
+    )
+    sorted_df = target._stable_sort(df)
+    assert sorted_df[["uniprot_id_primary", "id", "marker"]].to_dict("records") == [
+        {"uniprot_id_primary": "U1", "id": "A", "marker": 3},
+        {"uniprot_id_primary": "U1", "id": "A", "marker": 4},
+        {"uniprot_id_primary": "U1", "id": "B", "marker": 2},
+        {"uniprot_id_primary": "U2", "id": "B", "marker": 1},
     ]
 
 
 @pytest.mark.unit
-def test_process_targets__sorts_output_rows(tmp_path: Path):
-    input_path = tmp_path / "targets.csv"
-    frame = pd.DataFrame(
+def test_dedup_stage2__respects_sorted_order():
+    df = pd.DataFrame(
         [
             {
-                "target_chembl_id": "CHEMBL_T4",
-                "isoform_ids": "ENSP0005|ENSP0004",
-                "isoform_names": "Beta|Alpha",
-                "isoform_synonyms": "Beta Alt:Beta|Alpha Alt:Alpha",
-            }
+                "id": "ID1",
+                "name": "alpha",
+                "target_chembl_id": "CHEMBL1",
+                "uniprot_id_primary": "U1",
+            },
+            {
+                "id": "ID1",
+                "name": "alpha",
+                "target_chembl_id": "CHEMBL1",
+                "uniprot_id_primary": "U2",
+            },
+            {
+                "id": "ID1",
+                "name": "beta",
+                "target_chembl_id": "CHEMBL1",
+                "uniprot_id_primary": "U1",
+            },
         ]
     )
-    frame.to_csv(input_path, index=False, encoding="utf-8")
-
-    output_path = target.process_targets(input_path)
-    result = pd.read_csv(output_path)
-
-    assert result["isoform_name"].tolist() == [
-        "Alpha",
-        "Alpha",
-        "Alpha",
-        "Alpha",
-        "Beta",
-        "Beta",
-        "Beta",
-        "Beta",
-    ]
+    deduped = target._dedupe_stage2(df)
+    assert deduped.iloc[0]["uniprot_id_primary"] == "U1"
+    assert len(deduped) == 2
 
 
 @pytest.mark.unit
-def test_process_targets__writes_to_custom_output_dir(tmp_path: Path):
-    input_path = tmp_path / "targets.csv"
-    frame = pd.DataFrame(
+def test_dedup_stage3__drops_duplicates_by_id_name():
+    df = pd.DataFrame(
         [
             {
-                "target_chembl_id": "CHEMBL_T5",
-                "isoform_ids": "ENSP0006",
-                "isoform_names": "Delta",
-                "isoform_synonyms": "Delta",
-            }
+                "id": "ID1",
+                "name": "alpha",
+                "target_chembl_id": "CHEMBL1",
+                "uniprot_id_primary": "U1",
+            },
+            {
+                "id": "ID1",
+                "name": "alpha",
+                "target_chembl_id": "CHEMBL2",
+                "uniprot_id_primary": "U2",
+            },
+            {
+                "id": "ID2",
+                "name": "beta",
+                "target_chembl_id": "CHEMBL1",
+                "uniprot_id_primary": "U1",
+            },
         ]
     )
-    frame.to_csv(input_path, index=False, encoding="utf-8")
-
-    destination = tmp_path / "out"
-    output_path = target.process_targets(input_path, output_dir=destination)
-
-    assert output_path.parent == destination
-    assert output_path.exists()
+    deduped = target._dedupe_stage3(df)
+    assert len(deduped) == 2
+    assert deduped.iloc[0]["target_chembl_id"] == "CHEMBL1"
 
 
 @pytest.mark.unit
-def test_process_targets__supports_custom_separator(tmp_path: Path):
-    input_path = tmp_path / "targets.csv"
-    buffer = io.StringIO()
-    frame = pd.DataFrame(
-        [
-            {
-                "target_chembl_id": "CHEMBL_T6",
-                "isoform_ids": "ENSP0007",
-                "isoform_names": "Epsilon",
-                "isoform_synonyms": "Epsilon",
-            }
-        ]
-    )
-    frame.to_csv(buffer, index=False, sep=";")
-    input_path.write_text(buffer.getvalue(), encoding="utf-8")
-
-    output_path = target.process_targets(input_path, sep=";")
-    result = pd.read_csv(output_path)
-
-    assert result["isoform_name"].tolist() == ["Epsilon", "Epsilon"]
+def test_transform_frame__column_order_exact():
+    frame = _build_sample_frame()
+    result, _ = target._transform_frame(frame)
+    assert list(result.columns) == target.OUTPUT_COLUMNS
 
 
 @pytest.mark.unit
-def test_process_targets__handles_isoform_mismatch_lists(tmp_path: Path):
-    input_path = tmp_path / "targets.csv"
+def test_process_targets__writes_with_isoform_prefix(tmp_path: Path):
+    input_path = tmp_path / "output.target_20250101.csv"
+    frame = _build_sample_frame()
+    frame.to_csv(input_path, index=False, encoding="utf-8")
+
+    output_path = target.process_targets(str(input_path), verbose=False)
+
+    assert output_path.name == "isoform.output.target_20250101.csv"
+    assert output_path.parent == tmp_path
+    written = pd.read_csv(output_path)
+    assert list(written.columns) == target.OUTPUT_COLUMNS
+
+
+@pytest.mark.unit
+def test_process_targets__auto_discovers_latest_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    first = tmp_path / "output.target_20240101.csv"
+    second = tmp_path / "output.target_20240201.csv"
+    frame = _build_sample_frame()
+    frame.to_csv(first, index=False, encoding="utf-8")
+    frame.to_csv(second, index=False, encoding="utf-8")
+    os.utime(first, (first.stat().st_atime, first.stat().st_mtime - 100))
+
+    monkeypatch.setattr(target, "DEFAULT_INPUT_DIR", tmp_path)
+    output_path = target.process_targets(output_csv=tmp_path / "result.csv", verbose=False)
+
+    assert output_path == tmp_path / "result.csv"
+    written = pd.read_csv(output_path)
+    assert not written.empty
+
+
+@pytest.mark.unit
+def test_transform_frame__handles_mismatched_lengths():
     frame = pd.DataFrame(
         [
             {
-                "target_chembl_id": "CHEMBL_T7",
-                "isoform_ids": "ENSP0008|ENSP0009",
-                "isoform_names": "Zeta|",
-                "isoform_synonyms": "Zeta Alt:Zeta|",
+                "isoform_synonyms": "SynA|SynB|SynC",
+                "isoform_names": "Alpha|Beta",
+                "isoform_ids": "ID1",
+                "uniprot_id_primary": "U1",
+                "target_chembl_id": "CHEMBL1",
             }
         ]
     )
-    frame.to_csv(input_path, index=False, encoding="utf-8")
+    result, _ = target._transform_frame(frame)
 
-    output_path = target.process_targets(input_path)
-    result = pd.read_csv(output_path)
-
-    assert result.to_dict(orient="records") == [
-        {
-            "target_chembl_id": "CHEMBL_T7",
-            "isoform_id": "ENSP0008",
-            "isoform_name": "Zeta",
-            "term": "Zeta",
-            "token": "zeta",
-        },
-        {
-            "target_chembl_id": "CHEMBL_T7",
-            "isoform_id": "ENSP0008",
-            "isoform_name": "Zeta",
-            "term": "zeta",
-            "token": "zeta",
-        },
-        {
-            "target_chembl_id": "CHEMBL_T7",
-            "isoform_id": "ENSP0008",
-            "isoform_name": "Zeta",
-            "term": "zeta alt",
-            "token": "alt",
-        },
-        {
-            "target_chembl_id": "CHEMBL_T7",
-            "isoform_id": "ENSP0008",
-            "isoform_name": "Zeta",
-            "term": "zeta alt",
-            "token": "zeta",
-        },
-    ]
+    beta_rows = result[result["name"] == "beta"]
+    assert not beta_rows.empty
+    assert beta_rows["id"].isna().all()
