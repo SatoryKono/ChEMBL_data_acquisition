@@ -41,16 +41,13 @@ def postprocess_target_table(
         column for column in base_columns if column not in source.columns
     ]
     if missing_columns:
-        source = source.copy()
-        for column in missing_columns:
-            source[column] = ""
         logger.warning(
             "target_postprocess_missing_columns",
             path=str(path),
             columns=missing_columns,
         )
 
-    source_base = source[base_columns].copy()
+    source_base = source.reindex(columns=base_columns, fill_value="").copy()
 
     for column in ("lineage_superkingdom", "lineage_phylum", "lineage_class"):
         source_base[column] = _lowercase_column(source_base[column])
