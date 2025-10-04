@@ -49,6 +49,60 @@
 
 Подробное описание аргументов, подкоманд и расширенных сценариев использования смотрите в [`docs/USAGE_EN.md`](./USAGE_EN.md) и [`docs/USAGE_RU.md`](./USAGE_RU.md).
 
+## Document pipeline (`get-document-data`)
+
+Установленная команда `get-document-data` и скрипт `python scripts/get_document_data.py`
+делят один и тот же интерфейс. Во втором случае используйте флаг `--mode`,
+чтобы выбрать стадию:
+
+```
+python scripts/get_document_data.py --mode <chembl|pubmed|all> [...]
+```
+
+Режимы наследуют общие селекторы (`--column`, `--chunk-size`, `--limit`,
+`--offset`) и расширяются специализированными флагами:
+
+| Режим | Описание | Дополнительные параметры |
+|-------|----------|--------------------------|
+| `chembl` | Запрашивает метаданные напрямую из ChEMBL. | `--timeout` (30 секунд по умолчанию). |
+| `pubmed` | Обогащает ChEMBL-профили данными PubMed, Semantic Scholar, OpenAlex и CrossRef. | `--sleep`, `--workers`, `--batch-size`, `--openalex-rps`, `--crossref-rps`, `--fallback-*`. |
+| `all` | Последовательно выполняет ChEMBL и внешние источники, объединяет результат. | Параметры режима `pubmed`; дополнительно подставляет DOI из выгрузки ChEMBL. |
+
+Примеры запуска:
+
+```bash
+# Минимальная выгрузка только из ChEMBL
+python scripts/get_document_data.py --mode chembl \
+    --input data/input/document.csv \
+    --final-out output/documents_chembl.csv \
+    --config config/config.yaml \
+    --log-level INFO
+```
+
+```bash
+# Обогащение PubMed с принудительной подменой DOI из CSV
+python scripts/get_document_data.py --mode pubmed \
+    --input data/input/document.csv \
+    --final-out output/documents_pubmed.csv \
+    --fallback-doi-csv data/input/manual_doi.csv \
+    --fallback-doi-pmid-column PMID --fallback-doi-value-column DOI \
+    --fallback-overwrite --log-level INFO
+```
+
+```bash
+# Полный цикл с настройкой rate limit для внешних namespace
+python scripts/get_document_data.py --mode all \
+    --input data/input/document.csv \
+    --final-out output/documents_full.csv \
+    --openalex-rps 2 --crossref-rps 3 \
+    --config config/config.yaml --limit 500 --log-level INFO
+```
+
+На выходе формируется детерминированный CSV, `<имя>.meta.yaml`,
+`<имя>_quality_report_table.csv`,
+`<имя>_data_correlation_report_table.csv` и `<имя>.quality.json` с
+покрытием DOI.
+
 ## Target pipeline
 
 The `get-target-data` CLI exposes four acquisition modes (`chembl`, `uniprot`, `iuphar`, `all`). All of them share a consistent set of selector and pagination flags:

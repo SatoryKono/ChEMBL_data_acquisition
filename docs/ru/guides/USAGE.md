@@ -29,6 +29,11 @@
 3. **Специфические параметры**, управляющие поведением отдельных пайплайнов:
    стадийные флаги таргет-пайплайна, настройки DOI-фолбэков для документов и т.п.
 
+При запуске документного пайплайна через `python scripts/get_document_data.py`
+используйте `--mode <chembl|pubmed|all>`, чтобы выбрать нужную стадию. У
+установленной консольной команды сохраняются позиционные подкоманды для
+обратной совместимости.
+
 Любая команда возвращает ненулевой код при ошибках валидации, проблемах с IO или
 неудачных запросах к внешним сервисам.
 
@@ -59,27 +64,75 @@ get-data --base-path /data/chembl \
 
 ## Пайплайн документов (`get-document-data`)
 
-Подкоманды:
+Пайплайн доступен через установленную команду `get-document-data` и напрямую
+через скрипт. Во втором случае используйте алиас `--mode`:
 
-| Режим | Описание | Основные параметры |
-|-------|----------|--------------------|
-| `chembl` | Выгружает метаданные документов из ChEMBL. | `--column`, `--chunk-size`, `--timeout`, `--limit`, `--offset`. |
-| `pubmed` | Обогащает данными PubMed, Semantic Scholar, OpenAlex и CrossRef. | `--column`, `--sleep`, `--workers`, `--batch-size`, `--limit`, `--offset`, `--openalex-rps`, `--crossref-rps`, `--fallback-doi-*`. |
-| `all` | Запускает `chembl`, объединяет внешние источники и формирует итоговую таблицу. | Параметры режима `pubmed` плюс `--fallback-doi-*` для CSV с ручными DOI. |
-
-Пример:
-
+```bash
+python scripts/get_document_data.py --mode <chembl|pubmed|all> [опции]
 ```
-get-document-data all \
+
+Запуск справки подчёркивает новый флаг:
+
+```text
+$ python scripts/get_document_data.py --help
+usage: get_document_data.py [-h] ... [--mode {pubmed,chembl,all}] {pubmed,chembl,all} ...
+
+optional arguments:
+  --mode {pubmed,chembl,all}
+                        Acquisition mode alias for the positional sub-command.
+```
+
+Общие селекторы и их значения по умолчанию (эм-дэш означает отсутствие опции в
+режиме):
+
+| Опция | `chembl` | `pubmed` | `all` | Описание |
+|-------|---------:|---------:|------:|----------|
+| `--column` | `document_chembl_id` | `PMID` | `document_chembl_id` | Колонка с идентификаторами во входном CSV. |
+| `--chunk-size` | `5` | — | `5` | Размер пачки для запросов ChEMBL. |
+| `--batch-size` | — | `100` | `50` | Количество PMID в одном запросе PubMed. |
+| `--sleep` | — | `5.0` | `5.0` | Пауза между запросами PubMed (секунды). |
+| `--workers` | — | `1` | `1` | Число параллельных потоков для PubMed. |
+| `--timeout` | `30.0` | — | `30.0` | Таймаут HTTP-запросов к ChEMBL (секунды). |
+| `--limit` | `None` | `None` | `None` | Максимум идентификаторов; `0` пропускает шаг. |
+| `--offset` | `0` | `0` | `0` | Количество строк, пропускаемых перед обработкой. |
+| `--openalex-rps` | — | `None` | `None` | Override RPS для OpenAlex. |
+| `--crossref-rps` | — | `None` | `None` | Override RPS для CrossRef. |
+
+Фолбэки DOI работают в режимах обогащения и сохраняют идемпотентность запусков:
+
+| Опция | По умолчанию | Режимы | Описание |
+|-------|--------------|--------|----------|
+| `--fallback-doi-csv` | `None` | `pubmed`, `all` | CSV с ручными соответствиями PMID → DOI. |
+| `--fallback-doi-pmid-column` | `PMID` | `pubmed`, `all` | Колонка с PMID во фолбэк-файле. |
+| `--fallback-doi-value-column` | `DOI` | `pubmed`, `all` | Колонка со значениями DOI во фолбэк-файле. |
+| `--fallback-overwrite` / `--fallback-doi-overwrite` | `False` | `pubmed`, `all` | Принудительно заменять DOI значением из CSV. |
+
+Примеры запуска:
+
+```bash
+# Минимальная выгрузка из ChEMBL
+python scripts/get_document_data.py --mode chembl \
     --input data/input/document.csv \
-    --final-out output/documents_$(date +%Y%m%d).csv \
-    --config config/config.yaml \
-    --limit 500 --log-level INFO
+    --final-out output/documents_chembl.csv \
+    --config config/config.yaml
+
+# Обогащение PubMed с ручными DOI
+python scripts/get_document_data.py --mode pubmed \
+    --input data/input/document.csv \
+    --final-out output/documents_pubmed.csv \
+    --fallback-doi-csv data/input/manual_doi.csv \
+    --fallback-overwrite
+
+# Полный цикл с настройкой namespace-ограничений
+python scripts/get_document_data.py --mode all \
+    --input data/input/document.csv \
+    --final-out output/documents_full.csv \
+    --openalex-rps 2 --crossref-rps 3
 ```
 
-На выходе — детерминированный CSV, файл `<имя>.meta.yaml`, отчёты
+На выходе формируется детерминированный CSV, `<имя>.meta.yaml`, отчёты
 `<имя>_quality_report_table.csv`, `<имя>_data_correlation_report_table.csv` и
-`<имя>.quality.json` с покрытием DOI.
+`<имя>.quality.json` с показателями покрытия DOI.
 
 ## Пайплайн таргетов (`get-target-data`)
 

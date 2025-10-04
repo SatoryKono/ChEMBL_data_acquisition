@@ -6,10 +6,11 @@ This document provides a comprehensive reference for all configuration options u
 
 The configuration is loaded and merged from multiple sources, with later sources overriding earlier ones. The order of precedence is as follows:
 
-1.  **Packaged `config.yaml`**: The base configuration file located at `config/config.yaml`.
-2.  **Local `config.local.yaml`**: A local override file that you can place next to the main configuration file.
-3.  **Environment Variables**: System environment variables.
-4.  **CLI Arguments**: Command-line flags passed at runtime.
+1.  **Model defaults**: Values declared on the Pydantic models in `library/config.py`.
+2.  **Packaged `config.yaml`**: The base configuration file located at `config/config.yaml`.
+3.  **Local `config.local.yaml`**: A local override file that you can place next to the main configuration file.
+4.  **Environment variables**: System environment variables.
+5.  **CLI arguments**: Command-line flags passed at runtime.
 
 ### YAML Configuration
 
@@ -65,6 +66,27 @@ This section contains pipeline-specific settings for `activity`, `assay`, `docum
 | `timeout` | `30.0` | Request timeout in seconds for this pipeline. |
 | `workers` | `1` | Number of parallel workers for fetching data. |
 | `limit` | `null` | Maximum number of records to process. |
+
+#### `sources.chembl.pipelines.document`
+The document pipeline ships tuned defaults for each acquisition stage:
+
+| Key | Default | Description |
+|---|---|---|
+| `document.chembl.column` | `document_chembl_id` | Identifier column for ChEMBL lookups. |
+| `document.chembl.chunk_size` | `5` | Number of document IDs fetched per request. |
+| `document.chembl.timeout` | `30.0` | HTTP timeout in seconds for ChEMBL requests. |
+| `document.chembl.limit` | `null` | Maximum number of ChEMBL identifiers to process. |
+| `document.pubmed.column` | `PMID` | Identifier column used for PubMed enrichment. |
+| `document.pubmed.sleep` | `5.0` | Delay in seconds between PubMed batch requests. |
+| `document.pubmed.workers` | `1` | Concurrent PubMed workers. |
+| `document.pubmed.batch_size` | `5` | PMIDs requested per PubMed call. |
+| `document.pubmed.limit` | `null` | Maximum number of PubMed identifiers to process. |
+| `document.all.column` | `document_chembl_id` | Identifier column used when running both stages. |
+| `document.all.chunk_size` | `5` | Chunk size for the initial ChEMBL pull. |
+| `document.all.batch_size` | `5` | PMIDs per PubMed batch when combining stages. |
+| `document.all.sleep` | `5.0` | Delay in seconds between PubMed batches. |
+| `document.all.timeout` | `30.0` | Timeout in seconds applied to upstream HTTP calls. |
+| `document.all.limit` | `null` | Maximum number of combined identifiers to process. |
 
 #### Other Sources (`openalex`, `crossref`, `uniprot`, `pubchem`, etc.)
 Each external source has its own configuration block under `sources` defining its base URL, rate limits (`rps`), and timeouts.

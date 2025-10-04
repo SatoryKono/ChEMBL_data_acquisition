@@ -31,6 +31,10 @@ three tiers:
 3. **Pipeline-specific switches** that tailor behaviour (for example staging
    flags in the target pipeline or DOI fallbacks in the document pipeline).
 
+When the document pipeline is launched via `python scripts/get_document_data.py`,
+use `--mode <chembl|pubmed|all>` to select the stage. The installed console
+script keeps the positional sub-commands for backward compatibility.
+
 All commands exit with a non-zero status on validation errors, IO issues, or
 upstream API failures.
 
@@ -63,27 +67,76 @@ the filesystem.
 
 ## Document pipeline (`get-document-data`)
 
-Sub-commands:
+The pipeline can be executed via the installed `get-document-data` entrypoint or
+directly with the script. When using the script, the `--mode` flag mirrors the
+historic sub-commands:
 
-| Mode | Description | Key options |
-|------|-------------|-------------|
-| `chembl` | Retrieve metadata from the ChEMBL API. | `--column`, `--chunk-size`, `--timeout`, `--limit`, `--offset`. |
-| `pubmed` | Enrich with PubMed, Semantic Scholar, OpenAlex, and CrossRef. | `--column`, `--sleep`, `--workers`, `--batch-size`, `--limit`, `--offset`, `--openalex-rps`, `--crossref-rps`, `--fallback-doi-*`. |
-| `all` | Run ChEMBL, merge external services, and export the consolidated table. | Same options as `pubmed` plus `--fallback-doi-*` for DOI overrides. |
-
-Typical command:
-
+```bash
+python scripts/get_document_data.py --mode <chembl|pubmed|all> [options]
 ```
-get-document-data all \
+
+Running `--help` on the root command now highlights the alias:
+
+```text
+$ python scripts/get_document_data.py --help
+usage: get_document_data.py [-h] ... [--mode {pubmed,chembl,all}] {pubmed,chembl,all} ...
+
+optional arguments:
+  --mode {pubmed,chembl,all}
+                        Acquisition mode alias for the positional sub-command.
+```
+
+Shared selectors resolve to the defaults below (em dash indicates that the
+option is not available for the mode):
+
+| Option | `chembl` | `pubmed` | `all` | Description |
+|--------|---------:|---------:|------:|-------------|
+| `--column` | `document_chembl_id` | `PMID` | `document_chembl_id` | Input identifier column. |
+| `--chunk-size` | `5` | — | `5` | Number of ChEMBL IDs fetched per request. |
+| `--batch-size` | — | `100` | `50` | PMIDs per PubMed batch. |
+| `--sleep` | — | `5.0` | `5.0` | Delay between PubMed requests (seconds). |
+| `--workers` | — | `1` | `1` | Concurrent PubMed workers. |
+| `--timeout` | `30.0` | — | `30.0` | HTTP timeout for ChEMBL calls (seconds). |
+| `--limit` | `None` | `None` | `None` | Maximum identifiers; `0` skips processing. |
+| `--offset` | `0` | `0` | `0` | Rows skipped before processing begins. |
+| `--openalex-rps` | — | `None` | `None` | Namespace override for OpenAlex rate limiting. |
+| `--crossref-rps` | — | `None` | `None` | Namespace override for CrossRef rate limiting. |
+
+Fallback overrides are available for enrichment modes and support idempotent
+reruns:
+
+| Option | Default | Applies to | Description |
+|--------|---------|------------|-------------|
+| `--fallback-doi-csv` | `None` | `pubmed`, `all` | CSV with manual PMID → DOI mappings. |
+| `--fallback-doi-pmid-column` | `PMID` | `pubmed`, `all` | Column containing PubMed identifiers in the fallback CSV. |
+| `--fallback-doi-value-column` | `DOI` | `pubmed`, `all` | Column containing DOI values in the fallback CSV. |
+| `--fallback-overwrite` / `--fallback-doi-overwrite` | `False` | `pubmed`, `all` | Replace upstream DOI values with fallback entries. |
+
+Example invocations:
+
+```bash
+# Retrieve ChEMBL-only metadata
+python scripts/get_document_data.py --mode chembl \
     --input data/input/document.csv \
-    --final-out output/documents_$(date +%Y%m%d).csv \
-    --config config/config.yaml \
-    --limit 500 --log-level INFO
+    --final-out output/documents_chembl.csv \
+    --config config/config.yaml
+
+# PubMed enrichment with explicit DOI overrides
+python scripts/get_document_data.py --mode pubmed \
+    --input data/input/document.csv \
+    --final-out output/documents_pubmed.csv \
+    --fallback-doi-csv data/input/manual_doi.csv \
+    --fallback-overwrite
+
+# Complete merge with namespaced rate limits
+python scripts/get_document_data.py --mode all \
+    --input data/input/document.csv \
+    --final-out output/documents_full.csv \
+    --openalex-rps 2 --crossref-rps 3
 ```
 
-The pipeline writes a deterministic CSV, `<name>.meta.yaml`,
-`<name>_quality_report_table.csv`, `<name>_data_correlation_report_table.csv`,
-and `<name>.quality.json` with DOI coverage statistics.
+Each mode emits the deterministic CSV, `<name>.meta.yaml`, table-quality CSVs,
+and `<name>.quality.json` with DOI coverage metrics.
 
 ## Target pipeline (`get-target-data`)
 

@@ -41,6 +41,52 @@
     get-data --help
     ```
 
+## Конвейер документов (`get-document-data`)
+
+Команда `get-document-data` доступна после установки пакета, а в режиме
+разработки её можно вызвать напрямую:
+
+```bash
+python scripts/get_document_data.py --mode <chembl|pubmed|all> [...]
+```
+
+Флаг `--mode` соответствует историческим подкомандам и позволяет использовать
+единый интерфейс. Общие селекторы (`--column`, `--chunk-size`, `--limit`,
+`--offset`) дополняются специализированными флагами для каждой стадии:
+
+| Режим | Описание | Дополнительные параметры |
+|-------|----------|--------------------------|
+| `chembl` | Выгружает метаданные напрямую из ChEMBL. | `--timeout` (30 секунд по умолчанию). |
+| `pubmed` | Обогащает ChEMBL-записи данными PubMed, Semantic Scholar, OpenAlex и CrossRef. | `--sleep`, `--workers`, `--batch-size`, `--openalex-rps`, `--crossref-rps`, `--fallback-*`. |
+| `all` | Последовательно выполняет ChEMBL и внешние источники и объединяет результат. | Параметры режима `pubmed`; дополнительно использует DOI из выгрузки ChEMBL. |
+
+Примеры запуска:
+
+```bash
+# Минимальная выгрузка из ChEMBL
+python scripts/get_document_data.py --mode chembl \
+    --input data/input/document.csv \
+    --final-out output/documents_chembl.csv \
+    --config config/config.yaml
+
+# Обогащение PubMed с ручными DOI и принудительной подменой
+python scripts/get_document_data.py --mode pubmed \
+    --input data/input/document.csv \
+    --final-out output/documents_pubmed.csv \
+    --fallback-doi-csv data/input/manual_doi.csv \
+    --fallback-overwrite
+
+# Полный конвейер с ограничением RPS для namespace-флагов
+python scripts/get_document_data.py --mode all \
+    --input data/input/document.csv \
+    --final-out output/documents_full.csv \
+    --openalex-rps 2 --crossref-rps 3
+```
+
+Каждый запуск формирует детерминированный CSV, `<имя>.meta.yaml`, файлы
+`<имя>_quality_report_table.csv`, `<имя>_data_correlation_report_table.csv` и
+`<имя>.quality.json` с показателями покрытия DOI.
+
 ## Конвейер таргетов
 
 CLI `get-target-data` предлагает четыре режима получения данных (`chembl`, `uniprot`, `iuphar`, `all`). Теперь каждый режим поддерживает единый набор флагов для выбора и пагинации:

@@ -352,6 +352,7 @@ def fetch_pubmed_records(
     max_workers: int | None = None,
     batch_size: int | None = None,
     fallback_doi_map: Mapping[str, str] | None = None,
+    fallback_overwrite: bool = False,
     return_generator: bool = False,
 ) -> pd.DataFrame | Iterator[pd.DataFrame]:
     """Retrieve metadata for a sequence of PubMed identifiers.
@@ -387,6 +388,9 @@ def fetch_pubmed_records(
         Explicit DOI overrides keyed by PMID. When provided, entries supply the
         DOI used to seed downstream CrossRef lookups whenever neither PubMed
         nor Semantic Scholar returns one.
+    fallback_overwrite : bool, optional
+        When ``True`` the DOI fallback map replaces DOI values returned by
+        upstream services. Defaults to ``False``.
     return_generator : bool, optional
         When ``True`` return a generator yielding ordered batches instead of a
         concatenated dataframe.
@@ -786,15 +790,17 @@ def fetch_pubmed_records(
             for index, pubmed in enumerate(pubmed_list):
                 pmid = pubmed.get("PubMed.PMID", "")
                 semsch = semsch_map.get(pmid, {}) if pmid else {}
-                fallback_doi = ""
-                if fallback_doi_map:
-                    fallback_doi = fallback_doi_map.get(pmid, "")
+                fallback_doi = (
+                    fallback_doi_map.get(pmid, "") if fallback_doi_map else ""
+                )
                 doi = (
                     pubmed.get("PubMed.DOI")
                     or semsch.get("scholar.DOI")
-                    or fallback_doi
                     or ""
                 )
+                if fallback_doi:
+                    if fallback_overwrite or not doi:
+                        doi = fallback_doi
                 plan.append((index, pubmed, semsch, pmid, doi))
                 if pmid:
                     openalex_lookup.setdefault(pmid, []).append(index)
@@ -1686,6 +1692,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
     batch_size = getattr(args, "batch_size", pubmed_defaults.batch_size)
     sleep = getattr(args, "sleep", pubmed_defaults.sleep)
     fallback_doi = bool(getattr(args, "fallback_doi_csv", None))
+    fallback_overwrite = bool(getattr(args, "fallback_overwrite", False))
     if workers > 1 and sleep == 0:
         logger.warning(
             "zero_sleep_workers",
@@ -1739,6 +1746,11 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             metadata_obj,
             value=fallback_doi,
             default_source="cli",
+        ),
+        fallback_overwrite=_option(
+            metadata_obj,
+            value=fallback_overwrite,
+            default_source="cli" if fallback_overwrite else "default",
         ),
     )
     try:
@@ -1805,6 +1817,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             max_workers=getattr(args, "workers", pubmed_defaults.workers),
             batch_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
             fallback_doi_map=fallback_doi_map,
+            fallback_overwrite=fallback_overwrite,
             return_generator=True,
         )
         output = output_path
@@ -2052,6 +2065,8 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     sleep = getattr(args, "sleep", all_defaults.sleep)
     timeout = getattr(args, "timeout", all_defaults.timeout)
     chunk_size = getattr(args, "chunk_size", all_defaults.chunk_size)
+    fallback_doi_cli = bool(getattr(args, "fallback_doi_csv", None))
+    fallback_overwrite = bool(getattr(args, "fallback_overwrite", False))
     if workers > 1 and sleep == 0:
         logger.warning(
             "zero_sleep_workers",
@@ -2112,6 +2127,16 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             argument="timeout",
             path="sources.chembl.pipelines.document.all.timeout",
             value=timeout,
+        ),
+        fallback_doi=_option(
+            metadata_obj,
+            value=fallback_doi_cli,
+            default_source="cli" if fallback_doi_cli else "default",
+        ),
+        fallback_overwrite=_option(
+            metadata_obj,
+            value=fallback_overwrite,
+            default_source="cli" if fallback_overwrite else "default",
         ),
     )
 
@@ -2183,6 +2208,32 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 str(pmid): str(doi)
                 for pmid, doi in zip(masked_pmids, masked_dois, strict=True)
             }
+    fallback_csv = getattr(args, "fallback_doi_csv", None)
+    if fallback_csv:
+        try:
+            fallback_frame = io.read_csv(fallback_csv, cfg=cfg.io)
+        except (FileNotFoundError, ValueError) as exc:
+            logger.error(
+                "fallback_doi_read_failed",
+                error=str(exc),
+                path=str(fallback_csv),
+            )
+            return 1
+        try:
+            fallback_map = _build_fallback_doi_map(
+                fallback_frame,
+                pmid_column=getattr(args, "fallback_doi_pmid_column", "PMID"),
+                doi_column=getattr(args, "fallback_doi_value_column", "DOI"),
+            )
+        except ValueError as exc:
+            logger.error(
+                "fallback_doi_invalid",
+                error=str(exc),
+                path=str(fallback_csv),
+            )
+            return 1
+        if fallback_map:
+            doi_fallback_map.update(fallback_map)
     pmids = pubmed_ids.dropna().astype(str).tolist()
     pubmed_batch_size = getattr(args, "batch_size", all_defaults.batch_size)
     if pubmed_batch_size is None or pubmed_batch_size <= 0:
@@ -2202,6 +2253,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         batch_size=pubmed_batch_size,
         pubmed_cfg=cfg.pubmed,
         fallback_doi_map=doi_fallback_map or None,
+        fallback_overwrite=fallback_overwrite,
         return_generator=True,
     )
     doc_df["pubmed_id"] = pubmed_ids.astype("Int64").astype("string").fillna("")
@@ -2300,6 +2352,14 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     parser = argparse.ArgumentParser(
         description="Document data utilities", parents=[root]
     )
+    parser.add_argument(
+        "--mode",
+        choices=("pubmed", "chembl", "all"),
+        help=(
+            "Acquisition mode alias for the positional sub-command. Equivalent to "
+            "providing the mode name as the first positional argument."
+        ),
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     pubmed = sub.add_parser(
@@ -2361,6 +2421,16 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--fallback-doi-value-column",
         default="DOI",
         help="Column containing DOI values in fallback CSV",
+    )
+    pubmed.add_argument(
+        "--fallback-overwrite",
+        "--fallback-doi-overwrite",
+        action="store_true",
+        dest="fallback_overwrite",
+        help=(
+            "Replace DOI values with fallback entries even when upstream services "
+            "return a DOI."
+        ),
     )
     pubmed.set_defaults(func=run_pubmed)
 
@@ -2461,6 +2531,32 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=None,
         help="Requests per second limit for CrossRef",
     )
+    all_cmd.add_argument(
+        "--fallback-doi-csv",
+        type=path_argument,
+        default=None,
+        help="Optional CSV file providing PMID to DOI overrides",
+    )
+    all_cmd.add_argument(
+        "--fallback-doi-pmid-column",
+        default="PMID",
+        help="Column containing PubMed identifiers in fallback CSV",
+    )
+    all_cmd.add_argument(
+        "--fallback-doi-value-column",
+        default="DOI",
+        help="Column containing DOI values in fallback CSV",
+    )
+    all_cmd.add_argument(
+        "--fallback-overwrite",
+        "--fallback-doi-overwrite",
+        action="store_true",
+        dest="fallback_overwrite",
+        help=(
+            "Replace DOI values with fallback entries even when upstream services "
+            "return a DOI."
+        ),
+    )
     all_cmd.set_defaults(func=run_all)
 
     parser.subparsers_map = {  # type: ignore[attr-defined]
@@ -2470,6 +2566,35 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     }
 
     return parser, log_cfg
+
+
+def _normalize_mode_args(argv: Sequence[str]) -> tuple[str | None, list[str]]:
+    """Extract ``--mode`` alias and return the remaining argument vector."""
+
+    mode_value: str | None = None
+    normalized: list[str] = []
+    index = 0
+    length = len(argv)
+    while index < length:
+        token = argv[index]
+        if token == "--mode":
+            if mode_value is not None:
+                raise ValueError("--mode specified multiple times")
+            index += 1
+            if index >= length:
+                raise ValueError("--mode requires a value")
+            mode_value = argv[index]
+            index += 1
+            continue
+        if token.startswith("--mode="):
+            if mode_value is not None:
+                raise ValueError("--mode specified multiple times")
+            mode_value = token.split("=", 1)[1]
+            index += 1
+            continue
+        normalized.append(token)
+        index += 1
+    return mode_value, normalized
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -2494,7 +2619,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         execution.
     """
     parser, log_cfg = build_parser()
-    args = parser.parse_args(argv)
+    raw_args = list(argv) if argv is not None else sys.argv[1:]
+    try:
+        mode_alias, normalized_args = _normalize_mode_args(raw_args)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if mode_alias:
+        normalized_args.insert(0, mode_alias)
+    args = parser.parse_args(normalized_args)
+    if mode_alias is not None:
+        setattr(args, "mode", mode_alias)
+    else:
+        setattr(args, "mode", getattr(args, "command", None))
     prepare_io_paths(
         args,
         input_default=DEFAULT_INPUT_NAME,
