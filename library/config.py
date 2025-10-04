@@ -1253,13 +1253,17 @@ class TargetChemblCfg(_BaseModel):
 
 
 class TargetIupharCfg(_BaseModel):
+    column: str = "uniprot_id"
+    chunk_size: int = Field(100, ge=1)
+    timeout: float = Field(30.0, gt=0)
+    limit: int | None = Field(default=None, ge=0)
+    offset: int = Field(0, ge=0)
     target_csv: Path = (
         DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_target.csv"
     )
     family_csv: Path = (
         DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_family.csv"
     )
-    limit: int | None = Field(default=None, ge=0)
 
 
 class TargetAllCfg(_BaseModel):
