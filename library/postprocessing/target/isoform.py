@@ -67,6 +67,20 @@ _SOURCE_COLUMNS: tuple[str, ...] = (
     "target_chembl_id",
 )
 
+_SOURCE_COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
+    "uniprot_id_primary": (
+        "uniprot_id",
+        "primary_accession",
+        "uniprot_accession",
+        "accession",
+    ),
+    "target_chembl_id": (
+        "chembl_id",
+        "target_id",
+        "target_chemblid",
+    ),
+}
+
 # Column order of the emitted CSV artefact.
 _OUTPUT_COLUMNS: tuple[str, ...] = (
     "id",
@@ -74,6 +88,64 @@ _OUTPUT_COLUMNS: tuple[str, ...] = (
     "target_chembl_id",
     "name",
 )
+
+def _normalize_column_name(column: str) -> str:
+    """Return a normalised representation of ``column`` for fuzzy matching."""
+
+    return re.sub(r"[^a-z0-9]", "", _to_text(column).lower())
+
+
+def _resolve_source_columns(frame: pd.DataFrame) -> dict[str, str]:
+    """Resolve the source column names accounting for legacy aliases."""
+
+    normalized_lookup: dict[str, list[str]] = {}
+    for column in frame.columns:
+        normalized_lookup.setdefault(_normalize_column_name(column), []).append(column)
+
+    resolved: dict[str, str] = {}
+    missing: list[str] = []
+
+    for canonical in _SOURCE_COLUMNS:
+        match: str | None = None
+        if canonical in frame.columns:
+            match = canonical
+        else:
+            for alias in _SOURCE_COLUMN_ALIASES.get(canonical, ()):  # pragma: no branch - small tuple
+                if alias in frame.columns:
+                    match = alias
+                    break
+
+        if match is None:
+            candidate_norms = {_normalize_column_name(canonical)}
+            candidate_norms.update(
+                _normalize_column_name(alias)
+                for alias in _SOURCE_COLUMN_ALIASES.get(canonical, ())
+            )
+            for norm in candidate_norms:
+                candidates = normalized_lookup.get(norm)
+                if candidates:
+                    match = sorted(candidates)[0]
+                    break
+
+        if match is None:
+            missing.append(canonical)
+        else:
+            resolved[canonical] = match
+
+    if missing:
+        alias_hints = ", ".join(
+            f"{name} (aliases: {', '.join((name,) + _SOURCE_COLUMN_ALIASES.get(name, ()))})"
+            for name in missing
+        )
+        available = ", ".join(frame.columns)
+        raise KeyError(
+            "Required columns missing from isoform export: "
+            + f"{missing}. "
+            + f"Available columns: {available}. "
+            + f"Accepted names: {alias_hints}"
+        )
+
+    return resolved
 
 
 def _to_text(value: Any) -> str:
@@ -163,7 +235,9 @@ class _TransformationResult:
 def _transform(frame: pd.DataFrame) -> _TransformationResult:
     """Apply the isoform expansion stages mirroring the Power Query steps."""
 
-    projected = frame.loc[:, list(_SOURCE_COLUMNS)].copy()
+    column_map = _resolve_source_columns(frame)
+    projected = frame.loc[:, [column_map[column] for column in _SOURCE_COLUMNS]].copy()
+    projected = projected.rename(columns={column_map[column]: column for column in _SOURCE_COLUMNS})
 
     projected["isoform_synonyms"] = projected["isoform_synonyms"].map(
         lambda value: _to_text(value).lower()
