@@ -55,7 +55,7 @@ def _normalise_series(series: pd.Series, *, lowercase: bool) -> pd.Series:
         .str.replace(r"\s+", " ", regex=True)
     )
     cleaned = cleaned.replace(
-        to_replace=r"^(?i)(?:na|n/a|none|n\\.?a\\.?|n\s*/\s*a)$",
+        to_replace=r"(?i)^(?:na|n/a|none|n\\.?a\\.?|n\s*/\s*a)$",
         value="",
         regex=True,
     )
@@ -65,13 +65,13 @@ def _normalise_series(series: pd.Series, *, lowercase: bool) -> pd.Series:
 
 
 def _split_pipe(value: str) -> list[str]:
-    if not value:
+    if not value or not isinstance(value, str):
         return []
     return [part.strip() for part in value.split("|") if part.strip()]
 
 
 def _split_synonyms(value: str) -> list[str]:
-    if not value:
+    if not value or not isinstance(value, str):
         return []
     parts = [segment.strip() for segment in value.split(":") if segment.strip()]
     unique: list[str] = []
@@ -230,5 +230,5 @@ def process_targets(
     output_path = output_directory / f"isoform.output.{input_path.name}"
     LOGGER.info("Writing processed target isoforms to %s", output_path)
     output_directory.mkdir(parents=True, exist_ok=True)
-    result.to_csv(output_path, index=False, encoding="utf-8", line_terminator="\n")
+    result.to_csv(output_path, index=False, encoding="utf-8", lineterminator="\n")
     return output_path
