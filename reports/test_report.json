@@ -21,6 +21,141 @@
   },
   "tests": [
     {
+      "nodeid": "tests/e2e/test_get_cli_pipelines.py::test_get_activity_run_failure",
+      "status": "passed",
+      "duration_ms": 0.275,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/e2e/test_get_cli_pipelines.py::test_get_activity_run_skip_existing",
+      "status": "passed",
+      "duration_ms": 0.293,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/e2e/test_get_cli_pipelines.py::test_get_activity_run_success",
+      "status": "passed",
+      "duration_ms": 6.102,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/e2e/test_get_cli_pipelines.py::test_get_assay_run_failure",
+      "status": "passed",
+      "duration_ms": 0.226,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/e2e/test_get_cli_pipelines.py::test_get_assay_run_skip_existing",
+      "status": "passed",
+      "duration_ms": 0.291,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/e2e/test_get_cli_pipelines.py::test_get_assay_run_success",
+      "status": "passed",
+      "duration_ms": 4.532,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/e2e/test_get_cli_pipelines.py::test_get_document_run_all_failure",
+      "status": "passed",
+      "duration_ms": 0.283,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/e2e/test_get_cli_pipelines.py::test_get_document_run_all_success",
+      "status": "passed",
+      "duration_ms": 5.425,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/e2e/test_get_cli_pipelines.py::test_get_document_run_missing_handler",
+      "status": "passed",
+      "duration_ms": 0.256,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/e2e/test_get_cli_pipelines.py::test_get_target_run_all_failure",
+      "status": "passed",
+      "duration_ms": 0.263,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/e2e/test_get_cli_pipelines.py::test_get_target_run_all_success",
+      "status": "passed",
+      "duration_ms": 4.742,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/e2e/test_get_cli_pipelines.py::test_get_target_run_skip_existing",
+      "status": "passed",
+      "duration_ms": 0.381,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/e2e/test_get_cli_pipelines.py::test_get_testitem_run_failure_logs",
+      "status": "passed",
+      "duration_ms": 0.286,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/e2e/test_get_cli_pipelines.py::test_get_testitem_run_skip_existing",
+      "status": "passed",
+      "duration_ms": 0.386,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/e2e/test_get_cli_pipelines.py::test_get_testitem_run_success",
+      "status": "passed",
+      "duration_ms": 8.162,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
       "nodeid": "tests/e2e/test_get_data_end_to_end.py::test_get_data_end_to_end__miniature_pipeline",
       "status": "passed",
       "duration_ms": 83.711,
