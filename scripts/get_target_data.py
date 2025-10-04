@@ -20,7 +20,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 import math
-import inspect
+from inspect import signature
 from functools import partial
 from itertools import islice
 from pathlib import Path
@@ -131,7 +131,7 @@ else:  # pragma: no cover - compatibility bridge
     setattr(target_pp, "process_targets", _process_targets_impl)
 
 try:
-    _TARGET_PROCESS_SIGNATURE = inspect.signature(_process_targets_impl)
+    _TARGET_PROCESS_SIGNATURE = signature(_process_targets_impl)
 except (TypeError, ValueError):  # pragma: no cover - unexpected callable
     _TARGET_PROCESS_PARAMETERS: set[str] = set()
 else:
