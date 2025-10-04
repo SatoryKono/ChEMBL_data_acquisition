@@ -1,139 +1,68 @@
 # Обзор архитектуры
 
-Этот документ описывает общую архитектуру набора ChEMBL Data Acquisition. Он
-дополняет пошаговое описание пайплайнов в разделе [Поток данных ETL](./ETL_DATA_FLOW_RU.md).
-
-## Контекст системы
-
 ```mermaid
 flowchart LR
-  subgraph Входы
-    A[CSV/TSV с идентификаторами]
-    B[Конфигурация\n(config.yaml, CLI-флаги)]
-    C[Переменные окружения]
-  end
-  subgraph Оркестрация
-    D[Консольные команды\n(get-*/pipeline CLI)]
-    E[modules scripts.get_*]
-  end
-  subgraph Ядро пайплайна
-    F[library.pipelines.*\n(оркестраторы)]
-    G[library.io\n(потоковый ввод/вывод)]
-    H[library.clients\n(HTTP-клиенты)]
-    I[library.integration\n(локальные ресурсы)]
-    J[library.postprocessing]
-    K[library.validation\nи схемы]
-    L[library.table_quality]
-    M[library.metadata]
-  end
-  subgraph Выходы
-    N[Детерминированные CSV]
-    O[YAML с метаданными]
-    P[Отчёты качества\n(.quality.json, CSV)]
-    Q[Сырые снимки\n(опционально)]
-  end
-  Входы --> D
-  D --> E --> F
-  F --> G
-  F --> H
-  F --> I
-  F --> J
-  F --> K
-  F --> L
-  F --> M
-  G --> F
-  H -->|Запросы| External[(ChEMBL, PubMed, UniProt, PubChem, OpenAlex, Semantic Scholar, CrossRef)]
-  I -->|Локальные чтения| Local[(CSV/Parquet словари)]
-  F --> N
-  F --> O
-  F --> P
-  F --> Q
+    subgraph CLI
+        A1[get-document-data]
+        A2[get-target-data]
+        A3[get-assay-data]
+        A4[get-testitem-data]
+        A5[get-activity-data]
+        A0[get-data orchestrator]
+    end
+    subgraph Library
+        B1[library/clients]
+        B2[library/pipelines]
+        B3[library/qa]
+        B4[library/utils]
+    end
+    subgraph Resources
+        C1[config/config.yaml]
+        C2[config/dictionary]
+    end
+
+    A0 --> A1 & A2 & A3 & A4 & A5
+    A1 & A2 & A3 & A4 & A5 --> B2
+    B2 --> B1
+    B2 --> B3
+    B2 --> B4
+    B2 --> C1
+    B2 --> C2
 ```
 
-Основные моменты:
+Оркестратор инициализирует общую конфигурацию, логирование, лимитеры и по очереди
+вызвает CLI для каждой сущности. Внутри используются общие компоненты `library/`:
 
-- **Консольные точки входа** проксируют аргументы в соответствующие модули
-  `scripts.get_*`, обеспечивая единый уровень логирования и загрузку
-  конфигурации.
-- **Оркестраторы пайплайнов** в `library.pipelines` объединяют чанковый ввод,
-  HTTP-клиентов, пост-обработку, валидацию и экспорт.
-- **Потоковые загрузчики** из `library.io` читают и записывают данные чанками,
-  сохраняя детерминированный порядок строк и колонок.
-- **Клиенты и интеграции** инкапсулируют ретраи, ограничение RPS и кеширование
-  запросов ко внешним API и локальным словарям.
-- **Пост-обработка** приводит доменные поля к целевому виду перед валидацией
-  (классификация публикаций, вычисление счётчиков по таргетам, агрегация
-  синонимов и т.д.).
-- **Валидация и отчёты качества** гарантируют соответствие схемам и формируют
-  артефакты для QA.
+- `library/clients` — HTTP-клиенты с ретраями и лимитами для ChEMBL, UniProt,
+  PubMed, OpenAlex, CrossRef, PubChem.
+- `library/pipelines` — логика загрузки, трансформации и экспорта по сущностям.
+- `library/utils` — вспомогательные утилиты: CLI-бустрап, детерминированное I/O,
+  загрузка конфигурации.
+- `library/qa` и `library/table_quality.py` — валидация Pandera, профили качества,
+  формирование метаданных.
 
-## Зависимости компонентов
+Внешние сервисы вызываются через токен-бакетные лимитеры (`sources.*`), все
+запросы проходят через `system.retry`.
 
-```mermaid
-graph TD
-  subgraph Общие хелперы
-    IO[library.io]
-    Clients[library.clients]
-    Integrations[library.integration]
-    Post[library.postprocessing]
-    Validation[library.validation & schemas]
-    Metadata[library.metadata]
-    Quality[library.table_quality]
-  end
+## Ответственность компонентов
 
-  Activity[scripts.get_activity_data\n+ library.pipelines.activity] --> IO
-  Activity --> Clients
-  Activity --> Post
-  Activity --> Validation
-  Activity --> Metadata
-  Activity --> Quality
+| Компонент | Задачи |
+|-----------|-------|
+| `scripts/` | Парсинг аргументов, подготовка путей, запуск пайплайнов. |
+| `library/pipelines/*` | Чтение входных CSV, вызовы API, объединение данных, валидация и экспорт. |
+| `library/qa`, `library/table_quality.py` | Проверки схем, подсчёт метрик качества, предупреждения. |
+| `library/postprocessing` | Упорядочивание колонок, генерация метаданных, сортировка. |
+| `library/config.py` | Слияние YAML, переменных окружения и CLI, проверка типов. |
 
-  Assay[scripts.get_assay_data\n+ library.pipelines.assay] --> IO
-  Assay --> Clients
-  Assay --> Post
-  Assay --> Validation
-  Assay --> Metadata
-  Assay --> Quality
+## Модель выполнения
 
-  Document[scripts.get_document_data\n+ library.pipelines.document] --> IO
-  Document --> Clients
-  Document --> Integrations
-  Document --> Post
-  Document --> Validation
-  Document --> Metadata
-  Document --> Quality
+1. CLI загружает конфигурацию через `library.config.load_config`; при `--print-config`
+   выводится итоговый YAML.
+2. Входной CSV читается с учётом настроек кодировки, разделителей и маркеров NA.
+3. Пайплайны обращаются к API через общие лимитеры и ретраят запросы.
+4. Промежуточные DataFrame'ы валидируются, нормализуются и детерминированно
+   сортируются перед экспортом.
+5. Рядом с CSV создаются `.meta.yaml` и отчёты качества.
 
-  TestItem[scripts.get_testitem_data\n+ library.pipelines.testitem] --> IO
-  TestItem --> Clients
-  TestItem --> Integrations
-  TestItem --> Post
-  TestItem --> Validation
-  TestItem --> Metadata
-  TestItem --> Quality
-
-  Target[scripts.get_target_data\n+ library.pipelines.target] --> IO
-  Target --> Clients
-  Target --> Integrations
-  Target --> Post
-  Target --> Validation
-  Target --> Metadata
-  Target --> Quality
-```
-
-Схема подчёркивает, что все пайплайны используют единый набор утилит, что
-упрощает сопровождение и синхронизацию изменений.
-
-## Слои и ответственность
-
-| Слой | Модули | Роль |
-|------|--------|------|
-| Конфигурация | `config/config.yaml`, `config.schema.json`, `library/config.py` | Определяют хосты API, лимиты, пути, опции нормализации и правила загрузки `.env`. |
-| Точки входа | `scripts/*.py`, `library/cli/commands/*`, `library/utils/cli_tools/*` | Парсят CLI, подготавливают пути, запускают пайплайны, оркестратор `get-data` и вспомогательные утилиты. |
-| Клиенты | `library/clients/*`, `library/utils/http.py` | Устанавливают HTTP-сессии, ретраи, rate limiting и потоковую пагинацию. |
-| Нормализация и схемы | `library/schemas/*`, `library/normalization/*` | Приводят типы данных к стандарту, выравнивают операторы и применяют Pandera-схемы. |
-| Пост-обработка | `library/postprocessing/*`, `library/processing/*` | Вычисляют производные поля, объединяют словари, готовят порядок колонок. |
-| Экспорт и метаданные | `library/io/*`, `library/metadata.py`, `library/table_quality.py` | Записывают CSV/Parquet, создают YAML с контрольными суммами, формируют отчёты качества. |
-| QA и наблюдаемость | `logs/`, `library/common/log.py`, `library/utils/cli_tools/table_quality_main.py` | Структурированное логирование, профилирование таблиц, диагностика ошибок. |
-
-Диаграммы помогают быстро определить, в каком слое вносить изменения при
-добавлении новой сущности или адаптации правил очистки данных.
+Подробности по шагам — в [`ETL_PROCESS.md`](./ETL_PROCESS.md), модель данных —
+в [`DATA_MODEL.md`](./DATA_MODEL.md).
