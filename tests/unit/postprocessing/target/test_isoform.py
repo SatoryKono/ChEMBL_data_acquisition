@@ -34,3 +34,15 @@ def test_transform__empty_input_returns_empty_frame():
     result = transform.result
     assert result.empty
     assert list(result.columns) == list(isoform._OUTPUT_COLUMNS)
+
+
+@pytest.mark.unit
+def test_resolve_source_columns__includes_fallback_aliases_in_error():
+    frame = pd.DataFrame(columns=["unrelated_column"])
+
+    with pytest.raises(KeyError) as excinfo:
+        isoform._resolve_source_columns(frame)
+
+    message = str(excinfo.value)
+    assert "uniProtkbId" in message
+    assert "target_chembl_id" in message
