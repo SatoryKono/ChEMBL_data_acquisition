@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 import sys
 import shutil
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 import math
@@ -114,6 +114,7 @@ from library.schemas.targets import TARGETS_COLUMN_ORDER
 
 
 from library.postprocessing import target as target_pp
+from library.postprocessing import names as names_pp
 
 try:
     from library.postprocessing.target import process_targets as _process_targets_impl
@@ -306,6 +307,208 @@ def _postprocess_organism_export(
     return organism_path
 
 
+def _normalise_names_summary(summary: Mapping[str, Any]) -> dict[str, Any]:
+    """Return *summary* converted to built-in container types for logging."""
+
+    normalised: dict[str, Any] = {}
+    for key, value in summary.items():
+        if isinstance(value, Mapping):
+            normalised[key] = _normalise_names_summary(value)
+        elif isinstance(value, pd.Series):
+            normalised[key] = value.to_dict()
+        elif isinstance(value, pd.DataFrame):
+            normalised[key] = value.to_dict(orient="list")
+        elif isinstance(value, set):
+            normalised[key] = sorted(value)
+        elif isinstance(value, tuple):
+            normalised[key] = list(value)
+        else:
+            normalised[key] = value
+    return normalised
+
+
+def _coerce_target_names_result(
+    result: object,
+) -> tuple[Path | None, dict[str, Any] | None]:
+    """Interpret *result* from ``process_target_names``."""
+
+    path_candidate: object | None = None
+    summary: dict[str, Any] | None = None
+
+    if isinstance(result, tuple):
+        if result:
+            path_candidate = result[0]
+            extra = result[1] if len(result) > 1 else None
+            if isinstance(extra, Mapping):
+                summary = _normalise_names_summary(extra)
+    elif isinstance(result, Mapping):
+        path_candidate = (
+            result.get("path")
+            or result.get("output")
+            or result.get("csv_path")
+            or result.get("names_path")
+        )
+        extra = result.get("summary") or result.get("stats")
+        if isinstance(extra, Mapping):
+            summary = _normalise_names_summary(extra)
+    elif hasattr(result, "path"):
+        path_candidate = getattr(result, "path")
+        extra = getattr(result, "summary", None)
+        if isinstance(extra, Mapping):
+            summary = _normalise_names_summary(extra)
+    else:
+        path_candidate = result
+
+    if path_candidate is None:
+        return None, summary
+
+    try:
+        path = Path(str(path_candidate))
+    except Exception:  # pragma: no cover - defensive
+        return None, summary
+
+    return path, summary
+
+
+def _csv_read_kwargs(cfg: Config) -> dict[str, Any]:
+    """Return keyword arguments for :func:`pandas.read_csv` respecting *cfg*."""
+
+    io_cfg = getattr(cfg, "io", None)
+    sep = getattr(io_cfg, "csv_sep", ",") if io_cfg is not None else ","
+    encoding = getattr(io_cfg, "csv_encoding", "utf-8") if io_cfg is not None else "utf-8"
+    return {"sep": sep, "encoding": encoding, "dtype": str}
+
+
+def _summarise_contrion_series(series: pd.Series | None) -> dict[str, Any] | None:
+    """Return summary statistics for the ``contrion`` column."""
+
+    if series is None:
+        return None
+
+    unique_tokens: set[str] = set()
+    non_empty_rows = 0
+    total_tokens = 0
+
+    for value in series.dropna().astype(str):
+        text = value.strip()
+        if not text or text in {"-", "--"}:
+            continue
+        parts = [part.strip() for part in text.split("|") if part.strip()]
+        if not parts:
+            continue
+        non_empty_rows += 1
+        total_tokens += len(parts)
+        unique_tokens.update(parts)
+
+    return {
+        "contrion_unique": len(unique_tokens),
+        "contrion_non_empty": non_empty_rows,
+        "contrion_total": total_tokens,
+    }
+
+
+def _summarise_active_component_types(series: pd.Series | None) -> dict[str, int] | None:
+    """Return counts per ``active_component_type`` value."""
+
+    if series is None:
+        return None
+
+    normalised = (
+        series.fillna("<NA>")
+        .astype(str)
+        .map(lambda value: value.strip() or "<EMPTY>")
+    )
+    counts = normalised.value_counts(dropna=False)
+    return {str(key): int(value) for key, value in counts.items()}
+
+
+def _compute_target_names_summary(
+    source: Path,
+    output: Path,
+    *,
+    cfg: Config,
+) -> dict[str, Any]:
+    """Compute fallback summary metrics for the target names export."""
+
+    summary: dict[str, Any] = {}
+    read_kwargs = _csv_read_kwargs(cfg)
+
+    try:
+        before_df = pd.read_csv(source, **read_kwargs)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.exception(
+            "target_names_summary_failed",
+            stage="source",
+            path=str(source),
+            error=str(exc),
+        )
+    else:
+        summary["rows_before"] = int(len(before_df))
+
+    try:
+        after_df = pd.read_csv(output, **read_kwargs)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.exception(
+            "target_names_summary_failed",
+            stage="output",
+            path=str(output),
+            error=str(exc),
+        )
+    else:
+        summary["rows_after"] = int(len(after_df))
+        contrion_summary = _summarise_contrion_series(after_df.get("contrion"))
+        if contrion_summary:
+            summary.update(contrion_summary)
+        active_summary = _summarise_active_component_types(
+            after_df.get("active_component_type")
+        )
+        if active_summary is not None:
+            summary["active_component_type"] = active_summary
+
+    return summary
+
+
+def _postprocess_names_export(
+    source: Path,
+    *,
+    cfg: Config,
+) -> Path | None:
+    """Invoke the target names post-processing helper."""
+
+    try:
+        result = names_pp.process_target_names(str(source), verbose=True)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.exception(
+            "target_names_postprocess_failed",
+            path=str(source),
+            error=str(exc),
+        )
+        return None
+
+    output_path, summary = _coerce_target_names_result(result)
+    if output_path is None:
+        logger.error(
+            "target_names_postprocess_invalid_result",
+            path=str(source),
+            result_type=type(result).__name__,
+        )
+        return None
+
+    payload: dict[str, Any] = {
+        "path": str(output_path),
+        "source": str(source),
+    }
+
+    if summary is None:
+        summary = _compute_target_names_summary(source, output_path, cfg=cfg)
+
+    if summary:
+        payload.update(summary)
+
+    logger.info("target_names_postprocess_done", **payload)
+    return output_path
+
+
 def _postprocess_target_exports(
     source: Path,
     *,
@@ -322,6 +525,7 @@ def _postprocess_target_exports(
         context=context,
         ambiguous_classifications=ambiguous_classifications,
     )
+    _postprocess_names_export(source, cfg=cfg)
 
 
 def _resolve_parameter(
