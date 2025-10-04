@@ -17,6 +17,42 @@ import sys
 import pandas as pd
 import re
 
+
+def _empty_like(index: pd.Index) -> pd.Series:
+    """Return an empty object-typed series aligned with *index*."""
+
+    if len(index):
+        return pd.Series([""] * len(index), index=index, dtype=object)
+    return pd.Series(dtype=object)
+
+
+def _project_source_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return ``frame`` projected onto :data:`_SOURCE_COLUMNS` with fallbacks."""
+
+    projected = frame.reindex(columns=list(_SOURCE_COLUMNS)).copy()
+    for column in _SOURCE_COLUMNS:
+        if column in frame.columns:
+            projected[column] = frame[column].astype(object)
+            continue
+
+        fallback_series: pd.Series | None = None
+        for candidate in _SOURCE_FALLBACKS.get(column, ()):  # pragma: no branch - small tuple
+            if candidate in frame.columns:
+                fallback_series = frame[candidate].astype(object)
+                break
+            if candidate in projected.columns and candidate != column:
+                existing = projected[candidate]
+                if not existing.replace("", pd.NA).isna().all():
+                    fallback_series = existing.astype(object)
+                    break
+
+        if fallback_series is None:
+            projected[column] = _empty_like(projected.index)
+        else:
+            projected[column] = fallback_series.reindex(projected.index).astype(object)
+
+    return projected
+
 # Ordered list of encodings attempted when reading the aggregated targets CSV.
 _DEFAULT_ENCODINGS: tuple[str, ...] = ("utf-8", "utf-8-sig", "cp1252")
 
@@ -67,6 +103,29 @@ _SOURCE_COLUMNS: tuple[str, ...] = (
     "target_chembl_id",
 )
 
+# Alternative column names consulted when projecting the input frame.  The
+# UniProt-only export, for instance, lacks ``target_chembl_id`` and
+# ``uniprot_id_primary`` because the identifiers are represented as
+# ``uniProtkbId`` (and friends).  The fallbacks ensure that these shapes can be
+# processed without raising ``KeyError`` while keeping legacy behaviour for the
+# canonical aggregated target table.
+_SOURCE_FALLBACKS: dict[str, tuple[str, ...]] = {
+    "uniprot_id_primary": (
+        "uniprot_id",
+        "uniprotkb_Id",
+        "uniprotkb_id",
+        "uniProtkbId",
+        "uniProtkbIdFallback",
+    ),
+    "target_chembl_id": (
+        "target_id",
+        "chembl_id",
+        "target",
+        "uniprot_id_primary",
+        "uniprot_id",
+        "uniprotkb_Id",
+        "uniProtkbId",
+        "uniProtkbIdFallback",
 _SOURCE_COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
     "uniprot_id_primary": (
         "uniprot_id",
@@ -235,6 +294,16 @@ class _TransformationResult:
 def _transform(frame: pd.DataFrame) -> _TransformationResult:
     """Apply the isoform expansion stages mirroring the Power Query steps."""
 
+    projected = _project_source_columns(frame)
+    if projected.empty:
+        empty_result = pd.DataFrame(columns=list(_OUTPUT_COLUMNS))
+        return _TransformationResult(
+            result=empty_result.copy(),
+            combined=empty_result.copy(),
+            dedup_stage1=empty_result.copy(),
+            sorted_stage=empty_result.copy(),
+            dedup_stage2=empty_result.copy(),
+        )
     column_map = _resolve_source_columns(frame)
     projected = frame.loc[:, [column_map[column] for column in _SOURCE_COLUMNS]].copy()
     projected = projected.rename(columns={column_map[column]: column for column in _SOURCE_COLUMNS})
