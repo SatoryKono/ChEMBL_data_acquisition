@@ -1609,3 +1609,24 @@
 {"ts": "2025-10-03T17:51:26.885930+00:00", "level": "INFO", "event": "deduplicated_rows", "run_id": "aa19a9c8034e44a0a363b8bcd57fe343", "status": null, "rps": null, "dropped": 0}
 {"ts": "2025-10-03T17:51:27.249807+00:00", "level": "INFO", "event": "validate_write_done", "run_id": "aa19a9c8034e44a0a363b8bcd57fe343", "status": null, "rps": null, "rows": 10}
 {"ts": "2025-10-03T17:51:27.250627+00:00", "level": "INFO", "event": "pipeline_done", "run_id": "aa19a9c8034e44a0a363b8bcd57fe343", "status": null, "rps": null}
+{"ts": "2025-10-03T20:23:12.530650+00:00", "level": "INFO", "event": "pipeline_start", "run_id": "43dd433e016b41b89fa91f7cf3982921", "status": null, "rps": null}
+{"ts": "2025-10-03T20:23:12.530918+00:00", "level": "WARN", "event": "cli_option_deprecated", "run_id": "43dd433e016b41b89fa91f7cf3982921", "status": null, "rps": null, "option": "--output", "replacement": "--final-out"}
+{"ts": "2025-10-03T20:23:12.531190+00:00", "level": "INFO", "event": "pipeline_done", "run_id": "43dd433e016b41b89fa91f7cf3982921", "status": null, "rps": null}
+{"ts": "2025-10-03T20:23:13.889927+00:00", "level": "INFO", "event": "pipeline_start", "run_id": "331a3f26da3e43e3bc37abf71d99ce0b", "status": null, "rps": null}
+{"ts": "2025-10-03T20:23:13.890100+00:00", "level": "WARN", "event": "cli_option_deprecated", "run_id": "331a3f26da3e43e3bc37abf71d99ce0b", "status": null, "rps": null, "option": "--output", "replacement": "--final-out"}
+{"ts": "2025-10-03T20:23:13.896997+00:00", "level": "ERROR", "event": "chunk_processing_failed", "run_id": "331a3f26da3e43e3bc37abf71d99ce0b", "status": null, "rps": null, "error": "External network access is disabled during tests"}
+{"ts": "2025-10-03T20:23:13.898118+00:00", "level": "INFO", "event": "raw_dump_written", "run_id": "331a3f26da3e43e3bc37abf71d99ce0b", "status": null, "rps": null, "rows": 0, "path": "/tmp/pytest-of-jules/pytest-0/test_target_timeout_override0/out.csv"}
+{"ts": "2025-10-03T20:23:13.898292+00:00", "level": "INFO", "event": "chembl_stage_rows", "run_id": "331a3f26da3e43e3bc37abf71d99ce0b", "stage": "fetch", "status": null, "rps": null, "rows": 0}
+{"ts": "2025-10-03T20:23:13.898429+00:00", "level": "INFO", "event": "chembl_stage_rows", "run_id": "331a3f26da3e43e3bc37abf71d99ce0b", "stage": "raw_dump", "status": null, "rps": null, "rows": 0}
+{"ts": "2025-10-03T20:23:13.898561+00:00", "level": "INFO", "event": "chembl_stage_rows", "run_id": "331a3f26da3e43e3bc37abf71d99ce0b", "stage": "post_cleanup", "status": null, "rps": null, "rows": 0}
+{"ts": "2025-10-03T20:23:13.898689+00:00", "level": "INFO", "event": "chembl_placeholder_replacements", "run_id": "331a3f26da3e43e3bc37abf71d99ce0b", "status": null, "rps": null, "total": 0}
+{"ts": "2025-10-03T20:23:13.898829+00:00", "level": "INFO", "event": "pipeline_fail", "run_id": "331a3f26da3e43e3bc37abf71d99ce0b", "status": null, "rps": null}
+{"ts": "2025-10-03T20:23:13.917721+00:00", "level": "INFO", "event": "pipeline_start", "run_id": "aa7727135c7540e8a5192cc27f35b3da", "status": null, "rps": null}
+{"ts": "2025-10-03T20:23:13.917933+00:00", "level": "WARN", "event": "cli_option_deprecated", "run_id": "aa7727135c7540e8a5192cc27f35b3da", "status": null, "rps": null, "option": "--output", "replacement": "--final-out"}
+{"ts": "2025-10-03T20:23:13.924496+00:00", "level": "ERROR", "event": "chunk_processing_failed", "run_id": "aa7727135c7540e8a5192cc27f35b3da", "status": null, "rps": null, "error": "External network access is disabled during tests"}
+{"ts": "2025-10-03T20:23:13.925938+00:00", "level": "INFO", "event": "raw_dump_written", "run_id": "aa7727135c7540e8a5192cc27f35b3da", "status": null, "rps": null, "rows": 0, "path": "/tmp/pytest-of-jules/pytest-0/test_target_chunk_size_overrid0/out.csv"}
+{"ts": "2025-10-03T20:23:13.926113+00:00", "level": "INFO", "event": "chembl_stage_rows", "run_id": "aa7727135c7540e8a5192cc27f35b3da", "stage": "fetch", "status": null, "rps": null, "rows": 0}
+{"ts": "2025-10-03T20:23:13.926258+00:00", "level": "INFO", "event": "chembl_stage_rows", "run_id": "aa7727135c7540e8a5192cc27f35b3da", "stage": "raw_dump", "status": null, "rps": null, "rows": 0}
+{"ts": "2025-10-03T20:23:13.926389+00:00", "level": "INFO", "event": "chembl_stage_rows", "run_id": "aa7727135c7540e8a5192cc27f35b3da", "stage": "post_cleanup", "status": null, "rps": null, "rows": 0}
+{"ts": "2025-10-03T20:23:13.926517+00:00", "level": "INFO", "event": "chembl_placeholder_replacements", "run_id": "aa7727135c7540e8a5192cc27f35b3da", "status": null, "rps": null, "total": 0}
+{"ts": "2025-10-03T20:23:13.926645+00:00", "level": "INFO", "event": "pipeline_fail", "run_id": "aa7727135c7540e8a5192cc27f35b3da", "status": null, "rps": null}
