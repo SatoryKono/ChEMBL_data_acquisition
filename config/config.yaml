@@ -115,6 +115,7 @@ sources:
           family_csv: "config/dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
           limit: null
         all:
+          column: "target_chembl_id"  # Column containing ChEMBL target identifiers
           data_dir: "config/dictionary/_target/_uniprot"
           target_csv: "config/dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
           family_csv: "config/dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
