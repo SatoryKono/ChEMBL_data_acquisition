@@ -75,7 +75,7 @@
 | `force_refresh_existing` | `false` | При `true` пересобирает связи родитель→потомок даже для записей с уже заполненным родителем, заставляя использовать данные из кэша/ChEMBL. |
 | `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id']` | Список полей, которые запрашиваются у ChEMBL при построении или обновлении каталога; расширяйте его для дополнительных атрибутов. |
 | `filters` | `{'parent_molecule_chembl_id__isnull': 'false'}` | Набор фильтров, добавляемых ко всем запросам; по умолчанию выбирает только записи с заполненным родителем в ChEMBL. |
-| `hierarchy_lookup_path` | `dictionary/_testitem/molecule_hierarchy.csv` | Необязательный CSV с готовыми связями родитель→потомок, который используется офлайн до обращения к ChEMBL; переопределяйте при распространении собственной витрины или переносе каталога. |
+| `hierarchy_lookup_path` | `config/dictionary/_testitem/molecule_hierarchy.csv` | Необязательный CSV с готовыми связями родитель→потомок, который используется офлайн до обращения к ChEMBL; переопределяйте при распространении собственной витрины или переносе каталога. |
 | `hierarchy_lookup_encoding` | `utf-8-sig` | Кодировка, применяемая при чтении CSV иерархии; меняйте, если файл сохранён в другом наборе символов (например, Latin-1 из старых выгрузок). |
 | `hierarchy_lookup_delimiter` | `,` | Разделитель столбцов, ожидаемый загрузчиком иерархии; укажите `;` или табуляцию для файлов, подготовленных региональными командами. |
 | `page_size` | `500` | Количество записей в одном запросе при перепостроении каталога. |
@@ -207,8 +207,8 @@ CLI-параметры имеют приоритет над YAML и окруже
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
 | `enable` | `true` | Включает стадию расчёта `salt_chembl_id` и флагов из каталога молекул. |
-| `sources.molecule_catalog_path` | `../dictionary/_testitem/molecule_catalog.csv` | CSV со столбцами `molecule_chembl_id`, `natural_product`, `prodrug`, `polymer_flag`. |
-| `sources.molecule_hierarchy_path` | `dictionary/_testitem/molecule_hierarchy.csv` | CSV с соответствиями дочерней и родительской молекулы. |
+| `sources.molecule_catalog_path` | `../config/dictionary/_testitem/molecule_catalog.csv` | CSV со столбцами `molecule_chembl_id`, `natural_product`, `prodrug`, `polymer_flag`. |
+| `sources.molecule_hierarchy_path` | `config/dictionary/_testitem/molecule_hierarchy.csv` | CSV с соответствиями дочерней и родительской молекулы. |
 | `output.salt_as_null_when_absent` | `true` | При `true` несолевые соединения дают `null`, при `false` — символ `-`. |
 | `flags.coerce_to_bool` | `true` | Нормализует значения вида `Y/N`, `1/0`, `yes/no` в булев тип pandas. |
 | `flags.parent_fallback` | `true` | Подтягивает флаги из родителя, если у дочерней записи они пусты. |
@@ -245,7 +245,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 |  | `timeout` | `30.0` | Таймаут сетевых операций (сек.). |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
 |  | `offset` | `0` | Число строк, пропускаемых перед обработкой. |
-|  | `data_dir` | `../dictionary/_target/_uniprot` | Каталог с кэшированными JSON UniProt. |
+|  | `data_dir` | `../config/dictionary/_target/_uniprot` | Каталог с кэшированными JSON UniProt. |
 | `chembl` | `column` | `target_chembl_id` | Колонка с таргетами ChEMBL. |
 |  | `chunk_size` | `5` | Размер батча запросов. |
 |  | `timeout` | `30.0` | Таймаут сетевых операций (сек.). |
@@ -256,12 +256,12 @@ CLI-параметры имеют приоритет над YAML и окруже
 |  | `timeout` | `30.0` | Таймаут обработки (сек.). |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
 |  | `offset` | `0` | Число строк, пропускаемых перед обработкой. |
-|  | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Справочник таргетов IUPHAR. |
-|  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
+|  | `target_csv` | `../config/dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Справочник таргетов IUPHAR. |
+|  | `family_csv` | `../config/dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
 | `all` | `column` | `target_chembl_id` | Колонка для запуска объединённого сценария. |
-|  | `data_dir` | `../dictionary/_target/_uniprot` | Каталог с данными UniProt. |
-|  | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Таблица таргетов IUPHAR. |
-|  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Таблица семейств IUPHAR. |
+|  | `data_dir` | `../config/dictionary/_target/_uniprot` | Каталог с данными UniProt. |
+|  | `target_csv` | `../config/dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Таблица таргетов IUPHAR. |
+|  | `family_csv` | `../config/dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Таблица семейств IUPHAR. |
 |  | `chunk_size` | `5` | Размер батча при объединении источников. |
 |  | `timeout` | `30.0` | Таймаут сетевых операций (сек.). |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
@@ -327,14 +327,14 @@ CLI-параметры имеют приоритет над YAML и окруже
 
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
-| `dictionary_dir` | `../dictionary` | Корневая папка словарей. |
-| `iuphar_target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Соответствия таргетов IUPHAR. |
-| `iuphar_family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
-| `uniprot_data_dir` | `../dictionary/_target/_uniprot` | Кэшированные ответы UniProt. |
-| `targets_type_csv` | `../dictionary/_target/targets_type.csv` | Классификация типов таргетов. |
+| `dictionary_dir` | `../config/dictionary` | Корневая папка словарей. |
+| `iuphar_target_csv` | `../config/dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Соответствия таргетов IUPHAR. |
+| `iuphar_family_csv` | `../config/dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
+| `uniprot_data_dir` | `../config/dictionary/_target/_uniprot` | Кэшированные ответы UniProt. |
+| `targets_type_csv` | `../config/dictionary/_target/targets_type.csv` | Классификация типов таргетов. |
 
 
-Каталог `dictionary/_target` отражает текущую структуру репозитория; в нём по умолчанию лежат справочники IUPHAR и выгрузки UniProt.
+Каталог `config/dictionary/_target` отражает текущую структуру репозитория; в нём по умолчанию лежат справочники IUPHAR и выгрузки UniProt.
 
 
 > Таксономическая классификация таргетов вычисляется по данным UniProt в коде пайплайна; отдельный CSV-справочник организмов больше не требуется.

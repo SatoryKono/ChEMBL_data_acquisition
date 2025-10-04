@@ -7,7 +7,7 @@
 
 - `testitem.csv` — основной словарь тестовых веществ, включая аггрегированные названия, стереохимию и скелет InChI;
 - `molecule_catalog.csv` — признаки натурального происхождения, проконвертированности и полимерности молекул;
-- `../molecule_hierarchy.csv` — связки родительских молекул, используемые при нормализации идентификаторов.
+- `molecule_hierarchy.csv` — связки родительских молекул, используемые при нормализации идентификаторов.
 
 Описание колонок доступно в разделе `testitem.csv (processed export)` файла [docs/en/devel/DATA_SCHEMA.md](../../docs/en/devel/DATA_SCHEMA.md#testitemcsv-processed-export).
 

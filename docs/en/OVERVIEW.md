@@ -33,7 +33,7 @@ page for engineers and analysts before diving into the detailed manuals.
 | `library/cli/commands/` | Console-script entry points used by installed wheels. |
 | `library/utils/cli_tools/` | Lightweight utilities (table profiling, cached target harness, CSV helpers, mapping tools). |
 | `config/` | Default YAML configuration, schema definition, and bundled dictionaries. |
-| `dictionary/` | Reference datasets used by the pipelines (UniProt caches, target taxonomies, QA fixtures). |
+| `config/dictionary/` | Reference datasets used by the pipelines (UniProt caches, target taxonomies, QA fixtures). |
 | `data/` | Smoke-test inputs and sample exports. |
 | `docs/` | Project documentation (English and Russian variants). |
 | `tests/` | Unit and integration tests covering pipelines and CLI helpers. |

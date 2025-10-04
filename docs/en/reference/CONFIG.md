@@ -76,7 +76,7 @@ relative paths are resolved against the configuration file.
 | `force_refresh_existing` | `false` | When `true`, rebuilds parent relationships even if the incoming dataset already contains parent identifiers, ensuring the cache wins over source columns. |
 | `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id']` | List of fields requested from the ChEMBL API when populating or refreshing the catalogue; extend to retrieve extra metadata alongside identifiers. |
 | `filters` | `{'parent_molecule_chembl_id__isnull': 'false'}` | Query parameters appended to every API call; defaults keep only rows that already have parent assignments in ChEMBL. |
-| `hierarchy_lookup_path` | `dictionary/_testitem/molecule_hierarchy.csv` | Optional CSV used as an offline seed for parent-child relationships before querying ChEMBL; override when distributing a curated hierarchy snapshot or relocating the dictionary folder. |
+| `hierarchy_lookup_path` | `config/dictionary/_testitem/molecule_hierarchy.csv` | Optional CSV used as an offline seed for parent-child relationships before querying ChEMBL; override when distributing a curated hierarchy snapshot or relocating the dictionary folder. |
 | `hierarchy_lookup_encoding` | `utf-8-sig` | Text encoding applied when reading the hierarchy lookup CSV; change when the snapshot is saved with a different charset (for example Latin-1 from legacy exports). |
 | `hierarchy_lookup_delimiter` | `,` | Delimiter expected by the hierarchy lookup loader; override for semicolon- or tab-separated snapshots produced by regional data teams. |
 | `page_size` | `500` | Number of records requested per API page while rebuilding the catalogue. |
@@ -216,8 +216,8 @@ applies exponential backoff between attempts before surfacing the error.
 | Key | Default | Description |
 | --- | --- | --- |
 | `enable` | `true` | Master switch for the enrichment stage that derives salt identifiers and catalogue flags. |
-| `sources.molecule_catalog_path` | `../dictionary/_testitem/molecule_catalog.csv` | CSV with `molecule_chembl_id` and the `natural_product`/`prodrug`/`polymer_flag` columns. |
-| `sources.molecule_hierarchy_path` | `dictionary/_testitem/molecule_hierarchy.csv` | CSV that maps derivatives to their parent molecule (`molecule_chembl_id`, `parent_molecule_chembl_id`). |
+| `sources.molecule_catalog_path` | `../config/dictionary/_testitem/molecule_catalog.csv` | CSV with `molecule_chembl_id` and the `natural_product`/`prodrug`/`polymer_flag` columns. |
+| `sources.molecule_hierarchy_path` | `config/dictionary/_testitem/molecule_hierarchy.csv` | CSV that maps derivatives to their parent molecule (`molecule_chembl_id`, `parent_molecule_chembl_id`). |
 | `output.salt_as_null_when_absent` | `true` | Emit `null` (or `-` when set to `false`) when the compound is not a salt. |
 | `flags.coerce_to_bool` | `true` | Normalise catalogue values such as `Y/N`, `1/0`, `yes/no` to pandas nullable booleans. |
 | `flags.parent_fallback` | `true` | Reuse parent flag values when the child entry is missing. |
@@ -254,7 +254,7 @@ applies exponential backoff between attempts before surfacing the error.
 |  | `timeout` | `30.0` | Request timeout in seconds. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
 |  | `offset` | `0` | Number of rows skipped before processing. |
-|  | `data_dir` | `../dictionary/_target/_uniprot` | Directory holding cached UniProt JSON files. |
+|  | `data_dir` | `../config/dictionary/_target/_uniprot` | Directory holding cached UniProt JSON files. |
 | `chembl` | `column` | `target_chembl_id` | Column with ChEMBL target identifiers. |
 |  | `chunk_size` | `5` | Batch size for API requests. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
@@ -265,12 +265,12 @@ applies exponential backoff between attempts before surfacing the error.
 |  | `timeout` | `30.0` | Processing timeout in seconds. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
 |  | `offset` | `0` | Number of rows skipped before processing. |
-|  | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
-|  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
+|  | `target_csv` | `../config/dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
+|  | `family_csv` | `../config/dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
 | `all` | `column` | `target_chembl_id` | Column used to seed the ChEMBL stage. |
-|  | `data_dir` | `../dictionary/_target/_uniprot` | Directory containing cached UniProt data. |
-|  | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target reference data. |
-|  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family reference data. |
+|  | `data_dir` | `../config/dictionary/_target/_uniprot` | Directory containing cached UniProt data. |
+|  | `target_csv` | `../config/dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target reference data. |
+|  | `family_csv` | `../config/dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family reference data. |
 |  | `chunk_size` | `5` | Batch size when combining all sources. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
@@ -340,14 +340,14 @@ supports the short alias documented in the [Environment variable aliases](#envir
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `dictionary_dir` | `../dictionary` | Root directory with lookup tables. |
-| `iuphar_target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
-| `iuphar_family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
-| `uniprot_data_dir` | `../dictionary/_target/_uniprot` | Cached UniProt JSON responses. |
-| `targets_type_csv` | `../dictionary/_target/targets_type.csv` | Target type classification table. |
+| `dictionary_dir` | `../config/dictionary` | Root directory with lookup tables. |
+| `iuphar_target_csv` | `../config/dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
+| `iuphar_family_csv` | `../config/dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
+| `uniprot_data_dir` | `../config/dictionary/_target/_uniprot` | Cached UniProt JSON responses. |
+| `targets_type_csv` | `../config/dictionary/_target/targets_type.csv` | Target type classification table. |
 
 
-The `dictionary/_target` folder mirrors the current repository layout; all
+The `config/dictionary/_target` folder mirrors the current repository layout; all
 IUPHAR and UniProt lookups are stored there by default.
 
 

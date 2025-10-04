@@ -96,7 +96,7 @@ This section defines paths to local data files, such as dictionaries and mapping
 
 | Key | Example Default | Description |
 |---|---|---|
-| `dictionary_dir` | `../dictionary` | Root directory for all dictionary files. |
+| `dictionary_dir` | `../config/dictionary` | Root directory for all dictionary files. |
 | `iuphar_target_csv` | `.../_IUPHAR_target.csv` | Path to the IUPHAR target mapping table. |
 
 ---
