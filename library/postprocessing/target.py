@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import re
 
 # Ordered list of encodings attempted when reading the aggregated targets CSV.
 _DEFAULT_ENCODINGS: tuple[str, ...] = ("utf-8", "utf-8-sig", "cp1252")
@@ -22,6 +23,25 @@ _DEFAULT_ENCODINGS: tuple[str, ...] = ("utf-8", "utf-8-sig", "cp1252")
 # path. The Power Query workflow consumed the canonical exports emitted under
 # ``data/output`` so we keep the same convention here.
 _DEFAULT_SEARCH_DIR = Path("data/output")
+
+# Accepted filename patterns for aggregated target exports.
+_INPUT_NAME_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"output\.target_\d{8}\.csv\Z"), "output.target_<YYYYMMDD>.csv"),
+    (re.compile(r"output\.targets_\d{8}\.csv\Z"), "output.targets_<YYYYMMDD>.csv"),
+    (re.compile(r"targets_\d{8}(?:_normalized)?\.csv\Z"), "targets_<YYYYMMDD>[_normalized].csv"),
+)
+
+
+def _matches_expected_input_name(filename: str) -> bool:
+    """Return ``True`` when ``filename`` matches a supported input pattern."""
+
+    return any(pattern.match(filename) for pattern, _ in _INPUT_NAME_RULES)
+
+
+def _supported_patterns_text() -> str:
+    """Return a human-readable list of accepted filename templates."""
+
+    return ", ".join(description for _, description in _INPUT_NAME_RULES)
 
 # Columns projected from the aggregated target table before isoform expansion.
 _SOURCE_COLUMNS: tuple[str, ...] = (
@@ -224,14 +244,24 @@ def _resolve_input_path(input_csv: str | Path | None) -> Path:
     if input_csv is not None:
         candidate = Path(input_csv)
         if candidate.is_dir():
-            matches = list(candidate.glob("output.target_*.csv"))
+            matches = [
+                path
+                for path in candidate.glob("*.csv")
+                if _matches_expected_input_name(path.name)
+            ]
             if not matches:
                 raise FileNotFoundError(
-                    f"No output.target_*.csv files found under {candidate}"
+                    "No supported target exports found under "
+                    f"{candidate} (expected patterns: {_supported_patterns_text()})"
                 )
             return max(matches, key=lambda path: path.stat().st_mtime)
         if not candidate.exists():
             raise FileNotFoundError(candidate)
+        if not _matches_expected_input_name(candidate.name):
+            raise ValueError(
+                "Input file must match one of the supported patterns: "
+                + _supported_patterns_text()
+            )
         return candidate
 
     search_dir = _DEFAULT_SEARCH_DIR
@@ -239,10 +269,15 @@ def _resolve_input_path(input_csv: str | Path | None) -> Path:
         raise FileNotFoundError(
             "No input CSV supplied and default search directory does not exist"
         )
-    matches = list(search_dir.glob("output.target_*.csv"))
+    matches = [
+        path
+        for path in search_dir.glob("*.csv")
+        if _matches_expected_input_name(path.name)
+    ]
     if not matches:
         raise FileNotFoundError(
-            f"No output.target_*.csv files found under {search_dir}" 
+            "No supported target exports found under "
+            f"{search_dir} (expected patterns: {_supported_patterns_text()})"
         )
     return max(matches, key=lambda path: path.stat().st_mtime)
 
@@ -265,11 +300,14 @@ def process_targets(
     output_csv: str | None = None,
     verbose: bool = True,
 ) -> Path:
-    """Run the isoform post-processing pipeline on ``output.target_*.csv``."""
+    """Run the isoform post-processing pipeline on canonical target exports."""
 
     input_path = _resolve_input_path(input_csv)
-    if not input_path.name.startswith("output.target_"):
-        raise ValueError("Input file must match pattern output.target_*.csv")
+    if not _matches_expected_input_name(input_path.name):
+        raise ValueError(
+            "Input file must match one of the supported patterns: "
+            + _supported_patterns_text()
+        )
 
     output_path = _resolve_output_path(input_path, output_csv)
 
