@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
+import numpy as np
 import pandas as pd
 
 from .helpers import first_element_text, normalize_text
@@ -117,6 +118,31 @@ class Cellularity:
             # ``pd.isna`` may return array-like objects for non-scalar inputs;
             # those should simply fall back to the fetcher.
             pass
+            missing_value = pd.isna(tax_id)
+        except (TypeError, ValueError):
+            missing_value = False
+
+        if tax_id is None:
+            return []
+
+        if isinstance(missing_value, (bool, np.bool_)) and missing_value:
+            return []
+
+        if getattr(missing_value, "all", None) is not None:
+            try:
+                all_missing = missing_value.all()
+            except TypeError:
+                all_missing = False
+            if isinstance(all_missing, (bool, np.bool_)) and all_missing:
+                return []
+            if all_missing is pd.NA:
+                return []
+
+        if tax_id is pd.NA:
+            return []
+
+        if isinstance(tax_id, (float, np.floating)) and pd.isna(tax_id):
+            return []
         values = list(self.fetcher(tax_id, email))  # type: ignore[arg-type]
         return values
 
@@ -152,12 +178,12 @@ class Cellularity:
         if lineage_text:
             lineage_names = [segment.strip() for segment in lineage_text.split(";")]
         lineage_names = [name for name in lineage_names if name]
-        if sci_name and sci_name.strip() and sci_name not in lineage_names:
-            lineage_names.append(sci_name.strip())
+        if sci_name is not None and sci_name not in lineage_names:
+            lineage_names.append(sci_name)
         return lineage_names
 
     def classify_by_fetch(self, tax_id: Any, email: str | None = None) -> str:
-        names = [normalize_text(name) for name in self.get_lineage_names(tax_id, email)]
+        names = [self._lower_token(name) for name in self.get_lineage_names(tax_id, email)]
         if "viruses" in names:
             return "acellular (virus)"
         if "bacteria" in names or "archaea" in names:
@@ -185,6 +211,16 @@ class Cellularity:
             if candidate in lookup:
                 return True
         return False
+
+    @staticmethod
+    def _lower_token(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, float) and pd.isna(value):
+            return ""
+        if value is pd.NA:
+            return ""
+        return str(value).lower()
 
 
 def add_cellularity_smart(
