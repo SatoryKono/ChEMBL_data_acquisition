@@ -1,56 +1,107 @@
 # ChEMBL Data Acquisition Utilities
 
-This repository contains a suite of Python-based utilities for fetching, processing, and enriching data from the ChEMBL database and other related life sciences resources like UniProt, IUPHAR, PubMed, and PubChem.
+This repository provides reproducible pipelines for downloading, normalising and
+quality-controlling ChEMBL datasets. The utilities bundle command line scripts,
+HTTP clients, schema validations and reporting helpers that allow analysts to
+run individual entity pipelines or orchestrate the full end-to-end workflow in
+a single command.
 
-| Language | Documentation Root |
-|----------|--------------------|
-| English  | [`docs/en/README.md`](./docs/en/README.md) |
-| Русский  | [`docs/ru/README.md`](./docs/ru/README.md) |
+## End-to-end pipeline
 
-All documentation is maintained in synchronized English and Russian variants.
+```mermaid
+flowchart LR
+    A[Input identifiers\nCSV files] -->|resolve| B[Document pipeline]
+    B -->|enrich| C[Target pipeline]
+    C -->|link| D[Assay pipeline]
+    D -->|hydrate| E[Test item pipeline]
+    E -->|join| F[Activity pipeline]
+    B -.->|citations| F
+    C -.->|targets| F
+    style F fill:#dfeaff,stroke:#1e3a8a,stroke-width:2px
+```
 
-## Feature highlights
+Each pipeline is idempotent and can be executed independently. The
+[`get-data`](./scripts/get_data.py) orchestrator reuses the same configuration
+and logging options to run the sequence automatically while producing consistent
+outputs.
 
-- **Data Pipelines:** End-to-end pipelines for documents, targets, assays, activities, and test items.
-- **Orchestration:** A top-level orchestrator (`get-data`) to run all pipelines sequentially with shared configuration.
-- **Unified CLI:** A consistent command-line interface with shared flags for I/O, configuration, and logging.
-- **Flexible Configuration:** Configure via YAML files, environment variables, and CLI arguments.
-- **Quality Gates:** Built-in schema validation, deterministic CSV writing, static analysis, and unit tests to ensure data quality and reproducibility.
+## Repository layout
 
+| Path | Description |
+|------|-------------|
+| `scripts/` | Command line entry points for each pipeline and orchestration helpers. |
+| `library/` | Reusable packages: API clients, pipelines, validation schemas, post-processing and QA utilities. |
+| `config/` | Default YAML configuration, schemas and dictionary resources used during enrichment. |
+| `data/` | Lightweight fixtures and smoke-test inputs that mirror the expected CSV structure. |
+| `docs/` | Full bilingual documentation set (`en`/`ru`) kept in sync. |
+| `tests/` | Deterministic pytest suite covering unit, integration and end-to-end scenarios. |
+| `reports/` | Location where JSON/Markdown test reports are emitted by CI and local runs. |
+| `Makefile` | Convenience targets for formatting, linting, tests and documentation checks. |
 
-## Quick Start
+A detailed breakdown of sub-packages, glossary and extended guides is available
+in [`docs/en/SUMMARY.md`](./docs/en/SUMMARY.md) and
+[`docs/ru/SUMMARY.md`](./docs/ru/SUMMARY.md).
 
-1.  **Create a virtual environment and install dependencies:**
+## Quick start
 
-    ```bash
-    python -m venv .venv
-    source .venv/bin/activate  # On Windows, use: .venv\Scripts\activate
-    pip install -r requirements-lock.txt
-    ```
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-lock.txt
+pre-commit install
+```
 
-2.  **Initialize pre-commit hooks:**
+Inspect the orchestrator and pipeline-specific flags:
 
-    ```bash
-    pre-commit install
-    ```
+```bash
+python scripts/get_data.py --help
+python scripts/get_document_data.py --help
+```
 
-3.  **Explore the main orchestrator script:**
+Run the complete workflow against the sample identifiers and write outputs to
+`./output`:
 
-    Run the main `get-data` script with `--help` to see all available options.
+```bash
+python scripts/get_data.py \
+  --base-path . \
+  --input-dir data/input \
+  --output-dir output \
+  --config config/config.yaml \
+  --date $(date -u +%Y%m%d)
+```
 
-    ```bash
-    get-data --help
-    ```
+Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar
+and table-quality reports under the same directory. Refer to the
+[output reference](./docs/en/OUTPUT.md) for the complete specification.
 
-## Full Documentation
+## Documentation
 
-For detailed information on usage, configuration, and output formats, please refer to the full documentation:
+All guides are provided in English and Russian. The structure is mirrored across
+languages:
 
-- **[Usage Guide](./docs/en/USAGE.md)**: A comprehensive guide to all command-line tools, their arguments, and examples.
-  - *[Руководство по использованию](./docs/ru/USAGE.md)*
-- **[Configuration Reference](./docs/en/CONFIG.md)**: A complete reference for all configuration options available in `config.yaml` and via environment variables.
-  - *[Справка по конфигурации](./docs/ru/CONFIG.md)*
-- **[Output Reference](./docs/en/OUTPUT.md)**: A detailed description of the generated files, including CSV formats and metadata sidecars.
-  - *[Справка по выходным данным](./docs/ru/OUTPUT.md)*
-- **[Developer Guide](./docs/en/DEVELOPER.md)**: Information for developers contributing to the project.
-  - *[Руководство для разработчика](./docs/ru/DEVELOPER.md)*
+- Overview and table of contents: [`docs/en/README.md`](./docs/en/README.md),
+  [`docs/ru/README.md`](./docs/ru/README.md)
+- Usage and CLI reference: [`docs/en/USAGE.md`](./docs/en/USAGE.md),
+  [`docs/ru/USAGE.md`](./docs/ru/USAGE.md)
+- Configuration guide: [`docs/en/CONFIG.md`](./docs/en/CONFIG.md),
+  [`docs/ru/CONFIG.md`](./docs/ru/CONFIG.md)
+- Output specification and validation rules:
+  [`docs/en/OUTPUT.md`](./docs/en/OUTPUT.md), [`docs/ru/OUTPUT.md`](./docs/ru/OUTPUT.md)
+- Architecture and data model:
+  [`docs/en/architecture/ARCHITECTURE.md`](./docs/en/architecture/ARCHITECTURE.md),
+  [`docs/ru/architecture/ARCHITECTURE.md`](./docs/ru/architecture/ARCHITECTURE.md)
+- Developer and CI/CD guidance:
+  [`docs/en/development/README.md`](./docs/en/development/README.md),
+  [`docs/ru/development/README.md`](./docs/ru/development/README.md)
+
+## Testing policy
+
+Tests are organised under `tests/` and executed with `pytest`. Local and CI runs
+must produce:
+
+- `reports/test_report.json` — machine readable execution log
+- `reports/test_summary.md` — condensed Markdown summary
+
+Smoke runs can use `pytest -q -k "not slow and not e2e"`, while full validation
+uses `pytest -q`. See [`docs/en/development/TESTING.md`](./docs/en/development/TESTING.md)
+for fixtures, determinism requirements and coverage targets.

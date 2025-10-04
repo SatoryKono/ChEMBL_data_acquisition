@@ -1,38 +1,17 @@
-# Developer Documentation Index
+# Developer documentation index
 
-Developer resources are now grouped by topic. Bookmark the folders or use the curated links below.
-
-## English
-
-### Development
-- [Contribution guide](./development/CONTRIBUTING.md)
-- [QA process](./development/QA_PROCESS.md)
-
-### Reference
-- [Configuration matrix](./reference/CONFIG.md)
-- [CLI helper reference](./reference/CLI_TOOLS.md)
-- [Data schema](./reference/DATA_SCHEMA.md)
-
-### Architecture
+- [Developer handbook](./development/README.md)
+- [Local setup](./development/LOCAL_SETUP.md)
+- [Testing policy](./development/TESTING.md)
+- [CI/CD guidelines](./development/CI_CD.md)
+- [Release checklist](./development/RELEASE.md)
+- [Dictionary datasets](./reference/DICTIONARIES.md)
+- [Terminology glossary](./reference/TERMINOLOGY.md)
+- [Schema crosswalks](./reference/SCHEMA_CROSSWALKS.md)
 - [Architecture overview](./architecture/ARCHITECTURE.md)
-- [ETL process report](./architecture/ETL_PROCESS.md)
-- [ETL data flow](./architecture/ETL_DATA_FLOW.md)
+- [ETL process](./architecture/ETL_PROCESS.md)
+- [Data flow diagrams](./architecture/ETL_DATA_FLOW.md)
+- [Analytical data model](./architecture/DATA_MODEL.md)
+- [QC dependencies](./architecture/QC_DEPENDENCIES.md)
 
-## Русский
-
-### Разработка
-- [Руководство по контрибуции](../ru/development/CONTRIBUTING.md)
-- [QA-процесс](../ru/development/QA_PROCESS.md)
-
-### Справочники
-- [Матрица настроек](../ru/reference/CONFIG.md)
-- [Справочник по CLI](../ru/reference/CLI_TOOLS.md)
-- [Схема данных](../ru/reference/DATA_SCHEMA.md)
-
-### Архитектура
-- [Обзор архитектуры](../ru/architecture/ARCHITECTURE.md)
-- [Описание ETL-процесса](../ru/architecture/ETL_PROCESS.md)
-- [Поток данных ETL](../ru/architecture/ETL_DATA_FLOW.md)
-
-
-The unified [documentation index](../index.md) lists user guides alongside these developer references.
+Russian equivalents are mirrored under `../ru/` with identical filenames.
