@@ -1,0 +1,107 @@
+# Утилиты ChEMBL Data Acquisition
+
+> **Языки:** [English](README_EN.md) · Русский
+
+Текст на русском полностью синхронизирован с английской версией и поддерживается
+в актуальном состоянии вместе с `README_EN.md`.
+
+## Сквозной конвейер
+
+```mermaid
+flowchart LR
+    A[Входные идентификаторы\nCSV-файлы] -->|resolve| B[Document pipeline]
+    B -->|enrich| C[Target pipeline]
+    C -->|link| D[Assay pipeline]
+    D -->|hydrate| E[Test item pipeline]
+    E -->|join| F[Activity pipeline]
+    B -.->|citations| F
+    C -.->|targets| F
+    style F fill:#dfeaff,stroke:#1e3a8a,stroke-width:2px
+```
+
+Каждый пайплайн идемпотентен и может запускаться независимо. Оркестратор
+[`get-data`](./scripts/get_data.py) использует единую конфигурацию и настройки
+логирования, чтобы выполнить всю цепочку автоматически и воспроизводимо.
+
+## Структура репозитория
+
+| Путь | Описание |
+|------|----------|
+| `scripts/` | Точки входа CLI для каждого пайплайна и вспомогательные оркестраторы. |
+| `library/` | Переиспользуемые модули: API-клиенты, пайплайны, схемы валидации, пост-обработка и QA-утилиты. |
+| `config/` | Базовый YAML-конфиг, схемы и словари для обогащения. |
+| `data/` | Небольшие фикстуры и тестовые входные данные, повторяющие структуру CSV. |
+| `docs/` | Полный комплект документации на английском и русском языках. |
+| `tests/` | Детерминированный набор тестов pytest (unit, integration, e2e). |
+| `reports/` | Каталог для JSON/Markdown отчётов о запуске тестов. |
+| `Makefile` | Удобные команды для форматирования, линтинга, тестирования и проверки документации. |
+
+Детальная структура пакетов, глоссарий и расширенные руководства описаны в
+[`docs/ru/SUMMARY.md`](./docs/ru/SUMMARY.md) и
+[`docs/en/SUMMARY.md`](./docs/en/SUMMARY.md).
+
+## Быстрый старт
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-lock.txt
+pre-commit install
+```
+
+Изучите флаги оркестратора и отдельных пайплайнов:
+
+```bash
+python scripts/get_data.py --help
+python scripts/get_document_data.py --help
+```
+
+Полный прогон на образцах идентификаторов с выводом в `./output`:
+
+```bash
+python scripts/get_data.py \
+  --base-path . \
+  --input-dir data/input \
+  --output-dir output \
+  --config config/config.yaml \
+  --date $(date -u +%Y%m%d)
+```
+
+Каждый пайплайн сохраняет детерминированный CSV, файл метаданных
+`<имя>.meta.yaml` и отчёты качества в том же каталоге. Таргет-пайплайн также
+создаёт вспомогательные таблицы `organism.output.target_<stamp>.csv` и
+`isoform.output.target_<stamp>.csv`, которые подробно описаны в
+[`docs/OUTPUT_TARGETS_RU.md`](./docs/OUTPUT_TARGETS_RU.md) и
+[`docs/OUTPUT_TARGETS_EN.md`](./docs/OUTPUT_TARGETS_EN.md). Полную спецификацию
+см. в [`docs/ru/OUTPUT.md`](./docs/ru/OUTPUT.md).
+
+## Документация
+
+Все руководства доступны на двух языках. Структура зеркальна:
+
+- Обзор и оглавление: [`docs/ru/README.md`](./docs/ru/README.md),
+  [`docs/en/README.md`](./docs/en/README.md)
+- Использование и CLI: [`docs/ru/USAGE.md`](./docs/ru/USAGE.md),
+  [`docs/en/USAGE.md`](./docs/en/USAGE.md)
+- Конфигурация: [`docs/ru/CONFIG.md`](./docs/ru/CONFIG.md),
+  [`docs/en/CONFIG.md`](./docs/en/CONFIG.md)
+- Спецификация выходных данных и правила валидации:
+  [`docs/ru/OUTPUT.md`](./docs/ru/OUTPUT.md), [`docs/en/OUTPUT.md`](./docs/en/OUTPUT.md)
+- Архитектура и модель данных:
+  [`docs/ru/architecture/ARCHITECTURE.md`](./docs/ru/architecture/ARCHITECTURE.md),
+  [`docs/en/architecture/ARCHITECTURE.md`](./docs/en/architecture/ARCHITECTURE.md)
+- Руководство по разработке и CI/CD:
+  [`docs/ru/development/README.md`](./docs/ru/development/README.md),
+  [`docs/en/development/README.md`](./docs/en/development/README.md)
+
+## Политика тестирования
+
+Тесты располагаются в `tests/` и запускаются через `pytest`. Локальные и CI-запуски
+должны создавать:
+
+- `reports/test_report.json` — машинно читаемый протокол
+- `reports/test_summary.md` — краткое Markdown-резюме
+
+Для смоук-прогона подойдёт `pytest -q -k "not slow and not e2e"`, полный набор —
+`pytest -q`. Детали фикстур, требований к детерминизму и целям по покрытию см. в
+[`docs/ru/development/TESTING.md`](./docs/ru/development/TESTING.md).

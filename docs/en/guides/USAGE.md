@@ -2,7 +2,7 @@
 
 This manual explains how to run the ChEMBL data acquisition pipelines and their
 supporting utilities. Every section has a Russian counterpart in
-[`docs/USAGE_RU.md`](./USAGE_RU.md).
+[`../../ru/guides/USAGE.md`](../../ru/guides/USAGE.md).
 
 ## General CLI pattern
 
@@ -41,7 +41,7 @@ pipeline: `document.csv`, `target.csv`, `assay.csv`, `activity.csv`,
 `testitem.csv`) and extended samples under `data/input/full`. Copy the relevant
 file, fill in your identifiers, and point `--input` to the new location. If you
 maintain your own seed lists, place them anywhere accessible to the CLI and
-ensure the headers match [`docs/DATA_SCHEMA_EN.md`](./DATA_SCHEMA_EN.md).
+ensure the headers match [`../DATA_SCHEMA.md`](../DATA_SCHEMA.md).
 
 ## Orchestrator (`get-data`)
 
@@ -221,7 +221,7 @@ get-activity-data --input data/input/activity.csv \
 `--dry-run` is unique to this pipeline: it validates CLI arguments and input
 files, then exits without contacting remote services. Activity-specific
 post-processing derives `lower_value`/`upper_value` using the rules described in
-[`docs/OUTPUT_EN.md`](./OUTPUT_EN.md).
+[`../OUTPUT.md`](../OUTPUT.md).
 
 ## Test item pipeline (`get-testitem-data`)
 
