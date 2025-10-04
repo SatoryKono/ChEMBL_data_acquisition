@@ -22,10 +22,17 @@ def reset_gtop_caches() -> Iterator[None]:
 
 
 class _DummyResponse:
-    def __init__(self, payload: object, content_type: str, *, json_exc: Exception | None = None):
+    def __init__(
+        self,
+        payload: object,
+        content_type: str,
+        *,
+        json_exc: Exception | None = None,
+    ):
         self._payload = payload
         self._json_exc = json_exc
         self.headers = {"Content-Type": content_type}
+        self.status_code = 200
 
     def raise_for_status(self) -> None:  # pragma: no cover - always OK in tests
         return None
@@ -118,6 +125,71 @@ def test_fetch_gtop_endpoint__accepts_text_plain_json(
             },
         )
     ]
+    assert session.calls == 2
+
+
+@pytest.mark.unit
+def test_fetch_gtop_endpoint__handles_empty_body(
+    monkeypatch: pytest.MonkeyPatch,
+    reset_gtop_caches: None,
+) -> None:
+    response = _DummyResponse(b"", "application/json")
+    response.headers["Content-Length"] = "0"
+    session = _DummySession(lambda: response)
+    _patch_dependencies(monkeypatch, session)
+
+    info_events: list[tuple[str, dict[str, object]]] = []
+    warning_events: list[tuple[str, dict[str, object]]] = []
+
+    def capture_info(event: str, *args: object, **kwargs: object) -> None:
+        info_events.append((event, dict(kwargs)))
+
+    def capture_warning(event: str, *args: object, **kwargs: object) -> None:
+        warning_events.append((event, dict(kwargs)))
+
+    monkeypatch.setattr(uniprot.logger, "info", capture_info)
+    monkeypatch.setattr(uniprot.logger, "warning", capture_warning)
+
+    cfg = IupharCfg()
+
+    result = uniprot._fetch_gtop_endpoint("GTP3", "naturalLigands", cfg=cfg)
+    assert result == []
+    assert info_events == [
+        (
+            "gtop_empty_response",
+            {
+                "gtop_id": "GTP3",
+                "endpoint": "naturalLigands",
+                "content_type": "application/json",
+            },
+        )
+    ]
+    assert warning_events == []
+    assert ("GTP3", "naturalLigands") not in uniprot._GTOP_JSON_FAILURE_CACHE
+    assert session.calls == 1
+
+    second = uniprot._fetch_gtop_endpoint("GTP3", "naturalLigands", cfg=cfg)
+    assert second == []
+    assert info_events == [
+        (
+            "gtop_empty_response",
+            {
+                "gtop_id": "GTP3",
+                "endpoint": "naturalLigands",
+                "content_type": "application/json",
+            },
+        ),
+        (
+            "gtop_empty_response",
+            {
+                "gtop_id": "GTP3",
+                "endpoint": "naturalLigands",
+                "content_type": "application/json",
+            },
+        ),
+    ]
+    assert warning_events == []
+    assert ("GTP3", "naturalLigands") not in uniprot._GTOP_JSON_FAILURE_CACHE
     assert session.calls == 2
 
 

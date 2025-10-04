@@ -898,16 +898,15 @@ def _fetch_gtop_endpoint(
                 body_is_empty = not body.strip()
             else:
                 body_is_empty = not body
-            if response.headers.get("Content-Length") == "0" or body_is_empty:
-                logger.warning(
-                    "gtop_json_decode_failed",
+            content_length = response.headers.get("Content-Length")
+            if content_length == "0" or body_is_empty:
+                logger.info(
+                    "gtop_empty_response",
                     gtop_id=gtop_id,
                     endpoint=endpoint,
-                    error="empty response body",
                     content_type=raw_content_type,
                 )
-                _GTOP_JSON_FAILURE_CACHE.add(cache_key)
-                return None
+                return []
             try:
                 payload = response.json()
             except (json.JSONDecodeError, ValueError) as exc:
