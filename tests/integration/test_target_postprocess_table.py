@@ -7,50 +7,53 @@ import pandas as pd
 import pandas.testing as pdt
 import pytest
 
-from library.postprocessing.target.cellularity import add_cellularity_smart
-from library.postprocessing.target.main import postprocess_target_table
-from library.postprocessing.target.multifunctional import compute_multifunctional
+from library.config import Config
+from library.pipelines.target import helpers
+
+INPUT_FILE = "target_postprocess_power_query_input.csv"
+EXPECTED_FILE = "target_postprocess_power_query_expected.csv"
 
 
 @pytest.mark.integration
-def test_postprocess_target_table__matches_power_query(tmp_path: Path, snapshot_resource: Path) -> None:
-    source = snapshot_resource / "target_postprocess_input.csv"
-    expected = snapshot_resource / "target_postprocess_expected.csv"
-    working = tmp_path / source.name
-    shutil.copy(source, working)
+def test_postprocess_target_table__matches_golden(
+    tmp_path: Path, cfg: Config, snapshot_resource: Path
+) -> None:
+    input_path = snapshot_resource / INPUT_FILE
+    expected_path = snapshot_resource / EXPECTED_FILE
 
-    output = Path(postprocess_target_table(working, fetcher=lambda tax_id, email: []))
+    working_input = tmp_path / INPUT_FILE
+    working_output = tmp_path / "targets_final.csv"
+    working_input.write_bytes(input_path.read_bytes())
 
-    result = pd.read_csv(output, dtype=str, keep_default_na=False)
-    expected_frame = pd.read_csv(expected, dtype=str, keep_default_na=False)
-    pdt.assert_frame_equal(result, expected_frame)
+    helpers.postprocess_target_table_file(working_input, working_output, cfg=cfg)
 
-    source_df = pd.read_csv(working, dtype=str, keep_default_na=False)
-    base = source_df[
-        [
-            "target_chembl_id",
-            "uniprot_id_primary",
-            "organism",
-            "taxon_id",
-            "lineage_superkingdom",
-            "lineage_phylum",
-            "lineage_class",
-        ]
-    ].copy()
-    for column in ("lineage_superkingdom", "lineage_phylum", "lineage_class"):
-        base[column] = base[column].astype("string").str.lower()
-    with_cellularity = add_cellularity_smart(
-        base,
-        "taxon_id",
-        "lineage_superkingdom",
-        "lineage_class",
-        fetcher=lambda tax_id, email: [],
+    assert working_output.read_bytes() == expected_path.read_bytes()
+
+    result = pd.read_csv(working_output, dtype=str, keep_default_na=False).astype(
+        "string"
     )
-    multifunctional = compute_multifunctional(source_df)
-    joined = with_cellularity.merge(
-        multifunctional[["target_chembl_id", "multifunctional_enzyme"]],
-        on="target_chembl_id",
-        how="left",
-        sort=False,
+    expected = pd.read_csv(expected_path, dtype=str, keep_default_na=False).astype(
+        "string"
     )
-    assert joined["multifunctional_enzyme"].dtype == bool
+    pdt.assert_frame_equal(result, expected)
+
+
+@pytest.mark.integration
+def test_postprocess_target_table__is_idempotent(
+    tmp_path: Path, cfg: Config, snapshot_resource: Path
+) -> None:
+    input_path = snapshot_resource / INPUT_FILE
+    expected_path = snapshot_resource / EXPECTED_FILE
+
+    working_input = tmp_path / INPUT_FILE
+    working_output = tmp_path / "targets_final.csv"
+    working_input.write_bytes(input_path.read_bytes())
+
+    helpers.postprocess_target_table_file(working_input, working_output, cfg=cfg)
+    first_run = working_output.read_bytes()
+
+    second_output = tmp_path / "targets_final_second.csv"
+    helpers.postprocess_target_table_file(working_input, second_output, cfg=cfg)
+    second_run = second_output.read_bytes()
+
+    assert first_run == second_run == expected_path.read_bytes()
