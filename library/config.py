@@ -16,10 +16,14 @@ from __future__ import annotations
 import logging
 import os
 import re
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import ExitStack
+from importlib import resources
 from pathlib import Path
 from types import UnionType
 from typing import Any, Mapping, Union, get_args, get_origin
+
+from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
 import yaml
@@ -186,6 +190,118 @@ def _resolve_placeholder_base_path(base_path: Path | str | None) -> Path:
     if base_path is not None:
         return _normalize_base_path(base_path)
     return _default_base_path()
+
+
+_RESOURCE_STACK = ExitStack()
+atexit.register(_RESOURCE_STACK.close)
+
+_UNSET = object()
+
+
+@dataclass(slots=True)
+class ConfigSource:
+    """Origin of a configuration value used in :class:`ConfigMetadata`."""
+
+    source: str
+    detail: str | None = None
+
+
+@dataclass(slots=True)
+class ConfigMetadata:
+    """Metadata describing configuration values and their provenance."""
+
+    snapshot: dict[str, Any]
+    sources: dict[tuple[str, ...], ConfigSource]
+    cli_paths: dict[str, tuple[str, ...]] = field(default_factory=dict)
+
+    def get(self, path: Sequence[str] | str) -> dict[str, Any]:
+        """Return a copy of the metadata entry located at ``path``."""
+
+        tuple_path = (
+            tuple(str(part) for part in path)
+            if isinstance(path, Sequence) and not isinstance(path, str)
+            else tuple(str(part) for part in str(path).split(".") if str(part))
+        )
+        current: Any = self.snapshot
+        for key in tuple_path:
+            if not isinstance(current, dict) or key not in current:
+                return {"value": None, "source": "unknown"}
+            current = current[key]
+        if isinstance(current, dict) and "value" in current and "source" in current:
+            result = {"value": current["value"], "source": current["source"]}
+            if "detail" in current and current["detail"] is not None:
+                result["detail"] = current["detail"]
+            return result
+        return {"value": current, "source": "unknown"}
+
+    def cli_entry(self, argument: str) -> dict[str, Any] | None:
+        """Return metadata for the CLI destination ``argument`` if available."""
+
+        path = self.cli_paths.get(argument)
+        if path is None:
+            return None
+        return self.get(path)
+
+    def option(
+        self,
+        *,
+        argument: str | None = None,
+        path: Sequence[str] | str | None = None,
+        value: Any = _UNSET,
+        default_source: str = "unknown",
+        default_detail: str | None = None,
+    ) -> dict[str, Any]:
+        """Return metadata for ``argument`` or ``path`` overriding ``value``."""
+
+        entry: dict[str, Any] | None = None
+        if argument is not None:
+            entry = self.cli_entry(argument)
+        if entry is None and path is not None:
+            entry = self.get(path)
+        if entry is None:
+            entry = {"value": None, "source": default_source}
+            if default_detail is not None:
+                entry["detail"] = default_detail
+        else:
+            entry = dict(entry)
+        if value is not _UNSET:
+            entry["value"] = value
+        return entry
+
+
+def _iter_leaf_items(
+    data: Any, prefix: tuple[str, ...] = ()
+) -> Iterator[tuple[tuple[str, ...], Any]]:
+    """Yield ``(path, value)`` pairs for leaf nodes in ``data``."""
+
+    if isinstance(data, dict):
+        for key, value in data.items():
+            key_str = str(key)
+            yield from _iter_leaf_items(value, (*prefix, key_str))
+        return
+    yield prefix, data
+
+
+def _build_snapshot(
+    data: Mapping[str, Any],
+    sources: Mapping[tuple[str, ...], ConfigSource],
+    prefix: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Return nested mapping annotating ``data`` with source metadata."""
+
+    snapshot: dict[str, Any] = {}
+    for key, value in data.items():
+        key_str = str(key)
+        path = (*prefix, key_str)
+        if isinstance(value, Mapping):
+            snapshot[key_str] = _build_snapshot(value, sources, path)
+            continue
+        source = sources.get(path, ConfigSource("default", None))
+        entry: dict[str, Any] = {"value": value, "source": source.source}
+        if source.detail is not None:
+            entry["detail"] = source.detail
+        snapshot[key_str] = entry
+    return snapshot
 
 
 def _dictionary_resource(*parts: str) -> Path:
@@ -957,7 +1073,7 @@ class ActivityCfg(_BoolModel):
     column: str = "activity_id"
     batch_size: int = Field(5, ge=1)
     workers: int = Field(1, ge=1)
-    timeout: float = Field(30.0, ge=0)
+    timeout: float = Field(30.0, gt=0)
     limit: int | None = Field(default=None, ge=0)
     offset: int = Field(0, ge=0)
     dry_run: bool = False
@@ -971,7 +1087,7 @@ class ActivityCfg(_BoolModel):
 class AssayCfg(_BaseModel):
     column: str = "assay_chembl_id"
     batch_size: int = Field(10, ge=1)
-    timeout: float = Field(30.0, ge=0)
+    timeout: float = Field(30.0, gt=0)
     limit: int | None = Field(default=None, ge=0)
 
 
@@ -989,7 +1105,7 @@ class TestitemBatchRetryCfg(_BoolModel):
 class TestitemCfg(_BaseModel):
     column: str = "molecule_chembl_id"
     batch_size: int = Field(1000, ge=1, le=1000)
-    timeout: float = Field(30.0, ge=0)
+    timeout: float = Field(30.0, gt=0)
     limit: int | None = Field(default=None, ge=0)
     offset: int = Field(0, ge=0)
     fields: tuple[str, ...] = Field(default=TESTITEM_FIELD_DEFAULTS)
@@ -1082,7 +1198,7 @@ class DocumentPubmedCfg(_BaseModel):
 class DocumentChemblCfg(_BaseModel):
     column: str = "document_chembl_id"
     chunk_size: int = Field(5, ge=1)
-    timeout: float = Field(30.0, ge=0)
+    timeout: float = Field(30.0, gt=0)
     limit: int | None = Field(default=None, ge=0)
 
 
@@ -1092,7 +1208,7 @@ class DocumentAllCfg(_BaseModel):
     sleep: float = Field(5.0, ge=0)
     workers: int = Field(1, ge=1)
     batch_size: int = Field(50, ge=1)
-    timeout: float = Field(30.0, ge=0)
+    timeout: float = Field(30.0, gt=0)
     limit: int | None = Field(default=None, ge=0)
 
 
@@ -1118,8 +1234,10 @@ class TargetChemblCfg(_BaseModel):
     column: str = "target_chembl_id"
 
     chunk_size: int = Field(5, ge=1)
-    timeout: float = Field(30.0, ge=0)
+    timeout: float = Field(30.0, gt=0)
+
     limit: int | None = Field(default=None, ge=0)
+
 
 
 class TargetIupharCfg(_BaseModel):
@@ -1141,12 +1259,13 @@ class TargetAllCfg(_BaseModel):
         DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_family.csv"
     )
     chunk_size: int = Field(5, ge=1)
-    timeout: float = Field(30.0, ge=0)
+    timeout: float = Field(30.0, gt=0)
     uniprot_column: str = "uniprot_id"
     chembl_out: Path | None = None
     uniprot_out: Path | None = None
     iuphar_out: Path | None = None
-    limit: int | None = Field(default=None, ge=0)
+    limit: int | None = Field(default=None, ge=1)
+    offset: int = Field(0, ge=0)
 
 
 class TargetCfg(_BaseModel):
@@ -1585,7 +1704,9 @@ def load_config(
     *,
     base_path: Path | str | None = None,
     strict: bool = True,
-) -> Config:
+    include_metadata: bool = False,
+    cli_sources: Mapping[tuple[str, ...], str] | None = None,
+) -> Config | tuple[Config, ConfigMetadata]:
     """Load configuration from *path* applying overrides.
 
     Parameters
@@ -1593,12 +1714,22 @@ def load_config(
     base_path:
         Optional root directory used to resolve ``$CHEMBL_DA_BASE_PATH``
         placeholders.
+    include_metadata:
+        When ``True`` return a tuple containing the configuration and
+        :class:`ConfigMetadata` describing value provenance.
+    cli_sources:
+        Optional mapping of CLI override paths to argument identifiers used to
+        populate metadata detail fields.
     """
 
     try:
         data, resolved_path = load_yaml_config(path)
     except ConfigLoaderError as exc:
         raise ConfigError(str(exc)) from exc
+
+    source_map: dict[tuple[str, ...], ConfigSource] = {}
+    for path_tuple, _ in _iter_leaf_items(data):
+        source_map[path_tuple] = ConfigSource("config", str(resolved_path))
 
     local_path = resolved_path.with_name(
         f"{resolved_path.stem}.local{resolved_path.suffix}"
@@ -1609,6 +1740,8 @@ def load_config(
         except ConfigLoaderError as exc:
             raise ConfigError(str(exc)) from exc
         _merge_mapping(data, local_data)
+        for path_tuple, _ in _iter_leaf_items(local_data):
+            source_map[path_tuple] = ConfigSource("config", str(local_path))
 
     data = _coerce_integral_numbers(data)
 
@@ -1622,11 +1755,17 @@ def load_config(
         )
 
     env_overrides = _apply_env_overrides(data)
+    for path_tuple, env_key in env_overrides.items():
+        source_map[path_tuple] = ConfigSource("env", env_key)
     _upgrade_legacy_config(data)
 
     if cli_overrides:
         for key, val in cli_overrides.items():
-            _set_by_path(data, key.split("."), val)
+            parts = key.split(".")
+            _set_by_path(data, parts, val)
+            path_tuple = tuple(parts)
+            detail = cli_sources.get(path_tuple) if cli_sources else None
+            source_map[path_tuple] = ConfigSource("cli", detail)
 
     placeholder_base = _resolve_placeholder_base_path(base_path)
     data = _expand_config_placeholders(data, base_path=placeholder_base)
@@ -1673,7 +1812,15 @@ def load_config(
                 raise FileNotFoundError(p)
 
     configure_limiter_cache(cfg.rate.limiter_cache_maxsize, cfg.rate.limiter_cache_ttl)
-    return cfg
+    if not include_metadata:
+        return cfg
+
+    cfg_dict = _serialize_paths(cfg.to_dict())
+    for path_tuple, _ in _iter_leaf_items(cfg_dict):
+        source_map.setdefault(path_tuple, ConfigSource("default", None))
+    snapshot = _build_snapshot(cfg_dict, source_map)
+    metadata = ConfigMetadata(snapshot=snapshot, sources=source_map)
+    return cfg, metadata
 
 
 def ensure_dirs(cfg: Config) -> None:
@@ -1938,6 +2085,8 @@ __all__ = [
     "DocumentPubmedCfg",
     "DocumentChemblCfg",
     "DocumentAllCfg",
+    "ConfigMetadata",
+    "ConfigSource",
     "DocumentCfg",
     "TargetUniprotCfg",
     "TargetChemblCfg",

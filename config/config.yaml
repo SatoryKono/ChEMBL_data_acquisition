@@ -104,12 +104,17 @@ sources:
         uniprot:
           column: "uniprot_id"
           data_dir: "dictionary/_target/_uniprot"
+          chunk_size: 100
+          timeout: 30.0
           limit: null
+          offset: 0
+          data_dir: "../dictionary/_target/_uniprot"
         chembl:
           column: "target_chembl_id"  # Column containing ChEMBL target identifiers
           chunk_size: 5
           timeout: 30.0
           limit: null
+          offset: 0
         iuphar:
           target_csv: "dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
           family_csv: "dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
@@ -125,6 +130,7 @@ sources:
           uniprot_out: null
           iuphar_out: null
           limit: null
+          offset: 0
   openalex:
     base: "https://api.openalex.org"  # OpenAlex API root URL (env: CHEMBL_DA_OPENALEX_BASE)
     timeout_connect: 5  # Connection timeout in seconds (env: CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT)

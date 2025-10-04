@@ -76,10 +76,12 @@ from library.pipelines.common import (
 from library.cli import (
     LoggerConfig,
     positive_int,
+    ConfigMetadata,
 )
 from library.cli import (
     build_parser as base_parser,
 )
+from library.cli.logging import setup_cli_logging
 from library.cli_utils import (
     PipelineError,
     resolve_invocation,
@@ -107,6 +109,41 @@ from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_dela
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
+
+_OPTION_UNSET = object()
+
+
+def _option(
+    metadata: ConfigMetadata | None,
+    *,
+    argument: str | None = None,
+    path: str | None = None,
+    value: object = _OPTION_UNSET,
+    default_source: str = "unknown",
+    default_detail: str | None = None,
+) -> dict[str, object]:
+    """Return structured option metadata for pipeline logging."""
+
+    if metadata is not None:
+        if value is _OPTION_UNSET:
+            return metadata.option(
+                argument=argument,
+                path=path,
+                default_source=default_source,
+                default_detail=default_detail,
+            )
+        return metadata.option(
+            argument=argument,
+            path=path,
+            value=value,
+            default_source=default_source,
+            default_detail=default_detail,
+        )
+    actual = None if value is _OPTION_UNSET else value
+    entry: dict[str, object] = {"value": actual, "source": default_source}
+    if default_detail is not None:
+        entry["detail"] = default_detail
+    return entry
 
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
@@ -179,16 +216,57 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     output_path = Path(
         args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     )
+
+    metadata_obj = getattr(args, "_config_metadata", None)
+    if not isinstance(metadata_obj, ConfigMetadata):
+        metadata_obj = None
+
+    output_source = "cli" if getattr(args, "output_csv", None) else "derived"
     logger.info(
         "activity_pipeline_start",
-        input=str(args.input_csv),
-        output=str(output_path),
-        limit=limit,
-        offset=offset,
-        batch_size=cfg.activity.batch_size,
-        timeout=cfg.activity.timeout,
-        dry_run=cfg.activity.dry_run,
-        workers=configured_workers,
+        input=_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
+        output=_option(
+            metadata_obj,
+            value=str(output_path),
+            default_source=output_source,
+        ),
+        limit=_option(
+            metadata_obj,
+            argument="limit",
+            path="sources.chembl.pipelines.activity.limit",
+            value=limit,
+        ),
+        offset=_option(
+            metadata_obj,
+            argument="offset",
+            path="sources.chembl.pipelines.activity.offset",
+            value=offset,
+        ),
+        batch_size=_option(
+            metadata_obj,
+            argument="batch_size",
+            path="sources.chembl.pipelines.activity.batch_size",
+            value=cfg.activity.batch_size,
+        ),
+        timeout=_option(
+            metadata_obj,
+            argument="timeout",
+            path="sources.chembl.pipelines.activity.timeout",
+            value=cfg.activity.timeout,
+        ),
+        dry_run=_option(
+            metadata_obj,
+            argument="dry_run",
+            path="sources.chembl.pipelines.activity.dry_run",
+            value=cfg.activity.dry_run,
+            default_source="cli",
+        ),
+        workers=_option(
+            metadata_obj,
+            argument="workers",
+            path="sources.chembl.pipelines.activity.workers",
+            value=configured_workers,
+        ),
     )
 
     if cfg.activity.dry_run:
@@ -602,22 +680,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--limit must be zero or a positive integer")
     if args.offset < 0:
         parser.error("--offset must be zero or a positive integer")
-    return run_cli_command(
-        args=args,
-        parser=parser,
-        log_cfg=log_cfg,
-        mapping={
-            "timeout": "activity.timeout",
-            "column": "activity.column",
-            "batch_size": "activity.batch_size",
-            "limit": "activity.limit",
-            "offset": "activity.offset",
-            "dry_run": "activity.dry_run",
-            "workers": "activity.workers",
-        },
-        run=run,
-        logger=logger,
-    )
+    with setup_cli_logging(
+        Path(__file__).with_suffix("").name, log_cfg, getattr(args, "date", None)
+    ) as logging_ctx:
+        exit_code = run_cli_command(
+            args=args,
+            parser=parser,
+            log_cfg=logging_ctx.log_cfg,
+            mapping={
+                "timeout": "activity.timeout",
+                "column": "activity.column",
+                "batch_size": "activity.batch_size",
+                "limit": "activity.limit",
+                "offset": "activity.offset",
+                "dry_run": "activity.dry_run",
+                "workers": "activity.workers",
+            },
+            run=run,
+            logger=logger,
+        )
+    configure_logger(log_cfg)
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

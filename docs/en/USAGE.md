@@ -58,6 +58,18 @@ Fetches and enriches target data from ChEMBL, UniProt, and IUPHAR. This pipeline
 *   `--raw-format`: The format for the raw output (`csv` or `parquet`).
 *   `--id-cols`: Identifier columns for deterministic sorting.
 
+**Mode Options:** Every sub-command (`chembl`, `uniprot`, `iuphar`, `all`) accepts the same selector and execution flags:
+
+| Option | Purpose | Default values |
+| --- | --- | --- |
+| `--column` | Input column used to select identifiers. | `chembl`: `target_chembl_id`; `uniprot`/`iuphar`: `uniprot_id`; `all`: `target_chembl_id`. |
+| `--chunk-size` | Number of identifiers requested per API batch. | `chembl`/`all`: `5`; `uniprot`/`iuphar`: `100`. |
+| `--timeout` | Network timeout in seconds. | `30.0` for all modes. |
+| `--limit` | Maximum number of records to process; omit to process all rows. | `null` (no limit). |
+| `--offset` | Number of rows to skip before processing. | `0` for all modes. |
+
+The `all` orchestrator forwards these values to the ChEMBL stage and exposes per-pipeline overrides prefixed with the mode name: `--chembl-chunk-size`, `--uniprot-timeout`, `--iuphar-limit`, etc. The merge step still uses `--uniprot-column` to choose the UniProt identifier from the ChEMBL export.
+
 ```bash
 get-target-data all \
     --input seeds/target_ids.csv \

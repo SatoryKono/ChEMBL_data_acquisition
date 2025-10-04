@@ -93,11 +93,14 @@ from library.postprocessing import document as document_export_postprocessing
 from library.clients import ChemblClient, _chunked
 from library.cli import (
     LoggerConfig,
+    ConfigMetadata,
     build_root_parser,
+    configure_logger,
     path_argument,
     positive_int,
     prepare_io_paths,
 )
+from library.cli.logging import setup_cli_logging
 from library.cli.utils import run_cli_command
 from library.config import (
     Config,
@@ -135,6 +138,39 @@ DEFAULT_INPUT_NAME = "document.csv"
 DEFAULT_OUTPUT_STEM = "documents"
 DOCUMENT_PROGRESS_INFO_INTERVAL = 100
 DOCUMENT_FRAME_CONCAT_STRIDE = 16
+
+_OPTION_UNSET = object()
+
+
+def _option(
+    metadata: ConfigMetadata | None,
+    *,
+    argument: str | None = None,
+    path: str | None = None,
+    value: object = _OPTION_UNSET,
+    default_source: str = "unknown",
+    default_detail: str | None = None,
+) -> dict[str, object]:
+    if metadata is not None:
+        if value is _OPTION_UNSET:
+            return metadata.option(
+                argument=argument,
+                path=path,
+                default_source=default_source,
+                default_detail=default_detail,
+            )
+        return metadata.option(
+            argument=argument,
+            path=path,
+            value=value,
+            default_source=default_source,
+            default_detail=default_detail,
+        )
+    actual = None if value is _OPTION_UNSET else value
+    entry: dict[str, object] = {"value": actual, "source": default_source}
+    if default_detail is not None:
+        entry["detail"] = default_detail
+    return entry
 
 
 T = TypeVar("T")
@@ -1646,16 +1682,64 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
     output_path = Path(
         args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     )
+    workers = getattr(args, "workers", pubmed_defaults.workers)
+    batch_size = getattr(args, "batch_size", pubmed_defaults.batch_size)
+    sleep = getattr(args, "sleep", pubmed_defaults.sleep)
+    fallback_doi = bool(getattr(args, "fallback_doi_csv", None))
+    if workers > 1 and sleep == 0:
+        logger.warning(
+            "zero_sleep_workers",
+            workers=workers,
+            sleep=sleep,
+        )
+    metadata_obj = getattr(args, "_config_metadata", None)
+    if not isinstance(metadata_obj, ConfigMetadata):
+        metadata_obj = None
+    output_source = "cli" if getattr(args, "output_csv", None) else "derived"
     logger.info(
         "document_pubmed_start",
-        input=str(args.input_csv),
-        output=str(output_path),
-        limit=limit,
-        offset=offset,
-        workers=getattr(args, "workers", pubmed_defaults.workers),
-        batch_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
-        sleep=getattr(args, "sleep", pubmed_defaults.sleep),
-        fallback_doi=bool(getattr(args, "fallback_doi_csv", None)),
+        input=_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
+        output=_option(
+            metadata_obj,
+            value=str(output_path),
+            default_source=output_source,
+        ),
+        limit=_option(
+            metadata_obj,
+            argument="limit",
+            path="sources.chembl.pipelines.document.pubmed.limit",
+            value=limit,
+        ),
+        offset=_option(
+            metadata_obj,
+            argument="offset",
+            path="sources.chembl.pipelines.document.pubmed.offset",
+            value=offset,
+            default_source="cli",
+        ),
+        workers=_option(
+            metadata_obj,
+            argument="workers",
+            path="sources.chembl.pipelines.document.pubmed.workers",
+            value=workers,
+        ),
+        batch_size=_option(
+            metadata_obj,
+            argument="batch_size",
+            path="sources.chembl.pipelines.document.pubmed.batch_size",
+            value=batch_size,
+        ),
+        sleep=_option(
+            metadata_obj,
+            argument="sleep",
+            path="sources.chembl.pipelines.document.pubmed.sleep",
+            value=sleep,
+        ),
+        fallback_doi=_option(
+            metadata_obj,
+            value=fallback_doi,
+            default_source="cli",
+        ),
     )
     try:
         pmids_iter = io.read_ids(
@@ -1780,14 +1864,45 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     output_path = Path(
         args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     )
+    chunk_size = getattr(args, "chunk_size", chembl_defaults.chunk_size)
+    timeout = getattr(args, "timeout", chembl_defaults.timeout)
+    metadata_obj = getattr(args, "_config_metadata", None)
+    if not isinstance(metadata_obj, ConfigMetadata):
+        metadata_obj = None
+    output_source = "cli" if getattr(args, "output_csv", None) else "derived"
     logger.info(
         "document_chembl_start",
-        input=str(args.input_csv),
-        output=str(output_path),
-        limit=limit,
-        offset=offset,
-        chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
-        timeout=getattr(args, "timeout", chembl_defaults.timeout),
+        input=_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
+        output=_option(
+            metadata_obj,
+            value=str(output_path),
+            default_source=output_source,
+        ),
+        limit=_option(
+            metadata_obj,
+            argument="limit",
+            path="sources.chembl.pipelines.document.chembl.limit",
+            value=limit,
+        ),
+        offset=_option(
+            metadata_obj,
+            argument="offset",
+            path="sources.chembl.pipelines.document.chembl.offset",
+            value=offset,
+            default_source="cli",
+        ),
+        chunk_size=_option(
+            metadata_obj,
+            argument="chunk_size",
+            path="sources.chembl.pipelines.document.chembl.chunk_size",
+            value=chunk_size,
+        ),
+        timeout=_option(
+            metadata_obj,
+            argument="timeout",
+            path="sources.chembl.pipelines.document.chembl.timeout",
+            value=timeout,
+        ),
     )
 
     # Configure session for ChEMBL requests
@@ -1932,17 +2047,72 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     output_path = Path(
         args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     )
+    workers = getattr(args, "workers", all_defaults.workers)
+    batch_size = getattr(args, "batch_size", all_defaults.batch_size)
+    sleep = getattr(args, "sleep", all_defaults.sleep)
+    timeout = getattr(args, "timeout", all_defaults.timeout)
+    chunk_size = getattr(args, "chunk_size", all_defaults.chunk_size)
+    if workers > 1 and sleep == 0:
+        logger.warning(
+            "zero_sleep_workers",
+            workers=workers,
+            sleep=sleep,
+        )
+    metadata_obj = getattr(args, "_config_metadata", None)
+    if not isinstance(metadata_obj, ConfigMetadata):
+        metadata_obj = None
+    output_source = "cli" if getattr(args, "output_csv", None) else "derived"
     logger.info(
         "document_all_start",
-        input=str(args.input_csv),
-        output=str(output_path),
-        limit=limit,
-        offset=offset,
-        chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
-        workers=getattr(args, "workers", all_defaults.workers),
-        batch_size=getattr(args, "batch_size", all_defaults.batch_size),
-        sleep=getattr(args, "sleep", all_defaults.sleep),
-        timeout=getattr(args, "timeout", all_defaults.timeout),
+        input=_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
+        output=_option(
+            metadata_obj,
+            value=str(output_path),
+            default_source=output_source,
+        ),
+        limit=_option(
+            metadata_obj,
+            argument="limit",
+            path="sources.chembl.pipelines.document.all.limit",
+            value=limit,
+        ),
+        offset=_option(
+            metadata_obj,
+            argument="offset",
+            path="sources.chembl.pipelines.document.all.offset",
+            value=offset,
+            default_source="cli",
+        ),
+        chunk_size=_option(
+            metadata_obj,
+            argument="chunk_size",
+            path="sources.chembl.pipelines.document.all.chunk_size",
+            value=chunk_size,
+        ),
+        workers=_option(
+            metadata_obj,
+            argument="workers",
+            path="sources.chembl.pipelines.document.all.workers",
+            value=workers,
+        ),
+        batch_size=_option(
+            metadata_obj,
+            argument="batch_size",
+            path="sources.chembl.pipelines.document.all.batch_size",
+            value=batch_size,
+        ),
+        sleep=_option(
+            metadata_obj,
+            argument="sleep",
+            path="sources.chembl.pipelines.document.all.sleep",
+            value=sleep,
+        ),
+        timeout=_option(
+            metadata_obj,
+            argument="timeout",
+            path="sources.chembl.pipelines.document.all.timeout",
+            value=timeout,
+        ),
     )
 
     try:
@@ -2374,15 +2544,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         "openalex_rps": "openalex.rps",
         "crossref_rps": "crossref.rps",
     }
-    return run_cli_command(
-        args=args,
-        parser=subparser,
-        base_parser=parser,
-        log_cfg=log_cfg,
-        mapping=mapping,
-        run=run,
-        logger=logger,
-    )
+    with setup_cli_logging(
+        Path(__file__).with_suffix("").name, log_cfg, getattr(args, "date", None)
+    ) as logging_ctx:
+        exit_code = run_cli_command(
+            args=args,
+            parser=subparser,
+            base_parser=parser,
+            log_cfg=logging_ctx.log_cfg,
+            mapping=mapping,
+            run=run,
+            logger=logger,
+        )
+    configure_logger(log_cfg)
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

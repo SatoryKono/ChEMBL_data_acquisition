@@ -151,6 +151,7 @@ def run_cli_command(
             mapping=dict(mapping),
             base_parser=base_parser,
         )
+        metadata = getattr(args, "_config_metadata", None)
     except (ConfigError, FileNotFoundError, ValueError) as exc:
         use_logger.error(
             "config_error",
@@ -159,6 +160,9 @@ def run_cli_command(
         )
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
+
+    if metadata is not None:
+        use_logger.info("config_snapshot", config=getattr(metadata, "snapshot", {}))
 
     try:
         if getattr(args, "print_config", False):
