@@ -1,0 +1,287 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pandas as pd
+import pytest
+import yaml
+
+from library.common.csv_utils import sha256_file
+from library.pipelines.testitem import cli
+from library.pipelines.testitem.catalog import ParentLookupStats
+
+
+class _StatsSupplier:
+    """Callable wrapper returning a predetermined :class:`ParentLookupStats`."""
+
+    def __init__(self, stats: ParentLookupStats) -> None:
+        self._stats = stats
+
+    def __call__(self) -> ParentLookupStats:
+        return self._stats
+
+
+def _base_stats() -> ParentLookupStats:
+    return ParentLookupStats(
+        source="lookup",
+        missing=0,
+        unique=2,
+        attached=2,
+        uncovered=0,
+        failed_ids=(),
+        hierarchy_attached=1,
+        fallback_attached=1,
+        no_parent=0,
+    )
+
+
+@pytest.mark.integration
+def test_finalize_output__writes_csv_and_metadata(
+    tmp_path: Path, sample_input_csv: Path, cfg
+) -> None:
+    cfg.system.doc_quality.enable = False
+
+    chunk = pd.DataFrame(
+        {
+            "molecule_chembl_id": pd.Series([" CHEMBL1 ", "CHEMBL2"], dtype="string"),
+            "parent_molecule_chembl_id": pd.Series(["CHEMBL10", pd.NA], dtype="string"),
+            "natural_product": pd.Series([True, False], dtype="boolean"),
+            "salt_chembl_id": pd.Series(["CHEMBL1", pd.NA], dtype="string"),
+            "pubchem_cid": pd.Series([123, 456], dtype="Int64"),
+        }
+    )
+    output_path = tmp_path / "final.csv"
+    stats_supplier = _StatsSupplier(_base_stats())
+
+    exit_code = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=stats_supplier,
+        input_csv=sample_input_csv,
+        missing_ids=["CHEMBL999"],
+    )
+
+    assert exit_code == 0
+    assert output_path.exists()
+
+    final = pd.read_csv(output_path)
+    assert list(final.columns[:3]) == [
+        "molecule_chembl_id",
+        "parent_molecule_chembl_id",
+        "salt_chembl_id",
+    ]
+    assert list(final["molecule_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
+    assert "pipeline_version" in final.columns
+    assert "timestamp_utc" in final.columns
+
+    meta_path = output_path.with_name("final.csv.meta.yaml")
+    assert meta_path.exists()
+    meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert meta["stats"]["rows_total"] == 2
+    assert meta["stats"]["rows_kept"] == 2
+    assert meta["inputs"]["input_csv"].endswith("input.csv")
+
+
+@pytest.mark.integration
+def test_finalize_output__missing_required_columns_fails(
+    tmp_path: Path, sample_input_csv: Path, cfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg.system.doc_quality.enable = False
+
+    chunk = pd.DataFrame({"other": [1]})
+    output_path = tmp_path / "invalid.csv"
+    warnings: list[tuple[str, dict[str, object]]] = []
+
+    def capture_warning(event: str, **fields: object) -> None:
+        warnings.append((event, fields))
+
+    monkeypatch.setattr(cli.logger, "warning", capture_warning)
+    stats_supplier = _StatsSupplier(_base_stats())
+
+    exit_code = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=stats_supplier,
+        input_csv=sample_input_csv,
+    )
+
+    assert exit_code == 1
+    assert ("validation_skipped", {"missing_columns": ["molecule_chembl_id"]}) in warnings
+
+
+@pytest.mark.integration
+def test_finalize_output__optional_columns_missing_warns(
+    tmp_path: Path, sample_input_csv: Path, cfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg.system.doc_quality.enable = False
+
+    chunk = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    output_path = tmp_path / "optional.csv"
+    warnings: list[tuple[str, dict[str, object]]] = []
+
+    def capture_warning(event: str, **fields: object) -> None:
+        warnings.append((event, fields))
+
+    monkeypatch.setattr(cli.logger, "warning", capture_warning)
+    stats_supplier = _StatsSupplier(_base_stats())
+
+    exit_code = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=stats_supplier,
+        input_csv=sample_input_csv,
+    )
+
+    assert exit_code == 0
+    assert any(event == "optional_columns_missing" for event, _ in warnings)
+
+
+@pytest.mark.integration
+def test_finalize_output__writes_failure_cases(tmp_path: Path, sample_input_csv: Path, cfg) -> None:
+    cfg.system.doc_quality.enable = False
+
+    chunk = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1"],
+            "natural_product": ["unexpected"],
+        }
+    )
+    output_path = tmp_path / "failures.csv"
+    stats_supplier = _StatsSupplier(_base_stats())
+
+    exit_code = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=stats_supplier,
+        input_csv=sample_input_csv,
+    )
+
+    assert exit_code == 1
+    failure_path = tmp_path / "failures_failure_cases.csv"
+    assert failure_path.exists()
+    failure_contents = pd.read_csv(failure_path)
+    assert not failure_contents.empty
+    assert "natural_product" in failure_contents["column"].tolist()
+
+
+@pytest.mark.integration
+def test_finalize_output__quality_report_failure_non_fatal(
+    tmp_path: Path,
+    sample_input_csv: Path,
+    cfg,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg.system.doc_quality.enable = True
+    cfg.system.doc_quality.fatal_on_error = False
+
+    chunk = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    output_path = tmp_path / "quality.csv"
+    stats_supplier = _StatsSupplier(_base_stats())
+    recorded: list[dict[str, object]] = []
+
+    def fake_analyze(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("quality failed")
+
+    def capture_failure(*_args: object, **kwargs: object) -> None:
+        recorded.append(kwargs)
+
+    monkeypatch.setattr(cli, "analyze_table_quality", fake_analyze)
+    monkeypatch.setattr(cli, "record_quality_failure", capture_failure)
+
+    exit_code = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=stats_supplier,
+        input_csv=sample_input_csv,
+    )
+
+    assert exit_code == 0
+    assert recorded and recorded[0]["error"] == "quality failed"
+
+
+@pytest.mark.integration
+def test_finalize_output__quality_report_failure_fatal(
+    tmp_path: Path,
+    sample_input_csv: Path,
+    cfg,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg.system.doc_quality.enable = True
+    cfg.system.doc_quality.fatal_on_error = True
+
+    chunk = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    output_path = tmp_path / "quality_fatal.csv"
+    stats_supplier = _StatsSupplier(_base_stats())
+
+    def fake_analyze(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("quality failed")
+
+    monkeypatch.setattr(cli, "analyze_table_quality", fake_analyze)
+
+    exit_code = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=stats_supplier,
+        input_csv=sample_input_csv,
+    )
+
+    assert exit_code == 1
+
+
+@pytest.mark.integration
+def test_finalize_output__empty_input_produces_placeholder(
+    tmp_path: Path, sample_input_csv: Path, cfg
+) -> None:
+    cfg.system.doc_quality.enable = False
+
+    output_path = tmp_path / "empty.csv"
+    stats_supplier = _StatsSupplier(_base_stats())
+
+    exit_code = cli.finalize_output(
+        [],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=stats_supplier,
+        input_csv=sample_input_csv,
+    )
+
+    assert exit_code == 0
+    frame = pd.read_csv(output_path)
+    assert list(frame.columns[:1]) == ["molecule_chembl_id"]
+    assert frame.empty
+
+
+@pytest.mark.integration
+def test_finalize_output__idempotent_results(tmp_path: Path, sample_input_csv: Path, cfg) -> None:
+    cfg.system.doc_quality.enable = False
+
+    chunk = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1", "CHEMBL2"]})
+    output_path = tmp_path / "stable.csv"
+    stats_supplier = _StatsSupplier(_base_stats())
+
+    first_exit = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=stats_supplier,
+        input_csv=sample_input_csv,
+    )
+    first_hash = sha256_file(output_path)
+
+    second_exit = cli.finalize_output(
+        [chunk.copy()],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=stats_supplier,
+        input_csv=sample_input_csv,
+    )
+    second_hash = sha256_file(output_path)
+
+    assert first_exit == 0 == second_exit
+    assert first_hash == second_hash

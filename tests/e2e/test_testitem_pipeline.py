@@ -7,6 +7,7 @@ import pytest
 
 from library.common.csv_utils import sha256_file, write_csv_deterministic
 from library.pipelines.testitem import cli, enrichment
+from library.pipelines.testitem.catalog import ParentLookupStats
 from library.schemas.normalize import normalize_testitems
 
 
@@ -68,3 +69,57 @@ def test_testitem_pipeline_e2e__deterministic_output(
     assert list(reloaded["molecule_chembl_id"]) == ["CHEMBL1", "CHEMBL2", "CHEMBL999"]
     assert pd.isna(reloaded.loc[2, "parent_molecule_chembl_id"])
     assert pd.isna(reloaded.loc[2, "natural_product"])
+
+
+@pytest.mark.e2e
+def test_testitem_pipeline_e2e__finalize_stage_idempotent(
+    tmp_path: Path, sample_input_csv: Path, cfg
+) -> None:
+    cfg.system.doc_quality.enable = False
+
+    chunk = pd.DataFrame(
+        {
+            "molecule_chembl_id": pd.Series(["CHEMBL1", "CHEMBL2"], dtype="string"),
+            "parent_molecule_chembl_id": pd.Series(["CHEMBL10", pd.NA], dtype="string"),
+            "natural_product": pd.Series([True, False], dtype="boolean"),
+            "salt_chembl_id": pd.Series(["CHEMBL1", "CHEMBL2"], dtype="string"),
+        }
+    )
+
+    stats = ParentLookupStats(
+        source="lookup",
+        missing=0,
+        unique=2,
+        attached=2,
+        uncovered=0,
+    )
+
+    def supplier() -> ParentLookupStats:
+        return stats
+
+    output_path = tmp_path / "finalized.csv"
+
+    first_exit = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=supplier,
+        input_csv=sample_input_csv,
+    )
+    assert first_exit == 0
+    first_hash = sha256_file(output_path)
+
+    second_exit = cli.finalize_output(
+        [chunk.copy()],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=supplier,
+        input_csv=sample_input_csv,
+    )
+    assert second_exit == 0
+    second_hash = sha256_file(output_path)
+
+    assert first_hash == second_hash
+
+    final_frame = pd.read_csv(output_path)
+    assert list(final_frame["molecule_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
