@@ -574,6 +574,8 @@ def apply_config_overrides(
     }
     setattr(args, "_config_metadata", metadata)
 
+    missing_cfg_paths: set[str] = set()
+
     for arg, key in override_map.items():
         if not hasattr(args, arg):
             continue
@@ -583,7 +585,20 @@ def apply_config_overrides(
         ):
             default = base_parser.get_default(arg)
         if getattr(args, arg) == default:
-            setattr(args, arg, _get_cfg_value(cfg, key))
+            if not key:
+                continue
+            try:
+                value = _get_cfg_value(cfg, key)
+            except AttributeError:
+                if key not in missing_cfg_paths:
+                    logger.warning(
+                        "config_missing_attribute",
+                        argument=arg,
+                        path=key,
+                    )
+                    missing_cfg_paths.add(key)
+                continue
+            setattr(args, arg, value)
 
     return cfg
 
