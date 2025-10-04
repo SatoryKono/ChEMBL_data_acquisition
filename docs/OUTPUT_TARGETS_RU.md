@@ -14,7 +14,7 @@
   [`OUTPUT.md`](./ru/OUTPUT.md#экспорт-targets).
 - `organism.output.target_<YYYYMMDD>.csv` — справочная таблица для пайплайна
   активностей и проверок QA.
-- `isoform.output.targets_<YYYYMMDD>.csv` — развёртка изоформ и токенов для
+- `isoform.output.target_<YYYYMMDD>.csv` — развёртка изоформ и токенов для
   контроля синонимики.
 
 Суффикс `<YYYYMMDD>` задаётся явно опцией `--date` либо вычисляется по текущей
@@ -108,34 +108,53 @@ CHEMBL1922,Viral,true,false,-,-,0000012999,-,-
 
 ## Развёртка изоформ
 
-Механика `isoform.output.*` сохранилась. Таблица целей читается повторно,
-столбцы `isoform_*` очищаются, синонимы раскладываются в токены, дубликаты по
-(`target_chembl_id`, `isoform_id`, `term`, `token`) отбрасываются, после чего
-записывается детерминированный CSV для QA.
+`isoform.output.target_<stamp>.csv` повторяет Power Query-скрипт, который ранее
+использовался для валидации изоформ. Алгоритм включает восемь этапов:
 
-Для полноты ниже приведён исходный пример и результат:
+1. **Проекция колонок** — читаются только `isoform_synonyms`, `isoform_names`,
+   `isoform_ids`, `uniprot_id_primary`, `target_chembl_id`.
+2. **Приведение регистра** — `isoform_synonyms` и `isoform_names` переводятся в
+   нижний регистр, идентификаторы изоформ остаются без изменений.
+3. **Разделение списков** — значения разбиваются по символу `|`, пробелы
+   отбрасываются, пустые токены удаляются.
+4. **Выравнивание по индексам** — вспомогательная функция `MakeTriples`
+   дополняет короткие списки `null`, формируя записи `{name, id, synonym}`.
+5. **Токенизация** — синонимы разбиваются по `:`, затем каждый токен расширяется
+   до набора `[токен, токен без "pde", токен без "pld"]` с сохранением порядка и
+   удалением пустых значений.
+6. **Построение таблиц** — trimmed `isoform_names` образуют первую таблицу
+   (строки `""`, `"n/a"`, `"none"` исключаются), токены синонимов — вторую.
+7. **Объединение и очистка** — таблицы объединяются и проходят три последовательных
+   `Distinct`: (а) по (`id`, `name`, `target_chembl_id`, `uniprot_id_primary`), (б)
+   после стабильной сортировки `mergesort` по (`uniprot_id_primary`, `id`) по
+   набору (`id`, `target_chembl_id`, `name`), (в) финальный `Distinct` по (`id`,
+   `name`).
+8. **Запись** — результат сортируется в колонках `["id", "uniprot_id_primary",
+   "target_chembl_id", "name"]` и сохраняется в UTF-8 без BOM.
+
+Пример (источник `output.target_20250101.csv`):
 
 ```
-target_chembl_id,isoform_ids,isoform_names,isoform_synonyms
-CHEMBL1824,ENSP00000350283,Nav1.7,"Nav1.7:SCN9A isoform 3"
-CHEMBL1824,ENSP00000350284,"Nav1.7 isoform 2","Nav1.7 splice variant:SCN9A-2"
-CHEMBL6130,,"",""
-CHEMBL240,ENSP00000456012,ALK2,"Activin receptor-like kinase 2:ACVR1"
-CHEMBL259,ENSP00000263253,FGFR4,"FGFR-4 isoform:Fibroblast growth factor receptor-4"
+target_chembl_id,uniprot_id_primary,isoform_ids,isoform_names,isoform_synonyms
+CHEMBL1,Q11111,ENSP0001|ENSP0002,Alpha|Beta,Alpha Alt|PDE3A:Alpha
+CHEMBL2,Q22222,,Gamma|N/A|none,Gamma:Variant|n/a|none
+CHEMBL3,Q33333,ID_UP|id_low,Theta|Lambda,PLDA:Variant
 ```
 
+Результат `isoform.output.target_20250101.csv` (первые строки):
+
 ```
-target_chembl_id,isoform_id,isoform_name,term,token
-CHEMBL1824,ENSP00000350283,Nav1.7,Nav1.7,7
-CHEMBL1824,ENSP00000350283,Nav1.7,Nav1.7,nav1
-CHEMBL1824,ENSP00000350283,Nav1.7,nav1.7,7
-CHEMBL1824,ENSP00000350283,Nav1.7,nav1.7,nav1
-CHEMBL1824,ENSP00000350283,Nav1.7,scn9a isoform 3,3
-CHEMBL1824,ENSP00000350283,Nav1.7,scn9a isoform 3,isoform
-CHEMBL1824,ENSP00000350283,Nav1.7,scn9a isoform 3,scn9a
-CHEMBL1824,ENSP00000350284,Nav1.7 isoform 2,Nav1.7 isoform 2,2
-CHEMBL1824,ENSP00000350284,Nav1.7 isoform 2,Nav1.7 isoform 2,7
-CHEMBL1824,ENSP00000350284,Nav1.7 isoform 2,Nav1.7 isoform 2,isoform
+id,uniprot_id_primary,target_chembl_id,name
+ENSP0001,Q11111,CHEMBL1,alpha
+ENSP0001,Q11111,CHEMBL1,alpha alt
+ENSP0002,Q11111,CHEMBL1,beta
+ENSP0002,Q11111,CHEMBL1,pde3a
+ENSP0002,Q11111,CHEMBL1,3a
+,Q22222,CHEMBL2,gamma
+,Q22222,CHEMBL2,variant
+ID_UP,Q33333,CHEMBL3,theta
+ID_UP,Q33333,CHEMBL3,plda
+ID_UP,Q33333,CHEMBL3,a
 ```
 
-Процесс детерминированный, не зависит от локали и не требует сетевого доступа.
+Трансформация идемпотентна, не зависит от локали и не требует сетевого доступа.
