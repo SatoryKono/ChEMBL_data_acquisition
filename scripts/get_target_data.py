@@ -105,6 +105,7 @@ from library.common.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipelines.common import add_pipeline_metadata
 from library import SidecarErrors
+from library.postprocessing import target as target_pp
 from library.table_quality import analyze_table_quality
 from library.validation import ValidationResult
 from library.schemas import TargetsSchema, normalize_targets
@@ -3106,6 +3107,26 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             raw_format=raw_format,
             reindex_raw=reindex_raw,
         )
+
+        if exit_code == 0:
+            output_csv_path = final_output
+            if not output_csv_path.exists():
+                normalized_candidate = _normalized_output_path(final_output)
+                if normalized_candidate.exists():
+                    output_csv_path = normalized_candidate
+                else:
+                    output_csv_path = None
+            if output_csv_path is not None:
+                try:
+                    target_pp.process_targets(str(Path(output_csv_path)), verbose=True)
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    logger.exception(
+                        "isoform_postprocess_failed",
+                        error=str(exc),
+                        path=str(output_csv_path),
+                    )
+                    return 1
+
         return exit_code
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         logger.error(

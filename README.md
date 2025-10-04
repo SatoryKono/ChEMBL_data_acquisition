@@ -94,6 +94,23 @@ languages:
   [`docs/en/development/README.md`](./docs/en/development/README.md),
   [`docs/ru/development/README.md`](./docs/ru/development/README.md)
 
+## Pipelines
+
+### Targets
+
+Running `scripts/get_target_data.py` now produces two deterministic artefacts in
+the output directory:
+
+- `output.target_<date>.csv` — the canonical target table produced by the
+  pipeline.
+- `isoform.output.target_<date>.csv` — an isoform-focused summary derived via
+  the ported Power Query logic.
+
+The isoform export is created automatically and can also be generated manually
+through `library.postprocessing.target.process_targets`. The transformation steps
+and invariants are documented in [`docs/OUTPUT_TARGETS_EN.md`](./docs/OUTPUT_TARGETS_EN.md)
+and [`docs/OUTPUT_TARGETS_RU.md`](./docs/OUTPUT_TARGETS_RU.md).
+
 ## Testing policy
 
 Tests are organised under `tests/` and executed with `pytest`. Local and CI runs

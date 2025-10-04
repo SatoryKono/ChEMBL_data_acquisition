@@ -1,0 +1,2 @@
+target_chembl_id,uniprot_id_primary,isoform_names,isoform_ids,isoform_synonyms
+CHEMBL2000,Q33333,Alpha|Beta|Gamma,ID1|ID2,Syn1|Syn2

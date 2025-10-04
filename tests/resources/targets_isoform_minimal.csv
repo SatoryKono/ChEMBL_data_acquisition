@@ -1,0 +1,4 @@
+target_chembl_id,uniprot_id_primary,isoform_names,isoform_ids,isoform_synonyms
+CHEMBL1000,Q11111,Alpha|A,IsoA|IsoA-Variant,PDE3A:alpha|Alpha variant
+CHEMBL1001,Q22222," n/a | none |  ",IsoB,
+CHEMBL1003,, ,MixedID,PLDALPHA|pdeBeta
