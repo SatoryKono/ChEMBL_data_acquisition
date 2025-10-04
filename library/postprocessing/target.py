@@ -34,6 +34,9 @@ DEFAULT_ENCODINGS: Sequence[str] = (
 # separators are treated as token boundaries which mirrors the SynExpand step
 # present in the original Power Query file.
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9']+")
+SENTINEL_PATTERN = re.compile(
+    r"^(?:na|n/a|none|n\.?a\.?|n\s*/\s*a)$", re.IGNORECASE
+)
 
 
 def _normalise_series(series: pd.Series, *, lowercase: bool) -> pd.Series:
@@ -54,24 +57,23 @@ def _normalise_series(series: pd.Series, *, lowercase: bool) -> pd.Series:
         .str.strip()
         .str.replace(r"\s+", " ", regex=True)
     )
-    cleaned = cleaned.replace(
-        to_replace=r"^(?i)(?:na|n/a|none|n\\.?a\\.?|n\s*/\s*a)$",
-        value="",
-        regex=True,
-    )
+    sentinel_mask = cleaned.str.fullmatch(SENTINEL_PATTERN, na=False)
+    cleaned = cleaned.mask(sentinel_mask, "")
     if lowercase:
         cleaned = cleaned.str.lower()
     return cleaned
 
 
 def _split_pipe(value: str) -> list[str]:
+    if not isinstance(value, str):
+        return []
     if not value:
         return []
     return [part.strip() for part in value.split("|") if part.strip()]
 
 
 def _split_synonyms(value: str) -> list[str]:
-    if not value:
+    if not isinstance(value, str) or not value:
         return []
     parts = [segment.strip() for segment in value.split(":") if segment.strip()]
     unique: list[str] = []
@@ -230,5 +232,12 @@ def process_targets(
     output_path = output_directory / f"isoform.output.{input_path.name}"
     LOGGER.info("Writing processed target isoforms to %s", output_path)
     output_directory.mkdir(parents=True, exist_ok=True)
-    result.to_csv(output_path, index=False, encoding="utf-8", line_terminator="\n")
+    try:
+        result.to_csv(
+            output_path, index=False, encoding="utf-8", lineterminator="\n"
+        )
+    except TypeError:  # pragma: no cover - backwards compatibility
+        result.to_csv(
+            output_path, index=False, encoding="utf-8", line_terminator="\n"
+        )
     return output_path

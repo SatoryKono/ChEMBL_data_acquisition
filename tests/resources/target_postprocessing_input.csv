@@ -1,0 +1,5 @@
+target_chembl_id,isoform_ids,isoform_names,isoform_synonyms,target_pref_name
+CHEMBLT1,"ENSP000001|ENSP000002"," Alpha Isoform  |Beta Isoform","Alpha Isoform:Alpha chain|beta isoform:Beta chain","Target One"
+CHEMBLT2,ENSP000003,Gamma Isoform,"Gamma Isoform:gamma isoform:Gamma Isoform","Target Two"
+CHEMBLT3,""," ","Functional Isoform:Functional isoform|N/A","Target Three"
+CHEMBLT4,NA,NA,,"Target Four"
