@@ -176,9 +176,11 @@ class Cellularity:
         lineage_text = first_element_text(list(taxon), "Lineage")
         sci_name = first_element_text(list(taxon), "ScientificName")
         lineage_names: list[str] = []
-        if lineage_text:
-            lineage_names = [segment.strip() for segment in lineage_text.split(";")]
-        lineage_names = [name for name in lineage_names if name]
+        if lineage_text is not None:
+            trimmed_lineage = lineage_text.strip()
+            if len(trimmed_lineage) > 0:
+                segments = lineage_text.split(";")
+                lineage_names = [segment.strip() for segment in segments]
         if sci_name is not None and sci_name not in lineage_names:
             lineage_names.append(sci_name)
         return lineage_names
