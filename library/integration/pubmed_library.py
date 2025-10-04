@@ -242,6 +242,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "chunk_size": "document.pubmed.batch_size",
             },
         )
+        metadata = getattr(args, "_config_metadata", None)
     except (ConfigError, FileNotFoundError, ValueError) as exc:
         logger.error(
             "config_error",
@@ -250,6 +251,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
+
+    if metadata is not None:
+        logger.info("config_snapshot", config=getattr(metadata, "snapshot", {}))
 
     try:
         cfg = Config.model_validate(cfg.model_dump())

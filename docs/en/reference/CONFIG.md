@@ -250,26 +250,35 @@ applies exponential backoff between attempts before surfacing the error.
 | Sub-section | Key | Default | Description |
 | --- | --- | --- | --- |
 | `uniprot` | `column` | `uniprot_id` | Column with UniProt identifiers. |
-|  | `data_dir` | `../dictionary/_target/_uniprot` | Directory holding cached UniProt JSON files. |
+|  | `chunk_size` | `100` | Batch size for cached or remote lookups. |
+|  | `timeout` | `30.0` | Request timeout in seconds. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
+|  | `offset` | `0` | Number of rows skipped before processing. |
+|  | `data_dir` | `../dictionary/_target/_uniprot` | Directory holding cached UniProt JSON files. |
 | `chembl` | `column` | `target_chembl_id` | Column with ChEMBL target identifiers. |
 |  | `chunk_size` | `5` | Batch size for API requests. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
-| `iuphar` | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
-|  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
+|  | `offset` | `0` | Number of rows skipped before processing. |
+| `iuphar` | `column` | `uniprot_id` | Column used to locate UniProt identifiers in the CSV. |
+|  | `chunk_size` | `100` | Batch size when mapping UniProt accessions. |
+|  | `timeout` | `30.0` | Processing timeout in seconds. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
-| `all` | `data_dir` | `../dictionary/_target/_uniprot` | Directory containing cached UniProt data. |
+|  | `offset` | `0` | Number of rows skipped before processing. |
+|  | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
+|  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
+| `all` | `column` | `target_chembl_id` | Column used to seed the ChEMBL stage. |
+|  | `data_dir` | `../dictionary/_target/_uniprot` | Directory containing cached UniProt data. |
 |  | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target reference data. |
 |  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family reference data. |
 |  | `chunk_size` | `5` | Batch size when combining all sources. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
-
+|  | `limit` | `null` | Optional cap on identifiers processed. |
+|  | `offset` | `0` | Number of rows skipped before processing. |
 |  | `uniprot_column` | `uniprot_id` | Column used to join UniProt data. |
 |  | `chembl_out` | `null` | Optional override for the combined ChEMBL output path. |
 |  | `uniprot_out` | `null` | Optional override for the combined UniProt output path. |
 |  | `iuphar_out` | `null` | Optional override for the combined IUPHAR output path. |
-|  | `limit` | `null` | Optional cap on identifiers processed. |
 
 > Target taxonomy (`type` column and classifier flags) is computed by a built-in
 > module that uses UniProt lineage fields (`genus`, `lineage_superkingdom`,

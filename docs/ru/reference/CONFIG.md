@@ -241,26 +241,35 @@ CLI-параметры имеют приоритет над YAML и окруже
 | Подсекция | Ключ | Значение | Описание |
 | --- | --- | --- | --- |
 | `uniprot` | `column` | `uniprot_id` | Колонка с UniProt ID. |
-|  | `data_dir` | `../dictionary/_target/_uniprot` | Каталог с кэшированными JSON UniProt. |
+|  | `chunk_size` | `100` | Размер батча для кэшированных или сетевых запросов. |
+|  | `timeout` | `30.0` | Таймаут сетевых операций (сек.). |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
+|  | `offset` | `0` | Число строк, пропускаемых перед обработкой. |
+|  | `data_dir` | `../dictionary/_target/_uniprot` | Каталог с кэшированными JSON UniProt. |
 | `chembl` | `column` | `target_chembl_id` | Колонка с таргетами ChEMBL. |
 |  | `chunk_size` | `5` | Размер батча запросов. |
-|  | `timeout` | `30.0` | Таймаут запроса (сек.). |
+|  | `timeout` | `30.0` | Таймаут сетевых операций (сек.). |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
-| `iuphar` | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Справочник таргетов IUPHAR. |
+|  | `offset` | `0` | Число строк, пропускаемых перед обработкой. |
+| `iuphar` | `column` | `uniprot_id` | Колонка для поиска UniProt ID в CSV. |
+|  | `chunk_size` | `100` | Размер батча при сопоставлении UniProt. |
+|  | `timeout` | `30.0` | Таймаут обработки (сек.). |
+|  | `limit` | `null` | Ограничение на число идентификаторов. |
+|  | `offset` | `0` | Число строк, пропускаемых перед обработкой. |
+|  | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Справочник таргетов IUPHAR. |
 |  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
-|  | `limit` | `null` | Ограничение на число идентификаторов. |
-| `all` | `data_dir` | `../dictionary/_target/_uniprot` | Каталог с данными UniProt. |
+| `all` | `column` | `target_chembl_id` | Колонка для запуска объединённого сценария. |
+|  | `data_dir` | `../dictionary/_target/_uniprot` | Каталог с данными UniProt. |
 |  | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Таблица таргетов IUPHAR. |
 |  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Таблица семейств IUPHAR. |
 |  | `chunk_size` | `5` | Размер батча при объединении источников. |
-|  | `timeout` | `30.0` | Таймаут запроса (сек.). |
-
+|  | `timeout` | `30.0` | Таймаут сетевых операций (сек.). |
+|  | `limit` | `null` | Ограничение на число идентификаторов. |
+|  | `offset` | `0` | Число строк, пропускаемых перед обработкой. |
 |  | `uniprot_column` | `uniprot_id` | Колонка для соединения с UniProt. |
 |  | `chembl_out` | `null` | Индивидуальный путь для объединённых данных ChEMBL. |
 |  | `uniprot_out` | `null` | Индивидуальный путь для объединённых данных UniProt. |
 |  | `iuphar_out` | `null` | Индивидуальный путь для объединённых данных IUPHAR. |
-|  | `limit` | `null` | Ограничение на число идентификаторов. |
 
 > При финализации `finalise_targets` вызывает встроенный классификатор таксономии: он использует поля UniProt с родословной (`genus`, `lineage_*`, `taxon_id`, `species_group_flag`) для расчёта итоговой колонки `type` и вспомогательных флагов, поэтому отдельный CSV для `organism` больше не нужен.
 

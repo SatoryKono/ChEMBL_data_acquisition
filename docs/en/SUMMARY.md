@@ -1,7 +1,23 @@
 # Project Summary
 
 This document provides an at-a-glance description of the ChEMBL data acquisition
-utilities, their structure, shared services and supporting workflows.
+utilities, their structure, shared services and supporting workflows. Use it as
+the canonical entry point into the wider documentation set.
+
+## Documentation index
+
+* [Project overview](./OVERVIEW.md) – positioning, personas and a guided tour of
+  the toolkit.
+* [Quickstart](./QUICKSTART.md) – environment bootstrap and the first end-to-end
+  pipeline execution.
+* [Usage guide](./guides/USAGE.md) – CLI flags, orchestration tips and
+  troubleshooting advice.
+* [Output reference](./reference/OUTPUT.md) – structure of the exported CSV
+  files, metadata sidecars and quality reports.
+* [Developer documentation](./DEVELOPER.md) – contribution process, QA policy
+  and deep reference material.
+* Русская версия основных материалов находится в каталоге
+  [`docs/ru`](../ru/README.md).
 
 ## Repository layout
 
@@ -68,11 +84,9 @@ add_pipeline_metadata → write_csv_deterministic →
 * Overrides follow the precedence `config/config.yaml` < environment variables < CLI
   arguments. Short aliases such as `CHEMBL_DA_RPS` (`sources.chembl.api.rps`)
   and `CHEMBL_DA_OUTDIR` (`local.io.output_dir`) are exposed for convenience.
-<<<<<<< HEAD
-  The full matrix is documented in `docs/en/devel/CONFIG.md`.
-=======
-  The full matrix is documented in `docs/CONFIG_EN.md`.
->>>>>>> origin/refactor-docs-and-file-structure
+  The full matrix is documented in the
+  [Configuration reference](./reference/CONFIG.md)
+  (Русский вариант — [`Матрица настроек`](../ru/reference/CONFIG.md)).
 
 ## External services
 
@@ -92,11 +106,9 @@ add_pipeline_metadata → write_csv_deterministic →
 1. Create and activate a Python ≥3.11 virtual environment.
 2. Install dependencies from the lock file: `pip install -r requirements-lock.txt`.
 3. Enable the quality gate: `pre-commit install`.
-<<<<<<< HEAD
-4. Recommended ad-hoc checks (see Quality Assurance Process — [English](../qa/QA_PROCESS.md) / [Русский](../../ru/qa/QA_PROCESS.md) — for the living checklist):
-=======
-4. Recommended ad-hoc checks (see Quality Assurance Process — [English](./QA_PROCESS_EN.md) / [Русский](./QA_PROCESS_RU.md) — for the living checklist):
->>>>>>> origin/refactor-docs-and-file-structure
+4. Recommended ad-hoc checks (see Quality Assurance Process —
+   [English](./development/QA_PROCESS.md) /
+   [Русский](../ru/development/QA_PROCESS.md) — for the living checklist):
    * `pre-commit run --all-files`
    * `pytest` / `pytest --cov=library --cov=scripts`
    * `ruff check`, `black --check .`, `mypy`
@@ -116,13 +128,9 @@ mirrored in `requirements-lock.txt` for reproducible environments.
 * Deterministic logging uses JSON lines with `run_id`, `event`, `stage` and
   per-pipeline counters, allowing easy monitoring with `jq` or log collectors.
 
-<<<<<<< HEAD
-Detailed command walkthroughs live in `docs/en/user/USAGE.md` and
-`docs/ru/user/USAGE.md`.
-=======
-Detailed command walkthroughs live in `docs/USAGE_EN.md` and
-`docs/USAGE_RU.md`.
->>>>>>> origin/refactor-docs-and-file-structure
+Detailed command walkthroughs live in the
+[English usage guide](./guides/USAGE.md) and the
+[Русский гайд по использованию](../ru/guides/USAGE.md).
 
 ## Outputs
 
@@ -134,12 +142,10 @@ Detailed command walkthroughs live in `docs/USAGE_EN.md` and
 * Pipeline-specific extras include document quality JSON files and intermediate
   target exports for the `all` workflow.
 
-<<<<<<< HEAD
-Refer to `docs/en/user/OUTPUT.md` / `docs/ru/user/OUTPUT.md` for field-level details and
-=======
-Refer to `docs/OUTPUT_EN.md` / `docs/OUTPUT_RU.md` for field-level details and
->>>>>>> origin/refactor-docs-and-file-structure
-examples.
+Refer to the
+[output reference](./reference/OUTPUT.md) /
+[Справочник по выходным данным](../ru/reference/OUTPUT.md) for field-level
+details and examples.
 
 ## Testing and determinism
 
