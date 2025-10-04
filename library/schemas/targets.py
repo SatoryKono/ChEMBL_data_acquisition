@@ -9,6 +9,11 @@ from pandera.dtypes import DataType
 
 PA_ANY = cast(DataType, object)
 
+# NOTE: The trailing space in this column name is intentional. It mirrors the
+# Power Query export produced by the legacy pipeline and must be preserved for
+# downstream consumers that expect a byte-identical header.
+CELLULARITY_COLUMN_NAME: str = "AddCellularitySmart "
+
 # Explicit column order for the targets table.
 #
 # Pandera sorts columns alphabetically when exposing ``DataFrameSchema.columns``.
@@ -85,7 +90,7 @@ TARGETS_COLUMN_ORDER: list[str] = [
     "PRINTS",
     "TCDB",
     "pref_name",
-    "target_type",
+    CELLULARITY_COLUMN_NAME,
     "tax_id",
     "species_group_flag",
     "target_components",
@@ -186,7 +191,7 @@ TargetsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "PRINTS": pa.Column(str, required=False, nullable=True),
         "TCDB": pa.Column(str, required=False, nullable=True),
         "pref_name": pa.Column(str, required=False, nullable=True),
-        "target_type": pa.Column(str, required=False, nullable=True),
+        CELLULARITY_COLUMN_NAME: pa.Column(str, required=False, nullable=True),
         "tax_id": pa.Column(str, required=False, nullable=True),
         "species_group_flag": pa.Column(str, required=False, nullable=True),
         "target_components": pa.Column(str, required=False, nullable=True),

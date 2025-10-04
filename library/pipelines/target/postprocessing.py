@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from library.schemas.targets import TARGETS_COLUMN_ORDER
+from library.schemas.targets import CELLULARITY_COLUMN_NAME, TARGETS_COLUMN_ORDER
 
 from . import organism_classification
 from ...config import Config, IoCfg
@@ -84,7 +84,7 @@ TEXT_COLUMNS: list[str] = [
     "xref_pdb",
     "xref_alphafold",
     "pref_name",
-    "target_type",
+    CELLULARITY_COLUMN_NAME,
     "tax_id",
     "species_group_flag",
     "target_components",
@@ -273,7 +273,9 @@ def align_target_columns(df: pd.DataFrame) -> pd.DataFrame:
     aligned["PRINTS"] = _series_or_default(df, "PRINTS")
     aligned["TCDB"] = _series_or_default(df, "TCDB")
     aligned["pref_name"] = _series_or_default(df, "pref_name")
-    aligned["target_type"] = _series_or_default(df, "target_type")
+    aligned[CELLULARITY_COLUMN_NAME] = _series_or_default(
+        df, CELLULARITY_COLUMN_NAME
+    )
     aligned["tax_id"] = _series_or_default(df, "tax_id")
     aligned["species_group_flag"] = _series_or_default(df, "species_group_flag")
     aligned["target_components"] = _series_or_default(df, "target_components")
@@ -571,8 +573,8 @@ def finalise_targets(
     Notes
     -----
     If ``df`` already contains a ``type`` column, it will be renamed to
-    ``target_type`` before the new classification is appended to avoid
-    conflicting suffixes.
+    ``AddCellularitySmart `` (the original Power Query export name) before the
+    new classification is appended to avoid conflicting suffixes.
     """
 
     df = df.copy()
@@ -647,8 +649,10 @@ def finalise_targets(
     #         )
 
     if "type" in df.columns:
-        logger.debug("Renaming existing 'type' column to 'target_type'")
-        df = df.rename(columns={"type": "target_type"})
+        logger.debug(
+            "Renaming existing 'type' column to '%s'", CELLULARITY_COLUMN_NAME
+        )
+        df = df.rename(columns={"type": CELLULARITY_COLUMN_NAME})
 
     df = organism_classification.add_cellularity_smart(
         df,
@@ -656,7 +660,7 @@ def finalise_targets(
         superkingdom_col="lineage_superkingdom",
         phylum_col="lineage_phylum",
         class_col="lineage_class",
-        output_col="target_type",
+        output_col=CELLULARITY_COLUMN_NAME,
     )
 
     df = df.drop(columns=[c for c in REMOVE_COLUMNS if c in df.columns])
