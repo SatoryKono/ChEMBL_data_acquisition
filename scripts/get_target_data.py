@@ -281,6 +281,31 @@ def _postprocess_isoform_export(
     return isoform_path
 
 
+def _postprocess_organism_export(
+    source: Path,
+    *,
+    cfg: Config,
+) -> Path | None:
+    """Invoke the organism lookup post-processing step for target exports."""
+
+    try:
+        organism_path = Path(target_pp.postprocess_target_table(str(source)))
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.exception(
+            "target_organism_postprocess_failed",
+            path=str(source),
+            error=str(exc),
+        )
+        return None
+
+    logger.info(
+        "target_organism_postprocess_done",
+        path=str(organism_path),
+        source=str(source),
+    )
+    return organism_path
+
+
 def _resolve_parameter(
     namespace: argparse.Namespace,
     cfg_section: Any,
@@ -3128,6 +3153,7 @@ def validate_and_write(
         http_requests=http_requests,
     )
     if exit_code == 0:
+        _postprocess_organism_export(final_csv_path, cfg=cfg)
         _postprocess_isoform_export(
             final_csv_path,
             cfg=cfg,

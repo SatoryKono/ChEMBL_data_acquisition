@@ -28,6 +28,9 @@ class _MemoryLogger:
     def error(self, event: str, **payload: object) -> None:
         self.events.append(("error", event, dict(payload)))
 
+    def exception(self, event: str, **payload: object) -> None:
+        self.events.append(("exception", event, dict(payload)))
+
 
 @pytest.fixture()
 def logger_stub(monkeypatch: pytest.MonkeyPatch) -> _MemoryLogger:
@@ -222,3 +225,55 @@ def test_run__delegates_to_handler(
     exit_code = get_target_data.run(cfg, args)
 
     assert exit_code == 4
+
+
+def test_postprocess_organism_export__success(
+    cfg: Config,
+    tmp_path: Path,
+    logger_stub: _MemoryLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "output.target_20250101.csv"
+    source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    output_path = tmp_path / "organism.output.target_20250101.csv"
+
+    def _fake_postprocess(path: str) -> str:
+        assert path == str(source)
+        output_path.write_text("target_chembl_id,target_type\nCHEMBL1,Multicellular\n", encoding="utf-8")
+        return str(output_path)
+
+    monkeypatch.setattr(get_target_data.target_pp, "postprocess_target_table", _fake_postprocess)
+
+    result = get_target_data._postprocess_organism_export(source, cfg=cfg)
+
+    assert result == output_path
+    assert (
+        "info",
+        "target_organism_postprocess_done",
+        {"path": str(output_path), "source": str(source)},
+    ) in logger_stub.events
+
+
+def test_postprocess_organism_export__failure(
+    cfg: Config,
+    tmp_path: Path,
+    logger_stub: _MemoryLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "output.target_20250101.csv"
+    source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    def _failing_postprocess(path: str) -> str:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(get_target_data.target_pp, "postprocess_target_table", _failing_postprocess)
+
+    result = get_target_data._postprocess_organism_export(source, cfg=cfg)
+
+    assert result is None
+    assert (
+        "exception",
+        "target_organism_postprocess_failed",
+        {"path": str(source), "error": "boom"},
+    ) in logger_stub.events
