@@ -4,12 +4,17 @@ This document provides a comprehensive reference for all configuration options u
 
 ## Configuration Layers
 
-The configuration is loaded and merged from multiple sources, with later sources overriding earlier ones. The order of precedence is as follows:
+The configuration is resolved by stacking successive layers. Later layers override
+earlier ones. The resulting precedence is:
 
-1.  **Packaged `config.yaml`**: The base configuration file located at `config/config.yaml`.
-2.  **Local `config.local.yaml`**: A local override file that you can place next to the main configuration file.
-3.  **Environment Variables**: System environment variables.
-4.  **CLI Arguments**: Command-line flags passed at runtime.
+1.  **Built-in defaults** defined by the Pydantic models in `library/config.py`.
+    They supply baseline values even when the YAML files omit a key.
+2.  **Configuration files** starting with the packaged `config/config.yaml` and
+    optionally extending it via `config/config.local.yaml`. Environment variables
+    prefixed with `CHEMBL_DA__` act as patches on top of the merged YAML data.
+3.  **CLI arguments** specified at runtime. These have the highest priority and
+    are typically accompanied by provenance metadata emitted through
+    `--print-config`.
 
 ### YAML Configuration
 
@@ -56,15 +61,32 @@ The configuration is organized into three main sections:
 | `user_agent` | `chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)` | User-Agent header. **Must be changed** to a real contact for production use. |
 
 #### `sources.chembl.pipelines.*`
-This section contains pipeline-specific settings for `activity`, `assay`, `document`, `target`, and `testitem` pipelines.
+This section contains pipeline-specific settings for `activity`, `assay`,
+`document`, `target`, and `testitem` pipelines.
 
-| Key | Example Default | Description |
-|---|---|---|
-| `column` | `activity_chembl_id` | Name of the identifier column in the input CSV. |
-| `batch_size`| `50` | Number of records to request in a single API call. |
-| `timeout` | `30.0` | Request timeout in seconds for this pipeline. |
-| `workers` | `1` | Number of parallel workers for fetching data. |
-| `limit` | `null` | Maximum number of records to process. |
+##### Document pipeline defaults
+
+| Key | Default | Mode |
+|-----|---------|------|
+| `column` | `PMID` | `document.pubmed` |
+| `sleep` | `5.0` | `document.pubmed` |
+| `workers` | `1` | `document.pubmed` |
+| `batch_size` | `5` | `document.pubmed` |
+| `limit` | `null` | `document.pubmed` |
+| `column` | `document_chembl_id` | `document.chembl` |
+| `chunk_size` | `50` | `document.chembl` |
+| `timeout` | `30.0` | `document.chembl` |
+| `limit` | `null` | `document.chembl` |
+| `column` | `document_chembl_id` | `document.all` |
+| `chunk_size` | `5` | `document.all` |
+| `sleep` | `5.0` | `document.all` |
+| `workers` | `1` | `document.all` |
+| `batch_size` | `5` | `document.all` |
+| `timeout` | `30.0` | `document.all` |
+| `limit` | `null` | `document.all` |
+
+Other pipelines expose comparable keys such as `column`, `chunk_size`,
+`batch_size`, `timeout`, `limit`, and optional offsets or staging toggles.
 
 #### Other Sources (`openalex`, `crossref`, `uniprot`, `pubchem`, etc.)
 Each external source has its own configuration block under `sources` defining its base URL, rate limits (`rps`), and timeouts.

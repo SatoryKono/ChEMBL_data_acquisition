@@ -57,29 +57,95 @@ get-data --base-path /data/chembl \
 выгрузки создаются в целевых каталогах без устаревших алиасов. Значение
 `--limit 0` пропускает выполнение, а `--dry-run` выводит план без записи файлов.
 
-## Пайплайн документов (`get-document-data`)
+## Пайплайн документов (`python scripts/get_document_data.py`)
 
-Подкоманды:
+Конвейер документов запускается единым скриптом `python scripts/get_document_data.py --mode <chembl|pubmed|all>`. Флаг `--mode`
+заменяет прежние позиционные подкоманды, сохраняя общие аргументы CLI в духе остальных пайплайнов.
 
-| Режим | Описание | Основные параметры |
-|-------|----------|--------------------|
-| `chembl` | Выгружает метаданные документов из ChEMBL. | `--column`, `--chunk-size`, `--timeout`, `--limit`, `--offset`. |
-| `pubmed` | Обогащает данными PubMed, Semantic Scholar, OpenAlex и CrossRef. | `--column`, `--sleep`, `--workers`, `--batch-size`, `--limit`, `--offset`, `--openalex-rps`, `--crossref-rps`, `--fallback-doi-*`. |
-| `all` | Запускает `chembl`, объединяет внешние источники и формирует итоговую таблицу. | Параметры режима `pubmed` плюс `--fallback-doi-*` для CSV с ручными DOI. |
+### Краткая шпаргалка
 
-Пример:
+| `--mode` | Назначение | Колонка по умолчанию | Пространственные флаги |
+|----------|------------|----------------------|------------------------|
+| `chembl` | Выгружает документные метаданные из ChEMBL. | `document_chembl_id` | `--chembl-chunk-size`, `--chembl-timeout` (алиасы: `--chunk-size`, `--timeout`). |
+| `pubmed` | Обогащает данными PubMed, Semantic Scholar, OpenAlex и CrossRef. | `PMID` | `--pubmed-sleep`, `--pubmed-workers`, `--pubmed-batch-size`, `--openalex-rps`, `--crossref-rps`. |
+| `all` | Последовательно выполняет стадии ChEMBL и PubMed и объединяет результат. | `document_chembl_id` | Принимает оба пространства имён и поддерживает параметры DOI-фолбэков. |
+
+### Фрагмент справки
 
 ```
-get-document-data all \
+$ python scripts/get_document_data.py --mode all --help
+...
+  --chembl-chunk-size CHEMBL_CHUNK_SIZE, --chunk-size CHEMBL_CHUNK_SIZE
+                        Максимум идентификаторов в одном запросе ChEMBL
+  --pubmed-sleep PUBMED_SLEEP, --sleep PUBMED_SLEEP
+                        Пауза между запросами к PubMed в секундах
+  --pubmed-workers PUBMED_WORKERS, --workers PUBMED_WORKERS
+                        Количество параллельных запросов PubMed
+  --pubmed-batch-size PUBMED_BATCH_SIZE, --batch-size PUBMED_BATCH_SIZE
+                        Максимум PMID в одном запросе PubMed
+  --chembl-timeout CHEMBL_TIMEOUT, --timeout CHEMBL_TIMEOUT
+                        Таймаут HTTP-запросов к ChEMBL в секундах
+  --openalex-rps OPENALEX_RPS
+                        Ограничение RPS для OpenAlex
+  --crossref-rps CROSSREF_RPS
+                        Ограничение RPS для CrossRef
+
+Fallback DOI overrides:
+  --fallback-doi-enabled
+                        Включить чтение DOI из CSV-файла
+  --fallback-doi-path FALLBACK_DOI_PATH
+                        CSV с DOI, сопоставленными по PMID
+  --fallback-doi-col-pmid FALLBACK_DOI_COL_PMID
+                        Колонка с PubMed ID во fallback-файле
+  --fallback-doi-col-doi FALLBACK_DOI_COL_DOI
+                        Колонка с DOI во fallback-файле
+  --fallback-doi-delimiter FALLBACK_DOI_DELIMITER
+                        Разделитель CSV (по умолчанию: io.csv_sep)
+  --fallback-doi-encoding FALLBACK_DOI_ENCODING
+                        Кодировка CSV (по умолчанию: io.csv_encoding)
+  --fallback-doi-overwrite
+                        Разрешить перезапись существующих DOI значениями из CSV
+```
+
+### Флаги DOI-фолбэков
+
+| Флаг | Значение по умолчанию | Описание |
+|------|-----------------------|----------|
+| `--fallback-doi-enabled` | Выключен | Активирует чтение переопределений из CSV. |
+| `--fallback-doi-path` | _обязателен при включении_ | Путь к CSV с парами PMID → DOI. |
+| `--fallback-doi-col-pmid` | `PMID` | Имя колонки с PubMed ID во fallback-файле. |
+| `--fallback-doi-col-doi` | `DOI` | Имя колонки с DOI во fallback-файле. |
+| `--fallback-doi-delimiter` | `local.io.csv_sep` (по умолчанию `,`) | Разделитель при чтении CSV. |
+| `--fallback-doi-encoding` | `local.io.csv_encoding` (по умолчанию `utf-8-sig`) | Кодировка fallback-файла. |
+| `--fallback-doi-overwrite` | Выключен | Разрешает замещать существующие DOI значениями из CSV. |
+
+### Примеры запуска
+
+```bash
+# Только ChEMBL
+python scripts/get_document_data.py --mode chembl \
     --input data/input/document.csv \
-    --final-out output/documents_$(date +%Y%m%d).csv \
+    --final-out output/documents_chembl.csv \
+    --config config/config.yaml
+
+# PubMed и партнёры с ограничением RPS
+python scripts/get_document_data.py --mode pubmed \
+    --input data/input/document.csv \
+    --final-out output/documents_pubmed.csv \
     --config config/config.yaml \
-    --limit 500 --log-level INFO
+    --openalex-rps 3 --crossref-rps 3
+
+# Полный прогон с ручными DOI
+python scripts/get_document_data.py --mode all \
+    --input data/input/document.csv \
+    --final-out output/documents_full.csv \
+    --config config/config.yaml \
+    --fallback-doi-enabled \
+    --fallback-doi-path data/input/document_fallback.csv \
+    --fallback-doi-overwrite
 ```
 
-На выходе — детерминированный CSV, файл `<имя>.meta.yaml`, отчёты
-`<имя>_quality_report_table.csv`, `<имя>_data_correlation_report_table.csv` и
-`<имя>.quality.json` с покрытием DOI.
+Выгрузка включает детерминированный CSV, `<имя>.meta.yaml`, отчёты `<имя>_quality_report_table.csv`, `<имя>_data_correlation_report_table.csv` и `<имя>.quality.json` со статистикой по DOI.
 
 ## Пайплайн таргетов (`get-target-data`)
 

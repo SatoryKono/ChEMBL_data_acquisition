@@ -49,6 +49,44 @@
 
 Подробное описание аргументов, подкоманд и расширенных сценариев использования смотрите в [`docs/USAGE_EN.md`](./USAGE_EN.md) и [`docs/USAGE_RU.md`](./USAGE_RU.md).
 
+## Document pipeline
+
+Use the document workflow through the unified development entry point `python scripts/get_document_data.py --mode <chembl|pubmed|all>`. The selected mode controls which acquisition stages run while sharing the common CLI flags described in the usage guide.
+
+| `--mode` value | Purpose | Namespaced flags |
+|----------------|---------|------------------|
+| `chembl` | Retrieve document metadata from the ChEMBL API. | `--chembl-chunk-size`, `--chembl-timeout` (or shared `--chunk-size`, `--timeout`). |
+| `pubmed` | Enrich with PubMed, Semantic Scholar, OpenAlex, and CrossRef. | `--pubmed-sleep`, `--pubmed-workers`, `--pubmed-batch-size`, `--openalex-rps`, `--crossref-rps`. |
+| `all` | Run the ChEMBL and PubMed stages sequentially before merging the outputs. | Accepts both `chembl` and `pubmed` namespaces plus fallback DOI switches. |
+
+Example invocations:
+
+```bash
+# ChEMBL-only export
+python scripts/get_document_data.py --mode chembl \
+    --input data/input/document.csv \
+    --final-out output/documents_chembl.csv \
+    --config config/config.yaml
+
+# PubMed + partner services
+python scripts/get_document_data.py --mode pubmed \
+    --input data/input/document.csv \
+    --final-out output/documents_pubmed.csv \
+    --config config/config.yaml \
+    --openalex-rps 3 --crossref-rps 3
+
+# Full merge with DOI overrides
+python scripts/get_document_data.py --mode all \
+    --input data/input/document.csv \
+    --final-out output/documents_full.csv \
+    --config config/config.yaml \
+    --fallback-doi-enabled \
+    --fallback-doi-path data/input/document_fallback.csv \
+    --fallback-doi-overwrite
+```
+
+The pipeline writes a deterministic CSV, `<name>.meta.yaml`, `<name>_quality_report_table.csv`, `<name>_data_correlation_report_table.csv`, and `<name>.quality.json` with DOI coverage statistics.
+
 ## Target pipeline
 
 The `get-target-data` CLI exposes four acquisition modes (`chembl`, `uniprot`, `iuphar`, `all`). All of them share a consistent set of selector and pagination flags:
