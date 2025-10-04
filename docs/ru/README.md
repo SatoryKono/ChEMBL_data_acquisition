@@ -48,8 +48,9 @@ flowchart TD
   подставляет `get-data`.
 - Каждый конвейер сохраняет детерминированный CSV, файл метаданных `<name>.meta.yaml`,
   отчёт `<name>_quality_report_table.csv` и JSON-сводку качества. Таргет-пайплайн
-  дополнительно создаёт детерминированный файл развёртки изоформ
-  `isoform.output.<stem>.csv`, описанный в [`OUTPUT_TARGETS`](../en/OUTPUT.md#target-export-targets).
+  дополнительно формирует справочники `organism.output.target_<stamp>.csv` и
+  `isoform.output.targets_<stamp>.csv`, описанные в
+  [`OUTPUT_TARGETS_RU.md`](../OUTPUT_TARGETS_RU.md).
 - Валидация схем выполняется до и после обогащения; ошибки логируются в
   структурированном формате и, при необходимости, приводят к фатальному завершению
   согласно конфигурации.

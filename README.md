@@ -71,7 +71,11 @@ python scripts/get_data.py \
 ```
 
 Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar
-and table-quality reports under the same directory. Refer to the
+and table-quality reports under the same directory. The target pipeline also
+emits helper lookups named `organism.output.target_<stamp>.csv` alongside
+`isoform.output.targets_<stamp>.csv` — both are detailed in
+[`docs/OUTPUT_TARGETS_EN.md`](./docs/OUTPUT_TARGETS_EN.md) and
+[`docs/OUTPUT_TARGETS_RU.md`](./docs/OUTPUT_TARGETS_RU.md). Refer to the
 [output reference](./docs/en/OUTPUT.md) for the complete specification.
 
 ## Documentation
