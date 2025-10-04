@@ -37,12 +37,12 @@ _SCRIPT_CASES = (
     },
     {
         "module": get_document_data,
-        "command": "pubmed",
+        "command": None,
         "input_flag": "--input",
         "output_flag": "--output",
         "output_attr": "output_csv",
         "prefix": "document_pipeline",
-        "extra_args": (),
+        "extra_args": ("--mode", "pubmed"),
     },
     {
         "module": get_target_data,

@@ -3219,6 +3219,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             if offset_value < 0:
                 subparser.error("--offset must be zero or a positive integer")
             mapping: dict[str, str] = {}
+            run_args: argparse.Namespace | None = None
+            base_parser_arg: argparse.ArgumentParser | None = None
             if args.command == "uniprot":
                 mapping = {
                     "column": "target.uniprot.column",
@@ -3297,15 +3299,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args_dict["output_csv"] = candidate
                 else:
                     args_dict["output_csv"] = Path(output_candidate)
-                exit_code = run_cli_command(
-                    args=argparse.Namespace(**args_dict),
-                    parser=subparser,
-                    base_parser=parser,
-                    log_cfg=logging_ctx.log_cfg,
-                    mapping=mapping,
-                    run=run,
-                    logger=logger,
-                )
+                run_args = argparse.Namespace(**args_dict)
+                base_parser_arg = parser
+            else:
+                run_args = args
+
+            if run_args is None:
+                run_args = args
+            exit_code = run_cli_command(
+                args=run_args,
+                parser=subparser,
+                base_parser=base_parser_arg,
+                log_cfg=logging_ctx.log_cfg,
+                mapping=mapping,
+                run=run,
+                logger=logger,
+            )
         except PipelineError as exc:
             exit_code = 2
             logger.error("pipeline_error", error=str(exc))

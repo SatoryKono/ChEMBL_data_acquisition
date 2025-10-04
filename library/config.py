@@ -1229,7 +1229,10 @@ class DocumentCfg(_BaseModel):
 class TargetUniprotCfg(_BaseModel):
     column: str = "uniprot_id"
     data_dir: Path = DICTIONARY_DIR / "_target" / "_uniprot"
+    chunk_size: int = Field(100, ge=1)
+    timeout: float = Field(30.0, gt=0)
     limit: int | None = Field(default=None, ge=0)
+    offset: int = Field(0, ge=0)
 
 
 class TargetChemblCfg(_BaseModel):
@@ -1245,20 +1248,26 @@ class TargetChemblCfg(_BaseModel):
     timeout: float = Field(30.0, gt=0)
 
     limit: int | None = Field(default=None, ge=0)
+    offset: int = Field(0, ge=0)
 
 
 
 class TargetIupharCfg(_BaseModel):
+    column: str = "uniprot_id"
     target_csv: Path = (
         DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_target.csv"
     )
     family_csv: Path = (
         DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_family.csv"
     )
+    chunk_size: int = Field(100, ge=1)
+    timeout: float = Field(30.0, gt=0)
     limit: int | None = Field(default=None, ge=0)
+    offset: int = Field(0, ge=0)
 
 
 class TargetAllCfg(_BaseModel):
+    column: str = "target_chembl_id"
     data_dir: Path = DICTIONARY_DIR / "_target" / "_uniprot"
     target_csv: Path = (
         DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_target.csv"

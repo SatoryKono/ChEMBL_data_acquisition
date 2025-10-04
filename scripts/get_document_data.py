@@ -1836,6 +1836,12 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
     )
     fallback_enabled = getattr(args, "fallback_doi_enabled", False)
     fallback_path_arg = getattr(args, "fallback_doi_path", None)
+    fallback_overwrite = getattr(args, "fallback_doi_overwrite", False)
+    fallback_payload = {
+        "value": bool(fallback_enabled),
+        "path": str(fallback_path_arg) if fallback_path_arg else None,
+        "overwrite": bool(fallback_overwrite),
+    }
     logger.info(
         "document_pubmed_start",
         input=str(args.input_csv),
@@ -1846,8 +1852,9 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         batch_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
         sleep=getattr(args, "sleep", pubmed_defaults.sleep),
         fallback_doi_enabled=fallback_enabled,
-        fallback_doi_overwrite=getattr(args, "fallback_doi_overwrite", False),
+        fallback_doi_overwrite=fallback_overwrite,
         fallback_doi_path=str(fallback_path_arg) if fallback_path_arg else None,
+        fallback_doi=fallback_payload,
     )
     try:
         pmids_iter = io.read_ids(
@@ -2461,10 +2468,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     return exit_code
 
 
-MODE_HANDLERS: Mapping[str, Callable[[Config, argparse.Namespace], int]] = {
-    "chembl": run_chembl,
-    "pubmed": run_pubmed,
-    "all": run_all,
+MODE_HANDLER_NAMES: Mapping[str, str] = {
+    "chembl": "run_chembl",
+    "pubmed": "run_pubmed",
+    "all": "run_all",
 }
 
 
@@ -2476,6 +2483,11 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     )
     args.output_csv = output_path
     mode = getattr(args, "mode", None)
+    if mode in (None, argparse.SUPPRESS):
+        command_value = getattr(args, "command", None)
+        if command_value not in (None, argparse.SUPPRESS):
+            mode = command_value
+            setattr(args, "mode", mode)
     timeout_value = None
     if mode == "chembl":
         timeout_value = getattr(args, "timeout", None)
@@ -2488,10 +2500,26 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0
-    handler = MODE_HANDLERS.get(str(mode))
+    handler: Callable[[Config, argparse.Namespace], int] | None = None
+    if hasattr(args, "func"):
+        func_candidate = getattr(args, "func")
+        if func_candidate is None:
+            logger.error(
+                "missing_subcommand_handler", command=getattr(args, "command", "")
+            )
+            return 1
+        if callable(func_candidate):
+            handler = func_candidate
     if handler is None:
-        logger.error("unknown_mode", mode=mode)
-        return 1
+        handler_name = MODE_HANDLER_NAMES.get(str(mode))
+        if handler_name is None:
+            logger.error("unknown_mode", mode=mode)
+            return 1
+        handler_obj = globals().get(handler_name)
+        if not callable(handler_obj):
+            logger.error("missing_mode_handler", mode=mode, handler=handler_name)
+            return 1
+        handler = handler_obj
     result = handler(cfg, args)
     return int(result)
 
@@ -2512,7 +2540,8 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     pipeline_group.add_argument(
         "--mode",
         choices=("chembl", "pubmed", "all"),
-        required=True,
+        required=False,
+        default=None,
         help="Document pipeline to execute",
     )
     pipeline_group.add_argument(
@@ -2669,6 +2698,13 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Enable lookup of DOI overrides from a CSV file",
     )
     fallback_group.add_argument(
+        "--fallback-doi-csv",
+        dest="fallback_doi_csv",
+        type=path_argument,
+        default=None,
+        help="Deprecated alias for --fallback-doi-path that enables overrides",
+    )
+    fallback_group.add_argument(
         "--fallback-doi-path",
         type=path_argument,
         default=None,
@@ -2700,6 +2736,13 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Allow replacing existing DOIs with fallback values",
     )
 
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=("chembl", "pubmed", "all"),
+        help="Deprecated subcommand alias",
+    )
+
     return parser, log_cfg
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -2724,17 +2767,54 @@ def main(argv: Sequence[str] | None = None) -> int:
         execution.
     """
     parser, log_cfg = build_parser()
-    args = parser.parse_args(argv)
+    normalised_argv = list(argv) if argv is not None else None
+    converted_fallback_csv: list[str] = []
+    if normalised_argv:
+        expanded_args: list[str] = []
+        index = 0
+        while index < len(normalised_argv):
+            token = normalised_argv[index]
+            if token == "--fallback-doi-csv":
+                if index + 1 >= len(normalised_argv):
+                    expanded_args.append(token)
+                    index += 1
+                    continue
+                value = normalised_argv[index + 1]
+                converted_fallback_csv.append(value)
+                expanded_args.extend(["--fallback-doi-enabled", "--fallback-doi-path", value])
+                index += 2
+                continue
+            expanded_args.append(token)
+            index += 1
+        normalised_argv = expanded_args
+    args = parser.parse_args(normalised_argv)
+    if converted_fallback_csv:
+        fallback_value = converted_fallback_csv[-1]
+        try:
+            fallback_path = Path(fallback_value)
+        except TypeError:
+            fallback_path = Path(str(fallback_value))
+        setattr(args, "fallback_doi_csv", fallback_path)
+        setattr(args, "fallback_doi_enabled", True)
+        if getattr(args, "fallback_doi_path", None) in (None, argparse.SUPPRESS):
+            setattr(args, "fallback_doi_path", fallback_path)
     prepare_io_paths(
         args,
         input_default=DEFAULT_INPUT_NAME,
         output_stem=DEFAULT_OUTPUT_STEM,
     )
+    mode_value = getattr(args, "mode", None)
+    if mode_value in (None, argparse.SUPPRESS):
+        command_alias = getattr(args, "command", None)
+        if command_alias in (None, argparse.SUPPRESS):
+            parser.error("--mode must be specified")
+        setattr(args, "mode", command_alias)
+        mode_value = command_alias
     limit_value = getattr(args, "limit", None)
     if limit_value == 0:
         logger.info("pipeline_skip_limit", limit=limit_value)
         return 0
-    mode = getattr(args, "mode", "")
+    mode = str(mode_value)
     if limit_value is not None and limit_value < 0:
         parser.error("--limit must be zero or a positive integer")
     offset_value = getattr(args, "offset", 0)

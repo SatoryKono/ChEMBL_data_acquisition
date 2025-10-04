@@ -32,6 +32,7 @@ if __package__ in {None, ""}:
 from library.integration import chembl_library as cl
 from library.pipelines.assay import postprocessing as ap
 from library import cli
+configure_logger = cli.configure_logger
 from library import io
 from library.common.csv_utils import write_csv_chunks_deterministic
 from library.pipelines.assay.chembl_assay import ASSAY_COLUMNS

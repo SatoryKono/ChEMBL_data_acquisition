@@ -67,6 +67,7 @@ if __package__ in {None, ""}:
     ensure_project_root()
 
 from library import cli  # noqa: F401 - re-exported for monkeypatching in tests
+configure_logger = cli.configure_logger
 from library import io
 from library.integration import molecule_catalog
 from library.integration import pubchem_library as pl
