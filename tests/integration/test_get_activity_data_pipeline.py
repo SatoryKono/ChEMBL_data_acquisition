@@ -1,0 +1,275 @@
+"""Integration tests for the activity pipeline CLI helpers."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+from typing import Iterable
+
+import pandas as pd
+import pytest
+
+from scripts import get_activity_data
+
+
+class _DummyChemblClient:
+    """Minimal stand-in for :class:`ChemblClient` used in tests."""
+
+    def __init__(self, *args, **kwargs) -> None:  # pragma: no cover - interface compatibility
+        pass
+
+    def __enter__(self) -> "_DummyChemblClient":  # pragma: no cover - trivial
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - trivial
+        return False
+
+
+class _RecordingLogger:
+    """Capture structured events emitted during the pipeline run."""
+
+    def __init__(self) -> None:
+        self.events: list[tuple[str, str, dict[str, object]]] = []
+
+    def info(self, event: str, **kwargs: object) -> None:
+        self.events.append(("info", event, dict(kwargs)))
+
+    def warning(self, event: str, **kwargs: object) -> None:
+        self.events.append(("warning", event, dict(kwargs)))
+
+    def error(self, event: str, **kwargs: object) -> None:
+        self.events.append(("error", event, dict(kwargs)))
+
+
+@pytest.fixture()
+def activity_resource_dir(snapshot_resource: Path) -> Path:
+    return snapshot_resource / "activity_pipeline"
+
+
+def _copy_resource(resource_dir: Path, name: str, destination: Path) -> Path:
+    target = destination / name
+    target.write_text((resource_dir / name).read_text(encoding="utf-8"), encoding="utf-8")
+    return target
+
+
+def _install_fetch_stubs(
+    monkeypatch: pytest.MonkeyPatch,
+    frame: pd.DataFrame,
+) -> list[tuple[str, ...]]:
+    captured: list[tuple[str, ...]] = []
+
+    def _fake_get_activities(chunk_ids: Iterable[str], **_: object) -> pd.DataFrame:
+        identifiers = [str(item) for item in chunk_ids]
+        captured.append(tuple(identifiers))
+        mask = frame["activity_id"].astype(str).isin(identifiers)
+        result = frame.loc[mask].copy().reset_index(drop=True)
+        if identifiers:
+            result = result.drop_duplicates(subset=["activity_id"], keep="first")
+        return result
+
+    monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
+    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    return captured
+
+
+def _install_writer_stub(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, pd.DataFrame]]:
+    written: list[tuple[Path, pd.DataFrame]] = []
+
+    def _writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        *,
+        key_cols: Iterable[str] | None,
+        col_order: Iterable[str] | None,
+        chunksize: int,
+        sort_chunksize: int | None = None,
+        sep: str = ",",
+        encoding: str = "utf-8",
+        cfg=None,
+        **_: object,
+    ) -> Path:
+        collected = [chunk.copy() for chunk in chunks]
+        if collected:
+            result = pd.concat(collected, ignore_index=True)
+        else:
+            result = pd.DataFrame(columns=list(col_order or []))
+        if col_order:
+            order = [str(col) for col in col_order]
+            result = result.reindex(columns=order, fill_value=pd.NA)
+        destination_path = Path(destination)
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        result.to_csv(destination_path, index=False, sep=sep, encoding=encoding)
+        written.append((destination_path, result))
+        return destination_path
+
+    monkeypatch.setattr(get_activity_data, "write_csv_chunks_deterministic", _writer)
+    return written
+
+
+def _configure_cfg(cfg) -> None:
+    cfg.activity.limit = None
+    cfg.activity.dry_run = False
+    cfg.activity.batch_size = 5
+    cfg.activity.workers = 1
+    cfg.system.doc_quality.enable = False
+    cfg.activity_enrichment.action_type.enabled = False
+    cfg.activity_enrichment.action_type.log_missing = False
+    cfg.activity_enrichment.activity_properties.enabled = False
+
+
+def _make_args(input_csv: Path, output_csv: Path) -> argparse.Namespace:
+    return argparse.Namespace(
+        input_csv=input_csv,
+        output_csv=output_csv,
+        offset=0,
+        workers=None,
+        skip_existing=False,
+        force=False,
+        dry_run=False,
+        invocation=None,
+    )
+
+
+def _collect_events(stdout: str) -> list[dict[str, object]]:
+    events: list[dict[str, object]] = []
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError:  # pragma: no cover - defensive for unrelated output
+            continue
+    return events
+
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("deterministic_env")
+def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_path, monkeypatch):
+    _configure_cfg(cfg)
+    input_csv = _copy_resource(activity_resource_dir, "ids_happy.csv", tmp_path)
+    output_csv = tmp_path / "activities.csv"
+    chunk_df = pd.read_csv(activity_resource_dir / "chunk_happy.csv")
+
+    captured = _install_fetch_stubs(monkeypatch, chunk_df)
+    written = _install_writer_stub(monkeypatch)
+    logger_stub = _RecordingLogger()
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    monkeypatch.setattr("library.validation.logger", logger_stub)
+
+    args = _make_args(input_csv, output_csv)
+
+    exit_code = get_activity_data.run_chembl(cfg, args)
+
+    activity_events = [event for _, event, _ in logger_stub.events]
+
+    assert exit_code == 0
+    assert {path for path, _ in written} == {output_csv}
+    assert set(activity_events).issuperset(
+        {
+            "activity_pipeline_start",
+            "activity_pipeline_done",
+            "records_dropped",
+            "schema_validate_start",
+            "schema_validate_done",
+        }
+    )
+    assert captured == [("ACT1", "ACT2", "ACT3")]
+
+    written_df = written[0][1]
+    assert list(written_df["activity_id"]) == ["ACT1", "ACT2", "ACT3"]
+    assert pd.api.types.is_float_dtype(written_df["standard_value"])  # type: ignore[arg-type]
+    assert written_df["standard_value"].tolist() == [5.5, 7.25, 9.0]
+
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("deterministic_env")
+def test_activity_pipeline__missing_column_input(activity_resource_dir: Path, cfg, tmp_path, monkeypatch):
+    _configure_cfg(cfg)
+    input_csv = _copy_resource(activity_resource_dir, "ids_missing_column.csv", tmp_path)
+    output_csv = tmp_path / "activities.csv"
+
+    # Ensure we never reach the fetch stage when validation of inputs fails.
+    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(get_activity_data.cl, "get_activities", lambda *_, **__: pd.DataFrame())
+    logger_stub = _RecordingLogger()
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    monkeypatch.setattr("library.validation.logger", logger_stub)
+
+    args = _make_args(input_csv, output_csv)
+
+    exit_code = get_activity_data.run_chembl(cfg, args)
+
+    activity_events = [event for _, event, _ in logger_stub.events]
+
+    assert exit_code == 1
+    assert "read_fail" in activity_events
+    assert not output_csv.exists()
+
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("deterministic_env")
+def test_activity_pipeline__malformed_values(activity_resource_dir: Path, cfg, tmp_path, monkeypatch):
+    _configure_cfg(cfg)
+    input_csv = _copy_resource(activity_resource_dir, "ids_happy.csv", tmp_path)
+    output_csv = tmp_path / "activities.csv"
+    chunk_df = pd.read_csv(activity_resource_dir / "chunk_malformed.csv")
+
+    _install_fetch_stubs(monkeypatch, chunk_df)
+    written = _install_writer_stub(monkeypatch)
+    logger_stub = _RecordingLogger()
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    monkeypatch.setattr("library.validation.logger", logger_stub)
+
+    args = _make_args(input_csv, output_csv)
+
+    exit_code = get_activity_data.run_chembl(cfg, args)
+
+    activity_events = [event for _, event, _ in logger_stub.events]
+
+    assert exit_code == 1
+    assert not written
+    assert "validation_failed" in activity_events
+    failure_path = output_csv.with_name("activities_failure_cases.csv")
+    assert failure_path.exists()
+    failure_df = pd.read_csv(failure_path)
+    assert len(failure_df) >= 2
+    assert set(failure_df["column"]) == {"standard_value"}
+    failure_cases = " ".join(str(value) for value in failure_df["failure_case"])
+    assert "not-a-number" in failure_cases
+    assert ">=" in failure_cases
+    error_events = {event for level, event, _ in logger_stub.events if level == "error"}
+    assert {"validation_failed", "activity_pipeline_failed"}.issubset(error_events)
+
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("deterministic_env")
+def test_activity_pipeline__deduplicates_identifiers(activity_resource_dir: Path, cfg, tmp_path, monkeypatch):
+    _configure_cfg(cfg)
+    input_csv = _copy_resource(activity_resource_dir, "ids_duplicates.csv", tmp_path)
+    output_csv = tmp_path / "activities.csv"
+    chunk_df = pd.read_csv(activity_resource_dir / "chunk_happy.csv")
+
+    captured = _install_fetch_stubs(monkeypatch, chunk_df)
+    written = _install_writer_stub(monkeypatch)
+    logger_stub = _RecordingLogger()
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    monkeypatch.setattr("library.validation.logger", logger_stub)
+
+    args = _make_args(input_csv, output_csv)
+
+    exit_code = get_activity_data.run_chembl(cfg, args)
+
+    assert exit_code == 0
+    assert len(captured) == 1
+    recorded = captured[0]
+    assert len({item.lower() for item in recorded}) == 3
+    assert len(written) == 1
+    written_df = written[0][1]
+    assert written_df["activity_id"].tolist() == ["ACT1", "ACT2", "ACT3"]
+    info_events = {event for _, event, _ in logger_stub.events}
+    assert "records_dropped" in info_events
+    assert "schema_validate_done" in info_events
+    warning_events = {event for level, event, _ in logger_stub.events if level == "warning"}
+    assert "read_ids_dropped_na_markers" not in warning_events

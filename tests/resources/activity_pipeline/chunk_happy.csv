@@ -1,0 +1,4 @@
+activity_id,molecule_chembl_id,assay_chembl_id,standard_value,standard_units,standard_type,relation,activity_comment
+ACT1,CHEMBL1,ASSAY1,"5.500",nM,IC50,=,
+ACT2,CHEMBL2,ASSAY2,"7.250",nM,IC50,=,
+ACT3,CHEMBL3,ASSAY3,"9.000",nM,IC50,=,
