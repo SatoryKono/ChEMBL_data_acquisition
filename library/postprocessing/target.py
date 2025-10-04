@@ -257,7 +257,7 @@ def _resolve_input_path(input_csv: str | Path | None) -> Path:
                     "No supported target exports found under "
                     f"{candidate} (expected patterns: {_supported_patterns_text()})"
                 )
-            return max(matches, key=lambda path: path.stat().st_mtime)
+            return max(matches, key=lambda path: (path.stat().st_mtime, path.name))
         if not candidate.exists():
             raise FileNotFoundError(candidate)
         if not _matches_expected_input_name(candidate.name):
@@ -282,7 +282,7 @@ def _resolve_input_path(input_csv: str | Path | None) -> Path:
             "No supported target exports found under "
             f"{search_dir} (expected patterns: {_supported_patterns_text()})"
         )
-    return max(matches, key=lambda path: path.stat().st_mtime)
+    return max(matches, key=lambda path: (path.stat().st_mtime, path.name))
 
 
 def _resolve_output_path(input_path: Path, output_csv: str | None) -> Path:
