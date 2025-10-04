@@ -77,6 +77,7 @@ from pandera.errors import SchemaErrors
 import library.cli_utils as cli_utils_module
 from library import cli
 from library import io
+from library.postprocessing import target as target_pp
 from library.integration import chembl_library as cl
 from library.integration import iuphar_library as ii
 from library.integration import uniprot_library as uu
@@ -1695,6 +1696,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 )
                 return 1
 
+        final_export_path = destination if destination.exists() else raw_destination
+        target_pp.process_targets(str(final_export_path), verbose=True)
         if limit is not None:
             logger.info("process_limit", limit=processed_ids)
         logger.info(
@@ -1840,8 +1843,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
             if final_output != raw_output:
                 shutil.copy2(raw_path, final_output)
-                return final_output
-            return raw_path
+                final_path = final_output
+            else:
+                final_path = raw_path
+            target_pp.process_targets(str(final_path), verbose=True)
+            return final_path
 
         frames: list[pd.DataFrame] = []
         for chunk in chunks:
@@ -1897,6 +1903,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 key_cols=resolved_keys or None,
                 col_order=TARGETS_COLUMN_ORDER,
             )
+        target_pp.process_targets(str(final_path), verbose=True)
         return final_path
 
     failure_path = normalized_output.with_name(
@@ -2986,7 +2993,7 @@ def validate_and_write(
     before_dedup = len(final_df)
     final_df = final_df.drop_duplicates()
     logger.info("deduplicated_rows", dropped=before_dedup - len(final_df))
-    io.write_csv(
+    final_export_path = io.write_csv(
         final_df,
         normalized_output,
         cfg=cfg,
@@ -2995,6 +3002,7 @@ def validate_and_write(
         col_order=TARGETS_COLUMN_ORDER,
         key_cols=key_columns or None,
     )
+    target_pp.process_targets(str(final_export_path), verbose=True)
     if final_df.empty:
         logger.info(
             "quality_report_skipped",
