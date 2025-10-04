@@ -49,6 +49,20 @@
 
 Подробное описание аргументов, подкоманд и расширенных сценариев использования смотрите в [`docs/USAGE_EN.md`](./USAGE_EN.md) и [`docs/USAGE_RU.md`](./USAGE_RU.md).
 
+## Target pipeline
+
+The `get-target-data` CLI exposes four acquisition modes (`chembl`, `uniprot`, `iuphar`, `all`). All of them share a consistent set of selector and pagination flags:
+
+- `--column`: input column that stores the identifiers processed by the mode.
+- `--chunk-size`: batch size for API calls or cached lookups.
+- `--timeout`: network timeout in seconds applied to HTTP requests.
+- `--limit`: maximum number of rows processed; omit to handle the entire CSV.
+- `--offset`: number of rows skipped before processing begins.
+
+The combined `all` mode forwards these values to its sub-pipelines and supports prefixed overrides such as `--chembl-chunk-size` or `--uniprot-timeout` when a particular source requires a different value. During start-up the script logs the resolved parameter values together with their origin (defaults, YAML configuration, or CLI), simplifying troubleshooting.
+
+Refer to [`docs/en/USAGE.md`](./USAGE.md) for CLI examples and [`docs/en/reference/CONFIG.md`](./reference/CONFIG.md) for matching configuration keys and defaults.
+
 ## Требования и установка
 
 | Компонент | Поддерживаемая версия | Последняя протестированная |
