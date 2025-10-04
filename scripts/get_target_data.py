@@ -20,6 +20,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
+import inspect
 from itertools import islice
 from pathlib import Path
 from typing import IO, Any, cast
@@ -110,6 +111,13 @@ from library.validation import ValidationResult
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
 
+try:
+    from library.postprocessing import target as target_pp
+except ImportError:  # pragma: no cover - compatibility with legacy module name
+    from library.postprocessing import target_pp  # type: ignore
+
+_PROCESS_TARGETS_SIGNATURE = inspect.signature(target_pp.process_targets)
+
 
 @contextmanager
 def _override_cli_meta_writer() -> Iterator[None]:
@@ -197,6 +205,20 @@ class ParameterLogEntry:
     name: str
     value: object
     source: str
+
+
+@dataclass(slots=True)
+class TargetPipelineMetrics:
+    """Aggregate lightweight metrics for target acquisition runs."""
+
+    http_requests: int = 0
+    ambiguous_classifications: int = 0
+
+    def record_http_requests(self, count: int) -> None:
+        self.http_requests += max(int(count), 0)
+
+    def record_ambiguous(self, count: int) -> None:
+        self.ambiguous_classifications = max(int(count), 0)
 
 
 def _resolve_parameter(
@@ -2095,6 +2117,7 @@ def fetch_chembl(
     final_out: Path,
     limit: int | None = None,
     *,
+    metrics: TargetPipelineMetrics | None = None,
     raw_out: Path | None = None,
     raw_format: str = "csv",
     id_cols: Sequence[str] | None = None,
@@ -2151,20 +2174,36 @@ def fetch_chembl(
         cfg.target.chembl.limit = limit
     if chunk_size is not None:
         cfg.target.chembl.chunk_size = chunk_size
+    http_request_counter = 0
+    original_request_json = ChemblClient.request_json
+
+    def _counting_request_json(
+        self: ChemblClient,
+        url: str,
+        *,
+        cfg: Any,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        nonlocal http_request_counter
+        http_request_counter += 1
+        return original_request_json(self, url, cfg=cfg, timeout=timeout)
+
+    ChemblClient.request_json = _counting_request_json  # type: ignore[assignment]
     try:
         if run_chembl(cfg, chembl_args) != 0:
             raise RuntimeError("ChEMBL retrieval failed")
     finally:
+        ChemblClient.request_json = original_request_json  # type: ignore[assignment]
         if limit is not None:
             cfg.target.chembl.limit = original_limit
         if chunk_size is not None:
             cfg.target.chembl.chunk_size = original_chunk_size
     normalized_output = _normalized_output_path(final_out)
     df = pd.read_csv(
-
         final_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
-
     )
+    if metrics is not None and http_request_counter:
+        metrics.record_http_requests(http_request_counter)
     logger.info("fetch_chembl_done", rows=len(df))
     return df
 
@@ -2757,12 +2796,25 @@ def fetch_iuphar(
     return combined_df, iuphar_df
 
 
+def _count_ambiguous_classifications(df: pd.DataFrame) -> int:
+    """Return the number of records classified via heuristic fallbacks."""
+
+    if "protein_class_pred_rule_id" not in df.columns:
+        return 0
+    rules = (
+        df["protein_class_pred_rule_id"].fillna("").astype(str).str.lower()
+    )
+    ambiguous_rules = {"name", "molecular_function"}
+    return int(rules.isin(ambiguous_rules).sum())
+
+
 def merge_results(
     combined_df: pd.DataFrame,
     iuphar_df: pd.DataFrame,
     cfg: Config,
     *,
     classifier: ii.IUPHARClassifier | None = None,
+    metrics: TargetPipelineMetrics | None = None,
 ) -> pd.DataFrame:
     """Merge ChEMBL, UniProt and IUPHAR data into a single table.
 
@@ -2813,7 +2865,10 @@ def merge_results(
     merged = pc.append_protein_class_predictions(merged, classifier)
     processed = tp.postprocess_targets(merged)
     final_df = tp.finalise_targets(processed)
-    logger.info("merge_results_done", rows=len(final_df))
+    ambiguous_count = _count_ambiguous_classifications(final_df)
+    if metrics is not None:
+        metrics.record_ambiguous(ambiguous_count)
+    logger.info("merge_results_done", rows=len(final_df), ambiguous=ambiguous_count)
     return final_df
 
 
@@ -2826,6 +2881,8 @@ def validate_and_write(
     id_cols: Sequence[str] | None = None,
     raw_format: str = "csv",
     reindex_raw: bool = True,
+    metrics: TargetPipelineMetrics | None = None,
+    cli_args: argparse.Namespace | None = None,
 ) -> int:
     """Normalise, validate and export the target table.
 
@@ -2995,6 +3052,10 @@ def validate_and_write(
         col_order=TARGETS_COLUMN_ORDER,
         key_cols=key_columns or None,
     )
+    ambiguous_count = _count_ambiguous_classifications(final_df)
+    if metrics is not None:
+        metrics.record_ambiguous(ambiguous_count)
+
     if final_df.empty:
         logger.info(
             "quality_report_skipped",
@@ -3022,6 +3083,48 @@ def validate_and_write(
             )
             return 1
     logger.info("validate_write_done", rows=len(final_df))
+    if exit_code == 0:
+        process_kwargs: dict[str, Any] = {}
+        params = _PROCESS_TARGETS_SIGNATURE.parameters
+        if "verbose" in params:
+            verbose_value = getattr(cli_args, "verbose", None)
+            if verbose_value in (None, argparse.SUPPRESS):
+                verbose_value = getattr(cfg, "verbose", None)
+            if verbose_value in (None, argparse.SUPPRESS):
+                verbose_value = False
+            process_kwargs["verbose"] = bool(verbose_value)
+        if "offline" in params:
+            offline_value = getattr(cli_args, "offline", None)
+            if offline_value in (None, argparse.SUPPRESS):
+                offline_value = getattr(cfg, "offline", None)
+            if offline_value in (None, argparse.SUPPRESS):
+                offline_value = getattr(getattr(cfg, "system", object()), "offline", False)
+            process_kwargs["offline"] = bool(offline_value)
+        try:
+            isoform_output = target_pp.process_targets(
+                normalized_output,
+                output_dir=normalized_output.parent,
+                sep=cfg.io.csv_sep,
+                **process_kwargs,
+            )
+        except Exception as exc:  # pragma: no cover - defensive path
+            logger.exception(
+                "target_postprocess_failed",
+                error=str(exc),
+                source=str(normalized_output),
+            )
+            return 1
+        http_requests = metrics.http_requests if metrics is not None else 0
+        ambiguous_logged = (
+            metrics.ambiguous_classifications if metrics is not None else ambiguous_count
+        )
+        logger.info(
+            "target_postprocess_done",
+            input=str(normalized_output),
+            output=str(isoform_output),
+            http_requests=http_requests,
+            ambiguous=ambiguous_logged,
+        )
     return exit_code
 
 
@@ -3052,6 +3155,8 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             limit=limit,
         )
         return 1
+
+    metrics = TargetPipelineMetrics()
 
     try:
         final_candidate = getattr(args, "final_out", None)
@@ -3090,13 +3195,14 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             args.input_csv,
             chembl_out,
             limit=limit,
+            metrics=metrics,
             chunk_size=cfg.target.all.chunk_size,
             offset=cfg.target.all.offset,
             id_cols=key_columns,
         )
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
-        merged = merge_results(combined_df, iuphar_df, cfg)
+        merged = merge_results(combined_df, iuphar_df, cfg, metrics=metrics)
         exit_code = validate_and_write(
             merged,
             final_output,
@@ -3105,6 +3211,8 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             id_cols=key_columns,
             raw_format=raw_format,
             reindex_raw=reindex_raw,
+            metrics=metrics,
+            cli_args=args,
         )
         return exit_code
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
