@@ -310,9 +310,7 @@ def test_pipeline_subset__target_postprocess_sidecars(
         working_output = Path(args.final_out)
         working_output.parent.mkdir(parents=True, exist_ok=True)
         working_output.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
-        normalized = get_target_data._normalized_output_path(working_output)
-        normalized.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
-        get_target_data._postprocess_target_exports(normalized, cfg=cfg_obj)
+        get_target_data._postprocess_target_exports(working_output, cfg=cfg_obj)
         return 0
 
     stream = io.StringIO()
