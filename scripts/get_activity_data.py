@@ -101,6 +101,7 @@ from library.processing.activity import (
     apply_activity_annotations,
     compute_activity_bounds,
 )
+from library.postprocessing.activity_extended import process_activity_extended
 from library.table_quality import analyze_table_quality
 from library.validation import validate_activities
 from library.schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
@@ -289,6 +290,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("process_offset", offset=offset)
 
     processed_ids = 0
+    extended_output_path: Path | None = None
 
     def _iter_ids() -> Iterator[str]:
         nonlocal processed_ids
@@ -545,6 +547,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         finally:
             chunk_failures.save(fetch_failure_path, cfg=cfg)
 
+    if exit_code == 0:
+        extended_output_path = process_activity_extended(
+            output_path,
+            base_dir=output_path.parent,
+            verbose=bool(getattr(args, "verbose", False)),
+        )
+
     if limit is not None:
         logger.info("process_limit", limit=processed_ids)
 
@@ -557,12 +566,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
 
     if exit_code == 0:
-        logger.info(
-            "activity_pipeline_done",
-            output=str(output_path),
-            processed=processed_ids,
-            dry_run=False,
-        )
+        log_payload = {
+            "output": str(output_path),
+            "processed": processed_ids,
+            "dry_run": False,
+        }
+        if extended_output_path is not None:
+            log_payload["extended_output"] = str(extended_output_path)
+        logger.info("activity_pipeline_done", **log_payload)
     else:
         extra_payload = last_error_extra
         context_payload = dict(last_error_context) if last_error_context else {}
