@@ -93,7 +93,10 @@ def read_csv_with_fallbacks(
     errors: list[Exception] = []
     for encoding in encodings:
         try:
-            return pd.read_csv(path, sep=sep, encoding=encoding, dtype="string")
+            frame = pd.read_csv(path, sep=sep, encoding=encoding, dtype="string")
+            # Normalise column headers so UTF-8 with BOM exports behave consistently.
+            frame = frame.rename(columns=lambda c: str(c).lstrip("\ufeff"))
+            return frame
         except Exception as exc:  # pragma: no cover - defensive guard
             errors.append(exc)
     if not errors:  # pragma: no cover - defensive guard

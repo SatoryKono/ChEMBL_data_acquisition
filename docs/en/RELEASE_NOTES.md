@@ -15,4 +15,5 @@
   `local.io` configuration fields.
 - Synced CLI documentation tables with the packaged entry points and switched the determinism smoke test to the supported
   `--final-out` flag to avoid deprecation warnings during automated checks.
+- Normalised CSV header handling in post-processing so UTF-8 BOM markers are stripped before downstream helpers consume the data.
 

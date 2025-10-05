@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import importlib.util
 import sys
 import types
@@ -20,6 +21,8 @@ import pytest
 import library
 from library.config import Config
 from library.pipelines.target import cellularity, helpers, multifunctional
+from library.postprocessing import names as target_names
+from library.postprocessing.names import process_target_names
 from library.postprocessing.target import isoform
  
 
@@ -139,6 +142,44 @@ def test_postprocess_target_table_file__writes_expected_bytes(
         "string"
     )
     pdt.assert_frame_equal(result, expected)
+
+
+@pytest.mark.unit
+def test_process_target_names__strips_bom_headers(tmp_path: Path) -> None:
+    """Ensure UTF-8 BOM headers are stripped so downstream helpers continue to work."""
+
+    # UTF-8 with BOM exports would previously keep the BOM in ``target_chembl_id``
+    # which meant downstream helpers could not find required columns.
+    csv_path = tmp_path / "output.target_20240101.csv"
+    with csv_path.open("w", newline="", encoding="utf-8-sig") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(
+            [
+                "target_chembl_id",
+                "pref_name",
+                "synonyms",
+                "contrion",
+                "active_component_type",
+            ]
+        )
+        writer.writerow([
+            "CHEMBL_TGT",
+            "Example Compound",
+            "Example Alias|Example Compound",
+            "Na|Cl",
+            "protein",
+        ])
+
+    result_info = process_target_names(csv_path)
+    output_path = Path(result_info["path"])
+
+    assert output_path.name == "name.output.target_20240101.csv"
+    assert output_path.exists()
+    assert result_info["summary"]["rows_after"] == 3
+
+    result = pd.read_csv(output_path, dtype=str, keep_default_na=False).astype("string")
+    assert list(result.columns) == list(target_names.TARGET_NAMES_COLUMNS)
+    assert set(result["target_chembl_id"]) == {"CHEMBL_TGT"}
 
 
 @pytest.mark.unit
