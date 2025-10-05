@@ -208,13 +208,81 @@ def test_transform_activity_frame__fills_missing_columns(activity_resources: Pat
     assert row.activity_chembl_id == "ACT-001"
     assert row.compound_key == "CMPD-1"
     assert row.compound_name == "Compound One"
-    assert pd.isna(row.saltform_id)
+    assert row.saltform_id == "MOL-1"
     assert bool(row.multmol_assay) is False
     assert bool(row.rounded_data_citation) is False
     assert bool(row.is_citation) is False
     assert pd.isna(row.original_activity_approx)
     assert pd.isna(row.original_activity_exact)
     assert row.pA_value == pytest.approx(5.0)
+
+
+def test_transform_activity_frame__backfills_null_identifiers_and_log_value(
+    activity_resources: Path,
+) -> None:
+    dictionary_root = activity_resources / "dictionary"
+    frame = pd.DataFrame(
+        {
+            "activity_chembl_id": [pd.NA, ""],
+            "activity_id": ["ACT-1", "ACT-2"],
+            "salt_chembl_id": [pd.NA, ""],
+            "molecule_chembl_id": ["CHEMBL1", "CHEMBL2"],
+            "target_chembl_id": ["TAR-1", "TAR-1"],
+            "assay_chembl_id": ["ASSAY-1", "ASSAY-1"],
+            "document_chembl_id": ["DOC-1", "DOC-1"],
+            "bao_endpoint": ["BAO:000001", "BAO:000001"],
+            "standard_type": ["IC50", "IC50"],
+            "standard_value": [1.0, 10.0],
+            "standard_units": ["nM", "uM"],
+            "log_value": [pd.NA, ""],
+            "pchembl_value": [9.0, 8.0],
+            "bao_format": ["fmt", "fmt"],
+        }
+    )
+
+    transformed = _transform_activity_frame(
+        frame,
+        dictionary_root=dictionary_root,
+        targets_override=None,
+    )
+
+    assert transformed["activity_chembl_id"].tolist() == ["ACT-1", "ACT-2"]
+    assert transformed["saltform_id"].tolist() == ["CHEMBL1", "CHEMBL2"]
+    assert transformed["pA_value"].tolist() == pytest.approx([9.0, 8.0])
+
+
+def test_transform_activity_frame__computes_log_value_from_standard_fields(
+    activity_resources: Path,
+) -> None:
+    dictionary_root = activity_resources / "dictionary"
+    frame = pd.DataFrame(
+        {
+            "activity_chembl_id": [pd.NA],
+            "activity_id": ["ACT-3"],
+            "salt_chembl_id": [pd.NA],
+            "molecule_chembl_id": ["CHEMBL3"],
+            "target_chembl_id": ["TAR-2"],
+            "assay_chembl_id": ["ASSAY-2"],
+            "document_chembl_id": ["DOC-2"],
+            "bao_endpoint": ["BAO:000002"],
+            "standard_type": ["IC50"],
+            "standard_value": [10.0],
+            "standard_units": ["nM"],
+            "log_value": [pd.NA],
+            "pchembl_value": [pd.NA],
+            "bao_format": ["fmt"],
+        }
+    )
+
+    transformed = _transform_activity_frame(
+        frame,
+        dictionary_root=dictionary_root,
+        targets_override=None,
+    )
+
+    assert transformed.loc[0, "activity_chembl_id"] == "ACT-3"
+    assert transformed.loc[0, "saltform_id"] == "CHEMBL3"
+    assert transformed.loc[0, "pA_value"] == pytest.approx(8.0)
 
 
 def test_apply_multimol_logic__marks_duplicate_multimol_assay(

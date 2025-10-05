@@ -513,23 +513,54 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
     df = frame.copy()
     filled: set[str] = set()
 
-    if "activity_chembl_id" not in df.columns and "activity_id" in df.columns:
-        df["activity_chembl_id"] = df["activity_id"].astype("string")
-        filled.add("activity_chembl_id")
+    def _prepare_string(column: str) -> pd.Series:
+        df[column] = df[column].astype("string")
+        return df[column]
+
+    def _string_missing(series: pd.Series) -> pd.Series:
+        stripped = series.str.strip()
+        empty = stripped.eq("").fillna(False)
+        return series.isna() | empty
+
+    def _fill_from(column: str, fallback_column: str) -> None:
+        if column in df.columns:
+            target = _prepare_string(column)
+            if fallback_column in df.columns:
+                fallback = df[fallback_column].astype("string")
+                mask = _string_missing(target)
+                if mask.any():
+                    fallback_mask = ~_string_missing(fallback)
+                    combined = mask & fallback_mask
+                    if combined.any():
+                        df.loc[combined, column] = fallback.loc[combined]
+                        filled.add(column)
+        elif fallback_column in df.columns:
+            df[column] = df[fallback_column].astype("string")
+            filled.add(column)
+
+    _fill_from("activity_chembl_id", "activity_id")
 
     if "compound_name" not in df.columns and "molecule_pref_name" in df.columns:
         df["compound_name"] = df["molecule_pref_name"].astype("string")
         filled.add("compound_name")
 
-    if "compound_key" not in df.columns:
-        for candidate in ("parent_molecule_chembl_id", "molecule_chembl_id"):
-            if candidate in df.columns:
-                df["compound_key"] = df[candidate].astype("string")
-                filled.add("compound_key")
+    for candidate in ("parent_molecule_chembl_id", "molecule_chembl_id"):
+        _fill_from("compound_key", candidate)
+        if "compound_key" in df.columns:
+            current = df["compound_key"].astype("string")
+            if not _string_missing(current).any():
                 break
+
+    _fill_from("salt_chembl_id", "molecule_chembl_id")
 
     if "log_value" in df.columns:
         df["log_value"] = pd.to_numeric(df["log_value"], errors="coerce").astype("Float64")
+        if "pchembl_value" in df.columns:
+            fallback = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
+            mask = df["log_value"].isna() & fallback.notna()
+            if mask.any():
+                df.loc[mask, "log_value"] = fallback.loc[mask]
+                filled.add("log_value")
     elif "pchembl_value" in df.columns:
         df["log_value"] = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
         filled.add("log_value")
@@ -557,6 +588,7 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
         mask = df["log_value"].isna() & computed.notna()
         if mask.any():
             df.loc[mask, "log_value"] = computed.loc[mask]
+            filled.add("log_value")
 
     bool_defaults = {
         "multmol_assay",
@@ -577,10 +609,6 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
         if column not in df.columns:
             df[column] = pd.Series(pd.NA, index=df.index, dtype="Float64")
             filled.add(column)
-
-    if "salt_chembl_id" not in df.columns:
-        df["salt_chembl_id"] = pd.Series(pd.NA, index=df.index, dtype="string")
-        filled.add("salt_chembl_id")
 
     if "nstereo" not in df.columns:
         df["nstereo"] = pd.Series(pd.NA, index=df.index, dtype="Int64")
@@ -630,9 +658,11 @@ def _derive_output_path(input_path: Path) -> Path:
     base_name = helpers.normalise_export_basename(input_path)
     if base_name.startswith("output.activities_"):
         base_name = base_name.replace("output.activities_", "output.activity_", 1)
-    if not base_name.startswith("output.activity_"):
+    if base_name.startswith("output.activity_"):
+        final_name = base_name.replace("output.activity_", "extended.output.activity_", 1)
+    else:
         logger.warning("activity_extended_unexpected_basename", basename=base_name)
-    final_name = base_name.replace("output.activity_", "extended.output.activity_", 1)
+        final_name = base_name if base_name.startswith("extended.") else f"extended.{base_name}"
     return input_path.with_name(final_name)
 
 
@@ -736,7 +766,10 @@ def process_activity_extended(
             total=len(processed),
         )
     logger.info("activity_extended_saving", path=str(output_path))
-    helpers.write_csv(processed, output_path, columns=_FINAL_COLUMN_ORDER)
+    to_write = processed.copy()
+    if "pA_value" in to_write.columns:
+        to_write["pA_value"] = to_write["pA_value"].astype("string")
+    helpers.write_csv(to_write, output_path, columns=_FINAL_COLUMN_ORDER)
     logger.info(
         "activity_extended_saved",
         path=str(output_path),
