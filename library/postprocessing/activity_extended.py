@@ -322,6 +322,19 @@ def _load_target_metadata(path: Path) -> pd.DataFrame:
         dtype_map=_TARGET_METADATA_READ_SCHEMA,
         na_values=_NA_MARKERS,
     )
+    if "unicellular_organism" not in frame.columns:
+        source_column: str | None = None
+        for candidate in ("type", "organism_type"):
+            if candidate in frame.columns:
+                source_column = candidate
+                break
+        if source_column is not None:
+            source = frame[source_column].astype("string")
+            normalised = source.str.strip().str.lower()
+            inferred = normalised == "unicellular organism"
+            frame["unicellular_organism"] = inferred.astype("boolean")
+        else:
+            frame["unicellular_organism"] = pd.Series(pd.NA, index=frame.index, dtype="boolean")
     frame = frame.rename(columns={"target_sort_order": "sortorder.target"})
     missing = [column for column in _TARGET_COLUMNS if column not in frame.columns]
     if missing:
@@ -341,11 +354,11 @@ def _load_document_lookup(dictionary_root: Path) -> pd.DataFrame:
 
     frame: pd.DataFrame | None = None
     missing_errors: list[str] = []
-    for sep in (",", "\t"):
+    for sep in helpers.CSV_SEPARATORS:
         try:
             candidate_frame = helpers.read_csv_with_fallbacks(candidate, sep=sep)
         except Exception as exc:
-            missing_errors.append(f"sep='{sep}': {exc!s}")
+            missing_errors.append(f"sep={sep!r}: {exc!s}")
             continue
 
         resolved_columns: dict[str, str] = {}
@@ -371,8 +384,8 @@ def _load_document_lookup(dictionary_root: Path) -> pd.DataFrame:
             break
 
         missing_errors.append(
-            "sep='{}': available columns -> {}".format(
-                sep, ", ".join(candidate_frame.columns) or "<none>"
+            "sep={}: available columns -> {}".format(
+                repr(sep), ", ".join(candidate_frame.columns) or "<none>"
             )
         )
 
