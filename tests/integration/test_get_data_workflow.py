@@ -9,7 +9,8 @@ from typing import Callable
 import pandas as pd
 import pytest
 
-from scripts import get_data
+from library.config import Config
+from scripts import get_data, get_target_data
 from tests.helpers.logs import parse_log_lines
 
 
@@ -252,3 +253,100 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
     final_output = step.expected_output(cfg)
     assert final_output.exists()
     assert attempts["count"] == 2
+
+
+@pytest.mark.integration
+def test_pipeline_subset__target_postprocess_sidecars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _prepare_environment(tmp_path)
+    _write_input(
+        cfg,
+        "target",
+        pd.DataFrame(
+            [
+                {
+                    "target_chembl_id": "CHEMBL1",
+                    "target_name": "Alpha",
+                    "organism": "Homo sapiens",
+                }
+            ],
+            dtype="string",
+        ),
+    )
+
+    call_order: list[str] = []
+
+    def _sidecar_path(source: Path, prefix: str) -> Path:
+        canonical = get_target_data._normalise_target_export_name(source).lstrip(".")
+        destination = source.with_name(f"{prefix}{canonical}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+        return destination
+
+    def _fake_organism(source: Path, *, cfg: Config) -> Path:
+        call_order.append("organism")
+        return _sidecar_path(source, "organism.")
+
+    def _fake_isoform(
+        source: Path,
+        *,
+        cfg: Config,
+        context: get_target_data.IsoformPostprocessContext | None = None,
+        ambiguous_classifications: int | None = None,
+    ) -> Path:
+        call_order.append("isoform")
+        return _sidecar_path(source, "isoform.")
+
+    def _fake_names(source: Path, *, cfg: Config) -> Path:
+        call_order.append("names")
+        return _sidecar_path(source, "name.")
+
+    def _fake_iuphar(source: Path, *, verbose: bool = True) -> Path:
+        call_order.append("iuphar")
+        return _sidecar_path(source, "IUPHAR.")
+
+    def _stub_run_all(cfg_obj: Config, args: argparse.Namespace) -> int:
+        working_output = Path(args.final_out)
+        working_output.parent.mkdir(parents=True, exist_ok=True)
+        working_output.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+        normalized = get_target_data._normalized_output_path(working_output)
+        normalized.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+        get_target_data._postprocess_target_exports(normalized, cfg=cfg_obj)
+        return 0
+
+    stream = io.StringIO()
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
+    )
+
+    step = get_data.PipelineStep("target", get_target_data.main, "all")
+
+    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", (step,), raising=False)
+    monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+    monkeypatch.setattr(get_target_data, "run_all", _stub_run_all)
+    monkeypatch.setattr(
+        get_target_data,
+        "_postprocess_organism_export",
+        _fake_organism,
+    )
+    monkeypatch.setattr(get_target_data, "_postprocess_isoform_export", _fake_isoform)
+    monkeypatch.setattr(get_target_data, "_postprocess_names_export", _fake_names)
+    monkeypatch.setattr(get_target_data, "_postprocess_iuphar_export", _fake_iuphar)
+
+    status = get_data.run_pipeline(cfg)
+
+    assert status == 0
+    assert call_order == ["organism", "isoform", "names", "iuphar"]
+
+    final_output = step.expected_output(cfg)
+    assert final_output.exists()
+    sidecars = {
+        "organism": final_output.with_name(f"organism.{final_output.name}"),
+        "isoform": final_output.with_name(f"isoform.{final_output.name}"),
+        "names": final_output.with_name(f"name.{final_output.name}"),
+        "iuphar": final_output.with_name(f"IUPHAR.{final_output.name}"),
+    }
+    for path in sidecars.values():
+        assert path.exists()
+

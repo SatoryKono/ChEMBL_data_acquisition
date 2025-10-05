@@ -75,6 +75,8 @@ def test_keyboard_aliases__cases(command: str) -> None:
     [
         ("output.target_20251005.csv", True),
         ("targets_20251005_normalized.csv", True),
+        ("output.targets_20251005.csv.tmp", True),
+        (".output.targets_20251005.csv_normalized.tmp", True),
         ("out.csv", False),
         ("out_chembl.csv", False),
         ("out_uniprot.csv", False),
@@ -405,12 +407,24 @@ def test_postprocess_target_exports__chains_helpers(
         call_order.append("isoform")
         return source
 
+    def _fake_names(path: Path, *, cfg: Config) -> Path:
+        assert Path(path) == source
+        call_order.append("names")
+        return source
+
+    def _fake_iuphar(path: Path, *, verbose: bool = True) -> Path:
+        assert Path(path) == source
+        call_order.append("iuphar")
+        return source
+
     monkeypatch.setattr(get_target_data, "_postprocess_organism_export", _fake_organism)
     monkeypatch.setattr(get_target_data, "_postprocess_isoform_export", _fake_isoform)
+    monkeypatch.setattr(get_target_data, "_postprocess_names_export", _fake_names)
+    monkeypatch.setattr(get_target_data, "_postprocess_iuphar_export", _fake_iuphar)
 
     get_target_data._postprocess_target_exports(source, cfg=cfg)
 
-    assert call_order == ["organism", "isoform"]
+    assert call_order == ["organism", "isoform", "names", "iuphar"]
 
 
 def test_postprocess_target_exports__skips_for_uniprot_suffix(
