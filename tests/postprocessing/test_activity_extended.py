@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import shutil
 from pathlib import Path
 
@@ -67,6 +68,54 @@ def test_augment_activity_frame__fills_existing_blanks() -> None:
         check_names=False,
     )
     assert {"activity_chembl_id", "compound_name", "compound_key", "log_value"} <= filled
+
+
+def test_augment_activity_frame__fills_blank_salt_and_log_value() -> None:
+    frame = pd.DataFrame(
+        {
+            "salt_chembl_id": pd.Series(["", pd.NA], dtype="string"),
+            "molecule_chembl_id": pd.Series(["CHEMBL1", "CHEMBL2"], dtype="string"),
+            "log_value": pd.Series(["", pd.NA], dtype="string"),
+            "pchembl_value": pd.Series([5.5, pd.NA], dtype="Float64"),
+            "standard_value": pd.Series([pd.NA, 50.0], dtype="Float64"),
+            "standard_units": pd.Series(["nM", "nM"], dtype="string"),
+        }
+    )
+
+    augmented, filled = _augment_activity_frame(frame)
+
+    assert list(augmented["salt_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
+    assert str(augmented["salt_chembl_id"].dtype) == "string"
+    expected = pd.Series(
+        [5.5, float(-math.log10(50e-9))], index=frame.index, dtype="Float64"
+    )
+    pd.testing.assert_series_equal(
+        augmented["log_value"],
+        expected,
+        check_names=False,
+        check_exact=False,
+        rtol=1e-6,
+    )
+    assert {"salt_chembl_id", "log_value"} <= filled
+
+
+def test_rename_columns__propagates_backfilled_pA_value() -> None:
+    frame = pd.DataFrame(
+        {
+            "log_value": pd.Series([pd.NA, ""], dtype="string"),
+            "pchembl_value": pd.Series([6.0, 5.0], dtype="Float64"),
+        }
+    )
+
+    augmented, _ = _augment_activity_frame(frame)
+    renamed = _rename_columns(augmented)
+
+    assert "pA_value" in renamed.columns
+    pd.testing.assert_series_equal(
+        renamed["pA_value"],
+        pd.Series([6.0, 5.0], index=frame.index, dtype="Float64"),
+        check_names=False,
+    )
 
 
 def test_load_citation_fraction__missing_file(tmp_path: Path) -> None:
