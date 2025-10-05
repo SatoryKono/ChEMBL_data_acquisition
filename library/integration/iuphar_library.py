@@ -64,7 +64,17 @@ class IUPHARData:
         """
         chain: list[str] = []
         current = start_id
+        visited: set[str] = set()
         while current:
+            if current in visited:
+                logger.warning(
+                    "family_chain_cycle",
+                    start_id=start_id,
+                    cycle_member=current,
+                    chain=chain,
+                )
+                break
+            visited.add(current)
             chain.append(current)
             parent_series = self.family_df.loc[
                 self.family_df["family_id"] == current, "parent_family_id"
