@@ -76,6 +76,29 @@ def test_postprocess_target_table__fills_missing_columns(tmp_path: Path) -> None
 
 
 @pytest.mark.unit
+def test_postprocess_target_table__normalises_tmp_suffix(tmp_path: Path) -> None:
+    input_path = tmp_path / "output.target_20250101.csv.tmp"
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1"],
+            "uniprot_id_primary": ["P11111"],
+            "organism": ["Human"],
+            "taxon_id": ["9606"],
+            "lineage_superkingdom": ["Eukaryota"],
+            "lineage_phylum": ["Chordata"],
+            "lineage_class": ["Mammalia"],
+        }
+    )
+    frame.to_csv(input_path, index=False)
+
+    output_location = postprocess_target_table(input_path)
+    output_path = Path(output_location)
+
+    assert output_path.name == "organism.output.target_20250101.csv"
+    assert output_path.exists()
+
+
+@pytest.mark.unit
 def test_postprocess_target_table__handles_missing_identifier_column(
     tmp_path: Path,
 ) -> None:

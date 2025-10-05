@@ -54,7 +54,12 @@ from typing import Any, Iterable, Mapping, MutableMapping, Sequence
 
 import pandas as pd
 
-from .helpers import ENCODING_FALLBACKS, normalise_text, read_csv_with_fallbacks
+from .helpers import (
+    ENCODING_FALLBACKS,
+    normalise_export_basename,
+    normalise_text,
+    read_csv_with_fallbacks,
+)
 from library.common.csv_utils import write_csv_deterministic
 
 _DEFAULT_SEARCH_DIR = Path("data/output")
@@ -406,7 +411,8 @@ def process_target_names(
             by=["target_chembl_id", "molecule_chembl_id", "all_names"],
             kind="mergesort",
         )
-    output_path = path.with_name(f"name.{path.name}")
+    base = normalise_export_basename(path)
+    output_path = path.with_name(f"name.{base}").with_suffix(".csv")
     write_csv_deterministic(
         result,
         output_path,
@@ -592,7 +598,8 @@ def process_target_names(input_path: str | Path, *, verbose: bool = False) -> di
 
     names_df = _build_names_table(frame)
     prefix = "names" if verbose else "name"
-    output_path = source_path.with_name(f"{prefix}.{source_path.name}")
+    base = normalise_export_basename(source_path)
+    output_path = source_path.with_name(f"{prefix}.{base}").with_suffix(".csv")
     helpers.write_csv(names_df, output_path, columns=TARGET_NAMES_COLUMNS)
 
     summary: dict[str, Any] = {

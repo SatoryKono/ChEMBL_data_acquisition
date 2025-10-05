@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from ...common.log import logger
+from ..helpers import normalise_export_basename
 from .cellularity import add_cellularity_smart, FetchLineageCallable
 from .multifunctional import compute_multifunctional
 
@@ -69,7 +70,8 @@ def postprocess_target_table(
         sort=False,
     )
 
-    output_path = path.with_name(f"organism.{path.name}")
+    base = normalise_export_basename(path)
+    output_path = path.with_name(f"organism.{base}").with_suffix(".csv")
     joined.to_csv(output_path, index=False, encoding="utf-8", lineterminator="\n")
     print(f"Postprocessed target table saved to: {output_path.name}")
     return str(output_path)
