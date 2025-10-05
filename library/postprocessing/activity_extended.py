@@ -159,9 +159,11 @@ _FINAL_COLUMN_ORDER: tuple[str, ...] = (
     "activity_chembl_id",
     "saltform_id",
     "molecule_chembl_id",
+    "molecule_chembl_id.1",
     "target_chembl_id",
     "assay_chembl_id",
     "document_chembl_id",
+    "completed",
     "bao_endpoint",
     "standard_type",
     "standard_value",
@@ -169,8 +171,10 @@ _FINAL_COLUMN_ORDER: tuple[str, ...] = (
     "bao_format",
     "compound_key",
     "compound_name",
+    "standard_inchi_skeleton",
     "unknown_chirality",
     "multmol_assay",
+    "assay_with_same_target",
     "exact_data_citation",
     "higly_correlated_assay",
     "shuffled_assay",
@@ -304,6 +308,109 @@ def _load_target_metadata(path: Path) -> pd.DataFrame:
             "targets_type.csv missing expected columns: " + ", ".join(sorted(missing))
         )
     return frame.loc[:, list(_TARGET_COLUMNS)]
+
+
+def _load_document_lookup(dictionary_root: Path) -> pd.DataFrame:
+    candidate = dictionary_root / "_document" / "document.csv"
+    if not candidate.exists():
+        raise ActivityExtendedError(
+            "document.csv not found; expected at "
+            f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
+        )
+
+    frame: pd.DataFrame | None = None
+    for sep in (",", "\t"):
+        try:
+            candidate_frame = helpers.read_csv_with_fallbacks(candidate, sep=sep)
+        except Exception:
+            continue
+        if "document_chembl_id" in candidate_frame.columns:
+            frame = candidate_frame
+            break
+    if frame is None:
+        raise ActivityExtendedError(
+            "document.csv missing required 'document_chembl_id' column; unable to join document metadata"
+        )
+
+    columns = ["document_chembl_id", "completed", "review"]
+    for column in columns:
+        if column not in frame.columns:
+            frame[column] = pd.Series(pd.NA, dtype="string")
+    result = frame.loc[:, columns].drop_duplicates(subset=["document_chembl_id"])
+    return result
+
+
+def _load_assay_lookup(dictionary_root: Path) -> pd.DataFrame:
+    candidate = dictionary_root / "_assay" / "assay.csv"
+    if not candidate.exists():
+        raise ActivityExtendedError(
+            "assay.csv not found; expected at "
+            f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
+        )
+    frame: pd.DataFrame | None = None
+    for sep in (",", "\t"):
+        try:
+            candidate_frame = helpers.read_csv_with_fallbacks(candidate, sep=sep)
+        except Exception:
+            continue
+        if "assay_chembl_id" in candidate_frame.columns:
+            frame = candidate_frame
+            break
+    if frame is None:
+        raise ActivityExtendedError(
+            "assay.csv missing required 'assay_chembl_id' column; unable to join assay metadata"
+        )
+    if "assay_with_same_target" not in frame.columns:
+        frame["assay_with_same_target"] = pd.Series(pd.NA, dtype="string")
+    result = frame.loc[:, ["assay_chembl_id", "assay_with_same_target"]]
+    return result.drop_duplicates(subset=["assay_chembl_id"])
+
+
+def _load_testitem_lookup(dictionary_root: Path) -> pd.DataFrame:
+    candidate = dictionary_root / "_testitem" / "testitem.csv"
+    if not candidate.exists():
+        raise ActivityExtendedError(
+            "testitem.csv not found; expected at "
+            f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
+        )
+    frame: pd.DataFrame | None = None
+    for sep in (",", "\t"):
+        try:
+            candidate_frame = helpers.read_csv_with_fallbacks(candidate, sep=sep)
+        except Exception:
+            continue
+        if "molecule_chembl_id" in candidate_frame.columns:
+            frame = candidate_frame
+            break
+    if frame is None:
+        raise ActivityExtendedError(
+            "testitem.csv missing required 'molecule_chembl_id' column; unable to join testitem metadata"
+        )
+    if "standard_inchi_skeleton" not in frame.columns:
+        frame["standard_inchi_skeleton"] = pd.Series(pd.NA, dtype="string")
+    result = frame.loc[:, ["molecule_chembl_id", "standard_inchi_skeleton"]]
+    return result.drop_duplicates(subset=["molecule_chembl_id"])
+
+
+def _insert_columns_after(
+    df: pd.DataFrame, anchor: str, columns: Sequence[str]
+) -> pd.DataFrame:
+    present = [column for column in columns if column in df.columns]
+    if not present:
+        return df
+    base_order = [column for column in df.columns if column not in present]
+    try:
+        index = base_order.index(anchor) + 1
+    except ValueError:
+        index = len(base_order)
+    new_order = base_order[:index] + present + base_order[index:]
+    return df.loc[:, new_order]
+
+
+def _log_join_statistics(event: str, indicator: pd.Series) -> None:
+    matched = int((indicator == "both").sum())
+    missing = int((indicator == "left_only").sum())
+    logger.info(event, matched=matched, missing=missing)
 
 
 def _safe_to_bool(series: pd.Series, column: str) -> pd.Series:
@@ -444,7 +551,6 @@ def _drop_unused_columns(df: pd.DataFrame) -> pd.DataFrame:
         "error_document",
         "exact_cited_activity_samedoc",
         "higly_correlated_cit_samedoc",
-        "standard_inchi_skeleton",
         "standard_inchi_stereo",
         "step1",
         "step2",
@@ -506,6 +612,97 @@ def _annotate_high_citation(df: pd.DataFrame, dictionary_root: Path) -> pd.DataF
         converted["high_citation_rate"], "high_citation_rate"
     ).fillna(False)
     return converted
+
+
+def _merge_document_metadata(df: pd.DataFrame, dictionary_root: Path) -> pd.DataFrame:
+    lookup = _load_document_lookup(dictionary_root)
+    merged = df.merge(
+        lookup,
+        on="document_chembl_id",
+        how="left",
+        indicator="_merge_document",
+    )
+    _log_join_statistics("activity_extended_document_join", merged["_merge_document"])
+    merged.drop(columns=["_merge_document"], inplace=True)
+
+    if "completed" in merged.columns:
+        merged["completed"] = merged["completed"].astype("string")
+    else:
+        merged["completed"] = pd.Series(pd.NA, index=merged.index, dtype="string")
+
+    if "review" in merged.columns:
+        merged["review"] = _safe_to_bool(merged["review"], "review")
+    else:
+        merged["review"] = pd.Series(pd.NA, index=merged.index, dtype="boolean")
+
+    merged = _insert_columns_after(merged, "document_chembl_id", ("completed", "review"))
+    return merged
+
+
+def _merge_assay_metadata(df: pd.DataFrame, dictionary_root: Path) -> pd.DataFrame:
+    lookup = _load_assay_lookup(dictionary_root)
+    merged = df.merge(
+        lookup,
+        on="assay_chembl_id",
+        how="left",
+        indicator="_merge_assay",
+        suffixes=("", "_assay"),
+    )
+    _log_join_statistics("activity_extended_assay_join", merged["_merge_assay"])
+    merged.drop(columns=["_merge_assay"], inplace=True)
+
+    if "assay_with_same_target" in merged.columns:
+        merged["assay_with_same_target"] = _safe_to_int(
+            merged["assay_with_same_target"], "assay_with_same_target"
+        )
+    else:
+        merged["assay_with_same_target"] = pd.Series(pd.NA, index=merged.index, dtype="Int64")
+
+    merged = _insert_columns_after(merged, "multmol_assay", ("assay_with_same_target",))
+    return merged
+
+
+def _merge_testitem_metadata(df: pd.DataFrame, dictionary_root: Path) -> pd.DataFrame:
+    lookup = _load_testitem_lookup(dictionary_root)
+    lookup = lookup.assign(_molecule_chembl_id_expanded=lookup["molecule_chembl_id"])
+    merged = df.merge(
+        lookup,
+        on="molecule_chembl_id",
+        how="left",
+        indicator="_merge_testitem",
+        suffixes=("", "_testitem"),
+    )
+    _log_join_statistics("activity_extended_testitem_join", merged["_merge_testitem"])
+    merged.drop(columns=["_merge_testitem"], inplace=True)
+
+    right_id_column = "_molecule_chembl_id_expanded"
+    if right_id_column in merged.columns:
+        new_ids = merged[right_id_column].astype("string")
+        merged.drop(columns=[right_id_column], inplace=True)
+    else:
+        new_ids = pd.Series(pd.NA, index=merged.index, dtype="string")
+    merged["molecule_chembl_id.1"] = new_ids
+
+    if "standard_inchi_skeleton" in merged.columns:
+        left_inchi = merged["standard_inchi_skeleton"].astype("string")
+        merged.drop(columns=["standard_inchi_skeleton"], inplace=True)
+    else:
+        left_inchi = pd.Series(pd.NA, index=merged.index, dtype="string")
+
+    right_inchi_column = "standard_inchi_skeleton_testitem"
+    if right_inchi_column in merged.columns:
+        right_inchi = merged[right_inchi_column].astype("string")
+        merged.drop(columns=[right_inchi_column], inplace=True)
+    else:
+        right_inchi = pd.Series(pd.NA, index=merged.index, dtype="string")
+    merged["standard_inchi_skeleton"] = right_inchi.fillna(left_inchi)
+
+    merged["molecule_chembl_id.1"] = merged["molecule_chembl_id.1"].astype("string")
+    merged["standard_inchi_skeleton"] = merged["standard_inchi_skeleton"].astype("string")
+
+    merged = _insert_columns_after(merged, "molecule_chembl_id", ("molecule_chembl_id.1",))
+    merged = _insert_columns_after(merged, "compound_name", ("standard_inchi_skeleton",))
+    return merged
 
 
 def _merge_target_metadata(
@@ -816,6 +1013,9 @@ def _transform_activity_frame(
 
     df = _prepare_unknown_chirality(df)
     df = _apply_multimol_logic(df)
+    df = _merge_document_metadata(df, dictionary_root)
+    df = _merge_assay_metadata(df, dictionary_root)
+    df = _merge_testitem_metadata(df, dictionary_root)
     df = _rename_columns(df)
     df = _drop_unused_columns(df)
     df = _compute_citation_flags(df)
