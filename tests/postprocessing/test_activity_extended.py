@@ -284,6 +284,36 @@ def test_select_and_cast__missing_columns_error() -> None:
         _select_and_cast(frame)
 
 
+def test_transform_activity_frame__fills_missing_required_columns(
+    activity_resources: Path,
+) -> None:
+    dictionary_root = activity_resources / "dictionary"
+    frame = pd.DataFrame(
+        {
+            "activity_id": ["ACT-1"],
+            "assay_chembl_id": ["ASSAY-1"],
+            "document_chembl_id": ["DOC-1"],
+            "molecule_chembl_id": ["CHEMBL1"],
+            "target_chembl_id": ["TAR-ALPHA"],
+            "standard_type": ["IC50"],
+            "standard_value": [12.3],
+            "bao_format": ["Single protein"],
+            "pchembl_value": [6.5],
+        }
+    )
+
+    transformed = _transform_activity_frame(
+        frame,
+        dictionary_root=dictionary_root,
+        targets_override=None,
+    )
+
+    assert list(transformed.columns) == list(_FINAL_COLUMN_ORDER)
+    assert transformed.loc[0, "saltform_id"] == "CHEMBL1"
+    assert transformed.loc[0, "pA_value"] == pytest.approx(6.5)
+    assert transformed.loc[0, "compound_name"] is pd.NA
+
+
 def test_process_activity_extended__writes_expected_payload(
     activity_resources: Path,
     tmp_path: Path,

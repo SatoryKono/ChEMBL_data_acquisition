@@ -15,7 +15,7 @@ import re
 import sys
 import warnings
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 import pandas as pd
 
@@ -55,6 +55,39 @@ _REQUIRED_COLUMNS: frozenset[str] = frozenset(
         "nstereo",
     }
 )
+
+_REQUIRED_COLUMN_DTYPES: Mapping[str, str] = {
+    "activity_chembl_id": "string",
+    "salt_chembl_id": "string",
+    "molecule_chembl_id": "string",
+    "target_chembl_id": "string",
+    "assay_chembl_id": "string",
+    "document_chembl_id": "string",
+    "bao_endpoint": "string",
+    "standard_type": "string",
+    "standard_value": "Float64",
+    "log_value": "Float64",
+    "bao_format": "string",
+    "compound_key": "string",
+    "compound_name": "string",
+    "multmol_assay": "boolean",
+    "approx_cited_activity": "boolean",
+    "shuffled_cit": "boolean",
+    "exact_cited_activity": "boolean",
+    "higly_correlated_cit": "boolean",
+    "review_doc": "boolean",
+    "rounded_data_citation": "boolean",
+    "original_activity_approx": "string",
+    "original_activity_exact": "string",
+    "nstereo": "Int64",
+}
+
+_REQUIRED_COLUMN_FALLBACKS: Mapping[str, Callable[[pd.DataFrame], pd.Series | None]] = {
+    "activity_chembl_id": lambda frame: frame.get("activity_id"),
+    "salt_chembl_id": lambda frame: frame.get("molecule_chembl_id"),
+    "compound_name": lambda frame: frame.get("molecule_pref_name"),
+    "log_value": lambda frame: frame.get("pchembl_value"),
+}
 
 _GROUP_KEY_COLUMNS: tuple[str, ...] = (
     "salt_chembl_id",
@@ -286,6 +319,41 @@ def _apply_multimol_logic(df: pd.DataFrame) -> pd.DataFrame:
     return merged
 
 
+def _empty_series(index: pd.Index, dtype: str) -> pd.Series:
+    if dtype == "boolean":
+        return pd.Series(pd.NA, index=index, dtype="boolean")
+    if dtype == "Float64":
+        return pd.Series(pd.NA, index=index, dtype="Float64")
+    if dtype == "Int64":
+        return pd.Series(pd.NA, index=index, dtype="Int64")
+    return pd.Series(pd.NA, index=index, dtype=dtype)
+
+
+def _ensure_required_input_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    df = frame.copy()
+    if df.empty:
+        for column, dtype in _REQUIRED_COLUMN_DTYPES.items():
+            if column not in df.columns:
+                df[column] = pd.Series([], dtype=dtype)
+        return df
+
+    for column, dtype in _REQUIRED_COLUMN_DTYPES.items():
+        if column in df.columns:
+            continue
+        fallback = _REQUIRED_COLUMN_FALLBACKS.get(column)
+        if fallback is not None:
+            candidate = fallback(df)
+            if candidate is not None:
+                aligned = candidate.reindex(df.index)
+                try:
+                    df[column] = aligned.astype(dtype)
+                except (TypeError, ValueError):
+                    df[column] = aligned.astype("string")
+                continue
+        df[column] = _empty_series(df.index, dtype)
+    return df
+
+
 def _rename_columns(df: pd.DataFrame) -> pd.DataFrame:
     renamed = df.rename(
         columns={
@@ -496,10 +564,10 @@ def _transform_activity_frame(
     dictionary_root: Path,
     targets_override: Path | None,
 ) -> pd.DataFrame:
-    working, filled = _augment_activity_frame(frame)
-    missing = _REQUIRED_COLUMNS - set(working.columns)
+    df = _ensure_required_input_columns(frame)
+    missing = _REQUIRED_COLUMNS - set(df.columns)
     if missing:
-        available = ", ".join(sorted(frame.columns))
+        available = ", ".join(sorted(df.columns))
         missing_list = ", ".join(sorted(missing))
         raise ActivityExtendedError(
             "Activity export missing required columns: "
