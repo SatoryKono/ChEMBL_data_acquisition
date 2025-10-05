@@ -86,6 +86,7 @@ python scripts/get_data.py \
 | Assay | `python scripts/get_assay_data.py --input data/input/assay.csv --final-out output/assays.csv --chunk-size 25 --timeout 45` | Shares global options plus per-request chunk size and timeout tuning. |
 | Test item | `python scripts/get_testitem_data.py --input data/input/testitem.csv --final-out output/testitems.csv --request-limit 500 --hierarchy-path config/dictionary/_testitem/molecule_hierarchy.csv` | Provides parent-molecule enrichment controls and request throttling (`--request-limit`, `--batch-size`, `--dry-run`). |
 | Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto` | Resolves tissue metadata, merges ontology cross-references and normalises synonyms for downstream joins. |
+| Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --output output/cellline.csv --batch-size 20 --limit 100` | Retrieves ChEMBL cell line records, normalises nullable identifiers and enforces deterministic ordering. |
 | Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --action-type-enabled --bounds-enabled --quality-threshold warn` | Toggles enrichment hooks (`--action-type-enabled`, `--bounds-enabled`), derived bounds and QA thresholds. |
 
 Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar

@@ -79,6 +79,7 @@ python scripts/get_data.py \
 | Assay | `python scripts/get_assay_data.py --input data/input/assay.csv --final-out output/assays.csv --chunk-size 25 --timeout 45` | Общие флаги плюс настройка размера пачки и таймаута запросов. |
 | Test item | `python scripts/get_testitem_data.py --input data/input/testitem.csv --final-out output/testitems.csv --request-limit 500 --hierarchy-path config/dictionary/_testitem/molecule_hierarchy.csv` | Управляет обогащением родительских молекул и лимитами запросов (`--request-limit`, `--batch-size`, `--dry-run`). |
 | Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto` | Загружает метаданные тканей, объединяет онтологические кросс-ссылки и нормализует синонимы для последующего объединения. |
+| Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --output output/cellline.csv --batch-size 20 --limit 100` | Выгружает данные по клеточным линиям из ChEMBL, нормализует идентификаторы и формирует стабильный CSV. |
 | Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --action-type-enabled --bounds-enabled --quality-threshold warn` | Включает обогащения (`--action-type-enabled`, `--bounds-enabled`), расчёт границ и пороги QA. |
 
 Каждый пайплайн сохраняет детерминированный CSV, файл метаданных

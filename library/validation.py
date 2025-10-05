@@ -16,6 +16,7 @@ __all__ = [
     "validate_columns",
     "validate_activities",
     "validate_assays",
+    "validate_celllines",
     "validate_tissues",
     "validate_testitems",
 ]
@@ -191,6 +192,21 @@ def validate_assays(
         df,
         schema=AssaysSchema,
         schema_name="AssaysSchema",
+        return_result=return_result,
+    )
+
+
+def validate_celllines(
+    df: pd.DataFrame, *, return_result: bool = False
+) -> ValidationResult | pd.DataFrame:
+    """Validate cell line dataframe using :data:`library.schemas.CellLinesSchema`."""
+
+    from library.schemas import CellLinesSchema
+
+    return _validate_with_schema(
+        df,
+        schema=CellLinesSchema,
+        schema_name="CellLinesSchema",
         return_result=return_result,
     )
 

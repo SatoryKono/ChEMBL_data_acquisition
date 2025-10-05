@@ -1099,6 +1099,14 @@ class AssayCfg(_BaseModel):
     limit: int | None = Field(default=None, ge=0)
 
 
+class CelllineCfg(_BaseModel):
+    column: str = "cell_chembl_id"
+    batch_size: int = Field(20, ge=1)
+    timeout: float = Field(30.0, gt=0)
+    limit: int | None = Field(default=None, ge=0)
+    offset: int = Field(0, ge=0)
+
+
 class TissueCfg(_BaseModel):
     column: str = "tissue_chembl_id"
     batch_size: int = Field(20, ge=1)
@@ -1305,6 +1313,7 @@ class TargetCfg(_BaseModel):
 class ChemblPipelinesCfg(_BaseModel):
     activity: ActivityCfg = Field(default_factory=lambda: ActivityCfg())
     assay: AssayCfg = Field(default_factory=lambda: AssayCfg())
+    cellline: CelllineCfg = Field(default_factory=lambda: CelllineCfg())
     tissue: TissueCfg = Field(default_factory=lambda: TissueCfg())
     testitem: TestitemCfg = Field(default_factory=lambda: TestitemCfg())
     document: DocumentCfg = Field(default_factory=lambda: DocumentCfg())
@@ -1456,6 +1465,10 @@ class Config(_BaseModel):
     @property
     def assay(self) -> AssayCfg:
         return self.sources.chembl.pipelines.assay
+
+    @property
+    def cellline(self) -> CelllineCfg:
+        return self.sources.chembl.pipelines.cellline
 
     @property
     def tissue(self) -> TissueCfg:
@@ -1942,7 +1955,7 @@ def _upgrade_legacy_config(data: dict[str, Any]) -> None:
         mapping_cfg = sources["uniprot"].setdefault("mapping", {})
         _merge_mapping(mapping_cfg, data.pop("uniprot_mapping"))
 
-    for section in ("activity", "assay", "testitem", "document", "target"):
+    for section in ("activity", "assay", "cellline", "tissue", "testitem", "document", "target"):
         if section in data:
             pipelines.setdefault(section, {})
             _merge_mapping(pipelines[section], data.pop(section))

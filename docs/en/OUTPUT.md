@@ -359,6 +359,34 @@ ordering follows `TISSUES_COLUMN_ORDER`.
   `output.tissue_<YYYYMMDD>_quality_report_table.csv` and
   `output.tissue_<YYYYMMDD>.quality.json`.
 
+## Cell line export (`cellline`)
+
+Schema: [`library/schemas/celllines.py`](../library/schemas/celllines.py). The
+columns follow `CELL_LINE_COLUMN_ORDER` and include the pipeline metadata
+(`pipeline_version`, `timestamp_utc`).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `cell_chembl_id` | string | Primary ChEMBL identifier (required, unique). |
+| `cell_name` | string | Preferred cell line name. |
+| `cell_description` | string | Free-text description from ChEMBL. |
+| `cell_id` | integer | Internal numeric identifier provided by ChEMBL (nullable). |
+| `cell_source_organism` | string | Organism name for the originating tissue. |
+| `cell_source_tax_id` | integer | NCBI taxonomy identifier for the source organism (nullable). |
+| `cell_source_tissue` | string | Tissue or organ where the cell line originates. |
+| `cellosaurus_id` | string | Cellosaurus accession when available. |
+| `cl_lincs_id` | string | LINCS identifier (nullable). |
+| `clo_id` | string | CLO (Cell Line Ontology) identifier. |
+| `efo_id` | string | EFO cross-reference (nullable). |
+| `pipeline_version` | string | Package version recorded during export. |
+| `timestamp_utc` | string | UTC timestamp of the export. |
+
+Values are normalised using `normalize_cell_lines`: identifier columns are
+trimmed and coerced to `string`, numeric fields use pandas nullable integer
+types (`Int64`). Missing values are exported as empty strings to preserve CSV
+compatibility. Rows are sorted by `cell_chembl_id` to guarantee deterministic
+ordering.
+
 ## Quality reports
 
 The CSV quality report contains the following columns:
