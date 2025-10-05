@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 import sys
+import warnings
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -456,6 +457,7 @@ def process_activity_extended(
     *,
     dictionary_dir: Path | str | None = None,
     targets_csv: Path | str | None = None,
+    base_dir: Path | str | None = None,
 ) -> Path:
     """Create the extended activity export mirroring the Power Query workflow.
 
@@ -471,11 +473,27 @@ def process_activity_extended(
         Optional explicit path to ``targets_type.csv`` overriding the dictionary
         lookup.
 
+    base_dir:
+        Deprecated alias for ``search_dir`` kept for backwards compatibility.
+
     Returns
     -------
     pathlib.Path
         Path to the generated ``extended.output.activity_<stamp>.csv`` file.
     """
+
+    if base_dir is not None:
+        if search_dir is not None:
+            raise TypeError(
+                "process_activity_extended() received both 'search_dir' and 'base_dir'. "
+                "Use 'search_dir' only."
+            )
+        warnings.warn(
+            "'base_dir' is deprecated; pass 'search_dir' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        search_dir = base_dir
 
     resolved_search_dir = Path(search_dir) if search_dir is not None else _current_default_search_dir()
     if not resolved_search_dir.exists():
