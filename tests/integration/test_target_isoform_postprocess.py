@@ -35,3 +35,14 @@ def test_process_targets__normalises_temp_export_basename(tmp_path: Path) -> Non
     expected = tmp_path / "isoform.output.targets_20251005.csv"
     assert output_path == expected
     assert output_path.exists()
+
+
+def test_process_targets__normalises_normalized_extension(tmp_path: Path) -> None:
+    input_path = tmp_path / "output.targets_20251005.csv_normalized"
+    _write_isoform_input(input_path)
+
+    output_path = process_targets(input_csv=str(input_path), verbose=False)
+
+    expected = tmp_path / "isoform.output.targets_20251005.csv"
+    assert output_path == expected
+    assert output_path.exists()
