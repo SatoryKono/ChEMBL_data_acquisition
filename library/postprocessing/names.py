@@ -597,9 +597,8 @@ def process_target_names(input_path: str | Path, *, verbose: bool = False) -> di
     frame = helpers.ensure_string_columns(frame, frame.columns)
 
     names_df = _build_names_table(frame)
-    prefix = "names" if verbose else "name"
     base = normalise_export_basename(source_path)
-    output_path = source_path.with_name(f"{prefix}.{base}").with_suffix(".csv")
+    output_path = source_path.with_name(f"name.{base}").with_suffix(".csv")
     helpers.write_csv(names_df, output_path, columns=TARGET_NAMES_COLUMNS)
 
     summary: dict[str, Any] = {
