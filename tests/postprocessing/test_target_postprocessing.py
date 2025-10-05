@@ -483,3 +483,19 @@ def test_isoform_process_targets__writes_isoform_prefix(tmp_path: Path, snapshot
 
     assert output_path.name == "isoform.output.target_20250101.csv"
     assert output_path.parent == input_path.parent
+
+
+@pytest.mark.unit
+def test_isoform_process_targets__accepts_explicit_custom_name(
+    tmp_path: Path, snapshot_resource: Path
+) -> None:
+    source = snapshot_resource / "target_isoform_minimal.csv"
+    input_path = tmp_path / "custom_export.csv"
+    input_path.write_bytes(source.read_bytes())
+
+    match = "does not match the canonical target export naming conventions"
+    with pytest.warns(UserWarning, match=match):
+        output_path = isoform.process_targets(str(input_path), verbose=False)
+
+    assert output_path.name == "isoform.custom_export.csv"
+    assert output_path.parent == input_path.parent
