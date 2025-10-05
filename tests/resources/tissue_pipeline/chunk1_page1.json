@@ -1,0 +1,15 @@
+{
+  "page_meta": {
+    "next": "/chembl/api/data/tissue.json?format=json&offset=1"
+  },
+  "tissues": [
+    {
+      "tissue_chembl_id": "CHEMBLT1",
+      "pref_name": "Hepatic tissue",
+      "uberon_id": "UBERON:0002107",
+      "efo_id": "EFO:0002107",
+      "bto_id": "BTO:0000759",
+      "caloha_id": "TS-1234"
+    }
+  ]
+}
