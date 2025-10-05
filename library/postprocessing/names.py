@@ -591,7 +591,8 @@ def process_target_names(input_path: str | Path, *, verbose: bool = False) -> di
     frame = helpers.ensure_string_columns(frame, frame.columns)
 
     names_df = _build_names_table(frame)
-    output_path = source_path.with_name(f"name.{source_path.name}")
+    prefix = "names" if verbose else "name"
+    output_path = source_path.with_name(f"{prefix}.{source_path.name}")
     helpers.write_csv(names_df, output_path, columns=TARGET_NAMES_COLUMNS)
 
     summary: dict[str, Any] = {
