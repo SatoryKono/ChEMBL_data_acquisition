@@ -517,7 +517,16 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
     df = frame.copy()
     filled: set[str] = set()
 
-    if "activity_chembl_id" not in df.columns and "activity_id" in df.columns:
+    if "activity_chembl_id" in df.columns:
+        activity_series = df["activity_chembl_id"].astype("string")
+        missing_mask = activity_series.isna() | activity_series.str.strip().eq("").fillna(False)
+        if missing_mask.any() and "activity_id" in df.columns:
+            df.loc[missing_mask, "activity_chembl_id"] = (
+                df.loc[missing_mask, "activity_id"].astype("string")
+            )
+            filled.add("activity_chembl_id")
+        df["activity_chembl_id"] = df["activity_chembl_id"].astype("string")
+    elif "activity_id" in df.columns:
         df["activity_chembl_id"] = df["activity_id"].astype("string")
         filled.add("activity_chembl_id")
 
@@ -544,11 +553,22 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
 
     log_value_series: pd.Series | None = None
 
+    pchembl_series: pd.Series | None = None
+
     if "log_value" in df.columns:
         log_value_series = pd.to_numeric(df["log_value"], errors="coerce").astype("Float64")
-    elif "pchembl_value" in df.columns:
-        log_value_series = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
+    if "pchembl_value" in df.columns:
+        pchembl_series = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
+
+    if log_value_series is None and pchembl_series is not None:
+        log_value_series = pchembl_series.copy()
         filled.add("log_value")
+    elif log_value_series is not None and pchembl_series is not None:
+        mask = log_value_series.isna() & pchembl_series.notna()
+        if mask.any():
+            log_value_series = log_value_series.copy()
+            log_value_series.loc[mask] = pchembl_series.loc[mask]
+            filled.add("log_value")
 
     if log_value_series is not None:
         df["log_value"] = log_value_series
@@ -581,6 +601,7 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
         if mask.any():
             log_value_series = log_value_series.copy()
             log_value_series.loc[mask] = computed.loc[mask]
+            filled.add("log_value")
 
     if log_value_series is not None:
         df["log_value"] = log_value_series
@@ -605,8 +626,23 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
             df[column] = pd.Series(pd.NA, index=df.index, dtype="Float64")
             filled.add(column)
 
-    if "salt_chembl_id" not in df.columns:
-        df["salt_chembl_id"] = pd.Series(pd.NA, index=df.index, dtype="string")
+    if "salt_chembl_id" in df.columns:
+        salt_series = df["salt_chembl_id"].astype("string")
+        missing_mask = salt_series.isna() | salt_series.str.strip().eq("").fillna(False)
+        if missing_mask.any():
+            if "molecule_chembl_id" in df.columns:
+                df.loc[missing_mask, "salt_chembl_id"] = (
+                    df.loc[missing_mask, "molecule_chembl_id"].astype("string")
+                )
+                filled.add("salt_chembl_id")
+            else:
+                df.loc[missing_mask, "salt_chembl_id"] = pd.NA
+        df["salt_chembl_id"] = df["salt_chembl_id"].astype("string")
+    else:
+        if "molecule_chembl_id" in df.columns:
+            df["salt_chembl_id"] = df["molecule_chembl_id"].astype("string")
+        else:
+            df["salt_chembl_id"] = pd.Series(pd.NA, index=df.index, dtype="string")
         filled.add("salt_chembl_id")
 
     if "nstereo" not in df.columns:

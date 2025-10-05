@@ -12,6 +12,7 @@ import pytest
 from library.postprocessing import ActivityExtendedError, process_activity_extended
 from library.postprocessing.activity_extended import (
     _FINAL_COLUMN_ORDER,
+    _augment_activity_frame,
     _annotate_high_citation,
     _apply_multimol_logic,
     _compute_citation_flags,
@@ -39,6 +40,51 @@ def activity_resources(snapshot_resource: Path) -> Path:
 def _copytree(src: Path, dst: Path) -> Path:
     shutil.copytree(src, dst)
     return dst
+
+
+def test_augment_activity_frame__backfills_existing_columns() -> None:
+    frame = pd.DataFrame(
+        {
+            "activity_chembl_id": [pd.NA, "", "  "],
+            "activity_id": [101, 102, 103],
+            "salt_chembl_id": [pd.NA, "", None],
+            "molecule_chembl_id": ["CHEMBL1", "CHEMBL2", "CHEMBL3"],
+            "log_value": [pd.NA, "", None],
+            "pchembl_value": [7.0, 8.0, pd.NA],
+            "standard_value": [1.0, 1.0, 1.0],
+            "standard_units": ["uM", "nM", "nM"],
+        }
+    )
+
+    augmented, filled = _augment_activity_frame(frame)
+
+    assert str(augmented["activity_chembl_id"].dtype) == "string"
+    assert str(augmented["salt_chembl_id"].dtype) == "string"
+    assert {"activity_chembl_id", "salt_chembl_id", "log_value"}.issubset(filled)
+    assert augmented["activity_chembl_id"].tolist() == ["101", "102", "103"]
+    assert augmented["salt_chembl_id"].tolist() == ["CHEMBL1", "CHEMBL2", "CHEMBL3"]
+    assert augmented["log_value"].isna().sum() == 0
+    assert augmented["log_value"].tolist() == pytest.approx([7.0, 8.0, 9.0])
+
+
+def test_rename_columns__pA_value_after_backfill() -> None:
+    frame = pd.DataFrame(
+        {
+            "activity_chembl_id": [pd.NA],
+            "activity_id": [201],
+            "salt_chembl_id": [""],
+            "molecule_chembl_id": ["CHEMBL42"],
+            "log_value": [pd.NA],
+            "pchembl_value": [6.5],
+        }
+    )
+
+    augmented, _ = _augment_activity_frame(frame)
+    renamed = _rename_columns(augmented)
+
+    assert "pA_value" in renamed.columns
+    assert renamed["pA_value"].tolist() == pytest.approx([6.5])
+    assert renamed["saltform_id"].tolist() == ["CHEMBL42"]
 
 
 def test_load_citation_fraction__missing_file(tmp_path: Path) -> None:
@@ -242,7 +288,7 @@ def test_transform_activity_frame__fills_missing_columns(activity_resources: Pat
     assert row.activity_chembl_id == "ACT-001"
     assert row.compound_key == "CMPD-1"
     assert row.compound_name == "Compound One"
-    assert pd.isna(row.saltform_id)
+    assert row.saltform_id == "MOL-1"
     assert bool(row.multmol_assay) is False
     assert bool(row.rounded_data_citation) is False
     assert bool(row.is_citation) is False
@@ -368,6 +414,10 @@ def test_process_activity_extended__writes_expected_payload(
         dtype=str,
     ).fillna("")
 
+    for column in ("pA_value",):
+        result[column] = pd.to_numeric(result[column], errors="coerce")
+        expected[column] = pd.to_numeric(expected[column], errors="coerce")
+
     pd.testing.assert_frame_equal(result, expected, check_dtype=False)
 
 
@@ -441,5 +491,9 @@ def test_process_activity_extended__uses_explicit_input_path(
         activity_resources / "expected.extended.output.activity_20240101.csv",
         dtype=str,
     ).fillna("")
+
+    for column in ("pA_value",):
+        result[column] = pd.to_numeric(result[column], errors="coerce")
+        expected[column] = pd.to_numeric(expected[column], errors="coerce")
 
     pd.testing.assert_frame_equal(result, expected, check_dtype=False)
