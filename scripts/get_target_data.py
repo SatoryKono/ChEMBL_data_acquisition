@@ -269,10 +269,34 @@ def _normalise_target_export_name(path: Path) -> str:
     return name
 
 
+def _export_stem(name: str) -> str:
+    """Return the lowercase stem for ``name`` stripping the CSV extension."""
+
+    lowered = name.lower()
+    return lowered[:-4] if lowered.endswith(".csv") else lowered
+
+
+_UNSUPPORTED_EXPORT_SUFFIXES: tuple[str, ...] = (
+    RAW_SUFFIX.lower(),
+    "_chembl",
+    "_uniprot",
+    "_iuphar",
+)
+
+
 def _is_supported_target_export(path: Path) -> bool:
     """Return ``True`` if *path* represents a canonical target export."""
 
     export_name = _normalise_target_export_name(path)
+    stem = _export_stem(export_name)
+
+    if stem.endswith(_UNSUPPORTED_EXPORT_SUFFIXES):
+        return False
+    if stem.endswith(NORMALIZED_SUFFIX.lower()) and not target_pp._matches_expected_input_name(
+        export_name
+    ):
+        return False
+
     return target_pp._matches_expected_input_name(export_name)
 
 

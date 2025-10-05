@@ -69,6 +69,30 @@ def test_keyboard_aliases__cases(command: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "filename, expected",
+    [
+        ("output.target_20251005.csv", True),
+        ("targets_20251005_normalized.csv", True),
+        ("out.csv", False),
+        ("out_chembl.csv", False),
+        ("out_uniprot.csv", False),
+        ("out_iuphar.csv", False),
+        ("out_raw.csv", False),
+        ("out_normalized.csv", False),
+    ],
+)
+def test_is_supported_target_export__cases(
+    filename: str, expected: bool, tmp_path: Path
+) -> None:
+    path = tmp_path / filename
+    path.write_text("", encoding="utf-8")
+
+    result = get_target_data._is_supported_target_export(path)
+
+    assert result is expected
+
+
+@pytest.mark.parametrize(
     "value, tokens",
     [
         ("P12345", ["P12345"]),
