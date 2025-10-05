@@ -1,0 +1,16 @@
+{
+  "tissues": [
+    {
+      "tissue_chembl_id": "CHEMBL613507",
+      "pref_name": "Liver",
+      "uberon_id": "UBERON:0002107",
+      "efo_id": "EFO:0002067",
+      "bto_id": null,
+      "caloha_id": "TS-0565",
+      "extra_field": "ignored"
+    }
+  ],
+  "page_meta": {
+    "next": "/chembl/api/data/tissue.json?format=json&tissue_chembl_id__in=CHEMBL613507,CHEMBL2109249&limit=2&offset=1"
+  }
+}

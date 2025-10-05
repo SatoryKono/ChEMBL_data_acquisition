@@ -1,0 +1,4 @@
+tissue_chembl_id,pref_name,uberon_id,efo_id,bto_id,caloha_id,pipeline_version,timestamp_utc
+CHEMBL2109249,Cerebral cortex,UBERON:0000956,,BTO:0000142,,0.1.3,2020-01-01T00:00:00+00:00
+CHEMBL613507,Liver,UBERON:0002107,EFO:0002067,,TS-0565,0.1.3,2020-01-01T00:00:00+00:00
+CHEMBL999999,,,,,,0.1.3,2020-01-01T00:00:00+00:00

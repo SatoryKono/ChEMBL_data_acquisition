@@ -1,0 +1,11 @@
+{
+  "tissues": [
+    {
+      "tissue_chembl_id": "CHEMBL2109249",
+      "pref_name": "Cerebral cortex",
+      "uberon_id": "UBERON:0000956",
+      "bto_id": "BTO:0000142"
+    }
+  ],
+  "page_meta": {}
+}
