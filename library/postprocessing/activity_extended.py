@@ -17,6 +17,7 @@ import warnings
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
+import numpy as np
 import pandas as pd
 
 from library.common.log import logger
@@ -333,13 +334,15 @@ def _empty_series(index: pd.Index, dtype: str) -> pd.Series:
     return pd.Series(pd.NA, index=index, dtype=dtype)
 
 
-def _ensure_required_input_columns(frame: pd.DataFrame) -> pd.DataFrame:
+def _ensure_required_input_columns(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]]:
     df = frame.copy()
+    filled: set[str] = set()
     if df.empty:
         for column, dtype in _REQUIRED_COLUMN_DTYPES.items():
             if column not in df.columns:
                 df[column] = pd.Series([], dtype=dtype)
-        return df
+                filled.add(column)
+        return df, filled
 
     for column, dtype in _REQUIRED_COLUMN_DTYPES.items():
         if column in df.columns:
@@ -353,9 +356,11 @@ def _ensure_required_input_columns(frame: pd.DataFrame) -> pd.DataFrame:
                     df[column] = aligned.astype(dtype)
                 except (TypeError, ValueError):
                     df[column] = aligned.astype("string")
+                filled.add(column)
                 continue
         df[column] = _empty_series(df.index, dtype)
-    return df
+        filled.add(column)
+    return df, filled
 
 
 def _rename_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -537,9 +542,48 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
                     filled.add("compound_key")
                     break
 
-    if "log_value" not in df.columns and "pchembl_value" in df.columns:
-        df["log_value"] = pd.to_numeric(df["pchembl_value"], errors="coerce")
+    log_value_series: pd.Series | None = None
+
+    if "log_value" in df.columns:
+        log_value_series = pd.to_numeric(df["log_value"], errors="coerce").astype("Float64")
+    elif "pchembl_value" in df.columns:
+        log_value_series = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
         filled.add("log_value")
+
+    if log_value_series is not None:
+        df["log_value"] = log_value_series
+
+    if (
+        log_value_series is not None
+        and "standard_value" in df.columns
+        and "standard_units" in df.columns
+    ):
+        std_value = pd.to_numeric(df["standard_value"], errors="coerce")
+        units = df["standard_units"].astype("string").str.strip().str.lower()
+        factors = units.map({
+            "m": 1.0,
+            "mm": 1e-3,
+            "um": 1e-6,
+            "µm": 1e-6,
+            "nm": 1e-9,
+            "pm": 1e-12,
+        })
+        factors = pd.to_numeric(factors, errors="coerce")
+        molar = std_value * factors
+        computed = pd.Series(pd.NA, index=df.index, dtype="Float64")
+        valid = molar.notna() & (molar > 0)
+        if valid.any():
+            computed_values = -np.log10(molar[valid].astype("float64"))
+            computed.loc[valid] = pd.Series(computed_values, index=df.index[valid]).astype(
+                "Float64"
+            )
+        mask = log_value_series.isna() & computed.notna()
+        if mask.any():
+            log_value_series = log_value_series.copy()
+            log_value_series.loc[mask] = computed.loc[mask]
+
+    if log_value_series is not None:
+        df["log_value"] = log_value_series
 
     bool_defaults = {
         "multmol_assay",
@@ -578,7 +622,9 @@ def _transform_activity_frame(
     dictionary_root: Path,
     targets_override: Path | None,
 ) -> pd.DataFrame:
-    df = _ensure_required_input_columns(frame)
+    df, ensured = _ensure_required_input_columns(frame)
+    df, augmented = _augment_activity_frame(df)
+    filled = ensured | augmented
     missing = _REQUIRED_COLUMNS - set(df.columns)
     if missing:
         available = ", ".join(sorted(df.columns))
@@ -597,6 +643,7 @@ def _transform_activity_frame(
             "activity_extended_missing_columns_filled",
             columns=sorted(filled),
         )
+
     df = _prepare_unknown_chirality(df)
     df = _apply_multimol_logic(df)
     df = _rename_columns(df)
@@ -609,7 +656,20 @@ def _transform_activity_frame(
 
 
 def _derive_output_path(input_path: Path) -> Path:
-    return input_path.with_name(f"extended.{input_path.name}")
+    base_name = helpers.normalise_export_basename(input_path)
+    candidate = base_name
+    while candidate.startswith("extended."):
+        candidate = candidate[len("extended.") :]
+
+    match = _FILENAME_RE.match(candidate)
+    if match is not None:
+        stamp = match.group(1)
+        final_name = f"extended.output.activity_{stamp}.csv"
+    else:
+        logger.warning("activity_extended_unexpected_basename", basename=base_name)
+        final_name = f"extended.{candidate}"
+
+    return input_path.with_name(final_name)
 
 
 def process_activity_extended(
@@ -694,7 +754,30 @@ def process_activity_extended(
     )
 
     output_path = _derive_output_path(input_path)
+    logger.info(
+        "activity_extended_dataframe_shape",
+        rows=processed.shape[0],
+        columns=processed.shape[1],
+    )
+    logger.info(
+        "activity_extended_columns",
+        columns=sorted(processed.columns.tolist()),
+    )
+    for column in ("activity_chembl_id", "saltform_id", "pA_value"):
+        non_null = int(processed[column].notna().sum()) if column in processed.columns else 0
+        logger.info(
+            "activity_extended_non_null_counts",
+            column=column,
+            non_null=non_null,
+            total=len(processed),
+        )
+    logger.info("activity_extended_saving", path=str(output_path))
     helpers.write_csv(processed, output_path, columns=_FINAL_COLUMN_ORDER)
+    logger.info(
+        "activity_extended_saved",
+        path=str(output_path),
+        rows=len(processed),
+    )
     return output_path
 
 
