@@ -528,13 +528,22 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
                 filled.add("compound_key")
                 break
 
+    log_value_series: pd.Series | None = None
+
     if "log_value" in df.columns:
-        df["log_value"] = pd.to_numeric(df["log_value"], errors="coerce").astype("Float64")
+        log_value_series = pd.to_numeric(df["log_value"], errors="coerce").astype("Float64")
     elif "pchembl_value" in df.columns:
-        df["log_value"] = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
+        log_value_series = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
         filled.add("log_value")
 
-    if "log_value" in df.columns and "standard_value" in df.columns and "standard_units" in df.columns:
+    if log_value_series is not None:
+        df["log_value"] = log_value_series
+
+    if (
+        log_value_series is not None
+        and "standard_value" in df.columns
+        and "standard_units" in df.columns
+    ):
         std_value = pd.to_numeric(df["standard_value"], errors="coerce")
         units = df["standard_units"].astype("string").str.strip().str.lower()
         factors = units.map({
@@ -554,9 +563,13 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
             computed.loc[valid] = pd.Series(computed_values, index=df.index[valid]).astype(
                 "Float64"
             )
-        mask = df["log_value"].isna() & computed.notna()
+        mask = log_value_series.isna() & computed.notna()
         if mask.any():
-            df.loc[mask, "log_value"] = computed.loc[mask]
+            log_value_series = log_value_series.copy()
+            log_value_series.loc[mask] = computed.loc[mask]
+
+    if log_value_series is not None:
+        df["log_value"] = log_value_series
 
     bool_defaults = {
         "multmol_assay",
