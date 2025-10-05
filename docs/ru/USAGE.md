@@ -245,23 +245,21 @@ python scripts/get_assay_data.py \
 | Опция | Значение по умолчанию | Описание |
 |-------|-----------------------|----------|
 | `--column` | `tissue_chembl_id` | Колонка с идентификаторами тканей ChEMBL. |
-| `--chunk-size` | `50` | Количество идентификаторов в одном запросе к `/tissue`. |
+| `--batch-size` | `20` | Количество идентификаторов в одном запросе к `/tissue`. |
 | `--timeout` | `30.0` | HTTP-таймаут на запрос. |
 | `--limit`, `--offset` | `None`, `0` | Ограничение диапазона до обращения к API. |
-| `--xref-sources` | `uberon,efo,bto,caloha` | Список онтологий через запятую, которые нужно расширять. |
-| `--raw-out` | `None` | Путь для сохранения «сырого» объединённого набора до нормализации. |
-| `--raw-format` | `parquet` | Формат файла для `--raw-out` (`csv` или `parquet`). |
+| `--mode` | `chembl` | Источник данных (на данный момент только `chembl`). |
 
-Пример, сохраняющий унифицированную таблицу и ограничивающий онтологии:
+Пример, сохраняющий унифицированную таблицу и ограничивающий диапазон идентификаторов:
 
 ```bash
 python scripts/get_tissue_data.py \
   --input data/input/tissue.csv \
   --final-out output/tissues.csv \
   --config config/config.yaml \
-  --chunk-size 50 \
-  --xref-sources uberon,efo,bto \
-  --limit 250
+  --batch-size 25 \
+  --limit 200 \
+  --offset 10
 ```
 
 ## Пайплайн клеточных линий `get_cellline_data`

@@ -309,50 +309,27 @@ Schema: [`library/schemas/testitems.py`](../library/schemas/testitems.py).
 Schema: [`library/schemas/tissues.py`](../library/schemas/tissues.py). Column
 ordering follows `TISSUES_COLUMN_ORDER`.
 
-### Core identifiers and naming
+### Columns
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `tissue_chembl_id` | string | Primary identifier (non-null, unique). |
-| `pref_name` | string | Preferred tissue name (non-null). |
-| `synonyms` | string | Semicolon-separated synonyms aggregated across sources. |
-| `organism` | string | Organism name resolved from ChEMBL metadata. |
-| `organism_tax_id` | string/int | NCBI taxonomy identifier when provided. |
-| `organism_common_name` | string | Common name (e.g., `human`). |
-
-### Ontology cross-references
-
-| Column | Description |
-|--------|-------------|
-| `uberon_id`, `uberon_label` | UBERON accession and preferred label. |
-| `efo_id`, `efo_label` | EFO identifier and label. |
-| `bto_id`, `bto_label` | BTO (BRENDA Tissue Ontology) cross reference. |
-| `caloha_id`, `caloha_label` | Caloha anatomical ontology mapping. |
-| `lincs_id`, `lincs_pref_name` | LINCS tissue identifier and label. |
-| `ccle_id`, `ccle_name` | CCLE tissue identifier and display name. |
-
-### Hierarchy and lineage
-
-| Column | Description |
-|--------|-------------|
-| `parent_tissue_chembl_id` | Direct parent within the ChEMBL tissue hierarchy (nullable). |
-| `hierarchy_level` | Integer depth starting at `0` for root nodes. |
-| `lineage` | `>`-delimited path from the root to the leaf tissue. |
-
-### Audit columns
-
-| Column | Description |
-|--------|-------------|
-| `pipeline_version` | Package version used for the export. |
-| `timestamp_utc` | UTC timestamp of export. |
+| `tissue_chembl_id` | string | Primary identifier returned by the `/tissue` endpoint. Placeholders for missing records preserve the requested identifier even if ChEMBL omits it. |
+| `pref_name` | string | Preferred tissue name where available. |
+| `uberon_id` | string | UBERON cross-reference supplied by ChEMBL. |
+| `efo_id` | string | EFO cross-reference supplied by ChEMBL. |
+| `bto_id` | string | BRENDA Tissue Ontology cross-reference supplied by ChEMBL. |
+| `caloha_id` | string | Caloha anatomical ontology identifier supplied by ChEMBL. |
+| `pipeline_version` | string | Package version inserted by :func:`library.pipelines.common.add_pipeline_metadata`. |
+| `timestamp_utc` | string | UTC timestamp of the pipeline run in ISO 8601 format. |
 
 ### Sorting, nulls and companion artefacts
 
-- Rows are sorted by `tissue_chembl_id` (ascending) and then by `pref_name` to
-  guarantee deterministic ordering.
-- `tissue_chembl_id`, `pref_name`, `pipeline_version` and `timestamp_utc` are
-  always populated. Optional cross-reference fields are normalised to empty
-  strings rather than `NULL` tokens.
+- Rows are sorted by `tissue_chembl_id` (ascending) to guarantee deterministic
+  ordering. Ties are broken deterministically by the CSV writer.
+- Cross-reference columns are emitted using the nullable pandas string type and
+  serialised as empty fields (`<NA>` when reloaded with `dtype="string"`).
+- Metadata columns are populated for every record, including placeholders for
+  missing identifiers.
 - When `--final-out` is omitted the CLI writes
   `output.tissue_<YYYYMMDD>.csv` alongside
   `output.tissue_<YYYYMMDD>.meta.yaml`,

@@ -1,0 +1,15 @@
+{
+  "tissues": [
+    {
+      "tissue_chembl_id": "CHEMBLT2",
+      "pref_name": null,
+      "uberon_id": "UBERON:0002",
+      "efo_id": "EFO:0002",
+      "bto_id": "",
+      "caloha_id": null
+    }
+  ],
+  "page_meta": {
+    "next": null
+  }
+}

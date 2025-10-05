@@ -28,7 +28,7 @@ End-to-end smoke tests now cover every `scripts/get_*` entrypoint via `tests/e2e
 - writes the derived tables with deterministic ordering and derived fields, and
 - honours `--skip-existing` semantics without invoking the pipeline.
 
-The tests exercise success and failure paths for `get_testitem_data`, `get_document_data`, `get_target_data`, `get_assay_data` and `get_activity_data`, bringing the CLI surface under the deterministic test umbrella.
+The tests exercise success and failure paths for `get_testitem_data`, `get_document_data`, `get_target_data`, `get_assay_data`, `get_tissue_data` and `get_activity_data`, bringing the CLI surface under the deterministic test umbrella.
 
 ## Running tests and generating reports
 
