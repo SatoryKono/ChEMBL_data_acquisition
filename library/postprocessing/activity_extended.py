@@ -648,6 +648,13 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
     if "salt_chembl_id" not in df.columns:
         df["salt_chembl_id"] = pd.Series(pd.NA, index=df.index, dtype="string")
         filled.add("salt_chembl_id")
+    else:
+        mask = _string_missing_mask(df["salt_chembl_id"])
+        if mask.any() and "molecule_chembl_id" in df.columns:
+            df.loc[mask, "salt_chembl_id"] = df.loc[mask, "molecule_chembl_id"].astype(
+                "string"
+            )
+            filled.add("salt_chembl_id")
 
     if "nstereo" not in df.columns:
         df["nstereo"] = pd.Series(pd.NA, index=df.index, dtype="Int64")
