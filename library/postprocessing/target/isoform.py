@@ -453,20 +453,27 @@ def _resolve_input_path(input_csv: Optional[Union[str, Path]]) -> Path:
             raise FileNotFoundError(candidate)
         if not _matches_expected_input_name(candidate.name):
             if candidate.suffix.lower() != ".csv":
-                raise ValueError(
-                    "Input file must match one of the supported patterns: "
-                    + _supported_patterns_text()
+                warnings.warn(
+                    (
+                        "Input file '%s' does not use the canonical '.csv' extension "
+                        "(%s); attempting to proceed because an explicit path was "
+                        "provided."
+                    )
+                    % (candidate.name, _supported_patterns_text()),
+                    UserWarning,
+                    stacklevel=2,
                 )
-            warnings.warn(
-                (
-                    "Input file '%s' does not match the canonical target export "
-                    "naming conventions (%s); proceeding because an explicit path "
-                    "was provided."
+            else:
+                warnings.warn(
+                    (
+                        "Input file '%s' does not match the canonical target export "
+                        "naming conventions (%s); proceeding because an explicit path "
+                        "was provided."
+                    )
+                    % (candidate.name, _supported_patterns_text()),
+                    UserWarning,
+                    stacklevel=2,
                 )
-                % (candidate.name, _supported_patterns_text()),
-                UserWarning,
-                stacklevel=2,
-            )
         return candidate
 
     search_dir = _current_default_search_dir()

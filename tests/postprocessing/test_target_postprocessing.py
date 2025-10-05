@@ -499,3 +499,19 @@ def test_isoform_process_targets__accepts_explicit_custom_name(
 
     assert output_path.name == "isoform.custom_export.csv"
     assert output_path.parent == input_path.parent
+
+
+@pytest.mark.unit
+def test_isoform_process_targets__warns_on_non_csv_extension(
+    tmp_path: Path, snapshot_resource: Path
+) -> None:
+    source = snapshot_resource / "target_isoform_minimal.csv"
+    input_path = tmp_path / "custom_export.txt"
+    input_path.write_bytes(source.read_bytes())
+
+    match = "does not use the canonical '.csv' extension"
+    with pytest.warns(UserWarning, match=match):
+        output_path = isoform.process_targets(str(input_path), verbose=False)
+
+    assert output_path.name == "isoform.custom_export.txt"
+    assert output_path.parent == input_path.parent
