@@ -20,6 +20,7 @@ from library.postprocessing.activity_extended import (
     _latest_activity_export,
     _load_citation_fraction,
     _load_target_metadata,
+    _merge_target_metadata,
     _prepare_unknown_chirality,
     _rename_columns,
     _resolve_targets_path,
@@ -141,26 +142,60 @@ def test_load_citation_fraction__typed_columns(activity_resources: Path) -> None
     assert str(frame["K_min_significant"].dtype) == "Int64"
 
 
-def test_load_target_metadata__string_columns(activity_resources: Path) -> None:
+def test_load_target_metadata__typed_columns(activity_resources: Path) -> None:
     dictionary_root = activity_resources / "dictionary"
     path = dictionary_root / "_target" / "targets_type.csv"
 
     frame = _load_target_metadata(path)
 
-    assert set(frame.columns) == {
+    assert list(frame.columns) == [
         "target_chembl_id",
-        "target_sort_order",
+        "sortorder.target",
         "multifunctional_enzyme",
         "IUPHAR_class",
         "IUPHAR_subclass",
-        "genus",
-        "superkingdom",
-        "phylum",
-        "taxon_id",
         "gene_index",
         "taxon_index",
-    }
-    assert (frame.dtypes == "string").all()
+        "type",
+    ]
+    assert str(frame["target_chembl_id"].dtype) == "string"
+    assert str(frame["sortorder.target"].dtype) == "string"
+    assert str(frame["multifunctional_enzyme"].dtype) == "boolean"
+    assert str(frame["IUPHAR_class"].dtype) == "string"
+    assert str(frame["IUPHAR_subclass"].dtype) == "string"
+    assert str(frame["gene_index"].dtype) == "string"
+    assert str(frame["taxon_index"].dtype) == "string"
+    assert str(frame["type"].dtype) == "string"
+
+
+def test_load_target_metadata__cp1252_roundtrip(tmp_path: Path) -> None:
+    dictionary_root = tmp_path / "dictionary"
+    dictionary_root.mkdir()
+    csv_path = dictionary_root / "targets_type.csv"
+    csv_path.write_text(
+        (
+            "target_chembl_id,target_sort_order,multifunctional_enzyme,IUPHAR_class,"
+            "IUPHAR_subclass,gene_index,taxon_index,type\n"
+            "CHEMBLCP1252,0007,TRUE,Café,SubclassÉ,GÎNE,TØX,Unicellular organism\n"
+        ),
+        encoding="cp1252",
+    )
+
+    frame = _load_target_metadata(csv_path)
+
+    assert frame.loc[0, "IUPHAR_class"] == "Café"
+    assert frame.loc[0, "IUPHAR_subclass"] == "SubclassÉ"
+    assert frame.loc[0, "sortorder.target"] == "0007"
+    assert frame.loc[0, "gene_index"] == "GÎNE"
+    assert frame.loc[0, "taxon_index"] == "TØX"
+    assert str(frame["multifunctional_enzyme"].dtype) == "boolean"
+
+    base = pd.DataFrame({"target_chembl_id": pd.Series(["CHEMBLCP1252"], dtype="string")})
+    merged = _merge_target_metadata(base, dictionary_root=dictionary_root, targets_override=csv_path)
+
+    assert bool(merged.loc[0, "multifunctional_enzyme"]) is True
+    assert merged.loc[0, "type"] == "Unicellular organism"
+    assert bool(merged.loc[0, "unicellular_organism"]) is True
 
 
 def test_resolve_targets_path__uses_override(tmp_path: Path) -> None:

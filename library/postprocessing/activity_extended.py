@@ -21,7 +21,6 @@ import numpy as np
 import pandas as pd
 
 from library.common.log import logger
-from library.pipelines.target import organism_classification
 
 from . import helpers
 
@@ -133,21 +132,29 @@ _FINAL_COLUMN_ORDER: tuple[str, ...] = (
     "multifunctional_enzyme",
     "gene_index",
     "taxon_index",
-    "target_sort_order",
+    "sortorder.target",
 )
 
-_TARGET_COLUMNS: Sequence[str] = (
+_TARGET_RAW_COLUMNS: Sequence[str] = (
     "target_chembl_id",
     "target_sort_order",
     "multifunctional_enzyme",
     "IUPHAR_class",
     "IUPHAR_subclass",
-    "genus",
-    "superkingdom",
-    "phylum",
-    "taxon_id",
     "gene_index",
     "taxon_index",
+    "type",
+)
+
+_TARGET_METADATA_ORDER: Sequence[str] = (
+    "target_chembl_id",
+    "sortorder.target",
+    "multifunctional_enzyme",
+    "IUPHAR_class",
+    "IUPHAR_subclass",
+    "gene_index",
+    "taxon_index",
+    "type",
 )
 
 
@@ -236,18 +243,24 @@ def _resolve_targets_path(dictionary_root: Path, override: Path | None) -> Path:
 def _load_target_metadata(path: Path) -> pd.DataFrame:
     dtype: Mapping[str, str] = {
         "target_chembl_id": "string",
+        "target_sort_order": "string",
+        "multifunctional_enzyme": "boolean",
         "IUPHAR_class": "string",
         "IUPHAR_subclass": "string",
         "gene_index": "string",
         "taxon_index": "string",
-        "target_sort_order": "string",
-        "multifunctional_enzyme": "string",
-        "genus": "string",
-        "superkingdom": "string",
-        "phylum": "string",
-        "taxon_id": "string",
+        "type": "string",
     }
-    return pd.read_csv(path, usecols=_TARGET_COLUMNS, dtype=dtype)
+    frame = pd.read_csv(
+        path,
+        usecols=_TARGET_RAW_COLUMNS,
+        dtype=dtype,
+        encoding="cp1252",
+        on_bad_lines="error",
+    )
+    renamed = frame.rename(columns={"target_sort_order": "sortorder.target"})
+    ordered = [column for column in _TARGET_METADATA_ORDER if column in renamed.columns]
+    return renamed.loc[:, ordered]
 
 
 def _safe_to_bool(series: pd.Series, column: str) -> pd.Series:
@@ -460,31 +473,24 @@ def _merge_target_metadata(
     merged = df.merge(targets, on="target_chembl_id", how="left")
     merged = merged.loc[:, ~merged.columns.duplicated()]
 
-    if "organism_cellularity" not in merged.columns:
-        merged["organism_cellularity"] = pd.Series(dtype="string")
+    if "multifunctional_enzyme" in merged.columns:
+        merged["multifunctional_enzyme"] = _safe_to_bool(
+            merged["multifunctional_enzyme"], "multifunctional_enzyme"
+        )
+    else:
+        merged["multifunctional_enzyme"] = pd.Series(pd.NA, index=merged.index, dtype="boolean")
 
-    merged["multifunctional_enzyme"] = _safe_to_bool(
-        merged["multifunctional_enzyme"], "multifunctional_enzyme"
-    )
+    if "type" in merged.columns:
+        type_series = merged["type"].astype("string")
+        normalised = type_series.str.strip().str.casefold()
+        matches = normalised.isin({"unicellular organism", "viruses"})
+        missing_mask = normalised.isna()
+        flags = matches.where(~missing_mask, False)
+        merged["unicellular_organism"] = pd.Series(flags, index=merged.index).astype("boolean")
+    else:
+        merged["unicellular_organism"] = pd.Series(False, index=merged.index, dtype="boolean")
 
-    enriched = organism_classification.add_cellularity_smart(
-        merged,
-        genus_col="genus",
-        superkingdom_col="superkingdom",
-        phylum_col="phylum",
-        output_col="organism_cellularity",
-    )
-
-    unicellular_labels = {
-        organism_classification.TYPE_UNICELLULAR,
-        organism_classification.TYPE_VIRAL,
-    }
-    enriched["unicellular_organism"] = (
-        enriched["organism_cellularity"].astype("string").isin(unicellular_labels)
-    ).astype("boolean")
-
-    enriched.drop(columns=["genus", "superkingdom", "phylum", "taxon_id", "organism_cellularity"], inplace=True)
-    return enriched
+    return merged
 
 
 def _select_and_cast(df: pd.DataFrame) -> pd.DataFrame:
@@ -652,10 +658,15 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
     else:
         mask = _string_missing_mask(df["salt_chembl_id"])
         if mask.any() and "molecule_chembl_id" in df.columns:
-            df.loc[mask, "salt_chembl_id"] = df.loc[mask, "molecule_chembl_id"].astype(
-                "string"
-            )
-            filled.add("salt_chembl_id")
+            fill_mask = mask
+            if "parent_molecule_chembl_id" in df.columns:
+                parent_missing = _string_missing_mask(df["parent_molecule_chembl_id"])
+                fill_mask = mask & parent_missing
+            if fill_mask.any():
+                df.loc[fill_mask, "salt_chembl_id"] = df.loc[fill_mask, "molecule_chembl_id"].astype(
+                    "string"
+                )
+                filled.add("salt_chembl_id")
 
     if "nstereo" not in df.columns:
         df["nstereo"] = pd.Series(pd.NA, index=df.index, dtype="Int64")

@@ -82,12 +82,9 @@ def test_process_activity_extended__fills_missing_optional_columns(tmp_path, cap
                 "multifunctional_enzyme",
                 "IUPHAR_class",
                 "IUPHAR_subclass",
-                "genus",
-                "superkingdom",
-                "phylum",
-                "taxon_id",
                 "gene_index",
                 "taxon_index",
+                "type",
             ],
         )
         writer.writeheader()
@@ -98,12 +95,9 @@ def test_process_activity_extended__fills_missing_optional_columns(tmp_path, cap
                 "multifunctional_enzyme": "false",
                 "IUPHAR_class": "ClassA",
                 "IUPHAR_subclass": "SubclassA",
-                "genus": "Candida",
-                "superkingdom": "Eukaryota",
-                "phylum": "Ascomycota",
-                "taxon_id": "1234",
                 "gene_index": "GENE1",
                 "taxon_index": "TAX1",
+                "type": "Unicellular organism",
             }
         )
 
