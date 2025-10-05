@@ -574,6 +574,8 @@ def _transform_activity_frame(
             f"{missing_list}. Available columns: {available}"
         )
 
+    working, filled = _augment_activity_frame(df)
+
     if filled:
         logger.warning(
             "activity_extended_missing_columns_filled",
