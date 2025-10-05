@@ -1,7 +1,16 @@
 """Target names post-processing mirroring the legacy Power Query workbook.
 
+The ``SSOT_CONTEXT`` constant holds the original Power Query script used as the
+single source of truth for these transformations so that future refactors can
+validate behaviour against the historical pipeline.
+"""
+
+from __future__ import annotations
+
+
+SSOT_CONTEXT = '''
 The implementation follows the Single Source of Truth (SSoT) captured in the
-Power Query (M) script that shipped with the historical Excel workbook.  The
+Power Query (M) script that shipped with the historical Excel workbook. The
 script is reproduced below so future refactors can be validated against the
 original transformation pipeline:
 
@@ -34,9 +43,7 @@ Query workbook that produced auxiliary name tables for reporting. It extracts
 textual identifiers from the merged targets export, normalises them and emits a
 long-form table where each row represents a distinct name attributed to a
 target.
-"""
-
-from __future__ import annotations
+'''
 
 from dataclasses import dataclass
 import json
