@@ -70,8 +70,8 @@ python scripts/get_data.py \
 Каждый пайплайн сохраняет детерминированный CSV, файл метаданных
 `<имя>.meta.yaml` и отчёты качества в том же каталоге. Таргет-пайплайн также
 создаёт вспомогательные таблицы `organism.output.target_<stamp>.csv`,
-`isoform.output.target_<stamp>.csv` и `names.output.target_<stamp>.csv`,
-которые подробно описаны в
+`isoform.output.target_<stamp>.csv`, `names.output.target_<stamp>.csv` и
+`IUPHAR.output.target_<stamp>.csv`, которые подробно описаны в
 [`docs/OUTPUT_TARGETS_RU.md`](./docs/OUTPUT_TARGETS_RU.md) и
 [`docs/OUTPUT_TARGETS_EN.md`](./docs/OUTPUT_TARGETS_EN.md). Полную спецификацию
 см. в [`docs/ru/OUTPUT.md`](./docs/ru/OUTPUT.md).
@@ -84,6 +84,11 @@ python scripts/get_data.py \
   [`docs/en/README.md`](./docs/en/README.md)
 - Использование и CLI: [`docs/ru/USAGE.md`](./docs/ru/USAGE.md),
   [`docs/en/USAGE.md`](./docs/en/USAGE.md)
+- Руководства (расширенные сценарии, отладка, FAQ):
+  [`docs/ru/guides/ADVANCED_SCENARIOS.md`](./docs/ru/guides/ADVANCED_SCENARIOS.md),
+  [`docs/ru/guides/DEBUGGING.md`](./docs/ru/guides/DEBUGGING.md),
+  [`docs/ru/guides/FAQ.md`](./docs/ru/guides/FAQ.md) и зеркальные английские версии в
+  `docs/en/guides/`
 - Конфигурация: [`docs/ru/CONFIG.md`](./docs/ru/CONFIG.md),
   [`docs/en/CONFIG.md`](./docs/en/CONFIG.md)
 - Спецификация выходных данных и правила валидации:

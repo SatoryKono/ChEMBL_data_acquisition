@@ -172,6 +172,17 @@ def test_process_iuphar_targets__produces_expected_csv(tmp_path: Path, snapshot_
                 "component_sequence": None,
                 "component_structures": None,
             },
+                "target_chembl_id": "CHEMBL4",
+                "GuidetoPHARMACOLOGY": "GTOP4",
+                "iuphar_target_id": "T4",
+                "iuphar_family_id": "F4",
+                "iuphar_type": "Type",
+                "iuphar_class": "Class",
+                "iuphar_subclass": "Sub",
+                "iuphar_chain": "Chain",
+                "iuphar_name": "Name",
+                # Missing gtop_synonyms
+            }
         ]
     )
     frame.to_csv(input_path, index=False)
@@ -182,3 +193,35 @@ def test_process_iuphar_targets__produces_expected_csv(tmp_path: Path, snapshot_
     expected_bytes = (snapshot_resource / "iuphar_postprocessing_expected.csv").read_bytes()
     actual_bytes = output_path.read_bytes()
     assert actual_bytes == expected_bytes
+    message = str(excinfo.value)
+    assert "gtop_synonyms" in message
+    assert "component_description" not in message
+
+
+def test_process_iuphar_targets__fills_missing_component_description(tmp_path: Path) -> None:
+    path = tmp_path / "output.target_20240606.csv"
+    frame = pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL5",
+                "GuidetoPHARMACOLOGY": "GTOP5",
+                "iuphar_target_id": "T5",
+                "iuphar_family_id": "F5",
+                "iuphar_type": "Type",
+                "iuphar_class": "Class",
+                "iuphar_subclass": "Sub",
+                "iuphar_chain": "Chain",
+                "iuphar_name": "Name",
+                "gtop_synonyms": "Alpha|Beta",
+                "synonyms": "Gamma",
+                # component_description intentionally omitted
+            }
+        ]
+    )
+    frame.to_csv(path, index=False)
+
+    output_path = iuphar.process_iuphar_targets(path)
+
+    assert output_path.exists()
+    result = pd.read_csv(output_path)
+    assert result.loc[0, "iuphar_synonyms"] == "alpha|beta|gamma|name"

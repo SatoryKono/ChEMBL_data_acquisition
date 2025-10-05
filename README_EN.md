@@ -78,8 +78,9 @@ python scripts/get_data.py \
 Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar
 and table-quality reports under the same directory. The target pipeline also
 emits helper lookups named `organism.output.target_<stamp>.csv`,
-`isoform.output.target_<stamp>.csv`, and `names.output.target_<stamp>.csv` — all
-described in [`docs/OUTPUT_TARGETS_EN.md`](./docs/OUTPUT_TARGETS_EN.md) and
+`isoform.output.target_<stamp>.csv`, `names.output.target_<stamp>.csv`, and
+`IUPHAR.output.target_<stamp>.csv` — all described in
+[`docs/OUTPUT_TARGETS_EN.md`](./docs/OUTPUT_TARGETS_EN.md) and
 [`docs/OUTPUT_TARGETS_RU.md`](./docs/OUTPUT_TARGETS_RU.md). Refer to the
 [output reference](./docs/en/OUTPUT.md) for the complete specification.
 
@@ -92,6 +93,11 @@ languages:
   [`docs/ru/README.md`](./docs/ru/README.md)
 - Usage and CLI reference: [`docs/en/USAGE.md`](./docs/en/USAGE.md),
   [`docs/ru/USAGE.md`](./docs/ru/USAGE.md)
+- Guides (advanced usage, debugging, FAQ):
+  [`docs/en/guides/ADVANCED_SCENARIOS.md`](./docs/en/guides/ADVANCED_SCENARIOS.md),
+  [`docs/en/guides/DEBUGGING.md`](./docs/en/guides/DEBUGGING.md),
+  [`docs/en/guides/FAQ.md`](./docs/en/guides/FAQ.md) and their Russian twins under
+  `docs/ru/guides/`
 - Configuration guide: [`docs/en/CONFIG.md`](./docs/en/CONFIG.md),
   [`docs/ru/CONFIG.md`](./docs/ru/CONFIG.md)
 - Output specification and validation rules:
