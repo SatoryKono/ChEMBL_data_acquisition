@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 import sys
@@ -64,8 +65,18 @@ _DEFAULT_SEARCH_DIR = Path("data/output")
 
 # Accepted filename patterns for aggregated target exports.
 _INPUT_NAME_RULES: Tuple[Tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"output\.target_\d{8}\.csv\Z"), "output.target_<YYYYMMDD>.csv"),
-    (re.compile(r"output\.targets_\d{8}\.csv\Z"), "output.targets_<YYYYMMDD>.csv"),
+    (
+        re.compile(
+            r"output\.target_\d{8}(?:_[A-Za-z0-9]+)*(?:_normalized)?\.csv\Z"
+        ),
+        "output.target_<YYYYMMDD>[<_suffixes>][_normalized].csv",
+    ),
+    (
+        re.compile(
+            r"output\.targets_\d{8}(?:_[A-Za-z0-9]+)*(?:_normalized)?\.csv\Z"
+        ),
+        "output.targets_<YYYYMMDD>[<_suffixes>][_normalized].csv",
+    ),
     (
         re.compile(r"targets_\d{8}(?:_[A-Za-z0-9]+)*(?:_normalized)?\.csv\Z"),
         "targets_<YYYYMMDD>[<_suffixes>][_normalized].csv",
@@ -507,7 +518,17 @@ def _resolve_output_path(input_path: Path, output_csv: Optional[str]) -> Path:
         output_path = Path(output_csv)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         return output_path
-    return input_path.with_name(f"isoform.{input_path.name}")
+
+    def _canonical_export_name(name: str) -> str:
+        stem, ext = os.path.splitext(name)
+        lowered = stem.lower()
+        normalized_suffix = "_normalized"
+        if lowered.endswith(normalized_suffix):
+            stem = stem[: -len(normalized_suffix)]
+        return f"{stem}{ext or ''}"
+
+    canonical_name = _canonical_export_name(input_path.name)
+    return input_path.with_name(f"isoform.{canonical_name}")
 
 
 def _stringify_for_csv(value: Any) -> str:
