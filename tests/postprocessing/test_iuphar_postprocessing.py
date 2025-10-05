@@ -130,7 +130,7 @@ def test_process_iuphar_targets__missing_required_columns(tmp_path: Path) -> Non
                 "iuphar_subclass": "Sub",
                 "iuphar_chain": "Chain",
                 "iuphar_name": "Name",
-                # Missing gtop_synonyms and component_description
+                # Missing gtop_synonyms
             }
         ]
     )
@@ -141,4 +141,33 @@ def test_process_iuphar_targets__missing_required_columns(tmp_path: Path) -> Non
 
     message = str(excinfo.value)
     assert "gtop_synonyms" in message
-    assert "component_description" in message
+    assert "component_description" not in message
+
+
+def test_process_iuphar_targets__fills_missing_component_description(tmp_path: Path) -> None:
+    path = tmp_path / "output.target_20240606.csv"
+    frame = pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL5",
+                "GuidetoPHARMACOLOGY": "GTOP5",
+                "iuphar_target_id": "T5",
+                "iuphar_family_id": "F5",
+                "iuphar_type": "Type",
+                "iuphar_class": "Class",
+                "iuphar_subclass": "Sub",
+                "iuphar_chain": "Chain",
+                "iuphar_name": "Name",
+                "gtop_synonyms": "Alpha|Beta",
+                "synonyms": "Gamma",
+                # component_description intentionally omitted
+            }
+        ]
+    )
+    frame.to_csv(path, index=False)
+
+    output_path = iuphar.process_iuphar_targets(path)
+
+    assert output_path.exists()
+    result = pd.read_csv(output_path)
+    assert result.loc[0, "iuphar_synonyms"] == "alpha|beta|gamma|name"

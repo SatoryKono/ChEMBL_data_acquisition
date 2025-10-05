@@ -55,6 +55,9 @@ _REQUIRED_COLUMNS: tuple[str, ...] = (
     "iuphar_chain",
     "iuphar_name",
     "gtop_synonyms",
+)
+
+_OPTIONAL_COLUMNS: tuple[str, ...] = (
     "component_description",
 )
 
@@ -103,6 +106,16 @@ def _ensure_required_columns(df: pd.DataFrame) -> None:
         raise IUPHARPostProcessingError(
             "Input CSV is missing required columns: " + ", ".join(sorted(missing))
         )
+
+
+def _ensure_optional_columns(df: pd.DataFrame) -> pd.DataFrame:
+    missing = [column for column in _OPTIONAL_COLUMNS if column not in df.columns]
+    if not missing:
+        return df
+    df = df.copy()
+    for column in missing:
+        df[column] = ""
+    return df
 
 
 def _clean_brackets(value: str) -> str:
@@ -226,6 +239,7 @@ def process_iuphar_targets(
 
     df = read_csv_with_fallbacks(input_path)
     _ensure_required_columns(df)
+    df = _ensure_optional_columns(df)
 
     input_rows = len(df)
     df, dropped_columns = _drop_helper_columns(df)
