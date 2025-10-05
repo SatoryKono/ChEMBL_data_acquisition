@@ -31,6 +31,45 @@ from library.postprocessing.activity_extended import (
 pytestmark = pytest.mark.postprocessing
 
 
+EXPECTED_DTYPE_MAP: dict[str, str] = {
+    "activity_chembl_id": "object",
+    "saltform_id": "object",
+    "molecule_chembl_id": "object",
+    "molecule_chembl_id.1": "string",
+    "target_chembl_id": "object",
+    "assay_chembl_id": "object",
+    "document_chembl_id": "object",
+    "completed": "string",
+    "bao_endpoint": "object",
+    "standard_type": "object",
+    "standard_value": "float64",
+    "pA_value": "Float64",
+    "bao_format": "object",
+    "compound_key": "object",
+    "compound_name": "object",
+    "standard_inchi_skeleton": "string",
+    "unknown_chirality": "boolean",
+    "multmol_assay": "boolean",
+    "assay_with_same_target": "Int64",
+    "exact_data_citation": "boolean",
+    "higly_correlated_assay": "boolean",
+    "shuffled_assay": "boolean",
+    "review": "boolean",
+    "rounded_data_citation": "boolean",
+    "high_citation_rate": "boolean",
+    "original_activity_approx": "object",
+    "original_activity_exact": "object",
+    "is_citation": "boolean",
+    "IUPHAR_class": "string",
+    "IUPHAR_subclass": "string",
+    "unicellular_organism": "boolean",
+    "multifunctional_enzyme": "boolean",
+    "gene_index": "string",
+    "taxon_index": "string",
+    "target_sort_order": "string",
+}
+
+
 @pytest.fixture()
 def activity_resources(snapshot_resource: Path) -> Path:
     """Return the fixture directory with activity post-processing snapshots."""
@@ -288,6 +327,24 @@ def test_transform_activity_frame__parses_activity_properties_flags(
         assert bool(row.rounded_data_citation) == flags["rounded_data_citation"]
         assert bool(row.is_citation) == any(flags.values())
 
+    assert transformed["completed"].tolist() == [
+        "1980-08-15",
+        "1980-08-15",
+        "2008-01-11",
+        pd.NA,
+    ]
+    assert transformed["assay_with_same_target"].tolist() == [3, 3, 2, pd.NA]
+    assert transformed["molecule_chembl_id.1"].tolist() == ["MOL-1", "MOL-1", "MOL-2", "MOL-3"]
+    assert transformed["standard_inchi_skeleton"].tolist() == [
+        "InChI=1",
+        "InChI=1",
+        "InChI=2",
+        pd.NA,
+    ]
+
+    dtype_map = {column: str(transformed[column].dtype) for column in transformed.columns}
+    assert dtype_map == EXPECTED_DTYPE_MAP
+
 
 def test_transform_activity_frame__fills_missing_columns(activity_resources: Path) -> None:
     dictionary_root = activity_resources / "dictionary"
@@ -319,7 +376,11 @@ def test_transform_activity_frame__fills_missing_columns(activity_resources: Pat
     assert row.activity_chembl_id == "ACT-001"
     assert row.compound_key == "CMPD-1"
     assert row.compound_name == "Compound One"
-    assert pd.isna(row.saltform_id)
+    assert row.saltform_id == "MOL-1"
+    assert row.completed == "1980-08-15"
+    assert row.assay_with_same_target == 3
+    assert row["molecule_chembl_id.1"] == "MOL-1"
+    assert row.standard_inchi_skeleton == "InChI=1"
     assert bool(row.multmol_assay) is False
     assert bool(row.rounded_data_citation) is False
     assert bool(row.is_citation) is False
@@ -423,6 +484,10 @@ def test_transform_activity_frame__fills_missing_required_columns(
     assert transformed.loc[0, "saltform_id"] == "CHEMBL1"
     assert transformed.loc[0, "pA_value"] == pytest.approx(6.5)
     assert transformed.loc[0, "compound_name"] is pd.NA
+    assert transformed.loc[0, "completed"] == "1980-08-15"
+    assert transformed.loc[0, "assay_with_same_target"] == 3
+    assert pd.isna(transformed.loc[0, "molecule_chembl_id.1"])
+    assert pd.isna(transformed.loc[0, "standard_inchi_skeleton"])
 
 
 def test_process_activity_extended__writes_expected_payload(
@@ -439,13 +504,22 @@ def test_process_activity_extended__writes_expected_payload(
 
     assert output_path.name == "extended.output.activity_20240101.csv"
 
-    result = pd.read_csv(output_path, dtype=str).fillna("")
-    expected = pd.read_csv(
-        activity_resources / "expected.extended.output.activity_20240101.csv",
-        dtype=str,
-    ).fillna("")
+    source_frame = pd.read_csv(tmp_exports / "output.activity_20240101.csv")
+    transformed = _transform_activity_frame(
+        source_frame,
+        dictionary_root=Path(tmp_dictionary),
+        targets_override=None,
+    )
+    assert list(transformed.columns) == list(_FINAL_COLUMN_ORDER)
+    dtype_map = {column: str(transformed[column].dtype) for column in transformed.columns}
+    assert dtype_map == EXPECTED_DTYPE_MAP
 
-    pd.testing.assert_frame_equal(result, expected, check_dtype=False)
+    result = pd.read_csv(output_path)
+    expected = pd.read_csv(
+        activity_resources / "expected.extended.output.activity_20240101.csv"
+    )
+
+    pd.testing.assert_frame_equal(result, expected)
 
 
 def test_process_activity_extended__supports_base_dir_alias(
@@ -487,7 +561,7 @@ def test_process_activity_extended__raises_for_missing_dictionary(
     missing_dictionary = tmp_path / "dictionary"
     missing_dictionary.mkdir()
 
-    with pytest.raises(ActivityExtendedError, match="citation_fraction.csv not found"):
+    with pytest.raises(ActivityExtendedError, match="document.csv not found"):
         process_activity_extended(
             search_dir=tmp_exports,
             dictionary_dir=missing_dictionary,
@@ -513,10 +587,9 @@ def test_process_activity_extended__uses_explicit_input_path(
 
     assert output_path.name == "extended.chembl_activities_snapshot.csv"
 
-    result = pd.read_csv(output_path, dtype=str).fillna("")
+    result = pd.read_csv(output_path)
     expected = pd.read_csv(
-        activity_resources / "expected.extended.output.activity_20240101.csv",
-        dtype=str,
-    ).fillna("")
+        activity_resources / "expected.extended.output.activity_20240101.csv"
+    )
 
-    pd.testing.assert_frame_equal(result, expected, check_dtype=False)
+    pd.testing.assert_frame_equal(result, expected)
