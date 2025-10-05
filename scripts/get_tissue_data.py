@@ -1,0 +1,189 @@
+"""Command line interface for retrieving ChEMBL tissue metadata."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+from typing import Sequence
+
+try:
+    from library.utils.bootstrap import ensure_project_root
+except ModuleNotFoundError:  # pragma: no cover - direct execution fallback
+    def ensure_project_root() -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        project_root_str = str(project_root)
+        if project_root_str not in sys.path:
+            sys.path.insert(0, project_root_str)
+
+
+if __package__ in {None, ""}:
+    ensure_project_root()
+
+from library import cli, io
+from library.cli import LoggerConfig, configure_logger
+from library.cli import build_parser as base_parser
+from library.cli.logging import setup_cli_logging
+from library.cli_utils import run_cli_command
+from library.common.log import logger
+from library.config import Config
+from library.pipelines.tissue import TissuePipelineOptions, run_tissue_pipeline
+
+DEFAULT_INPUT_NAME = "tissue.csv"
+DEFAULT_OUTPUT_STEM = "tissue"
+MODE_CHOICES: tuple[str, ...] = ("chembl",)
+
+
+def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
+    """Create the command-line parser for the tissue pipeline."""
+
+    parser, log_cfg = base_parser(
+        "ChEMBL tissue data utilities",
+        column="tissue_chembl_id",
+        chunk_size=20,
+        size_option="--batch-size",
+        size_dest="batch_size",
+    )
+    parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
+    parser.add_argument(
+        "--mode",
+        choices=MODE_CHOICES,
+        default="chembl",
+        help="Data source to query (default: chembl)",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        help="Override request timeout in seconds",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of identifiers to process (0 skips processing)",
+    )
+    parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Number of identifiers to skip before processing",
+    )
+    parser.set_defaults(func=run)
+    return parser, log_cfg
+
+
+def run(cfg: Config, args: argparse.Namespace) -> int:
+    """Execute the tissue pipeline using ``cfg`` and parsed ``args``."""
+
+    mode = str(getattr(args, "mode", "chembl")).lower()
+    if mode not in MODE_CHOICES:
+        logger.error("unsupported_mode", mode=mode)
+        return 1
+
+    output_path = Path(
+        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    )
+    args.output_csv = output_path
+
+    if (
+        getattr(args, "skip_existing", False)
+        and output_path.exists()
+        and not getattr(args, "force", False)
+    ):
+        logger.info("pipeline_skip_existing", output=str(output_path))
+        return 0
+
+    batch_size = getattr(args, "batch_size", cfg.tissue.batch_size)
+    timeout = args.timeout if args.timeout is not None else None
+
+    options = TissuePipelineOptions(
+        input_csv=Path(args.input_csv),
+        output_csv=output_path,
+        column=str(args.column),
+        batch_size=int(batch_size),
+        limit=args.limit,
+        offset=int(args.offset),
+        timeout=timeout,
+        mode=mode,
+    )
+
+    logger.info(
+        "tissue_pipeline_start",
+        input=str(args.input_csv),
+        output=str(output_path),
+        limit=args.limit,
+        offset=args.offset,
+        timeout=timeout if timeout is not None else cfg.tissue.timeout,
+        batch_size=options.batch_size,
+    )
+
+    result = run_tissue_pipeline(cfg, options)
+
+    if result.failure_path and result.failures:
+        logger.error(
+            "tissue_validation_failed",
+            failures=result.failures,
+            path=str(result.failure_path),
+        )
+    if result.missing_ids:
+        sample = list(result.missing_ids[:5])
+        logger.warning(
+            "tissue_missing_identifiers_summary",
+            total=len(result.missing_ids),
+            sample=sample,
+        )
+
+    logger.info(
+        "tissue_pipeline_summary",
+        records=result.records,
+        duration=result.duration,
+        output=str(result.output_path),
+        exit_code=result.exit_code,
+    )
+    return result.exit_code
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Program entry point for the tissue CLI."""
+
+    parser, log_cfg = build_parser()
+    args = parser.parse_args(argv)
+    cli.prepare_io_paths(
+        args,
+        input_default=DEFAULT_INPUT_NAME,
+        output_stem=DEFAULT_OUTPUT_STEM,
+    )
+    if args.limit == 0:
+        logger.info("pipeline_skip_limit", limit=args.limit)
+        return 0
+    if args.limit is not None and args.limit < 0:
+        parser.error("--limit must be zero or a positive integer")
+    if args.offset < 0:
+        parser.error("--offset must be zero or a positive integer")
+
+    with setup_cli_logging(
+        Path(__file__).with_suffix("").name,
+        log_cfg,
+        getattr(args, "date", None),
+    ) as logging_ctx:
+        exit_code = run_cli_command(
+            args=args,
+            parser=parser,
+            log_cfg=logging_ctx.log_cfg,
+            mapping={
+                "timeout": "tissue.timeout",
+                "column": "tissue.column",
+                "batch_size": "tissue.batch_size",
+                "limit": "tissue.limit",
+                "offset": "tissue.offset",
+            },
+            run=run,
+            logger=logger,
+        )
+    configure_logger(log_cfg)
+    return exit_code
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI entry point
+    raise SystemExit(main())

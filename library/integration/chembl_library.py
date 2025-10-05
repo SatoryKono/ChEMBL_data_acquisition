@@ -20,11 +20,13 @@ from ..pipelines.target.chembl_target import (
     get_targets_raw_frame,
     iter_target_batches,
 )
+from ..pipelines.tissue import get_tissues
 
 __all__ = [
     "get_assay",
     "get_assays",
     "get_activities",
+    "get_tissues",
     "get_testitem",
     "get_documents",
     "get_target",

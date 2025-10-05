@@ -96,6 +96,12 @@ def normalize_documents(df: pd.DataFrame) -> pd.DataFrame:
     return _normalize_common(df)
 
 
+def normalize_tissues(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalise a tissues dataframe."""
+
+    return _normalize_common(df)
+
+
 def normalize_targets(df: pd.DataFrame) -> pd.DataFrame:
     """Normalise a targets dataframe.
 
@@ -132,6 +138,7 @@ __all__ = [
     "normalize_activities",
     "normalize_assays",
     "normalize_documents",
+    "normalize_tissues",
     "normalize_targets",
     "normalize_testitems",
 ]

@@ -427,6 +427,49 @@
       "title": "AssayCfg",
       "type": "object"
     },
+    "TissueCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "column": {
+          "default": "tissue_chembl_id",
+          "title": "Column",
+          "type": "string"
+        },
+        "batch_size": {
+          "default": 20,
+          "minimum": 1,
+          "title": "Batch Size",
+          "type": "integer"
+        },
+        "timeout": {
+          "default": 30.0,
+          "exclusiveMinimum": 0,
+          "title": "Timeout",
+          "type": "number"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
+        },
+        "offset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        }
+      },
+      "title": "TissueCfg",
+      "type": "object"
+    },
     "ChemblCacheCfg": {
       "additionalProperties": false,
       "properties": {
@@ -553,6 +596,9 @@
         },
         "assay": {
           "$ref": "#/$defs/AssayCfg"
+        },
+        "tissue": {
+          "$ref": "#/$defs/TissueCfg"
         },
         "testitem": {
           "$ref": "#/$defs/TestitemCfg"
