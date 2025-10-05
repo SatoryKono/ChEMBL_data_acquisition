@@ -266,7 +266,7 @@
 | target_type | string | ChEMBL | Target type reported by ChEMBL (`SINGLE PROTEIN`, `PROTEIN FAMILY`, etc.).|
 | tax_id | string | ChEMBL | Taxonomy identifier as stored in ChEMBL.|
 | species_group_flag | string | ChEMBL | Species group flag from ChEMBL.|
-| target_sort_order | string | Taxonomy classifier | Deterministic sort key derived from the classifier for analytics pivots.|
+| sortorder.target | string | Taxonomy classifier | Deterministic sort key derived from the classifier for analytics pivots.|
 | gene_index | string | Taxonomy classifier | Classifier-provided gene ordering indicator for curation worksheets.|
 | taxon_index | string | Taxonomy classifier | Derived taxonomy ordering indicator used by downstream reports.|
 | multifunctional_enzyme | boolean/string | Taxonomy classifier | Flag raised when taxonomy rules classify the target as multifunctional.|

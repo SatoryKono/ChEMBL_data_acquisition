@@ -47,6 +47,7 @@ def _prepare_dictionary(dictionary_root: Path) -> None:
                 "taxon_id",
                 "gene_index",
                 "taxon_index",
+                "unicellular_organism",
             ],
         )
         writer.writeheader()
@@ -63,8 +64,47 @@ def _prepare_dictionary(dictionary_root: Path) -> None:
                 "taxon_id": "1234",
                 "gene_index": "GENE1",
                 "taxon_index": "TAX1",
+                "unicellular_organism": "false",
             }
         )
+
+    document_subdir = dictionary_root / "_document"
+    document_subdir.mkdir(parents=True, exist_ok=True)
+    with (document_subdir / "document.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["document_chembl_id", "completed", "review"])
+        writer.writeheader()
+        writer.writerow(
+            {
+                "document_chembl_id": "DOC1",
+                "completed": "1980-08-15",
+                "review": "false",
+            }
+        )
+        writer.writerow(
+            {
+                "document_chembl_id": "DOC2",
+                "completed": "2008-01-11",
+                "review": "false",
+            }
+        )
+
+    assay_subdir = dictionary_root / "_assay"
+    assay_subdir.mkdir(parents=True, exist_ok=True)
+    with (assay_subdir / "assay.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["assay_chembl_id", "assay_with_same_target"])
+        writer.writeheader()
+        writer.writerow({"assay_chembl_id": "ASSAY1", "assay_with_same_target": "3"})
+        writer.writerow({"assay_chembl_id": "ASSAY2", "assay_with_same_target": "2"})
+
+    testitem_subdir = dictionary_root / "_testitem"
+    testitem_subdir.mkdir(parents=True, exist_ok=True)
+    with (testitem_subdir / "testitem.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle, fieldnames=["molecule_chembl_id", "standard_inchi_skeleton"]
+        )
+        writer.writeheader()
+        writer.writerow({"molecule_chembl_id": "CHEMBL1", "standard_inchi_skeleton": "InChI=1"})
+        writer.writerow({"molecule_chembl_id": "CHEMBL2", "standard_inchi_skeleton": "InChI=2"})
 
 
 @pytest.mark.integration

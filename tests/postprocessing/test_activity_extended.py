@@ -34,14 +34,14 @@ EXPECTED_DTYPE_MAP: dict[str, str] = {
     "saltform_id": "object",
     "molecule_chembl_id": "object",
     "molecule_chembl_id.1": "string",
-    "target_chembl_id": "object",
+    "target_chembl_id": "string",
     "assay_chembl_id": "object",
     "document_chembl_id": "object",
     "completed": "string",
     "bao_endpoint": "object",
     "standard_type": "object",
-    "standard_value": "float64",
-    "pA_value": "Float64",
+    "standard_value": "string",
+    "pA_value": "string",
     "bao_format": "object",
     "compound_key": "object",
     "compound_name": "object",
@@ -54,6 +54,9 @@ EXPECTED_DTYPE_MAP: dict[str, str] = {
     "shuffled_assay": "boolean",
     "review": "boolean",
     "rounded_data_citation": "boolean",
+    "allosteric": "boolean",
+    "nam": "boolean",
+    "pam": "boolean",
     "high_citation_rate": "boolean",
     "original_activity_approx": "object",
     "original_activity_exact": "object",
@@ -64,7 +67,7 @@ EXPECTED_DTYPE_MAP: dict[str, str] = {
     "multifunctional_enzyme": "boolean",
     "gene_index": "string",
     "taxon_index": "string",
-    "target_sort_order": "string",
+    "sortorder.target": "string",
 }
 
 
@@ -186,7 +189,7 @@ def test_load_target_metadata__string_columns(activity_resources: Path) -> None:
 
     assert set(frame.columns) == {
         "target_chembl_id",
-        "target_sort_order",
+        "sortorder.target",
         "multifunctional_enzyme",
         "IUPHAR_class",
         "IUPHAR_subclass",
@@ -196,8 +199,9 @@ def test_load_target_metadata__string_columns(activity_resources: Path) -> None:
         "taxon_id",
         "gene_index",
         "taxon_index",
+        "unicellular_organism",
     }
-    expected_logical = {"multifunctional_enzyme"}
+    expected_logical = {"multifunctional_enzyme", "unicellular_organism"}
     expected_integer = {"taxon_id"}
     for column, dtype in frame.dtypes.items():
         if column in expected_logical:
@@ -206,6 +210,33 @@ def test_load_target_metadata__string_columns(activity_resources: Path) -> None:
             assert dtype == "Int64"
         else:
             assert dtype == "string[python]"
+
+
+def test_load_target_metadata__cp1252_roundtrip(tmp_path: Path) -> None:
+    target_path = tmp_path / "targets_type.csv"
+    rows = [
+        (
+            "target_chembl_id,target_sort_order,multifunctional_enzyme,IUPHAR_class,"
+            "IUPHAR_subclass,genus,superkingdom,phylum,taxon_id,gene_index,taxon_index,"
+            "unicellular_organism\n"
+        ),
+        (
+            "TAR-CP1252,010,TRUE,Clássé,Subclássé,Escherichia,Protéobactéria,Firmicutes,123,GénE,Táxon,FALSE\n"
+        ),
+    ]
+    target_path.write_text("".join(rows), encoding="cp1252")
+
+    frame = _load_target_metadata(target_path)
+
+    assert frame.loc[0, "IUPHAR_class"] == "Clássé"
+    assert frame.loc[0, "sortorder.target"] == "010"
+    assert frame.loc[0, "unicellular_organism"].item() is False
+    assert frame.loc[0, "taxon_id"].item() == 123
+    assert frame.loc[0, "multifunctional_enzyme"].item() is True
+    assert frame["sortorder.target"].dtype == "string[python]"
+    assert frame["unicellular_organism"].dtype == "boolean"
+    assert frame["taxon_id"].dtype == "Int64"
+    assert frame["multifunctional_enzyme"].dtype == "boolean"
 
 
 def test_resolve_targets_path__uses_override(tmp_path: Path) -> None:

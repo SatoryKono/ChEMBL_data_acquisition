@@ -21,7 +21,7 @@ ORGANISM_COLUMNS: list[str] = [
     "multifunctional_enzyme",
     "IUPHAR_class",
     "IUPHAR_subclass",
-    "target_sort_order",
+    "sortorder.target",
     "gene_index",
     "taxon_index",
 ]
@@ -41,14 +41,25 @@ def _build_organism_lookup(frame: pd.DataFrame) -> pd.DataFrame:
         mf_series = pd.Series(pd.NA, index=frame.index, dtype="boolean")
     lookup["multifunctional_enzyme"] = mf_series.fillna(False).astype("boolean")
 
-    for column in ("IUPHAR_class", "IUPHAR_subclass", "target_sort_order", "gene_index", "taxon_index"):
+    for column in ("IUPHAR_class", "IUPHAR_subclass", "sortorder.target", "gene_index", "taxon_index"):
         if column in frame.columns:
             lookup[column] = frame[column].map(helpers.normalise_text).replace("", "-").astype("string")
         else:
             lookup[column] = "-"
 
     lookup = lookup.reindex(columns=ORGANISM_COLUMNS)
-    lookup = helpers.ensure_string_columns(lookup, ["target_chembl_id", "target_type", "IUPHAR_class", "IUPHAR_subclass", "target_sort_order", "gene_index", "taxon_index"])
+    lookup = helpers.ensure_string_columns(
+        lookup,
+        [
+            "target_chembl_id",
+            "target_type",
+            "IUPHAR_class",
+            "IUPHAR_subclass",
+            "sortorder.target",
+            "gene_index",
+            "taxon_index",
+        ],
+    )
     lookup = lookup.sort_values(by="target_chembl_id", kind="mergesort").reset_index(drop=True)
     return lookup
 
