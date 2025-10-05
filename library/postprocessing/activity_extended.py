@@ -22,7 +22,6 @@ import numpy as np
 import pandas as pd
 
 from library.common.log import logger
-from library.pipelines.target import organism_classification
 
 from . import helpers
 
@@ -100,7 +99,7 @@ _ACTIVITY_INPUT_SCHEMA: Mapping[str, str] = {
     if dtype in {"string", "boolean", "Int64", "Float64"}
 }
 
-_TARGET_METADATA_SCHEMA: Mapping[str, str] = {
+_TARGET_METADATA_READ_SCHEMA: Mapping[str, str] = {
     "target_chembl_id": "Text",
     "target_sort_order": "Text",
     "multifunctional_enzyme": "Logical",
@@ -112,6 +111,22 @@ _TARGET_METADATA_SCHEMA: Mapping[str, str] = {
     "taxon_id": "Int64",
     "gene_index": "Text",
     "taxon_index": "Text",
+    "unicellular_organism": "Logical",
+}
+
+_TARGET_METADATA_SCHEMA: Mapping[str, str] = {
+    "target_chembl_id": "Text",
+    "sortorder.target": "Text",
+    "multifunctional_enzyme": "Logical",
+    "IUPHAR_class": "Text",
+    "IUPHAR_subclass": "Text",
+    "genus": "Text",
+    "superkingdom": "Text",
+    "phylum": "Text",
+    "taxon_id": "Int64",
+    "gene_index": "Text",
+    "taxon_index": "Text",
+    "unicellular_organism": "Logical",
 }
 
 _CITATION_FRACTION_SCHEMA: Mapping[str, str] = {
@@ -187,18 +202,19 @@ _FINAL_COLUMN_ORDER: tuple[str, ...] = (
     "high_citation_rate",
     "original_activity_approx",
     "original_activity_exact",
+    "is_citation",
     "IUPHAR_class",
     "IUPHAR_subclass",
     "unicellular_organism",
     "multifunctional_enzyme",
     "gene_index",
     "taxon_index",
-    "target_sort_order",
+    "sortorder.target",
 )
 
 _TARGET_COLUMNS: Sequence[str] = (
     "target_chembl_id",
-    "target_sort_order",
+    "sortorder.target",
     "multifunctional_enzyme",
     "IUPHAR_class",
     "IUPHAR_subclass",
@@ -208,6 +224,7 @@ _TARGET_COLUMNS: Sequence[str] = (
     "taxon_id",
     "gene_index",
     "taxon_index",
+    "unicellular_organism",
 )
 
 
@@ -301,10 +318,11 @@ def _resolve_targets_path(dictionary_root: Path, override: Path | None) -> Path:
 def _load_target_metadata(path: Path) -> pd.DataFrame:
     frame = helpers.read_csv_strict(
         path,
-        encoding=helpers.ENCODING_FALLBACKS,
-        dtype_map=_TARGET_METADATA_SCHEMA,
+        encoding="cp1252",
+        dtype_map=_TARGET_METADATA_READ_SCHEMA,
         na_values=_NA_MARKERS,
     )
+    frame = frame.rename(columns={"target_sort_order": "sortorder.target"})
     missing = [column for column in _TARGET_COLUMNS if column not in frame.columns]
     if missing:
         raise ActivityExtendedError(
@@ -697,14 +715,16 @@ def _compute_citation_flags(df: pd.DataFrame) -> pd.DataFrame:
         "review",
         "rounded_data_citation",
     ]
-    converted = df.copy()
+    prepared: dict[str, pd.Series] = {}
     for column in bool_columns:
-        if column in converted.columns:
-            converted[column] = _safe_to_bool(converted[column], column).fillna(False)
+        if column in df.columns:
+            prepared[column] = _safe_to_bool(df[column], column).fillna(False)
         else:
-            converted[column] = pd.Series(False, index=converted.index, dtype="boolean")
-    converted["is_citation"] = converted[bool_columns].any(axis=1)
-    return converted
+            prepared[column] = pd.Series(False, index=df.index, dtype="boolean")
+    mask = pd.DataFrame(prepared).any(axis=1).astype("boolean")
+    result = df.copy()
+    result["is_citation"] = mask
+    return result
 
 
 def _annotate_high_citation(df: pd.DataFrame, dictionary_root: Path) -> pd.DataFrame:
@@ -845,31 +865,28 @@ def _merge_target_metadata(
 
     merged = helpers.coerce_types(merged, _TARGET_METADATA_SCHEMA)
 
-    if "organism_cellularity" not in merged.columns:
-        merged["organism_cellularity"] = pd.Series(dtype="string")
+    for column in ("multifunctional_enzyme", "unicellular_organism"):
+        if column in merged.columns:
+            merged[column] = _safe_to_bool(merged[column], column)
 
-    merged["multifunctional_enzyme"] = _safe_to_bool(
-        merged["multifunctional_enzyme"], "multifunctional_enzyme"
+    reorder_plan: tuple[tuple[str, tuple[str, ...]], ...] = (
+        ("original_activity_exact", ("IUPHAR_class", "IUPHAR_subclass")),
+        ("IUPHAR_subclass", ("unicellular_organism", "multifunctional_enzyme")),
+        ("multifunctional_enzyme", ("gene_index", "taxon_index")),
+        ("taxon_index", ("sortorder.target",)),
     )
+    for anchor, columns in reorder_plan:
+        merged = _insert_columns_after(merged, anchor, columns)
 
-    enriched = organism_classification.add_cellularity_smart(
-        merged,
-        genus_col="genus",
-        superkingdom_col="superkingdom",
-        phylum_col="phylum",
-        output_col="organism_cellularity",
-    )
+    drop_columns = [
+        column
+        for column in ("genus", "superkingdom", "phylum", "taxon_id")
+        if column in merged.columns
+    ]
+    if drop_columns:
+        merged.drop(columns=drop_columns, inplace=True)
 
-    unicellular_labels = {
-        organism_classification.TYPE_UNICELLULAR,
-        organism_classification.TYPE_VIRAL,
-    }
-    enriched["unicellular_organism"] = (
-        enriched["organism_cellularity"].astype("string").isin(unicellular_labels)
-    ).astype("boolean")
-
-    enriched.drop(columns=["genus", "superkingdom", "phylum", "taxon_id", "organism_cellularity"], inplace=True)
-    return enriched
+    return merged
 
 
 def _select_and_cast(df: pd.DataFrame) -> pd.DataFrame:
@@ -1139,12 +1156,16 @@ def _transform_activity_frame(
             columns=sorted(filled),
         )
 
+    _resolve_targets_path(dictionary_root, targets_override)
+
     df = _prepare_unknown_chirality(df)
     df = _apply_multimol_logic(df)
     df = _merge_document_metadata(df, dictionary_root)
     df = _merge_assay_metadata(df, dictionary_root)
     df = _merge_testitem_metadata(df, dictionary_root)
     df = _rename_columns(df)
+    df = _compute_citation_flags(df)
+    df = _annotate_high_citation(df, dictionary_root)
     df = _extract_activity_properties_flags(df)
     df = _drop_unused_columns(df)
     df = _merge_target_metadata(df, dictionary_root=dictionary_root, targets_override=targets_override)

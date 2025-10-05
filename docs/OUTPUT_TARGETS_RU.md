@@ -41,9 +41,9 @@
    присваивает значения `Multicellular organism`, `Unicellular organism` или
    `Viral`.
 5. **Формирование справочника** — набор столбцов сводится к схеме
-   (`target_chembl_id`, `target_type`, `unicellular_organism`,
-   `multifunctional_enzyme`, `IUPHAR_class`, `IUPHAR_subclass`,
-   `target_sort_order`, `gene_index`, `taxon_index`), булевы поля приводятся к
+  (`target_chembl_id`, `target_type`, `unicellular_organism`,
+  `multifunctional_enzyme`, `IUPHAR_class`, `IUPHAR_subclass`,
+  `sortorder.target`, `gene_index`, `taxon_index`), булевы поля приводятся к
    типу `boolean`.
 6. **Выгрузка `organism.output.*`** — строки сортируются по `target_chembl_id` и
    записываются с переводами строк `\n` через `write_csv_deterministic` рядом с
@@ -72,7 +72,7 @@ CHEMBL6138,Escherichia,Bacteria,Proteobacteria,Gammaproteobacteria,Membrane prot
 Соответствующий результат (первые строки):
 
 ```
-target_chembl_id,target_type,unicellular_organism,multifunctional_enzyme,IUPHAR_class,IUPHAR_subclass,target_sort_order,gene_index,taxon_index
+target_chembl_id,target_type,unicellular_organism,multifunctional_enzyme,IUPHAR_class,IUPHAR_subclass,sortorder.target,gene_index,taxon_index
 CHEMBL1824,Multicellular organism,false,false,Voltage-gated ion channels,Sodium channels,0000012345,GENE000123,TAX000987
 CHEMBL240,Multicellular organism,false,false,Transforming growth factor beta receptors,Type I receptor,0000012388,GENE000981,TAX000654
 CHEMBL259,Multicellular organism,false,true,Fibroblast growth factor receptors,Type 4 receptor,0000012401,GENE000456,TAX000456

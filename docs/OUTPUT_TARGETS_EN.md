@@ -42,7 +42,7 @@ automatic stamp derived from the execution date.
    `Viral`.
 5. **Project helper columns** — the frame is reduced to the lookup schema
    (`target_chembl_id`, `target_type`, `unicellular_organism`,
-   `multifunctional_enzyme`, `IUPHAR_class`, `IUPHAR_subclass`, `target_sort_order`,
+   `multifunctional_enzyme`, `IUPHAR_class`, `IUPHAR_subclass`, `sortorder.target`,
    `gene_index`, `taxon_index`). Boolean columns are normalised to the Pandas
    nullable `boolean` dtype.
 6. **Emit `organism.output.*`** — the result is sorted by `target_chembl_id`,
@@ -71,7 +71,7 @@ CHEMBL6138,Escherichia,Bacteria,Proteobacteria,Gammaproteobacteria,Membrane prot
 Corresponding lookup (first rows):
 
 ```
-target_chembl_id,target_type,unicellular_organism,multifunctional_enzyme,IUPHAR_class,IUPHAR_subclass,target_sort_order,gene_index,taxon_index
+target_chembl_id,target_type,unicellular_organism,multifunctional_enzyme,IUPHAR_class,IUPHAR_subclass,sortorder.target,gene_index,taxon_index
 CHEMBL1824,Multicellular organism,false,false,Voltage-gated ion channels,Sodium channels,0000012345,GENE000123,TAX000987
 CHEMBL240,Multicellular organism,false,false,Transforming growth factor beta receptors,Type I receptor,0000012388,GENE000981,TAX000654
 CHEMBL259,Multicellular organism,false,true,Fibroblast growth factor receptors,Type 4 receptor,0000012401,GENE000456,TAX000456
