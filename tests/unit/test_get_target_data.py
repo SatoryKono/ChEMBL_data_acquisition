@@ -152,6 +152,20 @@ def test_first_token__cases(value: str | None, expected: str) -> None:
     assert get_target_data._first_token(value) == expected
 
 
+@pytest.mark.parametrize(
+    "filename, expected",
+    [
+        ("data/output/out_chembl.csv", True),
+        ("data/output/out_uniprot.csv", True),
+        ("data/output/out_iuphar.csv", True),
+        ("data/output/out_normalized.csv", False),
+        ("data/output/output.target_20250101.csv", False),
+    ],
+)
+def test_is_partial_target_export__cases(filename: str, expected: bool) -> None:
+    assert get_target_data._is_partial_target_export(Path(filename)) is expected
+
+
 def test_limited_ids__respects_limit() -> None:
     source = iter(["A", "B", "C"])
 
@@ -385,5 +399,5 @@ def test_postprocess_target_exports__skips_for_uniprot_suffix(
     assert (
         "info",
         "target_postprocess_skipped",
-        {"path": str(source), "reason": "unsupported_export_name"},
+        {"path": str(source), "reason": "partial_export"},
     ) in logger_stub.events

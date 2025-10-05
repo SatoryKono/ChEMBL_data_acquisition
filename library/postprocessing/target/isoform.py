@@ -69,6 +69,10 @@ _INPUT_NAME_RULES: Tuple[Tuple[re.Pattern[str], str], ...] = (
         re.compile(r"targets_\d{8}(?:_[A-Za-z0-9]+)*(?:_normalized)?\.csv\Z"),
         "targets_<YYYYMMDD>[<_suffixes>][_normalized].csv",
     ),
+    (
+        re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*_normalized\.csv\Z"),
+        "<custom_stem>_normalized.csv",
+    ),
 )
 
 

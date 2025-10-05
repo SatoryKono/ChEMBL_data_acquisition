@@ -187,6 +187,12 @@ RAW_SUFFIX = "_raw"
 NORMALIZED_SUFFIX = "_normalized"
 COMMAND_CHOICES: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
 
+_PARTIAL_TARGET_EXPORT_SUFFIXES: tuple[str, ...] = (
+    "_chembl.csv",
+    "_uniprot.csv",
+    "_iuphar.csv",
+)
+
 
 class StoreWithSource(argparse.Action):
     """Store CLI values while tracking their origin."""
@@ -584,6 +590,14 @@ def _postprocess_iuphar_export(
     return output_path
 
 
+def _is_partial_target_export(path: Path | str) -> bool:
+    """Return ``True`` when ``path`` refers to a partial source export."""
+
+    name = path.name if isinstance(path, Path) else str(path)
+    lowered = name.lower()
+    return any(lowered.endswith(suffix) for suffix in _PARTIAL_TARGET_EXPORT_SUFFIXES)
+
+
 def _postprocess_target_exports(
     source: Path,
     *,
@@ -601,6 +615,14 @@ def _postprocess_target_exports(
                 break
             name = name.removesuffix(suffix)
         return name
+
+    if _is_partial_target_export(source):
+        logger.info(
+            "target_postprocess_skipped",
+            path=str(source),
+            reason="partial_export",
+        )
+        return
 
     export_name = _normalised_export_name(source)
     if not target_pp._matches_expected_input_name(export_name):
