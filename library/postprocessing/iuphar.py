@@ -12,7 +12,7 @@ from typing import Sequence
 
 import pandas as pd
 
-from .helpers import normalise_text, read_csv_with_fallbacks
+from .helpers import normalise_export_basename, normalise_text, read_csv_with_fallbacks
 from library.common.csv_utils import write_csv_deterministic
 
 __all__ = ["process_iuphar_targets", "IUPHARPostProcessingError"]
@@ -252,7 +252,8 @@ def process_iuphar_targets(
     else:
         input_path = Path(input_csv)
     if output_csv is None:
-        output_path = input_path.with_name(f"IUPHAR.{input_path.name}")
+        base = normalise_export_basename(input_path)
+        output_path = input_path.with_name(f"IUPHAR.{base}").with_suffix(".csv")
     else:
         output_path = Path(output_csv)
 

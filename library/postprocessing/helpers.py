@@ -23,6 +23,26 @@ from library.common.csv_utils import write_csv_deterministic
 ENCODING_FALLBACKS: tuple[str, ...] = ("utf-8", "utf-8-sig", "cp1252")
 
 
+def normalise_export_basename(path: Path) -> str:
+    """Return a deterministic basename for post-processed exports.
+
+    The helper mirrors the naming conventions used by the legacy Power Query
+    workbook: temporary suffixes (``.tmp``) are stripped, leading dots are
+    removed so that subsequent ``Path.with_name`` calls do not introduce
+    accidental hidden files, and the remaining stem is returned unchanged.
+    """
+
+    name = path.name
+    while name.startswith("."):
+        name = name[1:]
+    tmp_suffix = ".tmp"
+    while name.lower().endswith(tmp_suffix):
+        name = name[: -len(tmp_suffix)]
+    if not name:
+        raise ValueError(f"Unable to derive export basename from {path!s}")
+    return name
+
+
 def normalise_text(value: object | None) -> str:
     """Return a trimmed textual representation of ``value``.
 

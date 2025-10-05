@@ -38,3 +38,25 @@ def test_process_target_names__creates_name_output_file(tmp_path):
     assert not exported.empty
     assert (exported["target_chembl_id"] == "CHEMBL_TARGET").all()
     assert "Alpha" in exported["name"].values
+
+
+def test_process_target_names__normalises_tmp_suffix(tmp_path: Path) -> None:
+    input_path = tmp_path / "output.target_20250101.csv.tmp"
+    frame = pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL_TARGET",
+                "uniprot_id_primary": "P54321",
+                "pref_name": "Beta",
+                "gene_symbol": "GENE2",
+            }
+        ],
+        dtype="string",
+    )
+    frame.to_csv(input_path, index=False, encoding="utf-8")
+
+    result = names.process_target_names(input_path, verbose=False)
+
+    output_path = Path(result["path"])
+    assert output_path.name == "name.output.target_20250101.csv"
+    assert output_path.exists()
