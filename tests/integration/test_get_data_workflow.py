@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import io
-import json
 from dataclasses import replace
 from pathlib import Path
 from typing import Callable
@@ -11,6 +10,7 @@ import pandas as pd
 import pytest
 
 from scripts import get_data
+from tests.helpers.logs import parse_log_lines
 
 
 def _build_stub_step(
@@ -107,7 +107,9 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
     )
 
     stream = io.StringIO()
-    logger = get_data.Logger(get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration"))
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
+    )
     monkeypatch.setattr(get_data, "_PIPELINE_STEPS", (step,), raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
@@ -116,7 +118,7 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
     assert output_payload, "expected pipeline to write output"
     output_frame = output_payload[0]
     assert list(output_frame["document_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
-    logs = [json.loads(line) for line in stream.getvalue().splitlines() if line.strip()]
+    logs = parse_log_lines(stream.getvalue())
     assert any(record.get("event") == "duplicates_detected" for record in logs)
 
     malformed = frame.drop(columns=["title"])
@@ -126,7 +128,7 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
 
     status_malformed = get_data.run_pipeline(cfg)
     assert status_malformed == 1
-    logs = [json.loads(line) for line in stream.getvalue().splitlines() if line.strip()]
+    logs = parse_log_lines(stream.getvalue())
     assert any(record.get("event") == "schema_mismatch" for record in logs)
 
 
@@ -162,7 +164,9 @@ def test_pipeline_subset__skip_existing_and_force(tmp_path: Path, monkeypatch: p
     )
 
     stream = io.StringIO()
-    logger = get_data.Logger(get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration"))
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
+    )
     monkeypatch.setattr(get_data, "_PIPELINE_STEPS", (step,), raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
@@ -174,7 +178,7 @@ def test_pipeline_subset__skip_existing_and_force(tmp_path: Path, monkeypatch: p
     status_skip = get_data.run_pipeline(cfg_skip)
     assert status_skip == 0
     assert executions == [2]
-    logs = [json.loads(line) for line in stream.getvalue().splitlines() if line.strip()]
+    logs = parse_log_lines(stream.getvalue())
     assert any(record.get("event") == "step_skipped_existing" for record in logs)
 
     cfg_force = replace(cfg, skip_existing=True, force=True)
@@ -229,7 +233,9 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
     )
 
     stream = io.StringIO()
-    logger = get_data.Logger(get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration"))
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
+    )
     monkeypatch.setattr(get_data, "_PIPELINE_STEPS", (step,), raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 

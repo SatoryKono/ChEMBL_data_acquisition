@@ -23,6 +23,7 @@ def test_ensure_required_columns__raises_for_missing_columns() -> None:
 
     message = str(excinfo.value)
     assert "gtop_synonyms" in message
+
     assert "component_description" not in message
 
 

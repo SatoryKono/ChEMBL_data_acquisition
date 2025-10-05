@@ -22,6 +22,7 @@ that the pipelines can be executed programmatically from other callers as well.
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 import time
 import uuid
@@ -30,7 +31,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Callable, Iterable, IO, Sequence
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -53,6 +54,7 @@ from scripts import (
     get_testitem_data,
 )
 
+from library.cli.logging import setup_cli_logging
 from library.clients import ChemblClient
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
 from library.config import Config, load_config
@@ -60,7 +62,7 @@ from library.integration.molecule_catalog import load_parent_catalog
 from library.utils.config import DEFAULT_CONFIG_PATH
 
 
-_LOGGER: Logger = Logger(LoggerConfig())
+_LOGGER: Logger = configure_logger(LoggerConfig())
 
 _DEFAULT_INPUT_FILES = {
     "document": "document.csv",
@@ -189,7 +191,13 @@ def _resolve_path(base: Path, candidate: Path) -> Path:
     return (base / expanded).resolve()
 
 
-def _configure_logging(level_name: str, *, run_id: str | None = None) -> Logger:
+def _configure_logging(
+    level_name: str,
+    *,
+    run_id: str | None = None,
+    stream: IO[str] | None = None,
+    handlers: Iterable[logging.Handler] | None = None,
+) -> Logger:
     """Configure structured logging for the orchestration workflow."""
 
     normalised = level_name.upper()
@@ -199,7 +207,16 @@ def _configure_logging(level_name: str, *, run_id: str | None = None) -> Logger:
 
     resolved_run_id = run_id or uuid.uuid4().hex
 
-    return configure_logger(LoggerConfig(level=normalised, run_id=resolved_run_id))
+    extra_handlers = list(handlers) if handlers is not None else []
+
+    return configure_logger(
+        LoggerConfig(
+            level=normalised,
+            run_id=resolved_run_id,
+            stream=stream,
+            handlers=extra_handlers,
+        )
+    )
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
@@ -247,6 +264,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Logging verbosity for the orchestrator and child pipelines",
     )
     parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging for the orchestrator and delegated pipelines",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -286,6 +308,10 @@ def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
     config_path = Path(config_candidate).expanduser().resolve()
     dry_run = bool(getattr(args, "dry_run", False))
 
+    log_level = str(getattr(args, "log_level", "INFO")).upper()
+    if getattr(args, "verbose", False):
+        log_level = "DEBUG"
+
     if args.limit is not None and args.limit < 0:
         raise ValueError("--limit must be zero or a positive integer")
 
@@ -302,7 +328,7 @@ def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
         output_dir=output_dir,
         config_path=config_path,
         date_prefix=args.date_prefix,
-        log_level=args.log_level,
+        log_level=log_level,
         limit=args.limit,
         force=args.force,
         skip_existing=args.skip_existing,
@@ -866,23 +892,48 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command-line entry point for the orchestration script."""
 
     args = _parse_args(argv)
-    try:
-        logger = _configure_logging(args.log_level)
-    except ValueError as exc:
-        raise SystemExit(str(exc))
+    desired_level = (
+        "DEBUG" if getattr(args, "verbose", False) else str(args.log_level).upper()
+    )
+    if desired_level not in {"DEBUG", "INFO", "WARN", "WARNING", "ERROR"}:
+        raise SystemExit(f"invalid log level: {args.log_level}")
 
-    global _LOGGER
-    _LOGGER = logger
-    try:
-        cfg = _prepare_config(args)
-    except (FileNotFoundError, OSError, ValueError) as exc:
-        _LOGGER.error("configuration_error", error=str(exc))
-        return 1
-    status = run_pipeline(cfg)
-    if status != 0:
-        _LOGGER.error("workflow_failed", exit_code=status)
-    else:
-        _LOGGER.info("workflow_succeeded")
+    script_name = Path(__file__).with_suffix("").name
+    base_cfg = LoggerConfig(level=desired_level, run_id=uuid.uuid4().hex)
+    log_directory = Path(args.base_path).expanduser().resolve() / "logs"
+    status = 1
+
+    with setup_cli_logging(
+        script_name,
+        base_cfg,
+        getattr(args, "date_prefix", None),
+        log_dir=log_directory,
+    ) as logging_ctx:
+        try:
+            logger = _configure_logging(
+                logging_ctx.log_cfg.level,
+                run_id=logging_ctx.log_cfg.run_id,
+                stream=logging_ctx.console_stream,
+                handlers=logging_ctx.log_cfg.handlers,
+            )
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+
+        global _LOGGER
+        _LOGGER = logger
+
+        try:
+            cfg = _prepare_config(args)
+        except (FileNotFoundError, OSError, ValueError) as exc:
+            _LOGGER.error("configuration_error", error=str(exc))
+            status = 1
+        else:
+            status = run_pipeline(cfg)
+            if status != 0:
+                _LOGGER.error("workflow_failed", exit_code=status)
+            else:
+                _LOGGER.info("workflow_succeeded")
+
     return status
 
 

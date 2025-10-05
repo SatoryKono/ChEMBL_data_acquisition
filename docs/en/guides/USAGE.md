@@ -15,6 +15,8 @@ three tiers:
      `--output` and `--out` remain as deprecated aliases that trigger a
      deprecation warning; prefer `--final-out`.
    - `--log-level` – logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
+   - `--verbose` – shortcut enabling `DEBUG` logging without overriding
+     configuration files.
    - `--sep`, `--encoding` – CSV delimiter and encoding (`utf-8-sig` by default).
    - `--base-path`, `--input-dir`, `--output-dir`, `--date` – shortcuts used by
      the orchestrator to build consistent folder layouts and default filenames.
@@ -32,7 +34,9 @@ three tiers:
    flags in the target pipeline or DOI fallbacks in the document pipeline).
 
 All commands exit with a non-zero status on validation errors, IO issues, or
-upstream API failures.
+upstream API failures. Each run writes a text log to `logs/<script>_<YYYYMMDD>.log`
+using the `[timestamp] [LEVEL] [logger] message` format so that warnings and
+errors can be audited after the fact.
 
 ### Input templates
 
@@ -263,4 +267,5 @@ Use these modules for diagnostics, QA, or offline workflows. Each exposes a
 - The document pipeline can honour DOI overrides via `--fallback-doi-csv` with
   two extra flags: `--fallback-doi-pmid-column` and `--fallback-doi-value-column`.
 - All pipelines respect the `CHEMBL_DA_LOG_LEVEL` environment variable. Combine
-  it with `--log-level DEBUG` for verbose troubleshooting without editing YAML.
+  it with `--verbose` (or `--log-level DEBUG`) for verbose troubleshooting
+  without editing YAML.
