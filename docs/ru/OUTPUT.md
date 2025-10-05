@@ -291,6 +291,60 @@
 | `pipeline_version` | string | Версия пакета. |
 | `timestamp_utc` | string | Время выгрузки. |
 
+## Таблица тканей (`tissues`)
+
+Схема: [`library/schemas/tissues.py`](../library/schemas/tissues.py). Порядок
+колонок задаётся `TISSUES_COLUMN_ORDER`.
+
+### Идентификаторы и наименования
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `tissue_chembl_id` | string | Основной идентификатор (обязателен, уникален). |
+| `pref_name` | string | Предпочтительное название ткани (обязательное поле). |
+| `synonyms` | string | Синонимы, объединённые через `;`. |
+| `organism` | string | Название организма из метаданных ChEMBL. |
+| `organism_tax_id` | string/int | Идентификатор таксона NCBI при наличии. |
+| `organism_common_name` | string | Обиходное название (например, `human`). |
+
+### Онтологические кросс-ссылки
+
+| Колонка | Описание |
+|---------|----------|
+| `uberon_id`, `uberon_label` | Акцессия и наименование в UBERON. |
+| `efo_id`, `efo_label` | Идентификатор и лейбл в EFO. |
+| `bto_id`, `bto_label` | Ссылка на BRENDA Tissue Ontology. |
+| `caloha_id`, `caloha_label` | Соответствие в анатомической онтологии Caloha. |
+| `lincs_id`, `lincs_pref_name` | Идентификатор и название LINCS. |
+| `ccle_id`, `ccle_name` | Идентификатор и отображаемое имя CCLE. |
+
+### Иерархия и происхождение
+
+| Колонка | Описание |
+|---------|----------|
+| `parent_tissue_chembl_id` | Родительский узел в иерархии ChEMBL (может отсутствовать). |
+| `hierarchy_level` | Глубина узла (целое, начиная с `0` для корня). |
+| `lineage` | Путь от корня до узла через разделитель `>`. |
+
+### Аудит
+
+| Колонка | Описание |
+|---------|----------|
+| `pipeline_version` | Версия пакета при экспорте. |
+| `timestamp_utc` | Временная метка экспорта в UTC. |
+
+### Сортировка, пропуски и дополнительные файлы
+
+- Строки сортируются по `tissue_chembl_id` (по возрастанию), затем по `pref_name`
+  для детерминированного порядка.
+- Поля `tissue_chembl_id`, `pref_name`, `pipeline_version`, `timestamp_utc`
+  всегда заполнены. Дополнительные кросс-ссылки нормализуются в пустые строки,
+  а не в литералы `NULL`.
+- Если `--final-out` не указан, CLI создаёт
+  `output.tissue_<YYYYMMDD>.csv`, `output.tissue_<YYYYMMDD>.meta.yaml`,
+  `output.tissue_<YYYYMMDD>_quality_report_table.csv` и
+  `output.tissue_<YYYYMMDD>.quality.json`.
+
 ## Профили качества
 
 CSV-отчёт содержит:

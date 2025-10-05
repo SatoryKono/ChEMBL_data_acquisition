@@ -242,6 +242,35 @@ flags are:
 Retry, back-off and PubChem enrichment settings are sourced from the YAML
 configuration (`testitem` section).
 
+## Tissue pipeline `get_tissue_data`
+
+Aggregates tissue metadata from ChEMBL and companion ontologies, producing a
+normalised lookup for downstream joins. Besides the shared options the command
+supports:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--column` | `tissue_chembl_id` | Input column containing tissue ChEMBL identifiers. |
+| `--chunk-size` | `50` | Identifiers per request to the `/tissue` endpoint. |
+| `--timeout` | `30.0` | HTTP timeout per request. |
+| `--limit`, `--offset` | `None`, `0` | Range selection applied before contacting the API. |
+| `--xref-sources` | `uberon,efo,bto,caloha` | Comma-separated list of ontology sources to expand. |
+| `--raw-out` | `None` | Optional path for the raw combined payload prior to normalisation. |
+| `--raw-format` | `parquet` | File format for `--raw-out` (`csv` or `parquet`). |
+
+Example run writing the harmonised table and limiting enrichment to key
+ontologies:
+
+```bash
+python scripts/get_tissue_data.py \
+  --input data/input/tissue.csv \
+  --final-out output/tissues.csv \
+  --config config/config.yaml \
+  --chunk-size 50 \
+  --xref-sources uberon,efo,bto \
+  --limit 250
+```
+
 ## Utility commands
 
 Console scripts located under `library/utils/cli_tools` provide supporting
