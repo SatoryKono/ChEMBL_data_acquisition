@@ -503,17 +503,16 @@ def test_isoform_process_targets__accepts_explicit_custom_name(
 
 
 @pytest.mark.unit
-def test_isoform_process_targets__supports_uniprot_export_name(
+def test_isoform_process_targets__warns_on_non_csv_extension(
     tmp_path: Path, snapshot_resource: Path
 ) -> None:
     source = snapshot_resource / "target_isoform_minimal.csv"
-    input_path = tmp_path / "out_uniprot.csv"
+    input_path = tmp_path / "custom_export.txt"
     input_path.write_bytes(source.read_bytes())
 
-    with warnings.catch_warnings(record=True) as recorded:
-        warnings.simplefilter("error")
+    match = "does not use the canonical '.csv' extension"
+    with pytest.warns(UserWarning, match=match):
         output_path = isoform.process_targets(str(input_path), verbose=False)
 
-    assert recorded == []
-    assert output_path.name == "isoform.out_uniprot.csv"
+    assert output_path.name == "isoform.custom_export.txt"
     assert output_path.parent == input_path.parent
