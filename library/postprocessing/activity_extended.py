@@ -513,42 +513,71 @@ def _select_and_cast(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def _string_missing_mask(series: pd.Series) -> pd.Series:
+    values = series.astype("string")
+    stripped = values.str.strip()
+    return values.isna() | stripped.fillna("").eq("")
+
+
 def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]]:
     df = frame.copy()
     filled: set[str] = set()
 
-    if "activity_chembl_id" not in df.columns and "activity_id" in df.columns:
-        df["activity_chembl_id"] = df["activity_id"].astype("string")
-        filled.add("activity_chembl_id")
+    if "activity_chembl_id" not in df.columns:
+        if "activity_id" in df.columns:
+            df["activity_chembl_id"] = df["activity_id"].astype("string")
+            filled.add("activity_chembl_id")
+    else:
+        mask = _string_missing_mask(df["activity_chembl_id"])
+        if mask.any() and "activity_id" in df.columns:
+            df.loc[mask, "activity_chembl_id"] = df.loc[mask, "activity_id"].astype(
+                "string"
+            )
+            filled.add("activity_chembl_id")
 
-    if "compound_name" not in df.columns and "molecule_pref_name" in df.columns:
-        df["compound_name"] = df["molecule_pref_name"].astype("string")
-        filled.add("compound_name")
+    if "compound_name" not in df.columns:
+        if "molecule_pref_name" in df.columns:
+            df["compound_name"] = df["molecule_pref_name"].astype("string")
+            filled.add("compound_name")
+    else:
+        mask = _string_missing_mask(df["compound_name"])
+        if mask.any() and "molecule_pref_name" in df.columns:
+            df.loc[mask, "compound_name"] = df.loc[mask, "molecule_pref_name"].astype(
+                "string"
+            )
+            filled.add("compound_name")
 
-    if "compound_key" not in df.columns:
+    if "compound_key" in df.columns:
+        missing_mask = _string_missing_mask(df["compound_key"])
+    else:
+        missing_mask = pd.Series(True, index=df.index, dtype="boolean")
+        df["compound_key"] = pd.Series(pd.NA, index=df.index, dtype="string")
+
+    if missing_mask.any():
         for candidate in ("parent_molecule_chembl_id", "molecule_chembl_id"):
             if candidate in df.columns:
-                df["compound_key"] = df[candidate].astype("string")
+                df.loc[missing_mask, "compound_key"] = (
+                    df.loc[missing_mask, candidate].astype("string")
+                )
                 filled.add("compound_key")
                 break
-    else:
-        missing_mask = df["compound_key"].isna()
-        if missing_mask.any():
-            for candidate in ("parent_molecule_chembl_id", "molecule_chembl_id"):
-                if candidate in df.columns:
-                    df.loc[missing_mask, "compound_key"] = (
-                        df.loc[missing_mask, candidate].astype("string")
-                    )
-                    filled.add("compound_key")
-                    break
 
     log_value_series: pd.Series | None = None
 
     if "log_value" in df.columns:
         log_value_series = pd.to_numeric(df["log_value"], errors="coerce").astype("Float64")
-    elif "pchembl_value" in df.columns:
-        log_value_series = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
-        filled.add("log_value")
+    pchembl_series: pd.Series | None = None
+    if "pchembl_value" in df.columns:
+        pchembl_series = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
+        if log_value_series is None:
+            log_value_series = pchembl_series
+            filled.add("log_value")
+        else:
+            mask = log_value_series.isna()
+            if mask.any():
+                log_value_series = log_value_series.copy()
+                log_value_series.loc[mask] = pchembl_series.loc[mask]
+                filled.add("log_value")
 
     if log_value_series is not None:
         df["log_value"] = log_value_series
