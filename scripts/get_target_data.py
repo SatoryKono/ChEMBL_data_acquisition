@@ -334,7 +334,7 @@ def _is_supported_target_export(path: Path) -> bool:
         path=str(path),
         reason="noncanonical_filename",
     )
-    return True
+    return False
 
 
 def _postprocess_isoform_export(

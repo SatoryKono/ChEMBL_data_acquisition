@@ -84,6 +84,41 @@ _REQUIRED_COLUMN_DTYPES: Mapping[str, str] = {
     "nstereo": "Int64",
 }
 
+_NA_MARKERS: tuple[str, ...] = ("[#N/A]",)
+
+_ACTIVITY_INPUT_SCHEMA: Mapping[str, str] = {
+    column: (
+        "Logical"
+        if dtype == "boolean"
+        else "Int64"
+        if dtype == "Int64"
+        else "Float64"
+        if dtype == "Float64"
+        else "Text"
+    )
+    for column, dtype in _REQUIRED_COLUMN_DTYPES.items()
+    if dtype in {"string", "boolean", "Int64", "Float64"}
+}
+
+_TARGET_METADATA_SCHEMA: Mapping[str, str] = {
+    "target_chembl_id": "Text",
+    "target_sort_order": "Text",
+    "multifunctional_enzyme": "Logical",
+    "IUPHAR_class": "Text",
+    "IUPHAR_subclass": "Text",
+    "genus": "Text",
+    "superkingdom": "Text",
+    "phylum": "Text",
+    "taxon_id": "Int64",
+    "gene_index": "Text",
+    "taxon_index": "Text",
+}
+
+_CITATION_FRACTION_SCHEMA: Mapping[str, str] = {
+    "N": "Int64",
+    "K_min_significant": "Int64",
+}
+
 _REQUIRED_COLUMN_FALLBACKS: Mapping[str, Callable[[pd.DataFrame], pd.Series | None]] = {
     "activity_chembl_id": lambda frame: frame.get("activity_id"),
     "salt_chembl_id": (
@@ -103,13 +138,33 @@ _GROUP_KEY_COLUMNS: tuple[str, ...] = (
     "standard_type",
 )
 
+_DEDUPE_SORT_ORDER: tuple[str, ...] = (
+    "completed",
+    "activity_id",
+    "activity_chembl_id",
+    "assay_chembl_id",
+    "document_chembl_id",
+    "standard_type",
+    "standard_value",
+)
+
+_DEDUPE_SUBSET_KEYS: tuple[str, ...] = (
+    "activity_id",
+    "assay_chembl_id",
+    "document_chembl_id",
+    "standard_type",
+    "standard_value",
+)
+
 _FINAL_COLUMN_ORDER: tuple[str, ...] = (
     "activity_chembl_id",
     "saltform_id",
     "molecule_chembl_id",
+    "molecule_chembl_id.1",
     "target_chembl_id",
     "assay_chembl_id",
     "document_chembl_id",
+    "completed",
     "bao_endpoint",
     "standard_type",
     "standard_value",
@@ -117,8 +172,10 @@ _FINAL_COLUMN_ORDER: tuple[str, ...] = (
     "bao_format",
     "compound_key",
     "compound_name",
+    "standard_inchi_skeleton",
     "unknown_chirality",
     "multmol_assay",
+    "assay_with_same_target",
     "exact_data_citation",
     "higly_correlated_assay",
     "shuffled_assay",
@@ -130,7 +187,6 @@ _FINAL_COLUMN_ORDER: tuple[str, ...] = (
     "high_citation_rate",
     "original_activity_approx",
     "original_activity_exact",
-    "is_citation",
     "IUPHAR_class",
     "IUPHAR_subclass",
     "unicellular_organism",
@@ -212,7 +268,12 @@ def _load_citation_fraction(dictionary_root: Path) -> pd.DataFrame:
             "citation_fraction.csv not found; expected at "
             f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
         )
-    return pd.read_csv(candidate, dtype={"N": "Int64", "K_min_significant": "Int64"})
+    return helpers.read_csv_strict(
+        candidate,
+        encoding=helpers.ENCODING_FALLBACKS,
+        dtype_map=_CITATION_FRACTION_SCHEMA,
+        na_values=_NA_MARKERS,
+    )
 
 
 def _resolve_targets_path(dictionary_root: Path, override: Path | None) -> Path:
@@ -238,20 +299,121 @@ def _resolve_targets_path(dictionary_root: Path, override: Path | None) -> Path:
 
 
 def _load_target_metadata(path: Path) -> pd.DataFrame:
-    dtype: Mapping[str, str] = {
-        "target_chembl_id": "string",
-        "IUPHAR_class": "string",
-        "IUPHAR_subclass": "string",
-        "gene_index": "string",
-        "taxon_index": "string",
-        "target_sort_order": "string",
-        "multifunctional_enzyme": "string",
-        "genus": "string",
-        "superkingdom": "string",
-        "phylum": "string",
-        "taxon_id": "string",
-    }
-    return pd.read_csv(path, usecols=_TARGET_COLUMNS, dtype=dtype)
+    frame = helpers.read_csv_strict(
+        path,
+        encoding=helpers.ENCODING_FALLBACKS,
+        dtype_map=_TARGET_METADATA_SCHEMA,
+        na_values=_NA_MARKERS,
+    )
+    missing = [column for column in _TARGET_COLUMNS if column not in frame.columns]
+    if missing:
+        raise ActivityExtendedError(
+            "targets_type.csv missing expected columns: " + ", ".join(sorted(missing))
+        )
+    return frame.loc[:, list(_TARGET_COLUMNS)]
+
+
+def _load_document_lookup(dictionary_root: Path) -> pd.DataFrame:
+    candidate = dictionary_root / "_document" / "document.csv"
+    if not candidate.exists():
+        raise ActivityExtendedError(
+            "document.csv not found; expected at "
+            f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
+        )
+
+    frame: pd.DataFrame | None = None
+    for sep in (",", "\t"):
+        try:
+            candidate_frame = helpers.read_csv_with_fallbacks(candidate, sep=sep)
+        except Exception:
+            continue
+        if "document_chembl_id" in candidate_frame.columns:
+            frame = candidate_frame
+            break
+    if frame is None:
+        raise ActivityExtendedError(
+            "document.csv missing required 'document_chembl_id' column; unable to join document metadata"
+        )
+
+    columns = ["document_chembl_id", "completed", "review"]
+    for column in columns:
+        if column not in frame.columns:
+            frame[column] = pd.Series(pd.NA, dtype="string")
+    result = frame.loc[:, columns].drop_duplicates(subset=["document_chembl_id"])
+    return result
+
+
+def _load_assay_lookup(dictionary_root: Path) -> pd.DataFrame:
+    candidate = dictionary_root / "_assay" / "assay.csv"
+    if not candidate.exists():
+        raise ActivityExtendedError(
+            "assay.csv not found; expected at "
+            f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
+        )
+    frame: pd.DataFrame | None = None
+    for sep in (",", "\t"):
+        try:
+            candidate_frame = helpers.read_csv_with_fallbacks(candidate, sep=sep)
+        except Exception:
+            continue
+        if "assay_chembl_id" in candidate_frame.columns:
+            frame = candidate_frame
+            break
+    if frame is None:
+        raise ActivityExtendedError(
+            "assay.csv missing required 'assay_chembl_id' column; unable to join assay metadata"
+        )
+    if "assay_with_same_target" not in frame.columns:
+        frame["assay_with_same_target"] = pd.Series(pd.NA, dtype="string")
+    result = frame.loc[:, ["assay_chembl_id", "assay_with_same_target"]]
+    return result.drop_duplicates(subset=["assay_chembl_id"])
+
+
+def _load_testitem_lookup(dictionary_root: Path) -> pd.DataFrame:
+    candidate = dictionary_root / "_testitem" / "testitem.csv"
+    if not candidate.exists():
+        raise ActivityExtendedError(
+            "testitem.csv not found; expected at "
+            f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
+        )
+    frame: pd.DataFrame | None = None
+    for sep in (",", "\t"):
+        try:
+            candidate_frame = helpers.read_csv_with_fallbacks(candidate, sep=sep)
+        except Exception:
+            continue
+        if "molecule_chembl_id" in candidate_frame.columns:
+            frame = candidate_frame
+            break
+    if frame is None:
+        raise ActivityExtendedError(
+            "testitem.csv missing required 'molecule_chembl_id' column; unable to join testitem metadata"
+        )
+    if "standard_inchi_skeleton" not in frame.columns:
+        frame["standard_inchi_skeleton"] = pd.Series(pd.NA, dtype="string")
+    result = frame.loc[:, ["molecule_chembl_id", "standard_inchi_skeleton"]]
+    return result.drop_duplicates(subset=["molecule_chembl_id"])
+
+
+def _insert_columns_after(
+    df: pd.DataFrame, anchor: str, columns: Sequence[str]
+) -> pd.DataFrame:
+    present = [column for column in columns if column in df.columns]
+    if not present:
+        return df
+    base_order = [column for column in df.columns if column not in present]
+    try:
+        index = base_order.index(anchor) + 1
+    except ValueError:
+        index = len(base_order)
+    new_order = base_order[:index] + present + base_order[index:]
+    return df.loc[:, new_order]
+
+
+def _log_join_statistics(event: str, indicator: pd.Series) -> None:
+    matched = int((indicator == "both").sum())
+    missing = int((indicator == "left_only").sum())
+    logger.info(event, matched=matched, missing=missing)
 
 
 def _safe_to_bool(series: pd.Series, column: str) -> pd.Series:
@@ -305,12 +467,14 @@ def _apply_multimol_logic(df: pd.DataFrame) -> pd.DataFrame:
         raise ActivityExtendedError(
             "activity table missing columns for multimol grouping: " + ", ".join(sorted(missing))
         )
+    df = helpers.sort_power_query(df, _GROUP_KEY_COLUMNS)
     counts = (
         df.groupby(list(_GROUP_KEY_COLUMNS), dropna=False)
         .size()
         .rename("Count")
         .reset_index()
     )
+    counts = helpers.sort_power_query(counts, _GROUP_KEY_COLUMNS)
     merged = df.merge(counts, on=list(_GROUP_KEY_COLUMNS), how="left")
     mask = (
         merged["unknown_chirality"].fillna(True).eq(False)
@@ -390,7 +554,6 @@ def _drop_unused_columns(df: pd.DataFrame) -> pd.DataFrame:
         "error_document",
         "exact_cited_activity_samedoc",
         "higly_correlated_cit_samedoc",
-        "standard_inchi_skeleton",
         "standard_inchi_stereo",
         "step1",
         "step2",
@@ -545,7 +708,7 @@ def _compute_citation_flags(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _annotate_high_citation(df: pd.DataFrame, dictionary_root: Path) -> pd.DataFrame:
-    converted = df.copy()
+    converted = helpers.sort_power_query(df, ("document_chembl_id", "activity_chembl_id"))
     counts = (
         converted.groupby("document_chembl_id")["is_citation"]
         .agg(n_citation="sum", n_non_citation=lambda s: (~s).sum())
@@ -555,6 +718,7 @@ def _annotate_high_citation(df: pd.DataFrame, dictionary_root: Path) -> pd.DataF
     counts = counts[(counts["n_citation"] > 0) & (counts["n_non_citation"] > 0)]
 
     citation_fraction = _load_citation_fraction(dictionary_root)
+    counts = helpers.sort_power_query(counts, ("document_chembl_id",))
     counts = counts.merge(
         citation_fraction[["N", "K_min_significant"]],
         on="N",
@@ -575,6 +739,97 @@ def _annotate_high_citation(df: pd.DataFrame, dictionary_root: Path) -> pd.DataF
     return converted
 
 
+def _merge_document_metadata(df: pd.DataFrame, dictionary_root: Path) -> pd.DataFrame:
+    lookup = _load_document_lookup(dictionary_root)
+    merged = df.merge(
+        lookup,
+        on="document_chembl_id",
+        how="left",
+        indicator="_merge_document",
+    )
+    _log_join_statistics("activity_extended_document_join", merged["_merge_document"])
+    merged.drop(columns=["_merge_document"], inplace=True)
+
+    if "completed" in merged.columns:
+        merged["completed"] = merged["completed"].astype("string")
+    else:
+        merged["completed"] = pd.Series(pd.NA, index=merged.index, dtype="string")
+
+    if "review" in merged.columns:
+        merged["review"] = _safe_to_bool(merged["review"], "review")
+    else:
+        merged["review"] = pd.Series(pd.NA, index=merged.index, dtype="boolean")
+
+    merged = _insert_columns_after(merged, "document_chembl_id", ("completed", "review"))
+    return merged
+
+
+def _merge_assay_metadata(df: pd.DataFrame, dictionary_root: Path) -> pd.DataFrame:
+    lookup = _load_assay_lookup(dictionary_root)
+    merged = df.merge(
+        lookup,
+        on="assay_chembl_id",
+        how="left",
+        indicator="_merge_assay",
+        suffixes=("", "_assay"),
+    )
+    _log_join_statistics("activity_extended_assay_join", merged["_merge_assay"])
+    merged.drop(columns=["_merge_assay"], inplace=True)
+
+    if "assay_with_same_target" in merged.columns:
+        merged["assay_with_same_target"] = _safe_to_int(
+            merged["assay_with_same_target"], "assay_with_same_target"
+        )
+    else:
+        merged["assay_with_same_target"] = pd.Series(pd.NA, index=merged.index, dtype="Int64")
+
+    merged = _insert_columns_after(merged, "multmol_assay", ("assay_with_same_target",))
+    return merged
+
+
+def _merge_testitem_metadata(df: pd.DataFrame, dictionary_root: Path) -> pd.DataFrame:
+    lookup = _load_testitem_lookup(dictionary_root)
+    lookup = lookup.assign(_molecule_chembl_id_expanded=lookup["molecule_chembl_id"])
+    merged = df.merge(
+        lookup,
+        on="molecule_chembl_id",
+        how="left",
+        indicator="_merge_testitem",
+        suffixes=("", "_testitem"),
+    )
+    _log_join_statistics("activity_extended_testitem_join", merged["_merge_testitem"])
+    merged.drop(columns=["_merge_testitem"], inplace=True)
+
+    right_id_column = "_molecule_chembl_id_expanded"
+    if right_id_column in merged.columns:
+        new_ids = merged[right_id_column].astype("string")
+        merged.drop(columns=[right_id_column], inplace=True)
+    else:
+        new_ids = pd.Series(pd.NA, index=merged.index, dtype="string")
+    merged["molecule_chembl_id.1"] = new_ids
+
+    if "standard_inchi_skeleton" in merged.columns:
+        left_inchi = merged["standard_inchi_skeleton"].astype("string")
+        merged.drop(columns=["standard_inchi_skeleton"], inplace=True)
+    else:
+        left_inchi = pd.Series(pd.NA, index=merged.index, dtype="string")
+
+    right_inchi_column = "standard_inchi_skeleton_testitem"
+    if right_inchi_column in merged.columns:
+        right_inchi = merged[right_inchi_column].astype("string")
+        merged.drop(columns=[right_inchi_column], inplace=True)
+    else:
+        right_inchi = pd.Series(pd.NA, index=merged.index, dtype="string")
+    merged["standard_inchi_skeleton"] = right_inchi.fillna(left_inchi)
+
+    merged["molecule_chembl_id.1"] = merged["molecule_chembl_id.1"].astype("string")
+    merged["standard_inchi_skeleton"] = merged["standard_inchi_skeleton"].astype("string")
+
+    merged = _insert_columns_after(merged, "molecule_chembl_id", ("molecule_chembl_id.1",))
+    merged = _insert_columns_after(merged, "compound_name", ("standard_inchi_skeleton",))
+    return merged
+
+
 def _merge_target_metadata(
     df: pd.DataFrame,
     *,
@@ -583,8 +838,12 @@ def _merge_target_metadata(
 ) -> pd.DataFrame:
     targets_path = _resolve_targets_path(dictionary_root, targets_override)
     targets = _load_target_metadata(targets_path)
+    df = helpers.sort_power_query(df, ("target_chembl_id", "assay_chembl_id"))
+    targets = helpers.sort_power_query(targets, ("target_chembl_id",))
     merged = df.merge(targets, on="target_chembl_id", how="left")
     merged = merged.loc[:, ~merged.columns.duplicated()]
+
+    merged = helpers.coerce_types(merged, _TARGET_METADATA_SCHEMA)
 
     if "organism_cellularity" not in merged.columns:
         merged["organism_cellularity"] = pd.Series(dtype="string")
@@ -639,7 +898,66 @@ def _select_and_cast(df: pd.DataFrame) -> pd.DataFrame:
     for column in bool_columns:
         if column in result.columns:
             result[column] = _safe_to_bool(result[column], column)
+
+    def _format_numeric(value: object) -> object:
+        if pd.isna(value):
+            return pd.NA
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return value
+        if float(numeric).is_integer():
+            return f"{numeric:.1f}"
+        text = str(numeric)
+        return text.rstrip("0").rstrip(".") if "." in text else text
+
+    for column in ("standard_value", "pA_value"):
+        if column in result.columns:
+            result[column] = result[column].map(_format_numeric).astype("string")
     return result
+
+
+def dedupe_final(df: pd.DataFrame) -> pd.DataFrame:
+    """Return ``df`` sorted and deduplicated using Power Query key rules."""
+
+    if df.empty:
+        logger.info("activity_extended_deduplicated", removed=0, remaining=0)
+        return df.copy()
+
+    sort_candidates: list[str] = []
+    for column in _DEDUPE_SORT_ORDER:
+        if column == "activity_id":
+            options = ("activity_id", "activity_chembl_id")
+        else:
+            options = (column,)
+        for option in options:
+            if option in df.columns and option not in sort_candidates:
+                sort_candidates.append(option)
+                break
+
+    sorted_df = helpers.sort_power_query(df, sort_candidates) if sort_candidates else df.copy()
+
+    subset: list[str] = []
+    missing: list[str] = []
+    for column in _DEDUPE_SUBSET_KEYS:
+        options = ("activity_id", "activity_chembl_id") if column == "activity_id" else (column,)
+        selected = next((candidate for candidate in options if candidate in sorted_df.columns), None)
+        if selected is None:
+            missing.append(column)
+        else:
+            if selected not in subset:
+                subset.append(selected)
+
+    if missing:
+        raise ActivityExtendedError(
+            "activity table missing columns required for deduplication: "
+            + ", ".join(sorted(missing))
+        )
+
+    deduped = sorted_df.drop_duplicates(subset=subset, keep="first").reset_index(drop=True)
+    removed = int(len(sorted_df) - len(deduped))
+    logger.info("activity_extended_deduplicated", removed=removed, remaining=len(deduped))
+    return deduped
 
 
 def _string_missing_mask(series: pd.Series) -> pd.Series:
@@ -823,11 +1141,12 @@ def _transform_activity_frame(
 
     df = _prepare_unknown_chirality(df)
     df = _apply_multimol_logic(df)
+    df = _merge_document_metadata(df, dictionary_root)
+    df = _merge_assay_metadata(df, dictionary_root)
+    df = _merge_testitem_metadata(df, dictionary_root)
     df = _rename_columns(df)
     df = _extract_activity_properties_flags(df)
     df = _drop_unused_columns(df)
-    df = _compute_citation_flags(df)
-    df = _annotate_high_citation(df, dictionary_root)
     df = _merge_target_metadata(df, dictionary_root=dictionary_root, targets_override=targets_override)
     df = _select_and_cast(df)
     return df
@@ -925,7 +1244,12 @@ def process_activity_extended(
     input_path = explicit_input or _latest_activity_export(resolved_search_dir)
     dictionary_root = _resolve_dictionary_root(Path(dictionary_dir) if dictionary_dir is not None else None)
 
-    frame = helpers.read_csv_with_fallbacks(input_path)
+    frame = helpers.read_csv_strict(
+        input_path,
+        encoding=helpers.ENCODING_FALLBACKS,
+        dtype_map=_ACTIVITY_INPUT_SCHEMA,
+        na_values=_NA_MARKERS,
+    )
     processed = _transform_activity_frame(
         frame,
         dictionary_root=dictionary_root,
@@ -950,6 +1274,7 @@ def process_activity_extended(
             non_null=non_null,
             total=len(processed),
         )
+    processed = dedupe_final(processed)
     logger.info("activity_extended_saving", path=str(output_path))
     helpers.write_csv(processed, output_path, columns=_FINAL_COLUMN_ORDER)
     logger.info(
