@@ -580,7 +580,17 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
                 filled.add("log_value")
 
     if log_value_series is not None:
-        df["log_value"] = log_value_series
+        # ``log_value`` may originate from CSV exports where the column is typed as
+        # ``string``.  Pandas prohibits assigning floats into a ``string`` dtype
+        # column which resulted in ``TypeError: Invalid value for dtype 'str'``
+        # when we attempted to populate the computed numeric values.
+        #
+        # By explicitly re-creating the column with the nullable float dtype we
+        # guarantee that subsequent partial assignments (for example the
+        # pChEMBL-derived fallbacks) work consistently irrespective of the
+        # original storage dtype.
+        df = df.drop(columns=["log_value"], errors="ignore")
+        df["log_value"] = log_value_series.astype("Float64")
 
     if (
         log_value_series is not None
@@ -612,7 +622,8 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
             log_value_series.loc[mask] = computed.loc[mask]
 
     if log_value_series is not None:
-        df["log_value"] = log_value_series
+        df = df.drop(columns=["log_value"], errors="ignore")
+        df["log_value"] = log_value_series.astype("Float64")
 
     bool_defaults = {
         "multmol_assay",
