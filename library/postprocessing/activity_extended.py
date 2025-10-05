@@ -628,11 +628,18 @@ def _transform_activity_frame(
 
 def _derive_output_path(input_path: Path) -> Path:
     base_name = helpers.normalise_export_basename(input_path)
-    if base_name.startswith("output.activities_"):
-        base_name = base_name.replace("output.activities_", "output.activity_", 1)
-    if not base_name.startswith("output.activity_"):
+    candidate = base_name
+    while candidate.startswith("extended."):
+        candidate = candidate[len("extended.") :]
+
+    match = _FILENAME_RE.match(candidate)
+    if match is not None:
+        stamp = match.group(1)
+        final_name = f"extended.output.activity_{stamp}.csv"
+    else:
         logger.warning("activity_extended_unexpected_basename", basename=base_name)
-    final_name = base_name.replace("output.activity_", "extended.output.activity_", 1)
+        final_name = f"extended.{candidate}"
+
     return input_path.with_name(final_name)
 
 
