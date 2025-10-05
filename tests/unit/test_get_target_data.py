@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from typing import Iterable
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -386,4 +387,38 @@ def test_postprocess_target_exports__skips_for_uniprot_suffix(
         "info",
         "target_postprocess_skipped",
         {"path": str(source), "reason": "unsupported_export_name"},
+    ) in logger_stub.events
+
+
+def test_postprocess_iuphar_export__skips_when_columns_missing(
+    tmp_path: Path,
+    logger_stub: _MemoryLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "out_uniprot.csv"
+    source.write_text("target_chembl_id,name\nCHEMBL1,Alpha\n", encoding="utf-8")
+
+    def _not_called(*_: object, **__: object) -> None:  # pragma: no cover - defensive
+        raise AssertionError("IUPHAR post-processing should be skipped")
+
+    stub = SimpleNamespace(
+        process_iuphar_targets=_not_called,
+        _REQUIRED_COLUMNS=("target_chembl_id", "GuidetoPHARMACOLOGY"),
+        IUPHARPostProcessingError=RuntimeError,
+    )
+
+    monkeypatch.setattr(get_target_data, "iuphar_pp", stub, raising=False)
+    monkeypatch.setattr(get_target_data, "_IUPHAR_IMPORT_ERROR", None, raising=False)
+
+    result = get_target_data._postprocess_iuphar_export(source, verbose=False)
+
+    assert result is None
+    assert (
+        "info",
+        "target_iuphar_postprocess_skipped",
+        {
+            "path": str(source),
+            "reason": "missing_required_columns",
+            "missing": ["GuidetoPHARMACOLOGY"],
+        },
     ) in logger_stub.events

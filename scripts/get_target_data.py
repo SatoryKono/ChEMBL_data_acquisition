@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 import sys
 import shutil
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 import math
@@ -557,8 +557,29 @@ def _postprocess_iuphar_export(
         logger.error("target_iuphar_postprocess_unavailable", **payload)
         return None
 
+    required_columns: Collection[str] = tuple(
+        getattr(iuphar_pp, "_REQUIRED_COLUMNS", ())
+    )
+    missing_columns = _missing_csv_columns(source, required_columns) if required_columns else []
+    if missing_columns:
+        logger.info(
+            "target_iuphar_postprocess_skipped",
+            path=str(source),
+            reason="missing_required_columns",
+            missing=sorted(missing_columns),
+        )
+        return None
+
     try:
         result = iuphar_pp.process_iuphar_targets(str(source), verbose=verbose)
+    except getattr(iuphar_pp, "IUPHARPostProcessingError", RuntimeError) as exc:
+        logger.info(
+            "target_iuphar_postprocess_skipped",
+            path=str(source),
+            reason="input_validation_error",
+            error=str(exc),
+        )
+        return None
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.exception(
             "target_iuphar_postprocess_failed",
@@ -582,6 +603,26 @@ def _postprocess_iuphar_export(
         source=str(source),
     )
     return output_path
+
+
+def _missing_csv_columns(path: Path, required: Collection[str]) -> list[str]:
+    """Return the subset of *required* columns missing from ``path``."""
+
+    if not required:
+        return []
+
+    try:
+        header = pd.read_csv(
+            path,
+            nrows=0,
+            dtype=str,
+            keep_default_na=False,
+        )
+    except Exception:
+        return list(required)
+
+    existing = set(header.columns)
+    return [column for column in required if column not in existing]
 
 
 def _postprocess_target_exports(
