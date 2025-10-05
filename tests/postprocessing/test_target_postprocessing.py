@@ -528,6 +528,22 @@ def test_isoform_process_targets__writes_isoform_prefix(tmp_path: Path, snapshot
 
 
 @pytest.mark.unit
+def test_isoform_process_targets__strips_csv_normalized_suffix(
+    tmp_path: Path, snapshot_resource: Path
+) -> None:
+    source = snapshot_resource / "target_isoform_minimal.csv"
+    input_path = tmp_path / "output.targets_20250101.csv_normalized"
+    input_path.write_bytes(source.read_bytes())
+
+    match = "does not use the canonical '.csv' extension"
+    with pytest.warns(UserWarning, match=match):
+        output_path = isoform.process_targets(str(input_path), verbose=False)
+
+    assert output_path.name == "isoform.output.targets_20250101.csv"
+    assert output_path.parent == input_path.parent
+
+
+@pytest.mark.unit
 def test_isoform_process_targets__accepts_explicit_custom_name(
     tmp_path: Path, snapshot_resource: Path
 ) -> None:

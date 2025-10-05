@@ -40,6 +40,8 @@ def normalise_export_basename(path: Path) -> str:
     while name.lower().endswith(tmp_suffix):
         name = name[: -len(tmp_suffix)]
     stem, ext = os.path.splitext(name)
+    if ext.lower() in {".csv_normalized", ".csv_normalised"}:
+        ext = ".csv"
     lowered_stem = stem.lower()
     for suffix in ("_normalized", "_normalised"):
         if lowered_stem.endswith(suffix):
