@@ -129,6 +129,19 @@ def test_latest_activity_export__picks_latest_file(tmp_path: Path) -> None:
     assert resolved == newer
 
 
+def test_latest_activity_export__handles_hidden_temporary_file(tmp_path: Path) -> None:
+    search_dir = tmp_path / "exports"
+    search_dir.mkdir()
+    visible = search_dir / "output.activity_20230101.csv"
+    hidden_tmp = search_dir / ".output.activities_20240101.csv.tmp"
+    visible.write_text("activity_chembl_id\nACT-1\n", encoding="utf-8")
+    hidden_tmp.write_text("activity_chembl_id\nACT-2\n", encoding="utf-8")
+
+    resolved = _latest_activity_export(search_dir)
+
+    assert resolved == hidden_tmp
+
+
 def test_transform_activity_frame__parses_activity_properties_flags(
     activity_resources: Path,
 ) -> None:

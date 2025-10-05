@@ -26,7 +26,7 @@ from . import helpers
 
 _DEFAULT_SEARCH_DIR = Path("data/output")
 _DEFAULT_DICTIONARY_DIR = Path("config/dictionary")
-_FILENAME_RE = re.compile(r"output\.activity_\d{8}\.csv\Z")
+_FILENAME_RE = re.compile(r"output\.activit(?:y|ies)_(\d{8})\.csv\Z")
 
 _REQUIRED_COLUMNS: frozenset[str] = frozenset(
     {
@@ -126,20 +126,35 @@ def _current_default_search_dir() -> Path:
     return _DEFAULT_SEARCH_DIR
 
 
-def _matches_activity_filename(name: str) -> bool:
-    return bool(_FILENAME_RE.match(name))
+def _normalised_activity_basename(path: Path) -> tuple[str, str] | None:
+    """Return ``(date_token, name)`` for ``path`` when it matches the activity pattern."""
+
+    try:
+        candidate = helpers.normalise_export_basename(path)
+    except ValueError:
+        return None
+    match = _FILENAME_RE.match(candidate)
+    if match is None:
+        return None
+    return match.group(1), candidate
 
 
 def _latest_activity_export(search_dir: Path) -> Path:
-    candidates = sorted(
-        (path for path in search_dir.iterdir() if path.is_file() and _matches_activity_filename(path.name)),
-        key=lambda item: item.name,
-    )
+    candidates: list[tuple[str, str, Path]] = []
+    for path in search_dir.iterdir():
+        if not path.is_file():
+            continue
+        normalised = _normalised_activity_basename(path)
+        if normalised is None:
+            continue
+        candidates.append((normalised[0], normalised[1], path))
+    candidates.sort(key=lambda item: (item[0], item[1]))
     if not candidates:
         raise ActivityExtendedError(
-            f"No activity exports matching 'output.activity_YYYYMMDD.csv' found in {search_dir!s}"
+            "No activity exports matching 'output.activity_YYYYMMDD.csv' or "
+            f"'output.activities_YYYYMMDD.csv' found in {search_dir!s}"
         )
-    return candidates[-1]
+    return candidates[-1][2]
 
 
 def _resolve_dictionary_root(dictionary_dir: Path | None) -> Path:
