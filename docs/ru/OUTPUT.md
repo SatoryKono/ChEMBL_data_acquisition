@@ -291,6 +291,64 @@
 | `pipeline_version` | string | Версия пакета. |
 | `timestamp_utc` | string | Время выгрузки. |
 
+## Таблица тканей (`tissues`)
+
+Схема: [`library/schemas/tissues.py`](../library/schemas/tissues.py). Порядок
+колонок задаётся `TISSUES_COLUMN_ORDER`.
+
+### Колонки
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `tissue_chembl_id` | string | Основной идентификатор, возвращаемый эндпоинтом `/tissue`. Для отсутствующих записей добавляется строка-заглушка с исходным идентификатором. |
+| `pref_name` | string | Предпочтительное название ткани, если присутствует. |
+| `uberon_id` | string | Кросс-ссылка UBERON, передаваемая ChEMBL. |
+| `efo_id` | string | Кросс-ссылка EFO, передаваемая ChEMBL. |
+| `bto_id` | string | Кросс-ссылка BRENDA Tissue Ontology из ChEMBL. |
+| `caloha_id` | string | Идентификатор анатомической онтологии Caloha. |
+| `pipeline_version` | string | Версия пакета, добавляемая :func:`library.pipelines.common.add_pipeline_metadata`. |
+| `timestamp_utc` | string | Временная метка запуска пайплайна в формате ISO 8601 (UTC). |
+
+### Сортировка, пропуски и дополнительные файлы
+
+- Строки сортируются по `tissue_chembl_id` (по возрастанию). При совпадении
+  идентификаторов детерминированный порядок обеспечивает CSV-писатель.
+- Кросс-ссылки сохраняются в виде nullable-строк pandas и при повторной загрузке
+  читаются как `<NA>` (`dtype="string"`).
+- Метаданные проставляются для каждой строки, включая заглушки для отсутствующих
+  записей.
+- Если `--final-out` не указан, CLI создаёт
+  `output.tissue_<YYYYMMDD>.csv`, `output.tissue_<YYYYMMDD>.meta.yaml`,
+  `output.tissue_<YYYYMMDD>_quality_report_table.csv` и
+  `output.tissue_<YYYYMMDD>.quality.json`.
+
+## Экспорт клеточных линий (`cellline`)
+
+Схема описана в [`library/schemas/celllines.py`](../library/schemas/celllines.py);
+порядок колонок соответствует `CELL_LINE_COLUMN_ORDER` и включает служебные
+поля `pipeline_version`, `timestamp_utc`.
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `cell_chembl_id` | string | Основной идентификатор ChEMBL (обязательный, уникальный). |
+| `cell_name` | string | Предпочтительное название клеточной линии. |
+| `cell_description` | string | Текстовое описание из ChEMBL. |
+| `cell_id` | integer | Внутренний числовой идентификатор ChEMBL (может отсутствовать). |
+| `cell_source_organism` | string | Организм-источник клеточной линии. |
+| `cell_source_tax_id` | integer | Таксон NCBI для организма-источника (nullable). |
+| `cell_source_tissue` | string | Исходная ткань/орган. |
+| `cellosaurus_id` | string | Акцессия Cellosaurus при наличии. |
+| `cl_lincs_id` | string | Идентификатор LINCS (nullable). |
+| `clo_id` | string | Идентификатор в Cell Line Ontology. |
+| `efo_id` | string | Ссылка на EFO (nullable). |
+| `pipeline_version` | string | Версия пакета на момент экспорта. |
+| `timestamp_utc` | string | Временная метка экспорта (UTC). |
+
+Нормализация (`normalize_cell_lines`) приводит идентификаторы к типу `string`,
+числовые поля — к nullable-типу pandas `Int64`. Пропуски выгружаются как пустые
+строки, что обеспечивает совместимость с CSV-пайплайнами. Строки сортируются по
+`cell_chembl_id`, обеспечивая стабильный порядок между запусками.
+
 ## Профили качества
 
 CSV-отчёт содержит:

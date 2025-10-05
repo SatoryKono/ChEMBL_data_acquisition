@@ -45,6 +45,18 @@ sources:
         batch_size: 50
         timeout: 30.0
         limit: null
+      cellline:
+        column: "cell_chembl_id"
+        batch_size: 20
+        timeout: 30.0
+        limit: null
+        offset: 0
+      tissue:
+        column: "tissue_chembl_id"
+        batch_size: 20
+        timeout: 30.0
+        limit: null
+        offset: 0
       testitem:
         column: "molecule_chembl_id"
         batch_size: 1000

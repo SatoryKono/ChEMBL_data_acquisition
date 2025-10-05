@@ -1,0 +1,23 @@
+{
+  "tissues": [
+    {
+      "tissue_chembl_id": "CHEMBLT3",
+      "pref_name": "Gamma tissue",
+      "uberon_id": null,
+      "efo_id": "",
+      "bto_id": "BTO:0003",
+      "caloha_id": null
+    },
+    {
+      "tissue_chembl_id": "CHEMBLT1",
+      "pref_name": "Alpha tissue",
+      "uberon_id": "UBERON:0001",
+      "efo_id": null,
+      "bto_id": null,
+      "caloha_id": ""
+    }
+  ],
+  "page_meta": {
+    "next": "/data/tissue.json?offset=2"
+  }
+}

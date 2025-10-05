@@ -13,7 +13,16 @@ from importlib import import_module
 from typing import Any
 
 # ===== Helpers =====
-_LAZY_SUBMODULES = {"activity", "assay", "common", "document", "target", "testitem"}
+_LAZY_SUBMODULES = {
+  "activity",
+  "assay",
+  "cellline",
+  "common",
+  "document",
+  "target",
+  "testitem",
+  "tissue",
+}
 
 
 def _load_submodule(name: str) -> Any:
@@ -25,7 +34,16 @@ def _load_submodule(name: str) -> Any:
 
 
 # ===== Exports =====
-__all__ = ["activity", "assay", "common", "document", "target", "testitem"]
+__all__ = [
+  "activity",
+  "assay",
+  "cellline",
+  "common",
+  "document",
+  "target",
+  "testitem",
+  "tissue",
+]
 
 
 def __getattr__(name: str) -> Any:

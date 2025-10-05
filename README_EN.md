@@ -19,7 +19,8 @@ flowchart LR
     B -->|enrich| C[Target pipeline]
     C -->|link| D[Assay pipeline]
     D -->|hydrate| E[Test item pipeline]
-    E -->|join| F[Activity pipeline]
+    E -->|map| G[Tissue pipeline]
+    G -->|join| F[Activity pipeline]
     B -.->|citations| F
     C -.->|targets| F
     style F fill:#dfeaff,stroke:#1e3a8a,stroke-width:2px
@@ -27,8 +28,8 @@ flowchart LR
 
 Each pipeline is idempotent and can be executed independently. The
 [`get-data`](./scripts/get_data.py) orchestrator reuses the same configuration
-and logging options to run the sequence automatically while producing consistent
-outputs.
+and logging options to run the Document → Target → Assay → Test item → Tissue →
+Activity sequence automatically while producing consistent outputs.
 
 ## Repository layout
 
@@ -84,6 +85,8 @@ python scripts/get_data.py \
 | Target | `python scripts/get_target_data.py all --input data/input/target.csv --final-out output/targets.csv --chembl-chunk-size 10 --uniprot-data-dir cache/uniprot --raw-out output/targets_raw.parquet --raw-format parquet` | Sub-commands (`uniprot`, `chembl`, `iuphar`, `all`) accept prefixed overrides and optional raw exports. |
 | Assay | `python scripts/get_assay_data.py --input data/input/assay.csv --final-out output/assays.csv --chunk-size 25 --timeout 45` | Shares global options plus per-request chunk size and timeout tuning. |
 | Test item | `python scripts/get_testitem_data.py --input data/input/testitem.csv --final-out output/testitems.csv --request-limit 500 --hierarchy-path config/dictionary/_testitem/molecule_hierarchy.csv` | Provides parent-molecule enrichment controls and request throttling (`--request-limit`, `--batch-size`, `--dry-run`). |
+| Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto` | Resolves tissue metadata, merges ontology cross-references and normalises synonyms for downstream joins. |
+| Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --output output/cellline.csv --batch-size 20 --limit 100` | Retrieves ChEMBL cell line records, normalises nullable identifiers and enforces deterministic ordering. |
 | Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --action-type-enabled --bounds-enabled --quality-threshold warn` | Toggles enrichment hooks (`--action-type-enabled`, `--bounds-enabled`), derived bounds and QA thresholds. |
 
 Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar

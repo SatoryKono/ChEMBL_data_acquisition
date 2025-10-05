@@ -1,0 +1,4 @@
+tissue_chembl_id,pref_name,uberon_id,efo_id,bto_id,caloha_id,pipeline_version,timestamp_utc
+CHEMBLT001,Beta Tissue,,EFO:0000116,,CALOHA:0000001,0.1.3,2020-01-01T00:00:00+00:00
+CHEMBLT002,Alpha Tissue,UBERON:0000955,,BTO:0000955,,0.1.3,2020-01-01T00:00:00+00:00
+CHEMBLT003,,UBERON:0000178,EFO:0003077,,,0.1.3,2020-01-01T00:00:00+00:00
