@@ -10,6 +10,7 @@ normalisation, best-effort XML parsing and deterministic CSV emission.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Iterable, Sequence
 from xml.etree import ElementTree
@@ -38,6 +39,13 @@ def normalise_export_basename(path: Path) -> str:
     tmp_suffix = ".tmp"
     while name.lower().endswith(tmp_suffix):
         name = name[: -len(tmp_suffix)]
+    stem, ext = os.path.splitext(name)
+    lowered_stem = stem.lower()
+    for suffix in ("_normalized", "_normalised"):
+        if lowered_stem.endswith(suffix):
+            stem = stem[: -len(suffix)]
+            break
+    name = f"{stem}{ext or ''}"
     if not name:
         raise ValueError(f"Unable to derive export basename from {path!s}")
     return name
