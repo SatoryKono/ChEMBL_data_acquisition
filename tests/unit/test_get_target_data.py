@@ -361,3 +361,29 @@ def test_postprocess_target_exports__chains_helpers(
     get_target_data._postprocess_target_exports(source, cfg=cfg)
 
     assert call_order == ["organism", "isoform"]
+
+
+def test_postprocess_target_exports__skips_for_uniprot_suffix(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logger_stub: _MemoryLogger,
+) -> None:
+    source = tmp_path / "output.targets_20250101_uniprot.csv"
+    source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    def _unexpected(*_: object, **__: object) -> None:  # pragma: no cover - defensive
+        raise AssertionError("post-processing should be skipped")
+
+    monkeypatch.setattr(get_target_data, "_postprocess_organism_export", _unexpected)
+    monkeypatch.setattr(get_target_data, "_postprocess_isoform_export", _unexpected)
+    monkeypatch.setattr(get_target_data, "_postprocess_names_export", _unexpected)
+    monkeypatch.setattr(get_target_data, "_postprocess_iuphar_export", _unexpected)
+
+    get_target_data._postprocess_target_exports(source, cfg=cfg)
+
+    assert (
+        "info",
+        "target_postprocess_skipped",
+        {"path": str(source), "reason": "unsupported_export_name"},
+    ) in logger_stub.events
