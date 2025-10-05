@@ -335,7 +335,7 @@ def test_postprocess_isoform_export__skips_for_custom_name(
     logger_stub: _MemoryLogger,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    source = tmp_path / "out_chembl.csv"
+    source = tmp_path / "custom_export.csv"
     source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
 
     def _unexpected(*_: object, **__: object) -> None:  # pragma: no cover - defensive

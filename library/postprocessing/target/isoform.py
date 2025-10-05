@@ -74,6 +74,10 @@ _INPUT_NAME_RULES: Tuple[Tuple[re.Pattern[str], str], ...] = (
         re.compile(r"out_uniprot(?:_[A-Za-z0-9]+)*\.csv\Z"),
         "out_uniprot[_<suffixes>].csv",
     ),
+    (
+        re.compile(r"out(?:_[A-Za-z0-9]+)*\.csv\Z"),
+        "out[_<suffixes>].csv",
+    ),
 )
 
 
