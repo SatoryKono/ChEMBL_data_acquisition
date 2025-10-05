@@ -594,6 +594,23 @@ def _postprocess_target_exports(
 ) -> None:
     """Run all target post-processing helpers for ``source`` export."""
 
+    def _normalised_export_name(path: Path) -> str:
+        name = path.name
+        for suffix in reversed(path.suffixes):
+            if suffix == ".csv":
+                break
+            name = name.removesuffix(suffix)
+        return name
+
+    export_name = _normalised_export_name(source)
+    if not target_pp._matches_expected_input_name(export_name):
+        logger.info(
+            "target_postprocess_skipped",
+            path=str(source),
+            reason="unsupported_export_name",
+        )
+        return
+
     _postprocess_organism_export(source, cfg=cfg)
     _postprocess_isoform_export(
         source,
