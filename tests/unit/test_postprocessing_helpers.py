@@ -68,3 +68,26 @@ def test_stable_sort__preserves_duplicate_order() -> None:
 
     untouched = helpers.stable_sort(frame, [])
     assert untouched.equals(frame)
+
+
+@pytest.mark.unit
+def test_read_csv_with_fallbacks__uses_iso_8859_alias(monkeypatch, tmp_path: Path) -> None:
+    path = tmp_path / "document.csv"
+    # 0x81 cannot be decoded using cp1252 but is valid in ISO-8859-1.
+    raw = "document_chembl_id\tcompleted\nCHEMBL1\t\u0081\n"
+    path.write_bytes(raw.encode("iso-8859-1"))
+
+    original_read_csv = pd.read_csv
+
+    def fake_read_csv(*args, **kwargs):
+        encoding = kwargs.get("encoding")
+        if encoding in {"utf-8", "utf-8-sig", "cp1252", "latin-1"}:
+            raise UnicodeDecodeError(str(encoding), b"", 0, 1, "mock failure")
+        return original_read_csv(*args, **kwargs)
+
+    monkeypatch.setattr(pd, "read_csv", fake_read_csv)
+
+    frame = helpers.read_csv_with_fallbacks(path, sep="\t")
+
+    assert frame.columns.tolist() == ["document_chembl_id", "completed"]
+    assert frame.iloc[0]["completed"] == "\u0081"
