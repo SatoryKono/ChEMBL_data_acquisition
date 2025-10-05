@@ -12,16 +12,21 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Iterable, Sequence
 from xml.etree import ElementTree
 
 import pandas as pd
+from pandas.errors import ParserError
+
+import numpy as np
 
 from library.common.csv_utils import write_csv_deterministic
 
 # Accepted encodings – these match the Power Query ``Binary.Decompress`` fallbacks
 # that were historically used when loading the aggregated targets table.
 ENCODING_FALLBACKS: tuple[str, ...] = ("utf-8", "utf-8-sig", "cp1252")
+CSV_SEPARATORS: tuple[str, ...] = (",", "\t", ";")
 
 
 def normalise_export_basename(path: Path) -> str:
@@ -111,6 +116,200 @@ def read_csv_with_fallbacks(
         raise RuntimeError(f"Unable to read CSV at {path!s}")
     # Re-raise the last error so the traceback points to the failing codec.
     raise errors[-1]
+
+
+def _normalise_encoding_candidates(
+    encoding: str | Sequence[str] | None,
+) -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    def _append(value: str) -> None:
+        key = value.lower()
+        if key not in seen:
+            seen.add(key)
+            candidates.append(value)
+
+    if encoding is None:
+        pass
+    elif isinstance(encoding, str):
+        if encoding:
+            _append(encoding)
+    else:
+        for item in encoding:
+            if item:
+                _append(item)
+
+    for fallback in ENCODING_FALLBACKS:
+        _append(fallback)
+
+    if not candidates:
+        candidates.append("utf-8")
+    return candidates
+
+
+def _normalise_separator_candidates(separators: Sequence[str] | None) -> list[str]:
+    if separators is None:
+        return list(CSV_SEPARATORS)
+    seen: set[str] = set()
+    resolved: list[str] = []
+    for separator in (*separators, *CSV_SEPARATORS):
+        if not separator:
+            continue
+        if separator in seen:
+            continue
+        seen.add(separator)
+        resolved.append(separator)
+    return resolved or [","]
+
+
+def _dtype_for_read(schema: Mapping[str, str] | None) -> dict[str, str | pd.api.extensions.ExtensionDtype]:
+    if not schema:
+        return {}
+    mapping: dict[str, str | pd.api.extensions.ExtensionDtype] = {}
+    for column, declared in schema.items():
+        kind = str(declared).strip().lower()
+        if kind in {"text", "logical"}:
+            mapping[column] = "string"
+        elif kind == "int64":
+            mapping[column] = pd.Int64Dtype()
+        elif kind == "float64":
+            mapping[column] = pd.Float64Dtype()
+        else:
+            mapping[column] = declared
+    return mapping
+
+
+def _coerce_logical_series(series: pd.Series) -> pd.Series:
+    if series.dtype == "boolean":
+        return series
+
+    def convert(value: object) -> object:
+        if pd.isna(value):
+            return pd.NA
+        if isinstance(value, (bool, np.bool_)):
+            return bool(value)
+        if isinstance(value, (int, np.integer)):
+            if value in (0, 1):
+                return bool(value)
+        if isinstance(value, float):
+            if value in (0.0, 1.0):
+                return bool(int(value))
+        text = str(value).strip()
+        if not text or text == "-":
+            return pd.NA
+        lowered = text.lower()
+        if lowered in {"true", "t", "1", "y", "yes"}:
+            return True
+        if lowered in {"false", "f", "0", "n", "no"}:
+            return False
+        raise ValueError(f"Cannot coerce value {value!r} to Logical")
+
+    mapped = series.map(convert)
+    return mapped.astype("boolean")
+
+
+def _coerce_int64_series(series: pd.Series) -> pd.Series:
+    if series.dtype == "Int64":
+        return series
+    if series.empty:
+        return series.astype("Int64")
+    if series.dtype == "float64":
+        numeric = series.astype("float64")
+    else:
+        as_text = series.astype("string").str.strip()
+        numeric = as_text.replace({"": pd.NA, "-": pd.NA})
+    result = pd.to_numeric(numeric, errors="raise")
+    return result.astype("Int64")
+
+
+def _coerce_float64_series(series: pd.Series) -> pd.Series:
+    if series.dtype == "Float64":
+        return series
+    if series.empty:
+        return series.astype("Float64")
+    numeric = pd.to_numeric(series, errors="coerce")
+    return pd.Series(numeric, index=series.index, dtype="Float64")
+
+
+def coerce_types(df: pd.DataFrame, schema: Mapping[str, str] | None) -> pd.DataFrame:
+    """Return ``df`` with columns coerced according to ``schema``."""
+
+    if not schema:
+        return df.copy()
+
+    coerced = df.copy()
+    for column, declared in schema.items():
+        if column not in coerced.columns:
+            continue
+        kind = str(declared).strip().lower()
+        if kind == "text":
+            coerced[column] = coerced[column].astype("string")
+        elif kind == "logical":
+            coerced[column] = _coerce_logical_series(coerced[column])
+        elif kind == "int64":
+            coerced[column] = _coerce_int64_series(coerced[column])
+        elif kind == "float64":
+            coerced[column] = _coerce_float64_series(coerced[column])
+        else:
+            raise ValueError(f"Unsupported schema type {declared!r} for column '{column}'")
+    return coerced
+
+
+def read_csv_strict(
+    path: Path | str,
+    *,
+    encoding: str | Sequence[str] | None,
+    dtype_map: Mapping[str, str] | None,
+    na_values: Sequence[str] | None,
+    separators: Sequence[str] | None = None,
+) -> pd.DataFrame:
+    """Read ``path`` enforcing workbook delimiter, NA and encoding conventions."""
+
+    encodings = _normalise_encoding_candidates(encoding)
+    resolved_separators = _normalise_separator_candidates(separators)
+    dtype = _dtype_for_read(dtype_map)
+    expected_columns = set(dtype_map.keys()) if dtype_map else set()
+    na_tokens = list(na_values or []) or None
+
+    last_error: Exception | None = None
+    for candidate_encoding in encodings:
+        for separator in resolved_separators:
+            try:
+                frame = pd.read_csv(
+                    path,
+                    sep=separator,
+                    encoding=candidate_encoding,
+                    dtype=dtype or None,
+                    keep_default_na=False,
+                    na_values=na_tokens,
+                )
+            except UnicodeDecodeError as exc:
+                last_error = exc
+                break
+            except (ParserError, ValueError) as exc:
+                last_error = exc
+                continue
+            if expected_columns and expected_columns.isdisjoint(frame.columns):
+                last_error = ValueError(
+                    "Detected separator did not yield required columns; trying next candidate."
+                )
+                continue
+            frame = frame.rename(columns=lambda c: str(c).lstrip("\ufeff"))
+            if dtype_map:
+                frame = coerce_types(frame, dtype_map)
+            return frame
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"Unable to read CSV at {path!s}")
+
+
+def stable_sort(df: pd.DataFrame, keys: Sequence[str]) -> pd.DataFrame:
+    """Return ``df`` sorted by ``keys`` using a stable mergesort."""
+
+    if not keys:
+        return df.copy()
+    return df.sort_values(by=list(keys), kind="mergesort")
 
 
 def extract_xml_texts(value: str, xpath: str) -> list[str]:

@@ -15,6 +15,7 @@ from library.schemas.targets import CELLULARITY_COLUMN_NAME, TARGETS_COLUMN_ORDE
 
 from . import organism_classification
 from ...config import Config, IoCfg
+from ...postprocessing import helpers as postprocessing_helpers
 from ...common.csv_utils import write_csv_deterministic
 from ...common.log import logger
 
@@ -110,6 +111,16 @@ BOOL_COLUMNS: list[str] = [
     "signal_peptide",
     "propeptide",
 ]
+
+TARGET_WORKBOOK_SCHEMA: dict[str, str] = {
+    column: "Text" for column in TEXT_COLUMNS
+}
+for column in INT_COLUMNS:
+    TARGET_WORKBOOK_SCHEMA[column] = "Int64"
+for column in BOOL_COLUMNS:
+    TARGET_WORKBOOK_SCHEMA[column] = "Logical"
+
+NA_MARKERS: tuple[str, ...] = ("[#N/A]",)
 
 
 def _pipe_merge(values: Iterable[str | float | None]) -> str:
@@ -521,7 +532,21 @@ def postprocess_file(
     """
     sep = sep or cfg.csv_sep
     encoding = encoding or cfg.csv_encoding
-    df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
+    schema = dict(TARGET_WORKBOOK_SCHEMA)
+    schema.setdefault(chembl_col, "Text")
+
+    encodings: list[str] = []
+    if encoding:
+        encodings.append(encoding)
+    encodings.extend(postprocessing_helpers.ENCODING_FALLBACKS)
+
+    df = postprocessing_helpers.read_csv_strict(
+        input_path,
+        encoding=encodings,
+        dtype_map=schema,
+        na_values=NA_MARKERS,
+        separators=(sep,),
+    )
     processed = postprocess_targets(df, chembl_col=chembl_col)
     write_csv_deterministic(
         processed,
@@ -670,7 +695,6 @@ def finalise_targets(
             df[col] = df[col].astype("string").str.lower()
 
     df = align_target_columns(df)
-
     return df
 
 
@@ -714,7 +738,21 @@ def finalise_file(
     """
     sep = sep or cfg.io.csv_sep
     encoding = encoding or cfg.io.csv_encoding
-    df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
+    schema = dict(TARGET_WORKBOOK_SCHEMA)
+    schema.setdefault(chembl_col, "Text")
+
+    encodings: list[str] = []
+    if encoding:
+        encodings.append(encoding)
+    encodings.extend(postprocessing_helpers.ENCODING_FALLBACKS)
+
+    df = postprocessing_helpers.read_csv_strict(
+        input_path,
+        encoding=encodings,
+        dtype_map=schema,
+        na_values=NA_MARKERS,
+        separators=(sep,),
+    )
     processed = finalise_targets(
         df,
         chembl_col=chembl_col,
