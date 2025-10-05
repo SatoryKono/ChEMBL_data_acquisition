@@ -43,6 +43,11 @@
           "default": false,
           "title": "Dry Run",
           "type": "boolean"
+        },
+        "generate_extended": {
+          "default": true,
+          "title": "Generate Extended",
+          "type": "boolean"
         }
       },
       "title": "ActivityCfg",

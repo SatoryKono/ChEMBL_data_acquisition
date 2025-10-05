@@ -1085,8 +1085,9 @@ class ActivityCfg(_BoolModel):
     limit: int | None = Field(default=None, ge=0)
     offset: int = Field(0, ge=0)
     dry_run: bool = False
+    generate_extended: bool = True
 
-    @field_validator("dry_run", mode="before")
+    @field_validator("dry_run", "generate_extended", mode="before")
     @classmethod
     def _bools(cls, v: Any) -> bool:
         return cls._parse_bool(v)

@@ -40,6 +40,7 @@ sources:
         timeout: 30.0
         limit: null
         dry_run: false
+        generate_extended: true
       assay:
         column: "assay_chembl_id"
         batch_size: 50
