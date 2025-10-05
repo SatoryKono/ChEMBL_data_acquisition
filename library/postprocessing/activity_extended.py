@@ -470,6 +470,7 @@ def _derive_output_path(input_path: Path) -> Path:
 def process_activity_extended(
     search_dir: Path | str | None = None,
     *,
+    input_path: Path | str | None = None,
     dictionary_dir: Path | str | None = None,
     targets_csv: Path | str | None = None,
     base_dir: Path | str | None = None,
@@ -480,7 +481,13 @@ def process_activity_extended(
     ----------
     search_dir:
         Directory containing ``output.activity_<stamp>.csv`` exports.  When
-        omitted, ``data/output`` is scanned.
+        omitted, ``data/output`` is scanned unless ``input_path`` is provided.
+    input_path:
+        Explicit path to an activity export. When supplied the search directory
+        scan is skipped and ``input_path`` is used directly. This is useful when
+        the caller already knows the exact export path (for example when the
+        file was just produced by the pipeline) or when the export follows a
+        non-standard naming convention.
     dictionary_dir:
         Root directory with bundled dictionary CSVs.  Defaults to
         ``config/dictionary``.
@@ -510,11 +517,28 @@ def process_activity_extended(
         )
         search_dir = base_dir
 
-    resolved_search_dir = Path(search_dir) if search_dir is not None else _current_default_search_dir()
+    explicit_input: Path | None = Path(input_path) if input_path is not None else None
+    if explicit_input is not None:
+        if explicit_input.is_dir():
+            raise ActivityExtendedError(
+                f"input_path must point to a file, received directory: {explicit_input!s}"
+            )
+        if not explicit_input.exists():
+            raise ActivityExtendedError(f"Activity export not found: {explicit_input!s}")
+
+    resolved_search_dir = (
+        Path(search_dir)
+        if search_dir is not None
+        else (explicit_input.parent if explicit_input is not None else _current_default_search_dir())
+    )
     if not resolved_search_dir.exists():
         raise ActivityExtendedError(f"Search directory does not exist: {resolved_search_dir!s}")
+    if not resolved_search_dir.is_dir():
+        raise ActivityExtendedError(
+            f"Search directory is not a directory: {resolved_search_dir!s}"
+        )
 
-    input_path = _latest_activity_export(resolved_search_dir)
+    input_path = explicit_input or _latest_activity_export(resolved_search_dir)
     dictionary_root = _resolve_dictionary_root(Path(dictionary_dir) if dictionary_dir is not None else None)
 
     frame = helpers.read_csv_with_fallbacks(input_path)

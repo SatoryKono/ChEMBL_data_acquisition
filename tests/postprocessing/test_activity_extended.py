@@ -312,3 +312,31 @@ def test_process_activity_extended__raises_for_missing_dictionary(
             search_dir=tmp_exports,
             dictionary_dir=missing_dictionary,
         )
+
+
+def test_process_activity_extended__uses_explicit_input_path(
+    activity_resources: Path,
+    tmp_path: Path,
+) -> None:
+    tmp_exports = _copytree(activity_resources / "exports", tmp_path / "exports")
+    tmp_dictionary = _copytree(activity_resources / "dictionary", tmp_path / "dictionary")
+
+    original = tmp_exports / "output.activity_20240101.csv"
+    explicit = tmp_exports / "chembl_activities_snapshot.csv"
+    original.rename(explicit)
+
+    output_path = process_activity_extended(
+        search_dir=tmp_exports,
+        input_path=explicit,
+        dictionary_dir=tmp_dictionary,
+    )
+
+    assert output_path.name == "extended.chembl_activities_snapshot.csv"
+
+    result = pd.read_csv(output_path, dtype=str).fillna("")
+    expected = pd.read_csv(
+        activity_resources / "expected.extended.output.activity_20240101.csv",
+        dtype=str,
+    ).fillna("")
+
+    pd.testing.assert_frame_equal(result, expected, check_dtype=False)
