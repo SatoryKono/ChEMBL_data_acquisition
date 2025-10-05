@@ -75,6 +75,17 @@ python scripts/get_data.py \
   --date $(date -u +%Y%m%d)
 ```
 
+### CLI quick reference
+
+| Command | Example invocation | Highlights |
+|---------|--------------------|------------|
+| Orchestrator | `python scripts/get_data.py --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --dry-run` | Runs the full pipeline chain once, forwarding `--limit`, `--force`, `--skip-existing` and `--dry-run` to individual stages. |
+| Document | `python scripts/get_document_data.py --mode all --input data/input/document.csv --final-out output/documents.csv --fallback-doi-enabled --fallback-doi-path data/input/fallback.csv --openalex-rps 2` | Supports `--mode chembl|pubmed|all`, per-source batch sizing and fallback DOI overrides. |
+| Target | `python scripts/get_target_data.py all --input data/input/target.csv --final-out output/targets.csv --chembl-chunk-size 10 --uniprot-data-dir cache/uniprot --raw-out output/targets_raw.parquet --raw-format parquet` | Sub-commands (`uniprot`, `chembl`, `iuphar`, `all`) accept prefixed overrides and optional raw exports. |
+| Assay | `python scripts/get_assay_data.py --input data/input/assay.csv --final-out output/assays.csv --chunk-size 25 --timeout 45` | Shares global options plus per-request chunk size and timeout tuning. |
+| Test item | `python scripts/get_testitem_data.py --input data/input/testitem.csv --final-out output/testitems.csv --request-limit 500 --hierarchy-path config/dictionary/_testitem/molecule_hierarchy.csv` | Provides parent-molecule enrichment controls and request throttling (`--request-limit`, `--batch-size`, `--dry-run`). |
+| Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --action-type-enabled --bounds-enabled --quality-threshold warn` | Toggles enrichment hooks (`--action-type-enabled`, `--bounds-enabled`), derived bounds and QA thresholds. |
+
 Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar
 and table-quality reports under the same directory. The target pipeline also
 emits helper lookups named `organism.output.target_<stamp>.csv`,
