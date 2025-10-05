@@ -180,10 +180,8 @@ _FINAL_COLUMN_ORDER: tuple[str, ...] = (
     "shuffled_assay",
     "review",
     "rounded_data_citation",
-    "high_citation_rate",
     "original_activity_approx",
     "original_activity_exact",
-    "is_citation",
     "IUPHAR_class",
     "IUPHAR_subclass",
     "unicellular_organism",
@@ -762,8 +760,6 @@ def _select_and_cast(df: pd.DataFrame) -> pd.DataFrame:
         "shuffled_assay",
         "review",
         "rounded_data_citation",
-        "high_citation_rate",
-        "is_citation",
         "unicellular_organism",
         "multifunctional_enzyme",
     ]
@@ -1018,8 +1014,6 @@ def _transform_activity_frame(
     df = _merge_testitem_metadata(df, dictionary_root)
     df = _rename_columns(df)
     df = _drop_unused_columns(df)
-    df = _compute_citation_flags(df)
-    df = _annotate_high_citation(df, dictionary_root)
     df = _merge_target_metadata(df, dictionary_root=dictionary_root, targets_override=targets_override)
     df = _select_and_cast(df)
     return df

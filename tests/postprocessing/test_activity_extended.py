@@ -13,9 +13,7 @@ import pytest
 from library.postprocessing import ActivityExtendedError, process_activity_extended
 from library.postprocessing.activity_extended import (
     _FINAL_COLUMN_ORDER,
-    _annotate_high_citation,
     _apply_multimol_logic,
-    _compute_citation_flags,
     _derive_output_path,
     _latest_activity_export,
     _load_citation_fraction,
@@ -333,7 +331,6 @@ def test_transform_activity_frame__parses_activity_properties_flags(
         assert bool(row.shuffled_assay) == flags["shuffled_assay"]
         assert bool(row.review) == flags["review"]
         assert bool(row.rounded_data_citation) == flags["rounded_data_citation"]
-        assert bool(row.is_citation) == any(flags.values())
 
     assert transformed["completed"].tolist() == [
         "1980-08-15",
@@ -390,8 +387,7 @@ def test_transform_activity_frame__fills_missing_columns(activity_resources: Pat
     assert row["molecule_chembl_id.1"] == "MOL-1"
     assert row.standard_inchi_skeleton == "InChI=1"
     assert bool(row.multmol_assay) is False
-    assert bool(row.rounded_data_citation) is False
-    assert bool(row.is_citation) is False
+    assert pd.isna(row.rounded_data_citation)
     assert pd.isna(row.original_activity_approx)
     assert pd.isna(row.original_activity_exact)
     assert float(row.pA_value) == pytest.approx(5.0)
@@ -407,54 +403,6 @@ def test_apply_multimol_logic__marks_duplicate_multimol_assay(
     result = _apply_multimol_logic(prepared)
 
     assert result["multmol_assay"].tolist() == [True, True]
-
-
-def test_compute_citation_flags__sets_is_citation() -> None:
-    frame = pd.DataFrame(
-        {
-            "exact_data_citation": [1, 0, 0],
-            "higly_correlated_assay": [0, 1, 0],
-            "shuffled_assay": [0, 0, "true"],
-            "review": [0, 0, 0],
-            "rounded_data_citation": [0, 0, 0],
-        }
-    )
-
-    flagged = _compute_citation_flags(frame)
-
-    assert flagged["is_citation"].tolist() == [True, True, True]
-
-
-def test_annotate_high_citation__computes_threshold_flags(
-    activity_resources: Path,
-) -> None:
-    dictionary_root = activity_resources / "dictionary"
-    export_path = activity_resources / "exports" / "output.activity_20240101.csv"
-    frame = pd.read_csv(export_path)
-
-    df = _prepare_unknown_chirality(frame)
-    df = _apply_multimol_logic(df)
-    df = _rename_columns(df)
-    df = df.drop(columns=[c for c in df.columns if c not in {
-        "document_chembl_id",
-        "approx_cited_activity",
-        "shuffled_cit",
-        "exact_cited_activity",
-        "higly_correlated_cit",
-        "review_doc",
-        "rounded_data_citation",
-        "multmol_assay",
-        "unknown_chirality",
-    } | {
-        "saltform_id",
-        "activity_chembl_id",
-    }], errors="ignore")
-    df = _compute_citation_flags(df)
-
-    annotated = _annotate_high_citation(df, dictionary_root)
-    grouped = annotated.groupby("document_chembl_id")["high_citation_rate"].first()
-
-    assert grouped.to_dict() == {"DOC-1": True, "DOC-2": False, "DOC-3": False}
 
 
 def test_select_and_cast__missing_columns_error() -> None:
@@ -569,7 +517,7 @@ def test_process_activity_extended__raises_for_missing_dictionary(
     missing_dictionary = tmp_path / "dictionary"
     missing_dictionary.mkdir()
 
-    with pytest.raises(ActivityExtendedError, match="document.csv not found"):
+    with pytest.raises(ActivityExtendedError, match="targets_type.csv not found"):
         process_activity_extended(
             search_dir=tmp_exports,
             dictionary_dir=missing_dictionary,
