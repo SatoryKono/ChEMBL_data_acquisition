@@ -521,20 +521,50 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
         df["compound_name"] = df["molecule_pref_name"].astype("string")
         filled.add("compound_name")
 
-    if "compound_key" not in df.columns:
-        for candidate in ("parent_molecule_chembl_id", "molecule_chembl_id"):
-            if candidate in df.columns:
-                df["compound_key"] = df[candidate].astype("string")
-                filled.add("compound_key")
-                break
+    compound_key_missing: pd.Series | None = None
+    if "compound_key" in df.columns:
+        compound_key_missing = df["compound_key"].isna()
+    for candidate in ("parent_molecule_chembl_id", "molecule_chembl_id"):
+        if candidate not in df.columns:
+            continue
+        candidate_values = df[candidate].astype("string")
+        if "compound_key" not in df.columns:
+            df["compound_key"] = candidate_values
+            filled.add("compound_key")
+            break
+        assert compound_key_missing is not None  # for type checkers
+        if compound_key_missing.any():
+            df.loc[compound_key_missing, "compound_key"] = candidate_values.loc[compound_key_missing]
+            filled.add("compound_key")
+            compound_key_missing = df["compound_key"].isna()
+        if compound_key_missing is not None and not compound_key_missing.any():
+            break
+    if "compound_key" in df.columns:
+        df["compound_key"] = df["compound_key"].astype("string")
 
+    log_value: pd.Series | None = None
     if "log_value" in df.columns:
-        df["log_value"] = pd.to_numeric(df["log_value"], errors="coerce").astype("Float64")
+        log_value = pd.Series(
+            pd.to_numeric(df["log_value"], errors="coerce"),
+            index=df.index,
+            dtype="Float64",
+        )
     elif "pchembl_value" in df.columns:
-        df["log_value"] = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
+        log_value = pd.Series(
+            pd.to_numeric(df["pchembl_value"], errors="coerce"),
+            index=df.index,
+            dtype="Float64",
+        )
         filled.add("log_value")
 
-    if "log_value" in df.columns and "standard_value" in df.columns and "standard_units" in df.columns:
+    if log_value is not None:
+        df["log_value"] = log_value
+
+    if (
+        log_value is not None
+        and "standard_value" in df.columns
+        and "standard_units" in df.columns
+    ):
         std_value = pd.to_numeric(df["standard_value"], errors="coerce")
         units = df["standard_units"].astype("string").str.strip().str.lower()
         factors = units.map({
@@ -554,9 +584,10 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
             computed.loc[valid] = pd.Series(computed_values, index=df.index[valid]).astype(
                 "Float64"
             )
-        mask = df["log_value"].isna() & computed.notna()
+        mask = log_value.isna() & computed.notna()
         if mask.any():
-            df.loc[mask, "log_value"] = computed.loc[mask]
+            log_value = log_value.mask(mask, computed)
+            df["log_value"] = log_value
 
     bool_defaults = {
         "multmol_assay",
@@ -578,15 +609,40 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
             df[column] = pd.Series(pd.NA, index=df.index, dtype="Float64")
             filled.add(column)
 
+    if "salt_chembl_id" in df.columns and "molecule_chembl_id" in df.columns:
+        salt_series = df["salt_chembl_id"].astype("string")
+        molecule_series = df["molecule_chembl_id"].astype("string")
+        parent_mask = (
+            df["parent_molecule_chembl_id"].notna()
+            if "parent_molecule_chembl_id" in df.columns
+            else pd.Series(False, index=df.index)
+        )
+        same = salt_series.eq(molecule_series) & parent_mask
+        same = same.fillna(False)
+        if same.any():
+            df.loc[same, "salt_chembl_id"] = pd.NA
+            filled.add("salt_chembl_id")
+
     if "salt_chembl_id" not in df.columns:
         df["salt_chembl_id"] = pd.Series(pd.NA, index=df.index, dtype="string")
         filled.add("salt_chembl_id")
+    else:
+        df["salt_chembl_id"] = df["salt_chembl_id"].astype("string")
 
     if "nstereo" not in df.columns:
         df["nstereo"] = pd.Series(pd.NA, index=df.index, dtype="Int64")
         filled.add("nstereo")
 
     return df, filled
+
+
+def _format_log_value_for_export(value: object) -> object:
+    if pd.isna(value):  # type: ignore[arg-type]
+        return pd.NA
+    text = format(float(value), ".15g")
+    if "e" not in text.lower() and "." not in text:
+        text = f"{text}.0"
+    return text
 
 
 def _transform_activity_frame(
@@ -743,7 +799,12 @@ def process_activity_extended(
             total=len(processed),
         )
     logger.info("activity_extended_saving", path=str(output_path))
-    helpers.write_csv(processed, output_path, columns=_FINAL_COLUMN_ORDER)
+    output_frame = processed.copy()
+    if "pA_value" in output_frame.columns:
+        output_frame["pA_value"] = (
+            output_frame["pA_value"].map(_format_log_value_for_export).astype("string")
+        )
+    helpers.write_csv(output_frame, output_path, columns=_FINAL_COLUMN_ORDER)
     logger.info(
         "activity_extended_saved",
         path=str(output_path),
