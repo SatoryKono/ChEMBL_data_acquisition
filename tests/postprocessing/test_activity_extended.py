@@ -225,13 +225,13 @@ def test_transform_activity_frame__fills_missing_columns(activity_resources: Pat
     assert row.activity_chembl_id == "ACT-001"
     assert row.compound_key == "CMPD-1"
     assert row.compound_name == "Compound One"
-    assert pd.isna(row.saltform_id)
+    assert row.saltform_id == "MOL-1"
     assert bool(row.multmol_assay) is False
     assert bool(row.rounded_data_citation) is False
     assert bool(row.is_citation) is False
     assert pd.isna(row.original_activity_approx)
     assert pd.isna(row.original_activity_exact)
-    assert row.pA_value == pytest.approx(5.0)
+    assert row.pA_value == "5.0"
 
 
 def test_apply_multimol_logic__marks_duplicate_multimol_assay(
@@ -327,8 +327,54 @@ def test_transform_activity_frame__fills_missing_required_columns(
 
     assert list(transformed.columns) == list(_FINAL_COLUMN_ORDER)
     assert transformed.loc[0, "saltform_id"] == "CHEMBL1"
-    assert transformed.loc[0, "pA_value"] == pytest.approx(6.5)
+    assert transformed.loc[0, "pA_value"] == "6.5"
     assert transformed.loc[0, "compound_name"] is pd.NA
+
+
+def test_transform_activity_frame__backfills_present_columns(
+    activity_resources: Path,
+) -> None:
+    dictionary_root = activity_resources / "dictionary"
+    frame = pd.DataFrame(
+        {
+            "activity_chembl_id": [pd.NA],
+            "activity_id": ["ACT-002"],
+            "assay_chembl_id": ["ASSAY-2"],
+            "molecule_chembl_id": ["CHEMBL2"],
+            "salt_chembl_id": [pd.NA],
+            "parent_molecule_chembl_id": ["CMPD-2"],
+            "target_chembl_id": ["TAR-BETA"],
+            "document_chembl_id": ["DOC-2"],
+            "bao_endpoint": ["BAO:000002"],
+            "bao_format": ["Single protein"],
+            "standard_type": ["IC50"],
+            "standard_value": [1.0],
+            "standard_units": ["uM"],
+            "pchembl_value": [6.5],
+            "compound_key": [""],
+            "compound_name": [""],
+            "molecule_pref_name": ["Compound Two"],
+            "log_value": [pd.NA],
+        }
+    )
+    frame["activity_chembl_id"] = frame["activity_chembl_id"].astype("string")
+    frame["compound_key"] = frame["compound_key"].astype("string")
+    frame["compound_name"] = frame["compound_name"].astype("string")
+    frame["salt_chembl_id"] = frame["salt_chembl_id"].astype("string")
+    frame["log_value"] = frame["log_value"].astype("Float64")
+
+    transformed = _transform_activity_frame(
+        frame,
+        dictionary_root=dictionary_root,
+        targets_override=None,
+    )
+
+    row = transformed.iloc[0]
+    assert row.activity_chembl_id == "ACT-002"
+    assert row.compound_key == "CMPD-2"
+    assert row.compound_name == "Compound Two"
+    assert row.saltform_id == "CHEMBL2"
+    assert row.pA_value == "6.5"
 
 
 def test_process_activity_extended__writes_expected_payload(
