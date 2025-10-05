@@ -504,6 +504,60 @@ def _select_and_cast(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]]:
+    df = frame.copy()
+    filled: set[str] = set()
+
+    if "activity_chembl_id" not in df.columns and "activity_id" in df.columns:
+        df["activity_chembl_id"] = df["activity_id"].astype("string")
+        filled.add("activity_chembl_id")
+
+    if "compound_name" not in df.columns and "molecule_pref_name" in df.columns:
+        df["compound_name"] = df["molecule_pref_name"].astype("string")
+        filled.add("compound_name")
+
+    if "compound_key" not in df.columns:
+        for candidate in ("parent_molecule_chembl_id", "molecule_chembl_id"):
+            if candidate in df.columns:
+                df["compound_key"] = df[candidate].astype("string")
+                filled.add("compound_key")
+                break
+
+    if "log_value" not in df.columns and "pchembl_value" in df.columns:
+        df["log_value"] = pd.to_numeric(df["pchembl_value"], errors="coerce")
+        filled.add("log_value")
+
+    bool_defaults = {
+        "multmol_assay",
+        "approx_cited_activity",
+        "shuffled_cit",
+        "exact_cited_activity",
+        "higly_correlated_cit",
+        "review_doc",
+        "rounded_data_citation",
+    }
+    for column in bool_defaults:
+        if column not in df.columns:
+            df[column] = pd.Series(False, index=df.index, dtype="boolean")
+            filled.add(column)
+
+    float_defaults = {"original_activity_approx", "original_activity_exact"}
+    for column in float_defaults:
+        if column not in df.columns:
+            df[column] = pd.Series(pd.NA, index=df.index, dtype="Float64")
+            filled.add(column)
+
+    if "salt_chembl_id" not in df.columns:
+        df["salt_chembl_id"] = pd.Series(pd.NA, index=df.index, dtype="string")
+        filled.add("salt_chembl_id")
+
+    if "nstereo" not in df.columns:
+        df["nstereo"] = pd.Series(pd.NA, index=df.index, dtype="Int64")
+        filled.add("nstereo")
+
+    return df, filled
+
+
 def _transform_activity_frame(
     frame: pd.DataFrame,
     *,
@@ -520,6 +574,13 @@ def _transform_activity_frame(
             f"{missing_list}. Available columns: {available}"
         )
 
+    if filled:
+        logger.warning(
+            "activity_extended_missing_columns_filled",
+            columns=sorted(filled),
+        )
+
+    df = working
     df = _prepare_unknown_chirality(df)
     df = _apply_multimol_logic(df)
     df = _rename_columns(df)

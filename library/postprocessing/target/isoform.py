@@ -333,17 +333,32 @@ class _TransformationResult:
 def _transform(frame: pd.DataFrame) -> _TransformationResult:
     """Apply the isoform expansion stages mirroring the Power Query steps."""
 
-    if frame.empty:
-        empty_result = pd.DataFrame(columns=list(_OUTPUT_COLUMNS))
+    def _empty_result() -> _TransformationResult:
+        empty = pd.DataFrame(columns=list(_OUTPUT_COLUMNS))
         return _TransformationResult(
-            result=empty_result.copy(),
-            combined=empty_result.copy(),
-            dedup_stage1=empty_result.copy(),
-            sorted_stage=empty_result.copy(),
-            dedup_stage2=empty_result.copy(),
+            result=empty.copy(),
+            combined=empty.copy(),
+            dedup_stage1=empty.copy(),
+            sorted_stage=empty.copy(),
+            dedup_stage2=empty.copy(),
         )
 
-    resolved = _resolve_source_columns(frame)
+    if frame.empty:
+        return _empty_result()
+
+    try:
+        resolved = _resolve_source_columns(frame)
+    except KeyError as exc:
+        warnings.warn(
+            (
+                "Isoform post-processing could not resolve required columns; "
+                "emitting an empty result instead. Details: %s"
+            )
+            % exc,
+            UserWarning,
+            stacklevel=2,
+        )
+        return _empty_result()
     aligned = frame.copy()
     for canonical, source in resolved.items():
         if source in aligned.columns:
@@ -353,14 +368,7 @@ def _transform(frame: pd.DataFrame) -> _TransformationResult:
 
     projected = _project_source_columns(aligned)
     if projected.empty:
-        empty_result = pd.DataFrame(columns=list(_OUTPUT_COLUMNS))
-        return _TransformationResult(
-            result=empty_result.copy(),
-            combined=empty_result.copy(),
-            dedup_stage1=empty_result.copy(),
-            sorted_stage=empty_result.copy(),
-            dedup_stage2=empty_result.copy(),
-        )
+        return _empty_result()
     projected = projected.loc[:, list(_SOURCE_COLUMNS)].copy()
 
     projected["isoform_synonyms"] = projected["isoform_synonyms"].map(

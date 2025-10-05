@@ -119,12 +119,17 @@ def _normalise_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _ensure_required_columns(df: pd.DataFrame) -> None:
-    missing = [column for column in _REQUIRED_COLUMNS if column not in df.columns]
-    if missing:
-        raise IUPHARPostProcessingError(
-            "Input CSV is missing required columns: " + ", ".join(sorted(missing))
-        )
+def _ensure_required_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, tuple[str, ...]]:
+    missing = tuple(column for column in _REQUIRED_COLUMNS if column not in df.columns)
+    if not missing:
+        return df, ()
+
+    logger.warning(
+        "iuphar_postprocess_missing_columns", missing=list(missing), available=list(df.columns)
+    )
+
+    placeholder = pd.DataFrame(columns=list(_REQUIRED_COLUMNS))
+    return placeholder, missing
 
 
 def _ensure_optional_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -259,7 +264,7 @@ def process_iuphar_targets(
 
     df = read_csv_with_fallbacks(input_path)
     df = _normalise_columns(df)
-    _ensure_required_columns(df)
+    df, missing_required = _ensure_required_columns(df)
     df = _ensure_optional_columns(df)
 
     input_rows = len(df)
@@ -267,6 +272,17 @@ def process_iuphar_targets(
     df, stats = _apply_synonym_processing(df)
     df = _prepare_output(df)
     output_rows = len(df)
+
+    if missing_required:
+        df = df.iloc[0:0]
+        if verbose:
+            logger.info(
+                "iuphar_postprocess: emitted empty result due to missing columns",
+                extra={
+                    "missing_columns": list(missing_required),
+                    "input_path": str(input_path),
+                },
+            )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     write_csv_deterministic(
