@@ -3546,7 +3546,13 @@ def validate_and_write(
         args=postprocess_context.args if postprocess_context else None,
         http_requests=http_requests,
     )
-    if exit_code == 0:
+    if final_csv_path is not None:
+        if exit_code != 0:
+            logger.warning(
+                "postprocess_running_with_errors",
+                exit_code=exit_code,
+                path=str(final_csv_path),
+            )
         _postprocess_target_exports(
             final_csv_path,
             cfg=cfg,
