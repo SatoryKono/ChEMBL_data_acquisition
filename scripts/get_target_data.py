@@ -14,6 +14,7 @@ from __future__ import annotations
 
 # ruff: noqa: E402
 import argparse
+import csv
 import sys
 import shutil
 from collections.abc import Iterator, Mapping, Sequence
@@ -115,6 +116,7 @@ from library.schemas.targets import TARGETS_COLUMN_ORDER
 
 from library.postprocessing import target as target_pp
 from library.postprocessing import names as names_pp
+from library.postprocessing.helpers import ENCODING_FALLBACKS
 
 try:
     from library.postprocessing import iuphar as iuphar_pp
@@ -607,6 +609,15 @@ def _postprocess_iuphar_export(
         )
         return None
 
+    missing_columns = _missing_iuphar_columns(source)
+    if missing_columns:
+        logger.warning(
+            "target_iuphar_postprocess_missing_columns",
+            path=str(source),
+            columns=sorted(missing_columns),
+        )
+        return None
+
     try:
         result = iuphar_pp.process_iuphar_targets(str(source), verbose=verbose)
     except Exception as exc:  # pragma: no cover - defensive logging
@@ -632,6 +643,58 @@ def _postprocess_iuphar_export(
         source=str(source),
     )
     return output_path
+
+
+def _missing_iuphar_columns(source: Path) -> tuple[str, ...]:
+    """Return missing required columns for the IUPHAR helper."""
+
+    if iuphar_pp is None:
+        return ()
+
+    required: Sequence[str] | None = getattr(iuphar_pp, "_REQUIRED_COLUMNS", None)
+    if not required:
+        return ()
+
+    try:
+        header = _read_csv_header_with_fallbacks(source)
+    except FileNotFoundError:
+        logger.warning("target_iuphar_postprocess_header_missing", path=str(source))
+        return tuple(required)
+    if header is None:
+        return tuple(required)
+
+    normalise = getattr(iuphar_pp, "_normalise_column_name", None)
+    if callable(normalise):
+        header = [normalise(name) for name in header]
+
+    missing = [column for column in required if column not in header]
+    return tuple(missing)
+
+
+def _read_csv_header_with_fallbacks(path: Path) -> list[str] | None:
+    """Read the header row using the known encoding fallbacks."""
+
+    errors: list[Exception] = []
+    for encoding in ENCODING_FALLBACKS:
+        try:
+            with path.open("r", encoding=encoding, newline="") as handle:
+                reader = csv.reader(handle)
+                try:
+                    return next(reader)
+                except StopIteration:
+                    return []
+        except FileNotFoundError:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive guard
+            errors.append(exc)
+
+    if errors:
+        logger.warning(
+            "target_iuphar_postprocess_header_read_failed",
+            path=str(path),
+            error=str(errors[-1]),
+        )
+    return None
 
 
 def _postprocess_target_exports(

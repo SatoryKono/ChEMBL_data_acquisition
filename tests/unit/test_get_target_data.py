@@ -199,6 +199,41 @@ def test_run__skip_existing(
     assert ("info", "pipeline_skip_existing", {"output": str(final_out)}) in logger_stub.events
 
 
+def test_postprocess_iuphar_export__skips_when_required_columns_missing(
+    tmp_path: Path,
+    logger_stub: _MemoryLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "output.target_20250101.csv"
+    source.write_text(
+        "target_chembl_id,GuidetoPHARMACOLOGY\nCHEMBL1,GTOP1\n",
+        encoding="utf-8",
+    )
+
+    called = False
+
+    def _unexpected(*args: object, **kwargs: object) -> None:
+        nonlocal called
+        called = True
+        raise AssertionError("IUPHAR helper should not be invoked when columns are missing")
+
+    monkeypatch.setattr(
+        get_target_data.iuphar_pp,
+        "process_iuphar_targets",
+        _unexpected,
+    )
+
+    result = get_target_data._postprocess_iuphar_export(source)
+
+    assert result is None
+    assert not called
+
+    warning_payload = [payload for level, event, payload in logger_stub.events if event == "target_iuphar_postprocess_missing_columns"]
+    assert warning_payload, "Expected warning about missing IUPHAR columns"
+    assert warning_payload[0]["path"] == str(source)
+    assert "gtop_synonyms" in warning_payload[0]["columns"]
+
+
 def test_run_uniprot__invokes_target_postprocess(
     cfg: Config,
     tmp_path: Path,
