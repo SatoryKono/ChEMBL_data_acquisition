@@ -255,6 +255,37 @@ def test_process_activity_extended__writes_expected_payload(
     pd.testing.assert_frame_equal(result, expected, check_dtype=False)
 
 
+def test_process_activity_extended__supports_base_dir_alias(
+    activity_resources: Path,
+    tmp_path: Path,
+) -> None:
+    tmp_exports = _copytree(activity_resources / "exports", tmp_path / "exports")
+    tmp_dictionary = _copytree(activity_resources / "dictionary", tmp_path / "dictionary")
+
+    with pytest.warns(DeprecationWarning, match="base_dir"):
+        output_path = process_activity_extended(
+            base_dir=tmp_exports,
+            dictionary_dir=tmp_dictionary,
+        )
+
+    assert output_path.name == "extended.output.activity_20240101.csv"
+
+
+def test_process_activity_extended__raises_when_search_and_base_dir_provided(
+    activity_resources: Path,
+    tmp_path: Path,
+) -> None:
+    tmp_exports = _copytree(activity_resources / "exports", tmp_path / "exports")
+    tmp_dictionary = _copytree(activity_resources / "dictionary", tmp_path / "dictionary")
+
+    with pytest.raises(TypeError, match="both 'search_dir' and 'base_dir'"):
+        process_activity_extended(
+            search_dir=tmp_exports,
+            base_dir=tmp_exports,
+            dictionary_dir=tmp_dictionary,
+        )
+
+
 def test_process_activity_extended__raises_for_missing_dictionary(
     activity_resources: Path,
     tmp_path: Path,
