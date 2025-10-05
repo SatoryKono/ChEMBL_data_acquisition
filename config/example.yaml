@@ -11,6 +11,9 @@ sources:
     cache:
       cache_ttl: 900
       cache_maxsize: 256
+    pipelines:
+      activity:
+        generate_extended: false
   pubchem:
     enable: false
   openalex:

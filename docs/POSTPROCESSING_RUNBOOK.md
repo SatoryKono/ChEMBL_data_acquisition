@@ -35,3 +35,13 @@ When introducing new target post-processing modules, document the emitted file
 pattern and confirm that `normalise_export_basename` is used.  This prevents
 divergence between bespoke scripts and the shared automation, keeping the CI
 environment and production scheduler aligned.
+
+## Activity extended export toggle
+
+The activity pipeline invokes `process_activity_extended` once the primary
+`activities.csv` export has been written.  To keep backwards-compatible runs for
+legacy consumers, set `sources.chembl.pipelines.activity.generate_extended`
+to `false` in the configuration.  The script skips the post-processing stage and
+logs an `activity_pipeline_legacy_output` event while still emitting the
+original CSV.  Orchestrators should monitor this log message to distinguish
+between extended artefacts and legacy-only runs.

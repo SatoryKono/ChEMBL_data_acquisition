@@ -109,6 +109,7 @@ def _install_writer_stub(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, pd
 def _configure_cfg(cfg) -> None:
     cfg.activity.limit = None
     cfg.activity.dry_run = False
+    cfg.activity.generate_extended = True
     cfg.activity.batch_size = 5
     cfg.activity.workers = 1
     cfg.system.doc_quality.enable = False
@@ -142,6 +143,45 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
     monkeypatch.setattr("library.validation.logger", logger_stub)
 
+    extended_calls: list[dict[str, Path | None]] = []
+
+    def _capture_process_activity_extended(
+        search_dir=None,
+        *,
+        input_path=None,
+        dictionary_dir=None,
+        targets_csv=None,
+        base_dir=None,
+    ) -> Path:
+        search_dir_path = Path(search_dir) if search_dir is not None else None
+        input_path_path = Path(input_path) if input_path is not None else None
+        dictionary_dir_path = (
+            Path(dictionary_dir) if dictionary_dir is not None else None
+        )
+        targets_csv_path = Path(targets_csv) if targets_csv is not None else None
+        extended_calls.append(
+            {
+                "search_dir": search_dir_path,
+                "input_path": input_path_path,
+                "dictionary_dir": dictionary_dir_path,
+                "targets_csv": targets_csv_path,
+            }
+        )
+        assert base_dir is None
+        base_output_dir = search_dir_path or (
+            input_path_path.parent if input_path_path is not None else tmp_path
+        )
+        output = base_output_dir / "extended.output.activities.csv"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text("extended", encoding="utf-8")
+        return output
+
+    monkeypatch.setattr(
+        get_activity_data,
+        "process_activity_extended",
+        _capture_process_activity_extended,
+    )
+
     args = _make_args(input_csv, output_csv)
 
     exit_code = get_activity_data.run_chembl(cfg, args)
@@ -165,6 +205,69 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
     assert list(written_df["activity_id"]) == ["ACT1", "ACT2", "ACT3"]
     assert pd.api.types.is_float_dtype(written_df["standard_value"])  # type: ignore[arg-type]
     assert written_df["standard_value"].tolist() == [5.5, 7.25, 9.0]
+
+    assert len(extended_calls) == 1
+    extended_call = extended_calls[0]
+    assert extended_call["input_path"] == output_csv
+    assert extended_call["search_dir"] == output_csv.parent
+    assert extended_call["dictionary_dir"] == cfg.resources.dictionary_dir
+    assert extended_call["targets_csv"] == cfg.resources.targets_type_csv
+
+    done_payload = next(
+        payload for level, event, payload in logger_stub.events if event == "activity_pipeline_done"
+    )
+    assert "extended_output" in done_payload
+    assert not any(
+        event == "activity_pipeline_legacy_output" for _, event, _ in logger_stub.events
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("deterministic_env")
+def test_activity_pipeline__legacy_mode_skips_extended(
+    activity_resource_dir: Path,
+    cfg,
+    tmp_path,
+    monkeypatch,
+):
+    _configure_cfg(cfg)
+    cfg.activity.generate_extended = False
+
+    input_csv = _copy_resource(activity_resource_dir, "ids_happy.csv", tmp_path)
+    output_csv = tmp_path / "activities.csv"
+    chunk_df = pd.read_csv(activity_resource_dir / "chunk_happy.csv")
+
+    captured = _install_fetch_stubs(monkeypatch, chunk_df)
+    written = _install_writer_stub(monkeypatch)
+    logger_stub = _RecordingLogger()
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    monkeypatch.setattr("library.validation.logger", logger_stub)
+
+    def _fail_process_activity_extended(*args, **kwargs):  # pragma: no cover - failure guard
+        raise AssertionError("process_activity_extended should not be invoked when disabled")
+
+    monkeypatch.setattr(
+        get_activity_data,
+        "process_activity_extended",
+        _fail_process_activity_extended,
+    )
+
+    args = _make_args(input_csv, output_csv)
+
+    exit_code = get_activity_data.run_chembl(cfg, args)
+
+    assert exit_code == 0
+    assert {path for path, _ in written} == {output_csv}
+    assert captured == [("ACT1", "ACT2", "ACT3")]
+
+    events = [event for _, event, _ in logger_stub.events]
+    assert "activity_pipeline_done" in events
+    assert "activity_pipeline_legacy_output" in events
+
+    done_payload = next(
+        payload for level, event, payload in logger_stub.events if event == "activity_pipeline_done"
+    )
+    assert "extended_output" not in done_payload
 
 
 @pytest.mark.integration

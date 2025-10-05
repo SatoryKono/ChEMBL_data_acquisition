@@ -612,12 +612,18 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             chunk_failures.save(fetch_failure_path, cfg=cfg)
 
     if exit_code == 0:
-        extended_output_path = process_activity_extended(
-            input_path=output_path,
-            search_dir=output_path.parent,
-            dictionary_dir=cfg.resources.dictionary_dir,
-            targets_csv=cfg.resources.targets_type_csv,
-        )
+        if getattr(cfg.activity, "generate_extended", True):
+            extended_output_path = process_activity_extended(
+                input_path=output_path,
+                search_dir=output_path.parent,
+                dictionary_dir=cfg.resources.dictionary_dir,
+                targets_csv=cfg.resources.targets_type_csv,
+            )
+        else:
+            logger.info(
+                "activity_pipeline_legacy_output",
+                output=str(output_path),
+            )
 
     if limit is not None:
         logger.info("process_limit", limit=processed_ids)
