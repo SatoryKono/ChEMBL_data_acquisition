@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence, Callable
 
 from functools import partial
 from itertools import islice
@@ -176,6 +176,69 @@ _ACTIVITY_REQUIRED_DTYPES: dict[str, object] = {
 }
 
 _ORIGINAL_IO_WRITE_CSV = io.write_csv
+
+
+_EXTENDED_ACTIVITY_DTYPES: dict[str, str] = {
+    "activity_chembl_id": "string",
+    "salt_chembl_id": "string",
+    "target_chembl_id": "string",
+    "bao_endpoint": "string",
+    "compound_key": "string",
+    "compound_name": "string",
+    "multmol_assay": "boolean",
+    "approx_cited_activity": "boolean",
+    "shuffled_cit": "boolean",
+    "exact_cited_activity": "boolean",
+    "higly_correlated_cit": "boolean",
+    "review_doc": "boolean",
+    "rounded_data_citation": "boolean",
+    "original_activity_approx": "string",
+    "original_activity_exact": "string",
+    "nstereo": "Int64",
+    "log_value": "Float64",
+}
+
+_EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series | None]] = {
+    "activity_chembl_id": lambda df: df.get("activity_id"),
+    "compound_name": lambda df: df.get("molecule_pref_name"),
+    "log_value": lambda df: df.get("pchembl_value"),
+    "salt_chembl_id": lambda df: df.get("molecule_chembl_id"),
+}
+
+
+def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Guarantee columns expected by the post-processing stage."""
+
+    result = frame.copy()
+    if result.empty:
+        for column, dtype in _EXTENDED_ACTIVITY_DTYPES.items():
+            if column not in result.columns:
+                result[column] = pd.Series([], dtype=dtype)
+        return result
+
+    for column, dtype in _EXTENDED_ACTIVITY_DTYPES.items():
+        if column in result.columns:
+            continue
+        fallback = _EXTENDED_ACTIVITY_FALLBACKS.get(column)
+        if fallback is not None:
+            candidate = fallback(result)
+            if candidate is not None:
+                aligned = candidate.reindex(result.index)
+                try:
+                    result[column] = aligned.astype(dtype)
+                except TypeError:
+                    result[column] = aligned.astype("string")
+                continue
+        if dtype == "boolean":
+            filler = pd.Series(pd.NA, index=result.index, dtype="boolean")
+        elif dtype == "Float64":
+            filler = pd.Series(pd.NA, index=result.index, dtype="Float64")
+        elif dtype == "Int64":
+            filler = pd.Series(pd.NA, index=result.index, dtype="Int64")
+        else:
+            filler = pd.Series(pd.NA, index=result.index, dtype=dtype)
+        result[column] = filler
+    return result
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -360,6 +423,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     metadata_hooks = [
         _ensure_required_activity_columns,
+        _ensure_extended_activity_columns,
         normalize_activities,
         add_pipeline_metadata,
         _compute_bounds,
