@@ -99,6 +99,23 @@ _ACTIVITY_INPUT_SCHEMA: Mapping[str, str] = {
     if dtype in {"string", "boolean", "Int64", "Float64"}
 }
 
+def _normalise_column_key(name: str) -> str:
+    """Return a canonical key used to match column aliases."""
+
+    return re.sub(r"[^0-9a-z]+", "_", str(name).strip().lower()).strip("_")
+
+
+def _lookup_column_name(frame: pd.DataFrame, *candidates: str) -> str | None:
+    """Return the actual column name matching one of ``candidates``."""
+
+    normalised = {_normalise_column_key(column): column for column in frame.columns}
+    for candidate in candidates:
+        key = _normalise_column_key(candidate)
+        if key in normalised:
+            return normalised[key]
+    return None
+
+
 _TARGET_METADATA_READ_SCHEMA: Mapping[str, str] = {
     "target_chembl_id": "Text",
     "target_sort_order": "Text",
@@ -322,12 +339,11 @@ def _load_target_metadata(path: Path) -> pd.DataFrame:
         dtype_map=_TARGET_METADATA_READ_SCHEMA,
         na_values=_NA_MARKERS,
     )
+    alias = _lookup_column_name(frame, "unicellular_organism", "unicellular organism")
+    if alias is not None and alias != "unicellular_organism":
+        frame = frame.rename(columns={alias: "unicellular_organism"})
     if "unicellular_organism" not in frame.columns:
-        source_column: str | None = None
-        for candidate in ("type", "organism_type"):
-            if candidate in frame.columns:
-                source_column = candidate
-                break
+        source_column = _lookup_column_name(frame, "type", "organism_type", "organism type")
         if source_column is not None:
             source = frame[source_column].astype("string")
             normalised = source.str.strip().str.lower()
