@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +14,7 @@ from scripts import (
     get_target_data,
     get_testitem_data,
 )
+from tests.helpers.logs import parse_log_file
 
 _SCRIPT_CASES = (
     {
@@ -71,8 +71,7 @@ def test_cli_logging__creates_log_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: dict[str, Any]
 ) -> None:
     base_path = tmp_path
-    data_dir = base_path / "data"
-    log_dir = data_dir / "logs"
+    log_dir = base_path / "logs"
     log_dir.mkdir(parents=True)
 
     config_path = base_path / "config.yaml"
@@ -169,11 +168,7 @@ def test_cli_logging__creates_log_file(
     expected_name = f"{Path(module.__file__).stem}_20240102.log"
     assert log_path.name == expected_name
 
-    events = []
-    with log_path.open(encoding="utf-8") as handle:
-        for line in handle:
-            record = json.loads(line)
-            events.append(record)
+    events = parse_log_file(log_path)
 
     event_names = {record.get("event") for record in events}
     expected_events = {
@@ -191,5 +186,6 @@ def test_cli_logging__creates_log_file(
         for record in events
         if record.get("event") == f"{prefix}_records"
     )
-    assert record_entry.get("processed") == 2
-    assert record_entry.get("discarded") == 1
+    data = record_entry.get("data", {})
+    assert data.get("processed") == 2
+    assert data.get("discarded") == 1

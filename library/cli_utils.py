@@ -117,7 +117,12 @@ def run_cli_command(
 ) -> int:
     """Execute CLI boilerplate shared by data acquisition commands."""
 
-    log_cfg.level = getattr(args, "log_level", log_cfg.level)
+    desired_level = getattr(args, "log_level", log_cfg.level)
+    if getattr(args, "verbose", False):
+        desired_level = "DEBUG"
+    if not desired_level:
+        desired_level = "INFO"
+    log_cfg.level = str(desired_level).upper()
     configured_logger = cli.configure_logger(log_cfg)
     use_logger = logger or configured_logger
     use_logger.info("pipeline_start", run_id=log_cfg.run_id)

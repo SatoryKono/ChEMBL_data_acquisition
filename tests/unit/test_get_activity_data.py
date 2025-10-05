@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 from typing import Iterable
 
@@ -57,19 +56,6 @@ class _RecordingLogger:
 
     def error(self, event: str, **kwargs: object) -> None:
         self.events.append(("error", event, dict(kwargs)))
-
-
-def _extract_events(stdout: str) -> list[dict[str, object]]:
-    events: list[dict[str, object]] = []
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            events.append(json.loads(line))
-        except json.JSONDecodeError:  # pragma: no cover - defensive fallback
-            continue
-    return events
 
 
 @pytest.mark.parametrize(

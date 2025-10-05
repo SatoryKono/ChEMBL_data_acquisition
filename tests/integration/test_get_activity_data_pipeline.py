@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 from typing import Iterable
 
@@ -129,21 +128,6 @@ def _make_args(input_csv: Path, output_csv: Path) -> argparse.Namespace:
         dry_run=False,
         invocation=None,
     )
-
-
-def _collect_events(stdout: str) -> list[dict[str, object]]:
-    events: list[dict[str, object]] = []
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            events.append(json.loads(line))
-        except json.JSONDecodeError:  # pragma: no cover - defensive for unrelated output
-            continue
-    return events
-
-
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
 def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_path, monkeypatch):

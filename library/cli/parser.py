@@ -170,6 +170,12 @@ def add_common_arguments(
 
     parser.add_argument("--log-level", default=log_level, help="Logging level")
     parser.add_argument(
+        "--verbose",
+        action="store_true",
+        default=False,
+        help="Enable debug logging",
+    )
+    parser.add_argument(
         "--input",
         dest="input_csv",
         type=path_argument,
@@ -390,7 +396,14 @@ def configure_logger(
         )
 
     new_logger = _configure_logger(
-        LoggerConfig(level=cfg.level, run_id=cfg.run_id, stream=cfg.stream)
+        LoggerConfig(
+            level=cfg.level,
+            run_id=cfg.run_id,
+            redact_secrets=cfg.redact_secrets,
+            stream=cfg.stream,
+            handlers=list(cfg.handlers),
+            logger_name=cfg.logger_name,
+        )
     )
     # Update the shared logger instance in place so existing references remain
     # valid across the code base.

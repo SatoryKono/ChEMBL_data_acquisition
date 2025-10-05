@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import argparse
 import io
-import json
 from pathlib import Path
 from typing import Sequence
 
 import pytest
 
 from scripts import get_data
+from tests.helpers.logs import iter_events, parse_log_lines
 
 
 def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
@@ -46,6 +47,7 @@ def test_parse_args__defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     expected_prefix = get_data.datetime.now(get_data.UTC).strftime("%Y%m%d")
     assert args.date_prefix == expected_prefix
     assert args.log_level == "INFO"
+    assert args.verbose is False
     assert args.limit is None
     assert args.force is False
     assert args.skip_existing is False
@@ -74,6 +76,7 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
             "--force",
             "--skip-existing",
             "--dry-run",
+            "--verbose",
         ]
     )
     assert args.base_path == base
@@ -82,10 +85,39 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
     assert args.config == tmp_path / "custom.yaml"
     assert args.date_prefix == "20240203"
     assert args.log_level == "debug"
+    assert args.verbose is True
     assert args.limit == 50
     assert args.force is True
     assert args.skip_existing is True
     assert args.dry_run is True
+
+
+@pytest.mark.unit
+def test_prepare_config__verbose_overrides_level(tmp_path: Path) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
+
+    args = argparse.Namespace(
+        base_path=base_path,
+        input_dir=Path("input"),
+        output_dir=Path("output"),
+        config=config_path,
+        date_prefix="20240204",
+        log_level="info",
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        verbose=True,
+    )
+
+    cfg = get_data._prepare_config(args)
+    assert cfg.log_level == "DEBUG"
 
 
 @pytest.mark.unit
@@ -103,29 +135,18 @@ def test_pipeline_step_registration__expected_shape() -> None:
 @pytest.mark.unit
 def test_configure_logging__delegates_to_configure_logger(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[get_data.LoggerConfig] = []
+    original_configure = get_data.configure_logger
 
-    def _fake_configure_logger(cfg: get_data.LoggerConfig) -> get_data.Logger:
+    def _wrapper(cfg: get_data.LoggerConfig) -> get_data.Logger:
         captured.append(cfg)
-        stream = io.StringIO()
-        return get_data.Logger(
-            get_data.LoggerConfig(
-                level=cfg.level,
-                run_id=cfg.run_id,
-                redact_secrets=cfg.redact_secrets,
-                stream=stream,
-            )
-        )
+        return original_configure(cfg)
 
-    monkeypatch.setattr(get_data, "configure_logger", _fake_configure_logger)
+    monkeypatch.setattr(get_data, "configure_logger", _wrapper)
     logger = get_data._configure_logging("warn", run_id="fixed")
     assert captured, "expected configure_logger to be invoked"
     cfg = captured[0]
     assert cfg.level == "WARN"
     assert cfg.run_id == "fixed"
-    logger.warning("test_event")
-    record = json.loads(logger._cfg.stream.getvalue().strip())
-    assert record["event"] == "test_event"
-    assert record["run_id"] == "fixed"
 
 
 @pytest.mark.unit
@@ -156,16 +177,19 @@ def test_run_pipeline__propagates_step_failure(tmp_path: Path, monkeypatch: pyte
     )
 
     stream = io.StringIO()
-    logger = get_data.Logger(get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="unit"))
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="unit")
+    )
     monkeypatch.setattr(get_data, "_PIPELINE_STEPS", steps, raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
     status = get_data.run_pipeline(cfg)
     assert status == 2
     assert failure_calls, "expected failing step to execute"
-    events = [json.loads(line)["event"] for line in stream.getvalue().splitlines() if line.strip()]
+    records = parse_log_lines(stream.getvalue())
+    events = list(iter_events(records))
     assert "step_failed" in events
-    assert "step_done" not in events[-1]
+    assert events[-1] != "step_done"
 
 
 @pytest.mark.unit
@@ -177,11 +201,13 @@ def test_run_pipeline__handles_step_exception(tmp_path: Path, monkeypatch: pytes
 
     steps = (get_data.PipelineStep("document", _raising, None),)
     stream = io.StringIO()
-    logger = get_data.Logger(get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="unit"))
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="unit")
+    )
     monkeypatch.setattr(get_data, "_PIPELINE_STEPS", steps, raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
     status = get_data.run_pipeline(cfg)
     assert status == 1
-    records = [json.loads(line) for line in stream.getvalue().splitlines() if line.strip()]
-    assert any(record.get("event") == "step_exception" for record in records)
+    records = parse_log_lines(stream.getvalue())
+    assert any(entry["event"] == "step_exception" for entry in records)

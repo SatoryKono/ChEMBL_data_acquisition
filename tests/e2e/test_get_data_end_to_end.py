@@ -15,6 +15,7 @@ import pytest
 
 from library.common.csv_utils import sha256_file
 from scripts import get_data
+from tests.helpers.logs import parse_log_file, parse_log_lines
 
 
 PipelineFunc = Callable[[list[str]], int]
@@ -244,16 +245,19 @@ def test_get_data_end_to_end__miniature_pipeline(
 
     log_streams: deque[io.StringIO] = deque()
 
+    original_configure = get_data.configure_logger
+
     def _configure_logger_stub(cfg: get_data.LoggerConfig) -> get_data.Logger:
         stream = io.StringIO()
         log_streams.append(stream)
-        run_id = "e2e-run"
-        return get_data.Logger(
+        return original_configure(
             get_data.LoggerConfig(
                 level=cfg.level,
-                run_id=run_id,
+                run_id="e2e-run",
                 redact_secrets=cfg.redact_secrets,
                 stream=stream,
+                handlers=list(cfg.handlers) if cfg.handlers else [],
+                logger_name=cfg.logger_name,
             )
         )
 
@@ -331,15 +335,14 @@ def test_get_data_end_to_end__miniature_pipeline(
     monkeypatch.setattr(get_data, "_PIPELINE_STEPS", stub_steps, raising=False)
 
     date_prefix = "20240102"
+
     def _invoke(argv: list[str]) -> tuple[int, list[dict[str, object]]]:
         exit_code = get_data.main(argv)
         assert log_streams, "expected logger stream to be captured"
-        stream = log_streams.popleft()
-        records = [
-            json.loads(line)
-            for line in stream.getvalue().splitlines()
-            if line.strip()
-        ]
+        records: list[dict[str, object]] = []
+        while log_streams:
+            stream = log_streams.popleft()
+            records.extend(parse_log_lines(stream.getvalue()))
         return exit_code, records
 
     argv = [
@@ -361,11 +364,20 @@ def test_get_data_end_to_end__miniature_pipeline(
     exit_code, logs = _invoke(argv)
     assert exit_code == 0
 
+    log_dir = base_path / "logs"
+    orchestrator_log = log_dir / f"get_data_{date_prefix}.log"
+    assert orchestrator_log.exists()
+    orchestrator_records = parse_log_file(orchestrator_log)
+    orchestrator_events = {entry.get("event") for entry in orchestrator_records}
+    assert "pipeline_start" in orchestrator_events
+    assert "workflow_succeeded" in orchestrator_events
+
     events = {record.get("event"): record for record in logs if "event" in record}
     assert "document_duplicates_dropped" in events
-    assert events["document_duplicates_dropped"].get("level") == "WARN"
+    assert events["document_duplicates_dropped"].get("level") == "WARNING"
     assert "activity_missing_value" in events
     assert events["activity_missing_value"].get("level") == "ERROR"
+    assert not any(record.get("event") == "step_arguments" for record in logs)
 
     expected_dir = Path(__file__).resolve().parents[1] / "resources" / "expected_get_data"
     key_columns = {
@@ -391,12 +403,24 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert repeat_exit_code == 0
     for step_name in key_columns:
         assert any(
-            record["event"] == "step_done" and record.get("step") == step_name
+            record["event"] == "step_done"
+            and record.get("data", {}).get("step") == step_name
             for record in repeat_logs
         )
+    assert not any(record.get("event") == "step_arguments" for record in repeat_logs)
 
     hashes_after = {name: sha256_file(path) for name, path in output_paths.items()}
     assert hashes_before == hashes_after
+
+    verbose_argv = [*argv, "--verbose"]
+    verbose_exit_code, verbose_logs = _invoke(verbose_argv)
+    assert verbose_exit_code == 0
+    assert any(record.get("event") == "step_arguments" for record in verbose_logs)
+    assert any(record.get("level") == "DEBUG" for record in verbose_logs)
+    verbose_hashes = {name: sha256_file(path) for name, path in output_paths.items()}
+    assert hashes_before == verbose_hashes
+    verbose_file_records = parse_log_file(orchestrator_log)
+    assert any(entry.get("event") == "step_arguments" for entry in verbose_file_records)
 
     reports_dir = base_path / "reports"
     report_json_path = reports_dir / "test_report.json"
@@ -432,6 +456,8 @@ def test_get_data_end_to_end__miniature_pipeline(
 
     new_exit_code, _ = _invoke(new_run_argv)
     assert new_exit_code == 0
+    new_log_path = log_dir / f"get_data_{new_date_prefix}.log"
+    assert new_log_path.exists()
     for step_name, stem in get_data._DEFAULT_OUTPUT_STEMS.items():
         new_path = output_dir / f"output.{stem}_{new_date_prefix}.csv"
         assert new_path.exists()
