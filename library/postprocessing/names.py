@@ -406,7 +406,8 @@ def process_target_names(
             by=["target_chembl_id", "molecule_chembl_id", "all_names"],
             kind="mergesort",
         )
-    output_path = path.with_name(f"name.{path.name}")
+    base_name = helpers.normalise_export_basename(path)
+    output_path = path.with_name(f"name.{base_name}")
     write_csv_deterministic(
         result,
         output_path,
@@ -592,7 +593,8 @@ def process_target_names(input_path: str | Path, *, verbose: bool = False) -> di
 
     names_df = _build_names_table(frame)
     prefix = "names" if verbose else "name"
-    output_path = source_path.with_name(f"{prefix}.{source_path.name}")
+    base_name = helpers.normalise_export_basename(source_path)
+    output_path = source_path.with_name(f"{prefix}.{base_name}")
     helpers.write_csv(names_df, output_path, columns=TARGET_NAMES_COLUMNS)
 
     summary: dict[str, Any] = {

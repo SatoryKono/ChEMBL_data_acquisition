@@ -106,6 +106,28 @@ def write_csv(frame: pd.DataFrame, path: Path, *, columns: Sequence[str]) -> Pat
     )
 
 
+def normalise_export_basename(source: Path | str) -> str:
+    """Return a stable basename for derived artefacts created from ``source``."""
+
+    name = Path(source).name
+    # Leading dots are introduced by orchestrators that stage outputs via
+    # ``.{name}.tmp`` files. Strip them to recover the canonical artefact stem.
+    name = name.lstrip(".")
+    if name.endswith(".tmp"):
+        name = name[: -len(".tmp")]
+    # Temporary working files may encode the original ``.csv`` suffix before an
+    # additional qualifier such as ``_normalized``.  When the ``.csv`` segment is
+    # followed by an underscore we swap the order so the canonical suffix remains
+    # ``.csv`` at the end of the filename.
+    marker = ".csv_"
+    if marker in name and not name.endswith(".csv"):
+        prefix, remainder = name.split(marker, 1)
+        name = f"{prefix}_{remainder}"
+        if not name.endswith(".csv"):
+            name = f"{name}.csv"
+    return name
+
+
 def fill_missing(frame: pd.DataFrame, columns: Iterable[str], fill_value: str = "-") -> pd.DataFrame:
     """Fill ``columns`` missing from ``frame`` with ``fill_value``."""
 

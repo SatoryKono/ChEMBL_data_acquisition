@@ -299,6 +299,52 @@ def test_process_target_names_helper__writes_byte_identical_output(tmp_path: Pat
 
 
 @pytest.mark.unit
+def test_process_target_names__normalises_tmp_suffix(tmp_path: Path) -> None:
+    input_path = tmp_path / ".output.targets_20250101.csv_normalized.tmp"
+    data = pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL100",
+                "uniprot_id_primary": "P11111",
+                "pref_name": "Alpha",
+                "protein_name_canonical": "Alpha canonical",
+                "synonyms": "Alpha|Beta|alpha",
+                "protein_synonym_list": "",
+                "gtop_synonyms": "Alpha GPCR",
+                "gene_symbol": "ALPHA",
+                "gene_symbol_list": "ALPHA|Alpha",
+                "isoform_names": "Isoform A|Isoform B",
+                "isoform_synonyms": "",
+                "recommendedName": "Alpha recommended",
+                "secondaryAccessionNames": "SEC1|SEC2",
+                "contrion": "X|Y",
+                "active_component_type": "protein",
+                "target_components": json.dumps(
+                    [
+                        {
+                            "component_id": "CHEMBL100",
+                            "component_type": "protein",
+                            "component_synonyms": [
+                                {"syn_type": "common", "synonyms": ["Alpha"]}
+                            ],
+                        }
+                    ]
+                ),
+            }
+        ]
+    )
+    data.to_csv(input_path, index=False)
+
+    result = names.process_target_names(input_path)
+    if isinstance(result, dict):
+        output_path = Path(result["path"])
+    else:
+        output_path = Path(result)
+
+    assert output_path.name == "name.output.targets_20250101_normalized.csv"
+
+
+@pytest.mark.unit
 def test_process_target_names_helper__summary_counts(tmp_path: Path) -> None:
     input_path = tmp_path / "output.target_20250101.csv"
     frame = pd.DataFrame(

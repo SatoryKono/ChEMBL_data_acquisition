@@ -483,3 +483,15 @@ def test_isoform_process_targets__writes_isoform_prefix(tmp_path: Path, snapshot
 
     assert output_path.name == "isoform.output.target_20250101.csv"
     assert output_path.parent == input_path.parent
+
+
+@pytest.mark.unit
+def test_isoform_process_targets__normalises_tmp_suffix(tmp_path: Path, snapshot_resource: Path) -> None:
+    source = snapshot_resource / "target_isoform_minimal.csv"
+    tmp_input = tmp_path / ".output.target_20250101.csv.tmp"
+    tmp_input.write_bytes(source.read_bytes())
+
+    output_path = isoform.process_targets(str(tmp_input), verbose=False)
+
+    assert output_path.name == "isoform.output.target_20250101.csv"
+    assert output_path.exists()

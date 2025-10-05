@@ -17,6 +17,8 @@ import sys
 import pandas as pd
 import re
 
+from ..helpers import normalise_export_basename, write_csv
+
 
 def _empty_like(index: pd.Index) -> pd.Series:
     """Return an empty object-typed series aligned with *index*."""
@@ -75,7 +77,8 @@ _INPUT_NAME_RULES: Tuple[Tuple[re.Pattern[str], str], ...] = (
 def _matches_expected_input_name(filename: str) -> bool:
     """Return ``True`` when ``filename`` matches a supported input pattern."""
 
-    return any(pattern.match(filename) for pattern, _ in _INPUT_NAME_RULES)
+    normalised = normalise_export_basename(filename)
+    return any(pattern.match(normalised) for pattern, _ in _INPUT_NAME_RULES)
 
 
 def _supported_patterns_text() -> str:
@@ -480,7 +483,8 @@ def _resolve_output_path(input_path: Path, output_csv: Optional[str]) -> Path:
         output_path = Path(output_csv)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         return output_path
-    return input_path.with_name(f"isoform.{input_path.name}")
+    base_name = normalise_export_basename(input_path)
+    return input_path.with_name(f"isoform.{base_name}")
 
 
 def _stringify_for_csv(value: Any) -> str:
@@ -530,12 +534,7 @@ def process_targets(
         prepared[column] = prepared[column].map(_stringify_for_csv)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    prepared.to_csv(
-        output_path,
-        index=False,
-        encoding="utf-8",
-        lineterminator="\n",
-    )
+    write_csv(prepared, output_path, columns=list(_OUTPUT_COLUMNS))
     if verbose:
         print(f"[isoform] wrote {output_path}")
     return output_path

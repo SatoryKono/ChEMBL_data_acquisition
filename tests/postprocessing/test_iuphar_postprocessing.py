@@ -185,6 +185,37 @@ def test_process_iuphar_targets__produces_expected_csv(tmp_path: Path, snapshot_
     assert actual_bytes == expected_bytes
 
 
+def test_process_iuphar_targets__normalises_tmp_suffix(tmp_path: Path) -> None:
+    path = tmp_path / ".output.target_20240101.csv.tmp"
+    frame = pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL123",
+                "GuidetoPHARMACOLOGY": "GTOP123",
+                "iuphar_target_id": "T-123",
+                "iuphar_family_id": "F-10",
+                "iuphar_type": "Receptor",
+                "iuphar_class": "ClassA",
+                "iuphar_subclass": "SubclassA",
+                "iuphar_chain": "A",
+                "iuphar_name": "Alpha Receptor",
+                "gtop_synonyms": "Alpha|Beta",
+                "synonyms": "Beta|Gamma",
+                "component_description": "[]",
+                "component_synonym_ids": "S-1",
+                "component_type_raw": "type",
+                "component_sequence": "SEQ",
+                "component_structures": "STRUCT",
+            }
+        ]
+    )
+    frame.to_csv(path, index=False)
+
+    output_path = iuphar.process_iuphar_targets(path)
+
+    assert output_path.name == "IUPHAR.output.target_20240101.csv"
+
+
 def test_process_iuphar_targets__fills_missing_component_description(tmp_path: Path) -> None:
     path = tmp_path / "output.target_20240606.csv"
     frame = pd.DataFrame(

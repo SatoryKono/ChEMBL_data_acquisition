@@ -25,6 +25,7 @@ from ..pipelines.document import postprocessing as stage_document_postprocessing
 from ..config import IoCfg
 from ..common.csv_utils import write_csv_deterministic
 from ..common.log import logger
+from .helpers import normalise_export_basename
 
 # ===== Parameters ===========================================================
 UTF8_ENCODING = "utf-8"
@@ -477,22 +478,11 @@ def preprocess_document_export(
     return processed.loc[:, stage_document_postprocessing.FINAL_COLUMN_ORDER]
 
 
-def _normalise_export_basename(source: Path | str) -> str:
-    """Return the ``source`` basename without leading dot or ``.tmp`` suffix."""
-
-    name = Path(source).name
-    if name.startswith("."):
-        name = name[1:]
-    if name.endswith(".tmp"):
-        name = name[: -len(".tmp")]
-    return name
-
-
 def _build_default_destination(source: Path | str) -> Path:
     """Return the default output path for ``source``."""
 
     source_path = Path(source)
-    base_name = _normalise_export_basename(source_path)
+    base_name = normalise_export_basename(source_path)
     return source_path.with_name(f"{DEFAULT_OUTPUT_PREFIX}{base_name}")
 
 
