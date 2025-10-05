@@ -1,83 +1,149 @@
-"""Unit tests for :mod:`library.pipelines.tissue.chembl`."""
+"""Unit tests for :func:`library.pipelines.tissue.chembl.get_tissues`."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import deque
+from typing import Any, Iterable
 
 import pandas as pd
+import pytest
 
-from library.pipelines.tissue import chembl
-
-
-@dataclass
-class _CapturedRequest:
-    url: str
-    timeout: float | None
+from library.config import ApiCfg
+from library.pipelines.tissue.chembl import TISSUE_BASE_COLUMNS, get_tissues
 
 
-class _FakeClient:
-    """Minimal stub emulating :class:`ChemblClient`."""
+class MockChemblClient:
+    """Minimal stand-in for :class:`~library.clients.ChemblClient` used in tests."""
 
-    def __init__(self) -> None:
-        self.requests: list[_CapturedRequest] = []
+    def __init__(self, payloads: Iterable[dict[str, Any]]):
+        self._payloads: deque[dict[str, Any]] = deque(payloads)
+        self.calls: list[tuple[str, float | None]] = []
 
-    def request_json(self, url: str, *, cfg, timeout: float | None) -> dict[str, object]:
-        self.requests.append(_CapturedRequest(url, timeout))
-        if "CHEMBLT1" in url:
-            return {
+    def request_json(
+        self,
+        url: str,
+        *,
+        cfg: ApiCfg,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        self.calls.append((url, timeout))
+        if not self._payloads:
+            raise AssertionError("No payload queued for request")
+        return self._payloads.popleft()
+
+
+@pytest.mark.unit
+def test_get_tissues__chunked_requests() -> None:
+    cfg = ApiCfg(chembl_base="https://example.test/custom", timeout_read=12.5)
+    client = MockChemblClient(
+        [
+            {
                 "tissues": [
                     {
-                        "tissue_chembl_id": "CHEMBLT1",
+                        "tissue_chembl_id": "TIS_1",
                         "pref_name": "Alpha",
-                        "uberon_id": "UBERON:0001",
-                        "extra": "ignored",
+                        "uberon_id": "UBERON:1",
                     }
                 ],
-                "page_meta": {"next": None},
-            }
-        if "CHEMBLT2" in url:
-            return {
+                "page_meta": {
+                    "next": "https://example.test/custom/tissue.json?format=json&offset=1"
+                },
+            },
+            {
                 "tissues": [
                     {
-                        "tissue_chembl_id": "CHEMBLT2",
+                        "tissue_chembl_id": "TIS_2",
                         "pref_name": "Beta",
-                        "efo_id": "EFO:0001",
+                        "uberon_id": "UBERON:2",
                     }
                 ],
-            }
-        return {"tissues": [], "page_meta": {"next": None}}
-
-
-def test_get_tissues__chunks_and_normalises(cfg) -> None:
-    """Multiple identifiers are fetched in chunks and normalised."""
-
-    client = _FakeClient()
-
-    frame = chembl.get_tissues(
-        ["CHEMBLT1", "CHEMBLT2"],
-        cfg=cfg.api,
-        client=client,
-        chunk_size=1,
-        timeout=12.5,
+                "page_meta": {},
+            },
+            {
+                "tissues": [
+                    {
+                        "tissue_chembl_id": "TIS_3",
+                        "pref_name": "Gamma",
+                        "uberon_id": "UBERON:3",
+                    },
+                    {
+                        "tissue_chembl_id": "TIS_4",
+                        "pref_name": "Delta",
+                        "uberon_id": "UBERON:4",
+                    },
+                ],
+                "page_meta": {},
+            },
+        ]
     )
 
-    assert [req.url for req in client.requests] == [
-        f"{cfg.api.chembl_base.rstrip('/')}/tissue.json?format=json&"
-        "tissue_chembl_id__in=CHEMBLT1&limit=1",
-        f"{cfg.api.chembl_base.rstrip('/')}/tissue.json?format=json&"
-        "tissue_chembl_id__in=CHEMBLT2&limit=1",
+    df = get_tissues(
+        ["TIS_1", "TIS_2", "TIS_3", "TIS_4"],
+        cfg=cfg,
+        client=client,
+        chunk_size=2,
+    )
+
+    expected_urls = [
+        "https://example.test/custom/tissue.json?format=json"
+        "&tissue_chembl_id__in=TIS_1,TIS_2&limit=2",
+        "https://example.test/custom/tissue.json?format=json&offset=1",
+        "https://example.test/custom/tissue.json?format=json"
+        "&tissue_chembl_id__in=TIS_3,TIS_4&limit=2",
     ]
-    assert all(req.timeout == 12.5 for req in client.requests)
-    assert list(frame.columns) == chembl.TISSUE_BASE_COLUMNS
-    expected = pd.DataFrame(
-        {
-            "tissue_chembl_id": ["CHEMBLT1", "CHEMBLT2"],
-            "pref_name": ["Alpha", "Beta"],
-            "uberon_id": ["UBERON:0001", pd.NA],
-            "efo_id": [pd.NA, "EFO:0001"],
-            "bto_id": [pd.NA, pd.NA],
-            "caloha_id": [pd.NA, pd.NA],
-        }
-    ).astype(pd.StringDtype())
-    assert frame.astype(pd.StringDtype()).equals(expected)
+    assert client.calls == [(url, 12.5) for url in expected_urls]
+    assert df["tissue_chembl_id"].tolist() == ["TIS_1", "TIS_2", "TIS_3", "TIS_4"]
+
+
+@pytest.mark.unit
+def test_get_tissues__normalises_missing_columns() -> None:
+    cfg = ApiCfg(chembl_base="https://example.test/base", timeout_read=5.0)
+    client = MockChemblClient(
+        [
+            {
+                "tissues": [
+                    {
+                        "tissue_chembl_id": "TIS_MISSING",
+                        "pref_name": None,
+                        "uberon_id": "",
+                        "caloha_id": None,
+                    }
+                ],
+                "page_meta": {},
+            }
+        ]
+    )
+
+    df = get_tissues(
+        ["TIS_MISSING"],
+        cfg=cfg,
+        client=client,
+        chunk_size=5,
+    )
+
+    assert df.columns.tolist() == TISSUE_BASE_COLUMNS
+    row = df.iloc[0]
+    assert row["tissue_chembl_id"] == "TIS_MISSING"
+    assert pd.isna(row["pref_name"])
+    assert row["uberon_id"] == ""
+    assert pd.isna(row["efo_id"])
+    assert pd.isna(row["bto_id"])
+    assert pd.isna(row["caloha_id"])
+
+
+@pytest.mark.unit
+def test_get_tissues__skips_invalid_ids() -> None:
+    cfg = ApiCfg(chembl_base="https://example.test/base", timeout_read=5.0)
+    client = MockChemblClient([])
+
+    df = get_tissues(
+        ["", "#N/A"],
+        cfg=cfg,
+        client=client,
+        chunk_size=3,
+    )
+
+    assert client.calls == []
+    assert df.empty
+    assert df.columns.tolist() == TISSUE_BASE_COLUMNS
 
