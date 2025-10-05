@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 import sys
@@ -18,6 +17,8 @@ import warnings
 
 import pandas as pd
 import re
+
+from ..helpers import normalise_export_basename
 
 
 def _empty_like(index: pd.Index) -> pd.Series:
@@ -527,16 +528,8 @@ def _resolve_output_path(input_path: Path, output_csv: Optional[str]) -> Path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         return output_path
 
-    def _canonical_export_name(name: str) -> str:
-        stem, ext = os.path.splitext(name)
-        lowered = stem.lower()
-        normalized_suffix = "_normalized"
-        if lowered.endswith(normalized_suffix):
-            stem = stem[: -len(normalized_suffix)]
-        return f"{stem}{ext or ''}"
-
-    canonical_name = _canonical_export_name(input_path.name)
-    return input_path.with_name(f"isoform.{canonical_name}")
+    base_name = normalise_export_basename(input_path)
+    return input_path.with_name(f"isoform.{base_name}")
 
 
 def _stringify_for_csv(value: Any) -> str:
