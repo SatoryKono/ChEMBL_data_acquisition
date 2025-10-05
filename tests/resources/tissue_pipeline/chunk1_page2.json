@@ -1,0 +1,15 @@
+{
+  "page_meta": {
+    "next": null
+  },
+  "tissues": [
+    {
+      "tissue_chembl_id": "CHEMBLT2",
+      "pref_name": "Cardiac muscle",
+      "uberon_id": "UBERON:0002343",
+      "efo_id": null,
+      "bto_id": "",
+      "caloha_id": null
+    }
+  ]
+}
