@@ -25,6 +25,7 @@ from library.postprocessing.activity_extended import (
     _select_and_cast,
     _transform_activity_frame,
     _augment_activity_frame,
+    _TARGET_COLUMNS,
 )
 
 pytestmark = pytest.mark.postprocessing
@@ -296,6 +297,27 @@ def test_load_target_metadata__cp1252_roundtrip(tmp_path: Path) -> None:
     assert frame["unicellular_organism"].dtype == "boolean"
     assert frame["taxon_id"].dtype == "Int64"
     assert frame["multifunctional_enzyme"].dtype == "boolean"
+
+
+def test_load_target_metadata__derives_unicellular_flag(tmp_path: Path) -> None:
+    target_path = tmp_path / "targets_type.csv"
+    target_path.write_text(
+        (
+            "target_chembl_id,target_sort_order,multifunctional_enzyme,IUPHAR_class,"
+            "IUPHAR_subclass,genus,superkingdom,phylum,taxon_id,gene_index,taxon_index,"
+            "organism_type\n"
+            "CHEMBL1,001,FALSE,ClassA,SubclassA,Homo,Eukaryota,Chordata,9606,G1,T1,Multicellular organism\n"
+            "CHEMBL2,002,TRUE,ClassB,SubclassB,Escherichia,Bacteria,Proteobacteria,83333,G2,T2,Unicellular organism\n"
+        ),
+        encoding="utf-8",
+    )
+
+    frame = _load_target_metadata(target_path)
+
+    assert list(frame.columns) == list(_TARGET_COLUMNS)
+    assert frame.loc[0, "unicellular_organism"].item() is False
+    assert frame.loc[1, "unicellular_organism"].item() is True
+    assert frame["unicellular_organism"].dtype == "boolean"
 
 
 def test_resolve_targets_path__uses_override(tmp_path: Path) -> None:
