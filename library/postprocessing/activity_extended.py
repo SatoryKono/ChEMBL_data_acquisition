@@ -84,7 +84,11 @@ _REQUIRED_COLUMN_DTYPES: Mapping[str, str] = {
 
 _REQUIRED_COLUMN_FALLBACKS: Mapping[str, Callable[[pd.DataFrame], pd.Series | None]] = {
     "activity_chembl_id": lambda frame: frame.get("activity_id"),
-    "salt_chembl_id": lambda frame: frame.get("molecule_chembl_id"),
+    "salt_chembl_id": (
+        lambda frame: frame.get("molecule_chembl_id")
+        if "parent_molecule_chembl_id" not in frame.columns
+        else None
+    ),
     "compound_name": lambda frame: frame.get("molecule_pref_name"),
     "log_value": lambda frame: frame.get("pchembl_value"),
 }
@@ -522,6 +526,16 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
                 df["compound_key"] = df[candidate].astype("string")
                 filled.add("compound_key")
                 break
+    else:
+        missing_mask = df["compound_key"].isna()
+        if missing_mask.any():
+            for candidate in ("parent_molecule_chembl_id", "molecule_chembl_id"):
+                if candidate in df.columns:
+                    df.loc[missing_mask, "compound_key"] = (
+                        df.loc[missing_mask, candidate].astype("string")
+                    )
+                    filled.add("compound_key")
+                    break
 
     if "log_value" not in df.columns and "pchembl_value" in df.columns:
         df["log_value"] = pd.to_numeric(df["pchembl_value"], errors="coerce")
@@ -574,15 +588,15 @@ def _transform_activity_frame(
             f"{missing_list}. Available columns: {available}"
         )
 
-    working, filled = _augment_activity_frame(df)
+    df, ensured_filled = _augment_activity_frame(df)
+    original_filled = _augment_activity_frame(frame)[1]
+    filled = ensured_filled | original_filled
 
     if filled:
         logger.warning(
             "activity_extended_missing_columns_filled",
             columns=sorted(filled),
         )
-
-    df = working
     df = _prepare_unknown_chirality(df)
     df = _apply_multimol_logic(df)
     df = _rename_columns(df)

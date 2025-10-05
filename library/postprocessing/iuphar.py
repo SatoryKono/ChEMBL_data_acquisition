@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import re
 import sys
 from dataclasses import dataclass
@@ -14,10 +13,9 @@ import pandas as pd
 
 from .helpers import normalise_export_basename, normalise_text, read_csv_with_fallbacks
 from library.common.csv_utils import write_csv_deterministic
+from library.common.log import logger
 
 __all__ = ["process_iuphar_targets", "IUPHARPostProcessingError"]
-
-logger = logging.getLogger(__name__)
 
 _DEFAULT_SEARCH_DIR = Path("data/output")
 _TARGET_PATTERN = re.compile(r"output\.target_\d{8}\.csv\Z")
@@ -128,8 +126,10 @@ def _ensure_required_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, tuple[str,
         "iuphar_postprocess_missing_columns", missing=list(missing), available=list(df.columns)
     )
 
-    placeholder = pd.DataFrame(columns=list(_REQUIRED_COLUMNS))
-    return placeholder, missing
+    formatted = ", ".join(missing)
+    raise IUPHARPostProcessingError(
+        f"Input CSV is missing required columns: {formatted}"
+    )
 
 
 def _ensure_optional_columns(df: pd.DataFrame) -> pd.DataFrame:
