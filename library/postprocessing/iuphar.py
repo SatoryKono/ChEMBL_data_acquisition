@@ -290,6 +290,7 @@ def process_iuphar_targets(
         output_path,
         col_order=_OUTPUT_COLUMNS,
         key_cols=("target_chembl_id",),
+        encoding="utf-8",
     )
 
     if verbose:
