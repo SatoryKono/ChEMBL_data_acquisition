@@ -562,24 +562,24 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
                 filled.add("compound_key")
                 break
 
-    log_value_series: pd.Series | None = None
-
-    if "log_value" in df.columns:
-        log_value_series = pd.to_numeric(df["log_value"], errors="coerce").astype("Float64")
+    log_value_column_present = "log_value" in df.columns
+    log_value_series: pd.Series = (
+        pd.to_numeric(df["log_value"], errors="coerce").astype("Float64")
+        if log_value_column_present
+        else pd.Series(pd.NA, index=df.index, dtype="Float64")
+    )
+    log_value_filled = False
     pchembl_series: pd.Series | None = None
     if "pchembl_value" in df.columns:
         pchembl_series = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
-        if log_value_series is None:
-            log_value_series = pchembl_series
+        mask = log_value_series.isna() & pchembl_series.notna()
+        if mask.any():
+            log_value_series = log_value_series.copy()
+            log_value_series.loc[mask] = pchembl_series.loc[mask]
+            log_value_filled = True
             filled.add("log_value")
-        else:
-            mask = log_value_series.isna()
-            if mask.any():
-                log_value_series = log_value_series.copy()
-                log_value_series.loc[mask] = pchembl_series.loc[mask]
-                filled.add("log_value")
 
-    if log_value_series is not None:
+    if log_value_column_present or log_value_series.notna().any():
         # ``log_value`` may originate from CSV exports where the column is typed as
         # ``string``.  Pandas prohibits assigning floats into a ``string`` dtype
         # column which resulted in ``TypeError: Invalid value for dtype 'str'``
@@ -592,11 +592,7 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
         df = df.drop(columns=["log_value"], errors="ignore")
         df["log_value"] = log_value_series.astype("Float64")
 
-    if (
-        log_value_series is not None
-        and "standard_value" in df.columns
-        and "standard_units" in df.columns
-    ):
+    if "standard_value" in df.columns and "standard_units" in df.columns:
         std_value = pd.to_numeric(df["standard_value"], errors="coerce")
         units = df["standard_units"].astype("string").str.strip().str.lower()
         factors = units.map({
@@ -620,10 +616,15 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
         if mask.any():
             log_value_series = log_value_series.copy()
             log_value_series.loc[mask] = computed.loc[mask]
+            log_value_filled = True
+            filled.add("log_value")
 
-    if log_value_series is not None:
+    if log_value_column_present or log_value_series.notna().any():
         df = df.drop(columns=["log_value"], errors="ignore")
         df["log_value"] = log_value_series.astype("Float64")
+
+    if not log_value_filled and not log_value_column_present and not log_value_series.notna().any():
+        filled.discard("log_value")
 
     bool_defaults = {
         "multmol_assay",
