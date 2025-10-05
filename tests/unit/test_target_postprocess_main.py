@@ -74,3 +74,32 @@ def test_postprocess_target_table__fills_missing_columns(tmp_path: Path) -> None
     assert result_frame.at[0, "cellularity"] == "multicellular"
     assert result_frame.at[0, "multifunctional_enzyme"] == "True"
 
+
+@pytest.mark.unit
+def test_postprocess_target_table__handles_missing_identifier_column(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "targets_missing_id.csv"
+    frame = pd.DataFrame(
+        {
+            "taxon_id": ["9606"],
+            "reaction_ec_numbers": ["1.2.3.4|2.7.11.1"],
+        }
+    )
+    frame.to_csv(input_path, index=False)
+
+    fetch_calls: list[tuple[object, object | None]] = []
+
+    def _fake_fetcher(tax_id: object, email: str | None) -> list[str]:
+        fetch_calls.append((tax_id, email))
+        return ["Eukaryota", "Chordata"]
+
+    output_location = postprocess_target_table(input_path, fetcher=_fake_fetcher)
+    output_path = Path(output_location)
+
+    result_frame = pd.read_csv(output_path, dtype=str, keep_default_na=False)
+
+    assert result_frame.at[0, "target_chembl_id"] == ""
+    assert result_frame.at[0, "multifunctional_enzyme"] == "True"
+    assert fetch_calls == [("9606", None)]
+
