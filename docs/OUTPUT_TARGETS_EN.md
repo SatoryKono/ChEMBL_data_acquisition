@@ -18,6 +18,8 @@ CSV artefacts under the chosen output directory:
   synonym coverage analysis.
 - `names.output.target_<YYYYMMDD>.csv` — flattened component/name catalogue used
   to reconcile legacy exports and ChEMBL component groupings.
+- `IUPHAR.output.target_<YYYYMMDD>.csv` — normalised IUPHAR classifications and
+  synonym lists rebuilt from the canonical target export.
 
 The `<YYYYMMDD>` suffix is inherited from the CLI `--date` argument or the
 automatic stamp derived from the execution date.
@@ -271,3 +273,64 @@ These metrics surface in the structured logs and the pipeline metadata YAML.
   input yield byte-identical `names.output.target_<stamp>.csv` artefacts.
 - The output schema and default values are covered by regression tests to guard
   against accidental column drift.
+
+## Post-processing `IUPHAR.*`
+
+`IUPHAR.output.target_<stamp>.csv` reproduces the legacy helper that consolidated
+Guide to PHARMACOLOGY chains, families, and synonym tokens. It is regenerated on
+every target run to keep the helper aligned with the canonical export.
+
+### Input/output
+
+- **Input:** canonical `output.target_<stamp>.csv` with the IUPHAR enrichment
+  columns produced by `scripts/get_target_data.py`.
+- **Output:** helper written as `IUPHAR.output.target_<stamp>.csv` in the same
+  directory (or to a custom path supplied via the Python API). When no input is
+  provided, the helper discovers the most recent `output.target_*.csv` under the
+  default `data/output` location.
+- **Schema:**
+
+  ```
+  target_chembl_id,guidetopharmacology_id,iuphar_target_id,iuphar_family_id,
+  iuphar_type,iuphar_class,iuphar_subclass,iuphar_chain,iuphar_name,iuphar_synonyms
+  ```
+
+  The column order is enforced when writing the CSV to match downstream
+  consumers.
+
+### Dropped columns and renames
+
+Only the fields required by the synonym catalogue are kept. The helper removes
+diagnostic columns inherited from the component processing stage:
+
+- `component_synonym_ids`
+- `component_type_raw`
+- `component_sequence`
+- `component_structures`
+
+`GuidetoPHARMACOLOGY` is renamed to `guidetopharmacology_id`, while all other
+columns are preserved as-is.
+
+### Synonym construction
+
+Synonyms aggregate multiple sources and are rewritten deterministically:
+
+1. `gtop_synonyms`, `synonyms`, `component_description`, and the canonical
+   `iuphar_name` are normalised via `normalise_text`, split on `|` (or JSON keys
+   for structured descriptions), and stripped of empty tokens.
+2. Parenthetical or bracketed fragments are removed, consecutive whitespace is
+   collapsed, and tokens are lower-cased.
+3. Tokens are deduplicated in first-seen order to preserve deterministic
+   ordering.
+4. The resulting list joins into a pipe-delimited `iuphar_synonyms` column.
+
+The helper records the number of tokens observed before and after deduplication
+to simplify QA checks.
+
+### Logging and determinism
+
+When called with `verbose=True`, the helper emits structured lines with the
+input/output paths, counts of processed rows, the number of dropped columns, and
+synonym statistics. Outputs are written through `write_csv_deterministic` with a
+stable sort key (`target_chembl_id`), ensuring byte-identical results for
+identical inputs and Unix line endings.
