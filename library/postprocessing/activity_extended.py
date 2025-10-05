@@ -112,6 +112,7 @@ _TARGET_METADATA_READ_SCHEMA: Mapping[str, str] = {
     "gene_index": "Text",
     "taxon_index": "Text",
     "unicellular_organism": "Logical",
+    "organism_type": "Text",
 }
 
 _TARGET_METADATA_SCHEMA: Mapping[str, str] = {
@@ -323,6 +324,28 @@ def _load_target_metadata(path: Path) -> pd.DataFrame:
         na_values=_NA_MARKERS,
     )
     frame = frame.rename(columns={"target_sort_order": "sortorder.target"})
+    if "unicellular_organism" not in frame.columns and "organism_type" in frame.columns:
+        organism = frame["organism_type"].astype("string").str.strip().str.casefold()
+        mapping = {
+            "unicellular organism": True,
+            "multicellular organism": False,
+        }
+        derived = organism.map(mapping)
+        unexpected_mask = organism.notna() & derived.isna()
+        if unexpected_mask.any():
+            unexpected_values = sorted(
+                {
+                    str(value)
+                    for value in frame.loc[unexpected_mask, "organism_type"].dropna().unique()
+                }
+            )
+            logger.warning(
+                "targets_type.csv column 'organism_type' contained unexpected value(s): %s. "
+                "The 'unicellular_organism' flag will be left empty for these rows.",
+                unexpected_values,
+            )
+        frame["unicellular_organism"] = derived.astype("boolean")
+        frame = frame.drop(columns=["organism_type"])
     missing = [column for column in _TARGET_COLUMNS if column not in frame.columns]
     if missing:
         raise ActivityExtendedError(
