@@ -549,9 +549,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     if exit_code == 0:
         extended_output_path = process_activity_extended(
-            output_path,
-            base_dir=output_path.parent,
-            verbose=bool(getattr(args, "verbose", False)),
+            search_dir=output_path.parent,
+            dictionary_dir=cfg.resources.dictionary_dir,
+            targets_csv=cfg.resources.targets_type_csv,
         )
 
     if limit is not None:
