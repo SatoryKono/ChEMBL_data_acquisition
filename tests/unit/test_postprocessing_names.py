@@ -31,7 +31,7 @@ def test_process_target_names__creates_name_output_file(tmp_path):
 
     assert isinstance(result, dict)
     output_path = Path(result["path"])
-    assert output_path.name == "name.output.target_20240101.csv"
+    assert output_path.name == "names.output.target_20240101.csv"
     assert output_path.exists()
 
     exported = pd.read_csv(output_path, dtype=str)
@@ -58,5 +58,5 @@ def test_process_target_names__normalises_tmp_suffix(tmp_path: Path) -> None:
     result = names.process_target_names(input_path, verbose=False)
 
     output_path = Path(result["path"])
-    assert output_path.name == "name.output.target_20250101.csv"
+    assert output_path.name == "names.output.target_20250101.csv"
     assert output_path.exists()
