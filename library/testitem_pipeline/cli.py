@@ -880,15 +880,37 @@ def finalize_output(
     exit_code = 0
     columns_seen: set[str] = set()
     columns_to_fill: set[str] = set()
+    expected_columns: set[str] = set()
+    column_dtypes: dict[str, pd.api.extensions.ExtensionDtype | str | type | None] = {}
     failure_cases = SidecarErrors()
     failure_count = 0
 
     chunk_iter = iter(chunks)
 
-    def _ensure_optional_columns(frame: pd.DataFrame) -> None:
-        for column in columns_to_fill:
-            if column not in frame.columns:
-                frame[column] = pd.Series(pd.NA, index=frame.index, dtype="string")
+    schema_dtype_lookup: dict[str, str] = {
+        name: str(col.dtype) for name, col in TestitemsSchema.columns.items()
+    }
+
+    def _column_dtype(column: str) -> pd.api.extensions.ExtensionDtype | str | type:
+        dtype_name = schema_dtype_lookup.get(column, "string")
+        if dtype_name in {"str", "string"}:
+            return "string"
+        if dtype_name == "boolean":
+            return pd.BooleanDtype()
+        if dtype_name == "object":
+            return object
+        return "string"
+
+    def _ensure_column_alignment(frame: pd.DataFrame) -> None:
+        missing = (expected_columns | columns_to_fill) - set(frame.columns)
+        if not missing:
+            return
+        for column in sorted(missing):
+            dtype = column_dtypes.get(column)
+            if dtype is None:
+                dtype = _column_dtype(column)
+                column_dtypes[column] = dtype
+            frame[column] = pd.Series(pd.NA, index=frame.index, dtype=dtype)
 
     def _process_chunk(raw: pd.DataFrame) -> pd.DataFrame:
         nonlocal rows_total, rows_written, exit_code, columns_seen, failure_count
@@ -898,8 +920,11 @@ def finalize_output(
         if "pubchem_cid" in current.columns:
             current["pubchem_cid"] = current["pubchem_cid"].astype(object)
         current = add_pipeline_metadata(current)
-        _ensure_optional_columns(current)
+        _ensure_column_alignment(current)
+        for column in current.columns:
+            column_dtypes.setdefault(column, current.dtypes[column])
         columns_seen.update(current.columns)
+        expected_columns.update(columns_seen)
 
         chunk_missing_required = required_cols - set(current.columns)
         if chunk_missing_required:
@@ -966,8 +991,11 @@ def finalize_output(
     if missing_optional:
         added_optional = sorted(missing_optional)
         columns_to_fill.update(missing_optional)
+        expected_columns.update(columns_to_fill)
+        for column in missing_optional:
+            column_dtypes.setdefault(column, _column_dtype(column))
         for chunk in prepared_chunks:
-            _ensure_optional_columns(chunk)
+            _ensure_column_alignment(chunk)
         columns_seen.update(columns_to_fill)
         remaining_missing_optional = optional_cols - columns_seen
         if remaining_missing_optional:
