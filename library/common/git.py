@@ -219,7 +219,7 @@ def _git_sha() -> str:
 
     git_dir = _resolve_git_dir(repo_root)
     if git_dir is None:
-        logger.warning("git_directory_missing", path=str(repo_root))
+        logger.info("git_directory_missing", path=str(repo_root))
         return "UNKNOWN"
 
     git_executable = shutil.which("git")
