@@ -329,6 +329,30 @@ def test_postprocess_organism_export__failure(
     ) in logger_stub.events
 
 
+def test_postprocess_isoform_export__skips_for_custom_name(
+    cfg: Config,
+    tmp_path: Path,
+    logger_stub: _MemoryLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "out_chembl.csv"
+    source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    def _unexpected(*_: object, **__: object) -> None:  # pragma: no cover - defensive
+        raise AssertionError("isoform post-processing should be skipped")
+
+    monkeypatch.setattr(get_target_data.target_pp, "process_targets", _unexpected)
+
+    result = get_target_data._postprocess_isoform_export(source, cfg=cfg)
+
+    assert result is None
+    assert (
+        "info",
+        "target_isoform_postprocess_skipped",
+        {"path": str(source), "reason": "unsupported_export_name"},
+    ) in logger_stub.events
+
+
 def test_postprocess_target_exports__chains_helpers(
     cfg: Config,
     tmp_path: Path,

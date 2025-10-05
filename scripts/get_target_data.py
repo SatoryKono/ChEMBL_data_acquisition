@@ -258,6 +258,24 @@ def _bool_from_cli(value: object) -> bool | None:
     return bool(value)
 
 
+def _normalise_target_export_name(path: Path) -> str:
+    """Return a normalised filename for target exports."""
+
+    name = path.name
+    for suffix in reversed(path.suffixes):
+        if suffix == ".csv":
+            break
+        name = name.removesuffix(suffix)
+    return name
+
+
+def _is_supported_target_export(path: Path) -> bool:
+    """Return ``True`` if *path* represents a canonical target export."""
+
+    export_name = _normalise_target_export_name(path)
+    return target_pp._matches_expected_input_name(export_name)
+
+
 def _postprocess_isoform_export(
     source: Path,
     *,
@@ -267,8 +285,32 @@ def _postprocess_isoform_export(
 ) -> Path | None:
     """Invoke the isoform post-processing helper with CLI/config overrides."""
 
+    if not _is_supported_target_export(source):
+        logger.info(
+            "target_isoform_postprocess_skipped",
+            path=str(source),
+            reason="unsupported_export_name",
+        )
+        return None
+
     try:
         isoform_path = Path(target_pp.process_targets(str(source), verbose=True))
+    except ValueError as exc:
+        message = str(exc)
+        if "supported patterns" in message:
+            logger.info(
+                "target_isoform_postprocess_skipped",
+                path=str(source),
+                reason="unsupported_export_name",
+                error=message,
+            )
+            return None
+        logger.exception(
+            "target_isoform_postprocess_failed",
+            path=str(source),
+            error=message,
+        )
+        return None
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.exception(
             "target_isoform_postprocess_failed",
@@ -557,6 +599,14 @@ def _postprocess_iuphar_export(
         logger.error("target_iuphar_postprocess_unavailable", **payload)
         return None
 
+    if not _is_supported_target_export(source):
+        logger.info(
+            "target_iuphar_postprocess_skipped",
+            path=str(source),
+            reason="unsupported_export_name",
+        )
+        return None
+
     try:
         result = iuphar_pp.process_iuphar_targets(str(source), verbose=verbose)
     except Exception as exc:  # pragma: no cover - defensive logging
@@ -594,16 +644,7 @@ def _postprocess_target_exports(
 ) -> None:
     """Run all target post-processing helpers for ``source`` export."""
 
-    def _normalised_export_name(path: Path) -> str:
-        name = path.name
-        for suffix in reversed(path.suffixes):
-            if suffix == ".csv":
-                break
-            name = name.removesuffix(suffix)
-        return name
-
-    export_name = _normalised_export_name(source)
-    if not target_pp._matches_expected_input_name(export_name):
+    if not _is_supported_target_export(source):
         logger.info(
             "target_postprocess_skipped",
             path=str(source),
