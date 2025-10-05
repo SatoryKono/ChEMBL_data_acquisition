@@ -288,6 +288,13 @@ def test_transform_activity_frame__parses_activity_properties_flags(
         assert bool(row.rounded_data_citation) == flags["rounded_data_citation"]
         assert bool(row.is_citation) == any(flags.values())
 
+    assert transformed["allosteric"].dtype == pd.BooleanDtype()
+    assert transformed["nam"].dtype == pd.BooleanDtype()
+    assert transformed["pam"].dtype == pd.BooleanDtype()
+    assert transformed["allosteric"].eq(False).all()
+    assert transformed["nam"].eq(False).all()
+    assert transformed["pam"].eq(False).all()
+
 
 def test_transform_activity_frame__fills_missing_columns(activity_resources: Path) -> None:
     dictionary_root = activity_resources / "dictionary"

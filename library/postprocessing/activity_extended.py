@@ -11,6 +11,7 @@ the resulting CSVs remain byte-identical with the legacy exports.
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 import warnings
@@ -123,6 +124,9 @@ _FINAL_COLUMN_ORDER: tuple[str, ...] = (
     "shuffled_assay",
     "review",
     "rounded_data_citation",
+    "allosteric",
+    "nam",
+    "pam",
     "high_citation_rate",
     "original_activity_approx",
     "original_activity_exact",
@@ -400,6 +404,128 @@ def _drop_unused_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df.drop(columns=present, errors="ignore")
 
 
+def _normalise_activity_properties_text(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, (float, np.floating)) and np.isnan(value):
+        return None
+    if value is pd.NA:
+        return None
+    text = str(value) if not isinstance(value, str) else value
+    text = text.strip()
+    if not text:
+        return None
+    if text.lower() in {"nan", "none", "null"}:
+        return None
+    if text.startswith("\"") and text.endswith("\""):
+        inner = text[1:-1]
+        if inner.startswith("{") and inner.endswith("}"):
+            text = inner
+    return text
+
+
+def _load_activity_properties_json(text: str) -> Mapping[str, object] | None:
+    candidates = [text]
+    if "\"\"" in text:
+        candidates.append(text.replace("\"\"", "\""))
+    if text.startswith("\"") and text.endswith("\""):
+        inner = text[1:-1]
+        candidates.append(inner)
+        candidates.append(inner.replace("\"\"", "\""))
+
+    expanded: list[str] = []
+    for candidate in candidates:
+        replaced = (
+            candidate.replace("True", "true")
+            .replace("False", "false")
+            .replace("None", "null")
+        )
+        expanded.extend([candidate, replaced, replaced.replace("'", '"')])
+
+    seen: set[str] = set()
+    for candidate in expanded:
+        stripped = candidate.strip()
+        if not stripped or stripped in seen:
+            continue
+        seen.add(stripped)
+        try:
+            loaded = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(loaded, Mapping):
+            return loaded
+    return None
+
+
+def _coerce_activity_property_flag(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (np.bool_,)):
+        return bool(value)
+    if isinstance(value, (int, np.integer)):
+        if value in (0, 1):
+            return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "y"}:
+            return True
+        if lowered in {"false", "0", "no", "n"}:
+            return False
+    return None
+
+
+def _extract_activity_properties_flags(df: pd.DataFrame) -> pd.DataFrame:
+    result = df.copy()
+    index = result.index
+    defaults = {
+        column: pd.Series(pd.NA, index=index, dtype="boolean")
+        for column in ("allosteric", "nam", "pam")
+    }
+    flags = pd.DataFrame(defaults)
+    series = result.get("activity_properties")
+    if series is None:
+        for column in flags.columns:
+            result[column] = flags[column]
+        return result
+
+    mapping = {
+        "allosteric": ("allosteric",),
+        "nam": ("negative", "nam"),
+        "pam": ("positive", "pam"),
+    }
+
+    for idx, raw in series.items():
+        text = _normalise_activity_properties_text(raw)
+        if not text:
+            continue
+        payload = _load_activity_properties_json(text)
+        if payload is None:
+            continue
+        feature_source: Mapping[str, object] | None = None
+        features = payload.get("effect_features") if isinstance(payload, Mapping) else None
+        if isinstance(features, Mapping):
+            feature_source = features
+        elif isinstance(payload, Mapping):
+            feature_source = payload
+        else:
+            feature_source = {}
+
+        for column, keys in mapping.items():
+            if feature_source is None:
+                continue
+            value: object | None = None
+            for key in keys:
+                if key in feature_source:
+                    value = feature_source[key]
+                    break
+            coerced = _coerce_activity_property_flag(value)
+            flags.at[idx, column] = False if coerced is None else coerced
+
+    for column in flags.columns:
+        result[column] = flags[column]
+    return result
+
+
 def _compute_citation_flags(df: pd.DataFrame) -> pd.DataFrame:
     bool_columns = [
         "exact_data_citation",
@@ -502,6 +628,9 @@ def _select_and_cast(df: pd.DataFrame) -> pd.DataFrame:
         "shuffled_assay",
         "review",
         "rounded_data_citation",
+        "allosteric",
+        "nam",
+        "pam",
         "high_citation_rate",
         "is_citation",
         "unicellular_organism",
@@ -695,6 +824,7 @@ def _transform_activity_frame(
     df = _prepare_unknown_chirality(df)
     df = _apply_multimol_logic(df)
     df = _rename_columns(df)
+    df = _extract_activity_properties_flags(df)
     df = _drop_unused_columns(df)
     df = _compute_citation_flags(df)
     df = _annotate_high_citation(df, dictionary_root)
