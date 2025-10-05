@@ -24,6 +24,7 @@ from library.postprocessing.activity_extended import (
     _resolve_targets_path,
     _select_and_cast,
     _transform_activity_frame,
+    _augment_activity_frame,
 )
 
 pytestmark = pytest.mark.postprocessing
@@ -39,6 +40,33 @@ def activity_resources(snapshot_resource: Path) -> Path:
 def _copytree(src: Path, dst: Path) -> Path:
     shutil.copytree(src, dst)
     return dst
+
+
+def test_augment_activity_frame__fills_existing_blanks() -> None:
+    frame = pd.DataFrame(
+        {
+            "activity_chembl_id": pd.Series(["", pd.NA], dtype="string"),
+            "activity_id": pd.Series(["ACT-1", "ACT-2"], dtype="string"),
+            "compound_name": pd.Series([pd.NA, ""], dtype="string"),
+            "molecule_pref_name": pd.Series(["Preferred-1", "Preferred-2"], dtype="string"),
+            "compound_key": pd.Series(["   ", pd.NA], dtype="string"),
+            "molecule_chembl_id": pd.Series(["CHEMBL1", "CHEMBL2"], dtype="string"),
+            "pchembl_value": pd.Series([5.0, 6.0], dtype="Float64"),
+            "log_value": pd.Series([pd.NA, ""], dtype="object"),
+        }
+    )
+
+    augmented, filled = _augment_activity_frame(frame)
+
+    assert augmented["activity_chembl_id"].tolist() == ["ACT-1", "ACT-2"]
+    assert augmented["compound_name"].tolist() == ["Preferred-1", "Preferred-2"]
+    assert augmented["compound_key"].tolist() == ["CHEMBL1", "CHEMBL2"]
+    pd.testing.assert_series_equal(
+        augmented["log_value"],
+        pd.Series([5.0, 6.0], index=frame.index, dtype="Float64"),
+        check_names=False,
+    )
+    assert {"activity_chembl_id", "compound_name", "compound_key", "log_value"} <= filled
 
 
 def test_load_citation_fraction__missing_file(tmp_path: Path) -> None:
