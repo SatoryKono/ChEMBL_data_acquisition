@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Iterable
 
 import pandas as pd
@@ -351,6 +351,47 @@ def test_postprocess_isoform_export__skips_for_custom_name(
         "target_isoform_postprocess_skipped",
         {"path": str(source), "reason": "unsupported_export_name"},
     ) in logger_stub.events
+
+
+def test_postprocess_isoform_export__handles_value_error(
+    cfg: Config,
+    tmp_path: Path,
+    logger_stub: _MemoryLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "output.target_20250101.csv"
+    source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    class _RejectingIsoform:
+        def __call__(self, *_: object, **__: object) -> str:
+            raise ValueError("Input file must match one of the supported patterns: foo.csv")
+
+    monkeypatch.setattr(get_target_data.target_pp, "process_targets", _RejectingIsoform())
+
+    result = get_target_data._postprocess_isoform_export(source, cfg=cfg)
+
+    assert result is None
+    assert (
+        "info",
+        "target_isoform_postprocess_skipped",
+        {
+            "path": str(source),
+            "reason": "unsupported_export_name",
+            "error": "Input file must match one of the supported patterns: foo.csv",
+        },
+    ) in logger_stub.events
+
+
+def test_is_supported_target_export__rejects_custom_names() -> None:
+    path = PureWindowsPath("C:/tmp/out_chembl.csv")
+
+    assert get_target_data._is_supported_target_export(path) is False
+
+
+def test_is_supported_target_export__accepts_gzipped_export() -> None:
+    path = Path("output.target_20250101.csv.gz")
+
+    assert get_target_data._is_supported_target_export(path) is True
 
 
 def test_postprocess_target_exports__chains_helpers(

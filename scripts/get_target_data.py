@@ -262,10 +262,14 @@ def _normalise_target_export_name(path: Path) -> str:
     """Return a normalised filename for target exports."""
 
     name = path.name
+    if "/" in name or "\\" in name:
+        name = name.replace("\\", "/").split("/")[-1]
+
     for suffix in reversed(path.suffixes):
-        if suffix == ".csv":
+        if suffix.lower() == ".csv":
             break
-        name = name.removesuffix(suffix)
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
     return name
 
 
@@ -273,7 +277,11 @@ def _is_supported_target_export(path: Path) -> bool:
     """Return ``True`` if *path* represents a canonical target export."""
 
     export_name = _normalise_target_export_name(path)
-    return target_pp._matches_expected_input_name(export_name)
+    if target_pp._matches_expected_input_name(export_name):
+        return True
+
+    lowered = export_name.lower()
+    return lowered.startswith(("output.target_", "output.targets_", "targets_"))
 
 
 def _postprocess_isoform_export(
@@ -297,7 +305,7 @@ def _postprocess_isoform_export(
         isoform_path = Path(target_pp.process_targets(str(source), verbose=True))
     except ValueError as exc:
         message = str(exc)
-        if "supported patterns" in message:
+        if "supported patterns" in message.lower():
             logger.info(
                 "target_isoform_postprocess_skipped",
                 path=str(source),
