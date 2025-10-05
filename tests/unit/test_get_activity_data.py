@@ -9,6 +9,8 @@ from typing import Iterable
 import pandas as pd
 import pytest
 
+from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS
+from library.postprocessing import activity_extended
 from scripts import get_activity_data
 
 
@@ -357,3 +359,27 @@ def test_main__dry_run_skip_limit(monkeypatch, tmp_path, capsys) -> None:
     assert exit_code == 0
     events = [event for _, event, _ in logger_stub.events]
     assert "pipeline_skip_limit" in events
+
+
+def test_activity_columns__cover_extended_requirements() -> None:
+    required = activity_extended._REQUIRED_COLUMNS
+    available = set(ACTIVITY_COLUMNS)
+    assert required <= available
+
+
+def test_ensure_extended_activity_columns__adds_defaults() -> None:
+    frame = pd.DataFrame(
+        {
+            "activity_id": ["A1"],
+            "molecule_chembl_id": ["M1"],
+            "pchembl_value": [5.3],
+            "bao_label": ["BAO:000001"],
+        }
+    )
+
+    enriched = get_activity_data._ensure_extended_activity_columns(frame)
+
+    assert enriched["activity_chembl_id"].tolist() == ["A1"]
+    assert enriched.loc[0, "log_value"] == pytest.approx(5.3)
+    assert enriched["compound_name"].isna().all()
+    assert "salt_chembl_id" in enriched.columns
