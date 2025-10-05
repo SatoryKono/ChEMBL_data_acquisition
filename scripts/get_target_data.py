@@ -117,6 +117,13 @@ from library.postprocessing import target as target_pp
 from library.postprocessing import names as names_pp
 
 try:
+    from library.postprocessing import iuphar as iuphar_pp
+except ImportError as _IUPHAR_IMPORT_ERROR:  # pragma: no cover - compatibility
+    iuphar_pp = None
+else:  # pragma: no cover - compatibility bridge
+    _IUPHAR_IMPORT_ERROR = None
+
+try:
     from library.postprocessing.target import process_targets as _process_targets_impl
 except ImportError as _process_targets_exc:  # pragma: no cover - compatibility
     _process_targets_impl = getattr(target_pp, "process_targets", None)
@@ -370,6 +377,33 @@ def _coerce_target_names_result(
     return path, summary
 
 
+def _coerce_iuphar_result(result: object) -> Path | None:
+    """Interpret ``process_iuphar_targets`` return values."""
+
+    candidate: object | None
+    if isinstance(result, tuple):
+        candidate = result[0] if result else None
+    elif isinstance(result, Mapping):
+        candidate = (
+            result.get("path")
+            or result.get("output")
+            or result.get("csv_path")
+            or result.get("iuphar_path")
+        )
+    elif hasattr(result, "path"):
+        candidate = getattr(result, "path")
+    else:
+        candidate = result
+
+    if candidate is None:
+        return None
+
+    try:
+        return Path(str(candidate))
+    except Exception:  # pragma: no cover - defensive conversion
+        return None
+
+
 def _csv_read_kwargs(cfg: Config) -> dict[str, Any]:
     """Return keyword arguments for :func:`pandas.read_csv` respecting *cfg*."""
 
@@ -509,12 +543,54 @@ def _postprocess_names_export(
     return output_path
 
 
+def _postprocess_iuphar_export(
+    source: Path,
+    *,
+    verbose: bool = True,
+) -> Path | None:
+    """Invoke the IUPHAR enrichment post-processing helper."""
+
+    if iuphar_pp is None or not hasattr(iuphar_pp, "process_iuphar_targets"):
+        payload: dict[str, Any] = {"path": str(source)}
+        if _IUPHAR_IMPORT_ERROR is not None:
+            payload["error"] = str(_IUPHAR_IMPORT_ERROR)
+        logger.error("target_iuphar_postprocess_unavailable", **payload)
+        return None
+
+    try:
+        result = iuphar_pp.process_iuphar_targets(str(source), verbose=verbose)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.exception(
+            "target_iuphar_postprocess_failed",
+            path=str(source),
+            error=str(exc),
+        )
+        return None
+
+    output_path = _coerce_iuphar_result(result)
+    if output_path is None:
+        logger.error(
+            "target_iuphar_postprocess_invalid_result",
+            path=str(source),
+            result_type=type(result).__name__,
+        )
+        return None
+
+    logger.info(
+        "target_iuphar_postprocess_done",
+        path=str(output_path),
+        source=str(source),
+    )
+    return output_path
+
+
 def _postprocess_target_exports(
     source: Path,
     *,
     cfg: Config,
     context: IsoformPostprocessContext | None = None,
     ambiguous_classifications: int | None = None,
+    verbose: bool = True,
 ) -> None:
     """Run all target post-processing helpers for ``source`` export."""
 
@@ -526,6 +602,7 @@ def _postprocess_target_exports(
         ambiguous_classifications=ambiguous_classifications,
     )
     _postprocess_names_export(source, cfg=cfg)
+    _postprocess_iuphar_export(source, verbose=verbose)
 
 
 def _resolve_parameter(
