@@ -171,3 +171,60 @@ def test_process_iuphar_targets__fills_missing_component_description(tmp_path: P
     assert output_path.exists()
     result = pd.read_csv(output_path)
     assert result.loc[0, "iuphar_synonyms"] == "alpha|beta|gamma|name"
+
+
+def test_process_iuphar_targets__handles_header_whitespace(tmp_path: Path) -> None:
+    path = tmp_path / "output.target_20240707.csv"
+    frame = pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL6",
+                "GuidetoPHARMACOLOGY": "GTOP6",
+                "iuphar_target_id": "T6",
+                "iuphar_family_id": "F6",
+                "iuphar_type": "Type",
+                "iuphar_class": "Class",
+                "iuphar_subclass": "Sub",
+                "iuphar_chain": "Chain",
+                "iuphar_name": "Omega",
+                "gtop_synonyms": "Omega|Omega (alt)",
+                "component_description": "Omega component",
+            }
+        ]
+    )
+    frame = frame.rename(columns={col: f"  {col}  " for col in frame.columns})
+    frame.to_csv(path, index=False)
+
+    output_path = iuphar.process_iuphar_targets(path)
+
+    assert output_path.exists()
+    result = pd.read_csv(output_path)
+    assert result.loc[0, "iuphar_synonyms"] == "omega|omega component"
+
+
+def test_process_iuphar_targets__handles_bom_prefixed_header(tmp_path: Path) -> None:
+    path = tmp_path / "output.target_20240808.csv"
+    frame = pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL7",
+                "GuidetoPHARMACOLOGY": "GTOP7",
+                "iuphar_target_id": "T7",
+                "iuphar_family_id": "F7",
+                "iuphar_type": "Type",
+                "iuphar_class": "Class",
+                "iuphar_subclass": "Sub",
+                "iuphar_chain": "Chain",
+                "iuphar_name": "Lambda",
+                "gtop_synonyms": "Lambda",
+                "component_description": "Lambda",
+            }
+        ]
+    )
+    frame.to_csv(path, index=False, encoding="utf-8-sig")
+
+    output_path = iuphar.process_iuphar_targets(path)
+
+    assert output_path.exists()
+    result = pd.read_csv(output_path)
+    assert result.loc[0, "guidetopharmacology_id"] == "GTOP7"
