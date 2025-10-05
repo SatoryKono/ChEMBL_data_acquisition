@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 import sys
+import warnings
 
 import pandas as pd
 import re
@@ -451,9 +452,20 @@ def _resolve_input_path(input_csv: Optional[Union[str, Path]]) -> Path:
         if not candidate.exists():
             raise FileNotFoundError(candidate)
         if not _matches_expected_input_name(candidate.name):
-            raise ValueError(
-                "Input file must match one of the supported patterns: "
-                + _supported_patterns_text()
+            if candidate.suffix.lower() != ".csv":
+                raise ValueError(
+                    "Input file must match one of the supported patterns: "
+                    + _supported_patterns_text()
+                )
+            warnings.warn(
+                (
+                    "Input file '%s' does not match the canonical target export "
+                    "naming conventions (%s); proceeding because an explicit path "
+                    "was provided."
+                )
+                % (candidate.name, _supported_patterns_text()),
+                UserWarning,
+                stacklevel=2,
             )
         return candidate
 
@@ -496,11 +508,6 @@ def process_targets(
     """Run the isoform post-processing pipeline on canonical target exports."""
 
     input_path = _resolve_input_path(input_csv)
-    if not _matches_expected_input_name(input_path.name):
-        raise ValueError(
-            "Input file must match one of the supported patterns: "
-            + _supported_patterns_text()
-        )
 
     output_path = _resolve_output_path(input_path, output_csv)
 
