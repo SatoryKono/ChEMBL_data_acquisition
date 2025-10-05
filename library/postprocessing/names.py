@@ -28,12 +28,12 @@ contrion=()=>let
     #"Sorted Rows" = Table.Sort(#"Changed Type", {{"target_chembl_id", Order.Ascending}, {"molecule_chembl_id", Order.Ascending}})
 in
     #"Sorted Rows"
-"""Helpers for generating target name exports.
 
-The helper mirrors the legacy Power Query workbook that produced auxiliary
-name tables for reporting.  It extracts textual identifiers from the merged
-targets export, normalises them and emits a long-form table where each row
-represents a distinct name attributed to a target.
+Helpers for generating target name exports. The helper mirrors the legacy Power
+Query workbook that produced auxiliary name tables for reporting. It extracts
+textual identifiers from the merged targets export, normalises them and emits a
+long-form table where each row represents a distinct name attributed to a
+target.
 """
 
 from __future__ import annotations
