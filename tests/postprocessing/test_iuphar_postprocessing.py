@@ -185,6 +185,32 @@ def test_process_iuphar_targets__produces_expected_csv(tmp_path: Path, snapshot_
     assert actual_bytes == expected_bytes
 
 
+def test_process_iuphar_targets__normalises_tmp_suffix(tmp_path: Path) -> None:
+    input_path = tmp_path / "output.target_20250101.csv.tmp"
+    frame = pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL42",
+                "GuidetoPHARMACOLOGY": "GTOP42",
+                "iuphar_target_id": "T-42",
+                "iuphar_family_id": "F-42",
+                "iuphar_type": "Type",
+                "iuphar_class": "Class",
+                "iuphar_subclass": "Subclass",
+                "iuphar_chain": "A",
+                "iuphar_name": "Alpha",
+                "gtop_synonyms": "Alpha|Beta",
+            }
+        ]
+    )
+    frame.to_csv(input_path, index=False)
+
+    output_path = iuphar.process_iuphar_targets(input_path)
+
+    assert output_path.name == "IUPHAR.output.target_20250101.csv"
+    assert output_path.exists()
+
+
 def test_process_iuphar_targets__fills_missing_component_description(tmp_path: Path) -> None:
     path = tmp_path / "output.target_20240606.csv"
     frame = pd.DataFrame(
