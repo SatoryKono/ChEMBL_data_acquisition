@@ -178,6 +178,45 @@ def test_transform_activity_frame__parses_activity_properties_flags(
         assert bool(row.is_citation) == any(flags.values())
 
 
+def test_transform_activity_frame__fills_missing_columns(activity_resources: Path) -> None:
+    dictionary_root = activity_resources / "dictionary"
+    frame = pd.DataFrame(
+        {
+            "activity_id": ["ACT-001"],
+            "assay_chembl_id": ["ASSAY-1"],
+            "molecule_chembl_id": ["MOL-1"],
+            "target_chembl_id": ["TAR-ALPHA"],
+            "document_chembl_id": ["DOC-1"],
+            "bao_endpoint": ["BAO:000001"],
+            "bao_format": ["FMT-1"],
+            "standard_type": ["IC50"],
+            "standard_value": [8.0],
+            "pchembl_value": [5.0],
+            "molecule_pref_name": ["Compound One"],
+            "parent_molecule_chembl_id": ["CMPD-1"],
+        }
+    )
+
+    transformed = _transform_activity_frame(
+        frame,
+        dictionary_root=dictionary_root,
+        targets_override=None,
+    )
+
+    assert list(transformed.columns) == list(_FINAL_COLUMN_ORDER)
+    row = transformed.iloc[0]
+    assert row.activity_chembl_id == "ACT-001"
+    assert row.compound_key == "CMPD-1"
+    assert row.compound_name == "Compound One"
+    assert pd.isna(row.saltform_id)
+    assert bool(row.multmol_assay) is False
+    assert bool(row.rounded_data_citation) is False
+    assert bool(row.is_citation) is False
+    assert pd.isna(row.original_activity_approx)
+    assert pd.isna(row.original_activity_exact)
+    assert row.pA_value == pytest.approx(5.0)
+
+
 def test_apply_multimol_logic__marks_duplicate_multimol_assay(
     activity_resources: Path,
 ) -> None:
