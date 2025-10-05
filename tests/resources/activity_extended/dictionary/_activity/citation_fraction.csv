@@ -1,0 +1,3 @@
+N,K_min_significant,test_used_at_threshold,p_value_at_threshold
+2,1,Fisher,0.05
+3,2,Fisher,0.05

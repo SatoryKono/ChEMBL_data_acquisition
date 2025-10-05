@@ -1,264 +1,270 @@
-"""Tests for :mod:`library.postprocessing.activity_extended`."""
+"""Comprehensive tests for :mod:`library.postprocessing.activity_extended`."""
 
 from __future__ import annotations
 
+import json
+import shutil
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from library.postprocessing import ActivityExtendedError, process_activity_extended
-from library.postprocessing.activity_extended import _FINAL_COLUMN_ORDER
+from library.postprocessing.activity_extended import (
+    _FINAL_COLUMN_ORDER,
+    _annotate_high_citation,
+    _apply_multimol_logic,
+    _compute_citation_flags,
+    _latest_activity_export,
+    _load_citation_fraction,
+    _load_target_metadata,
+    _prepare_unknown_chirality,
+    _rename_columns,
+    _resolve_targets_path,
+    _select_and_cast,
+    _transform_activity_frame,
+)
+
+pytestmark = pytest.mark.postprocessing
 
 
-def _write_activity_export(path: Path, rows: list[dict[str, object]]) -> None:
-    frame = pd.DataFrame(rows)
-    frame.to_csv(path, index=False, encoding="utf-8")
+@pytest.fixture()
+def activity_resources(snapshot_resource: Path) -> Path:
+    """Return the fixture directory with activity post-processing snapshots."""
+
+    return snapshot_resource / "activity_extended"
 
 
-def _write_citation_fraction(path: Path) -> None:
-    data = (
-        "N,K_min_significant,test_used_at_threshold,p_value_at_threshold\n"
-        "2,1,Fisher,0.05\n"
-        "3,2,Fisher,0.05\n"
-    )
-    path.write_text(data, encoding="utf-8")
+def _copytree(src: Path, dst: Path) -> Path:
+    shutil.copytree(src, dst)
+    return dst
 
 
-def _write_targets_dictionary(path: Path) -> None:
-    rows = [
-        {
-            "target_chembl_id": "TAR1",
-            "target_sort_order": "100",
-            "multifunctional_enzyme": "FALSE",
-            "IUPHAR_class": "ClassA",
-            "IUPHAR_subclass": "SubclassA",
-            "genus": "Homo",
-            "superkingdom": "Eukaryota",
-            "phylum": "Chordata",
-            "taxon_id": "9606",
-            "gene_index": "1",
-            "taxon_index": "10",
-        },
-        {
-            "target_chembl_id": "TAR2",
-            "target_sort_order": "200",
-            "multifunctional_enzyme": "TRUE",
-            "IUPHAR_class": "ClassB",
-            "IUPHAR_subclass": "SubclassB",
-            "genus": "Escherichia",
-            "superkingdom": "Bacteria",
-            "phylum": "Proteobacteria",
-            "taxon_id": "562",
-            "gene_index": "2",
-            "taxon_index": "20",
-        },
+def test_load_citation_fraction__missing_file(tmp_path: Path) -> None:
+    dictionary_root = tmp_path / "dictionary"
+    dictionary_root.mkdir()
+
+    with pytest.raises(ActivityExtendedError, match="citation_fraction.csv not found"):
+        _load_citation_fraction(dictionary_root)
+
+
+def test_load_citation_fraction__typed_columns(activity_resources: Path) -> None:
+    dictionary_root = activity_resources / "dictionary"
+
+    frame = _load_citation_fraction(dictionary_root)
+
+    assert list(frame.columns) == [
+        "N",
+        "K_min_significant",
+        "test_used_at_threshold",
+        "p_value_at_threshold",
     ]
-    pd.DataFrame(rows).to_csv(path, index=False, encoding="utf-8")
+    assert str(frame["N"].dtype) == "Int64"
+    assert str(frame["K_min_significant"].dtype) == "Int64"
 
 
-@pytest.mark.postprocessing
-def test_process_activity_extended__happy_path(tmp_path: Path) -> None:
+def test_load_target_metadata__string_columns(activity_resources: Path) -> None:
+    dictionary_root = activity_resources / "dictionary"
+    path = dictionary_root / "_target" / "targets_type.csv"
+
+    frame = _load_target_metadata(path)
+
+    assert set(frame.columns) == {
+        "target_chembl_id",
+        "target_sort_order",
+        "multifunctional_enzyme",
+        "IUPHAR_class",
+        "IUPHAR_subclass",
+        "genus",
+        "superkingdom",
+        "phylum",
+        "taxon_id",
+        "gene_index",
+        "taxon_index",
+    }
+    assert (frame.dtypes == "string").all()
+
+
+def test_resolve_targets_path__uses_override(tmp_path: Path) -> None:
+    dictionary_root = tmp_path / "dictionary"
+    dictionary_root.mkdir()
+    override = tmp_path / "custom_targets.csv"
+    override.write_text("target_chembl_id,target_sort_order\nTAR-X,1\n", encoding="utf-8")
+
+    resolved = _resolve_targets_path(dictionary_root, override)
+
+    assert resolved == override
+
+
+def test_resolve_targets_path__prefers_known_subdir(tmp_path: Path) -> None:
+    dictionary_root = tmp_path / "dictionary"
+    targets_dir = dictionary_root / "_target"
+    targets_dir.mkdir(parents=True)
+    expected = targets_dir / "targets_type.csv"
+    expected.write_text("target_chembl_id,target_sort_order\nTAR-X,1\n", encoding="utf-8")
+
+    resolved = _resolve_targets_path(dictionary_root, None)
+
+    assert resolved == expected
+
+
+def test_resolve_targets_path__raises_when_missing(tmp_path: Path) -> None:
+    dictionary_root = tmp_path / "dictionary"
+    dictionary_root.mkdir()
+
+    with pytest.raises(ActivityExtendedError, match="targets_type.csv not found"):
+        _resolve_targets_path(dictionary_root, None)
+
+
+def test_latest_activity_export__picks_latest_file(tmp_path: Path) -> None:
     search_dir = tmp_path / "exports"
     search_dir.mkdir()
-    dictionary_dir = tmp_path / "dictionary"
-    (dictionary_dir / "_activity").mkdir(parents=True)
-    (dictionary_dir / "_target").mkdir(parents=True)
+    older = search_dir / "output.activity_20230101.csv"
+    newer = search_dir / "output.activity_20240101.csv"
+    older.write_text("activity_chembl_id\nACT-1\n", encoding="utf-8")
+    newer.write_text("activity_chembl_id\nACT-2\n", encoding="utf-8")
 
-    export_path = search_dir / "output.activity_20250101.csv"
-    _write_activity_export(
-        export_path,
-        [
-            {
-                "activity_chembl_id": "ACT1",
-                "salt_chembl_id": "SALT1",
-                "molecule_chembl_id": "MOL1",
-                "target_chembl_id": "TAR1",
-                "assay_chembl_id": "ASSAY1",
-                "document_chembl_id": "DOC1",
-                "bao_endpoint": "EP1",
-                "standard_type": "IC50",
-                "standard_value": 10.0,
-                "log_value": 5.0,
-                "bao_format": "BAO_0001",
-                "compound_key": "cmpd1",
-                "compound_name": "Compound 1",
-                "multmol_assay": pd.NA,
-                "approx_cited_activity": 0,
-                "shuffled_cit": 0,
-                "exact_cited_activity": 1,
-                "higly_correlated_cit": 0,
-                "review_doc": 0,
-                "rounded_data_citation": 0,
-                "original_activity_approx": "approx",
-                "original_activity_exact": "exact",
-                "nstereo": 1,
-            },
-            {
-                "activity_chembl_id": "ACT2",
-                "salt_chembl_id": "SALT1",
-                "molecule_chembl_id": "MOL1",
-                "target_chembl_id": "TAR1",
-                "assay_chembl_id": "ASSAY1",
-                "document_chembl_id": "DOC1",
-                "bao_endpoint": "EP1",
-                "standard_type": "IC50",
-                "standard_value": 11.0,
-                "log_value": 5.1,
-                "bao_format": "BAO_0001",
-                "compound_key": "cmpd1",
-                "compound_name": "Compound 1",
-                "multmol_assay": pd.NA,
-                "approx_cited_activity": 0,
-                "shuffled_cit": 0,
-                "exact_cited_activity": 0,
-                "higly_correlated_cit": 0,
-                "review_doc": 0,
-                "rounded_data_citation": 0,
-                "original_activity_approx": "approx",
-                "original_activity_exact": "exact",
-                "nstereo": 1,
-            },
-            {
-                "activity_chembl_id": "ACT3",
-                "salt_chembl_id": "SALT2",
-                "molecule_chembl_id": "MOL2",
-                "target_chembl_id": "TAR2",
-                "assay_chembl_id": "ASSAY2",
-                "document_chembl_id": "DOC2",
-                "bao_endpoint": "EP2",
-                "standard_type": "Ki",
-                "standard_value": 7.0,
-                "log_value": 4.9,
-                "bao_format": "BAO_0002",
-                "compound_key": "cmpd2",
-                "compound_name": "Compound 2",
-                "multmol_assay": "TRUE",
-                "approx_cited_activity": 0,
-                "shuffled_cit": 0,
-                "exact_cited_activity": 0,
-                "higly_correlated_cit": 0,
-                "review_doc": 0,
-                "rounded_data_citation": 0,
-                "original_activity_approx": "approx",
-                "original_activity_exact": "exact",
-                "nstereo": 2,
-            },
-        ],
+    resolved = _latest_activity_export(search_dir)
+
+    assert resolved == newer
+
+
+def test_transform_activity_frame__parses_activity_properties_flags(
+    activity_resources: Path,
+) -> None:
+    dictionary_root = activity_resources / "dictionary"
+    export_path = activity_resources / "exports" / "output.activity_20240101.csv"
+    frame = pd.read_csv(export_path)
+
+    transformed = _transform_activity_frame(
+        frame,
+        dictionary_root=dictionary_root,
+        targets_override=None,
     )
 
-    _write_citation_fraction(dictionary_dir / "_activity" / "citation_fraction.csv")
-    _write_targets_dictionary(dictionary_dir / "_target" / "targets_type.csv")
+    assert list(transformed.columns) == list(_FINAL_COLUMN_ORDER)
+
+    flag_map: dict[str, dict[str, bool]] = {}
+    for row in frame.itertuples(index=False):
+        payload = json.loads(row.activity_properties)
+        flag_map[row.activity_chembl_id] = {
+            "exact_data_citation": bool(payload["flags"]["exact_data_citation"]),
+            "higly_correlated_assay": bool(payload["flags"]["higly_correlated_assay"]),
+            "shuffled_assay": bool(payload["flags"]["shuffled_assay"]),
+            "review": bool(payload["flags"]["review"]),
+            "rounded_data_citation": bool(payload["flags"]["rounded_data_citation"]),
+        }
+
+    for row in transformed.itertuples(index=False):
+        flags = flag_map[row.activity_chembl_id]
+        assert bool(row.exact_data_citation) == flags["exact_data_citation"]
+        assert bool(row.higly_correlated_assay) == flags["higly_correlated_assay"]
+        assert bool(row.shuffled_assay) == flags["shuffled_assay"]
+        assert bool(row.review) == flags["review"]
+        assert bool(row.rounded_data_citation) == flags["rounded_data_citation"]
+        assert bool(row.is_citation) == any(flags.values())
+
+
+def test_apply_multimol_logic__marks_duplicate_multimol_assay(
+    activity_resources: Path,
+) -> None:
+    export_path = activity_resources / "exports" / "output.activity_20240101.csv"
+    frame = pd.read_csv(export_path).head(2)
+    prepared = _prepare_unknown_chirality(frame)
+
+    result = _apply_multimol_logic(prepared)
+
+    assert result["multmol_assay"].tolist() == [True, True]
+
+
+def test_compute_citation_flags__sets_is_citation() -> None:
+    frame = pd.DataFrame(
+        {
+            "exact_data_citation": [1, 0, 0],
+            "higly_correlated_assay": [0, 1, 0],
+            "shuffled_assay": [0, 0, "true"],
+            "review": [0, 0, 0],
+            "rounded_data_citation": [0, 0, 0],
+        }
+    )
+
+    flagged = _compute_citation_flags(frame)
+
+    assert flagged["is_citation"].tolist() == [True, True, True]
+
+
+def test_annotate_high_citation__computes_threshold_flags(
+    activity_resources: Path,
+) -> None:
+    dictionary_root = activity_resources / "dictionary"
+    export_path = activity_resources / "exports" / "output.activity_20240101.csv"
+    frame = pd.read_csv(export_path)
+
+    df = _prepare_unknown_chirality(frame)
+    df = _apply_multimol_logic(df)
+    df = _rename_columns(df)
+    df = df.drop(columns=[c for c in df.columns if c not in {
+        "document_chembl_id",
+        "approx_cited_activity",
+        "shuffled_cit",
+        "exact_cited_activity",
+        "higly_correlated_cit",
+        "review_doc",
+        "rounded_data_citation",
+        "multmol_assay",
+        "unknown_chirality",
+    } | {
+        "saltform_id",
+        "activity_chembl_id",
+    }], errors="ignore")
+    df = _compute_citation_flags(df)
+
+    annotated = _annotate_high_citation(df, dictionary_root)
+    grouped = annotated.groupby("document_chembl_id")["high_citation_rate"].first()
+
+    assert grouped.to_dict() == {"DOC-1": True, "DOC-2": False, "DOC-3": False}
+
+
+def test_select_and_cast__missing_columns_error() -> None:
+    frame = pd.DataFrame({"activity_chembl_id": ["ACT-1"]})
+
+    with pytest.raises(ActivityExtendedError, match="missing expected columns"):
+        _select_and_cast(frame)
+
+
+def test_process_activity_extended__writes_expected_payload(
+    activity_resources: Path,
+    tmp_path: Path,
+) -> None:
+    tmp_exports = _copytree(activity_resources / "exports", tmp_path / "exports")
+    tmp_dictionary = _copytree(activity_resources / "dictionary", tmp_path / "dictionary")
 
     output_path = process_activity_extended(
-        search_dir=search_dir,
-        dictionary_dir=dictionary_dir,
+        search_dir=tmp_exports,
+        dictionary_dir=tmp_dictionary,
     )
 
-    assert output_path == search_dir / "extended.output.activity_20250101.csv"
-    assert output_path.exists()
+    assert output_path.name == "extended.output.activity_20240101.csv"
 
-    result = pd.read_csv(output_path)
-    expected_columns = list(_FINAL_COLUMN_ORDER)
-    assert result.columns.tolist() == expected_columns
+    result = pd.read_csv(output_path, dtype=str).fillna("")
+    expected = pd.read_csv(
+        activity_resources / "expected.extended.output.activity_20240101.csv",
+        dtype=str,
+    ).fillna("")
 
-    assert result["saltform_id"].tolist() == ["SALT1", "SALT1", "SALT2"]
-    assert result["unknown_chirality"].tolist() == [False, False, True]
-    assert result["multmol_assay"].tolist() == [True, True, True]
-    assert result["is_citation"].tolist() == [True, False, False]
-    assert result["high_citation_rate"].tolist() == [True, True, False]
-    assert result["unicellular_organism"].tolist() == [False, False, True]
-    assert result["multifunctional_enzyme"].tolist() == [False, False, True]
+    pd.testing.assert_frame_equal(result, expected, check_dtype=False)
 
 
-@pytest.mark.postprocessing
-def test_process_activity_extended__missing_dictionary(tmp_path: Path) -> None:
-    search_dir = tmp_path / "exports"
-    search_dir.mkdir()
-    export_path = search_dir / "output.activity_20250101.csv"
-    _write_activity_export(
-        export_path,
-        [
-            {
-                "activity_chembl_id": "ACT1",
-                "salt_chembl_id": "SALT1",
-                "molecule_chembl_id": "MOL1",
-                "target_chembl_id": "TAR1",
-                "assay_chembl_id": "ASSAY1",
-                "document_chembl_id": "DOC1",
-                "bao_endpoint": "EP1",
-                "standard_type": "IC50",
-                "standard_value": 1.0,
-                "log_value": 5.0,
-                "bao_format": "BAO_0001",
-                "compound_key": "cmpd1",
-                "compound_name": "Compound 1",
-                "multmol_assay": pd.NA,
-                "approx_cited_activity": 0,
-                "shuffled_cit": 0,
-                "exact_cited_activity": 0,
-                "higly_correlated_cit": 0,
-                "review_doc": 0,
-                "rounded_data_citation": 0,
-                "original_activity_approx": "approx",
-                "original_activity_exact": "exact",
-                "nstereo": 1,
-            }
-        ],
-    )
+def test_process_activity_extended__raises_for_missing_dictionary(
+    activity_resources: Path,
+    tmp_path: Path,
+) -> None:
+    tmp_exports = _copytree(activity_resources / "exports", tmp_path / "exports")
+    missing_dictionary = tmp_path / "dictionary"
+    missing_dictionary.mkdir()
 
-    dictionary_dir = tmp_path / "dictionary"
-    dictionary_dir.mkdir()
-
-    with pytest.raises(ActivityExtendedError) as excinfo:
-        process_activity_extended(search_dir=search_dir, dictionary_dir=dictionary_dir)
-
-    assert "citation_fraction.csv" in str(excinfo.value)
-
-
-@pytest.mark.postprocessing
-def test_process_activity_extended__missing_column(tmp_path: Path) -> None:
-    search_dir = tmp_path / "exports"
-    search_dir.mkdir()
-    export_path = search_dir / "output.activity_20250101.csv"
-    # ``log_value`` column intentionally omitted.
-    _write_activity_export(
-        export_path,
-        [
-            {
-                "activity_chembl_id": "ACT1",
-                "salt_chembl_id": "SALT1",
-                "molecule_chembl_id": "MOL1",
-                "target_chembl_id": "TAR1",
-                "assay_chembl_id": "ASSAY1",
-                "document_chembl_id": "DOC1",
-                "bao_endpoint": "EP1",
-                "standard_type": "IC50",
-                "standard_value": 1.0,
-                "bao_format": "BAO_0001",
-                "compound_key": "cmpd1",
-                "compound_name": "Compound 1",
-                "multmol_assay": pd.NA,
-                "approx_cited_activity": 0,
-                "shuffled_cit": 0,
-                "exact_cited_activity": 0,
-                "higly_correlated_cit": 0,
-                "review_doc": 0,
-                "rounded_data_citation": 0,
-                "original_activity_approx": "approx",
-                "original_activity_exact": "exact",
-                "nstereo": 1,
-            }
-        ],
-    )
-
-    dictionary_dir = tmp_path / "dictionary"
-    (dictionary_dir / "_activity").mkdir(parents=True)
-    (dictionary_dir / "_target").mkdir(parents=True)
-    _write_citation_fraction(dictionary_dir / "_activity" / "citation_fraction.csv")
-    _write_targets_dictionary(dictionary_dir / "_target" / "targets_type.csv")
-
-    with pytest.raises(ActivityExtendedError) as excinfo:
-        process_activity_extended(search_dir=search_dir, dictionary_dir=dictionary_dir)
-
-    assert "log_value" in str(excinfo.value)
+    with pytest.raises(ActivityExtendedError, match="citation_fraction.csv not found"):
+        process_activity_extended(
+            search_dir=tmp_exports,
+            dictionary_dir=missing_dictionary,
+        )
