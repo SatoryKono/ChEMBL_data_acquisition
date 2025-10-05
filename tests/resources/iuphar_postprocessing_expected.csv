@@ -1,3 +1,3 @@
-﻿target_chembl_id,guidetopharmacology_id,iuphar_target_id,iuphar_family_id,iuphar_type,iuphar_class,iuphar_subclass,iuphar_chain,iuphar_name,iuphar_synonyms
+target_chembl_id,guidetopharmacology_id,iuphar_target_id,iuphar_family_id,iuphar_type,iuphar_class,iuphar_subclass,iuphar_chain,iuphar_name,iuphar_synonyms
 CHEMBL123,GTOP123,T-123,F-10,Receptor,ClassA,SubclassA,A,Alpha Receptor,alpha|beta|gamma|delta|alpha receptor
 CHEMBL999,GTOP999,T-999,F-99,Enzyme,ClassB,SubclassB,B,Omega,omega
