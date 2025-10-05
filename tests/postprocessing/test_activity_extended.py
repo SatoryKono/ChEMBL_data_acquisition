@@ -15,6 +15,7 @@ from library.postprocessing.activity_extended import (
     _annotate_high_citation,
     _apply_multimol_logic,
     _compute_citation_flags,
+    _derive_output_path,
     _latest_activity_export,
     _load_citation_fraction,
     _load_target_metadata,
@@ -140,6 +141,22 @@ def test_latest_activity_export__handles_hidden_temporary_file(tmp_path: Path) -
     resolved = _latest_activity_export(search_dir)
 
     assert resolved == hidden_tmp
+
+
+def test_derive_output_path__normalises_plural_basename(tmp_path: Path) -> None:
+    source = tmp_path / "extended.output.activities_20240101.csv"
+
+    derived = _derive_output_path(source)
+
+    assert derived.name == "extended.output.activity_20240101.csv"
+
+
+def test_derive_output_path__prefixes_custom_exports(tmp_path: Path) -> None:
+    source = tmp_path / "chembl_activities_snapshot.csv"
+
+    derived = _derive_output_path(source)
+
+    assert derived.name == "extended.chembl_activities_snapshot.csv"
 
 
 def test_transform_activity_frame__parses_activity_properties_flags(
