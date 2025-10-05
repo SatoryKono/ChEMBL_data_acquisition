@@ -399,7 +399,7 @@ def process_target_names(
             by=["target_chembl_id", "molecule_chembl_id", "all_names"],
             kind="mergesort",
         )
-    output_path = path.with_name(f"names.{path.name}")
+    output_path = path.with_name(f"name.{path.name}")
     write_csv_deterministic(
         result,
         output_path,
@@ -584,7 +584,7 @@ def process_target_names(input_path: str | Path, *, verbose: bool = False) -> di
     frame = helpers.ensure_string_columns(frame, frame.columns)
 
     names_df = _build_names_table(frame)
-    output_path = source_path.with_name(f"names.{source_path.name}")
+    output_path = source_path.with_name(f"name.{source_path.name}")
     helpers.write_csv(names_df, output_path, columns=TARGET_NAMES_COLUMNS)
 
     summary: dict[str, Any] = {
