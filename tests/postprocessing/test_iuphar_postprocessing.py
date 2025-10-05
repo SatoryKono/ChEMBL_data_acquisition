@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 import pandas as pd
@@ -9,118 +8,170 @@ import pytest
 from library.postprocessing import iuphar
 
 
-@pytest.fixture
-def sample_input(tmp_path: Path) -> Path:
-    path = tmp_path / "output.target_20240101.csv"
+def test_ensure_required_columns__raises_for_missing_columns() -> None:
     frame = pd.DataFrame(
         [
             {
                 "target_chembl_id": "CHEMBL1",
                 "GuidetoPHARMACOLOGY": "GTOP1",
-                "iuphar_target_id": "T1",
-                "iuphar_family_id": "F1",
-                "iuphar_type": "Receptor",
-                "iuphar_class": "ClassA",
-                "iuphar_subclass": "SubClass",
-                "iuphar_chain": "ChainA",
-                "iuphar_name": "Alpha Beta",
-                "gtop_synonyms": "Alpha|Beta|alpha",
-                "synonyms": "Alpha|Delta",
-                "component_description": '[{"description": "Gamma (extra)"}]',
-                "component_synonym_ids": "drop-me",
-                "component_type_raw": "unused",
-            },
-            {
-                "target_chembl_id": "CHEMBL2",
-                "GuidetoPHARMACOLOGY": "GTOP2",
-                "iuphar_target_id": "T2",
-                "iuphar_family_id": "F2",
-                "iuphar_type": "Enzyme",
-                "iuphar_class": "ClassB",
-                "iuphar_subclass": "SubClass",
-                "iuphar_chain": "ChainB",
-                "iuphar_name": "Delta",
-                "gtop_synonyms": "",
-                "synonyms": "",
-                "component_description": "Sigma|Delta",
-            },
-        ]
-    )
-    frame.to_csv(path, index=False)
-    return path
-
-
-def test_process_iuphar_targets__transforms_synonyms(tmp_path: Path, sample_input: Path, caplog: pytest.LogCaptureFixture) -> None:
-    caplog.set_level(logging.INFO)
-
-    output_path = iuphar.process_iuphar_targets(sample_input, verbose=True)
-
-    expected_output = sample_input.with_name("IUPHAR.output.target_20240101.csv")
-    assert output_path == expected_output
-    assert output_path.exists()
-
-    result = pd.read_csv(output_path)
-    assert result.columns.tolist() == [
-        "target_chembl_id",
-        "guidetopharmacology_id",
-        "iuphar_target_id",
-        "iuphar_family_id",
-        "iuphar_type",
-        "iuphar_class",
-        "iuphar_subclass",
-        "iuphar_chain",
-        "iuphar_name",
-        "iuphar_synonyms",
-    ]
-    assert result.loc[0, "guidetopharmacology_id"] == "GTOP1"
-    assert result.loc[0, "iuphar_synonyms"] == "alpha|beta|delta|gamma|alpha beta"
-    assert result.loc[1, "iuphar_synonyms"] == "sigma|delta"
-
-    log_lines = "\n".join(caplog.messages)
-    assert "input_rows=2" in log_lines
-    assert "output_rows=2" in log_lines
-    assert "dropped_columns=2" in log_lines
-    assert "synonym_tokens_before=10" in log_lines
-    assert "synonym_tokens_after=7" in log_lines
-
-
-def test_process_iuphar_targets__auto_discovers_latest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    first = tmp_path / "output.target_20230101.csv"
-    second = tmp_path / "output.target_20240202.csv"
-    frame = pd.DataFrame(
-        [
-            {
-                "target_chembl_id": "CHEMBL3",
-                "GuidetoPHARMACOLOGY": "GTOP3",
-                "iuphar_target_id": "T3",
-                "iuphar_family_id": "F3",
-                "iuphar_type": "Type",
-                "iuphar_class": "Class",
-                "iuphar_subclass": "Sub",
-                "iuphar_chain": "Chain",
-                "iuphar_name": "Theta",
-                "gtop_synonyms": "",
-                "synonyms": "",
-                "component_description": "",
             }
         ]
     )
-    frame.to_csv(first, index=False)
-    frame.to_csv(second, index=False)
-    monkeypatch.setattr(iuphar, "_DEFAULT_SEARCH_DIR", tmp_path)
 
-    output_path = iuphar.process_iuphar_targets()
+    with pytest.raises(iuphar.IUPHARPostProcessingError) as excinfo:
+        iuphar._ensure_required_columns(frame)
 
-    assert output_path == tmp_path / "IUPHAR.output.target_20240202.csv"
-    result = pd.read_csv(output_path)
-    assert result.loc[0, "guidetopharmacology_id"] == "GTOP3"
+    message = str(excinfo.value)
+    assert "gtop_synonyms" in message
+    assert "component_description" in message
 
 
-def test_process_iuphar_targets__missing_required_columns(tmp_path: Path) -> None:
-    path = tmp_path / "output.target_20240505.csv"
+def test_clean_brackets__removes_nested_annotations() -> None:
+    value = "Alpha (beta) [legacy] gamma"
+
+    assert iuphar._clean_brackets(value) == "Alpha gamma"
+
+
+def test_collect_synonym_tokens__handles_none_values() -> None:
+    row = pd.Series(
+        {
+            "gtop_synonyms": None,
+            "synonyms": None,
+            "component_description": None,
+            "iuphar_name": "Omega Chain",
+        }
+    )
+
+    cleaned, deduped = iuphar._collect_synonym_tokens(row)
+
+    assert cleaned == ["omega chain"]
+    assert deduped == ["omega chain"]
+
+
+def test_collect_synonym_tokens__deduplicates_preserving_order() -> None:
+    row = pd.Series(
+        {
+            "gtop_synonyms": "Alpha|Alpha|Beta",
+            "synonyms": "beta|Gamma|beta",
+            "component_description": "Alpha; Delta",
+            "iuphar_name": "Alpha",
+        }
+    )
+
+    cleaned, deduped = iuphar._collect_synonym_tokens(row)
+
+    assert cleaned.count("alpha") > 1
+    assert cleaned.count("beta") > 1
+    assert deduped == ["alpha", "beta", "gamma", "delta"]
+
+
+def test_parse_component_descriptions__supports_json_payloads() -> None:
+    payload = '[{"component_description": "Alpha"}, {"description": "Beta"}, {"name": "Gamma"}]'
+
+    result = iuphar._parse_component_descriptions(payload)
+
+    assert result == ["Alpha", "Beta", "Gamma"]
+
+
+def test_parse_component_descriptions__handles_fallback_delimiters() -> None:
+    payload = 'Alpha| Beta;Gamma ;; '
+
+    result = iuphar._parse_component_descriptions(payload)
+
+    assert result == ["Alpha", "Beta", "Gamma"]
+
+
+def test_collect_synonym_tokens__ignores_empty_array_tokens() -> None:
+    row = pd.Series(
+        {
+            "gtop_synonyms": "[]",
+            "synonyms": "[]",
+            "component_description": "[]",
+            "iuphar_name": "Theta",
+        }
+    )
+
+    cleaned, deduped = iuphar._collect_synonym_tokens(row)
+
+    assert cleaned == ["theta"]
+    assert deduped == ["theta"]
+
+
+def test_prepare_output__orders_columns_and_applies_renames() -> None:
     frame = pd.DataFrame(
         [
             {
+                "GuidetoPHARMACOLOGY": "GTOP1",
+                "target_chembl_id": "CHEMBL1",
+                "iuphar_target_id": "T1",
+                "iuphar_family_id": "F1",
+                "iuphar_type": "Type",
+                "iuphar_class": "Class",
+                "iuphar_subclass": "Subclass",
+                "iuphar_chain": "Chain",
+                "iuphar_name": "Name",
+            }
+        ]
+    )
+
+    prepared = iuphar._prepare_output(frame)
+
+    assert list(prepared.columns) == list(iuphar._OUTPUT_COLUMNS)
+    assert prepared.loc[0, "guidetopharmacology_id"] == "GTOP1"
+    assert prepared.loc[0, "iuphar_synonyms"] == ""
+
+
+def test_latest_target_file__returns_newest_export(tmp_path: Path) -> None:
+    oldest = tmp_path / "output.target_20230101.csv"
+    newest = tmp_path / "output.target_20240202.csv"
+    for path in (oldest, newest):
+        path.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    result = iuphar._latest_target_file(tmp_path)
+
+    assert result == newest
+
+
+def test_process_iuphar_targets__produces_expected_csv(tmp_path: Path, snapshot_resource: Path) -> None:
+    input_path = tmp_path / "output.target_20240101.csv"
+    frame = pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL123",
+                "GuidetoPHARMACOLOGY": "GTOP123",
+                "iuphar_target_id": "T-123",
+                "iuphar_family_id": "F-10",
+                "iuphar_type": "Receptor",
+                "iuphar_class": "ClassA",
+                "iuphar_subclass": "SubclassA",
+                "iuphar_chain": "A",
+                "iuphar_name": "Alpha Receptor",
+                "gtop_synonyms": "Alpha|Beta|Alpha (v1)",
+                "synonyms": "Beta|Gamma|Gamma",
+                "component_description": '[{"component_description": "Delta [old]"}, {"name": "ALPHA"}]',
+                "component_synonym_ids": "S-1",
+                "component_type_raw": "type",
+                "component_sequence": "SEQ",
+                "component_structures": "STRUCT",
+            },
+            {
+                "target_chembl_id": "CHEMBL999",
+                "GuidetoPHARMACOLOGY": "GTOP999",
+                "iuphar_target_id": "T-999",
+                "iuphar_family_id": "F-99",
+                "iuphar_type": "Enzyme",
+                "iuphar_class": "ClassB",
+                "iuphar_subclass": "SubclassB",
+                "iuphar_chain": "B",
+                "iuphar_name": "Omega",
+                "gtop_synonyms": "[]",
+                "synonyms": None,
+                "component_description": "[]",
+                "component_synonym_ids": None,
+                "component_type_raw": None,
+                "component_sequence": None,
+                "component_structures": None,
+            },
                 "target_chembl_id": "CHEMBL4",
                 "GuidetoPHARMACOLOGY": "GTOP4",
                 "iuphar_target_id": "T4",
@@ -134,11 +185,14 @@ def test_process_iuphar_targets__missing_required_columns(tmp_path: Path) -> Non
             }
         ]
     )
-    frame.to_csv(path, index=False)
+    frame.to_csv(input_path, index=False)
 
-    with pytest.raises(iuphar.IUPHARPostProcessingError) as excinfo:
-        iuphar.process_iuphar_targets(path)
+    output_path = iuphar.process_iuphar_targets(input_path)
 
+    assert output_path.name == "IUPHAR.output.target_20240101.csv"
+    expected_bytes = (snapshot_resource / "iuphar_postprocessing_expected.csv").read_bytes()
+    actual_bytes = output_path.read_bytes()
+    assert actual_bytes == expected_bytes
     message = str(excinfo.value)
     assert "gtop_synonyms" in message
     assert "component_description" not in message
