@@ -292,6 +292,8 @@ def _is_supported_target_export(path: Path) -> bool:
 
     if stem.endswith(_UNSUPPORTED_EXPORT_SUFFIXES):
         return False
+    if stem == "out" or stem.startswith("out_"):
+        return False
     if stem.endswith(NORMALIZED_SUFFIX.lower()) and not target_pp._matches_expected_input_name(
         export_name
     ):
