@@ -227,6 +227,15 @@ _TARGET_COLUMNS: Sequence[str] = (
     "unicellular_organism",
 )
 
+_UNICELLULAR_NORMALISATIONS: Mapping[str, bool] = {
+    "unicellular": True,
+    "unicellular organism": True,
+    "multicellular": False,
+    "multicellular organism": False,
+}
+
+_NA_TYPE = type(pd.NA)
+
 
 class ActivityExtendedError(RuntimeError):
     """Raised when the activity extended post-processing cannot proceed."""
@@ -323,6 +332,32 @@ def _load_target_metadata(path: Path) -> pd.DataFrame:
         na_values=_NA_MARKERS,
     )
     frame = frame.rename(columns={"target_sort_order": "sortorder.target"})
+
+    if "unicellular_organism" not in frame.columns and "organism_type" in frame.columns:
+        frame = frame.copy()
+
+        unmapped_values: set[str] = set()
+
+        def _normalise_organism(value: object) -> bool | _NA_TYPE:
+            if pd.isna(value):
+                return pd.NA
+            text = str(value).strip()
+            if not text:
+                return pd.NA
+            resolved = _UNICELLULAR_NORMALISATIONS.get(text.casefold())
+            if resolved is None:
+                unmapped_values.add(text)
+                return pd.NA
+            return resolved
+
+        inferred = frame["organism_type"].map(_normalise_organism).astype("boolean")
+        if unmapped_values:
+            logger.warning(
+                "targets_type.csv contains organism_type values without boolean mapping: %s",
+                sorted(unmapped_values),
+            )
+        frame["unicellular_organism"] = inferred
+
     missing = [column for column in _TARGET_COLUMNS if column not in frame.columns]
     if missing:
         raise ActivityExtendedError(
