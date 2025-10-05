@@ -542,19 +542,18 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
                     filled.add("compound_key")
                     break
 
-    log_value_series: pd.Series | None = None
+    has_log_value = False
 
     if "log_value" in df.columns:
-        log_value_series = pd.to_numeric(df["log_value"], errors="coerce").astype("Float64")
+        df["log_value"] = pd.to_numeric(df["log_value"], errors="coerce").astype("Float64")
+        has_log_value = True
     elif "pchembl_value" in df.columns:
-        log_value_series = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
+        df["log_value"] = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
         filled.add("log_value")
-
-    if log_value_series is not None:
-        df["log_value"] = log_value_series
+        has_log_value = True
 
     if (
-        log_value_series is not None
+        has_log_value
         and "standard_value" in df.columns
         and "standard_units" in df.columns
     ):
@@ -577,13 +576,9 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
             computed.loc[valid] = pd.Series(computed_values, index=df.index[valid]).astype(
                 "Float64"
             )
-        mask = log_value_series.isna() & computed.notna()
+        mask = df["log_value"].isna() & computed.notna()
         if mask.any():
-            log_value_series = log_value_series.copy()
-            log_value_series.loc[mask] = computed.loc[mask]
-
-    if log_value_series is not None:
-        df["log_value"] = log_value_series
+            df.loc[mask, "log_value"] = computed.loc[mask]
 
     bool_defaults = {
         "multmol_assay",

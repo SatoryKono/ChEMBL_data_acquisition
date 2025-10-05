@@ -14,6 +14,7 @@ from library.postprocessing.activity_extended import (
     _FINAL_COLUMN_ORDER,
     _annotate_high_citation,
     _apply_multimol_logic,
+    _augment_activity_frame,
     _compute_citation_flags,
     _derive_output_path,
     _latest_activity_export,
@@ -174,6 +175,23 @@ def test_derive_output_path__prefixes_custom_exports(tmp_path: Path) -> None:
     derived = _derive_output_path(source)
 
     assert derived.name == "extended.chembl_activities_snapshot.csv"
+
+
+def test_augment_activity_frame__fills_log_value_from_standard_value_string_dtype() -> None:
+    frame = pd.DataFrame(
+        {
+            "activity_id": [1, 2],
+            "log_value": pd.Series(["", "7.0"], dtype="string"),
+            "standard_value": pd.Series(["1000", "100"], dtype="string"),
+            "standard_units": pd.Series(["nM", "nM"], dtype="string"),
+        }
+    )
+
+    augmented, _ = _augment_activity_frame(frame)
+
+    assert str(augmented["log_value"].dtype) == "Float64"
+    assert augmented.loc[0, "log_value"] == pytest.approx(6.0)
+    assert augmented.loc[1, "log_value"] == pytest.approx(7.0)
 
 
 def test_transform_activity_frame__parses_activity_properties_flags(
