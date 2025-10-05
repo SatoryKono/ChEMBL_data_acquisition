@@ -3419,7 +3419,6 @@ def validate_and_write(
     logger.info("validate_write_start", output=str(output))
 
     key_columns = list(id_cols) if id_cols else ["target_chembl_id"]
-    normalized_output = _normalized_output_path(output)
     input_rows = len(df)
 
     if raw_out is not None:
@@ -3559,7 +3558,7 @@ def validate_and_write(
     logger.info("deduplicated_rows", dropped=before_dedup - len(final_df))
     final_csv_path = io.write_csv(
         final_df,
-        normalized_output,
+        output,
         cfg=cfg,
         sep=cfg.io.csv_sep,
         encoding=cfg.io.csv_encoding,
@@ -3598,7 +3597,7 @@ def validate_and_write(
         logger.info(
             "quality_report_skipped",
             reason="empty_dataframe",
-            table=str(normalized_output.with_suffix("")),
+            table=str(output.with_suffix("")),
         )
     else:
         doc_quality_cfg = cfg.system.doc_quality
@@ -3606,8 +3605,8 @@ def validate_and_write(
             if doc_quality_cfg.enable:
                 analyze_table_quality(
                     final_df,
-                    table_name=str(normalized_output.with_suffix("")),
-                    destination_dir=normalized_output.parent,
+                    table_name=str(output.with_suffix("")),
+                    destination_dir=output.parent,
                     sample_rows=doc_quality_cfg.sample_rows,
                     include_columns=doc_quality_cfg.include_columns,
                     exclude_columns=doc_quality_cfg.exclude_columns,
@@ -3616,7 +3615,7 @@ def validate_and_write(
             logger.exception(
                 "quality_report_failed",
                 error=str(exc),
-                path=str(normalized_output),
+                path=str(output),
                 exc=exc,
             )
             return 1
