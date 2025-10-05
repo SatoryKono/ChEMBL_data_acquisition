@@ -64,7 +64,8 @@ below to navigate the canonical English sources:
 |------|---------|---------|
 | Summary and navigation | [`SUMMARY.md`](./SUMMARY.md) | [`../ru/SUMMARY.md`](../ru/SUMMARY.md) |
 | Quick start | [`guides/QUICK_START.md`](./guides/QUICK_START.md) | [`../ru/guides/QUICK_START.md`](../ru/guides/QUICK_START.md) |
-| CLI usage | [`USAGE.md`](./USAGE.md) | [`../ru/USAGE.md`](../ru/USAGE.md) |
+| Usage guides | [`guides/USAGE.md`](./guides/USAGE.md), [`guides/ADVANCED_SCENARIOS.md`](./guides/ADVANCED_SCENARIOS.md), [`guides/FAQ.md`](./guides/FAQ.md), [`guides/DEBUGGING.md`](./guides/DEBUGGING.md) | [`../ru/guides/USAGE.md`](../ru/guides/USAGE.md), [`../ru/guides/ADVANCED_SCENARIOS.md`](../ru/guides/ADVANCED_SCENARIOS.md), [`../ru/guides/FAQ.md`](../ru/guides/FAQ.md), [`../ru/guides/DEBUGGING.md`](../ru/guides/DEBUGGING.md) |
+| CLI reference | [`USAGE.md`](./USAGE.md) | [`../ru/USAGE.md`](../ru/USAGE.md) |
 | Configuration | [`CONFIG.md`](./CONFIG.md) | [`../ru/CONFIG.md`](../ru/CONFIG.md) |
 | Outputs & validation | [`OUTPUT.md`](./OUTPUT.md) | [`../ru/OUTPUT.md`](../ru/OUTPUT.md) |
 | Quality controls | [`QA_PROCESS.md`](./QA_PROCESS.md) | [`../ru/QA_PROCESS.md`](../ru/QA_PROCESS.md) |

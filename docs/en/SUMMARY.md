@@ -22,6 +22,7 @@ same filenames inside `../ru/`.
 - [Quick start](./guides/QUICK_START.md)
 - [Debugging playbook](./guides/DEBUGGING.md)
 - [Advanced scenarios](./guides/ADVANCED_SCENARIOS.md)
+- [FAQ and diagnostics](./guides/FAQ.md)
 
 ## Reference
 - [Configuration tables](./CONFIG.md)

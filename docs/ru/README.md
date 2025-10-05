@@ -64,6 +64,7 @@ flowchart TD
 |--------|-------------------|----------------|
 | Сводка и оглавление | [`SUMMARY.md`](../en/SUMMARY.md) | [`SUMMARY.md`](./SUMMARY.md) |
 | Быстрый старт | [`../en/guides/QUICK_START.md`](../en/guides/QUICK_START.md) | [`guides/QUICK_START.md`](./guides/QUICK_START.md) |
+| Руководства и FAQ | [`../en/guides/USAGE.md`](../en/guides/USAGE.md), [`../en/guides/ADVANCED_SCENARIOS.md`](../en/guides/ADVANCED_SCENARIOS.md), [`../en/guides/FAQ.md`](../en/guides/FAQ.md), [`../en/guides/DEBUGGING.md`](../en/guides/DEBUGGING.md) | [`guides/USAGE.md`](./guides/USAGE.md), [`guides/ADVANCED_SCENARIOS.md`](./guides/ADVANCED_SCENARIOS.md), [`guides/FAQ.md`](./guides/FAQ.md), [`guides/DEBUGGING.md`](./guides/DEBUGGING.md) |
 | Использование CLI | [`../en/USAGE.md`](../en/USAGE.md) | [`USAGE.md`](./USAGE.md) |
 | Конфигурация | [`../en/CONFIG.md`](../en/CONFIG.md) | [`CONFIG.md`](./CONFIG.md) |
 | Выходные данные и валидация | [`../en/OUTPUT.md`](../en/OUTPUT.md) | [`OUTPUT.md`](./OUTPUT.md) |
