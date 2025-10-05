@@ -57,8 +57,8 @@ def test_transform__supports_alias_columns():
 
 
 @pytest.mark.unit
-def test_transform__missing_identifier_columns_raises_key_error():
-    """A descriptive error is raised when identifier columns are absent."""
+def test_transform__missing_identifier_columns_warns_and_returns_empty_result():
+    """A warning is emitted and an empty result returned when IDs are absent."""
 
     frame = pd.DataFrame(
         {
@@ -68,12 +68,18 @@ def test_transform__missing_identifier_columns_raises_key_error():
         }
     )
 
-    with pytest.raises(KeyError) as exc:
-        isoform._transform(frame)
+    with pytest.warns(UserWarning) as captured:
+        result = isoform._transform(frame)
 
-    message = str(exc.value)
+    assert len(captured) == 1
+    message = str(captured[0].message)
     assert "uniprot_id_primary" in message
     assert "target_chembl_id" in message
+
+    for attribute in ("result", "combined", "dedup_stage1", "sorted_stage", "dedup_stage2"):
+        frame_result = getattr(result, attribute)
+        assert isinstance(frame_result, pd.DataFrame)
+        assert frame_result.empty
 
 
 @pytest.mark.unit

@@ -83,6 +83,41 @@ _REQUIRED_COLUMN_DTYPES: Mapping[str, str] = {
     "nstereo": "Int64",
 }
 
+_NA_MARKERS: tuple[str, ...] = ("[#N/A]",)
+
+_ACTIVITY_INPUT_SCHEMA: Mapping[str, str] = {
+    column: (
+        "Logical"
+        if dtype == "boolean"
+        else "Int64"
+        if dtype == "Int64"
+        else "Float64"
+        if dtype == "Float64"
+        else "Text"
+    )
+    for column, dtype in _REQUIRED_COLUMN_DTYPES.items()
+    if dtype in {"string", "boolean", "Int64", "Float64"}
+}
+
+_TARGET_METADATA_SCHEMA: Mapping[str, str] = {
+    "target_chembl_id": "Text",
+    "target_sort_order": "Text",
+    "multifunctional_enzyme": "Logical",
+    "IUPHAR_class": "Text",
+    "IUPHAR_subclass": "Text",
+    "genus": "Text",
+    "superkingdom": "Text",
+    "phylum": "Text",
+    "taxon_id": "Int64",
+    "gene_index": "Text",
+    "taxon_index": "Text",
+}
+
+_CITATION_FRACTION_SCHEMA: Mapping[str, str] = {
+    "N": "Int64",
+    "K_min_significant": "Int64",
+}
+
 _REQUIRED_COLUMN_FALLBACKS: Mapping[str, Callable[[pd.DataFrame], pd.Series | None]] = {
     "activity_chembl_id": lambda frame: frame.get("activity_id"),
     "salt_chembl_id": (
@@ -208,7 +243,12 @@ def _load_citation_fraction(dictionary_root: Path) -> pd.DataFrame:
             "citation_fraction.csv not found; expected at "
             f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
         )
-    return pd.read_csv(candidate, dtype={"N": "Int64", "K_min_significant": "Int64"})
+    return helpers.read_csv_strict(
+        candidate,
+        encoding=helpers.ENCODING_FALLBACKS,
+        dtype_map=_CITATION_FRACTION_SCHEMA,
+        na_values=_NA_MARKERS,
+    )
 
 
 def _resolve_targets_path(dictionary_root: Path, override: Path | None) -> Path:
@@ -234,20 +274,18 @@ def _resolve_targets_path(dictionary_root: Path, override: Path | None) -> Path:
 
 
 def _load_target_metadata(path: Path) -> pd.DataFrame:
-    dtype: Mapping[str, str] = {
-        "target_chembl_id": "string",
-        "IUPHAR_class": "string",
-        "IUPHAR_subclass": "string",
-        "gene_index": "string",
-        "taxon_index": "string",
-        "target_sort_order": "string",
-        "multifunctional_enzyme": "string",
-        "genus": "string",
-        "superkingdom": "string",
-        "phylum": "string",
-        "taxon_id": "string",
-    }
-    return pd.read_csv(path, usecols=_TARGET_COLUMNS, dtype=dtype)
+    frame = helpers.read_csv_strict(
+        path,
+        encoding=helpers.ENCODING_FALLBACKS,
+        dtype_map=_TARGET_METADATA_SCHEMA,
+        na_values=_NA_MARKERS,
+    )
+    missing = [column for column in _TARGET_COLUMNS if column not in frame.columns]
+    if missing:
+        raise ActivityExtendedError(
+            "targets_type.csv missing expected columns: " + ", ".join(sorted(missing))
+        )
+    return frame.loc[:, list(_TARGET_COLUMNS)]
 
 
 def _safe_to_bool(series: pd.Series, column: str) -> pd.Series:
@@ -460,6 +498,8 @@ def _merge_target_metadata(
     merged = df.merge(targets, on="target_chembl_id", how="left")
     merged = merged.loc[:, ~merged.columns.duplicated()]
 
+    merged = helpers.coerce_types(merged, _TARGET_METADATA_SCHEMA)
+
     if "organism_cellularity" not in merged.columns:
         merged["organism_cellularity"] = pd.Series(dtype="string")
 
@@ -510,6 +550,22 @@ def _select_and_cast(df: pd.DataFrame) -> pd.DataFrame:
     for column in bool_columns:
         if column in result.columns:
             result[column] = _safe_to_bool(result[column], column)
+
+    def _format_numeric(value: object) -> object:
+        if pd.isna(value):
+            return pd.NA
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return value
+        if float(numeric).is_integer():
+            return f"{numeric:.1f}"
+        text = str(numeric)
+        return text.rstrip("0").rstrip(".") if "." in text else text
+
+    for column in ("standard_value", "pA_value"):
+        if column in result.columns:
+            result[column] = result[column].map(_format_numeric).astype("string")
     return result
 
 
@@ -795,7 +851,12 @@ def process_activity_extended(
     input_path = explicit_input or _latest_activity_export(resolved_search_dir)
     dictionary_root = _resolve_dictionary_root(Path(dictionary_dir) if dictionary_dir is not None else None)
 
-    frame = helpers.read_csv_with_fallbacks(input_path)
+    frame = helpers.read_csv_strict(
+        input_path,
+        encoding=helpers.ENCODING_FALLBACKS,
+        dtype_map=_ACTIVITY_INPUT_SCHEMA,
+        na_values=_NA_MARKERS,
+    )
     processed = _transform_activity_frame(
         frame,
         dictionary_root=dictionary_root,

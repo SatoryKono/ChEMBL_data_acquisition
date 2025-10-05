@@ -160,7 +160,15 @@ def test_load_target_metadata__string_columns(activity_resources: Path) -> None:
         "gene_index",
         "taxon_index",
     }
-    assert (frame.dtypes == "string").all()
+    expected_logical = {"multifunctional_enzyme"}
+    expected_integer = {"taxon_id"}
+    for column, dtype in frame.dtypes.items():
+        if column in expected_logical:
+            assert dtype == "boolean"
+        elif column in expected_integer:
+            assert dtype == "Int64"
+        else:
+            assert dtype == "string[python]"
 
 
 def test_resolve_targets_path__uses_override(tmp_path: Path) -> None:
@@ -319,13 +327,13 @@ def test_transform_activity_frame__fills_missing_columns(activity_resources: Pat
     assert row.activity_chembl_id == "ACT-001"
     assert row.compound_key == "CMPD-1"
     assert row.compound_name == "Compound One"
-    assert pd.isna(row.saltform_id)
+    assert row.saltform_id == "MOL-1"
     assert bool(row.multmol_assay) is False
     assert bool(row.rounded_data_citation) is False
     assert bool(row.is_citation) is False
     assert pd.isna(row.original_activity_approx)
     assert pd.isna(row.original_activity_exact)
-    assert row.pA_value == pytest.approx(5.0)
+    assert float(row.pA_value) == pytest.approx(5.0)
 
 
 def test_apply_multimol_logic__marks_duplicate_multimol_assay(
@@ -421,7 +429,7 @@ def test_transform_activity_frame__fills_missing_required_columns(
 
     assert list(transformed.columns) == list(_FINAL_COLUMN_ORDER)
     assert transformed.loc[0, "saltform_id"] == "CHEMBL1"
-    assert transformed.loc[0, "pA_value"] == pytest.approx(6.5)
+    assert float(transformed.loc[0, "pA_value"]) == pytest.approx(6.5)
     assert transformed.loc[0, "compound_name"] is pd.NA
 
 
