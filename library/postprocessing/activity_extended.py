@@ -528,8 +528,10 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
                 filled.add("compound_key")
                 break
 
-    if "log_value" not in df.columns and "pchembl_value" in df.columns:
-        df["log_value"] = pd.to_numeric(df["pchembl_value"], errors="coerce")
+    if "log_value" in df.columns:
+        df["log_value"] = pd.to_numeric(df["log_value"], errors="coerce").astype("Float64")
+    elif "pchembl_value" in df.columns:
+        df["log_value"] = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
         filled.add("log_value")
 
     if "log_value" in df.columns and "standard_value" in df.columns and "standard_units" in df.columns:
