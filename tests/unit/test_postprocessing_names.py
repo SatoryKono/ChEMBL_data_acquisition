@@ -1,0 +1,40 @@
+import pandas as pd
+from pathlib import Path
+
+from library.postprocessing import names
+
+
+def test_process_target_names__creates_name_output_file(tmp_path):
+    input_path = tmp_path / "output.target_20240101.csv"
+    frame = pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL_TARGET",
+                "uniprot_id_primary": "P12345",
+                "pref_name": "Alpha",
+                "synonyms": "Beta|Gamma",
+                "gtop_synonyms": "Delta",
+                "gene_symbol": "GENE1",
+                "gene_symbol_list": "GENE1|GENE2",
+                "isoform_names": "Isoform A",
+                "isoform_synonyms": "IsoSyn|IsoSyn2",
+                "secondaryAccessionNames": "Secondary",
+                "contrion": "Token1|Token2",
+                "active_component_type": "Protein",
+            }
+        ],
+        dtype="string",
+    )
+    frame.to_csv(input_path, index=False, encoding="utf-8")
+
+    result = names.process_target_names(input_path, verbose=False)
+
+    assert isinstance(result, dict)
+    output_path = Path(result["path"])
+    assert output_path.name == "name.output.target_20240101.csv"
+    assert output_path.exists()
+
+    exported = pd.read_csv(output_path, dtype=str)
+    assert not exported.empty
+    assert (exported["target_chembl_id"] == "CHEMBL_TARGET").all()
+    assert "Alpha" in exported["name"].values
