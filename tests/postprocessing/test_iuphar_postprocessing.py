@@ -23,7 +23,7 @@ def test_ensure_required_columns__raises_for_missing_columns() -> None:
 
     message = str(excinfo.value)
     assert "gtop_synonyms" in message
-    assert "component_description" in message
+    assert "component_description" not in message
 
 
 def test_clean_brackets__removes_nested_annotations() -> None:
@@ -172,17 +172,6 @@ def test_process_iuphar_targets__produces_expected_csv(tmp_path: Path, snapshot_
                 "component_sequence": None,
                 "component_structures": None,
             },
-                "target_chembl_id": "CHEMBL4",
-                "GuidetoPHARMACOLOGY": "GTOP4",
-                "iuphar_target_id": "T4",
-                "iuphar_family_id": "F4",
-                "iuphar_type": "Type",
-                "iuphar_class": "Class",
-                "iuphar_subclass": "Sub",
-                "iuphar_chain": "Chain",
-                "iuphar_name": "Name",
-                # Missing gtop_synonyms
-            }
         ]
     )
     frame.to_csv(input_path, index=False)
@@ -193,9 +182,6 @@ def test_process_iuphar_targets__produces_expected_csv(tmp_path: Path, snapshot_
     expected_bytes = (snapshot_resource / "iuphar_postprocessing_expected.csv").read_bytes()
     actual_bytes = output_path.read_bytes()
     assert actual_bytes == expected_bytes
-    message = str(excinfo.value)
-    assert "gtop_synonyms" in message
-    assert "component_description" not in message
 
 
 def test_process_iuphar_targets__fills_missing_component_description(tmp_path: Path) -> None:
