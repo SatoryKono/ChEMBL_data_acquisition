@@ -147,6 +147,21 @@ def compute_multifunctional(source: pd.DataFrame) -> pd.DataFrame:
     else:
         trimmed = source.copy()
     result = trimmed.copy()
+
+    if "target_chembl_id" not in result.columns:
+        result.insert(
+            0,
+            "target_chembl_id",
+            pd.Series("", index=result.index, dtype="string"),
+        )
+    else:
+        result["target_chembl_id"] = result["target_chembl_id"].astype("string")
+
+    reaction_numbers = result.get(
+        "reaction_ec_numbers",
+        pd.Series(pd.NA, index=result.index, dtype="string"),
+    )
+    result["reaction_ec_numbers"] = reaction_numbers
     result["reaction_ec_numbers"] = result["reaction_ec_numbers"].map(
         _transform_reaction_ec_numbers
     )
