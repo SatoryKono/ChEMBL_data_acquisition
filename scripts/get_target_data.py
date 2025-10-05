@@ -258,14 +258,34 @@ def _bool_from_cli(value: object) -> bool | None:
     return bool(value)
 
 
+_TEMPORARY_EXPORT_SUFFIXES: tuple[str, ...] = (".tmp",)
+_NORMALISED_MARKERS: tuple[str, ...] = (NORMALIZED_SUFFIX, "_normalised")
+
+
 def _normalise_target_export_name(path: Path) -> str:
     """Return a normalised filename for target exports."""
 
     name = path.name
-    for suffix in reversed(path.suffixes):
-        if suffix == ".csv":
+    lowered_name = name.lower()
+
+    for suffix in _TEMPORARY_EXPORT_SUFFIXES:
+        suffix_lower = suffix.lower()
+        while lowered_name.endswith(suffix_lower):
+            name = name[: -len(suffix)]
+            lowered_name = name.lower()
+
+    for marker in _NORMALISED_MARKERS:
+        marker_lower = marker.lower()
+        csv_marker = f".csv{marker_lower}"
+        if lowered_name.endswith(csv_marker):
+            name = name[: -len(marker)]
+            lowered_name = name.lower()
             break
-        name = name.removesuffix(suffix)
+        if lowered_name.endswith(marker_lower):
+            name = name[: -len(marker)]
+            lowered_name = name.lower()
+            break
+
     return name
 
 
@@ -299,7 +319,15 @@ def _is_supported_target_export(path: Path) -> bool:
         return True
 
     if path.suffix.lower() != ".csv":
-        return False
+        if not export_name.lower().endswith(".csv"):
+            return False
+        logger.info(
+            "target_postprocess_noncanonical_name",
+            path=str(path),
+            reason="noncanonical_filename",
+            canonical=export_name,
+        )
+        return True
 
     logger.info(
         "target_postprocess_noncanonical_name",
