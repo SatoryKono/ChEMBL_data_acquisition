@@ -106,6 +106,25 @@ def test_load_document_lookup__renames_legacy_identifier(tmp_path: Path, caplog:
     assert "Renamed document identifier column" in caplog.text
 
 
+def test_load_document_lookup__latin1_encoding_fallback(tmp_path: Path) -> None:
+    dictionary_root = tmp_path
+    document_dir = dictionary_root / "_document"
+    document_dir.mkdir(parents=True)
+
+    frame = pd.DataFrame(
+        {
+            "document_chembl_id": pd.Series(["DOC-1"], dtype="string"),
+            "completed": pd.Series(["value\x81with_control"], dtype="string"),
+        }
+    )
+    frame.to_csv(document_dir / "document.csv", index=False, sep="\t", encoding="latin-1")
+
+    lookup = _load_document_lookup(dictionary_root)
+
+    assert lookup.loc[0, "document_chembl_id"] == "DOC-1"
+    assert lookup.loc[0, "completed"] == "value\x81with_control"
+
+
 def test_load_document_lookup__missing_identifier_reports_available_columns(tmp_path: Path) -> None:
     dictionary_root = tmp_path
     document_dir = dictionary_root / "_document"

@@ -25,7 +25,12 @@ from library.common.csv_utils import write_csv_deterministic
 
 # Accepted encodings – these match the Power Query ``Binary.Decompress`` fallbacks
 # that were historically used when loading the aggregated targets table.
-ENCODING_FALLBACKS: tuple[str, ...] = ("utf-8", "utf-8-sig", "cp1252")
+# ``latin-1`` is included as the final fallback because a handful of legacy
+# dictionary exports produced by Power Query use extended control characters
+# (e.g. ``0x81``) that are not representable in ``cp1252``.  The ISO-8859-1
+# codec accepts these bytes and preserves them verbatim so the downstream
+# normalisation logic can continue operating deterministically.
+ENCODING_FALLBACKS: tuple[str, ...] = ("utf-8", "utf-8-sig", "cp1252", "latin-1")
 CSV_SEPARATORS: tuple[str, ...] = (",", "\t", ";")
 
 
