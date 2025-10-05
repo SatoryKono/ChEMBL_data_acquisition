@@ -123,10 +123,8 @@ _FINAL_COLUMN_ORDER: tuple[str, ...] = (
     "shuffled_assay",
     "review",
     "rounded_data_citation",
-    "high_citation_rate",
     "original_activity_approx",
     "original_activity_exact",
-    "is_citation",
     "IUPHAR_class",
     "IUPHAR_subclass",
     "unicellular_organism",
@@ -400,55 +398,6 @@ def _drop_unused_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df.drop(columns=present, errors="ignore")
 
 
-def _compute_citation_flags(df: pd.DataFrame) -> pd.DataFrame:
-    bool_columns = [
-        "exact_data_citation",
-        "higly_correlated_assay",
-        "shuffled_assay",
-        "review",
-        "rounded_data_citation",
-    ]
-    converted = df.copy()
-    for column in bool_columns:
-        if column in converted.columns:
-            converted[column] = _safe_to_bool(converted[column], column).fillna(False)
-        else:
-            converted[column] = pd.Series(False, index=converted.index, dtype="boolean")
-    converted["is_citation"] = converted[bool_columns].any(axis=1)
-    return converted
-
-
-def _annotate_high_citation(df: pd.DataFrame, dictionary_root: Path) -> pd.DataFrame:
-    converted = df.copy()
-    counts = (
-        converted.groupby("document_chembl_id")["is_citation"]
-        .agg(n_citation="sum", n_non_citation=lambda s: (~s).sum())
-        .reset_index()
-    )
-    counts["N"] = counts["n_citation"] + counts["n_non_citation"]
-    counts = counts[(counts["n_citation"] > 0) & (counts["n_non_citation"] > 0)]
-
-    citation_fraction = _load_citation_fraction(dictionary_root)
-    counts = counts.merge(
-        citation_fraction[["N", "K_min_significant"]],
-        on="N",
-        how="left",
-    )
-    counts["high_citation_rate"] = counts["K_min_significant"].notna() & (
-        counts["n_citation"] >= counts["K_min_significant"]
-    )
-
-    converted = converted.merge(
-        counts[["document_chembl_id", "high_citation_rate"]],
-        on="document_chembl_id",
-        how="left",
-    )
-    converted["high_citation_rate"] = _safe_to_bool(
-        converted["high_citation_rate"], "high_citation_rate"
-    ).fillna(False)
-    return converted
-
-
 def _merge_target_metadata(
     df: pd.DataFrame,
     *,
@@ -502,8 +451,6 @@ def _select_and_cast(df: pd.DataFrame) -> pd.DataFrame:
         "shuffled_assay",
         "review",
         "rounded_data_citation",
-        "high_citation_rate",
-        "is_citation",
         "unicellular_organism",
         "multifunctional_enzyme",
     ]
@@ -696,8 +643,6 @@ def _transform_activity_frame(
     df = _apply_multimol_logic(df)
     df = _rename_columns(df)
     df = _drop_unused_columns(df)
-    df = _compute_citation_flags(df)
-    df = _annotate_high_citation(df, dictionary_root)
     df = _merge_target_metadata(df, dictionary_root=dictionary_root, targets_override=targets_override)
     df = _select_and_cast(df)
     return df
