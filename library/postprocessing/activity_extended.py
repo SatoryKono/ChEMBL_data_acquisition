@@ -566,6 +566,7 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
 
     if "log_value" in df.columns:
         log_value_series = pd.to_numeric(df["log_value"], errors="coerce").astype("Float64")
+
     pchembl_series: pd.Series | None = None
     if "pchembl_value" in df.columns:
         pchembl_series = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
@@ -579,24 +580,20 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
                 log_value_series.loc[mask] = pchembl_series.loc[mask]
                 filled.add("log_value")
 
-    if log_value_series is not None:
-        df["log_value"] = log_value_series
-
-    if (
-        log_value_series is not None
-        and "standard_value" in df.columns
-        and "standard_units" in df.columns
-    ):
+    computed: pd.Series | None = None
+    if "standard_value" in df.columns and "standard_units" in df.columns:
         std_value = pd.to_numeric(df["standard_value"], errors="coerce")
         units = df["standard_units"].astype("string").str.strip().str.lower()
-        factors = units.map({
-            "m": 1.0,
-            "mm": 1e-3,
-            "um": 1e-6,
-            "µm": 1e-6,
-            "nm": 1e-9,
-            "pm": 1e-12,
-        })
+        factors = units.map(
+            {
+                "m": 1.0,
+                "mm": 1e-3,
+                "um": 1e-6,
+                "µm": 1e-6,
+                "nm": 1e-9,
+                "pm": 1e-12,
+            }
+        )
         factors = pd.to_numeric(factors, errors="coerce")
         molar = std_value * factors
         computed = pd.Series(pd.NA, index=df.index, dtype="Float64")
@@ -606,10 +603,18 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
             computed.loc[valid] = pd.Series(computed_values, index=df.index[valid]).astype(
                 "Float64"
             )
-        mask = log_value_series.isna() & computed.notna()
-        if mask.any():
-            log_value_series = log_value_series.copy()
-            log_value_series.loc[mask] = computed.loc[mask]
+
+    if computed is not None:
+        if log_value_series is None:
+            log_value_series = computed
+            if computed.notna().any():
+                filled.add("log_value")
+        else:
+            mask = log_value_series.isna() & computed.notna()
+            if mask.any():
+                log_value_series = log_value_series.copy()
+                log_value_series.loc[mask] = computed.loc[mask]
+                filled.add("log_value")
 
     if log_value_series is not None:
         df["log_value"] = log_value_series
