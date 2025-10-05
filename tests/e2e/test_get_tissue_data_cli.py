@@ -214,6 +214,13 @@ def test_get_tissue_data_cli__end_to_end(
     assert first_run_calls[0]["url"].endswith("CHEMBLT1,CHEMBLT2&limit=2")
     assert "CHEMBLT3" in first_run_calls[-1]["url"]
 
+    fetch_event = next(
+        (payload for level, event, payload in logger.events if event == "tissue_fetch_start"),
+        None,
+    )
+    assert fetch_event is not None
+    assert fetch_event["requested"] == 3
+
     start_event = next((event for event in logger.events if event[1] == "tissue_pipeline_start"), None)
     assert start_event is not None
     assert start_event[2]["input"] == str(input_csv)
@@ -270,4 +277,7 @@ def test_get_tissue_data_cli__end_to_end(
 
     new_events = logger.events[first_event_count:]
     assert any(event == "tissue_pipeline_start" for _, event, _ in new_events)
-    assert any(event == "tissue_pipeline_summary" for _, event, data in new_events if data.get("records") == 3)
+    assert any(
+        event == "tissue_pipeline_summary" and data.get("records") == 3 and data.get("duration", 0) >= 0
+        for _, event, data in new_events
+    )

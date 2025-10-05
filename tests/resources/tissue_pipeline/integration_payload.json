@@ -1,0 +1,33 @@
+{
+  "input_ids": [
+    "CHEMBLT003",
+    "CHEMBLT001",
+    "CHEMBLT002"
+  ],
+  "records": [
+    {
+      "tissue_chembl_id": "CHEMBLT002",
+      "pref_name": "Alpha Tissue",
+      "uberon_id": "UBERON:0000955",
+      "efo_id": null,
+      "bto_id": "BTO:0000955",
+      "caloha_id": null
+    },
+    {
+      "tissue_chembl_id": "CHEMBLT001",
+      "pref_name": "Beta Tissue",
+      "uberon_id": null,
+      "efo_id": "EFO:0000116",
+      "bto_id": null,
+      "caloha_id": "CALOHA:0000001"
+    },
+    {
+      "tissue_chembl_id": "CHEMBLT003",
+      "pref_name": null,
+      "uberon_id": "UBERON:0000178",
+      "efo_id": "EFO:0003077",
+      "bto_id": null,
+      "caloha_id": null
+    }
+  ]
+}
