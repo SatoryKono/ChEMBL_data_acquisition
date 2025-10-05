@@ -145,6 +145,23 @@ def write_csv(frame: pd.DataFrame, path: Path, *, columns: Sequence[str]) -> Pat
     )
 
 
+def sort_power_query(frame: pd.DataFrame, columns: Sequence[str]) -> pd.DataFrame:
+    """Return ``frame`` sorted by ``columns`` using Power Query compatible rules."""
+
+    if frame.empty:
+        return frame.copy()
+
+    seen: list[str] = []
+    for column in columns:
+        if column in frame.columns and column not in seen:
+            seen.append(column)
+
+    if not seen:
+        return frame.copy()
+
+    return frame.sort_values(by=seen, kind="mergesort", na_position="last").reset_index(drop=True)
+
+
 def fill_missing(frame: pd.DataFrame, columns: Iterable[str], fill_value: str = "-") -> pd.DataFrame:
     """Fill ``columns`` missing from ``frame`` with ``fill_value``."""
 
