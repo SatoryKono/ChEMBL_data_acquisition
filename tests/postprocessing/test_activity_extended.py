@@ -34,14 +34,14 @@ EXPECTED_DTYPE_MAP: dict[str, str] = {
     "saltform_id": "object",
     "molecule_chembl_id": "object",
     "molecule_chembl_id.1": "string",
-    "target_chembl_id": "object",
+    "target_chembl_id": "string",
     "assay_chembl_id": "object",
     "document_chembl_id": "object",
     "completed": "string",
     "bao_endpoint": "object",
     "standard_type": "object",
-    "standard_value": "float64",
-    "pA_value": "Float64",
+    "standard_value": "string",
+    "pA_value": "string",
     "bao_format": "object",
     "compound_key": "object",
     "compound_name": "object",
@@ -51,13 +51,16 @@ EXPECTED_DTYPE_MAP: dict[str, str] = {
     "assay_with_same_target": "Int64",
     "exact_data_citation": "boolean",
     "higly_correlated_assay": "boolean",
+    "highly_correlated_assay": "boolean",
     "shuffled_assay": "boolean",
     "review": "boolean",
     "rounded_data_citation": "boolean",
     "high_citation_rate": "boolean",
+    "allosteric": "boolean",
+    "nam": "boolean",
+    "pam": "boolean",
     "original_activity_approx": "object",
     "original_activity_exact": "object",
-    "is_citation": "boolean",
     "IUPHAR_class": "string",
     "IUPHAR_subclass": "string",
     "unicellular_organism": "boolean",
@@ -328,6 +331,7 @@ def test_transform_activity_frame__parses_activity_properties_flags(
         flags = flag_map[row.activity_chembl_id]
         assert bool(row.exact_data_citation) == flags["exact_data_citation"]
         assert bool(row.higly_correlated_assay) == flags["higly_correlated_assay"]
+        assert bool(row.highly_correlated_assay) == flags["higly_correlated_assay"]
         assert bool(row.shuffled_assay) == flags["shuffled_assay"]
         assert bool(row.review) == flags["review"]
         assert bool(row.rounded_data_citation) == flags["rounded_data_citation"]
@@ -394,7 +398,8 @@ def test_transform_activity_frame__fills_missing_columns(activity_resources: Pat
     assert row["molecule_chembl_id.1"] == "MOL-1"
     assert row.standard_inchi_skeleton == "InChI=1"
     assert bool(row.multmol_assay) is False
-    assert pd.isna(row.rounded_data_citation)
+    assert bool(row.highly_correlated_assay) is False
+    assert bool(row.rounded_data_citation) is False
     assert pd.isna(row.original_activity_approx)
     assert pd.isna(row.original_activity_exact)
     assert float(row.pA_value) == pytest.approx(5.0)
@@ -461,7 +466,7 @@ def test_process_activity_extended__writes_expected_payload(
     tmp_dictionary = _copytree(activity_resources / "dictionary", tmp_path / "dictionary")
 
     output_path = process_activity_extended(
-        search_dir=tmp_exports,
+        input_path=tmp_exports / "output.activity_20240101.csv",
         dictionary_dir=tmp_dictionary,
     )
 
@@ -496,6 +501,7 @@ def test_process_activity_extended__supports_base_dir_alias(
         output_path = process_activity_extended(
             base_dir=tmp_exports,
             dictionary_dir=tmp_dictionary,
+            input_path=tmp_exports / "output.activity_20240101.csv",
         )
 
     assert output_path.name == "extended.output.activity_20240101.csv"
@@ -524,7 +530,7 @@ def test_process_activity_extended__raises_for_missing_dictionary(
     missing_dictionary = tmp_path / "dictionary"
     missing_dictionary.mkdir()
 
-    with pytest.raises(ActivityExtendedError, match="targets_type.csv not found"):
+    with pytest.raises(ActivityExtendedError, match="document.csv not found"):
         process_activity_extended(
             search_dir=tmp_exports,
             dictionary_dir=missing_dictionary,

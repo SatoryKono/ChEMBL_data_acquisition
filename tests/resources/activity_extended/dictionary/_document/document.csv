@@ -1,4 +1,5 @@
 document_chembl_id,completed,review
-DOC-1,1980-08-15,TRUE
-DOC-2,2008-01-11,FALSE
-DOC-3,,FALSE
+DOC-1,1980-08-15,True
+DOC-2,2008-01-11,False
+DOC-3,,False
+DOC-4,,FALSE

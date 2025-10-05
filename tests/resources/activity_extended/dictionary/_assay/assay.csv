@@ -1,4 +1,9 @@
 assay_chembl_id,assay_with_same_target
-ASSAY-1,3
-ASSAY-2,2
+ASSAY-1,3.0
+ASSAY-2,2.0
 ASSAY-3,
+ASSAY-X,4.0
+ASSAY-Y,1.0
+ASSAY-Z,2.0
+ASSAY-W,
+ASSAY-V,

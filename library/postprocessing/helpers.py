@@ -25,7 +25,7 @@ from library.common.csv_utils import write_csv_deterministic
 
 # Accepted encodings – these match the Power Query ``Binary.Decompress`` fallbacks
 # that were historically used when loading the aggregated targets table.
-ENCODING_FALLBACKS: tuple[str, ...] = ("utf-8", "utf-8-sig", "cp1252")
+ENCODING_FALLBACKS: tuple[str, ...] = ("utf-8", "utf-8-sig", "cp1252", "latin-1")
 CSV_SEPARATORS: tuple[str, ...] = (",", "\t", ";")
 
 

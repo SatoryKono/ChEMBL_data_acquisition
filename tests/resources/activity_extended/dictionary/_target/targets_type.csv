@@ -1,3 +1,6 @@
 target_chembl_id,target_sort_order,multifunctional_enzyme,IUPHAR_class,IUPHAR_subclass,genus,superkingdom,phylum,taxon_id,gene_index,taxon_index
-TAR-ALPHA,001,TRUE,Family A,Subtype 1,Homo,Eukaryota,Chordata,9606,G1,T1
-TAR-BETA,002,FALSE,Family B,Subtype 2,Escherichia,Bacteria,Proteobacteria,562,G2,T2
+TAR-ALPHA,1,True,Family A,Subtype 1,Homo,Eukaryota,Chordata,9606,G1,T1
+TAR-BETA,2,False,Family B,Subtype 2,Escherichia,Bacteria,Proteobacteria,562,G2,T2
+TAR-GAMMA,003,FALSE,Family C,Subtype 3,Rattus,Eukaryota,Chordata,10116,G3,T3
+TAR-DELTA,004,FALSE,Family D,Subtype 4,Mus,Eukaryota,Chordata,10090,G4,T4
+TAR-OMEGA,005,TRUE,Family E,Subtype 5,Saccharomyces,Eukaryota,Ascomycota,559292,G5,T5

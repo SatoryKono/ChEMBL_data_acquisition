@@ -30,6 +30,52 @@ def _prepare_dictionary(dictionary_root: Path) -> None:
         writer.writeheader()
         writer.writerow({"N": "1", "K_min_significant": "1"})
 
+    document_subdir = dictionary_root / "_document"
+    document_subdir.mkdir(parents=True, exist_ok=True)
+    with (document_subdir / "document.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["document_chembl_id", "completed", "review"],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "document_chembl_id": "DOC1",
+                "completed": "1980-01-01",
+                "review": "false",
+            }
+        )
+
+    assay_subdir = dictionary_root / "_assay"
+    assay_subdir.mkdir(parents=True, exist_ok=True)
+    with (assay_subdir / "assay.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["assay_chembl_id", "assay_with_same_target"],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "assay_chembl_id": "ASSAY1",
+                "assay_with_same_target": "1",
+            }
+        )
+
+    testitem_subdir = dictionary_root / "_testitem"
+    testitem_subdir.mkdir(parents=True, exist_ok=True)
+    with (testitem_subdir / "testitem.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["molecule_chembl_id", "standard_inchi_skeleton"],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "molecule_chembl_id": "CHEMBL1",
+                "standard_inchi_skeleton": "InChI=1S/...",
+            }
+        )
+
     targets_subdir = dictionary_root / "_target"
     targets_subdir.mkdir(parents=True, exist_ok=True)
     with (targets_subdir / "targets_type.csv").open("w", newline="", encoding="utf-8") as handle:

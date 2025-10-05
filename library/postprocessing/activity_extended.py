@@ -156,6 +156,20 @@ _DEDUPE_SUBSET_KEYS: tuple[str, ...] = (
     "standard_value",
 )
 
+_FLAG_SUMMARY_COLUMNS: tuple[str, ...] = (
+    "unknown_chirality",
+    "multmol_assay",
+    "exact_data_citation",
+    "higly_correlated_assay",
+    "highly_correlated_assay",
+    "shuffled_assay",
+    "review",
+    "rounded_data_citation",
+    "high_citation_rate",
+    "original_activity_approx",
+    "original_activity_exact",
+)
+
 _FINAL_COLUMN_ORDER: tuple[str, ...] = (
     "activity_chembl_id",
     "saltform_id",
@@ -178,6 +192,7 @@ _FINAL_COLUMN_ORDER: tuple[str, ...] = (
     "assay_with_same_target",
     "exact_data_citation",
     "higly_correlated_assay",
+    "highly_correlated_assay",
     "shuffled_assay",
     "review",
     "rounded_data_citation",
@@ -416,6 +431,34 @@ def _log_join_statistics(event: str, indicator: pd.Series) -> None:
     logger.info(event, matched=matched, missing=missing)
 
 
+def _log_flag_summary(df: pd.DataFrame) -> None:
+    total = len(df)
+    for column in _FLAG_SUMMARY_COLUMNS:
+        if column not in df.columns:
+            logger.warning("activity_extended_flag_missing", column=column)
+            continue
+        series = df[column]
+        true_count = 0
+        false_count = 0
+        if pd.api.types.is_bool_dtype(series) or pd.api.types.is_object_dtype(series):
+            counts = series.value_counts(dropna=False)
+            true_count = int(counts.get(True, 0))
+            false_count = int(counts.get(False, 0))
+        na_count = int(total - series.notna().sum())
+        logger.info(
+            "activity_extended_flag_summary",
+            column=column,
+            true=true_count,
+            false=false_count,
+            na=na_count,
+            true_ratio=float(true_count / total) if total else 0.0,
+            false_ratio=float(false_count / total) if total else 0.0,
+            na_ratio=float(na_count / total) if total else 0.0,
+            non_null=int(total - na_count),
+            total=total,
+        )
+
+
 def _safe_to_bool(series: pd.Series, column: str) -> pd.Series:
     if not isinstance(series, pd.Series):
         raise ActivityExtendedError(f"column '{column}' has duplicate entries; expected a Series")
@@ -543,7 +586,12 @@ def _rename_columns(df: pd.DataFrame) -> pd.DataFrame:
             "log_value": "pA_value",
         }
     )
-    return renamed.loc[:, ~renamed.columns.duplicated(keep="last")]
+    if "higly_correlated_assay" in renamed.columns and "highly_correlated_assay" not in renamed.columns:
+        renamed["highly_correlated_assay"] = renamed["higly_correlated_assay"]
+    renamed = renamed.loc[:, ~renamed.columns.duplicated(keep="last")]
+    if "highly_correlated_assay" in renamed.columns:
+        renamed = _insert_columns_after(renamed, "higly_correlated_assay", ("highly_correlated_assay",))
+    return renamed
 
 
 def _drop_unused_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -703,6 +751,11 @@ def _compute_citation_flags(df: pd.DataFrame) -> pd.DataFrame:
             converted[column] = _safe_to_bool(converted[column], column).fillna(False)
         else:
             converted[column] = pd.Series(False, index=converted.index, dtype="boolean")
+    if (
+        "higly_correlated_assay" in converted.columns
+        and "highly_correlated_assay" in converted.columns
+    ):
+        converted["highly_correlated_assay"] = converted["higly_correlated_assay"]
     converted["is_citation"] = converted[bool_columns].any(axis=1)
     return converted
 
@@ -884,6 +937,7 @@ def _select_and_cast(df: pd.DataFrame) -> pd.DataFrame:
         "multmol_assay",
         "exact_data_citation",
         "higly_correlated_assay",
+        "highly_correlated_assay",
         "shuffled_assay",
         "review",
         "rounded_data_citation",
@@ -1145,6 +1199,8 @@ def _transform_activity_frame(
     df = _merge_assay_metadata(df, dictionary_root)
     df = _merge_testitem_metadata(df, dictionary_root)
     df = _rename_columns(df)
+    df = _compute_citation_flags(df)
+    df = _annotate_high_citation(df, dictionary_root)
     df = _extract_activity_properties_flags(df)
     df = _drop_unused_columns(df)
     df = _merge_target_metadata(df, dictionary_root=dictionary_root, targets_override=targets_override)
@@ -1275,6 +1331,7 @@ def process_activity_extended(
             total=len(processed),
         )
     processed = dedupe_final(processed)
+    _log_flag_summary(processed)
     logger.info("activity_extended_saving", path=str(output_path))
     helpers.write_csv(processed, output_path, columns=_FINAL_COLUMN_ORDER)
     logger.info(
