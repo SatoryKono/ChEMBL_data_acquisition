@@ -268,6 +268,30 @@ python scripts/get_tissue_data.py \
   --offset 10
 ```
 
+## Cell line pipeline `get_cellline_data`
+
+The command exports metadata for ChEMBL cell lines with stable typing and
+ordering. Supported options in addition to the shared flags:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--mode` | `chembl` | Selects the ChEMBL `/cell_line` endpoint. |
+| `--column` | `cell_chembl_id` | Input column containing cell line identifiers. |
+| `--batch-size` | `20` | Identifiers processed per request. |
+| `--timeout` | `30.0` | Request timeout in seconds. |
+| `--limit`, `--offset` | `None`, `0` | Range selection applied before fetching data. |
+
+Example: write the output to a dedicated directory while restricting the run to
+the first 25 rows of the input file.
+
+```bash
+python scripts/get_cellline_data.py \
+  --input data/input/cellline.csv \
+  --output output/cellline.csv \
+  --batch-size 10 \
+  --limit 25
+```
+
 ## Utility commands
 
 Console scripts located under `library/utils/cli_tools` provide supporting

@@ -16,6 +16,7 @@ from typing import Any
 _LAZY_SUBMODULES = {
   "activity",
   "assay",
+  "cellline",
   "common",
   "document",
   "target",
@@ -36,6 +37,7 @@ def _load_submodule(name: str) -> Any:
 __all__ = [
   "activity",
   "assay",
+  "cellline",
   "common",
   "document",
   "target",
