@@ -74,3 +74,19 @@ def test_transform__missing_identifier_columns_raises_key_error():
     message = str(exc.value)
     assert "uniprot_id_primary" in message
     assert "target_chembl_id" in message
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "out.csv",
+        "out_chembl.csv",
+        "out_normalized.csv",
+        "out_uniprot.csv",
+    ],
+)
+def test_matches_expected_input_name__supports_modern_exports(filename: str) -> None:
+    """Modern ``out*.csv`` exports are accepted for isoform processing."""
+
+    assert isoform._matches_expected_input_name(filename)
