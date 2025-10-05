@@ -100,6 +100,25 @@ def _latest_target_file(search_dir: Path) -> Path:
     return candidates[-1]
 
 
+def _normalise_column_name(name: str) -> str:
+    """Return ``name`` stripped of whitespace and UTF-8 BOM markers."""
+
+    if isinstance(name, str):
+        # ``str.strip`` alone does not remove the BOM prefix, therefore we
+        # explicitly lstrip it before trimming whitespace.  The helper keeps the
+        # original casing because downstream code relies on exact header names.
+        return name.lstrip("\ufeff").strip()
+    return name
+
+
+def _normalise_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Return ``df`` with consistently normalised column headers."""
+
+    if not df.columns.empty:
+        df = df.rename(columns=_normalise_column_name)
+    return df
+
+
 def _ensure_required_columns(df: pd.DataFrame) -> None:
     missing = [column for column in _REQUIRED_COLUMNS if column not in df.columns]
     if missing:
@@ -238,6 +257,7 @@ def process_iuphar_targets(
         output_path = Path(output_csv)
 
     df = read_csv_with_fallbacks(input_path)
+    df = _normalise_columns(df)
     _ensure_required_columns(df)
     df = _ensure_optional_columns(df)
 
