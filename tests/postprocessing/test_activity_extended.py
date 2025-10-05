@@ -16,6 +16,7 @@ from library.postprocessing.activity_extended import (
     _apply_multimol_logic,
     _derive_output_path,
     _latest_activity_export,
+    _load_document_lookup,
     _load_citation_fraction,
     _load_target_metadata,
     _prepare_unknown_chirality,
@@ -81,6 +82,45 @@ def activity_resources(snapshot_resource: Path) -> Path:
 def _copytree(src: Path, dst: Path) -> Path:
     shutil.copytree(src, dst)
     return dst
+
+
+def test_load_document_lookup__renames_legacy_identifier(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    dictionary_root = tmp_path
+    document_dir = dictionary_root / "_document"
+    document_dir.mkdir(parents=True)
+
+    frame = pd.DataFrame(
+        {
+            "ChEMBL.document_chembl_id": pd.Series(["DOC-1", "DOC-2"], dtype="string"),
+            "completed": pd.Series(["yes", "no"], dtype="string"),
+        }
+    )
+    frame.to_csv(document_dir / "document.csv", index=False, sep="\t", encoding="cp1252")
+
+    with caplog.at_level("WARNING"):
+        lookup = _load_document_lookup(dictionary_root)
+
+    assert lookup.columns.tolist() == ["document_chembl_id", "completed", "review"]
+    assert lookup["document_chembl_id"].tolist() == ["DOC-1", "DOC-2"]
+    assert lookup["review"].isna().all()
+    assert "Renamed document identifier column" in caplog.text
+
+
+def test_load_document_lookup__missing_identifier_reports_available_columns(tmp_path: Path) -> None:
+    dictionary_root = tmp_path
+    document_dir = dictionary_root / "_document"
+    document_dir.mkdir(parents=True)
+
+    pd.DataFrame({"identifier": ["DOC-1"]}).to_csv(
+        document_dir / "document.csv", index=False, sep=",", encoding="utf-8"
+    )
+
+    with pytest.raises(ActivityExtendedError) as excinfo:
+        _load_document_lookup(dictionary_root)
+
+    message = str(excinfo.value)
+    assert "identifier" in message
+    assert "available columns" in message
 
 
 def test_augment_activity_frame__fills_existing_blanks() -> None:

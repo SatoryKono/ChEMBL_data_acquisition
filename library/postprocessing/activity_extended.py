@@ -340,17 +340,47 @@ def _load_document_lookup(dictionary_root: Path) -> pd.DataFrame:
         )
 
     frame: pd.DataFrame | None = None
+    missing_errors: list[str] = []
     for sep in (",", "\t"):
         try:
             candidate_frame = helpers.read_csv_with_fallbacks(candidate, sep=sep)
-        except Exception:
+        except Exception as exc:
+            missing_errors.append(f"sep='{sep}': {exc!s}")
             continue
+
+        resolved_columns: dict[str, str] = {}
+        for column in candidate_frame.columns:
+            normalised = column.strip().lower()
+            if normalised == "document_chembl_id":
+                resolved_columns[column] = "document_chembl_id"
+            elif normalised in {"chembl.document_chembl_id", "chembl.document chembl id"}:
+                resolved_columns[column] = "document_chembl_id"
+
+        if resolved_columns:
+            candidate_frame = candidate_frame.rename(columns=resolved_columns)
+            alias_source = [src for src, dst in resolved_columns.items() if dst == "document_chembl_id" and src != dst]
+            if alias_source:
+                logger.warning(
+                    "Renamed document identifier column(s) %s to 'document_chembl_id'. "
+                    "Update the dictionary export to align with the expected schema.",
+                    alias_source,
+                )
+
         if "document_chembl_id" in candidate_frame.columns:
             frame = candidate_frame
             break
+
+        missing_errors.append(
+            "sep='{}': available columns -> {}".format(
+                sep, ", ".join(candidate_frame.columns) or "<none>"
+            )
+        )
+
     if frame is None:
+        detail = "; ".join(missing_errors)
         raise ActivityExtendedError(
             "document.csv missing required 'document_chembl_id' column; unable to join document metadata"
+            + (f". {detail}" if detail else "")
         )
 
     columns = ["document_chembl_id", "completed", "review"]
