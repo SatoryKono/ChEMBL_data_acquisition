@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
+from types import SimpleNamespace
+
 import pytest
 
 from library.config import Config
@@ -434,4 +436,36 @@ def test_postprocess_target_exports__skips_for_uniprot_suffix(
         "info",
         "target_postprocess_skipped",
         {"path": str(source), "reason": "unsupported_export_name"},
+    ) in logger_stub.events
+
+
+def test_postprocess_iuphar_export__missing_columns_logs_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, logger_stub: _MemoryLogger
+) -> None:
+    source = tmp_path / "output.target_20250101.csv"
+    source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    class _StubError(RuntimeError):
+        pass
+
+    def _raise_error(*_: object, **__: object) -> None:
+        raise _StubError("Input CSV is missing required columns: foo")
+
+    monkeypatch.setattr(get_target_data, "_IUPHAR_IMPORT_ERROR", None)
+    monkeypatch.setattr(
+        get_target_data,
+        "iuphar_pp",
+        SimpleNamespace(
+            process_iuphar_targets=_raise_error,
+            IUPHARPostProcessingError=_StubError,
+        ),
+    )
+
+    result = get_target_data._postprocess_iuphar_export(source)
+
+    assert result is None
+    assert (
+        "warning",
+        "target_iuphar_postprocess_missing_columns",
+        {"path": str(source), "error": "Input CSV is missing required columns: foo"},
     ) in logger_stub.events
