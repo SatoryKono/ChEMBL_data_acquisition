@@ -1,0 +1,500 @@
+"""Activity post-processing mirroring the legacy Power Query workbook.
+
+The historical ChEMBL acquisition pipeline relied on an Excel workbook that
+merged activity measurements with dictionary tables describing citation
+significance and target metadata.  The workbook emitted
+``extended.output.activity_<stamp>.csv`` files combining boolean flags,
+taxonomic annotations, and lookup-driven enrichments.  This module is the
+Python port of that workflow.  It reproduces every transformation step so that
+the resulting CSVs remain byte-identical with the legacy exports.
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+from typing import Mapping, Sequence
+
+import pandas as pd
+
+from library.common.log import logger
+from library.pipelines.target import organism_classification
+
+from . import helpers
+
+_DEFAULT_SEARCH_DIR = Path("data/output")
+_DEFAULT_DICTIONARY_DIR = Path("config/dictionary")
+_FILENAME_RE = re.compile(r"output\.activity_\d{8}\.csv\Z")
+
+_REQUIRED_COLUMNS: frozenset[str] = frozenset(
+    {
+        "activity_chembl_id",
+        "salt_chembl_id",
+        "molecule_chembl_id",
+        "target_chembl_id",
+        "assay_chembl_id",
+        "document_chembl_id",
+        "bao_endpoint",
+        "standard_type",
+        "standard_value",
+        "log_value",
+        "bao_format",
+        "compound_key",
+        "compound_name",
+        "multmol_assay",
+        "approx_cited_activity",
+        "shuffled_cit",
+        "exact_cited_activity",
+        "higly_correlated_cit",
+        "review_doc",
+        "rounded_data_citation",
+        "original_activity_approx",
+        "original_activity_exact",
+        "nstereo",
+    }
+)
+
+_GROUP_KEY_COLUMNS: tuple[str, ...] = (
+    "salt_chembl_id",
+    "molecule_chembl_id",
+    "target_chembl_id",
+    "assay_chembl_id",
+    "standard_type",
+)
+
+_FINAL_COLUMN_ORDER: tuple[str, ...] = (
+    "activity_chembl_id",
+    "saltform_id",
+    "molecule_chembl_id",
+    "target_chembl_id",
+    "assay_chembl_id",
+    "document_chembl_id",
+    "bao_endpoint",
+    "standard_type",
+    "standard_value",
+    "pA_value",
+    "bao_format",
+    "compound_key",
+    "compound_name",
+    "unknown_chirality",
+    "multmol_assay",
+    "exact_data_citation",
+    "higly_correlated_assay",
+    "shuffled_assay",
+    "review",
+    "rounded_data_citation",
+    "high_citation_rate",
+    "original_activity_approx",
+    "original_activity_exact",
+    "is_citation",
+    "IUPHAR_class",
+    "IUPHAR_subclass",
+    "unicellular_organism",
+    "multifunctional_enzyme",
+    "gene_index",
+    "taxon_index",
+    "target_sort_order",
+)
+
+_TARGET_COLUMNS: Sequence[str] = (
+    "target_chembl_id",
+    "target_sort_order",
+    "multifunctional_enzyme",
+    "IUPHAR_class",
+    "IUPHAR_subclass",
+    "genus",
+    "superkingdom",
+    "phylum",
+    "taxon_id",
+    "gene_index",
+    "taxon_index",
+)
+
+
+class ActivityExtendedError(RuntimeError):
+    """Raised when the activity extended post-processing cannot proceed."""
+
+
+def _current_default_search_dir() -> Path:
+    package = sys.modules.get(__name__)
+    if package is not None and hasattr(package, "_DEFAULT_SEARCH_DIR"):
+        override = getattr(package, "_DEFAULT_SEARCH_DIR")
+        if override is not None:
+            return Path(override)
+    return _DEFAULT_SEARCH_DIR
+
+
+def _matches_activity_filename(name: str) -> bool:
+    return bool(_FILENAME_RE.match(name))
+
+
+def _latest_activity_export(search_dir: Path) -> Path:
+    candidates = sorted(
+        (path for path in search_dir.iterdir() if path.is_file() and _matches_activity_filename(path.name)),
+        key=lambda item: item.name,
+    )
+    if not candidates:
+        raise ActivityExtendedError(
+            f"No activity exports matching 'output.activity_YYYYMMDD.csv' found in {search_dir!s}"
+        )
+    return candidates[-1]
+
+
+def _resolve_dictionary_root(dictionary_dir: Path | None) -> Path:
+    if dictionary_dir is None:
+        return _DEFAULT_DICTIONARY_DIR
+    return Path(dictionary_dir)
+
+
+def _load_citation_fraction(dictionary_root: Path) -> pd.DataFrame:
+    candidate = dictionary_root / "_activity" / "citation_fraction.csv"
+    if not candidate.exists():
+        raise ActivityExtendedError(
+            "citation_fraction.csv not found; expected at "
+            f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
+        )
+    return pd.read_csv(candidate, dtype={"N": "Int64", "K_min_significant": "Int64"})
+
+
+def _resolve_targets_path(dictionary_root: Path, override: Path | None) -> Path:
+    if override is not None:
+        path = Path(override)
+        if not path.exists():
+            raise ActivityExtendedError(f"targets_type.csv override not found: {path!s}")
+        return path
+
+    candidates = [
+        dictionary_root / "targets_type.csv",
+        dictionary_root / "_target" / "targets_type.csv",
+        dictionary_root / "_Target" / "targets_type.csv",
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    formatted = " or ".join(f"'{path}'" for path in candidates[:-1]) + f" or '{candidates[-1]}'"
+    raise ActivityExtendedError(
+        "targets_type.csv not found in the provided dictionary directory. Expected at "
+        + formatted
+    )
+
+
+def _load_target_metadata(path: Path) -> pd.DataFrame:
+    dtype: Mapping[str, str] = {
+        "target_chembl_id": "string",
+        "IUPHAR_class": "string",
+        "IUPHAR_subclass": "string",
+        "gene_index": "string",
+        "taxon_index": "string",
+        "target_sort_order": "string",
+        "multifunctional_enzyme": "string",
+        "genus": "string",
+        "superkingdom": "string",
+        "phylum": "string",
+        "taxon_id": "string",
+    }
+    return pd.read_csv(path, usecols=_TARGET_COLUMNS, dtype=dtype)
+
+
+def _safe_to_bool(series: pd.Series, column: str) -> pd.Series:
+    if not isinstance(series, pd.Series):
+        raise ActivityExtendedError(f"column '{column}' has duplicate entries; expected a Series")
+
+    def mapper(value: object) -> object:
+        if pd.isna(value):
+            return pd.NA
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+        else:
+            lowered = value
+        if lowered in (True, 1, "1", "true", "t"):
+            return True
+        if lowered in (False, 0, "0", "false", "f"):
+            return False
+        raise ValueError(f"invalid boolean value: {value}")
+
+    try:
+        mapped = series.map(mapper)
+        return mapped.astype("boolean")
+    except Exception as exc:  # pragma: no cover - defensive downgrade
+        logger.warning("dtype_bool_conversion_failed", column=column, error=str(exc))
+        return series.astype("string")
+
+
+def _safe_to_int(series: pd.Series, column: str) -> pd.Series:
+    if not isinstance(series, pd.Series):
+        raise ActivityExtendedError(f"column '{column}' has duplicate entries; expected a Series")
+    try:
+        return pd.to_numeric(series, errors="raise").astype("Int64")
+    except Exception as exc:  # pragma: no cover - defensive downgrade
+        logger.warning("dtype_int_conversion_failed", column=column, error=str(exc))
+        return series.astype("string")
+
+
+def _prepare_unknown_chirality(frame: pd.DataFrame) -> pd.DataFrame:
+    df = frame.copy()
+    if "nstereo" in df.columns:
+        df["unknown_chirality"] = _safe_to_int(df["nstereo"], "nstereo").ne(1).fillna(True)
+        df.drop(columns=["nstereo"], inplace=True)
+    else:
+        df["unknown_chirality"] = pd.Series(True, index=df.index, dtype="boolean")
+    return df
+
+
+def _apply_multimol_logic(df: pd.DataFrame) -> pd.DataFrame:
+    missing = set(_GROUP_KEY_COLUMNS) - set(df.columns)
+    if missing:
+        raise ActivityExtendedError(
+            "activity table missing columns for multimol grouping: " + ", ".join(sorted(missing))
+        )
+    counts = (
+        df.groupby(list(_GROUP_KEY_COLUMNS), dropna=False)
+        .size()
+        .rename("Count")
+        .reset_index()
+    )
+    merged = df.merge(counts, on=list(_GROUP_KEY_COLUMNS), how="left")
+    mask = (
+        merged["unknown_chirality"].fillna(True).eq(False)
+        & merged["multmol_assay"].isna()
+        & (merged["Count"] > 1)
+    )
+    duplicated_assays = set(merged.loc[mask, "assay_chembl_id"].dropna().astype(str))
+    merged["multimol_assay_same"] = merged["assay_chembl_id"].isin(duplicated_assays)
+
+    multmol_series = _safe_to_bool(merged["multmol_assay"], "multmol_assay").fillna(False)
+    merged["multmol_assay"] = _safe_to_bool(
+        multmol_series | merged["multimol_assay_same"], "multmol_assay"
+    )
+    merged.drop(columns=["multimol_assay_same", "Count"], inplace=True)
+    return merged
+
+
+def _rename_columns(df: pd.DataFrame) -> pd.DataFrame:
+    renamed = df.rename(
+        columns={
+            "salt_chembl_id": "saltform_id",
+            "approx_cited_activity": "rounded_data_citation",
+            "shuffled_cit": "shuffled_assay",
+            "exact_cited_activity": "exact_data_citation",
+            "higly_correlated_cit": "higly_correlated_assay",
+            "review_doc": "review",
+            "log_value": "pA_value",
+        }
+    )
+    return renamed.loc[:, ~renamed.columns.duplicated(keep="last")]
+
+
+def _drop_unused_columns(df: pd.DataFrame) -> pd.DataFrame:
+    drop_cols = [
+        "cited_document",
+        "acts_per_assay_step5",
+        "approx_cited_activity_samedoc",
+        "error_document",
+        "exact_cited_activity_samedoc",
+        "higly_correlated_cit_samedoc",
+        "standard_inchi_skeleton",
+        "standard_inchi_stereo",
+        "step1",
+        "step2",
+        "step3",
+        "step4",
+        "step5",
+        "step6",
+        "survives_main_steps",
+    ]
+    present = [column for column in drop_cols if column in df.columns]
+    return df.drop(columns=present, errors="ignore")
+
+
+def _compute_citation_flags(df: pd.DataFrame) -> pd.DataFrame:
+    bool_columns = [
+        "exact_data_citation",
+        "higly_correlated_assay",
+        "shuffled_assay",
+        "review",
+        "rounded_data_citation",
+    ]
+    converted = df.copy()
+    for column in bool_columns:
+        if column in converted.columns:
+            converted[column] = _safe_to_bool(converted[column], column).fillna(False)
+        else:
+            converted[column] = pd.Series(False, index=converted.index, dtype="boolean")
+    converted["is_citation"] = converted[bool_columns].any(axis=1)
+    return converted
+
+
+def _annotate_high_citation(df: pd.DataFrame, dictionary_root: Path) -> pd.DataFrame:
+    converted = df.copy()
+    counts = (
+        converted.groupby("document_chembl_id")["is_citation"]
+        .agg(n_citation="sum", n_non_citation=lambda s: (~s).sum())
+        .reset_index()
+    )
+    counts["N"] = counts["n_citation"] + counts["n_non_citation"]
+    counts = counts[(counts["n_citation"] > 0) & (counts["n_non_citation"] > 0)]
+
+    citation_fraction = _load_citation_fraction(dictionary_root)
+    counts = counts.merge(
+        citation_fraction[["N", "K_min_significant"]],
+        on="N",
+        how="left",
+    )
+    counts["high_citation_rate"] = counts["K_min_significant"].notna() & (
+        counts["n_citation"] >= counts["K_min_significant"]
+    )
+
+    converted = converted.merge(
+        counts[["document_chembl_id", "high_citation_rate"]],
+        on="document_chembl_id",
+        how="left",
+    )
+    converted["high_citation_rate"] = _safe_to_bool(
+        converted["high_citation_rate"], "high_citation_rate"
+    ).fillna(False)
+    return converted
+
+
+def _merge_target_metadata(
+    df: pd.DataFrame,
+    *,
+    dictionary_root: Path,
+    targets_override: Path | None,
+) -> pd.DataFrame:
+    targets_path = _resolve_targets_path(dictionary_root, targets_override)
+    targets = _load_target_metadata(targets_path)
+    merged = df.merge(targets, on="target_chembl_id", how="left")
+    merged = merged.loc[:, ~merged.columns.duplicated()]
+
+    if "organism_cellularity" not in merged.columns:
+        merged["organism_cellularity"] = pd.Series(dtype="string")
+
+    merged["multifunctional_enzyme"] = _safe_to_bool(
+        merged["multifunctional_enzyme"], "multifunctional_enzyme"
+    )
+
+    enriched = organism_classification.add_cellularity_smart(
+        merged,
+        genus_col="genus",
+        superkingdom_col="superkingdom",
+        phylum_col="phylum",
+        output_col="organism_cellularity",
+    )
+
+    unicellular_labels = {
+        organism_classification.TYPE_UNICELLULAR,
+        organism_classification.TYPE_VIRAL,
+    }
+    enriched["unicellular_organism"] = (
+        enriched["organism_cellularity"].astype("string").isin(unicellular_labels)
+    ).astype("boolean")
+
+    enriched.drop(columns=["genus", "superkingdom", "phylum", "taxon_id", "organism_cellularity"], inplace=True)
+    return enriched
+
+
+def _select_and_cast(df: pd.DataFrame) -> pd.DataFrame:
+    missing = set(_FINAL_COLUMN_ORDER) - set(df.columns)
+    if missing:
+        raise ActivityExtendedError(
+            "activity table missing expected columns: " + ", ".join(sorted(missing))
+        )
+    result = df.loc[:, _FINAL_COLUMN_ORDER].copy()
+    bool_columns = [
+        "unknown_chirality",
+        "multmol_assay",
+        "exact_data_citation",
+        "higly_correlated_assay",
+        "shuffled_assay",
+        "review",
+        "rounded_data_citation",
+        "high_citation_rate",
+        "is_citation",
+        "unicellular_organism",
+        "multifunctional_enzyme",
+    ]
+    for column in bool_columns:
+        if column in result.columns:
+            result[column] = _safe_to_bool(result[column], column)
+    return result
+
+
+def _transform_activity_frame(
+    frame: pd.DataFrame,
+    *,
+    dictionary_root: Path,
+    targets_override: Path | None,
+) -> pd.DataFrame:
+    missing = _REQUIRED_COLUMNS - set(frame.columns)
+    if missing:
+        available = ", ".join(sorted(frame.columns))
+        missing_list = ", ".join(sorted(missing))
+        raise ActivityExtendedError(
+            "Activity export missing required columns: "
+            f"{missing_list}. Available columns: {available}"
+        )
+
+    df = frame.copy()
+    df = _prepare_unknown_chirality(df)
+    df = _apply_multimol_logic(df)
+    df = _rename_columns(df)
+    df = _drop_unused_columns(df)
+    df = _compute_citation_flags(df)
+    df = _annotate_high_citation(df, dictionary_root)
+    df = _merge_target_metadata(df, dictionary_root=dictionary_root, targets_override=targets_override)
+    df = _select_and_cast(df)
+    return df
+
+
+def _derive_output_path(input_path: Path) -> Path:
+    return input_path.with_name(f"extended.{input_path.name}")
+
+
+def process_activity_extended(
+    search_dir: Path | str | None = None,
+    *,
+    dictionary_dir: Path | str | None = None,
+    targets_csv: Path | str | None = None,
+) -> Path:
+    """Create the extended activity export mirroring the Power Query workflow.
+
+    Parameters
+    ----------
+    search_dir:
+        Directory containing ``output.activity_<stamp>.csv`` exports.  When
+        omitted, ``data/output`` is scanned.
+    dictionary_dir:
+        Root directory with bundled dictionary CSVs.  Defaults to
+        ``config/dictionary``.
+    targets_csv:
+        Optional explicit path to ``targets_type.csv`` overriding the dictionary
+        lookup.
+
+    Returns
+    -------
+    pathlib.Path
+        Path to the generated ``extended.output.activity_<stamp>.csv`` file.
+    """
+
+    resolved_search_dir = Path(search_dir) if search_dir is not None else _current_default_search_dir()
+    if not resolved_search_dir.exists():
+        raise ActivityExtendedError(f"Search directory does not exist: {resolved_search_dir!s}")
+
+    input_path = _latest_activity_export(resolved_search_dir)
+    dictionary_root = _resolve_dictionary_root(Path(dictionary_dir) if dictionary_dir is not None else None)
+
+    frame = helpers.read_csv_with_fallbacks(input_path)
+    processed = _transform_activity_frame(
+        frame,
+        dictionary_root=dictionary_root,
+        targets_override=Path(targets_csv) if targets_csv is not None else None,
+    )
+
+    output_path = _derive_output_path(input_path)
+    helpers.write_csv(processed, output_path, columns=_FINAL_COLUMN_ORDER)
+    return output_path
+
+
+__all__ = ["process_activity_extended", "ActivityExtendedError"]
+
