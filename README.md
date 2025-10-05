@@ -95,6 +95,11 @@ languages:
   [`docs/ru/README.md`](./docs/ru/README.md)
 - Usage and CLI reference: [`docs/en/USAGE.md`](./docs/en/USAGE.md),
   [`docs/ru/USAGE.md`](./docs/ru/USAGE.md)
+- Guides (advanced usage, debugging, FAQ):
+  [`docs/en/guides/ADVANCED_SCENARIOS.md`](./docs/en/guides/ADVANCED_SCENARIOS.md),
+  [`docs/en/guides/DEBUGGING.md`](./docs/en/guides/DEBUGGING.md),
+  [`docs/en/guides/FAQ.md`](./docs/en/guides/FAQ.md) and their Russian twins under
+  `docs/ru/guides/`
 - Configuration guide: [`docs/en/CONFIG.md`](./docs/en/CONFIG.md),
   [`docs/ru/CONFIG.md`](./docs/ru/CONFIG.md)
 - Output specification and validation rules:

@@ -84,6 +84,11 @@ python scripts/get_data.py \
   [`docs/en/README.md`](./docs/en/README.md)
 - Использование и CLI: [`docs/ru/USAGE.md`](./docs/ru/USAGE.md),
   [`docs/en/USAGE.md`](./docs/en/USAGE.md)
+- Руководства (расширенные сценарии, отладка, FAQ):
+  [`docs/ru/guides/ADVANCED_SCENARIOS.md`](./docs/ru/guides/ADVANCED_SCENARIOS.md),
+  [`docs/ru/guides/DEBUGGING.md`](./docs/ru/guides/DEBUGGING.md),
+  [`docs/ru/guides/FAQ.md`](./docs/ru/guides/FAQ.md) и зеркальные английские версии в
+  `docs/en/guides/`
 - Конфигурация: [`docs/ru/CONFIG.md`](./docs/ru/CONFIG.md),
   [`docs/en/CONFIG.md`](./docs/en/CONFIG.md)
 - Спецификация выходных данных и правила валидации:

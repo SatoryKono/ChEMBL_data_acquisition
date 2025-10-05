@@ -22,6 +22,7 @@
 - [Быстрый старт](./guides/QUICK_START.md)
 - [Отладка и диагностика](./guides/DEBUGGING.md)
 - [Расширенные сценарии](./guides/ADVANCED_SCENARIOS.md)
+- [FAQ и диагностика](./guides/FAQ.md)
 
 ## Справочники
 - [Таблицы конфигурации](./CONFIG.md)
