@@ -7,7 +7,8 @@ flowchart LR
         A2[get-target-data]
         A3[get-assay-data]
         A4[get-testitem-data]
-        A5[get-activity-data]
+        A5[get-tissue-data]
+        A6[get-activity-data]
         A0[get-data orchestrator]
     end
     subgraph Library
@@ -21,8 +22,8 @@ flowchart LR
         C2[config/dictionary]
     end
 
-    A0 --> A1 & A2 & A3 & A4 & A5
-    A1 & A2 & A3 & A4 & A5 --> B2
+    A0 --> A1 & A2 & A3 & A4 & A5 & A6
+    A1 & A2 & A3 & A4 & A5 & A6 --> B2
     B2 --> B1
     B2 --> B3
     B2 --> B4
@@ -37,12 +38,26 @@ then invokes each CLI module in order. Pipelines import reusable components from
 - `library/clients` — HTTP clients with retry and throttling logic for ChEMBL,
   UniProt, PubMed, OpenAlex, CrossRef, PubChem.
 - `library/pipelines` — Fetching, transformation and export logic for each
-  entity. Subpackages (`document`, `target`, `assay`, `testitem`, `activity`)
-  expose orchestration primitives reused by the scripts.
+  entity. Subpackages (`document`, `target`, `assay`, `testitem`, `tissue`,
+  `activity`) expose orchestration primitives reused by the scripts.
 - `library/utils` — CLI helpers, deterministic CSV I/O, configuration loaders,
   logging bootstrap and file system utilities.
 - `library/qa` & `library/table_quality.py` — Schema validation, quality
   profiling and metadata writers.
+
+## Data extraction pipelines
+
+| Pipeline | CLI entry | Primary sources | Outputs |
+|----------|-----------|-----------------|---------|
+| Document | `scripts/get_document_data.py` | ChEMBL `/document`, PubMed E-utilities, OpenAlex, CrossRef, Semantic Scholar. | `output.documents_<stamp>.csv` plus metadata sidecars. |
+| Target | `scripts/get_target_data.py` | ChEMBL `/target`, UniProt, Guide to PHARMACOLOGY, cached dictionaries. | `output.targets_<stamp>.csv` and helper lookups (`organism`, `isoform`, `names`, `IUPHAR`). |
+| Assay | `scripts/get_assay_data.py` | ChEMBL `/assay`. | `output.assays_<stamp>.csv` with QA artefacts. |
+| Test item | `scripts/get_testitem_data.py` | ChEMBL `/molecule`, PubChem PUG-REST. | `output.testitems_<stamp>.csv` and metadata. |
+| Tissue | `scripts/get_tissue_data.py` | ChEMBL `/tissue`, ontology caches (UBERON, EFO, BTO, Caloha, LINCS, CCLE). | `output.tissue_<stamp>.csv` plus quality reports and metadata. |
+| Activity | `scripts/get_activity_data.py` | ChEMBL `/activity`. | `output.activities_<stamp>.csv` with enrichment columns. |
+
+The orchestrator runs these modules sequentially unless specific stages are
+skipped via CLI flags.
 
 External services are accessed via token-bucket rate limiters configured by
 `sources.*` blocks. All network calls are wrapped with retry logic defined in
