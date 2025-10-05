@@ -661,13 +661,14 @@ def _derive_output_path(input_path: Path) -> Path:
     while candidate.startswith("extended."):
         candidate = candidate[len("extended.") :]
 
-    match = _FILENAME_RE.match(candidate)
-    if match is not None:
-        stamp = match.group(1)
+    normalised = _normalised_activity_basename(Path(candidate))
+    if normalised is not None:
+        stamp, _ = normalised
         final_name = f"extended.output.activity_{stamp}.csv"
     else:
         logger.warning("activity_extended_unexpected_basename", basename=base_name)
-        final_name = f"extended.{candidate}"
+        normalised_candidate = helpers.normalise_export_basename(Path(candidate))
+        final_name = f"extended.{normalised_candidate}"
 
     return input_path.with_name(final_name)
 

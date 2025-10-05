@@ -144,11 +144,28 @@ def test_latest_activity_export__handles_hidden_temporary_file(tmp_path: Path) -
 
 
 def test_derive_output_path__normalises_plural_basename(tmp_path: Path) -> None:
-    source = tmp_path / "extended.output.activities_20240101.csv"
+    source = tmp_path / ".output.activities_20240101.csv.tmp"
 
     derived = _derive_output_path(source)
 
-    assert derived.name == "extended.output.activity_20240101.csv"
+    assert derived == source.with_name("extended.output.activity_20240101.csv")
+
+
+@pytest.mark.parametrize(
+    "source_name",
+    [
+        "extended.output.activity_20240101.csv",
+        "extended.extended.output.activity_20240101.csv.tmp",
+    ],
+)
+def test_derive_output_path__deduplicates_extended_prefix(
+    tmp_path: Path, source_name: str
+) -> None:
+    source = tmp_path / source_name
+
+    derived = _derive_output_path(source)
+
+    assert derived == source.with_name("extended.output.activity_20240101.csv")
 
 
 def test_derive_output_path__prefixes_custom_exports(tmp_path: Path) -> None:
