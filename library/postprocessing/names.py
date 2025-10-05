@@ -407,9 +407,9 @@ def process_target_names(
     result = pd.DataFrame(rows, columns=_OUTPUT_COLUMNS)
     result = result.fillna("")
     if not result.empty:
-        result = result.sort_values(
-            by=["target_chembl_id", "molecule_chembl_id", "all_names"],
-            kind="mergesort",
+        result = helpers.stable_sort(
+            result,
+            ["target_chembl_id", "molecule_chembl_id", "all_names"],
         )
     base = normalise_export_basename(path)
     output_path = path.with_name(f"name.{base}").with_suffix(".csv")

@@ -83,6 +83,41 @@ _REQUIRED_COLUMN_DTYPES: Mapping[str, str] = {
     "nstereo": "Int64",
 }
 
+_NA_MARKERS: tuple[str, ...] = ("[#N/A]",)
+
+_ACTIVITY_INPUT_SCHEMA: Mapping[str, str] = {
+    column: (
+        "Logical"
+        if dtype == "boolean"
+        else "Int64"
+        if dtype == "Int64"
+        else "Float64"
+        if dtype == "Float64"
+        else "Text"
+    )
+    for column, dtype in _REQUIRED_COLUMN_DTYPES.items()
+    if dtype in {"string", "boolean", "Int64", "Float64"}
+}
+
+_TARGET_METADATA_SCHEMA: Mapping[str, str] = {
+    "target_chembl_id": "Text",
+    "target_sort_order": "Text",
+    "multifunctional_enzyme": "Logical",
+    "IUPHAR_class": "Text",
+    "IUPHAR_subclass": "Text",
+    "genus": "Text",
+    "superkingdom": "Text",
+    "phylum": "Text",
+    "taxon_id": "Int64",
+    "gene_index": "Text",
+    "taxon_index": "Text",
+}
+
+_CITATION_FRACTION_SCHEMA: Mapping[str, str] = {
+    "N": "Int64",
+    "K_min_significant": "Int64",
+}
+
 _REQUIRED_COLUMN_FALLBACKS: Mapping[str, Callable[[pd.DataFrame], pd.Series | None]] = {
     "activity_chembl_id": lambda frame: frame.get("activity_id"),
     "salt_chembl_id": (
@@ -100,6 +135,24 @@ _GROUP_KEY_COLUMNS: tuple[str, ...] = (
     "target_chembl_id",
     "assay_chembl_id",
     "standard_type",
+)
+
+_DEDUPE_SORT_ORDER: tuple[str, ...] = (
+    "completed",
+    "activity_id",
+    "activity_chembl_id",
+    "assay_chembl_id",
+    "document_chembl_id",
+    "standard_type",
+    "standard_value",
+)
+
+_DEDUPE_SUBSET_KEYS: tuple[str, ...] = (
+    "activity_id",
+    "assay_chembl_id",
+    "document_chembl_id",
+    "standard_type",
+    "standard_value",
 )
 
 _FINAL_COLUMN_ORDER: tuple[str, ...] = (
@@ -212,7 +265,12 @@ def _load_citation_fraction(dictionary_root: Path) -> pd.DataFrame:
             "citation_fraction.csv not found; expected at "
             f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
         )
-    return pd.read_csv(candidate, dtype={"N": "Int64", "K_min_significant": "Int64"})
+    return helpers.read_csv_strict(
+        candidate,
+        encoding=helpers.ENCODING_FALLBACKS,
+        dtype_map=_CITATION_FRACTION_SCHEMA,
+        na_values=_NA_MARKERS,
+    )
 
 
 def _resolve_targets_path(dictionary_root: Path, override: Path | None) -> Path:
@@ -238,20 +296,18 @@ def _resolve_targets_path(dictionary_root: Path, override: Path | None) -> Path:
 
 
 def _load_target_metadata(path: Path) -> pd.DataFrame:
-    dtype: Mapping[str, str] = {
-        "target_chembl_id": "string",
-        "IUPHAR_class": "string",
-        "IUPHAR_subclass": "string",
-        "gene_index": "string",
-        "taxon_index": "string",
-        "target_sort_order": "string",
-        "multifunctional_enzyme": "string",
-        "genus": "string",
-        "superkingdom": "string",
-        "phylum": "string",
-        "taxon_id": "string",
-    }
-    return pd.read_csv(path, usecols=_TARGET_COLUMNS, dtype=dtype)
+    frame = helpers.read_csv_strict(
+        path,
+        encoding=helpers.ENCODING_FALLBACKS,
+        dtype_map=_TARGET_METADATA_SCHEMA,
+        na_values=_NA_MARKERS,
+    )
+    missing = [column for column in _TARGET_COLUMNS if column not in frame.columns]
+    if missing:
+        raise ActivityExtendedError(
+            "targets_type.csv missing expected columns: " + ", ".join(sorted(missing))
+        )
+    return frame.loc[:, list(_TARGET_COLUMNS)]
 
 
 def _load_document_lookup(dictionary_root: Path) -> pd.DataFrame:
@@ -408,12 +464,14 @@ def _apply_multimol_logic(df: pd.DataFrame) -> pd.DataFrame:
         raise ActivityExtendedError(
             "activity table missing columns for multimol grouping: " + ", ".join(sorted(missing))
         )
+    df = helpers.sort_power_query(df, _GROUP_KEY_COLUMNS)
     counts = (
         df.groupby(list(_GROUP_KEY_COLUMNS), dropna=False)
         .size()
         .rename("Count")
         .reset_index()
     )
+    counts = helpers.sort_power_query(counts, _GROUP_KEY_COLUMNS)
     merged = df.merge(counts, on=list(_GROUP_KEY_COLUMNS), how="left")
     mask = (
         merged["unknown_chirality"].fillna(True).eq(False)
@@ -525,7 +583,7 @@ def _compute_citation_flags(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _annotate_high_citation(df: pd.DataFrame, dictionary_root: Path) -> pd.DataFrame:
-    converted = df.copy()
+    converted = helpers.sort_power_query(df, ("document_chembl_id", "activity_chembl_id"))
     counts = (
         converted.groupby("document_chembl_id")["is_citation"]
         .agg(n_citation="sum", n_non_citation=lambda s: (~s).sum())
@@ -535,6 +593,7 @@ def _annotate_high_citation(df: pd.DataFrame, dictionary_root: Path) -> pd.DataF
     counts = counts[(counts["n_citation"] > 0) & (counts["n_non_citation"] > 0)]
 
     citation_fraction = _load_citation_fraction(dictionary_root)
+    counts = helpers.sort_power_query(counts, ("document_chembl_id",))
     counts = counts.merge(
         citation_fraction[["N", "K_min_significant"]],
         on="N",
@@ -654,8 +713,12 @@ def _merge_target_metadata(
 ) -> pd.DataFrame:
     targets_path = _resolve_targets_path(dictionary_root, targets_override)
     targets = _load_target_metadata(targets_path)
+    df = helpers.sort_power_query(df, ("target_chembl_id", "assay_chembl_id"))
+    targets = helpers.sort_power_query(targets, ("target_chembl_id",))
     merged = df.merge(targets, on="target_chembl_id", how="left")
     merged = merged.loc[:, ~merged.columns.duplicated()]
+
+    merged = helpers.coerce_types(merged, _TARGET_METADATA_SCHEMA)
 
     if "organism_cellularity" not in merged.columns:
         merged["organism_cellularity"] = pd.Series(dtype="string")
@@ -707,7 +770,66 @@ def _select_and_cast(df: pd.DataFrame) -> pd.DataFrame:
     for column in bool_columns:
         if column in result.columns:
             result[column] = _safe_to_bool(result[column], column)
+
+    def _format_numeric(value: object) -> object:
+        if pd.isna(value):
+            return pd.NA
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return value
+        if float(numeric).is_integer():
+            return f"{numeric:.1f}"
+        text = str(numeric)
+        return text.rstrip("0").rstrip(".") if "." in text else text
+
+    for column in ("standard_value", "pA_value"):
+        if column in result.columns:
+            result[column] = result[column].map(_format_numeric).astype("string")
     return result
+
+
+def dedupe_final(df: pd.DataFrame) -> pd.DataFrame:
+    """Return ``df`` sorted and deduplicated using Power Query key rules."""
+
+    if df.empty:
+        logger.info("activity_extended_deduplicated", removed=0, remaining=0)
+        return df.copy()
+
+    sort_candidates: list[str] = []
+    for column in _DEDUPE_SORT_ORDER:
+        if column == "activity_id":
+            options = ("activity_id", "activity_chembl_id")
+        else:
+            options = (column,)
+        for option in options:
+            if option in df.columns and option not in sort_candidates:
+                sort_candidates.append(option)
+                break
+
+    sorted_df = helpers.sort_power_query(df, sort_candidates) if sort_candidates else df.copy()
+
+    subset: list[str] = []
+    missing: list[str] = []
+    for column in _DEDUPE_SUBSET_KEYS:
+        options = ("activity_id", "activity_chembl_id") if column == "activity_id" else (column,)
+        selected = next((candidate for candidate in options if candidate in sorted_df.columns), None)
+        if selected is None:
+            missing.append(column)
+        else:
+            if selected not in subset:
+                subset.append(selected)
+
+    if missing:
+        raise ActivityExtendedError(
+            "activity table missing columns required for deduplication: "
+            + ", ".join(sorted(missing))
+        )
+
+    deduped = sorted_df.drop_duplicates(subset=subset, keep="first").reset_index(drop=True)
+    removed = int(len(sorted_df) - len(deduped))
+    logger.info("activity_extended_deduplicated", removed=removed, remaining=len(deduped))
+    return deduped
 
 
 def _string_missing_mask(series: pd.Series) -> pd.Series:
@@ -995,7 +1117,12 @@ def process_activity_extended(
     input_path = explicit_input or _latest_activity_export(resolved_search_dir)
     dictionary_root = _resolve_dictionary_root(Path(dictionary_dir) if dictionary_dir is not None else None)
 
-    frame = helpers.read_csv_with_fallbacks(input_path)
+    frame = helpers.read_csv_strict(
+        input_path,
+        encoding=helpers.ENCODING_FALLBACKS,
+        dtype_map=_ACTIVITY_INPUT_SCHEMA,
+        na_values=_NA_MARKERS,
+    )
     processed = _transform_activity_frame(
         frame,
         dictionary_root=dictionary_root,
@@ -1020,6 +1147,7 @@ def process_activity_extended(
             non_null=non_null,
             total=len(processed),
         )
+    processed = dedupe_final(processed)
     logger.info("activity_extended_saving", path=str(output_path))
     helpers.write_csv(processed, output_path, columns=_FINAL_COLUMN_ORDER)
     logger.info(
