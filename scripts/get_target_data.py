@@ -607,9 +607,19 @@ def _postprocess_iuphar_export(
         )
         return None
 
+    iuphar_error_type = getattr(iuphar_pp, "IUPHARPostProcessingError", None)
+
     try:
         result = iuphar_pp.process_iuphar_targets(str(source), verbose=verbose)
     except Exception as exc:  # pragma: no cover - defensive logging
+        if iuphar_error_type is not None and isinstance(exc, iuphar_error_type):
+            logger.warning(
+                "target_iuphar_postprocess_missing_columns",
+                path=str(source),
+                error=str(exc),
+            )
+            return None
+
         logger.exception(
             "target_iuphar_postprocess_failed",
             path=str(source),
