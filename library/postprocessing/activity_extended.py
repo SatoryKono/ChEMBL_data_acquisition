@@ -102,6 +102,24 @@ _GROUP_KEY_COLUMNS: tuple[str, ...] = (
     "standard_type",
 )
 
+_DEDUPE_SORT_ORDER: tuple[str, ...] = (
+    "completed",
+    "activity_id",
+    "activity_chembl_id",
+    "assay_chembl_id",
+    "document_chembl_id",
+    "standard_type",
+    "standard_value",
+)
+
+_DEDUPE_SUBSET_KEYS: tuple[str, ...] = (
+    "activity_id",
+    "assay_chembl_id",
+    "document_chembl_id",
+    "standard_type",
+    "standard_value",
+)
+
 _FINAL_COLUMN_ORDER: tuple[str, ...] = (
     "activity_chembl_id",
     "saltform_id",
@@ -301,12 +319,14 @@ def _apply_multimol_logic(df: pd.DataFrame) -> pd.DataFrame:
         raise ActivityExtendedError(
             "activity table missing columns for multimol grouping: " + ", ".join(sorted(missing))
         )
+    df = helpers.sort_power_query(df, _GROUP_KEY_COLUMNS)
     counts = (
         df.groupby(list(_GROUP_KEY_COLUMNS), dropna=False)
         .size()
         .rename("Count")
         .reset_index()
     )
+    counts = helpers.sort_power_query(counts, _GROUP_KEY_COLUMNS)
     merged = df.merge(counts, on=list(_GROUP_KEY_COLUMNS), how="left")
     mask = (
         merged["unknown_chirality"].fillna(True).eq(False)
@@ -419,7 +439,7 @@ def _compute_citation_flags(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _annotate_high_citation(df: pd.DataFrame, dictionary_root: Path) -> pd.DataFrame:
-    converted = df.copy()
+    converted = helpers.sort_power_query(df, ("document_chembl_id", "activity_chembl_id"))
     counts = (
         converted.groupby("document_chembl_id")["is_citation"]
         .agg(n_citation="sum", n_non_citation=lambda s: (~s).sum())
@@ -429,6 +449,7 @@ def _annotate_high_citation(df: pd.DataFrame, dictionary_root: Path) -> pd.DataF
     counts = counts[(counts["n_citation"] > 0) & (counts["n_non_citation"] > 0)]
 
     citation_fraction = _load_citation_fraction(dictionary_root)
+    counts = helpers.sort_power_query(counts, ("document_chembl_id",))
     counts = counts.merge(
         citation_fraction[["N", "K_min_significant"]],
         on="N",
@@ -457,6 +478,8 @@ def _merge_target_metadata(
 ) -> pd.DataFrame:
     targets_path = _resolve_targets_path(dictionary_root, targets_override)
     targets = _load_target_metadata(targets_path)
+    df = helpers.sort_power_query(df, ("target_chembl_id", "assay_chembl_id"))
+    targets = helpers.sort_power_query(targets, ("target_chembl_id",))
     merged = df.merge(targets, on="target_chembl_id", how="left")
     merged = merged.loc[:, ~merged.columns.duplicated()]
 
@@ -511,6 +534,49 @@ def _select_and_cast(df: pd.DataFrame) -> pd.DataFrame:
         if column in result.columns:
             result[column] = _safe_to_bool(result[column], column)
     return result
+
+
+def dedupe_final(df: pd.DataFrame) -> pd.DataFrame:
+    """Return ``df`` sorted and deduplicated using Power Query key rules."""
+
+    if df.empty:
+        logger.info("activity_extended_deduplicated", removed=0, remaining=0)
+        return df.copy()
+
+    sort_candidates: list[str] = []
+    for column in _DEDUPE_SORT_ORDER:
+        if column == "activity_id":
+            options = ("activity_id", "activity_chembl_id")
+        else:
+            options = (column,)
+        for option in options:
+            if option in df.columns and option not in sort_candidates:
+                sort_candidates.append(option)
+                break
+
+    sorted_df = helpers.sort_power_query(df, sort_candidates) if sort_candidates else df.copy()
+
+    subset: list[str] = []
+    missing: list[str] = []
+    for column in _DEDUPE_SUBSET_KEYS:
+        options = ("activity_id", "activity_chembl_id") if column == "activity_id" else (column,)
+        selected = next((candidate for candidate in options if candidate in sorted_df.columns), None)
+        if selected is None:
+            missing.append(column)
+        else:
+            if selected not in subset:
+                subset.append(selected)
+
+    if missing:
+        raise ActivityExtendedError(
+            "activity table missing columns required for deduplication: "
+            + ", ".join(sorted(missing))
+        )
+
+    deduped = sorted_df.drop_duplicates(subset=subset, keep="first").reset_index(drop=True)
+    removed = int(len(sorted_df) - len(deduped))
+    logger.info("activity_extended_deduplicated", removed=removed, remaining=len(deduped))
+    return deduped
 
 
 def _string_missing_mask(series: pd.Series) -> pd.Series:
@@ -820,6 +886,7 @@ def process_activity_extended(
             non_null=non_null,
             total=len(processed),
         )
+    processed = dedupe_final(processed)
     logger.info("activity_extended_saving", path=str(output_path))
     helpers.write_csv(processed, output_path, columns=_FINAL_COLUMN_ORDER)
     logger.info(
