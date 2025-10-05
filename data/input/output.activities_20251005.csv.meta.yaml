@@ -1,4 +1,4 @@
-generated_at: '2025-10-05T21:51:44.725049+00:00'
+generated_at: '2025-10-05T21:54:33.522754+00:00'
 git_sha: UNKNOWN
 command: get_activity_data --input data\input\activity.csv --limit 10
 columns:
@@ -485,5 +485,5 @@ stats:
   rows_total: 10
   rows_kept: 10
   rows_dropped: 0
-  output_sha256: e711f80a605a4084dcb937607540ec021a8f0e162eb77e307301904373f1f398
+  output_sha256: d1f36ffa535349c39ba17e598809f05d1c5e17a374c3bce9e0f913bd311babda
 schema: ActivitiesSchema
