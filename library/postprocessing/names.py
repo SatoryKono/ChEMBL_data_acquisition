@@ -598,7 +598,7 @@ def process_target_names(input_path: str | Path, *, verbose: bool = False) -> di
 
     names_df = _build_names_table(frame)
     base = normalise_export_basename(source_path)
-    output_path = source_path.with_name(f"name.{base}").with_suffix(".csv")
+    output_path = source_path.with_name(f"names.{base}").with_suffix(".csv")
     helpers.write_csv(names_df, output_path, columns=TARGET_NAMES_COLUMNS)
 
     summary: dict[str, Any] = {

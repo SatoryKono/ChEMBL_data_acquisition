@@ -173,7 +173,7 @@ def test_process_target_names__strips_bom_headers(tmp_path: Path) -> None:
     result_info = process_target_names(csv_path)
     output_path = Path(result_info["path"])
 
-    assert output_path.name == "name.output.target_20240101.csv"
+    assert output_path.name == "names.output.target_20240101.csv"
     assert output_path.exists()
     assert result_info["summary"]["rows_after"] == 3
 
