@@ -294,12 +294,19 @@ def _is_supported_target_export(path: Path) -> bool:
         return False
     if stem == "out" or stem.startswith("out_"):
         return False
-    if stem.endswith(NORMALIZED_SUFFIX.lower()) and not target_pp._matches_expected_input_name(
-        export_name
-    ):
+
+    if target_pp._matches_expected_input_name(export_name):
+        return True
+
+    if path.suffix.lower() != ".csv":
         return False
 
-    return target_pp._matches_expected_input_name(export_name)
+    logger.info(
+        "target_postprocess_noncanonical_name",
+        path=str(path),
+        reason="noncanonical_filename",
+    )
+    return True
 
 
 def _postprocess_isoform_export(
