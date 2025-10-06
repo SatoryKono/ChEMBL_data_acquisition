@@ -451,6 +451,22 @@ def get_assays(
                     chunk_frames.extend(_fetch_single(identifier))
             else:
                 raise
+        except requests.RequestException as exc:
+            logger.warning(
+                "chunk_network_retry",
+                extra={
+                    "stage": "chunk_retry",
+                    "chunk_key": chunk_key,
+                    "chunk_size": len(chunk),
+                    "error": exc.__class__.__name__,
+                },
+            )
+            chunk_frames = []
+            for identifier in chunk:
+                try:
+                    chunk_frames.extend(_fetch_single(identifier))
+                except requests.RequestException:
+                    raise
         if chunk_frames:
             records.append(pd.concat(chunk_frames, ignore_index=True))
             logger.info(

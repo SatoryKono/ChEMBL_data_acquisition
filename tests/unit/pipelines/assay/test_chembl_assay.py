@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 import pytest
-from requests import HTTPError, Response
+from requests import HTTPError, ReadTimeout, Response
 
 from library.config import ApiCfg
 from library.pipelines.assay.chembl_assay import get_assays
@@ -27,6 +27,8 @@ class _StubClient:
             raise HTTPError(response=response)
         if isinstance(next_response, dict):
             return next_response
+        if isinstance(next_response, Exception):
+            raise next_response
         raise AssertionError(f"Unexpected responder type: {type(next_response)!r}")
 
 
@@ -91,3 +93,23 @@ def test_get_assays__preserves_data_segment_in_pagination() -> None:
         call.startswith("https://www.ebi.ac.uk/chembl/api/data/assay.json?offset=1")
         for call in client.calls[1:]
     )
+
+
+@pytest.mark.unit
+def test_get_assays__recovers_from_request_exception() -> None:
+    """Network failures fall back to per-ID requests."""
+
+    responders = [
+        ReadTimeout("timeout"),
+        {"assays": [{"assay_chembl_id": "CHEMBL1"}], "page_meta": {}},
+        {"assays": [{"assay_chembl_id": "CHEMBL2"}], "page_meta": {}},
+    ]
+    client = _StubClient(responders)
+    cfg = ApiCfg()
+
+    df = get_assays(["CHEMBL1", "CHEMBL2"], cfg=cfg, client=client, chunk_size=2)
+
+    assert sorted(df["assay_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
+    assert any("assay_chembl_id__in" in call for call in client.calls)
+    assert sum("assay_chembl_id=CHEMBL1" in call for call in client.calls) == 1
+    assert sum("assay_chembl_id=CHEMBL2" in call for call in client.calls) == 1
