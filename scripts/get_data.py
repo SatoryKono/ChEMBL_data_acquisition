@@ -69,6 +69,9 @@ from library.pipelines.document import (
     run_pipeline as run_document_pipeline,
 )
 from library.pipelines.registry import PipelineStep, load_pipeline_registry
+
+from library.reporting.run_manifest import load_output_report, merge_run_output
+
 from library.pipelines.target import (
     TargetPipelineOptions,
     run_pipeline as run_target_pipeline,
@@ -77,6 +80,7 @@ from library.pipelines.testitem import (
     TestitemPipelineOptions,
     run_pipeline as run_testitem_pipeline,
 )
+
 from library.utils.config import DEFAULT_CONFIG_PATH
 
 
@@ -1106,6 +1110,9 @@ def _complete_manifest_entry(
     entry["duration_sec"] = round(time.perf_counter() - started_at, 6)
     entry["output"] = _describe_file(final_output)
     entry["sidecars"] = _describe_sidecars(final_output, working_output)
+    report = load_output_report(final_output)
+    if report is not None:
+        merge_run_output(entry, report)
 
 
 def _pending_manifest_entry(step: PipelineStep, cfg: PipelineRunConfig) -> dict[str, Any]:
