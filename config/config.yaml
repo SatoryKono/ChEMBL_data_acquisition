@@ -115,7 +115,7 @@ sources:
       target:
         uniprot:
           column: "uniprot_id"
-        data_dir: "target_uniprot_cache"
+          data_dir: "target_uniprot_cache"
           limit: null
         chembl:
           column: "target_chembl_id"  # Column containing ChEMBL target identifiers
