@@ -12,7 +12,7 @@ from typing import IO, Iterator
 
 from ..common.logging_setup import LoggerConfig
 
-_DEFAULT_LOG_DIR = Path("logs")
+_DEFAULT_LOG_DIR = Path(__file__).resolve().parents[2] / "data" / "logs"
 
 
 def _current_date_str() -> str:
