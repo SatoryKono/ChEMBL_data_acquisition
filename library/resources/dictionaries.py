@@ -24,12 +24,19 @@ __all__ = [
 _MANIFEST_FILENAME = "manifest.yaml"
 _IGNORED_FILENAMES = {
     "Thumbs.db",
+    "ehthumbs.db",
     "desktop.ini",
     ".DS_Store",
     ".Rhistory",
 }
 
-_IGNORED_DIRNAMES = {"__pycache__"}
+_IGNORED_DIRNAMES = {
+    "__pycache__",
+    ".git",
+    ".hg",
+    ".svn",
+    ".ipynb_checkpoints",
+}
 _IGNORED_SUFFIXES = {".pyc", ".pyo"}
 _SHA256_WILDCARD = "*"
 
@@ -80,7 +87,6 @@ def _compute_sha256(path: Path) -> str:
         # hashes for identical directory contents.  Sorting by the normalised
         # POSIX-style relative path guarantees a deterministic order across all
         # platforms and Python versions.
-        entries: list[tuple[str, Path]] = []
         children = sorted(
             path.rglob("*"),
             key=lambda candidate: candidate.relative_to(path).as_posix(),
@@ -96,7 +102,11 @@ def _compute_sha256(path: Path) -> str:
                 continue
             if child.suffix in _IGNORED_SUFFIXES:
                 continue
-            if child.name in _IGNORED_FILENAMES or child.name.startswith("._"):
+            if (
+                child.name in _IGNORED_FILENAMES
+                or child.name.startswith("._")
+                or child.name.startswith("~$")
+            ):
                 continue
             relative = child.relative_to(path).as_posix()
             entries.append((relative, child))
@@ -186,7 +196,7 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
             relative_path=relative_path,
             path=absolute_path,
             version=version,
-            sha256=sha256_expected[0],
+            sha256=sha256_actual,
             generator=Path(generator),
         )
 
