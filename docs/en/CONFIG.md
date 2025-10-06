@@ -9,7 +9,7 @@ The pipelines load configuration from three layers (lowest precedence first):
 
 Environment variables use the `CHEMBL_DA__SECTION__KEY` pattern, where nested
 keys are joined with double underscores. Short aliases exist for frequently used
-fields (see `_ALIAS_MAP` in `library/config.py`).
+fields (see `_ALIAS_MAP` in `library/config/loader.py`).
 
 ```bash
 # Example: increase the UniProt rate limit during a smoke run

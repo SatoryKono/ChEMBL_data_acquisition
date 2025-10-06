@@ -1,0 +1,72 @@
+"""Runtime helpers for configuration consumers."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from requests import Session
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+from ..common.rate_limiter import configure_limiter_cache
+from .models import ApiCfg, Config, CrossRefCfg, OpenAlexCfg, RetryCfg
+
+
+def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
+    """Return an HTTP session configured for retries and user agent."""
+
+    session = Session()
+    retry_kwargs: dict[str, Any] = {
+        "total": max(0, retry.max_attempts - 1),
+        "backoff_factor": retry.backoff_factor,
+        "status_forcelist": retry.status_forcelist,
+        "allowed_methods": None,
+        "raise_on_status": False,
+    }
+    if retry.backoff_cap is not None:
+        retry_kwargs["backoff_max"] = retry.backoff_cap
+
+    retry_cfg = Retry(**retry_kwargs)
+    adapter = HTTPAdapter(max_retries=retry_cfg)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    session.headers["User-Agent"] = api.user_agent
+    return session
+
+
+def _session_with_mailto_header(api: ApiCfg, retry: RetryCfg, mailto: str) -> Session:
+    session = session_with_retry(api, retry)
+    session.headers["mailto"] = mailto
+    return session
+
+
+def openalex_session(api: ApiCfg, retry: RetryCfg, cfg: OpenAlexCfg) -> Session:
+    """Return a session configured for OpenAlex requests."""
+
+    return _session_with_mailto_header(api, retry, cfg.mailto)
+
+
+def crossref_session(api: ApiCfg, retry: RetryCfg, cfg: CrossRefCfg) -> Session:
+    """Return a session configured for CrossRef requests."""
+
+    return _session_with_mailto_header(api, retry, cfg.mailto)
+
+
+def apply_rate_limiter_settings(cfg: Config) -> None:
+    """Configure rate limiter cache based on configuration settings."""
+
+    configure_limiter_cache(cfg.rate.limiter_cache_maxsize, cfg.rate.limiter_cache_ttl)
+
+
+def ensure_dirs(cfg: Config) -> None:
+    """Create output and cache directories if required."""
+
+    for path in (cfg.io.output_dir, cfg.io.cache_dir):
+        if path.exists():
+            if not path.is_dir():
+                raise NotADirectoryError(f"{path} is not a directory")
+        else:
+            if cfg.io.exist_ok:
+                path.mkdir(parents=True, exist_ok=True)
+            else:
+                raise FileNotFoundError(f"{path} does not exist")

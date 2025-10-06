@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from library.config import _absolutise_path_value
+from library.config.loader import _absolutise_path_value
 
 
 @pytest.mark.unit
