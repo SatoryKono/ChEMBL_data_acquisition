@@ -24,6 +24,7 @@ def test_iter_target_batches_with_retry__shrinks_on_timeout(
         mapping_cfg,
         chunk_size: int = 0,
         timeout: float | None = None,
+        enable_split_fallback: bool = True,
     ):
         ids_list = tuple(ids)
         calls.append((ids_list, chunk_size))
