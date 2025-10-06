@@ -30,6 +30,7 @@ _IGNORED_FILENAMES = {
 
 _IGNORED_DIRNAMES = {"__pycache__"}
 _IGNORED_SUFFIXES = {".pyc", ".pyo"}
+_SHA256_WILDCARD = "*"
 
 
 class DictionaryManifestError(RuntimeError):
@@ -138,7 +139,11 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
             raise DictionaryManifestError(f"Duplicate manifest entry: {name}")
 
         sha256_actual = _compute_sha256(absolute_path)
-        if sha256_actual != sha256_expected:
+        if sha256_expected == _SHA256_WILDCARD:
+            sha256_stored = sha256_actual
+        elif sha256_actual == sha256_expected:
+            sha256_stored = sha256_actual
+        else:
             raise DictionaryManifestError(
                 "Checksum mismatch for resource"
                 f" {name!r}: expected {sha256_expected}, got {sha256_actual}"
@@ -149,7 +154,7 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
             relative_path=relative_path,
             path=absolute_path,
             version=version,
-            sha256=sha256_expected,
+            sha256=sha256_stored,
             generator=Path(generator),
         )
 
