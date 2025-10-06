@@ -64,6 +64,33 @@ def test_compute_sha256__ignores_bytecode_artifacts(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_compute_sha256__ignores_os_metadata_case_insensitively(tmp_path: Path) -> None:
+    """Common OS metadata files must not impact directory checksums."""
+
+    root = tmp_path / "dictionary"
+    root.mkdir()
+    (root / "data.csv").write_text("id\n1\n", encoding="utf-8")
+
+    expected = dictionaries._compute_sha256(root)
+
+    metadata_files = [
+        "Thumbs.db",
+        "thumbs.db",
+        "DESKTOP.INI",
+        "EhThumbs.DB",
+    ]
+    for name in metadata_files:
+        (root / name).write_bytes(b"\x00\x01")
+
+    (root / "MODULE.PYC").write_bytes(b"\x02\x03")
+    pycache = root / "SubDir" / "__PyCache__"
+    pycache.mkdir(parents=True)
+    (pycache / "ignored.pyc").write_bytes(b"\x04\x05")
+
+    assert dictionaries._compute_sha256(root) == expected
+
+
+@pytest.mark.unit
 def test_compute_sha256__normalises_crlf_in_non_utf8_files(tmp_path: Path) -> None:
     """CRLF handling must be deterministic for legacy encodings (e.g. Latin-1)."""
 
