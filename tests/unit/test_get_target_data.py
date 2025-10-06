@@ -333,6 +333,58 @@ def test_run_uniprot__doc_quality_reports(
     )
 
 
+def test_fetch_uniprot__no_candidates_writes_empty_output(
+    cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_csv = tmp_path / "output_uniprot.csv"
+    chembl_df = pd.DataFrame({"target_chembl_id": ["CHEMBL1"]})
+
+    plan = get_target_data._UniprotQueryPlan(
+        unique_records=[],
+        row_candidates=[[] for _ in chembl_df.index],
+        row_index=list(chembl_df.index),
+        candidate_columns=[],
+    )
+
+    monkeypatch.setattr(
+        get_target_data,
+        "_build_uniprot_query_plan",
+        lambda *_: plan,
+    )
+
+    def _unexpected(*_: object, **__: object) -> None:  # pragma: no cover - defensive
+        raise AssertionError("run_uniprot should not be invoked when no candidates are found")
+
+    monkeypatch.setattr(get_target_data, "run_uniprot", _unexpected)
+
+    result = get_target_data.fetch_uniprot(cfg, chembl_df, output_csv)
+
+    assert output_csv.exists()
+    pd.testing.assert_frame_equal(
+        result,
+        pd.DataFrame(
+            {
+                "uniprot_id": pd.Series(dtype=object),
+                "original_id": pd.Series(dtype=object),
+                "source_column": pd.Series(dtype=object),
+                "mapping_uniprot_id": pd.Series(dtype=object),
+            }
+        ),
+        check_index_type=False,
+    )
+
+    written = pd.read_csv(
+        output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+    )
+    assert list(written.columns) == [
+        "uniprot_id",
+        "original_id",
+        "source_column",
+        "mapping_uniprot_id",
+    ]
+    assert written.empty
+
+
 def test_run__delegates_to_handler(
     cfg: Config,
     tmp_path: Path,

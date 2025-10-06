@@ -2803,12 +2803,38 @@ def fetch_uniprot(
         unique=len(plan.unique_records),
         candidate_columns=plan.candidate_columns,
     )
-    if plan.unique_records:
-        id_df = pd.DataFrame(plan.unique_records, dtype=object)
-    else:
-        id_df = pd.DataFrame(
-            columns=["uniprot_id", "original_id", "source_column"], dtype=object
+    if not plan.unique_records:
+        logger.info(
+            "fetch_uniprot_no_candidates",
+            output=str(output_csv),
+            rows=len(plan.row_index),
+            candidate_columns=plan.candidate_columns,
         )
+        empty_df = pd.DataFrame(
+            {
+                "uniprot_id": pd.Series(dtype=object),
+                "original_id": pd.Series(dtype=object),
+                "source_column": pd.Series(dtype=object),
+                "mapping_uniprot_id": pd.Series(dtype=object),
+            }
+        )
+        write_csv_deterministic(
+            empty_df,
+            output_csv,
+            col_order=[
+                "uniprot_id",
+                "original_id",
+                "source_column",
+                "mapping_uniprot_id",
+            ],
+            key_cols=["uniprot_id"],
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            cfg=cfg,
+        )
+        return empty_df
+
+    id_df = pd.DataFrame(plan.unique_records, dtype=object)
 
     id_df = id_df.copy()
     id_df["__query_order"] = range(len(id_df))
