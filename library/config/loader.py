@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Iterator, Mapping, Sequence
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping as TypingMapping
 
@@ -12,6 +13,7 @@ import yaml
 from pydantic import BaseModel, ValidationError
 
 from ..common.log import logger
+from library.resources.dictionaries import DictionaryManifestError, list_resources
 from config.paths import CONFIG_DIR as _CONFIG_DIR
 from config.paths import DEFAULT_CONFIG_PATH as _DEFAULT_CONFIG_PATH
 from .runtime import configure_rate_limiters
@@ -98,6 +100,10 @@ def _absolutise_path_value(value: Any, base_dir: Path) -> Any:
 
     if value is None:
         return value
+    if isinstance(value, (str, os.PathLike)):
+        candidate = os.fspath(value)
+        if candidate in _dictionary_resource_names():
+            return value
     base_dir = base_dir.resolve()
 
     def _resolve(path: Path) -> Path:
@@ -176,6 +182,17 @@ _OPTIONAL_UNKNOWN_KEYS: frozenset[str] = frozenset(
         "local.io.csv_fallback_separators",
     }
 )
+
+
+@lru_cache(maxsize=1)
+def _dictionary_resource_names() -> frozenset[str]:
+    """Return the set of known dictionary resource identifiers."""
+
+    try:
+        resources = list_resources()
+    except (DictionaryManifestError, FileNotFoundError):
+        return frozenset()
+    return frozenset(resources.keys())
 
 
 def _collect_unknown_keys(
