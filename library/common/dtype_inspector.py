@@ -24,10 +24,9 @@ from collections.abc import Mapping, Sequence
 import pandas as pd
 
 from ..integration import chembl_library as cl
-from library.clients import ChemblClient
+from library.orchestration import ETLContext
 from ..config import Config
 from .log import logger
-from .rate_limiter import get_global_limiter
 
 # Default sample identifiers for each dataset.  These are deliberately minimal
 # and can be overridden via the ``samples`` argument to :func:`inspect_dtypes`.
@@ -70,14 +69,8 @@ def inspect_dtypes(
     # ``ChemblClient`` manages HTTP connections and retries.  The context
     # manager ensures the underlying ``requests.Session`` is properly closed
     # even if one of the retrieval functions fails.
-    rate_cfg = cfg.rate
-    global_limiter = None
-    if (rate_cfg.global_rps or 0) > 0:
-        global_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
-
-    with ChemblClient(
-        cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
-    ) as client:
+    with ETLContext(cfg) as context:
+        client = context.chembl_client
         df = cl.get_activities(combined["activities"], cfg=cfg.api, client=client)
         results["activities"] = _dtype_map(df)
         logger.info("dtypes", dataset="activities", dtypes=results["activities"])

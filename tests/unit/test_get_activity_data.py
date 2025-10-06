@@ -43,6 +43,9 @@ class _DummyClient:
     def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - trivial helper
         return False
 
+    def close(self) -> None:  # pragma: no cover - interface compatibility
+        return None
+
 
 class _RecordingLogger:
     """Capture structured log events emitted by :mod:`get_activity_data`."""
@@ -270,7 +273,7 @@ def test_run_chembl__offset_and_workers(monkeypatch, cfg, tmp_path) -> None:
         return _fetcher, _writer
 
     monkeypatch.setattr(get_activity_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline)
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyClient)
+    monkeypatch.setattr("library.orchestration.context.ChemblClient", _DummyClient)
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
 
@@ -296,7 +299,7 @@ def test_run_chembl__read_ids_failures(error_factory, cfg, tmp_path, monkeypatch
         raise error_factory()
 
     monkeypatch.setattr(get_activity_data.io, "read_ids", _raise)
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyClient)
+    monkeypatch.setattr("library.orchestration.context.ChemblClient", _DummyClient)
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
 
@@ -315,7 +318,7 @@ def test_run_chembl__pipeline_failure_logs_error(cfg, tmp_path, monkeypatch) -> 
         "read_ids",
         lambda *_args, **_kwargs: iter(["ACT1"]),
     )
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyClient)
+    monkeypatch.setattr("library.orchestration.context.ChemblClient", _DummyClient)
 
     def fake_prepare_chunked_pipeline(*, fetch_config, fetch_chunk, csv_writer):
         def _fetcher() -> Iterable[pd.DataFrame]:

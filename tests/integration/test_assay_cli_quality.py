@@ -111,6 +111,9 @@ def test_get_assay_cli__clamps_batch_size(
         def __exit__(self, exc_type, exc, tb) -> bool:  # noqa: D401 - context protocol
             return False
 
+        def close(self) -> None:
+            return None
+
         def request_json(
             self,
             url: str,
@@ -184,7 +187,10 @@ def test_get_assay_cli__clamps_batch_size(
         del path, column, cfg
         return iter(identifiers)
 
-    monkeypatch.setattr(get_assay_data, "ChemblClient", _StubChemblClient)
+    monkeypatch.setattr(
+        "library.orchestration.context.ChemblClient",
+        _StubChemblClient,
+    )
     monkeypatch.setattr(get_assay_data, "ChunkFailureTracker", _StubChunkFailureTracker)
     monkeypatch.setattr(get_assay_data, "prepare_chunked_pipeline", _fake_prepare_chunked_pipeline)
     monkeypatch.setattr(get_assay_data, "run_pipeline", _fake_run_pipeline)

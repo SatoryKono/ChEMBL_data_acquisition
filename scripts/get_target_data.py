@@ -48,8 +48,7 @@ from library.integration import uniprot_library as uu
 from library.pipelines.target import protein_classification as pc
 from library.pipelines.target import postprocessing as tp
 from library.pipelines.target.defaults import ModeDefaults, TARGET_MODE_DEFAULTS
-from library.clients import ChemblClient
-from library.common.rate_limiter import get_global_limiter
+from library.orchestration import ETLContext
 from library.cli_utils import PipelineError, run_cli_command, run_pipeline
 from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
 from library.cli import (
@@ -2169,11 +2168,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
 
 
-    rate_cfg = cfg.rate
-    global_limiter = None
-    if (rate_cfg.global_rps or 0) > 0:
-        global_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
-
     fetched_rows_total = 0
     raw_dump_rows_total = 0
     chembl_http_requests = 0
@@ -2183,12 +2177,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         def _raw_fetcher() -> Iterator[pd.DataFrame]:
             nonlocal fetched_rows_total, raw_dump_rows_total, chembl_http_requests
             try:
-                with ChemblClient(
-                    cfg.api,
-                    cfg.retry,
-                    cfg.chembl,
-                    global_limiter=global_limiter,
-                ) as client:
+                with ETLContext(cfg) as context:
+                    client = context.chembl_client
                     def _count_attempt() -> None:
                         nonlocal chembl_http_requests
                         chembl_http_requests += 1
@@ -2361,12 +2351,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         nonlocal fetched_rows_total, raw_dump_rows_total, chembl_http_requests
 
         try:
-            with ChemblClient(
-                cfg.api,
-                cfg.retry,
-                cfg.chembl,
-                global_limiter=global_limiter,
-            ) as client:
+            with ETLContext(cfg) as context:
+                client = context.chembl_client
                 def _count_attempt() -> None:
                     nonlocal chembl_http_requests
                     chembl_http_requests += 1
