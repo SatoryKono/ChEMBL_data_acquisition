@@ -40,7 +40,7 @@ class DictionaryResource:
     generator: Path
 
 
-def _compute_sha256(path: Path) -> str:
+def _compute_sha256(path: Path, *, exclude: tuple[Path, ...] = ()) -> str:
     """Return the SHA256 checksum for ``path``.
 
     Directories are hashed by iterating over files in lexicographic order and
@@ -49,17 +49,25 @@ def _compute_sha256(path: Path) -> str:
     """
 
     hasher = hashlib.sha256()
+    excluded = {item.resolve() for item in exclude}
     if path.is_dir():
-        for child in sorted(path.rglob("*")):
+        for child in sorted(
+            path.rglob("*"), key=lambda child: child.relative_to(path).as_posix()
+        ):
             if child.is_dir():
                 continue
-            hasher.update(str(child.relative_to(path)).encode("utf-8"))
+            if child.resolve() in excluded:
+                continue
+            relative = child.relative_to(path).as_posix()
+            hasher.update(relative.encode("utf-8"))
             with child.open("rb") as handle:
                 for chunk in iter(lambda: handle.read(8192), b""):
                     hasher.update(chunk)
         return hasher.hexdigest()
     if not path.is_file():
         raise FileNotFoundError(f"Dictionary resource missing: {path}")
+    if path.resolve() in excluded:
+        raise FileNotFoundError(f"Excluded dictionary resource: {path}")
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(8192), b""):
             hasher.update(chunk)
@@ -110,7 +118,8 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
         if name in parsed:
             raise DictionaryManifestError(f"Duplicate manifest entry: {name}")
 
-        sha256_actual = _compute_sha256(absolute_path)
+        exclude = (manifest_path,) if absolute_path == manifest_root else ()
+        sha256_actual = _compute_sha256(absolute_path, exclude=exclude)
         if sha256_actual != sha256_expected:
             raise DictionaryManifestError(
                 "Checksum mismatch for resource"
