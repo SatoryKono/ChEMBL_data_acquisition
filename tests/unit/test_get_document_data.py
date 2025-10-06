@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Iterable
 
 import pandas as pd
 import pytest
 
 from library.config import Config
+from library.pipelines.document import runner
 from scripts import get_document_data
 
 
@@ -33,6 +33,7 @@ class _MemoryLogger:
 def logger_stub(monkeypatch: pytest.MonkeyPatch) -> _MemoryLogger:
     logger = _MemoryLogger()
     monkeypatch.setattr(get_document_data, "logger", logger)
+    monkeypatch.setattr(runner, "logger", logger)
     return logger
 
 
@@ -59,7 +60,7 @@ def test_coerce_chunk_size_value__cases(
     event: str | None,
     logger_stub: _MemoryLogger,
 ) -> None:
-    result = get_document_data._coerce_chunk_size_value(value)
+    result = runner._coerce_chunk_size_value(value)
 
     assert result == expected
     if event is not None:
@@ -76,7 +77,7 @@ def test_coerce_chunk_size_value__cases(
     ],
 )
 def test_resolve_chunk_size__cases(value: int | None, expected: int | None, logger_stub: _MemoryLogger) -> None:
-    result = get_document_data._resolve_chunk_size(value)
+    result = runner._resolve_chunk_size(value)
 
     assert result == expected
     if value is not None and value <= 0:
@@ -92,7 +93,7 @@ def test_coalesce_columns__prefers_first_non_empty() -> None:
         }
     )
 
-    result = get_document_data._coalesce_columns(frame, ["first", "second", "third"])
+    result = runner._coalesce_columns(frame, ["first", "second", "third"])
 
     assert result.tolist() == ["fallback", "primary", "replacement"]
 
@@ -103,7 +104,7 @@ def test_resolve_duplicate_column__merges_frames() -> None:
         columns=["title", "title", "other"],
     )
 
-    result = get_document_data._resolve_duplicate_column(frame, "title")
+    result = runner._resolve_duplicate_column(frame, "title")
 
     assert result.tolist() == ["first", "second"]
 
@@ -123,7 +124,7 @@ def test_collapse_duplicate_columns__projects_first_instance() -> None:
         ],
     )
 
-    result = get_document_data._collapse_duplicate_columns(frame)
+    result = runner._collapse_duplicate_columns(frame)
 
     assert list(result.columns) == ["PubMed.PMID", "PubMed.DOI", "title"]
     assert result["title"].tolist() == ["Primary", "Secondary"]
@@ -140,7 +141,7 @@ def test_prepare_export_frame__renames_and_coalesces() -> None:
         }
     )
 
-    export = get_document_data._prepare_export_frame(frame)
+    export = runner._prepare_export_frame(frame)
 
     assert "PubMed.PMID" in export.columns
     assert export.loc[0, "PubMed.PMID"] == ""
@@ -162,6 +163,8 @@ def test_run__skip_existing(cfg: Config, tmp_path: Path, logger_stub: _MemoryLog
         called = True
         return 0
 
+    monkeypatch.setattr(runner, "run_all", fake_run)
+    monkeypatch.setitem(runner.MODE_HANDLERS, "all", fake_run)
     monkeypatch.setattr(get_document_data, "run_all", fake_run)
 
     args = argparse.Namespace(
@@ -217,6 +220,8 @@ def test_run__propagates_timeout(cfg: Config, tmp_path: Path, monkeypatch: pytes
         called.append(cfg.api.timeout_read)
         return 0
 
+    monkeypatch.setattr(runner, "run_all", fake_run)
+    monkeypatch.setitem(runner.MODE_HANDLERS, "all", fake_run)
     monkeypatch.setattr(get_document_data, "run_all", fake_run)
 
     args = argparse.Namespace(
