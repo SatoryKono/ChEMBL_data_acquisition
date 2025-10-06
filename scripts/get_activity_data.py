@@ -202,7 +202,6 @@ _EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series | Non
     "activity_chembl_id": lambda df: df.get("activity_id"),
     "compound_name": lambda df: df.get("molecule_pref_name"),
     "log_value": lambda df: df.get("pchembl_value"),
-    "salt_chembl_id": lambda df: df.get("molecule_chembl_id"),
 }
 
 
