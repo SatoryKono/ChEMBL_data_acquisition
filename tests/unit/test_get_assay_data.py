@@ -17,6 +17,7 @@ from library.cli_utils import run_pipeline as cli_run_pipeline
 from library.config import Config
 from library.pipelines.assay.chembl_assay import MAX_ASSAY_CHUNK_SIZE
 from library.schemas import AssaysSchema
+from library.pipelines.registry import get_pipeline_step
 from scripts import get_assay_data
 
 
@@ -387,6 +388,7 @@ def test_build_parser__defaults() -> None:
     parser, _ = get_assay_data.build_parser()
     args = parser.parse_args([])
 
-    assert args.input_csv == Path(get_assay_data.DEFAULT_INPUT_NAME)
+    step = get_pipeline_step("assay")
+    assert args.input_csv == Path(step.input_filename)
     assert args.batch_size == parser.get_default("batch_size")
     assert callable(args.func)

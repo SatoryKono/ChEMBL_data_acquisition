@@ -40,6 +40,7 @@ from library.pipelines.common import (
     CsvWriterConfig,
     prepare_chunked_pipeline,
 )
+from library.pipelines.registry import PipelineStep, get_pipeline_step
 
 from library.cli import (
     LoggerConfig,
@@ -74,10 +75,20 @@ from library.validation import validate_activities
 from library.schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 
-DEFAULT_INPUT_NAME = "activity.csv"
-DEFAULT_OUTPUT_STEM = "activities"
 MIN_ACTIVITY_TIMEOUT = 60.0
 PROGRAM_NAME = Path(__file__).with_suffix("").name
+
+
+def _pipeline_step() -> PipelineStep:
+    return get_pipeline_step(f"{__name__}:main")
+
+
+def _default_input_name() -> str:
+    return _pipeline_step().input_filename
+
+
+def _default_output_stem() -> str:
+    return _pipeline_step().output_stem
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
     invocation = getattr(args, "invocation", None)
@@ -1373,7 +1384,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         size_dest="batch_size",
     )
     parser.prog = PROGRAM_NAME
-    parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
+    parser.set_defaults(input_csv=Path(_default_input_name()))
     parser.add_argument(
         "--timeout",
         type=float,
@@ -1438,8 +1449,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     cli.prepare_io_paths(
         args,
-        input_default=DEFAULT_INPUT_NAME,
-        output_stem=DEFAULT_OUTPUT_STEM,
+        input_default=_default_input_name(),
+        output_stem=_default_output_stem(),
     )
     if args.limit == 0:
         logger.info("pipeline_skip_limit", limit=args.limit)

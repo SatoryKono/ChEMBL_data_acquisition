@@ -26,9 +26,6 @@ import pandas as pd
 
 # ===== Parameters =====
 
-DEFAULT_INPUT_NAME = "testitem.csv"
-DEFAULT_OUTPUT_STEM = "testitems"
-
 
 from library import cli  # noqa: F401 - re-exported for monkeypatching in tests
 from library import io
@@ -82,6 +79,7 @@ from library.testitem_pipeline import (
 )
 from library.testitem_pipeline import catalog as pipeline_catalog
 from library.testitem_pipeline import pubchem as pipeline_pubchem
+from library.pipelines.registry import PipelineStep, get_pipeline_step
 
 configure_logger = cli.configure_logger
 
@@ -96,6 +94,18 @@ _load_pubchem_cid_cache = pipeline_pubchem._load_pubchem_cid_cache
 resolve_pubchem_cid = pipeline_pubchem.resolve_pubchem_cid
 
 configure_logger = cli.configure_logger
+
+
+def _pipeline_step() -> PipelineStep:
+    return get_pipeline_step(f"{__name__}:main")
+
+
+def _default_input_name() -> str:
+    return _pipeline_step().input_filename
+
+
+def _default_output_stem() -> str:
+    return _pipeline_step().output_stem
 
 
 def _resolve_catalog_load_source(
@@ -667,7 +677,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         size_option="--batch-size",
         size_dest="batch_size",
     )
-    parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
+    parser.set_defaults(input_csv=Path(_default_input_name()))
     parser.add_argument(
         "--timeout",
         type=float,
@@ -717,8 +727,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     cli.prepare_io_paths(
         args,
-        input_default=DEFAULT_INPUT_NAME,
-        output_stem=DEFAULT_OUTPUT_STEM,
+        input_default=_default_input_name(),
+        output_stem=_default_output_stem(),
     )
 
     if args.limit == 0:

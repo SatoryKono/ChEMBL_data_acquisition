@@ -24,10 +24,21 @@ from library.pipelines.cellline import (
     CellLinePipelineOptions,
     run_cellline_pipeline,
 )
+from library.pipelines.registry import PipelineStep, get_pipeline_step
 
-DEFAULT_INPUT_NAME = "cellline.csv"
-DEFAULT_OUTPUT_STEM = "cellline"
 MODE_CHOICES: tuple[str, ...] = ("chembl",)
+
+
+def _pipeline_step() -> PipelineStep:
+    return get_pipeline_step(f"{__name__}:main")
+
+
+def _default_input_name() -> str:
+    return _pipeline_step().input_filename
+
+
+def _default_output_stem() -> str:
+    return _pipeline_step().output_stem
 
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
@@ -40,7 +51,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         size_option="--batch-size",
         size_dest="batch_size",
     )
-    parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
+    parser.set_defaults(input_csv=Path(_default_input_name()))
     parser.add_argument(
         "--mode",
         choices=MODE_CHOICES,
@@ -149,8 +160,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     cli.prepare_io_paths(
         args,
-        input_default=DEFAULT_INPUT_NAME,
-        output_stem=DEFAULT_OUTPUT_STEM,
+        input_default=_default_input_name(),
+        output_stem=_default_output_stem(),
     )
     if args.limit == 0:
         logger.info("pipeline_skip_limit", limit=args.limit)

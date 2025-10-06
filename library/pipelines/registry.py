@@ -39,6 +39,7 @@ class PipelineStep:
     output_flag: str = "--final-out"
     extra_args: tuple[str, ...] = ()
     supports_dry_run: bool = False
+    callable_path: str = ""
 
     def build_arguments(self, cfg: Any, output_path: Path | None = None) -> list[str]:
         """Return CLI arguments forwarded to the wrapped ``main`` function."""
@@ -174,7 +175,35 @@ def _build_step(entry: PipelineStepDefinition) -> PipelineStep:
         output_flag=output_flag,
         extra_args=extra_args,
         supports_dry_run=supports_dry_run,
+        callable_path=dotted,
     )
+
+
+def get_pipeline_step(
+    identifier: str | Callable[[Sequence[str] | None], int],
+    *,
+    source: Path | str | Iterable[PipelineStepDefinition] | Mapping[str, object] | None = None,
+) -> PipelineStep:
+    """Return the registry entry matching ``identifier``.
+
+    Parameters
+    ----------
+    identifier:
+        Pipeline name, callable reference (``module:attr``) or the actual callable
+        exported by the CLI module.
+    source:
+        Optional registry source forwarded to :func:`load_pipeline_registry`.
+    """
+
+    steps = load_pipeline_registry(source)
+    for step in steps:
+        if isinstance(identifier, str):
+            if identifier in {step.name, step.callable_path}:
+                return step
+        else:
+            if step.main is identifier:
+                return step
+    raise LookupError(f"pipeline step not found for identifier: {identifier!r}")
 
 
 def _resolve_callable(dotted: str) -> Callable[[Sequence[str] | None], int]:
@@ -196,5 +225,6 @@ __all__ = [
     "PipelineStep",
     "PipelineStepDefinition",
     "PipelineStepFlags",
+    "get_pipeline_step",
     "load_pipeline_registry",
 ]

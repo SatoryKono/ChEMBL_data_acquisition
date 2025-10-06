@@ -102,10 +102,19 @@ from library.qa.reporting import build_table_quality_hook
 from library.qa.table_quality import TableQualityProfiler
 from library.schemas import DocumentsSchema, normalize_documents
 from library.schemas.document_spec import DOCUMENT_EXPORT_COLUMNS
+from library.pipelines.registry import PipelineStep, get_pipeline_step
 
 
-DEFAULT_INPUT_NAME = "document.csv"
-DEFAULT_OUTPUT_STEM = "documents"
+def _pipeline_step() -> PipelineStep:
+    return get_pipeline_step(f"{__name__}:main")
+
+
+def _default_input_name() -> str:
+    return _pipeline_step().input_filename
+
+
+def _default_output_stem() -> str:
+    return _pipeline_step().output_stem
 
 
 class _FallbackPathAction(argparse.Action):
@@ -1508,13 +1517,13 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Create the argument parser for document utilities."""
 
     root, _, log_cfg = build_root_parser()
-    root.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
+    root.set_defaults(input_csv=Path(_default_input_name()))
     parser = argparse.ArgumentParser(
         description="Document data utilities",
         parents=[root],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
+    parser.set_defaults(input_csv=Path(_default_input_name()))
 
     pipeline_group = parser.add_argument_group("Pipeline selection")
     pipeline_group.add_argument(
@@ -1750,8 +1759,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv_list)
     prepare_io_paths(
         args,
-        input_default=DEFAULT_INPUT_NAME,
-        output_stem=DEFAULT_OUTPUT_STEM,
+        input_default=_default_input_name(),
+        output_stem=_default_output_stem(),
     )
     limit_value = getattr(args, "limit", None)
     if limit_value == 0:

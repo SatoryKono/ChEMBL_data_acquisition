@@ -6,6 +6,7 @@ import pytest
 
 from library.cli import parser as cli_parser
 from library.config import Config, ConfigMetadata
+from library.pipelines.registry import get_pipeline_step
 from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS
 from scripts import get_target_data
 
@@ -87,10 +88,11 @@ def test_prepare_io_paths__output_alias_sets_final_out(tmp_path):
         "custom.csv",
     ])
 
+    step = get_pipeline_step("target")
     get_target_data.prepare_io_paths(
         args,
-        input_default=get_target_data.DEFAULT_INPUT_NAME,
-        output_stem=get_target_data.DEFAULT_OUTPUT_STEM,
+        input_default=step.input_filename,
+        output_stem=step.output_stem,
     )
 
     expected = (tmp_path / "custom.csv").resolve()

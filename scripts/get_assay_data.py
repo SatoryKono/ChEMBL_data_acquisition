@@ -57,14 +57,12 @@ from library.pipelines.common import (
     prepare_chunked_pipeline,
 )
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
+from library.pipelines.registry import PipelineStep, get_pipeline_step
 
 configure_logger = cli.configure_logger
 
 __all__ = ["ap", "configure_logger", "main", "run", "run_chembl"]
 
-
-DEFAULT_INPUT_NAME = "assay.csv"
-DEFAULT_OUTPUT_STEM = "assays"
 
 # Backwards compatibility: legacy configs referenced the private
 # ``_ASSAY_MAX_IDS_PER_REQUEST`` constant before it was renamed to
@@ -499,6 +497,18 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     return run_chembl(cfg, args)
 
 
+def _pipeline_step() -> PipelineStep:
+    return get_pipeline_step(f"{__name__}:main")
+
+
+def _default_input_name() -> str:
+    return _pipeline_step().input_filename
+
+
+def _default_output_stem() -> str:
+    return _pipeline_step().output_stem
+
+
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Create the command-line argument parser.
 
@@ -515,7 +525,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         size_option="--batch-size",
         size_dest="batch_size",
     )
-    parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
+    parser.set_defaults(input_csv=Path(_default_input_name()))
     parser.add_argument(
         "--timeout",
         type=float,
@@ -564,8 +574,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     cli.prepare_io_paths(
         args,
-        input_default=DEFAULT_INPUT_NAME,
-        output_stem=DEFAULT_OUTPUT_STEM,
+        input_default=_default_input_name(),
+        output_stem=_default_output_stem(),
     )
     if args.limit == 0:
         logger.info("pipeline_skip_limit", limit=args.limit)

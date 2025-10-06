@@ -74,6 +74,7 @@ from library.qa.reporting import build_table_quality_hook, is_quality_enabled
 from library.validation import ValidationResult
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
+from library.pipelines.registry import PipelineStep, get_pipeline_step
 
 
 from library.postprocessing import target as target_pp
@@ -144,11 +145,21 @@ TARGETS_OBJECT_COLUMNS: set[str] = {
 UNIPROT_MISSING_VALUE = ""
 
 
-DEFAULT_INPUT_NAME = "target.csv"
-DEFAULT_OUTPUT_STEM = "targets"
 RAW_SUFFIX = "_raw"
 NORMALIZED_SUFFIX = "_normalized"
 COMMAND_CHOICES: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
+
+
+def _pipeline_step() -> PipelineStep:
+    return get_pipeline_step(f"{__name__}:main")
+
+
+def _default_input_name() -> str:
+    return _pipeline_step().input_filename
+
+
+def _default_output_stem() -> str:
+    return _pipeline_step().output_stem
 
 
 _IUPHAR_OVERRIDE_COLUMNS: frozenset[str] = frozenset(
@@ -1517,7 +1528,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     _add_output_arguments(root, defaults=True)
     _add_output_arguments(shared, defaults=False)
 
-    root.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
+    root.set_defaults(input_csv=Path(_default_input_name()))
     parser = argparse.ArgumentParser(
         description="Target data utilities",
         parents=[root],
@@ -3925,8 +3936,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.command = command_alias
     prepare_io_paths(
         args,
-        input_default=DEFAULT_INPUT_NAME,
-        output_stem=DEFAULT_OUTPUT_STEM,
+        input_default=_default_input_name(),
+        output_stem=_default_output_stem(),
     )
     date_value = getattr(args, "date", None)
     if not isinstance(date_value, str) or not date_value:
@@ -4014,8 +4025,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     date_token = args_dict.get(
                         "date", datetime.now(timezone.utc).strftime("%Y%m%d")
                     )
+                    stem = _default_output_stem()
                     inferred = Path(args_dict["input_csv"]).with_name(
-                        f"output.{DEFAULT_OUTPUT_STEM}_{date_token}.csv"
+                        f"output.{stem}_{date_token}.csv"
                     )
                     args_dict["final_out"] = inferred
                 else:
