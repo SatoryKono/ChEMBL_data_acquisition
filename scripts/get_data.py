@@ -31,6 +31,7 @@ del bootstrap_cli
 
 import argparse
 import hashlib
+import heapq
 import json
 import logging
 import time
@@ -235,6 +236,22 @@ def _parse_overrides(
     return overrides
 
 
+def _parse_selected_steps(values: Sequence[str] | None) -> tuple[str, ...]:
+    """Normalise ``--steps`` CLI values into a tuple of step names."""
+
+    if not values:
+        return ()
+    selected: list[str] = []
+    for raw in values:
+        if raw is None:
+            continue
+        parts = [part.strip() for part in str(raw).split(",")]
+        for part in parts:
+            if part:
+                selected.append(part)
+    return tuple(selected)
+
+
 def _resolve_pipeline_steps(args: argparse.Namespace | None = None) -> tuple[PipelineStep, ...]:
     """Load pipeline definitions applying CLI overrides when provided."""
 
@@ -288,6 +305,155 @@ def _validate_override_keys(
     if unknown:
         joined = ", ".join(unknown)
         raise ValueError(f"unknown {kind} override for step(s): {joined}")
+
+
+def _build_step_indices(
+    steps: Sequence[PipelineStep],
+) -> tuple[
+    dict[str, PipelineStep],
+    dict[str, set[str]],
+    dict[str, set[str]],
+    dict[str, int],
+]:
+    """Return lookup structures for dependency resolution."""
+
+    steps_by_name: dict[str, PipelineStep] = {}
+    dependencies: dict[str, set[str]] = {}
+    producers: dict[str, set[str]] = {}
+    order: dict[str, int] = {}
+
+    for index, step in enumerate(steps):
+        if step.name in steps_by_name:
+            raise ValueError(f"duplicate pipeline step name: {step.name}")
+        steps_by_name[step.name] = step
+        order[step.name] = index
+        dependencies[step.name] = set(step.depends_on)
+        for artefact in step.produces:
+            producers.setdefault(artefact, set()).add(step.name)
+
+    return steps_by_name, dependencies, producers, order
+
+
+def _expand_execution_set(
+    selected: Sequence[str],
+    steps_by_name: Mapping[str, PipelineStep],
+    dependencies: Mapping[str, set[str]],
+) -> set[str]:
+    """Return the closure of ``selected`` including explicit dependencies."""
+
+    if not selected:
+        return set(steps_by_name)
+
+    execution_set: set[str] = set()
+    stack = list(selected)
+    while stack:
+        name = stack.pop()
+        if name in execution_set:
+            continue
+        if name not in steps_by_name:
+            raise ValueError(f"unknown pipeline step: {name}")
+        execution_set.add(name)
+        for dependency in dependencies[name]:
+            if dependency not in steps_by_name:
+                raise ValueError(
+                    f"unknown dependency '{dependency}' for step '{name}'"
+                )
+            stack.append(dependency)
+    return execution_set
+
+
+def _topological_sort_steps(
+    *,
+    execution_set: set[str],
+    steps_by_name: Mapping[str, PipelineStep],
+    dependencies: Mapping[str, set[str]],
+    producers: Mapping[str, set[str]],
+    order: Mapping[str, int],
+) -> list[str]:
+    """Return ``execution_set`` sorted respecting all dependencies."""
+
+    indegree: dict[str, int] = {}
+    adjacency: dict[str, set[str]] = {name: set() for name in execution_set}
+    resolved_dependencies: dict[str, set[str]] = {}
+
+    for name in execution_set:
+        deps = {dep for dep in dependencies[name] if dep in execution_set}
+        step = steps_by_name[name]
+        for artefact in step.consumes:
+            for producer in producers.get(artefact, set()):
+                if producer in execution_set:
+                    deps.add(producer)
+        resolved_dependencies[name] = deps
+
+    for name, deps in resolved_dependencies.items():
+        indegree[name] = len(deps)
+        for dep in deps:
+            adjacency.setdefault(dep, set()).add(name)
+
+    heap: list[tuple[int, str]] = [
+        (order[name], name) for name in execution_set if indegree[name] == 0
+    ]
+    heapq.heapify(heap)
+
+    ordered: list[str] = []
+    while heap:
+        _, current = heapq.heappop(heap)
+        ordered.append(current)
+        for successor in adjacency.get(current, set()):
+            indegree[successor] -= 1
+            if indegree[successor] == 0:
+                heapq.heappush(heap, (order[successor], successor))
+
+    if len(ordered) != len(execution_set):
+        remaining = sorted(execution_set - set(ordered))
+        raise ValueError(
+            "cyclic dependency detected: " + ", ".join(remaining)
+        )
+
+    return ordered
+
+
+def _resolve_artifact_path(cfg: PipelineRunConfig, artefact: str) -> Path:
+    """Return the expected location of ``artefact`` for ``cfg``."""
+
+    candidate = Path(artefact)
+    if candidate.is_absolute():
+        return candidate
+    if candidate.suffix:
+        return (cfg.output_dir / candidate).resolve()
+    filename = f"output.{artefact}_{cfg.date_prefix}.csv"
+    return (cfg.output_dir / filename).resolve()
+
+
+def _find_missing_artifacts(
+    step: PipelineStep,
+    cfg: PipelineRunConfig,
+    *,
+    executed_steps: set[str],
+    producers: Mapping[str, set[str]],
+) -> list[tuple[str, Path, tuple[str, ...]]]:
+    """Return artefacts required by ``step`` that are not currently available."""
+
+    missing: list[tuple[str, Path, tuple[str, ...]]] = []
+    for artefact in step.consumes:
+        producers_for_artifact = producers.get(artefact)
+        if producers_for_artifact:
+            if producers_for_artifact & executed_steps:
+                continue
+            path = _resolve_artifact_path(cfg, artefact)
+            if not path.exists():
+                missing.append(
+                    (
+                        artefact,
+                        path,
+                        tuple(sorted(producers_for_artifact)),
+                    )
+                )
+        else:
+            path = _resolve_artifact_path(cfg, artefact)
+            if not path.exists():
+                missing.append((artefact, path, tuple()))
+    return missing
 
 
 def _configure_logging(
@@ -420,6 +586,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         metavar="STEP=SUBCOMMAND",
         default=[],
         help="Override the CLI subcommand used to invoke a pipeline step",
+    )
+    parser.add_argument(
+        "--steps",
+        action="append",
+        metavar="NAME[,NAME...]",
+        default=[],
+        help=(
+            "Limit execution to the provided pipeline steps. May be repeated "
+            "or contain comma-separated values."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -1128,6 +1304,27 @@ def _pending_manifest_entry(step: PipelineStep, cfg: PipelineRunConfig) -> dict[
     return entry
 
 
+def _skipped_manifest_entry(
+    step: PipelineStep, cfg: PipelineRunConfig, *, reason: str
+) -> dict[str, Any]:
+    """Return a manifest entry describing a skipped ``step``."""
+
+    entry = _pending_manifest_entry(step, cfg)
+    now = datetime.now(UTC).isoformat()
+    entry.update(
+        {
+            "status": "skipped",
+            "exit_code": 0,
+            "executed": False,
+            "reason": reason,
+            "started_at": now,
+            "completed_at": now,
+            "duration_sec": 0.0,
+        }
+    )
+    return entry
+
+
 def _write_run_manifest(
     cfg: PipelineRunConfig,
     *,
@@ -1172,20 +1369,43 @@ def _write_run_manifest(
         )
 
 
-def run_pipeline(cfg: PipelineRunConfig) -> int:
+def run_pipeline(
+    cfg: PipelineRunConfig,
+    *,
+    steps: Sequence[PipelineStep] | None = None,
+    selected_steps: Sequence[str] | None = None,
+) -> int:
 
-    """Execute all configured steps and return the resulting exit status."""
+    """Execute configured steps honouring explicit dependencies."""
 
-    effective_steps = tuple(DEFAULT_PIPELINE_STEPS if steps is None else steps)
+    effective_steps = tuple(_PIPELINE_STEPS if steps is None else steps)
+    (
+        steps_by_name,
+        dependencies,
+        producers,
+        order,
+    ) = _build_step_indices(effective_steps)
+    selected = tuple(selected_steps or ())
+    execution_set = _expand_execution_set(selected, steps_by_name, dependencies)
+    execution_order = _topological_sort_steps(
+        execution_set=execution_set,
+        steps_by_name=steps_by_name,
+        dependencies=dependencies,
+        producers=producers,
+        order=order,
+    )
+
     base_config = load_config(cfg.config_path, base_path=cfg.base_path)
     overall_status = 0
     run_started_at = datetime.now(UTC)
     run_started_clock = time.perf_counter()
-    manifest_entries: list[dict[str, Any]] = []
-    failed_index: int | None = None
+    manifest_entries_by_name: dict[str, dict[str, Any]] = {}
+    failed_step: str | None = None
+    executed_steps: set[str] = set()
     _LOGGER.info("pipeline_start", stage="pipeline")
 
-    for index, step in enumerate(_PIPELINE_STEPS):
+    for name in execution_order:
+        step = steps_by_name[name]
         final_output = step.expected_output(cfg)
         working_output = _temporary_output_path(final_output)
         sentinel_path = _failure_sentinel_path(final_output)
@@ -1201,7 +1421,7 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
             "output": _describe_file(final_output),
             "sidecars": _describe_sidecars(final_output, working_output),
         }
-        manifest_entries.append(entry)
+        manifest_entries_by_name[step.name] = entry
 
         _LOGGER.info("step_start", step=step.name)
         step_started_clock = time.perf_counter()
@@ -1247,7 +1467,7 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
                     working_output=working_output,
                     started_at=step_started_clock,
                 )
-                failed_index = index
+                failed_step = step.name
                 break
             except Exception as exc:  # pragma: no cover - defensive guard
                 overall_status = 1
@@ -1266,8 +1486,41 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
                     working_output=working_output,
                     started_at=step_started_clock,
                 )
-                failed_index = index
+                failed_step = step.name
                 break
+
+        missing_artefacts = _find_missing_artifacts(
+            step,
+            cfg,
+            executed_steps=executed_steps,
+            producers=producers,
+        )
+        if missing_artefacts:
+            entry.update(
+                {
+                    "status": "failed",
+                    "exit_code": 1,
+                    "executed": False,
+                    "reason": "missing_artifact",
+                }
+            )
+            for artefact, path, producers_for in missing_artefacts:
+                _LOGGER.error(
+                    "step_missing_artifact",
+                    step=step.name,
+                    artefact=artefact,
+                    path=str(path),
+                    producers=list(producers_for),
+                )
+            _complete_manifest_entry(
+                entry,
+                final_output=final_output,
+                working_output=working_output,
+                started_at=step_started_clock,
+            )
+            overall_status = 1
+            failed_step = step.name
+            break
 
         try:
             result = _run_step(step, cfg, base_config, final_output, working_output)
@@ -1295,7 +1548,7 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
                 started_at=step_started_clock,
             )
             overall_status = exit_code
-            failed_index = index
+            failed_step = step.name
             break
         except BaseException as exc:  # pragma: no cover - defensive guard
             entry.update(
@@ -1320,7 +1573,7 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
                 started_at=step_started_clock,
             )
             overall_status = 1
-            failed_index = index
+            failed_step = step.name
             break
 
         entry.update(
@@ -1347,7 +1600,7 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
                 started_at=step_started_clock,
             )
             overall_status = result.exit_code
-            failed_index = index
+            failed_step = step.name
             break
 
         entry["status"] = result.status
@@ -1359,15 +1612,33 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
             started_at=step_started_clock,
         )
         _LOGGER.info("step_done", step=step.name)
+        if result.exit_code == 0 and (
+            result.executed or result.reason == "skip_existing"
+        ):
+            executed_steps.add(step.name)
     else:
         _LOGGER.info("workflow_complete")
 
-    if failed_index is not None and failed_index + 1 < len(_PIPELINE_STEPS):
-        for step in _PIPELINE_STEPS[failed_index + 1 :]:
-            manifest_entries.append(_pending_manifest_entry(step, cfg))
+    if failed_step is not None:
+        failed_position = execution_order.index(failed_step)
+        for name in execution_order[failed_position + 1 :]:
+            if name not in manifest_entries_by_name:
+                manifest_entries_by_name[name] = _pending_manifest_entry(
+                    steps_by_name[name], cfg
+                )
 
     run_completed_at = datetime.now(UTC)
     duration_seconds = time.perf_counter() - run_started_clock
+    manifest_entries: list[dict[str, Any]] = []
+    for step in effective_steps:
+        entry = manifest_entries_by_name.get(step.name)
+        if entry is None:
+            if step.name in execution_set:
+                entry = _pending_manifest_entry(step, cfg)
+            else:
+                entry = _skipped_manifest_entry(step, cfg, reason="not_selected")
+            manifest_entries_by_name[step.name] = entry
+        manifest_entries.append(entry)
     _write_run_manifest(
         cfg,
         run_started_at=run_started_at,
@@ -1428,7 +1699,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _LOGGER.error("configuration_error", error=str(exc))
                 status = 1
             else:
-                status = run_pipeline(cfg, steps=steps)
+                selected_steps = _parse_selected_steps(getattr(args, "steps", None))
+                try:
+                    status = run_pipeline(
+                        cfg, steps=steps, selected_steps=selected_steps
+                    )
+                except (TypeError, ValueError) as exc:
+                    _LOGGER.error("pipeline_error", error=str(exc))
+                    status = 1
                 if status != 0:
                     _LOGGER.error("workflow_failed", exit_code=status)
                 else:

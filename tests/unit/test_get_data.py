@@ -70,6 +70,7 @@ def test_parse_args__defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert args.override_input == []
     assert args.override_output_stem == []
     assert args.override_subcommand == []
+    assert args.steps == []
 
 
 @pytest.mark.unit
@@ -103,6 +104,8 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
             "target=custom_targets",
             "--override-subcommand",
             "target=sync",
+            "--steps",
+            "document,target",
         ]
     )
     assert args.base_path == base
@@ -120,6 +123,7 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
     assert args.override_input == ["document=document_custom.csv"]
     assert args.override_output_stem == ["target=custom_targets"]
     assert args.override_subcommand == ["target=sync"]
+    assert args.steps == ["document,target"]
 
 
 @pytest.mark.unit

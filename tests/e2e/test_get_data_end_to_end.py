@@ -398,6 +398,228 @@ def test_get_data_end_to_end__miniature_pipeline(
     events = {record.get("event"): record for record in logs if "event" in record}
     assert "document_duplicates_dropped" in events
     assert events["document_duplicates_dropped"].get("level") == "WARNING"
+
+
+@pytest.mark.e2e
+def test_get_data_scheduler__selective_execution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    (input_dir / "alpha.csv").write_text("id,value\n1,foo\n", encoding="utf-8")
+    (input_dir / "beta.csv").write_text("id,value\n1,bar\n", encoding="utf-8")
+    (input_dir / "gamma.csv").write_text("id,value\n1,baz\n", encoding="utf-8")
+
+    config_path = base_path / "config.yaml"
+    config_path.write_text("io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n", encoding="utf-8")
+
+    def _uppercase(frame: pd.DataFrame, logger: get_data.Logger) -> pd.DataFrame:
+        _ = logger
+        result = frame.copy()
+        result["value"] = result["value"].astype("string").str.upper()
+        return result[["id", "value"]]
+
+    def _reverse(frame: pd.DataFrame, logger: get_data.Logger) -> pd.DataFrame:
+        _ = logger
+        result = frame.copy()
+        result["value"] = result["value"].astype("string").apply(lambda x: x[::-1])
+        return result[["id", "value"]]
+
+    alpha_step = get_data.PipelineStep(
+        name="alpha",
+        main=_build_stub_pipeline("alpha", "id", ["id", "value"], _uppercase),
+        input_filename="alpha.csv",
+        output_stem="alpha",
+        produces=("alpha",),
+    )
+    beta_step = get_data.PipelineStep(
+        name="beta",
+        main=_build_stub_pipeline("beta", "id", ["id", "value"], _reverse),
+        input_filename="beta.csv",
+        output_stem="beta",
+        depends_on=("alpha",),
+        consumes=("alpha",),
+        produces=("beta",),
+    )
+    gamma_step = get_data.PipelineStep(
+        name="gamma",
+        main=_build_stub_pipeline("gamma", "id", ["id", "value"], _uppercase),
+        input_filename="gamma.csv",
+        output_stem="gamma",
+        produces=("gamma",),
+    )
+
+    # Intentionally shuffle order to ensure the scheduler establishes dependencies.
+    stub_steps = (gamma_step, beta_step, alpha_step)
+    monkeypatch.setattr(get_data, "_resolve_pipeline_steps", lambda _: stub_steps)
+
+    original_configure = get_data.configure_logger
+    log_streams: deque[io.StringIO] = deque()
+
+    def _configure_logger_stub(cfg: get_data.LoggerConfig) -> get_data.Logger:
+        stream = io.StringIO()
+        log_streams.append(stream)
+        return original_configure(
+            get_data.LoggerConfig(
+                level=cfg.level,
+                run_id="scheduler",
+                redact_secrets=cfg.redact_secrets,
+                stream=stream,
+                handlers=list(cfg.handlers) if cfg.handlers else [],
+                logger_name=cfg.logger_name,
+            )
+        )
+
+    monkeypatch.setattr(get_data, "configure_logger", _configure_logger_stub)
+
+    date_prefix = "20240215"
+    argv = [
+        "--base-path",
+        str(base_path),
+        "--input-dir",
+        "input",
+        "--output-dir",
+        "output",
+        "--config",
+        str(config_path),
+        "--date",
+        date_prefix,
+        "--log-level",
+        "INFO",
+        "--steps",
+        "beta",
+    ]
+
+    exit_code = get_data.main(argv)
+    assert exit_code == 0
+
+    alpha_output = output_dir / f"output.alpha_{date_prefix}.csv"
+    beta_output = output_dir / f"output.beta_{date_prefix}.csv"
+    gamma_output = output_dir / f"output.gamma_{date_prefix}.csv"
+    assert alpha_output.exists()
+    assert beta_output.exists()
+    assert not gamma_output.exists()
+
+    manifest_path = base_path / "reports" / "run_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    statuses = {entry["name"]: entry for entry in manifest["steps"]}
+    assert statuses["alpha"]["status"] == "success"
+    assert statuses["beta"]["status"] == "success"
+    assert statuses["gamma"]["status"] == "skipped"
+    assert statuses["gamma"]["reason"] == "not_selected"
+
+    records: list[dict[str, object]] = []
+    while log_streams:
+        records.extend(parse_log_lines(log_streams.popleft().getvalue()))
+    done_order = [
+        record.get("step")
+        for record in records
+        if record.get("event") == "step_done"
+    ]
+    assert done_order[:2] == ["alpha", "beta"]
+
+
+@pytest.mark.e2e
+def test_get_data_scheduler__missing_dependency_artifact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    (input_dir / "alpha.csv").write_text("id,value\n1,foo\n", encoding="utf-8")
+    (input_dir / "beta.csv").write_text("id,value\n1,bar\n", encoding="utf-8")
+
+    config_path = base_path / "config.yaml"
+    config_path.write_text("io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n", encoding="utf-8")
+
+    def _identity(frame: pd.DataFrame, logger: get_data.Logger) -> pd.DataFrame:
+        _ = logger
+        return frame[["id", "value"]].copy()
+
+    alpha_step = get_data.PipelineStep(
+        name="alpha",
+        main=_build_stub_pipeline("alpha", "id", ["id", "value"], _identity),
+        input_filename="alpha.csv",
+        output_stem="alpha",
+        produces=("alpha",),
+    )
+    beta_step = get_data.PipelineStep(
+        name="beta",
+        main=_build_stub_pipeline("beta", "id", ["id", "value"], _identity),
+        input_filename="beta.csv",
+        output_stem="beta",
+        consumes=("alpha",),
+        produces=("beta",),
+    )
+
+    stub_steps = (beta_step, alpha_step)
+    monkeypatch.setattr(get_data, "_resolve_pipeline_steps", lambda _: stub_steps)
+
+    original_configure = get_data.configure_logger
+    log_streams: deque[io.StringIO] = deque()
+
+    def _configure_logger_stub(cfg: get_data.LoggerConfig) -> get_data.Logger:
+        stream = io.StringIO()
+        log_streams.append(stream)
+        return original_configure(
+            get_data.LoggerConfig(
+                level=cfg.level,
+                run_id="scheduler-missing",
+                redact_secrets=cfg.redact_secrets,
+                stream=stream,
+                handlers=list(cfg.handlers) if cfg.handlers else [],
+                logger_name=cfg.logger_name,
+            )
+        )
+
+    monkeypatch.setattr(get_data, "configure_logger", _configure_logger_stub)
+
+    date_prefix = "20240216"
+    argv = [
+        "--base-path",
+        str(base_path),
+        "--input-dir",
+        "input",
+        "--output-dir",
+        "output",
+        "--config",
+        str(config_path),
+        "--date",
+        date_prefix,
+        "--log-level",
+        "INFO",
+        "--steps",
+        "beta",
+    ]
+
+    exit_code = get_data.main(argv)
+    assert exit_code == 1
+
+    beta_output = output_dir / f"output.beta_{date_prefix}.csv"
+    assert not beta_output.exists()
+
+    manifest_path = base_path / "reports" / "run_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    step_entries = {entry["name"]: entry for entry in manifest["steps"]}
+    assert step_entries["beta"]["status"] == "failed"
+    assert step_entries["beta"]["reason"] == "missing_artifact"
+    assert step_entries["beta"]["executed"] is False
+    assert step_entries["beta"]["exit_code"] == 1
+    assert step_entries["alpha"]["status"] == "skipped"
+    assert step_entries["alpha"]["reason"] == "not_selected"
+
+    records: list[dict[str, object]] = []
+    while log_streams:
+        records.extend(parse_log_lines(log_streams.popleft().getvalue()))
+    events = [record.get("event") for record in records if "event" in record]
+    assert "step_missing_artifact" in events
     assert "activity_missing_value" in events
     assert events["activity_missing_value"].get("level") == "ERROR"
     assert not any(record.get("event") == "step_arguments" for record in logs)

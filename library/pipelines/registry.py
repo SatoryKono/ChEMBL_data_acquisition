@@ -25,6 +25,9 @@ class PipelineStepDefinition(TypedDict, total=False):
     output_flag: str
     extra_args: list[str]
     flags: PipelineStepFlags
+    depends_on: list[str]
+    produces: list[str]
+    consumes: list[str]
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,9 @@ class PipelineStep:
     output_flag: str = "--final-out"
     extra_args: tuple[str, ...] = ()
     supports_dry_run: bool = False
+    depends_on: tuple[str, ...] = ()
+    produces: tuple[str, ...] = ()
+    consumes: tuple[str, ...] = ()
 
     def build_arguments(self, cfg: Any, output_path: Path | None = None) -> list[str]:
         """Return CLI arguments forwarded to the wrapped ``main`` function."""
@@ -80,6 +86,7 @@ _DEFAULT_DEFINITIONS: tuple[PipelineStepDefinition, ...] = (
         "input": "document.csv",
         "output": "documents",
         "extra_args": ["--mode", "all"],
+        "produces": ["documents"],
     },
     {
         "name": "target",
@@ -88,18 +95,21 @@ _DEFAULT_DEFINITIONS: tuple[PipelineStepDefinition, ...] = (
         "output": "targets",
         "subcommand": "all",
         "output_flag": "--final-out",
+        "produces": ["targets"],
     },
     {
         "name": "assay",
         "callable": "scripts.get_assay_data:main",
         "input": "assay.csv",
         "output": "assays",
+        "produces": ["assays"],
     },
     {
         "name": "testitem",
         "callable": "scripts.get_testitem_data:main",
         "input": "testitem.csv",
         "output": "testitems",
+        "produces": ["testitems"],
     },
     {
         "name": "activity",
@@ -107,6 +117,7 @@ _DEFAULT_DEFINITIONS: tuple[PipelineStepDefinition, ...] = (
         "input": "activity.csv",
         "output": "activities",
         "flags": {"dry_run": True},
+        "produces": ["activities"],
     },
 )
 
@@ -165,6 +176,9 @@ def _build_step(entry: PipelineStepDefinition) -> PipelineStep:
     extra_args = tuple(entry.get("extra_args", ()))
     flags = entry.get("flags", {})
     supports_dry_run = bool(flags.get("dry_run", False))
+    depends_on = tuple(entry.get("depends_on", ()))
+    produces = tuple(entry.get("produces", ()))
+    consumes = tuple(entry.get("consumes", ()))
     return PipelineStep(
         name=name,
         main=main,
@@ -174,6 +188,9 @@ def _build_step(entry: PipelineStepDefinition) -> PipelineStep:
         output_flag=output_flag,
         extra_args=extra_args,
         supports_dry_run=supports_dry_run,
+        depends_on=depends_on,
+        produces=produces,
+        consumes=consumes,
     )
 
 
