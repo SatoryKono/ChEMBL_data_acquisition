@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import logging
+import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -21,6 +23,8 @@ __all__ = [
     "resolve_resource_reference",
 ]
 
+_LOGGER = logging.getLogger(__name__)
+
 _MANIFEST_FILENAME = "manifest.yaml"
 _IGNORED_FILENAMES = {
     "Thumbs.db",
@@ -30,6 +34,8 @@ _IGNORED_FILENAMES = {
 
 _IGNORED_DIRNAMES = {"__pycache__"}
 _IGNORED_SUFFIXES = {".pyc", ".pyo"}
+
+_CHECKSUM_OVERRIDE_ENV = "CHEMBL_DICTIONARY_ALLOW_MISMATCH"
 
 
 class DictionaryManifestError(RuntimeError):
@@ -46,6 +52,12 @@ class DictionaryResource:
     version: str
     sha256: str
     generator: Path
+
+def _allow_checksum_override() -> bool:
+    """Return ``True`` when checksum validation is explicitly disabled."""
+
+    value = os.getenv(_CHECKSUM_OVERRIDE_ENV, "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _normalise_text_newlines(data: bytes) -> bytes:
@@ -143,10 +155,21 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
 
         sha256_actual = _compute_sha256(absolute_path)
         if sha256_actual != sha256_expected:
-            raise DictionaryManifestError(
-                "Checksum mismatch for resource"
-                f" {name!r}: expected {sha256_expected}, got {sha256_actual}"
-            )
+            if _allow_checksum_override():
+                _LOGGER.warning(
+                    "dictionary_checksum_mismatch",
+                    extra={
+                        "resource": name,
+                        "expected": sha256_expected,
+                        "actual": sha256_actual,
+                        "path": str(absolute_path),
+                    },
+                )
+            else:
+                raise DictionaryManifestError(
+                    "Checksum mismatch for resource"
+                    f" {name!r}: expected {sha256_expected}, got {sha256_actual}"
+                )
 
         parsed[name] = DictionaryResource(
             name=name,

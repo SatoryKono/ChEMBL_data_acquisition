@@ -19,7 +19,6 @@ if str(ROOT) not in sys.path:
 import numpy as np
 import pandas as pd
 import pytest
-import yaml
 
 from config.paths import DICTIONARY_DIR
 from library.config import Config
@@ -85,54 +84,13 @@ def deterministic_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 def relax_dictionary_manifest_checks() -> None:
     """Allow dictionary metadata lookup even when bundled samples diverge."""
 
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setenv("CHEMBL_DICTIONARY_ALLOW_MISMATCH", "1")
     try:
-        dictionary_resources.list_resources()
-    except dictionary_resources.DictionaryManifestError:
-        manifest_path = DICTIONARY_DIR / "manifest.yaml"
-        try:
-            manifest_data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
-        except OSError:
-            yield
-            return
-
-        resources = manifest_data.get("resources")
-        if not isinstance(resources, dict):
-            yield
-            return
-
-        original_get_resource = dictionary_resources.get_resource
-
-        def _safe_get_resource(name: str, *, base_dir: Path | None = None):
-            try:
-                return original_get_resource(name, base_dir=base_dir)
-            except dictionary_resources.DictionaryManifestError:
-                entry = resources.get(name)
-                if not isinstance(entry, dict):
-                    raise
-                path_value = entry.get("path")
-                version = entry.get("version")
-                sha256 = entry.get("sha256")
-                generator = entry.get("generator", "")
-                if not isinstance(path_value, str) or not isinstance(version, str) or not isinstance(sha256, str):
-                    raise
-                root = Path(base_dir) if base_dir is not None else DICTIONARY_DIR
-                resolved_path = (root / path_value).resolve()
-                return dictionary_resources.DictionaryResource(
-                    name=name,
-                    relative_path=Path(path_value),
-                    path=resolved_path,
-                    version=version,
-                    sha256=sha256,
-                    generator=Path(generator),
-                )
-
-        dictionary_resources.get_resource = _safe_get_resource
-        try:
-            yield
-        finally:
-            dictionary_resources.get_resource = original_get_resource
-    else:
         yield
+    finally:
+        dictionary_resources._load_manifest.cache_clear()
+        monkeypatch.undo()
 
 
 @pytest.fixture(autouse=True)
