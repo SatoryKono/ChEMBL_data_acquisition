@@ -4,7 +4,8 @@ import pytest
 from urllib3.util import retry as urllib3_retry
 
 from library.clients import pubmed
-from library.config import ApiCfg, RetryCfg, session_with_retry
+from library.config.models import ApiCfg, RetryCfg
+from library.config.runtime import session_with_retry
 
 
 @pytest.mark.unit

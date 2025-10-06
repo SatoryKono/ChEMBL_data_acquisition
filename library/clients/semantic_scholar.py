@@ -13,7 +13,7 @@ from typing import Any
 
 import requests
 
-from ..config import SemanticScholarCfg
+from ..config.models import SemanticScholarCfg
 from .pubmed import _do_request
 
 __all__ = ["fetch_semantic_scholar", "fetch_semantic_scholar_batch"]

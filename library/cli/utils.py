@@ -36,6 +36,7 @@ from ..common.log import logger as default_logger
 from ..common.metadata import Stats, record_quality_failure
 from ..common.sidecar import SidecarErrors
 from ..config import Config, ConfigError, ensure_dirs, print_config
+from ..config.loader import DEFAULT_CONFIG_PATH
 from ..reporting.run_manifest import finalise_csv_output
 from ..utils.config import DEFAULT_CONFIG_PATH
 

@@ -24,7 +24,8 @@ from requests import Session
 
 from ..common.log import logger
 from ..common.rate_limiter import get_limiter, sleep
-from ..config import ApiCfg, IupharCfg, RetryCfg, session_with_retry
+from ..config.models import ApiCfg, IupharCfg, RetryCfg
+from ..config.runtime import session_with_retry
 
 __all__ = [
     "EXPECTED_FAMILY_COLUMNS",
