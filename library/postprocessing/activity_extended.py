@@ -11,6 +11,7 @@ the resulting CSVs remain byte-identical with the legacy exports.
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 import sys
@@ -507,6 +508,46 @@ def _load_testitem_lookup(dictionary_root: Path) -> pd.DataFrame:
     return result.drop_duplicates(subset=["molecule_chembl_id"])
 
 
+@functools.lru_cache(maxsize=None)
+def _load_parent_lookup_cached(dictionary_root: str) -> pd.Series:
+    root_path = Path(dictionary_root)
+    candidate = root_path / "_testitem" / "molecule_hierarchy.csv"
+    if not candidate.exists():
+        raise ActivityExtendedError(
+            "molecule_hierarchy.csv not found; expected at "
+            f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
+        )
+    try:
+        frame = helpers.read_csv_with_fallbacks(candidate)
+    except Exception as exc:  # pragma: no cover - defensive
+        raise ActivityExtendedError(
+            "unable to read molecule_hierarchy.csv; verify the CSV format"
+        ) from exc
+
+    required = {"molecule_chembl_id", "parent_molecule_chembl_id"}
+    missing = required - set(frame.columns)
+    if missing:
+        missing_list = ", ".join(sorted(missing))
+        raise ActivityExtendedError(
+            "molecule_hierarchy.csv missing required columns: " + missing_list
+        )
+
+    subset = frame.loc[:, ["molecule_chembl_id", "parent_molecule_chembl_id"]].copy()
+    subset["molecule_chembl_id"] = subset["molecule_chembl_id"].astype("string")
+    subset["parent_molecule_chembl_id"] = subset["parent_molecule_chembl_id"].astype(
+        "string"
+    )
+    subset = subset.dropna(subset=["molecule_chembl_id"])
+    subset = subset.loc[subset["molecule_chembl_id"].str.strip().ne("")]
+    subset = subset.drop_duplicates(subset=["molecule_chembl_id"], keep="first")
+    return subset.set_index("molecule_chembl_id")["parent_molecule_chembl_id"]
+
+
+def _load_parent_lookup(dictionary_root: Path) -> pd.Series:
+    resolved_root = dictionary_root.resolve()
+    return _load_parent_lookup_cached(str(resolved_root))
+
+
 def _insert_columns_after(
     df: pd.DataFrame, anchor: str, columns: Sequence[str]
 ) -> pd.DataFrame:
@@ -640,6 +681,46 @@ def _ensure_required_input_columns(frame: pd.DataFrame) -> tuple[pd.DataFrame, s
                 continue
         df[column] = _empty_series(df.index, dtype)
         filled.add(column)
+    return df, filled
+
+
+def _ensure_compound_key_sources(
+    frame: pd.DataFrame, *, dictionary_root: Path
+) -> tuple[pd.DataFrame, set[str]]:
+    df = frame.copy()
+    filled: set[str] = set()
+
+    if "molecule_chembl_id" not in df.columns:
+        df["molecule_chembl_id"] = pd.Series(pd.NA, index=df.index, dtype="string")
+        filled.add("molecule_chembl_id")
+
+    if "parent_molecule_chembl_id" not in df.columns:
+        df["parent_molecule_chembl_id"] = pd.Series(pd.NA, index=df.index, dtype="string")
+        filled.add("parent_molecule_chembl_id")
+
+    if df.empty:
+        return df, filled
+
+    parent_missing = _string_missing_mask(df["parent_molecule_chembl_id"])
+    molecule_available = ~_string_missing_mask(df["molecule_chembl_id"])
+    needs_parent = parent_missing & molecule_available
+    if needs_parent.any():
+        lookup = _load_parent_lookup(dictionary_root)
+        resolved = df.loc[needs_parent, "molecule_chembl_id"].map(lookup)
+        resolved = resolved.dropna()
+        if not resolved.empty:
+            df.loc[resolved.index, "parent_molecule_chembl_id"] = resolved
+            filled.add("parent_molecule_chembl_id")
+
+    parent_missing = _string_missing_mask(df["parent_molecule_chembl_id"])
+    molecule_missing = _string_missing_mask(df["molecule_chembl_id"])
+    unresolved = parent_missing & molecule_missing
+    if unresolved.any():
+        raise ActivityExtendedError(
+            "Unable to derive compound_key: missing both molecule_chembl_id and "
+            "parent_molecule_chembl_id for one or more rows"
+        )
+
     return df, filled
 
 
@@ -1113,11 +1194,16 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
 
     if missing_mask.any():
         for candidate in ("parent_molecule_chembl_id", "molecule_chembl_id"):
-            if candidate in df.columns:
-                df.loc[missing_mask, "compound_key"] = (
-                    df.loc[missing_mask, candidate].astype("string")
-                )
+            if candidate not in df.columns:
+                continue
+            available_mask = missing_mask & ~_string_missing_mask(df[candidate])
+            if available_mask.any():
+                df.loc[available_mask, "compound_key"] = df.loc[
+                    available_mask, candidate
+                ].astype("string")
                 filled.add("compound_key")
+                missing_mask = _string_missing_mask(df["compound_key"])
+            if not missing_mask.any():
                 break
 
     log_value_column_present = "log_value" in df.columns
@@ -1229,8 +1315,11 @@ def _transform_activity_frame(
     targets_override: Path | None,
 ) -> pd.DataFrame:
     df, ensured = _ensure_required_input_columns(frame)
+    df, identifier_filled = _ensure_compound_key_sources(
+        df, dictionary_root=dictionary_root
+    )
     df, augmented = _augment_activity_frame(df)
-    filled = ensured | augmented
+    filled = ensured | identifier_filled | augmented
     missing = _REQUIRED_COLUMNS - set(df.columns)
     if missing:
         available = ", ".join(sorted(df.columns))
@@ -1241,8 +1330,11 @@ def _transform_activity_frame(
         )
 
     df, ensured_filled = _augment_activity_frame(df)
-    original_filled = _augment_activity_frame(frame)[1]
-    filled = ensured_filled | original_filled
+    original_sources, original_identifier_filled = _ensure_compound_key_sources(
+        frame, dictionary_root=dictionary_root
+    )
+    original_filled = _augment_activity_frame(original_sources)[1]
+    filled = ensured_filled | original_identifier_filled | original_filled | identifier_filled
 
     if filled:
         logger.warning(
