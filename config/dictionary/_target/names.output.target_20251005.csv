@@ -1,0 +1,241 @@
+target_chembl_id,uniprot_id_primary,name,name_type,source_column
+CHEMBL1075102,P3C2A,1,isoform_name,isoform_names
+CHEMBL1075102,P3C2A,2,isoform_name,isoform_names
+CHEMBL1075102,P3C2A,PI3K-C2-alpha,uniprot_secondary,secondaryAccessionNames
+CHEMBL1075102,P3C2A,PI3K-C2-alpha|PIK3C2A|Phosphatidylinositol 4-phosphate 3-kinase C2 domain-containing subunit alpha|Phosphoinositide 3-kinase-C2-alpha|PtdIns-3-kinase C2 subunit alpha|pik3c2a|pi3k-c2-alpha|phosphatidylinositol 4-phosphate 3-kinase c2 domain-containing subunit alpha|phosphoinositide 3-kinase-c2-alpha|ptdins-3-kinase c2 subunit alpha,uniprot_alternative,protein_name_alt
+CHEMBL1075102,P3C2A,PIK3C2A,gene_symbol,gene_symbol
+CHEMBL1075102,P3C2A,PIK3C2A,gene_symbol,gene_symbol_list
+CHEMBL1075102,P3C2A,Phosphatidylinositol 4-phosphate 3-kinase C2 domain-containing subunit alpha,chembl_preferred,pref_name
+CHEMBL1075102,P3C2A,Phosphatidylinositol 4-phosphate 3-kinase C2 domain-containing subunit alpha,uniprot_recommended,recommendedName
+CHEMBL1075102,P3C2A,Phosphatidylinositol 4-phosphate 3-kinase C2 domain-containing subunit alpha,uniprot_secondary,secondaryAccessionNames
+CHEMBL1075102,P3C2A,Phosphoinositide 3-kinase-C2-alpha,uniprot_secondary,secondaryAccessionNames
+CHEMBL1075102,P3C2A,PtdIns-3-kinase C2 subunit alpha,uniprot_secondary,secondaryAccessionNames
+CHEMBL1075102,P3C2A,phosphatidylinositol 4-phosphate 3-kinase c2 domain-containing subunit alpha,gtop_synonym,gtop_synonyms
+CHEMBL1075102,P3C2A,phosphatidylinositol 4-phosphate 3-kinase c2 domain-containing subunit alpha,uniprot_canonical,protein_name_canonical
+CHEMBL1075102,P3C2A,phosphatidylinositol 4-phosphate 3-kinase c2 domain-containing subunit alpha,uniprot_synonym,protein_synonym_list
+CHEMBL1075102,P3C2A,phosphoinositide 3-kinase-c2-alpha,gtop_synonym,gtop_synonyms
+CHEMBL1075102,P3C2A,phosphoinositide 3-kinase-c2-alpha,uniprot_synonym,protein_synonym_list
+CHEMBL1075102,P3C2A,pi3k-c2-alpha,gtop_synonym,gtop_synonyms
+CHEMBL1075102,P3C2A,pi3k-c2-alpha,uniprot_synonym,protein_synonym_list
+CHEMBL1075102,P3C2A,pik3c2a,gtop_synonym,gtop_synonyms
+CHEMBL1075102,P3C2A,pik3c2a,uniprot_synonym,protein_synonym_list
+CHEMBL1075102,P3C2A,ptdins-3-kinase c2 subunit alpha,gtop_synonym,gtop_synonyms
+CHEMBL1075102,P3C2A,ptdins-3-kinase c2 subunit alpha,uniprot_synonym,protein_synonym_list
+CHEMBL1615381,MEN1,1,isoform_name,isoform_names
+CHEMBL1615381,MEN1,2,isoform_name,isoform_names
+CHEMBL1615381,MEN1,3,isoform_name,isoform_names
+CHEMBL1615381,MEN1,MEN1,gene_symbol,gene_symbol
+CHEMBL1615381,MEN1,MEN1,gene_symbol,gene_symbol_list
+CHEMBL1615381,MEN1,MEN1|Menin|SCG2|men1|menin|scg2,uniprot_alternative,protein_name_alt
+CHEMBL1615381,MEN1,Menin,chembl_preferred,pref_name
+CHEMBL1615381,MEN1,Menin,uniprot_recommended,recommendedName
+CHEMBL1615381,MEN1,Menin,uniprot_secondary,secondaryAccessionNames
+CHEMBL1615381,MEN1,long,isoform_synonym,isoform_synonyms
+CHEMBL1615381,MEN1,men1,gtop_synonym,gtop_synonyms
+CHEMBL1615381,MEN1,men1,uniprot_synonym,protein_synonym_list
+CHEMBL1615381,MEN1,menin,gtop_synonym,gtop_synonyms
+CHEMBL1615381,MEN1,menin,uniprot_canonical,protein_name_canonical
+CHEMBL1615381,MEN1,menin,uniprot_synonym,protein_synonym_list
+CHEMBL1615381,MEN1,scg2,gtop_synonym,gtop_synonyms
+CHEMBL1615381,MEN1,scg2,uniprot_synonym,protein_synonym_list
+CHEMBL1615381,MEN1,short,isoform_synonym,isoform_synonyms
+CHEMBL2343,SGK1,1,isoform_name,isoform_names
+CHEMBL2343,SGK1,2,isoform_name,isoform_names
+CHEMBL2343,SGK1,3,isoform_name,isoform_names
+CHEMBL2343,SGK1,4,isoform_name,isoform_names
+CHEMBL2343,SGK1,5,isoform_name,isoform_names
+CHEMBL2343,SGK1,SGK1,gene_symbol,gene_symbol
+CHEMBL2343,SGK1,SGK1,gene_symbol,gene_symbol_list
+CHEMBL2343,SGK1,SGK|SGK1|Serine/threonine-protein kinase Sgk1|Serum/glucocorticoid-regulated kinase 1|sgk1|serine/threonine-protein kinase sgk1|serum/glucocorticoid-regulated kinase 1|sgk,uniprot_alternative,protein_name_alt
+CHEMBL2343,SGK1,Serine/threonine-protein kinase Sgk1,chembl_preferred,pref_name
+CHEMBL2343,SGK1,Serine/threonine-protein kinase Sgk1,uniprot_recommended,recommendedName
+CHEMBL2343,SGK1,Serine/threonine-protein kinase Sgk1,uniprot_secondary,secondaryAccessionNames
+CHEMBL2343,SGK1,Serum/glucocorticoid-regulated kinase 1,uniprot_secondary,secondaryAccessionNames
+CHEMBL2343,SGK1,serine/threonine-protein kinase sgk1,gtop_synonym,gtop_synonyms
+CHEMBL2343,SGK1,serine/threonine-protein kinase sgk1,uniprot_canonical,protein_name_canonical
+CHEMBL2343,SGK1,serine/threonine-protein kinase sgk1,uniprot_synonym,protein_synonym_list
+CHEMBL2343,SGK1,serum/glucocorticoid-regulated kinase 1,gtop_synonym,gtop_synonyms
+CHEMBL2343,SGK1,serum/glucocorticoid-regulated kinase 1,uniprot_synonym,protein_synonym_list
+CHEMBL2343,SGK1,sgk,gtop_synonym,gtop_synonyms
+CHEMBL2343,SGK1,sgk,uniprot_synonym,protein_synonym_list
+CHEMBL2343,SGK1,sgk1,gtop_synonym,gtop_synonyms
+CHEMBL2343,SGK1,sgk1,uniprot_synonym,protein_synonym_list
+CHEMBL2343,SGK1,sgk1.1:sgk1_v2,isoform_synonym,isoform_synonyms
+CHEMBL2343,SGK1,sgk1.2,isoform_synonym,isoform_synonyms
+CHEMBL2652,PDE2A,5,isoform_name,isoform_names
+CHEMBL2652,PDE2A,6,isoform_name,isoform_names
+CHEMBL2652,PDE2A,CGS-PDE,uniprot_secondary,secondaryAccessionNames
+CHEMBL2652,PDE2A,"CGS-PDE|Cyclic GMP-stimulated phosphodiesterase|PDE2A|cGMP-dependent 3',5'-cyclic phosphodiesterase|cGSPDE|pde2a|cgs-pde|cyclic gmp-stimulated phosphodiesterase|cgmp-dependent 3',5'-cyclic phosphodiesterase|cgspde",uniprot_alternative,protein_name_alt
+CHEMBL2652,PDE2A,Cyclic GMP-stimulated phosphodiesterase,uniprot_secondary,secondaryAccessionNames
+CHEMBL2652,PDE2A,PDE2A,gene_symbol,gene_symbol
+CHEMBL2652,PDE2A,PDE2A,gene_symbol,gene_symbol_list
+CHEMBL2652,PDE2A,"cGMP-dependent 3',5'-cyclic phosphodiesterase",chembl_preferred,pref_name
+CHEMBL2652,PDE2A,"cGMP-dependent 3',5'-cyclic phosphodiesterase",uniprot_recommended,recommendedName
+CHEMBL2652,PDE2A,"cGMP-dependent 3',5'-cyclic phosphodiesterase",uniprot_secondary,secondaryAccessionNames
+CHEMBL2652,PDE2A,cGSPDE,uniprot_secondary,secondaryAccessionNames
+CHEMBL2652,PDE2A,"cgmp-dependent 3',5'-cyclic phosphodiesterase",gtop_synonym,gtop_synonyms
+CHEMBL2652,PDE2A,"cgmp-dependent 3',5'-cyclic phosphodiesterase",uniprot_canonical,protein_name_canonical
+CHEMBL2652,PDE2A,"cgmp-dependent 3',5'-cyclic phosphodiesterase",uniprot_synonym,protein_synonym_list
+CHEMBL2652,PDE2A,cgs-pde,gtop_synonym,gtop_synonyms
+CHEMBL2652,PDE2A,cgs-pde,uniprot_synonym,protein_synonym_list
+CHEMBL2652,PDE2A,cgspde,gtop_synonym,gtop_synonyms
+CHEMBL2652,PDE2A,cgspde,uniprot_synonym,protein_synonym_list
+CHEMBL2652,PDE2A,cyclic gmp-stimulated phosphodiesterase,gtop_synonym,gtop_synonyms
+CHEMBL2652,PDE2A,cyclic gmp-stimulated phosphodiesterase,uniprot_synonym,protein_synonym_list
+CHEMBL2652,PDE2A,pde2a,gtop_synonym,gtop_synonyms
+CHEMBL2652,PDE2A,pde2a,uniprot_synonym,protein_synonym_list
+CHEMBL2652,PDE2A,pde2a1,isoform_name,isoform_names
+CHEMBL2652,PDE2A,pde2a2,isoform_name,isoform_names
+CHEMBL2652,PDE2A,pde2a3,isoform_name,isoform_names
+CHEMBL2652,PDE2A,pde2a4,isoform_name,isoform_names
+CHEMBL3130,PK3CD,1,isoform_name,isoform_names
+CHEMBL3130,PK3CD,2,isoform_name,isoform_names
+CHEMBL3130,PK3CD,PI3-kinase subunit delta,uniprot_secondary,secondaryAccessionNames
+CHEMBL3130,PK3CD,"PI3-kinase subunit delta|PI3K-delta|PI3Kdelta|PIK3CD|Phosphatidylinositol 4,5-bisphosphate 3-kinase 110 kDa catalytic subunit delta|Phosphatidylinositol 4,5-bisphosphate 3-kinase catalytic subunit delta isoform|PtdIns-3-kinase subunit delta|PtdIns-3-kinase subunit p110-delta|p110delta|pik3cd|pi3-kinase subunit delta|pi3k-delta|pi3kdelta|phosphatidylinositol 4,5-bisphosphate 3-kinase 110 kda catalytic subunit delta|phosphatidylinositol 4,5-bisphosphate 3-kinase catalytic subunit delta isoform|ptdins-3-kinase subunit delta|ptdins-3-kinase subunit p110-delta",uniprot_alternative,protein_name_alt
+CHEMBL3130,PK3CD,PI3K-delta,uniprot_secondary,secondaryAccessionNames
+CHEMBL3130,PK3CD,PI3Kdelta,uniprot_secondary,secondaryAccessionNames
+CHEMBL3130,PK3CD,PIK3CD,gene_symbol,gene_symbol
+CHEMBL3130,PK3CD,PIK3CD,gene_symbol,gene_symbol_list
+CHEMBL3130,PK3CD,"Phosphatidylinositol 4,5-bisphosphate 3-kinase 110 kDa catalytic subunit delta",uniprot_secondary,secondaryAccessionNames
+CHEMBL3130,PK3CD,"Phosphatidylinositol 4,5-bisphosphate 3-kinase catalytic subunit delta isoform",chembl_preferred,pref_name
+CHEMBL3130,PK3CD,"Phosphatidylinositol 4,5-bisphosphate 3-kinase catalytic subunit delta isoform",uniprot_recommended,recommendedName
+CHEMBL3130,PK3CD,"Phosphatidylinositol 4,5-bisphosphate 3-kinase catalytic subunit delta isoform",uniprot_secondary,secondaryAccessionNames
+CHEMBL3130,PK3CD,PtdIns-3-kinase subunit delta,uniprot_secondary,secondaryAccessionNames
+CHEMBL3130,PK3CD,PtdIns-3-kinase subunit p110-delta,uniprot_secondary,secondaryAccessionNames
+CHEMBL3130,PK3CD,p110-delta,isoform_synonym,isoform_synonyms
+CHEMBL3130,PK3CD,p110delta,gtop_synonym,gtop_synonyms
+CHEMBL3130,PK3CD,p110delta,uniprot_secondary,secondaryAccessionNames
+CHEMBL3130,PK3CD,p110delta,uniprot_synonym,protein_synonym_list
+CHEMBL3130,PK3CD,p37-delta,isoform_synonym,isoform_synonyms
+CHEMBL3130,PK3CD,"phosphatidylinositol 4,5-bisphosphate 3-kinase 110 kda catalytic subunit delta",gtop_synonym,gtop_synonyms
+CHEMBL3130,PK3CD,"phosphatidylinositol 4,5-bisphosphate 3-kinase 110 kda catalytic subunit delta",uniprot_synonym,protein_synonym_list
+CHEMBL3130,PK3CD,"phosphatidylinositol 4,5-bisphosphate 3-kinase catalytic subunit delta isoform",gtop_synonym,gtop_synonyms
+CHEMBL3130,PK3CD,"phosphatidylinositol 4,5-bisphosphate 3-kinase catalytic subunit delta isoform",uniprot_canonical,protein_name_canonical
+CHEMBL3130,PK3CD,"phosphatidylinositol 4,5-bisphosphate 3-kinase catalytic subunit delta isoform",uniprot_synonym,protein_synonym_list
+CHEMBL3130,PK3CD,pi3-kinase subunit delta,gtop_synonym,gtop_synonyms
+CHEMBL3130,PK3CD,pi3-kinase subunit delta,uniprot_synonym,protein_synonym_list
+CHEMBL3130,PK3CD,pi3k-delta,gtop_synonym,gtop_synonyms
+CHEMBL3130,PK3CD,pi3k-delta,uniprot_synonym,protein_synonym_list
+CHEMBL3130,PK3CD,pi3kdelta,gtop_synonym,gtop_synonyms
+CHEMBL3130,PK3CD,pi3kdelta,uniprot_synonym,protein_synonym_list
+CHEMBL3130,PK3CD,pik3cd,gtop_synonym,gtop_synonyms
+CHEMBL3130,PK3CD,pik3cd,uniprot_synonym,protein_synonym_list
+CHEMBL3130,PK3CD,ptdins-3-kinase subunit delta,gtop_synonym,gtop_synonyms
+CHEMBL3130,PK3CD,ptdins-3-kinase subunit delta,uniprot_synonym,protein_synonym_list
+CHEMBL3130,PK3CD,ptdins-3-kinase subunit p110-delta,gtop_synonym,gtop_synonyms
+CHEMBL3130,PK3CD,ptdins-3-kinase subunit p110-delta,uniprot_synonym,protein_synonym_list
+CHEMBL3788,PLK4,1,isoform_name,isoform_names
+CHEMBL3788,PLK4,2,isoform_name,isoform_names
+CHEMBL3788,PLK4,3,isoform_name,isoform_names
+CHEMBL3788,PLK4,PLK-4,uniprot_secondary,secondaryAccessionNames
+CHEMBL3788,PLK4,PLK-4|PLK4|Polo-like kinase 4|SAK|STK18|Serine/threonine-protein kinase 18|Serine/threonine-protein kinase PLK4|Serine/threonine-protein kinase Sak|plk4|plk-4|polo-like kinase 4|serine/threonine-protein kinase 18|serine/threonine-protein kinase plk4|serine/threonine-protein kinase sak|sak|stk18,uniprot_alternative,protein_name_alt
+CHEMBL3788,PLK4,PLK4,gene_symbol,gene_symbol
+CHEMBL3788,PLK4,PLK4,gene_symbol,gene_symbol_list
+CHEMBL3788,PLK4,Polo-like kinase 4,uniprot_secondary,secondaryAccessionNames
+CHEMBL3788,PLK4,Serine/threonine-protein kinase 18,uniprot_secondary,secondaryAccessionNames
+CHEMBL3788,PLK4,Serine/threonine-protein kinase PLK4,chembl_preferred,pref_name
+CHEMBL3788,PLK4,Serine/threonine-protein kinase PLK4,uniprot_recommended,recommendedName
+CHEMBL3788,PLK4,Serine/threonine-protein kinase PLK4,uniprot_secondary,secondaryAccessionNames
+CHEMBL3788,PLK4,Serine/threonine-protein kinase Sak,uniprot_secondary,secondaryAccessionNames
+CHEMBL3788,PLK4,plk-4,gtop_synonym,gtop_synonyms
+CHEMBL3788,PLK4,plk-4,uniprot_synonym,protein_synonym_list
+CHEMBL3788,PLK4,plk4,gtop_synonym,gtop_synonyms
+CHEMBL3788,PLK4,plk4,uniprot_synonym,protein_synonym_list
+CHEMBL3788,PLK4,polo-like kinase 4,gtop_synonym,gtop_synonyms
+CHEMBL3788,PLK4,polo-like kinase 4,uniprot_synonym,protein_synonym_list
+CHEMBL3788,PLK4,sak,gtop_synonym,gtop_synonyms
+CHEMBL3788,PLK4,sak,uniprot_synonym,protein_synonym_list
+CHEMBL3788,PLK4,serine/threonine-protein kinase 18,gtop_synonym,gtop_synonyms
+CHEMBL3788,PLK4,serine/threonine-protein kinase 18,uniprot_synonym,protein_synonym_list
+CHEMBL3788,PLK4,serine/threonine-protein kinase plk4,gtop_synonym,gtop_synonyms
+CHEMBL3788,PLK4,serine/threonine-protein kinase plk4,uniprot_canonical,protein_name_canonical
+CHEMBL3788,PLK4,serine/threonine-protein kinase plk4,uniprot_synonym,protein_synonym_list
+CHEMBL3788,PLK4,serine/threonine-protein kinase sak,gtop_synonym,gtop_synonyms
+CHEMBL3788,PLK4,serine/threonine-protein kinase sak,uniprot_synonym,protein_synonym_list
+CHEMBL3788,PLK4,stk18,gtop_synonym,gtop_synonyms
+CHEMBL3788,PLK4,stk18,uniprot_synonym,protein_synonym_list
+CHEMBL4580,KITM,1,isoform_name,isoform_names
+CHEMBL4580,KITM,2,isoform_name,isoform_names
+CHEMBL4580,KITM,2'-deoxyuridine kinase TK2,uniprot_secondary,secondaryAccessionNames
+CHEMBL4580,KITM,"2'-deoxyuridine kinase TK2|Deoxycytidine kinase TK2|Mt-TK|TK2|Thymidine kinase 2, mitochondrial|tk2|2'-deoxyuridine kinase tk2|deoxycytidine kinase tk2|mt-tk|thymidine kinase 2, mitochondrial",uniprot_alternative,protein_name_alt
+CHEMBL4580,KITM,2'-deoxyuridine kinase tk2,gtop_synonym,gtop_synonyms
+CHEMBL4580,KITM,2'-deoxyuridine kinase tk2,uniprot_synonym,protein_synonym_list
+CHEMBL4580,KITM,3,isoform_name,isoform_names
+CHEMBL4580,KITM,4,isoform_name,isoform_names
+CHEMBL4580,KITM,5,isoform_name,isoform_names
+CHEMBL4580,KITM,6,isoform_name,isoform_names
+CHEMBL4580,KITM,Deoxycytidine kinase TK2,uniprot_secondary,secondaryAccessionNames
+CHEMBL4580,KITM,Mt-TK,uniprot_secondary,secondaryAccessionNames
+CHEMBL4580,KITM,TK2,gene_symbol,gene_symbol
+CHEMBL4580,KITM,TK2,gene_symbol,gene_symbol_list
+CHEMBL4580,KITM,"Thymidine kinase 2, mitochondrial",chembl_preferred,pref_name
+CHEMBL4580,KITM,"Thymidine kinase 2, mitochondrial",uniprot_recommended,recommendedName
+CHEMBL4580,KITM,"Thymidine kinase 2, mitochondrial",uniprot_secondary,secondaryAccessionNames
+CHEMBL4580,KITM,deoxycytidine kinase tk2,gtop_synonym,gtop_synonyms
+CHEMBL4580,KITM,deoxycytidine kinase tk2,uniprot_synonym,protein_synonym_list
+CHEMBL4580,KITM,mt-tk,gtop_synonym,gtop_synonyms
+CHEMBL4580,KITM,mt-tk,uniprot_synonym,protein_synonym_list
+CHEMBL4580,KITM,"thymidine kinase 2, mitochondrial",gtop_synonym,gtop_synonyms
+CHEMBL4580,KITM,"thymidine kinase 2, mitochondrial",uniprot_canonical,protein_name_canonical
+CHEMBL4580,KITM,"thymidine kinase 2, mitochondrial",uniprot_synonym,protein_synonym_list
+CHEMBL4580,KITM,tk2,gtop_synonym,gtop_synonyms
+CHEMBL4580,KITM,tk2,uniprot_synonym,protein_synonym_list
+CHEMBL5255,TLR4,1,isoform_name,isoform_names
+CHEMBL5255,TLR4,2,isoform_name,isoform_names
+CHEMBL5255,TLR4,3,isoform_name,isoform_names
+CHEMBL5255,TLR4,TLR4,gene_symbol,gene_symbol
+CHEMBL5255,TLR4,TLR4,gene_symbol,gene_symbol_list
+CHEMBL5255,TLR4,TLR4|Toll-like receptor 4|hToll|tlr4|toll-like receptor 4|htoll,uniprot_alternative,protein_name_alt
+CHEMBL5255,TLR4,Toll-like receptor 4,chembl_preferred,pref_name
+CHEMBL5255,TLR4,Toll-like receptor 4,uniprot_recommended,recommendedName
+CHEMBL5255,TLR4,Toll-like receptor 4,uniprot_secondary,secondaryAccessionNames
+CHEMBL5255,TLR4,hToll,uniprot_secondary,secondaryAccessionNames
+CHEMBL5255,TLR4,htoll,gtop_synonym,gtop_synonyms
+CHEMBL5255,TLR4,htoll,uniprot_synonym,protein_synonym_list
+CHEMBL5255,TLR4,tlr4,gtop_synonym,gtop_synonyms
+CHEMBL5255,TLR4,tlr4,uniprot_synonym,protein_synonym_list
+CHEMBL5255,TLR4,toll-like receptor 4,gtop_synonym,gtop_synonyms
+CHEMBL5255,TLR4,toll-like receptor 4,uniprot_canonical,protein_name_canonical
+CHEMBL5255,TLR4,toll-like receptor 4,uniprot_synonym,protein_synonym_list
+CHEMBL5443,CDC7,1,isoform_name,isoform_names
+CHEMBL5443,CDC7,CDC7,gene_symbol,gene_symbol
+CHEMBL5443,CDC7,CDC7,gene_symbol,gene_symbol_list
+CHEMBL5443,CDC7,CDC7-related kinase,uniprot_secondary,secondaryAccessionNames
+CHEMBL5443,CDC7,CDC7|CDC7-related kinase|CDC7L1|Cell division cycle 7-related protein kinase|HsCdc7|huCdc7|cdc7|cdc7-related kinase|cell division cycle 7-related protein kinase|hscdc7|hucdc7|cdc7l1,uniprot_alternative,protein_name_alt
+CHEMBL5443,CDC7,Cell division cycle 7-related protein kinase,chembl_preferred,pref_name
+CHEMBL5443,CDC7,Cell division cycle 7-related protein kinase,uniprot_recommended,recommendedName
+CHEMBL5443,CDC7,Cell division cycle 7-related protein kinase,uniprot_secondary,secondaryAccessionNames
+CHEMBL5443,CDC7,HsCdc7,uniprot_secondary,secondaryAccessionNames
+CHEMBL5443,CDC7,cdc7,gtop_synonym,gtop_synonyms
+CHEMBL5443,CDC7,cdc7,uniprot_synonym,protein_synonym_list
+CHEMBL5443,CDC7,cdc7-related kinase,gtop_synonym,gtop_synonyms
+CHEMBL5443,CDC7,cdc7-related kinase,uniprot_synonym,protein_synonym_list
+CHEMBL5443,CDC7,cdc7l1,gtop_synonym,gtop_synonyms
+CHEMBL5443,CDC7,cdc7l1,uniprot_synonym,protein_synonym_list
+CHEMBL5443,CDC7,cell division cycle 7-related protein kinase,gtop_synonym,gtop_synonyms
+CHEMBL5443,CDC7,cell division cycle 7-related protein kinase,uniprot_canonical,protein_name_canonical
+CHEMBL5443,CDC7,cell division cycle 7-related protein kinase,uniprot_synonym,protein_synonym_list
+CHEMBL5443,CDC7,hscdc7,gtop_synonym,gtop_synonyms
+CHEMBL5443,CDC7,hscdc7,uniprot_synonym,protein_synonym_list
+CHEMBL5443,CDC7,huCdc7,uniprot_secondary,secondaryAccessionNames
+CHEMBL5443,CDC7,hucdc7,gtop_synonym,gtop_synonyms
+CHEMBL5443,CDC7,hucdc7,uniprot_synonym,protein_synonym_list
+CHEMBL5476,BMR1B,1,isoform_name,isoform_names
+CHEMBL5476,BMR1B,2,isoform_name,isoform_names
+CHEMBL5476,BMR1B,BMP type-1B receptor,uniprot_secondary,secondaryAccessionNames
+CHEMBL5476,BMR1B,BMP type-1B receptor|BMPR-1B|BMPR1B|Bone morphogenetic protein receptor type-1B|bmpr1b|bmp type-1b receptor|bmpr-1b|bone morphogenetic protein receptor type-1b,uniprot_alternative,protein_name_alt
+CHEMBL5476,BMR1B,BMPR-1B,uniprot_secondary,secondaryAccessionNames
+CHEMBL5476,BMR1B,BMPR1B,gene_symbol,gene_symbol
+CHEMBL5476,BMR1B,BMPR1B,gene_symbol,gene_symbol_list
+CHEMBL5476,BMR1B,Bone morphogenetic protein receptor type-1B,chembl_preferred,pref_name
+CHEMBL5476,BMR1B,Bone morphogenetic protein receptor type-1B,uniprot_recommended,recommendedName
+CHEMBL5476,BMR1B,Bone morphogenetic protein receptor type-1B,uniprot_secondary,secondaryAccessionNames
+CHEMBL5476,BMR1B,bmp type-1b receptor,gtop_synonym,gtop_synonyms
+CHEMBL5476,BMR1B,bmp type-1b receptor,uniprot_synonym,protein_synonym_list
+CHEMBL5476,BMR1B,bmpr-1b,gtop_synonym,gtop_synonyms
+CHEMBL5476,BMR1B,bmpr-1b,uniprot_synonym,protein_synonym_list
+CHEMBL5476,BMR1B,bmpr1b,gtop_synonym,gtop_synonyms
+CHEMBL5476,BMR1B,bmpr1b,uniprot_synonym,protein_synonym_list
+CHEMBL5476,BMR1B,bone morphogenetic protein receptor type-1b,gtop_synonym,gtop_synonyms
+CHEMBL5476,BMR1B,bone morphogenetic protein receptor type-1b,uniprot_canonical,protein_name_canonical
+CHEMBL5476,BMR1B,bone morphogenetic protein receptor type-1b,uniprot_synonym,protein_synonym_list
