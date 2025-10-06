@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -42,3 +43,68 @@ def test_normalise_text_newlines__binary_payload_preserved() -> None:
     result = dictionaries._normalise_text_newlines(payload)
 
     assert result is payload
+
+
+@pytest.mark.unit
+def test_get_resource__accepts_extra_checksum(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Extra hashes supplied via the environment authorise new dictionaries."""
+
+    dictionaries._load_manifest.cache_clear()
+    custom_hash = "deadbeef" * 8
+    monkeypatch.setenv(
+        "CHEMBL_DICTIONARY_EXTRA_HASHES",
+        json.dumps({"dictionary_root": [custom_hash]}),
+    )
+    original_compute = dictionaries._compute_sha256
+
+    def _fake_compute(path: Path) -> str:
+        if Path(path).resolve() == dictionaries.DICTIONARY_DIR.resolve():
+            return custom_hash
+        return original_compute(path)
+
+    monkeypatch.setattr(dictionaries, "_compute_sha256", _fake_compute)
+
+    resource = dictionaries.get_resource("dictionary_root")
+
+    assert resource.sha256 == custom_hash
+
+    dictionaries._load_manifest.cache_clear()
+
+
+@pytest.mark.unit
+def test_get_resource__supports_wildcard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The wildcard value disables checksum validation for a resource."""
+
+    dictionaries._load_manifest.cache_clear()
+    computed_hash = "cafebabe" * 8
+    monkeypatch.setenv(
+        "CHEMBL_DICTIONARY_EXTRA_HASHES",
+        json.dumps({"dictionary_root": "*"}),
+    )
+    original_compute = dictionaries._compute_sha256
+
+    def _fake_compute(path: Path) -> str:
+        if Path(path).resolve() == dictionaries.DICTIONARY_DIR.resolve():
+            return computed_hash
+        return original_compute(path)
+
+    monkeypatch.setattr(dictionaries, "_compute_sha256", _fake_compute)
+
+    resource = dictionaries.get_resource("dictionary_root")
+
+    assert resource.sha256 == computed_hash
+
+    dictionaries._load_manifest.cache_clear()
+
+
+@pytest.mark.unit
+def test_list_resources__invalid_extra_hashes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Invalid JSON payloads raise a manifest error immediately."""
+
+    dictionaries._load_manifest.cache_clear()
+    monkeypatch.setenv("CHEMBL_DICTIONARY_EXTRA_HASHES", "not json")
+
+    with pytest.raises(dictionaries.DictionaryManifestError):
+        dictionaries.list_resources()
+
+    dictionaries._load_manifest.cache_clear()

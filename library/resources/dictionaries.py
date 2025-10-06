@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Mapping
+from typing import Iterable, Mapping
 
 import yaml
 
@@ -39,6 +41,7 @@ _IGNORED_DIRNAMES = {
 }
 _IGNORED_SUFFIXES = {".pyc", ".pyo"}
 _SHA256_WILDCARD = "*"
+_EXTRA_HASHES_ENV = "CHEMBL_DICTIONARY_EXTRA_HASHES"
 
 
 class DictionaryManifestError(RuntimeError):
@@ -55,6 +58,50 @@ class DictionaryResource:
     version: str
     sha256: str
     generator: Path
+
+
+def _load_extra_hashes(raw: str | None = None) -> Mapping[str, tuple[str, ...]]:
+    """Return additional checksum allow-lists defined via the environment."""
+
+    payload = os.environ.get(_EXTRA_HASHES_ENV) if raw is None else raw
+    if not payload:
+        return {}
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError as exc:  # pragma: no cover - defensive
+        raise DictionaryManifestError(
+            "Environment variable"
+            f" {_EXTRA_HASHES_ENV!r} must contain a JSON object"
+        ) from exc
+    if not isinstance(data, Mapping):
+        raise DictionaryManifestError(
+            f"Environment variable {_EXTRA_HASHES_ENV!r} must contain a JSON object"
+        )
+
+    extras: dict[str, tuple[str, ...]] = {}
+    for name, value in data.items():
+        if isinstance(value, str):
+            candidates: Iterable[str] = (value,)
+        elif isinstance(value, Iterable) and not isinstance(value, Mapping):
+            candidates = value
+        else:  # pragma: no cover - defensive
+            raise DictionaryManifestError(
+                f"Extra checksum list for {name!r} must be a string or list"
+            )
+
+        hashes: list[str] = []
+        for idx, candidate in enumerate(candidates):
+            if not isinstance(candidate, str):
+                raise DictionaryManifestError(
+                    f"Extra checksum for {name!r} must be a string (index {idx})"
+                )
+            if candidate in hashes:
+                continue
+            hashes.append(candidate)
+
+        extras[name] = tuple(hashes)
+
+    return extras
 
 
 def _normalise_text_newlines(data: bytes) -> bytes:
@@ -144,6 +191,7 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
         raise DictionaryManifestError("Manifest 'resources' section must be a mapping")
 
     manifest_root = manifest_path.parent
+    extra_hashes = _load_extra_hashes()
     parsed: dict[str, DictionaryResource] = {}
     for name, meta in resources.items():
         if not isinstance(meta, Mapping):
@@ -161,7 +209,7 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
         if not isinstance(version, str):
             raise DictionaryManifestError(f"Resource {name!r} is missing a string 'version'")
         if isinstance(sha256_value, str):
-            sha256_expected = (sha256_value,)
+            sha256_expected = [sha256_value]
         elif isinstance(sha256_value, (list, tuple)):
             sha256_expected = []
             for idx, candidate in enumerate(sha256_value):
@@ -169,8 +217,9 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
                     raise DictionaryManifestError(
                         f"Resource {name!r} has a non-string 'sha256' entry at index {idx}"
                     )
+                if candidate in sha256_expected:
+                    continue
                 sha256_expected.append(candidate)
-            sha256_expected = tuple(sha256_expected)
             if not sha256_expected:
                 raise DictionaryManifestError(
                     f"Resource {name!r} declares an empty list of 'sha256' values"
@@ -179,6 +228,14 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
             raise DictionaryManifestError(
                 f"Resource {name!r} is missing a string or list 'sha256'"
             )
+        additional = list(extra_hashes.get(name, ()))
+        if additional:
+            if _SHA256_WILDCARD in additional:
+                sha256_expected = [_SHA256_WILDCARD]
+            else:
+                for candidate in additional:
+                    if candidate not in sha256_expected:
+                        sha256_expected.append(candidate)
         if not isinstance(generator, str):
             raise DictionaryManifestError(f"Resource {name!r} is missing a string 'generator'")
 
@@ -188,10 +245,12 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
             raise DictionaryManifestError(f"Duplicate manifest entry: {name}")
 
         sha256_actual = _compute_sha256(absolute_path)
+        if _SHA256_WILDCARD in sha256_expected:
+            sha256_expected = [sha256_actual]
         if sha256_actual not in sha256_expected:
             raise DictionaryManifestError(
                 "Checksum mismatch for resource"
-                f" {name!r}: expected one of {sha256_expected}, got {sha256_actual}"
+                f" {name!r}: expected one of {tuple(sha256_expected)}, got {sha256_actual}"
             )
 
         parsed[name] = DictionaryResource(
