@@ -2868,6 +2868,34 @@ def fetch_uniprot(
         cfg.target.uniprot.data_dir = orig_dir
         tmp_path.unlink(missing_ok=True)
 
+    if not output_csv.exists():
+        logger.warning(
+            "fetch_uniprot_output_missing",
+            path=str(output_csv),
+        )
+        placeholder = pd.DataFrame(
+            {
+                "uniprot_id": pd.Series(dtype=object),
+                "original_id": pd.Series(dtype=object),
+                "source_column": pd.Series(dtype=object),
+                "mapping_uniprot_id": pd.Series(dtype=object),
+            }
+        )
+        write_csv_deterministic(
+            placeholder,
+            output_csv,
+            col_order=[
+                "uniprot_id",
+                "original_id",
+                "source_column",
+                "mapping_uniprot_id",
+            ],
+            key_cols=["uniprot_id"],
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            cfg=cfg,
+        )
+
     fetched_df = pd.read_csv(
         output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
     )

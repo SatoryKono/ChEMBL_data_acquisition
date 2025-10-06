@@ -27,6 +27,9 @@ class _MemoryLogger:
     def warning(self, event: str, **payload: object) -> None:
         self.events.append(("warning", event, dict(payload)))
 
+    def debug(self, event: str, **payload: object) -> None:
+        self.events.append(("debug", event, dict(payload)))
+
     def error(self, event: str, **payload: object) -> None:
         self.events.append(("error", event, dict(payload)))
 
@@ -383,6 +386,66 @@ def test_fetch_uniprot__no_candidates_writes_empty_output(
         "mapping_uniprot_id",
     ]
     assert written.empty
+
+
+def test_fetch_uniprot__missing_output_creates_placeholder(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logger_stub: _MemoryLogger,
+) -> None:
+    output_csv = tmp_path / "output_uniprot.csv"
+    chembl_df = pd.DataFrame(
+        {"target_chembl_id": ["CHEMBL1"], "uniprot_id": ["P12345"]}
+    )
+
+    plan = get_target_data._UniprotQueryPlan(
+        unique_records=[
+            {
+                "uniprot_id": "P12345",
+                "original_id": "P12345",
+                "source_column": "uniprot_id",
+            }
+        ],
+        row_candidates=[
+            [get_target_data._UniprotCandidate("P12345", "uniprot_id", "P12345")]
+        ],
+        row_index=list(chembl_df.index),
+        candidate_columns=["uniprot_id"],
+    )
+
+    monkeypatch.setattr(
+        get_target_data, "_build_uniprot_query_plan", lambda *_: plan
+    )
+
+    def _fake_run(cfg_obj: Config, args: argparse.Namespace) -> int:
+        assert Path(args.final_out) == output_csv
+        return 0
+
+    monkeypatch.setattr(get_target_data, "run_uniprot", _fake_run)
+
+    result = get_target_data.fetch_uniprot(cfg, chembl_df, output_csv)
+
+    assert output_csv.exists()
+    written = pd.read_csv(
+        output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+    )
+    assert list(written.columns) == [
+        "uniprot_id",
+        "original_id",
+        "source_column",
+        "mapping_uniprot_id",
+    ]
+    assert written.empty
+
+    assert len(result.index) == 1
+    assert result.loc[result.index[0], "uniprot_id"] == "P12345"
+    assert any(
+        level == "warning"
+        and event == "fetch_uniprot_output_missing"
+        and payload == {"path": str(output_csv)}
+        for level, event, payload in logger_stub.events
+    )
 
 
 def test_run__delegates_to_handler(
