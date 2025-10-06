@@ -32,6 +32,8 @@ DOCUMENT_COLUMNS = [
 
 INVALID_DOCUMENT_IDS = {"", "#N/A"}
 
+MAX_DOCUMENT_CHUNK_SIZE = 20
+
 
 def get_documents(
     ids: Iterable[str],
@@ -79,7 +81,18 @@ def get_documents(
         return pd.DataFrame(columns=DOCUMENT_COLUMNS)
 
     records: list[dict[str, Any]] = []
-    for chunk in _chunked(unique_ids, chunk_size):
+    effective_chunk_size = max(1, min(chunk_size, MAX_DOCUMENT_CHUNK_SIZE))
+    if effective_chunk_size != chunk_size:
+        logger.info(
+            "chembl_document_chunk_size_capped",
+            extra={
+                "requested": chunk_size,
+                "applied": effective_chunk_size,
+                "max": MAX_DOCUMENT_CHUNK_SIZE,
+            },
+        )
+
+    for chunk in _chunked(unique_ids, effective_chunk_size):
         records.extend(
             _fetch_documents_chunk(
                 chunk,

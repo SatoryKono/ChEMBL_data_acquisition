@@ -57,6 +57,29 @@ def _build_response(identifier: str, title: str) -> dict[str, object]:
     }
 
 
+def _build_chunk_response(identifiers: Sequence[str]) -> dict[str, object]:
+    return {
+        "documents": [
+            {
+                "document_chembl_id": identifier,
+                "title": f"Title {identifier}",
+                "abstract": "",
+                "doi": "",
+                "year": 2024,
+                "journal_full_title": "Journal",
+                "journal": "J",
+                "volume": "1",
+                "issue": "1",
+                "first_page": "1",
+                "last_page": "2",
+                "pubmed_id": "123",
+                "authors": ["Author"],
+            }
+            for identifier in identifiers
+        ]
+    }
+
+
 @pytest.mark.unit
 def test_get_documents__splits_chunk_on_timeout(caplog: pytest.LogCaptureFixture) -> None:
     """The helper should split large chunks when a read timeout occurs."""
@@ -119,3 +142,37 @@ def test_get_documents__propagates_timeout_for_single_identifier() -> None:
         )
 
     assert client.calls == [(single_url, timeout)]
+
+
+@pytest.mark.unit
+def test_get_documents__caps_large_chunk_size(caplog: pytest.LogCaptureFixture) -> None:
+    cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=60.0)
+    identifiers = [f"CHEMBL{i}" for i in range(1, 27)]
+
+    first_chunk = identifiers[:20]
+    second_chunk = identifiers[20:]
+    responses = {
+        _chunk_url(cfg, first_chunk): _build_chunk_response(first_chunk),
+        _chunk_url(cfg, second_chunk): _build_chunk_response(second_chunk),
+    }
+    client = _StubChemblClient(responses)
+
+    with caplog.at_level("INFO"):
+        frame = get_documents(
+            identifiers,
+            cfg=cfg,
+            client=client,
+            chunk_size=50,
+            timeout=None,
+        )
+
+    assert [call[0] for call in client.calls] == [
+        _chunk_url(cfg, first_chunk),
+        _chunk_url(cfg, second_chunk),
+    ]
+    assert all(call[1] == cfg.timeout_read for call in client.calls)
+    assert sorted(frame["document_chembl_id"]) == sorted(identifiers)
+    assert any(
+        record.getMessage().startswith("chembl_document_chunk_size_capped")
+        for record in caplog.records
+    )
