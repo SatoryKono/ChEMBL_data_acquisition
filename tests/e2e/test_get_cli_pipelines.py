@@ -23,6 +23,8 @@ from scripts import (
     get_testitem_data,
 )
 
+from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
+
 
 @pytest.fixture()
 def sample_csv(tmp_path: Path) -> Callable[[str], Path]:
@@ -838,18 +840,44 @@ def test_get_assay_run_success(
     input_csv = sample_csv("assay")
     output_csv = tmp_path / "out" / "assays.csv"
     logger_stub = _patch_logger(monkeypatch, get_assay_data)
+    data_dir = Path(__file__).resolve().parents[1] / "data"
+    dictionary_path = data_dir / "assay_dictionary.csv"
 
     def _stub_run_chembl(config: Config, args: argparse.Namespace) -> int:
         frame = pd.read_csv(args.input_csv)
-        frame["description"] = frame["description"].astype("string").str.strip()
-        frame["description_length"] = frame["description"].str.len().astype("Int64")
-        frame = frame.drop_duplicates(subset=["assay_chembl_id"])
-        frame = frame.sort_values("assay_chembl_id").reset_index(drop=True)
+        dictionary = pd.read_csv(dictionary_path)
+        dictionary["assay_chembl_id"] = dictionary["assay_chembl_id"].astype("string")
+        enriched = frame.merge(dictionary, on="assay_chembl_id", how="left")
+        enriched["description"] = enriched["description"].astype("string").str.strip()
+        enriched["description_length"] = (
+            enriched["description"].str.len().astype("Int64")
+        )
+        enriched["year"] = pd.to_numeric(enriched["year"], errors="coerce").astype("Int64")
+        enriched = enriched.drop_duplicates(subset=["assay_chembl_id"])
+        enriched = enriched.sort_values("assay_chembl_id").reset_index(drop=True)
+        quality_columns = ["assay_strain", "assay_group", "year", "accession"]
+        completeness = 1.0 - enriched[quality_columns].isna().mean()
+        if float(completeness.min()) < ASSAY_ENRICHMENT_MIN_RATIO:
+            raise AssertionError(
+                "assay enrichment below threshold "
+                f"(threshold={ASSAY_ENRICHMENT_MIN_RATIO}, completeness={completeness.to_dict()})"
+            )
         output_path = Path(args.final_out)
         _ensure_parent(output_path)
-        frame.to_csv(output_path, index=False)
+        columns = [
+            "assay_chembl_id",
+            "target_chembl_id",
+            "document_chembl_id",
+            "description",
+            "description_length",
+            "assay_strain",
+            "assay_group",
+            "year",
+            "accession",
+        ]
+        enriched.to_csv(output_path, index=False, columns=columns)
         get_assay_data.logger.info(
-            "assay_pipeline_done", output=str(args.final_out), processed=len(frame)
+            "assay_pipeline_done", output=str(args.final_out), processed=len(enriched)
         )
         return 0
 
@@ -872,8 +900,15 @@ def test_get_assay_run_success(
         "document_chembl_id",
         "description",
         "description_length",
+        "assay_strain",
+        "assay_group",
+        "year",
+        "accession",
     ]
     assert (result["description_length"] == result["description"].str.len()).all()
+    quality_columns = ["assay_strain", "assay_group", "year", "accession"]
+    completeness = 1.0 - result[quality_columns].isna().mean()
+    assert (completeness >= ASSAY_ENRICHMENT_MIN_RATIO).all(), completeness
     events = [event for _, event, _ in logger_stub.events]
     assert "assay_pipeline_done" in events
 
