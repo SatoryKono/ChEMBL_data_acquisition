@@ -969,13 +969,13 @@
           "type": "string"
         },
         "chunk_size": {
-          "default": 5,
+          "default": 3,
           "minimum": 1,
           "title": "Chunk Size",
           "type": "integer"
         },
         "timeout": {
-          "default": 30.0,
+          "default": 90.0,
           "exclusiveMinimum": 0,
           "title": "Timeout",
           "type": "number"
@@ -1749,13 +1749,13 @@
           "type": "string"
         },
         "chunk_size": {
-          "default": 5,
+          "default": 3,
           "minimum": 1,
           "title": "Chunk Size",
           "type": "integer"
         },
         "timeout": {
-          "default": 30.0,
+          "default": 90.0,
           "exclusiveMinimum": 0,
           "title": "Timeout",
           "type": "number"
@@ -1856,13 +1856,13 @@
           "type": "string"
         },
         "chunk_size": {
-          "default": 5,
+          "default": 3,
           "minimum": 1,
           "title": "Chunk Size",
           "type": "integer"
         },
         "timeout": {
-          "default": 30.0,
+          "default": 90.0,
           "exclusiveMinimum": 0,
           "title": "Timeout",
           "type": "number"

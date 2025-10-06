@@ -20,8 +20,8 @@ class ModeDefaults:
 TARGET_MODE_DEFAULTS: Mapping[str, ModeDefaults] = {
     "chembl": ModeDefaults(
         column="target_chembl_id",
-        chunk_size=5,
-        timeout=30.0,
+        chunk_size=3,
+        timeout=90.0,
         limit=None,
         offset=0,
     ),
@@ -41,8 +41,8 @@ TARGET_MODE_DEFAULTS: Mapping[str, ModeDefaults] = {
     ),
     "all": ModeDefaults(
         column="target_chembl_id",
-        chunk_size=5,
-        timeout=30.0,
+        chunk_size=3,
+        timeout=90.0,
         limit=None,
         offset=0,
     ),

@@ -6,6 +6,7 @@ import json
 import math
 import re
 from collections.abc import Iterable, Iterator, Sequence
+from time import monotonic
 from typing import Any, Callable
 
 import pandas as pd
@@ -353,19 +354,23 @@ def _iter_target_chunk_with_fallback(
 
     url = f"{base_url}&target_chembl_id__in={','.join(chunk)}"
     handled_exc: requests.RequestException | None
+    start_time = monotonic()
     try:
         data = client.request_json(url, cfg=cfg, timeout=timeout)
     except requests.ReadTimeout as exc:
+        elapsed = monotonic() - start_time
         if len(chunk) <= 1 or not enable_split_fallback:
             raise exc
         event = "chembl_timeout_split"
         handled_exc = exc
     except requests.RequestException as exc:
+        elapsed = monotonic() - start_time
         event = "chembl_request_split"
         handled_exc = exc
     else:
         event = ""
         handled_exc = None
+        elapsed = monotonic() - start_time
 
     if event:
         if len(chunk) <= 1 or handled_exc is None:
@@ -377,6 +382,7 @@ def _iter_target_chunk_with_fallback(
                 "ids": list(chunk),
                 "timeout": timeout,
                 "error": str(handled_exc),
+                "elapsed": elapsed,
             },
         )
         for identifier in chunk:
@@ -398,6 +404,16 @@ def _iter_target_chunk_with_fallback(
         if isinstance(item, (dict, list))
     ]
     payloads = [payload for payload in payloads if payload]
+    logger.debug(
+        "chembl_target_chunk_ok",
+        extra={
+            "chunk_size": len(chunk),
+            "ids": list(chunk),
+            "timeout": timeout,
+            "elapsed": elapsed,
+            "records": len(payloads),
+        },
+    )
     if not payloads:
         return
     raw_frame = _normalise_target_payloads(payloads)
