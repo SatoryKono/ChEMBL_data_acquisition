@@ -109,6 +109,7 @@ from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_dela
 
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
+MIN_ACTIVITY_TIMEOUT = 60.0
 PROGRAM_NAME = Path(__file__).with_suffix("").name
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
@@ -1233,6 +1234,19 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         )
         cfg.activity.batch_size = MAX_ACTIVITY_CHUNK_SIZE
 
+    timeout = getattr(cfg.activity, "timeout", None)
+    if timeout is not None and timeout < MIN_ACTIVITY_TIMEOUT:
+        logger.warning(
+            "activity_timeout_clamped",
+            configured=timeout,
+            minimum=MIN_ACTIVITY_TIMEOUT,
+        )
+        logger.warning(
+            f"Configured timeout {timeout} is below the minimum of {MIN_ACTIVITY_TIMEOUT}; "
+            f"increasing to {MIN_ACTIVITY_TIMEOUT}."
+        )
+        cfg.activity.timeout = float(MIN_ACTIVITY_TIMEOUT)
+
     final_out_attr = getattr(args, "final_out", None)
     if final_out_attr in (None, argparse.SUPPRESS):
         legacy_output = getattr(args, "output_csv", None)
@@ -1288,7 +1302,10 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--timeout",
         type=float,
         default=90.0,
-        help="Timeout in seconds for each HTTP request",
+        help=(
+            "Timeout in seconds for each HTTP request (a minimum of "
+            f"{int(MIN_ACTIVITY_TIMEOUT)} seconds is enforced)"
+        ),
     )
     parser.add_argument(
         "--limit",
