@@ -163,6 +163,21 @@ _EXTENDED_ACTIVITY_DTYPES: dict[str, str] = {
 }
 
 
+_OUTPUT_ACTIVITY_DROP_COLUMNS: tuple[str, ...] = (
+    "approx_cited_activity",
+    "exact_cited_activity",
+    "higly_correlated_cit",
+    "multmol_assay",
+    "original_activity_approx",
+    "original_activity_exact",
+    "review_doc",
+    "rounded_data_citation",
+    "standard_lower_value",
+    "standard_upper_value",
+    "shuffled_cit",
+)
+
+
 
 def _coerce_series_dtype(series: pd.Series, dtype: str) -> pd.Series:
     """Return ``series`` converted to ``dtype`` where feasible."""
@@ -611,6 +626,35 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def _filter_activity_output_columns(
+    frame: pd.DataFrame,
+    *,
+    column_order: Sequence[str] | None = None,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Return ``frame`` restricted to the allowed output columns."""
+
+    drop_list = list(_OUTPUT_ACTIVITY_DROP_COLUMNS)
+    dropped_columns = [column for column in drop_list if column in frame.columns]
+    filtered = frame.drop(columns=drop_list, errors="ignore")
+
+    if column_order is None:
+        allowed_head: list[str] = [
+            column for column in filtered.columns if column not in _OUTPUT_ACTIVITY_DROP_COLUMNS
+        ]
+    else:
+        allowed_head = [
+            column
+            for column in column_order
+            if column in filtered.columns and column not in _OUTPUT_ACTIVITY_DROP_COLUMNS
+        ]
+
+    extras = [column for column in filtered.columns if column not in allowed_head]
+    if allowed_head or extras:
+        filtered = filtered.loc[:, allowed_head + extras]
+
+    return filtered, dropped_columns
+
+
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute activity retrieval from the ChEMBL API.
 
@@ -802,14 +846,37 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     ) -> Path:
         sort_columns = list(key_cols) or sorted(col_order)
         column_order = list(col_order)
-        filtered_order = [
-            column for column in column_order if column in available_columns
+        filtered_order = [column for column in column_order if column in available_columns]
+
+        drop_candidates = [
+            column
+            for column in _OUTPUT_ACTIVITY_DROP_COLUMNS
+            if column in available_columns
         ]
+        if drop_candidates:
+            logger.info(
+                "Dropped columns from output.activity_*: %s",
+                ", ".join(drop_candidates),
+            )
+
+        whitelist_order = [
+            column for column in filtered_order if column not in _OUTPUT_ACTIVITY_DROP_COLUMNS
+        ]
+
+        def _apply_whitelist(chunk: pd.DataFrame) -> pd.DataFrame:
+            filtered_chunk, _ = _filter_activity_output_columns(
+                chunk,
+                column_order=filtered_order,
+            )
+            return filtered_chunk
+
+        filtered_chunks = (_apply_whitelist(chunk) for chunk in chunks)
+
         output_path = write_csv_chunks_deterministic(
-            chunks,
+            filtered_chunks,
             destination,
             key_cols=sort_columns,
-            col_order=filtered_order,
+            col_order=whitelist_order,
             chunksize=cfg.io.csv_chunksize,
             sort_chunksize=cfg.io.csv_chunksize,
             sep=cfg.io.csv_sep,
