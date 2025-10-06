@@ -198,6 +198,28 @@ _EXTENDED_ACTIVITY_DTYPES: dict[str, str] = {
     "log_value": "Float64",
 }
 
+
+
+def _coerce_series_dtype(series: pd.Series, dtype: str) -> pd.Series:
+    """Return ``series`` converted to ``dtype`` where feasible."""
+
+    try:
+        return series.astype(dtype)
+    except (TypeError, ValueError):
+        if dtype in {"Float64", "Int64"}:
+            coerced = pd.to_numeric(series, errors="coerce")
+            return coerced.astype(dtype)
+        if dtype == "boolean":
+            lowered = series.astype("string").str.lower()
+            truthy = lowered.isin({"true", "1", "yes"})
+            falsy = lowered.isin({"false", "0", "no"})
+            result = pd.Series(pd.NA, index=series.index, dtype="boolean")
+            result.loc[truthy] = True
+            result.loc[falsy] = False
+            return result
+        return series.astype("string")
+
+
 _EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series | None]] = {
     "activity_chembl_id": lambda df: df.get("activity_id"),
     "compound_name": lambda df: df.get("molecule_pref_name"),
@@ -434,6 +456,7 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
     for column, dtype in _EXTENDED_ACTIVITY_DTYPES.items():
         fallback = _EXTENDED_ACTIVITY_FALLBACKS.get(column)
         if column in result.columns:
+            result[column] = _coerce_series_dtype(result[column], dtype)
             if fallback is not None:
                 existing = result[column]
                 if dtype in {"Float64", "Int64"}:
@@ -444,20 +467,14 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
                     candidate = fallback(result)
                     if candidate is not None:
                         aligned = candidate.reindex(result.index)
-                        try:
-                            filled = aligned.astype(dtype)
-                        except (TypeError, ValueError):
-                            filled = aligned.astype("string")
+                        filled = _coerce_series_dtype(aligned, dtype)
                         result.loc[missing_mask, column] = filled.loc[missing_mask]
             continue
         if fallback is not None:
             candidate = fallback(result)
             if candidate is not None:
                 aligned = candidate.reindex(result.index)
-                try:
-                    result[column] = aligned.astype(dtype)
-                except TypeError:
-                    result[column] = aligned.astype("string")
+                result[column] = _coerce_series_dtype(aligned, dtype)
                 continue
         if dtype == "boolean":
             filler = pd.Series(pd.NA, index=result.index, dtype="boolean")
