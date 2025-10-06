@@ -382,4 +382,18 @@ def test_ensure_extended_activity_columns__adds_defaults() -> None:
     assert enriched["activity_chembl_id"].tolist() == ["A1"]
     assert enriched.loc[0, "log_value"] == pytest.approx(5.3)
     assert enriched["compound_name"].isna().all()
-    assert "salt_chembl_id" in enriched.columns
+    assert enriched["salt_chembl_id"].isna().all()
+
+
+def test_ensure_extended_activity_columns__preserves_salt_ids() -> None:
+    frame = pd.DataFrame(
+        {
+            "activity_id": ["A1", "A2"],
+            "salt_chembl_id": ["CHEMBL_SALT1", pd.NA],
+            "molecule_chembl_id": ["CHEMBL123", "CHEMBL456"],
+        }
+    )
+
+    enriched = get_activity_data._ensure_extended_activity_columns(frame)
+
+    assert enriched["salt_chembl_id"].tolist() == ["CHEMBL_SALT1", pd.NA]
