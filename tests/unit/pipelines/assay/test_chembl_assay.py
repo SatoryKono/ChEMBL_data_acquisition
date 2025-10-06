@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
+
 import pytest
-from requests import HTTPError, ReadTimeout, Response
+from requests import ConnectionError, HTTPError, ReadTimeout, Response
+from urllib.parse import parse_qs, urlparse
 
 from library.config import ApiCfg
-from library.pipelines.assay.chembl_assay import get_assays
+from library.pipelines.assay.chembl_assay import get_assays, get_testitem
 
 
 class _StubClient:
@@ -113,3 +115,74 @@ def test_get_assays__recovers_from_request_exception() -> None:
     assert any("assay_chembl_id__in" in call for call in client.calls)
     assert sum("assay_chembl_id=CHEMBL1" in call for call in client.calls) == 1
     assert sum("assay_chembl_id=CHEMBL2" in call for call in client.calls) == 1
+
+
+@pytest.mark.unit
+def test_get_testitem__splits_chunk_on_timeout() -> None:
+    """Timeout failures trigger chunk splitting and retries."""
+
+    def _timeout_exc() -> ConnectionError:
+        return ConnectionError(
+            "HTTPSConnectionPool(host='www.ebi.ac.uk', port=443): Read timed out."
+        )
+
+    payloads: dict[tuple[str, ...], dict[str, Any] | Callable[[], Exception]] = {
+        ("CHEMBL1", "CHEMBL2", "CHEMBL3"): _timeout_exc,
+        ("CHEMBL1",): {
+            "molecules": [
+                {"molecule_chembl_id": "CHEMBL1", "pref_name": "One"},
+            ],
+            "page_meta": {},
+        },
+        ("CHEMBL2", "CHEMBL3"): {
+            "molecules": [
+                {"molecule_chembl_id": "CHEMBL2", "pref_name": "Two"},
+                {"molecule_chembl_id": "CHEMBL3", "pref_name": "Three"},
+            ],
+            "page_meta": {},
+        },
+    }
+
+    class _TimeoutStub:
+        def __init__(
+            self,
+            mapping: dict[tuple[str, ...], dict[str, Any] | Callable[[], Exception]],
+        ) -> None:
+            self._mapping = mapping
+            self.calls: list[str] = []
+
+        def request_json(self, url: str, *, cfg: ApiCfg, timeout: float | None) -> dict[str, Any]:
+            del cfg, timeout
+            self.calls.append(url)
+            parsed = urlparse(url)
+            ids_param = parse_qs(parsed.query).get("molecule_chembl_id__in", [""])[0]
+            identifiers = tuple(filter(None, ids_param.split(",")))
+            response = self._mapping[identifiers]
+            if callable(response):
+                response = response()
+            if isinstance(response, Exception):
+                raise response
+            return response
+
+    client = _TimeoutStub(payloads)
+    cfg = ApiCfg()
+
+    df = get_testitem(
+        ["CHEMBL1", "CHEMBL2", "CHEMBL3"],
+        cfg=cfg,
+        client=client,  # type: ignore[arg-type]
+        chunk_size=3,
+    )
+
+    assert sorted(df["molecule_chembl_id"].dropna().tolist()) == [
+        "CHEMBL1",
+        "CHEMBL2",
+        "CHEMBL3",
+    ]
+    assert any(
+        "molecule_chembl_id__in=CHEMBL1,CHEMBL2,CHEMBL3" in call for call in client.calls
+    )
+    assert any("molecule_chembl_id__in=CHEMBL1" in call for call in client.calls)
+    assert any(
+        "molecule_chembl_id__in=CHEMBL2,CHEMBL3" in call for call in client.calls
+    )

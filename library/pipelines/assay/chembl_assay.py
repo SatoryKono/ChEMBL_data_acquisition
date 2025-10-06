@@ -217,7 +217,7 @@ def _fetch_testitem_chunk(
     client: ChemblClient,
     timeout: float,
 ) -> list[pd.DataFrame]:
-    """Fetch data for ``identifiers`` with adaptive splitting on HTTP 400."""
+    """Fetch data for ``identifiers`` with adaptive splitting on HTTP 400/timeouts."""
 
     pending: list[list[str]] = [list(identifiers)]
     frames: list[pd.DataFrame] = []
@@ -271,6 +271,24 @@ def _fetch_testitem_chunk(
                 if first:
                     pending.append(first)
                 continue
+            if _is_retryable_chunk_error(exc) and len(current) > 1:
+                midpoint = max(1, len(current) // 2)
+                first = current[:midpoint]
+                second = current[midpoint:]
+                logger.warning(
+                    "chunk_retry_split",
+                    extra={
+                        "stage": "chunk_split",
+                        "chunk_key": chunk_key,
+                        "size": len(current),
+                        "error": exc.__class__.__name__,
+                    },
+                )
+                if second:
+                    pending.append(second)
+                if first:
+                    pending.append(first)
+                continue
             raise
         if chunk_frames:
             frames.append(pd.concat(chunk_frames, ignore_index=True))
@@ -282,6 +300,22 @@ def _fetch_testitem_chunk(
                 "chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key}
             )
     return frames
+
+
+def _is_retryable_chunk_error(exc: requests.RequestException) -> bool:
+    """Return ``True`` when *exc* indicates a transient connection failure."""
+
+    if isinstance(exc, requests.Timeout):
+        return True
+    message_parts = [str(exc)]
+    cause = getattr(exc, "__cause__", None)
+    context = getattr(exc, "__context__", None)
+    for detail in (cause, context):
+        if detail is not None:
+            message_parts.append(str(detail))
+    combined = " ".join(part for part in message_parts if part)
+    lowered = combined.lower()
+    return any(token in lowered for token in ("timed out", "timeout", "temporarily unavailable"))
 
 
 def get_assay(
