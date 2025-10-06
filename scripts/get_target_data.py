@@ -54,6 +54,7 @@ from library.common.rate_limiter import get_global_limiter
 from library.cli_utils import PipelineError, run_cli_command, run_pipeline
 from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
 from library.cli import (
+    Logger,
     LoggerConfig,
     build_root_parser,
     configure_logger,
@@ -61,7 +62,8 @@ from library.cli import (
     positive_int,
     prepare_io_paths,
 )
-from library.cli.logging import setup_cli_logging
+from library.cli.base import PipelineCLIBase
+from library.cli.logging import CLILoggingContext, setup_cli_logging
 from library.config import (
     Config,
     _serialize_paths,
@@ -1422,7 +1424,7 @@ def _save_snapshot(df: pd.DataFrame, base: Path, step: str, cfg: Config) -> Path
         index += 1
 
 
-def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
+def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Create and return the top-level CLI argument parser.
 
     The command line interface is organised into sub-commands for retrieving
@@ -3915,53 +3917,53 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     return int(result)
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """Command line entry point using :class:`Config` for defaults.
+class TargetPipelineCLI(PipelineCLIBase):
+    """CLI adapter orchestrating the target data pipelines."""
 
-    Parameters
-    ----------
-    argv : Sequence[str] | None, optional
-        Command-line arguments to parse. When ``None`` the values from
-        :data:`sys.argv` are used.
+    def build_parser(self) -> tuple[argparse.ArgumentParser, LoggerConfig]:
+        return _build_parser_impl()
 
-    Returns
-    -------
-    int
-        ``0`` when the selected target pipeline succeeds, non-zero otherwise.
+    def prepare_arguments(
+        self,
+        parser: argparse.ArgumentParser,
+        args: argparse.Namespace,
+        argv: Sequence[str] | None,
+    ) -> argparse.Namespace:
+        del argv
+        command_alias = COMMAND_ALIAS_TO_CANONICAL.get(getattr(args, "command", ""))
+        if command_alias is not None:
+            setattr(args, "_command_keyboard_alias", args.command)
+            args.command = command_alias
+        prepare_io_paths(
+            args,
+            input_default=DEFAULT_INPUT_NAME,
+            output_stem=DEFAULT_OUTPUT_STEM,
+        )
+        date_value = getattr(args, "date", None)
+        if not isinstance(date_value, str) or not date_value:
+            date_value = datetime.now(timezone.utc).strftime("%Y%m%d")
+            setattr(args, "date", date_value)
+        return args
 
-    Raises
-    ------
-    SystemExit
-        Raised when invalid command-line options are provided to the parser.
-    """
-    parser, log_cfg = build_parser()
-    args = parser.parse_args(argv)
-    command_alias = COMMAND_ALIAS_TO_CANONICAL.get(getattr(args, "command", ""))
-    if command_alias is not None:
-        setattr(args, "_command_keyboard_alias", args.command)
-        args.command = command_alias
-    prepare_io_paths(
-        args,
-        input_default=DEFAULT_INPUT_NAME,
-        output_stem=DEFAULT_OUTPUT_STEM,
-    )
-    date_value = getattr(args, "date", None)
-    if not isinstance(date_value, str) or not date_value:
-        date_value = datetime.now(timezone.utc).strftime("%Y%m%d")
-        setattr(args, "date", date_value)
-    exit_code = 0
+    def get_program_name(self) -> str:
+        return Path(__file__).with_suffix("").name
 
-    with setup_cli_logging(
-        Path(__file__).with_suffix("").name, log_cfg, date_value
-    ) as logging_ctx:
+    def get_logger(self) -> Logger:
+        return logger
+
+    def execute(
+        self,
+        args: argparse.Namespace,
+        parser: argparse.ArgumentParser,
+        logging_ctx: CLILoggingContext,
+    ) -> int:
         configure_logger(logging_ctx.log_cfg)
         console_stream = logging_ctx.console_stream
-        log_path = logging_ctx.log_path
+        exit_code = 0
         try:
-
             limit_value = getattr(args, "limit", None)
             subparser_map = getattr(parser, "subparsers_map", {})
-            subparser = subparser_map.get(args.command, parser)
+            subparser = subparser_map.get(getattr(args, "command", None), parser)
             if limit_value is not None and limit_value < 1:
                 subparser.error("--limit must be a positive integer")
             offset_value = getattr(args, "offset", 0)
@@ -4052,10 +4054,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             exit_code = 2
             logger.error("pipeline_error", error=str(exc))
             print(f"[ERROR] {exc}", file=console_stream, flush=True)
-    configure_logger(log_cfg)
+        return exit_code
 
 
-    return exit_code
+_CLI = TargetPipelineCLI()
+
+
+def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
+    """Expose parser creation for backwards compatibility."""
+
+    return _CLI.build_parser()
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Delegate to :class:`TargetPipelineCLI` for backwards compatibility."""
+
+    return _CLI.main(argv)
+
+
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
