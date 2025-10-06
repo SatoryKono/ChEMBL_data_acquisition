@@ -15,7 +15,7 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence, Callable
 from functools import partial
 from itertools import islice
 from pathlib import Path
-from time import sleep
+from time import sleep, perf_counter
 
 try:
     from library.utils.bootstrap import ensure_project_root
@@ -197,6 +197,93 @@ _EXTENDED_ACTIVITY_DTYPES: dict[str, str] = {
     "nstereo": "Int64",
     "log_value": "Float64",
 }
+
+
+def _compute_output_statistics(output_path: Path, cfg: Config) -> tuple[int | None, float | None]:
+    """Return row count and null ratio for the final pipeline output."""
+
+    if not output_path.exists():
+        return None, None
+
+    read_kwargs = {
+        "sep": getattr(cfg.io, "csv_sep", ","),
+        "encoding": getattr(cfg.io, "csv_encoding", "utf-8"),
+    }
+
+    chunk_size = getattr(cfg.io, "csv_chunksize", None)
+    total_rows = 0
+    total_cells = 0
+    total_nulls = 0
+
+    try:
+        if chunk_size and chunk_size > 0:
+            reader = pd.read_csv(output_path, chunksize=int(chunk_size), **read_kwargs)
+            for chunk in reader:
+                rows = len(chunk)
+                total_rows += rows
+                mask = chunk.isna()
+                total_cells += mask.size
+                total_nulls += int(mask.values.sum())
+        else:
+            frame = pd.read_csv(output_path, **read_kwargs)
+            total_rows = len(frame)
+            if frame.size:
+                mask = frame.isna()
+                total_cells = mask.size
+                total_nulls = int(mask.values.sum())
+            else:
+                total_cells = 0
+    except pd.errors.EmptyDataError:
+        return 0, 0.0
+    except FileNotFoundError:
+        return None, None
+    except Exception as exc:  # pragma: no cover - defensive for malformed CSVs
+        logger.warning(
+            "activity_summary_read_failed",
+            path=str(output_path),
+            error=str(exc),
+        )
+        return None, None
+
+    if total_cells == 0:
+        null_fraction = 0.0
+    else:
+        null_fraction = total_nulls / total_cells
+
+    return total_rows, float(null_fraction)
+
+
+def _emit_completion_message(
+    *,
+    cfg: Config,
+    output_path: Path | None,
+    processed_rows: int | None,
+    duration_s: float,
+    mode: str,
+) -> None:
+    """Log a human-readable completion summary for the pipeline."""
+
+    resolved_rows = processed_rows if processed_rows is not None else 0
+    null_fraction_value: float | None = None
+
+    if output_path is not None:
+        stats_rows, stats_null_fraction = _compute_output_statistics(output_path, cfg)
+        if stats_rows is not None:
+            resolved_rows = stats_rows
+        if stats_null_fraction is not None:
+            null_fraction_value = stats_null_fraction
+
+    null_fraction_display = (
+        f"{null_fraction_value:.6f}" if null_fraction_value is not None else "nan"
+    )
+
+    message = (
+        "Completed get_activity_data pipeline: "
+        f"rows={resolved_rows}, null_fraction={null_fraction_display}, "
+        f"duration={duration_s:.3f}s, mode={mode}, "
+        f"output={str(output_path) if output_path is not None else 'n/a'}"
+    )
+    logger.info(message)
 
 _EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series | None]] = {
     "activity_chembl_id": lambda df: df.get("activity_id"),
@@ -525,6 +612,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             args.final_out = output_path
         setattr(args, "output_csv", output_path)
 
+    start_time = perf_counter()
+
     metadata_obj = getattr(args, "_config_metadata", None)
     if not isinstance(metadata_obj, ConfigMetadata):
         metadata_obj = None
@@ -580,6 +669,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if cfg.activity.dry_run:
         expected = limit if limit is not None else 0
         logger.info("dry_run", limit=expected)
+        _emit_completion_message(
+            cfg=cfg,
+            output_path=output_path,
+            processed_rows=0,
+            duration_s=perf_counter() - start_time,
+            mode="dry_run",
+        )
         return 0
 
     try:
@@ -896,6 +992,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if extended_output_path is not None:
             log_payload["extended_output"] = str(extended_output_path)
         logger.info("activity_pipeline_done", **log_payload)
+        completion_rows = processed_ids
+        if pipeline_stats is not None:
+            completion_rows = int(
+                pipeline_stats.get(
+                    "rows_kept",
+                    pipeline_stats.get("rows_total", processed_ids),
+                )
+            )
+        _emit_completion_message(
+            cfg=cfg,
+            output_path=output_path,
+            processed_rows=completion_rows,
+            duration_s=perf_counter() - start_time,
+            mode="run",
+        )
     else:
         extra_payload = last_error_extra
         context_payload = dict(last_error_context) if last_error_context else {}
@@ -913,6 +1024,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the activity pipeline handling ``--skip-existing`` semantics."""
+
+    start_time = perf_counter()
 
     final_out_attr = getattr(args, "final_out", None)
     if final_out_attr in (None, argparse.SUPPRESS):
@@ -933,6 +1046,13 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         setattr(args, "output_csv", output_path)
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
+        _emit_completion_message(
+            cfg=cfg,
+            output_path=output_path,
+            processed_rows=None,
+            duration_s=perf_counter() - start_time,
+            mode="skip_existing",
+        )
         return 0
     return run_chembl(cfg, args)
 
