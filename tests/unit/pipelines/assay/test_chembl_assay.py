@@ -229,6 +229,26 @@ def test_get_activities__chunk_404_falls_back_to_single_requests() -> None:
 
 
 @pytest.mark.unit
+def test_get_activities__single_timeout_skips_identifier() -> None:
+    """Per-identifier timeouts are logged and skipped."""
+
+    responders = [
+        ReadTimeout("timeout"),
+        ReadTimeout("timeout"),
+        {"activities": [{"activity_id": "ACT2"}], "page_meta": {}},
+    ]
+    client = _StubClient(responders)
+    cfg = ApiCfg()
+
+    df = get_activities(["ACT1", "ACT2"], cfg=cfg, client=client, chunk_size=2)
+
+    assert list(df["activity_id"]) == ["ACT2"]
+    assert any("activity_id__in" in call for call in client.calls)
+    assert sum("activity_id=ACT1" in call for call in client.calls) == 1
+    assert sum("activity_id=ACT2" in call for call in client.calls) == 1
+
+
+@pytest.mark.unit
 def test_get_assays__single_timeout_falls_back_to_detail_endpoint() -> None:
     """Single-item timeouts fall back to the detail endpoint."""
 

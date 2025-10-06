@@ -608,6 +608,16 @@ def get_activities(
                 )
                 return []
             raise
+        except requests.RequestException as exc:
+            logger.warning(
+                "single_fetch_network_skip",
+                extra={
+                    "stage": "chunk_retry",
+                    "activity_id": identifier,
+                    "error": exc.__class__.__name__,
+                },
+            )
+            return []
         return frames
 
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
@@ -651,10 +661,7 @@ def get_activities(
             )
             chunk_frames = []
             for identifier in chunk:
-                try:
-                    chunk_frames.extend(_fetch_single(identifier))
-                except requests.RequestException:
-                    raise
+                chunk_frames.extend(_fetch_single(identifier))
         if chunk_frames:
             records.append(pd.concat(chunk_frames, ignore_index=True))
             logger.info(
