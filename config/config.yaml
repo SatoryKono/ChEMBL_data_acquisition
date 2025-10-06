@@ -119,8 +119,8 @@ sources:
           limit: null
         chembl:
           column: "target_chembl_id"  # Column containing ChEMBL target identifiers
-          chunk_size: 5
-          timeout: 30.0
+          chunk_size: 3
+          timeout: 90.0
           limit: null
           offset: 0
           batch_retry:
@@ -136,8 +136,8 @@ sources:
           data_dir: "config/dictionary/_target/_uniprot"
           target_csv: "config/dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
           family_csv: "config/dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
-          chunk_size: 5
-          timeout: 30.0
+          chunk_size: 3
+          timeout: 90.0
           uniprot_column: mapping_uniprot_id  # Column containing primary UniProt accession used for merges
           chembl_out: null
           uniprot_out: null

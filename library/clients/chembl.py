@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from itertools import islice
 from dataclasses import dataclass, field
+from time import monotonic
 from types import TracebackType
 from typing import Any, Callable, TypeVar, cast
 from urllib.parse import urlsplit, urlunsplit
@@ -218,6 +219,7 @@ class ChemblClient:
                     extra={"url": request_url, "attempt": attempt, "rps": cfg.rps},
                 )
                 try:
+                    start_time = monotonic()
                     session = self._get_session()
                     with session.get(
                         request_url, timeout=(cfg.timeout_connect, read_timeout)
@@ -226,7 +228,11 @@ class ChemblClient:
                         try:
                             data = cast(dict[str, Any], response.json())
                         except ValueError as exc:
-                            logger.exception("json_error", extra={"url": request_url})
+                            elapsed = monotonic() - start_time
+                            logger.exception(
+                                "json_error",
+                                extra={"url": request_url, "elapsed": elapsed},
+                            )
                             raise ValueError(
                                 f"invalid JSON in response from {request_url}"
                             ) from exc
@@ -259,15 +265,23 @@ class ChemblClient:
                                     "fallback_url": request_url,
                                     "attempt": attempt,
                                     "rps": cfg.rps,
+                                    "elapsed": elapsed,
                                 },
                             )
                         return data
                 except ValueError as exc:
+                    elapsed = monotonic() - start_time
                     last_exc = exc
                     if attempt >= total_attempts:
                         logger.exception(
                             "request_fail",
-                            extra={"url": request_url, "status": None, "rps": cfg.rps},
+                            extra={
+                                "url": request_url,
+                                "status": None,
+                                "rps": cfg.rps,
+                                "elapsed": elapsed,
+                                "attempt": attempt,
+                            },
                         )
                         break
                     delay = _backoff_delay(attempt, cfg, header_delay=None)
@@ -275,6 +289,7 @@ class ChemblClient:
                     sleep(delay)
                     break
                 except requests.HTTPError as exc:
+                    elapsed = monotonic() - start_time
                     last_exc = exc
                     response = exc.response
                     status = getattr(response, "status_code", None)
@@ -293,13 +308,20 @@ class ChemblClient:
                                 "fallback_url": request_url,
                                 "attempt": attempt,
                                 "rps": cfg.rps,
+                                "elapsed": elapsed,
                             },
                         )
                         continue
                     if attempt >= total_attempts:
                         logger.exception(
                             "request_fail",
-                            extra={"url": request_url, "status": status, "rps": cfg.rps},
+                            extra={
+                                "url": request_url,
+                                "status": status,
+                                "rps": cfg.rps,
+                                "elapsed": elapsed,
+                                "attempt": attempt,
+                            },
                         )
                         break
                     header_delay = _retry_after_delay(response)
@@ -308,11 +330,18 @@ class ChemblClient:
                     sleep(delay)
                     break
                 except requests.RequestException as exc:
+                    elapsed = monotonic() - start_time
                     last_exc = exc
                     if attempt >= total_attempts:
                         logger.exception(
                             "request_fail",
-                            extra={"url": request_url, "status": None, "rps": cfg.rps},
+                            extra={
+                                "url": request_url,
+                                "status": None,
+                                "rps": cfg.rps,
+                                "elapsed": elapsed,
+                                "attempt": attempt,
+                            },
                         )
                         break
                     delay = _backoff_delay(attempt, cfg, header_delay=None)

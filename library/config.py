@@ -1255,6 +1255,8 @@ class TargetChemblBatchRetryCfg(_BoolModel):
     enable: bool = True
     shrink_factor: float = Field(0.5, gt=0, lt=1)
     min_size: int = Field(1, ge=1)
+    single_timeout_retries: int = Field(2, ge=0)
+    single_timeout_delay: float = Field(0.0, ge=0.0)
 
     @field_validator("enable", mode="before")
     @classmethod
@@ -1271,8 +1273,8 @@ class TargetChemblCfg(_BaseModel):
 
     column: str = "target_chembl_id"
 
-    chunk_size: int = Field(5, ge=1)
-    timeout: float = Field(30.0, gt=0)
+    chunk_size: int = Field(3, ge=1)
+    timeout: float = Field(90.0, gt=0)
 
     limit: int | None = Field(default=None, ge=0)
     offset: int = Field(0, ge=0)
@@ -1307,8 +1309,8 @@ class TargetAllCfg(_BaseModel):
     family_csv: Path = (
         DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_family.csv"
     )
-    chunk_size: int = Field(5, ge=1)
-    timeout: float = Field(30.0, gt=0)
+    chunk_size: int = Field(3, ge=1)
+    timeout: float = Field(90.0, gt=0)
     uniprot_column: str = "uniprot_id"
     chembl_out: Path | None = None
     uniprot_out: Path | None = None
