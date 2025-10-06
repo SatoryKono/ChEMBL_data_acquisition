@@ -50,9 +50,6 @@ from library.pipelines.target import postprocessing as tp
 from library.pipelines.target.defaults import ModeDefaults, TARGET_MODE_DEFAULTS
 
 from library.orchestration import ETLContext
-
-from library.clients import ChemblClient
-from library.common.rate_limiter import get_global_limiter
 from library.cli.pipeline_definition import normalise_definition
 from library.cli_utils import PipelineError, run_cli_command, run_pipeline
 from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
