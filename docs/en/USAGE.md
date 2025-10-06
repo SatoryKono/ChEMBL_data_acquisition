@@ -55,6 +55,12 @@ Important flags:
 The orchestrator stops on the first non-zero exit code and reports per-pipeline
 elapsed time in the logs.
 
+After every execution the orchestrator also writes `reports/run_manifest.json`
+relative to `--base-path`. The manifest records each step with the resolved CSV
+destination, discovered sidecars, status (`success`, `skipped`, `failed`, etc.),
+timings and SHA256 checksums for all artefacts. The file is emitted even when
+the workflow aborts part way through so partial results can be inspected.
+
 ## Document pipeline `get_document_data`
 
 Modes: `chembl`, `pubmed`, `all`.
