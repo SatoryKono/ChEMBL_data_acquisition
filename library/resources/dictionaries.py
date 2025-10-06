@@ -78,6 +78,7 @@ def _compute_sha256(path: Path) -> str:
         # hashes for identical directory contents.  Sorting by the normalised
         # POSIX-style relative path guarantees a deterministic order across all
         # platforms and Python versions.
+        entries: list[tuple[str, Path]] = []
         children = sorted(
             path.rglob("*"),
             key=lambda candidate: candidate.relative_to(path).as_posix(),
