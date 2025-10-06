@@ -11,6 +11,7 @@ from itertools import islice
 from dataclasses import dataclass, field
 from types import TracebackType
 from typing import Any, Callable, TypeVar, cast
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 from cachetools import TTLCache
@@ -199,77 +200,120 @@ class ChemblClient:
 
         last_exc: requests.RequestException | ValueError | None = None
         total_attempts = cfg.retries + 1
+        fallback_url = _strip_json_suffix(url)
 
         for attempt in range(1, total_attempts + 1):
-            if self._global_limiter is not None:
-                self._global_limiter.acquire()
-            limiter.acquire()
-            event = "request_start" if attempt == 1 else "request_retry"
-            logger.debug(event, extra={"url": url, "attempt": attempt, "rps": cfg.rps})
-            try:
-                session = self._get_session()
-                with session.get(
-                    url, timeout=(cfg.timeout_connect, read_timeout)
-                ) as response:
-                    response.raise_for_status()
-                    try:
-                        data = cast(dict[str, Any], response.json())
-                    except ValueError as exc:
-                        logger.exception("json_error", extra={"url": url})
-                        raise ValueError(
-                            f"invalid JSON in response from {url}"
-                        ) from exc
-                    logger.debug(
-                        "request_ok",
-                        extra={
-                            "url": url,
-                            "status": getattr(response, "status_code", None),
-                            "rps": cfg.rps,
-                        },
-                    )
-                    with self._cache_lock:
-                        cached = self.cache.get(cache_key)
-                        if cached is not None:
-                            return cast(dict[str, Any], cached)
-                        self.cache[cache_key] = data
-                        logger.debug("cache_set", extra={"url": url, "rps": cfg.rps})
+            request_url = url
+            used_fallback = False
+            while True:
+                if self._global_limiter is not None:
+                    self._global_limiter.acquire()
+                limiter.acquire()
+                if used_fallback:
+                    event = "request_fallback"
+                else:
+                    event = "request_start" if attempt == 1 else "request_retry"
+                logger.debug(
+                    event,
+                    extra={"url": request_url, "attempt": attempt, "rps": cfg.rps},
+                )
+                try:
+                    session = self._get_session()
+                    with session.get(
+                        request_url, timeout=(cfg.timeout_connect, read_timeout)
+                    ) as response:
+                        response.raise_for_status()
+                        try:
+                            data = cast(dict[str, Any], response.json())
+                        except ValueError as exc:
+                            logger.exception("json_error", extra={"url": request_url})
+                            raise ValueError(
+                                f"invalid JSON in response from {request_url}"
+                            ) from exc
+                        logger.debug(
+                            "request_ok",
+                            extra={
+                                "url": request_url,
+                                "status": getattr(response, "status_code", None),
+                                "rps": cfg.rps,
+                            },
+                        )
+                        with self._cache_lock:
+                            cached = self.cache.get(cache_key)
+                            if cached is not None:
+                                return cast(dict[str, Any], cached)
+                            self.cache[cache_key] = data
+                            logger.debug(
+                                "cache_set", extra={"url": url, "rps": cfg.rps}
+                            )
+                        if used_fallback:
+                            logger.debug(
+                                "request_fallback_ok",
+                                extra={
+                                    "original_url": url,
+                                    "fallback_url": request_url,
+                                    "attempt": attempt,
+                                    "rps": cfg.rps,
+                                },
+                            )
                         return data
-            except ValueError as exc:
-                last_exc = exc
-                if attempt >= total_attempts:
-                    logger.exception(
-                        "request_fail",
-                        extra={"url": url, "status": None, "rps": cfg.rps},
-                    )
+                except ValueError as exc:
+                    last_exc = exc
+                    if attempt >= total_attempts:
+                        logger.exception(
+                            "request_fail",
+                            extra={"url": request_url, "status": None, "rps": cfg.rps},
+                        )
+                        break
+                    delay = _backoff_delay(attempt, cfg, header_delay=None)
+                    _log_retry_delay(request_url, attempt, None, delay)
+                    sleep(delay)
                     break
-                delay = _backoff_delay(attempt, cfg, header_delay=None)
-                _log_retry_delay(url, attempt, None, delay)
-                sleep(delay)
-            except requests.HTTPError as exc:
-                last_exc = exc
-                response = exc.response
-                status = getattr(response, "status_code", None)
-                if attempt >= total_attempts:
-                    logger.exception(
-                        "request_fail",
-                        extra={"url": url, "status": status, "rps": cfg.rps},
-                    )
+                except requests.HTTPError as exc:
+                    last_exc = exc
+                    response = exc.response
+                    status = getattr(response, "status_code", None)
+                    if (
+                        status == 404
+                        and not used_fallback
+                        and fallback_url is not None
+                        and fallback_url != request_url
+                    ):
+                        used_fallback = True
+                        request_url = fallback_url
+                        logger.debug(
+                            "request_fallback_switch",
+                            extra={
+                                "original_url": url,
+                                "fallback_url": request_url,
+                                "attempt": attempt,
+                                "rps": cfg.rps,
+                            },
+                        )
+                        continue
+                    if attempt >= total_attempts:
+                        logger.exception(
+                            "request_fail",
+                            extra={"url": request_url, "status": status, "rps": cfg.rps},
+                        )
+                        break
+                    header_delay = _retry_after_delay(response)
+                    delay = _backoff_delay(attempt, cfg, header_delay)
+                    _log_retry_delay(request_url, attempt, status, delay, header_delay)
+                    sleep(delay)
                     break
-                header_delay = _retry_after_delay(response)
-                delay = _backoff_delay(attempt, cfg, header_delay)
-                _log_retry_delay(url, attempt, status, delay, header_delay)
-                sleep(delay)
-            except requests.RequestException as exc:
-                last_exc = exc
-                if attempt >= total_attempts:
-                    logger.exception(
-                        "request_fail",
-                        extra={"url": url, "status": None, "rps": cfg.rps},
-                    )
+                except requests.RequestException as exc:
+                    last_exc = exc
+                    if attempt >= total_attempts:
+                        logger.exception(
+                            "request_fail",
+                            extra={"url": request_url, "status": None, "rps": cfg.rps},
+                        )
+                        break
+                    delay = _backoff_delay(attempt, cfg, header_delay=None)
+                    _log_retry_delay(request_url, attempt, None, delay)
+                    sleep(delay)
                     break
-                delay = _backoff_delay(attempt, cfg, header_delay=None)
-                _log_retry_delay(url, attempt, None, delay)
-                sleep(delay)
 
         if last_exc is not None:
             raise last_exc
@@ -316,6 +360,19 @@ def _chunked(items: Iterable[T], size: int) -> Iterator[list[T]]:
         if not chunk:
             break
         yield chunk
+
+
+def _strip_json_suffix(url: str) -> str | None:
+    """Return ``url`` without a trailing ``.json`` path component if present."""
+
+    split = urlsplit(url)
+    path = split.path
+    if not path.endswith(".json"):
+        return None
+    stripped = path[:-5]
+    if not stripped:
+        return None
+    return urlunsplit(split._replace(path=stripped))
 
 
 def _utcnow() -> datetime:

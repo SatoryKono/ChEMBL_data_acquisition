@@ -202,10 +202,10 @@ _EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series | Non
     "activity_chembl_id": lambda df: df.get("activity_id"),
     "compound_name": lambda df: df.get("molecule_pref_name"),
     "log_value": lambda df: df.get("pchembl_value"),
-    "salt_chembl_id": lambda df: df.get("molecule_chembl_id"),
 }
 
 
+ 
 def _string_like_missing(series: pd.Series) -> pd.Series:
     """Return a boolean mask for ``series`` treating blanks as missing."""
 
@@ -214,6 +214,187 @@ def _string_like_missing(series: pd.Series) -> pd.Series:
         string_values = series.astype("string")
         mask = mask | string_values.str.strip().fillna("").eq("")
     return mask
+ 
+ 
+def _string_blank_mask(series: pd.Series) -> pd.Series:
+    """Return mask of entries that are null or contain only whitespace."""
+
+    values = series.astype("string")
+    stripped = values.str.strip()
+    return values.isna() | stripped.fillna("").eq("")
+
+
+def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
+    """Return mapping of assay identifiers to ``src_assay_id`` values."""
+
+    if dictionary_dir is None:
+        return {}
+
+    candidate = Path(dictionary_dir) / "_assay" / "assay.csv"
+    try:
+        frame = pd.read_csv(
+            candidate,
+            usecols=["assay_chembl_id", "src_assay_id"],
+            dtype="string",
+        )
+    except FileNotFoundError:
+        logger.warning("assay_lookup_missing", path=str(candidate))
+        return {}
+    except pd.errors.EmptyDataError:
+        logger.warning("assay_lookup_empty", path=str(candidate))
+        return {}
+    except ValueError as exc:
+        logger.warning(
+            "assay_lookup_invalid_columns",
+            path=str(candidate),
+            error=str(exc),
+        )
+        return {}
+    except OSError as exc:
+        logger.warning("assay_lookup_read_failed", path=str(candidate), error=str(exc))
+        return {}
+
+    if frame.empty:
+        return {}
+
+    cleaned = frame.dropna(subset=["assay_chembl_id", "src_assay_id"])
+    if cleaned.empty:
+        return {}
+
+    cleaned = cleaned.assign(
+        assay_chembl_id=cleaned["assay_chembl_id"].str.strip(),
+        src_assay_id=cleaned["src_assay_id"].str.strip(),
+    )
+
+    cleaned = cleaned[cleaned["assay_chembl_id"].ne("") & cleaned["src_assay_id"].ne("")]
+    if cleaned.empty:
+        return {}
+
+    return {
+        str(assay_id): str(src_id)
+        for assay_id, src_id in cleaned[["assay_chembl_id", "src_assay_id"]]
+        .itertuples(index=False, name=None)
+    }
+
+
+def _ensure_src_assay_id(
+    frame: pd.DataFrame, *, lookup: Mapping[str, str]
+) -> pd.DataFrame:
+    """Populate ``src_assay_id`` using ``lookup`` when missing."""
+
+    if "src_assay_id" not in frame.columns and "assay_chembl_id" not in frame.columns:
+        return frame
+
+    result = frame.copy()
+
+    if "src_assay_id" in result.columns:
+        try:
+            result["src_assay_id"] = result["src_assay_id"].astype("string")
+        except TypeError:
+            result["src_assay_id"] = result["src_assay_id"].astype("string")
+    else:
+        result["src_assay_id"] = pd.Series(pd.NA, index=result.index, dtype="string")
+
+    if not lookup or result.empty or "assay_chembl_id" not in result.columns:
+        return result
+
+    assay_ids = result["assay_chembl_id"].astype("string")
+    missing_mask = _string_like_missing(result["src_assay_id"])
+    if not missing_mask.any():
+        return result
+
+    normalized_ids = assay_ids.where(~assay_ids.isna(), None).astype(object)
+
+    def _resolve(value: object) -> str | None:
+        if value is None:
+            return None
+        return lookup.get(str(value))
+
+    mapped = normalized_ids.map(_resolve)
+    available = missing_mask & mapped.notna()
+    if not available.any():
+        return result
+
+    result.loc[available, "src_assay_id"] = mapped[available].astype("string")
+    return result
+
+
+def _ensure_molecule_pref_name(
+    frame: pd.DataFrame,
+    *,
+    cfg: Config,
+    client: ChemblClient,
+    cache: dict[str, str | None],
+) -> pd.DataFrame:
+    """Populate ``molecule_pref_name`` via the test item API when missing."""
+
+    if frame.empty or "molecule_chembl_id" not in frame.columns:
+        return frame
+
+    result = frame.copy()
+
+    if "molecule_pref_name" in result.columns:
+        missing_mask = _string_blank_mask(result["molecule_pref_name"])
+    else:
+        result["molecule_pref_name"] = pd.Series(pd.NA, index=result.index, dtype="string")
+        missing_mask = pd.Series(True, index=result.index, dtype="boolean")
+
+    if not missing_mask.any():
+        return result
+
+    molecule_ids = (
+        result.loc[missing_mask, "molecule_chembl_id"].astype("string").str.strip()
+    )
+    molecule_ids = molecule_ids[molecule_ids != ""]
+    unique_ids = tuple(dict.fromkeys(molecule_ids.dropna().tolist()))
+
+    if not unique_ids:
+        return result
+
+    pending: list[str] = []
+    for identifier in unique_ids:
+        if identifier not in cache:
+            pending.append(identifier)
+
+    if pending:
+        fields = list(cfg.testitem.fields)
+        for column in ("molecule_chembl_id", "pref_name"):
+            if column not in fields:
+                fields.append(column)
+        lookup = cl.get_testitem(
+            pending,
+            cfg=cfg.api,
+            client=client,
+            chunk_size=cfg.testitem.batch_size,
+            timeout=cfg.testitem.timeout,
+            fields=fields,
+            page_limit=cfg.testitem.request_limit,
+        )
+        if not lookup.empty and {"molecule_chembl_id", "pref_name"}.issubset(lookup.columns):
+            mapped = (
+                lookup[["molecule_chembl_id", "pref_name"]]
+                .dropna(subset=["molecule_chembl_id"])
+                .astype({"molecule_chembl_id": "string"})
+            )
+            for chembl_id, pref_name in mapped.itertuples(index=False):
+                cache[str(chembl_id)] = str(pref_name) if pd.notna(pref_name) else None
+        for identifier in pending:
+            cache.setdefault(identifier, None)
+
+    fill_map = {key: value for key, value in cache.items() if value}
+    if not fill_map:
+        return result
+
+    replacements = molecule_ids.map(fill_map)
+    available = replacements.notna()
+    if available.any():
+        result.loc[molecule_ids.index[available], "molecule_pref_name"] = (
+            replacements[available].astype("string")
+        )
+
+    return result
+ 
+ 
 
 
 def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
@@ -470,6 +651,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return frame.assign(**fillers)
 
     available_columns: set[str] = set()
+    assay_src_lookup = _load_assay_src_lookup(cfg.resources.dictionary_dir)
 
     def _record_columns(frame: pd.DataFrame) -> pd.DataFrame:
         available_columns.update(frame.columns)
@@ -477,6 +659,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     metadata_hooks = [
         _ensure_required_activity_columns,
+        partial(_ensure_src_assay_id, lookup=assay_src_lookup),
         _ensure_extended_activity_columns,
         normalize_activities,
         add_pipeline_metadata,
@@ -553,6 +736,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     last_error_extra: dict[str, object] | None = None
     last_error_context: dict[str, object] = {}
 
+    pref_name_cache: dict[str, str | None] = {}
+
     with ChemblClient(
         cfg.api,
         cfg.retry,
@@ -613,7 +798,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 else:
                     last_error_extra = None
                     last_error_context = {}
-                    return result
+                    return _ensure_molecule_pref_name(
+                        result, cfg=cfg, client=client, cache=pref_name_cache
+                    )
             return pd.DataFrame(columns=ACTIVITY_COLUMNS)
 
         worker_count = getattr(cfg.activity, "workers", 1) or 1

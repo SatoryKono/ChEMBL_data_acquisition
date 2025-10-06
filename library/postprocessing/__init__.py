@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .activity_extended import ActivityExtendedError, process_activity_extended
+from .assay_extended import AssayExtendedError, enrich_assay_metadata
 from .document import preprocess_document_export, postprocess_export_file
 from .iuphar import process_iuphar_targets
 from .names import process_target_names
@@ -18,5 +19,7 @@ __all__ = [
     "process_target_names",
     "process_iuphar_targets",
     "process_activity_extended",
+    "AssayExtendedError",
+    "enrich_assay_metadata",
 ]
 

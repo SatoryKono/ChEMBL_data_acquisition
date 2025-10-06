@@ -115,6 +115,15 @@ ACTIVITY_COLUMNS = [
     "action_type",
 ]
 
+
+_ACTIVITY_EXTRA_FIELDS: tuple[str, ...] = (
+    "standard_text_value",
+)
+
+ACTIVITY_QUERY_FIELDS: tuple[str, ...] = tuple(
+    dict.fromkeys(list(ACTIVITY_COLUMNS) + list(_ACTIVITY_EXTRA_FIELDS))
+)
+
 TESTITEM_PUBCHEM_COLUMNS: tuple[str, ...] = (
     "pubchem_cid",
     "pubchem_iupac_name",
@@ -352,17 +361,19 @@ def get_assays(
         return pd.DataFrame(columns=ASSAY_COLUMNS)
 
     records: list[pd.DataFrame] = []
-    base = f"{cfg.chembl_base.rstrip('/')}/assay.json?format=json"
+    base_root = cfg.chembl_base.rstrip("/")
+    base_url = f"{base_root}/assay.json"
+    base_query: dict[str, str] = {"format": "json"}
     if require_variant_sequence:
-        base += "&variant_sequence__isnull=false"
-    effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    for chunk in _chunked(valid, chunk_size):
-        chunk_key = ",".join(chunk)
-        logger.info(
-            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
-        )
-        url = f"{base}&assay_chembl_id__in={chunk_key}&limit={len(chunk)}"
-        chunk_frames: list[pd.DataFrame] = []
+        base_query["variant_sequence__isnull"] = "false"
+    join_base = f"{base_root}/"
+
+    def _build_url(extra: dict[str, object]) -> str:
+        params = base_query | {k: str(v) for k, v in extra.items()}
+        return f"{base_url}?{urlencode(params)}"
+
+    def _fetch_chunk(url: str) -> list[pd.DataFrame]:
+        frames: list[pd.DataFrame] = []
         next_url: str | None = url
         while next_url:
             data = client.request_json(next_url, cfg=cfg, timeout=effective_timeout)
@@ -372,10 +383,50 @@ def get_assays(
                     axis="columns", how="all"
                 )
                 if not df_chunk.empty:
-                    chunk_frames.append(_apply_assay_column_aliases(df_chunk))
+                    frames.append(_apply_assay_column_aliases(df_chunk))
             page_meta = data.get("page_meta") or {}
             next_token = page_meta.get("next")
-            next_url = urljoin(cfg.chembl_base, next_token) if next_token else None
+            next_url = urljoin(join_base, next_token) if next_token else None
+        return frames
+
+    def _fetch_single(identifier: str) -> list[pd.DataFrame]:
+        single_url = _build_url({"assay_chembl_id": identifier, "limit": 1})
+        try:
+            return _fetch_chunk(single_url)
+        except requests.HTTPError as exc:  # pragma: no cover - exercised via caller
+            response = exc.response
+            if response is not None and response.status_code == 404:
+                logger.info(
+                    "assay_missing", extra={"stage": "chunk_skip", "assay_chembl_id": identifier}
+                )
+                return []
+            raise
+    effective_timeout = timeout if timeout is not None else cfg.timeout_read
+    for chunk in _chunked(valid, chunk_size):
+        chunk_key = ",".join(chunk)
+        logger.info(
+            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+        )
+        url = _build_url({"assay_chembl_id__in": ",".join(chunk), "limit": len(chunk)})
+        try:
+            chunk_frames = _fetch_chunk(url)
+        except requests.HTTPError as exc:
+            response = exc.response
+            if response is not None and response.status_code == 404:
+                logger.warning(
+                    "chunk_split_retry",
+                    extra={
+                        "stage": "chunk_retry",
+                        "chunk_key": chunk_key,
+                        "chunk_size": len(chunk),
+                        "status": 404,
+                    },
+                )
+                chunk_frames = []
+                for identifier in chunk:
+                    chunk_frames.extend(_fetch_single(identifier))
+            else:
+                raise
         if chunk_frames:
             records.append(pd.concat(chunk_frames, ignore_index=True))
             logger.info(
@@ -425,7 +476,11 @@ def get_activities(
         return pd.DataFrame(columns=ACTIVITY_COLUMNS)
 
     records: list[pd.DataFrame] = []
-    base = f"{cfg.chembl_base.rstrip('/')}/activity.json?format=json"
+    base_params: list[tuple[str, str]] = [("format", "json")]
+    if ACTIVITY_QUERY_FIELDS:
+        base_params.append(("fields", ",".join(ACTIVITY_QUERY_FIELDS)))
+    base_query = urlencode(base_params)
+    base = f"{cfg.chembl_base.rstrip('/')}/activity.json?{base_query}"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
         chunk_key = ",".join(chunk)

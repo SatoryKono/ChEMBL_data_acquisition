@@ -25,6 +25,21 @@ def test_augment_activity_frame__fills_missing_log_value():
     pd.testing.assert_series_equal(result["log_value"], expected)
 
 
+def test_augment_activity_frame__populates_compound_key_from_parent_and_child():
+    frame = pd.DataFrame(
+        {
+            "compound_key": pd.Series([pd.NA, ""], dtype="string"),
+            "parent_molecule_chembl_id": pd.Series(["PARENT-1", pd.NA], dtype="string"),
+            "molecule_chembl_id": pd.Series([pd.NA, "CHILD-2"], dtype="string"),
+        }
+    )
+
+    augmented, filled = _augment_activity_frame(frame)
+
+    assert augmented["compound_key"].tolist() == ["PARENT-1", "CHILD-2"]
+    assert "compound_key" in filled
+
+
 def test_augment_activity_frame__creates_log_value_from_standard_measurements():
     frame = pd.DataFrame(
         {

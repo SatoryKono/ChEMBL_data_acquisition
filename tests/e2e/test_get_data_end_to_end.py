@@ -8,6 +8,7 @@ import shutil
 from collections import deque
 from collections.abc import Callable
 from datetime import UTC
+from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
@@ -15,6 +16,7 @@ import pytest
 
 from library.common.csv_utils import sha256_file
 from scripts import get_data
+from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_file, parse_log_lines
 
 
@@ -120,13 +122,28 @@ def _assays_transform(frame: pd.DataFrame, logger: get_data.Logger) -> pd.DataFr
     frame = frame.copy()
     frame["description"] = frame["description"].astype("string").str.strip()
     frame["description_length"] = frame["description"].str.len().astype("Int64")
-    return frame[
+    lookup = _load_assay_dictionary()
+    enriched = frame.merge(lookup, on="assay_chembl_id", how="left")
+    quality_columns = ["assay_strain", "assay_group", "year", "accession"]
+    completeness = 1.0 - enriched[quality_columns].isna().mean()
+    min_ratio = float(completeness.min()) if len(completeness) else 1.0
+    if min_ratio < ASSAY_ENRICHMENT_MIN_RATIO:
+        raise AssertionError(
+            "assay enrichment below threshold "
+            f"(threshold={ASSAY_ENRICHMENT_MIN_RATIO}, completeness={completeness.to_dict()})"
+        )
+    enriched["year"] = enriched["year"].astype("Int64")
+    return enriched[
         [
             "assay_chembl_id",
             "target_chembl_id",
             "document_chembl_id",
             "description",
             "description_length",
+            "assay_strain",
+            "assay_group",
+            "year",
+            "accession",
         ]
     ]
 
@@ -396,6 +413,10 @@ def test_get_data_end_to_end__miniature_pipeline(
         expected = pd.read_csv(expected_dir / f"{stem}.csv")
         pd.testing.assert_frame_equal(actual, expected)
         assert not actual[key_columns[step_name]].duplicated().any()
+        if step_name == "assay":
+            quality_columns = ["assay_strain", "assay_group", "year", "accession"]
+            completeness = 1.0 - actual[quality_columns].isna().mean()
+            assert (completeness >= ASSAY_ENRICHMENT_MIN_RATIO).all(), completeness
 
     hashes_before = {name: sha256_file(path) for name, path in output_paths.items()}
 
@@ -561,3 +582,17 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert not missing_target.exists()
     sentinel_path = missing_output / f"output.targets_{date_prefix}.csv.failed"
     assert sentinel_path.exists()
+_ASSAY_DICTIONARY_PATH = Path(__file__).resolve().parents[1] / "data" / "assay_dictionary.csv"
+
+
+@lru_cache(maxsize=1)
+def _load_assay_dictionary() -> pd.DataFrame:
+    lookup = pd.read_csv(_ASSAY_DICTIONARY_PATH)
+    lookup = lookup.copy()
+    lookup["assay_chembl_id"] = lookup["assay_chembl_id"].astype("string").str.strip()
+    lookup["assay_strain"] = lookup["assay_strain"].astype("string")
+    lookup["assay_group"] = lookup["assay_group"].astype("string")
+    lookup["accession"] = lookup["accession"].astype("string")
+    lookup["year"] = pd.to_numeric(lookup["year"], errors="coerce").astype("Int64")
+    return lookup
+

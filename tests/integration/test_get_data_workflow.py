@@ -11,6 +11,7 @@ import pytest
 
 from library.config import Config
 from scripts import get_data, get_target_data
+from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_lines
 
 
@@ -197,16 +198,17 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
         pd.DataFrame(
             [
                 {
-                    "assay_chembl_id": "A1",
-                    "target_chembl_id": "T1",
-                    "document_chembl_id": "D1",
-                    "description": "First",
+                    "assay_chembl_id": "CHEMBLA1",
+                    "target_chembl_id": "CHEMBLT1",
+                    "document_chembl_id": "CHEMBL123",
+                    "description": "Binding assay",
                 }
             ]
         ),
     )
 
     attempts = {"count": 0}
+    dictionary_path = Path(__file__).resolve().parents[1] / "data" / "assay_dictionary.csv"
 
     def _on_execute(rows: pd.DataFrame, destination: Path) -> int:
         attempts["count"] += 1
@@ -215,7 +217,27 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
             tmp_path = destination.with_suffix(".tmp")
             tmp_path.write_text("partial\n", encoding="utf-8")
             return 1
-        destination.write_text("assay_chembl_id\nA1\n", encoding="utf-8")
+        dictionary = pd.read_csv(dictionary_path)
+        dictionary["assay_chembl_id"] = dictionary["assay_chembl_id"].astype("string")
+        enriched = rows.merge(dictionary, on="assay_chembl_id", how="left")
+        enriched["description"] = enriched["description"].astype("string").str.strip()
+        enriched["description_length"] = enriched["description"].str.len().astype("Int64")
+        enriched["year"] = pd.to_numeric(enriched["year"], errors="coerce").astype("Int64")
+        quality_columns = ["assay_strain", "assay_group", "year", "accession"]
+        completeness = 1.0 - enriched[quality_columns].isna().mean()
+        assert (completeness >= ASSAY_ENRICHMENT_MIN_RATIO).all(), completeness.to_dict()
+        columns = [
+            "assay_chembl_id",
+            "target_chembl_id",
+            "document_chembl_id",
+            "description",
+            "description_length",
+            "assay_strain",
+            "assay_group",
+            "year",
+            "accession",
+        ]
+        enriched.to_csv(destination, index=False, columns=columns)
         return 0
 
     step = get_data.PipelineStep(
@@ -253,6 +275,22 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
     final_output = step.expected_output(cfg)
     assert final_output.exists()
     assert attempts["count"] == 2
+    result = pd.read_csv(final_output)
+    expected_columns = [
+        "assay_chembl_id",
+        "target_chembl_id",
+        "document_chembl_id",
+        "description",
+        "description_length",
+        "assay_strain",
+        "assay_group",
+        "year",
+        "accession",
+    ]
+    assert list(result.columns) == expected_columns
+    quality_columns = ["assay_strain", "assay_group", "year", "accession"]
+    completeness = 1.0 - result[quality_columns].isna().mean()
+    assert (completeness >= ASSAY_ENRICHMENT_MIN_RATIO).all(), completeness.to_dict()
 
 
 @pytest.mark.integration

@@ -9,7 +9,9 @@ from typing import Any, Iterable
 import pandas as pd
 import pytest
 
+from library.cli_utils import run_pipeline as cli_run_pipeline
 from library.config import Config
+from library.schemas import AssaysSchema
 from scripts import get_assay_data
 
 
@@ -27,6 +29,12 @@ class _MemoryLogger:
 
     def error(self, event: str, **payload: object) -> None:
         self.events.append(("error", event, dict(payload)))
+
+    def debug(self, event: str, **payload: object) -> None:
+        self.events.append(("debug", event, dict(payload)))
+
+    def exception(self, event: str, **payload: object) -> None:
+        self.events.append(("exception", event, dict(payload)))
 
 
 @pytest.fixture()
@@ -202,6 +210,63 @@ def test_run__propagates_exit_code(cfg: Config, minimal_args: argparse.Namespace
     exit_code = get_assay_data.run(cfg, minimal_args)
 
     assert exit_code == 7
+
+
+@pytest.mark.unit
+def test_run_pipeline__adds_missing_assay_optional_columns(tmp_path: Path) -> None:
+    frame = pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]})
+
+    def fetcher() -> Iterable[pd.DataFrame]:
+        yield frame
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: Iterable[str] | None,
+        key_cols: Iterable[str] | None,
+        **_: object,
+    ) -> Path:
+        frames = [chunk.copy() for chunk in chunks]
+        if frames:
+            result = pd.concat(frames, ignore_index=True)
+        else:
+            result = pd.DataFrame(columns=list(col_order or []))
+        if col_order:
+            result = result.reindex(columns=list(col_order), fill_value=pd.NA)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        result.to_csv(destination, index=False)
+        return destination
+
+    logger = _MemoryLogger()
+    output_path = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failures.csv"
+
+    exit_code = cli_run_pipeline(
+        fetcher=fetcher,
+        schema=AssaysSchema,
+        schema_name="AssaysSchema",
+        validators=[],
+        metadata_hooks=[],
+        writer=writer,
+        output_path=output_path,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=lambda _: None,
+        cfg=None,
+        stats_extra=None,
+        logger=logger,
+    )
+
+    assert exit_code == 0
+    assert output_path.exists()
+    result = pd.read_csv(output_path)
+    assert "assay_group" in result.columns
+    assert "assay_strain" in result.columns
+    assert result["assay_group"].isna().all()
+    assert result["assay_strain"].isna().all()
 
 
 def test_build_parser__defaults() -> None:
