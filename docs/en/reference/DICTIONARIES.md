@@ -22,6 +22,10 @@ reference summarises each dataset, the consuming pipeline and important fields.
   consuming pipeline handles nulls gracefully.
 - For cached JSON responses store only the minimal subset required for tests to
   avoid large commits. The production pipeline should re-fetch data on demand.
+- When refreshing the bundle locally without updating the repository, export
+  the new checksums via the ``CHEMBL_DICTIONARY_EXTRA_HASHES`` environment
+  variable, e.g. ``{"dictionary_root": ["<sha256>"]}``.  Use ``"*"`` to skip
+  validation temporarily during investigations.
 
 ### Parent molecule enrichment
 
