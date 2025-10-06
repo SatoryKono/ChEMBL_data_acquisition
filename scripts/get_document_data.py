@@ -110,7 +110,6 @@ from library.pipelines.document.pipeline import (
     merge_metadata,
     merge_with_chembl,
     normalise_doi,
-    save_quality_report,
 )
 from library.pipelines.document.service import (
     DocumentPipeline,
@@ -118,12 +117,16 @@ from library.pipelines.document.service import (
     FallbackDoiState,
 )
 from library.common.log import logger
-from library.common.metadata import Stats, file_sha256, write_meta_yaml
+from library.reporting.run_manifest import (
+    QualityAnalysisError,
+    QualityReportError,
+    finalise_csv_output,
+)
 from library.postprocessing.document import preprocess_documents_csv
 from library.pipelines.common import add_pipeline_metadata
 from library.common.rate_limiter import get_global_limiter
 from library.common.sidecar import SidecarErrors
-from library.qa.table_quality import TableQualityProfiler, analyze_table_quality
+from library.qa.table_quality import TableQualityProfiler
 from library.schemas import DocumentsSchema, normalize_documents
 from library.schemas.document_spec import DOCUMENT_EXPORT_COLUMNS
 
@@ -661,45 +664,33 @@ def _finalise_export(
         if csv_path.name.startswith("output.document_"):
             _maybe_run_document_postprocessing(csv_path)
 
-    stats: Stats = {
-        "rows_total": rows_total,
-        "rows_kept": rows_kept,
-        "rows_dropped": rows_dropped,
-        "output_sha256": file_sha256(csv_path),
-    }
-    write_meta_yaml(
-        csv_path=csv_path,
-        command=" ".join(sys.argv),
-        config_subset=_serialize_paths(cfg.to_dict()),
-        inputs={"input_csv": str(input_csv)},
-        stats=stats,
-        schema="DocumentsSchema",
-    )
-
-    quality_path = csv_path.with_suffix(".quality.json")
+    doc_quality_cfg = getattr(cfg.system, "doc_quality", None)
     try:
-        report = build_quality_report(quality_summary)
-        save_quality_report(report, quality_path)
-    except (OSError, TypeError, ValueError) as exc:
+        finalise_csv_output(
+            csv_path=csv_path,
+            rows_total=rows_total,
+            rows_kept=rows_kept,
+            command=" ".join(sys.argv),
+            config_subset=_serialize_paths(cfg.to_dict()),
+            inputs={"input_csv": str(input_csv)},
+            schema="DocumentsSchema",
+            quality_summary=quality_summary,
+            quality_builder=build_quality_report,
+            quality_path=csv_path.with_suffix(".quality.json"),
+            quality_profiler=quality_profiler,
+            quality_config=doc_quality_cfg,
+            quality_table_name=csv_path.with_suffix("").name,
+            quality_destination=csv_path.parent,
+        )
+    except QualityReportError as exc:
+        destination = exc.path or csv_path.with_suffix(".quality.json")
         logger.error(
             "quality_report_write_failed",
             error=str(exc),
-            path=str(quality_path),
+            path=str(destination),
         )
         return 1
-
-    doc_quality_cfg = cfg.system.doc_quality
-    try:
-        if doc_quality_cfg.enable:
-            analyze_table_quality(
-                quality_profiler,
-                table_name=csv_path.with_suffix("").name,
-                destination_dir=csv_path.parent,
-                sample_rows=doc_quality_cfg.sample_rows,
-                include_columns=doc_quality_cfg.include_columns,
-                exclude_columns=doc_quality_cfg.exclude_columns,
-            )
-    except Exception as exc:
+    except QualityAnalysisError as exc:
         logger.exception(
             "quality_report_generation_failed",
             error=str(exc),

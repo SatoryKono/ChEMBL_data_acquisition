@@ -33,14 +33,10 @@ from ..cli import (
     prepare_io_paths,
 )
 from ..common.log import logger as default_logger
-from ..common.metadata import (
-    Stats,
-    file_sha256,
-    record_quality_failure,
-    write_meta_yaml,
-)
+from ..common.metadata import Stats, record_quality_failure
 from ..common.sidecar import SidecarErrors
 from ..config import Config, ConfigError, ensure_dirs, print_config
+from ..reporting.run_manifest import finalise_csv_output
 from ..utils.config import DEFAULT_CONFIG_PATH
 
 SchemaT = TypeVar("SchemaT")
@@ -610,15 +606,26 @@ def run_pipeline(
         use_logger.error("write_fail", error="writer returned None", path=str(output_path))
         return 1
 
-    stats: Stats = {
-        "rows_total": rows_total,
-        "rows_kept": rows_kept,
-        "rows_dropped": rows_dropped,
-        "output_sha256": file_sha256(csv_path),
-    }
     extra_stats = stats_extra() if callable(stats_extra) else stats_extra
-    for key, value in (extra_stats or {}).items():
-        stats[key] = value
+    resolved_invocation = invocation_tuple
+
+    extra_metadata: dict[str, object] = {}
+    if failed_metadata_hooks:
+        extra_metadata["metadata_hook_failures"] = sorted(failed_metadata_hooks)
+
+    report = finalise_csv_output(
+        csv_path=csv_path,
+        rows_total=rows_total,
+        rows_kept=rows_kept,
+        command=command_str,
+        config_subset=config_snapshot,
+        inputs=inputs,
+        schema=schema_name,
+        stats_extra=extra_stats or None,
+        invocation=resolved_invocation or None,
+        extra_metadata=extra_metadata or None,
+    )
+    stats = report.stats
 
     if stats_callback is not None:
         try:
@@ -626,22 +633,7 @@ def run_pipeline(
         except Exception:  # pragma: no cover - defensive against user callbacks
             use_logger.exception("stats_callback_failed")
 
-    resolved_invocation = invocation_tuple
-
-    extra_metadata: dict[str, object] = {}
-    if failed_metadata_hooks:
-        extra_metadata["metadata_hook_failures"] = sorted(failed_metadata_hooks)
-
-    meta_path = write_meta_yaml(
-        csv_path=csv_path,
-        command=command_str,
-        config_subset=config_snapshot,
-        inputs=inputs,
-        stats=stats,
-        schema=schema_name,
-        invocation=resolved_invocation or None,
-        extra_metadata=extra_metadata or None,
-    )
+    meta_path = report.meta_path
 
     doc_quality_cfg = getattr(getattr(cfg, "system", None), "doc_quality", None)
     fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
