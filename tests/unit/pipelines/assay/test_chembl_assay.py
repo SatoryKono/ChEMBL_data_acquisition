@@ -7,7 +7,7 @@ import pytest
 from requests import HTTPError, ReadTimeout, Response
 
 from library.config import ApiCfg
-from library.pipelines.assay.chembl_assay import get_assays
+from library.pipelines.assay.chembl_assay import get_assays, get_testitem
 
 
 class _StubClient:
@@ -113,3 +113,52 @@ def test_get_assays__recovers_from_request_exception() -> None:
     assert any("assay_chembl_id__in" in call for call in client.calls)
     assert sum("assay_chembl_id=CHEMBL1" in call for call in client.calls) == 1
     assert sum("assay_chembl_id=CHEMBL2" in call for call in client.calls) == 1
+
+
+@pytest.mark.unit
+def test_get_testitem__splits_chunk_on_timeout() -> None:
+    """Chunk-level timeouts trigger adaptive splitting."""
+
+    responders = [
+        ReadTimeout("timeout"),
+        {
+            "molecules": [
+                {"molecule_chembl_id": "CHEMBL1"},
+                {"molecule_chembl_id": "CHEMBL2"},
+            ],
+            "page_meta": {},
+        },
+        {
+            "molecules": [
+                {"molecule_chembl_id": "CHEMBL3"},
+                {"molecule_chembl_id": "CHEMBL4"},
+            ],
+            "page_meta": {},
+        },
+    ]
+    client = _StubClient(responders)
+    cfg = ApiCfg()
+
+    df = get_testitem(
+        ["CHEMBL1", "CHEMBL2", "CHEMBL3", "CHEMBL4"],
+        cfg=cfg,
+        client=client,
+        chunk_size=4,
+    )
+
+    assert sorted(df["molecule_chembl_id"].dropna().tolist()) == [
+        "CHEMBL1",
+        "CHEMBL2",
+        "CHEMBL3",
+        "CHEMBL4",
+    ]
+    assert any(
+        "molecule_chembl_id__in=CHEMBL1,CHEMBL2,CHEMBL3,CHEMBL4" in call
+        for call in client.calls
+    )
+    assert any(
+        "molecule_chembl_id__in=CHEMBL1,CHEMBL2" in call for call in client.calls
+    )
+    assert any(
+        "molecule_chembl_id__in=CHEMBL3,CHEMBL4" in call for call in client.calls
+    )
