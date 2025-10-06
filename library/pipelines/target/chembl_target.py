@@ -15,6 +15,7 @@ from requests.exceptions import ReadTimeout
 from library.clients import ChemblClient, _chunked
 from ...config import ApiCfg, TargetChemblBatchRetryCfg, UniprotMappingCfg
 from ...common.log import logger
+from ...common.rate_limiter import sleep
 
 TARGET_FIELDS = [
     "pref_name",
@@ -444,6 +445,10 @@ def iter_target_batches_with_retry(
 
     shrink_factor = retry_cfg.shrink_factor
     min_size = max(1, retry_cfg.min_size)
+    single_retry_limit = max(0, getattr(retry_cfg, "single_timeout_retries", 0))
+    single_retry_delay = max(0.0, getattr(retry_cfg, "single_timeout_delay", 0.0))
+
+    single_retry_counts: dict[tuple[str, ...], int] = {}
 
     buffer: list[str] = []
 
@@ -451,11 +456,37 @@ def iter_target_batches_with_retry(
         queue = list(batch)
         current_size = min(len(queue), base_chunk_size)
 
+        def _should_retry_single(
+            key: tuple[str, ...], exc: Exception
+        ) -> bool:
+            if single_retry_limit <= 0:
+                return False
+            if not isinstance(exc, ReadTimeout):
+                return False
+            attempts = single_retry_counts.get(key, 0)
+            if attempts >= single_retry_limit:
+                return False
+            next_attempt = attempts + 1
+            single_retry_counts[key] = next_attempt
+            log_kwargs = {
+                "chunk_size": len(key),
+                "ids": list(key),
+                "attempt": next_attempt,
+                "max_attempts": single_retry_limit,
+                "error": str(exc),
+            }
+            if single_retry_delay > 0:
+                log_kwargs["delay"] = single_retry_delay
+            effective_logger.warning("chembl_single_retry", **log_kwargs)
+            if single_retry_delay > 0:
+                sleep(single_retry_delay)
+            return True
+
         while queue:
             attempt_size = min(current_size, len(queue))
             if attempt_size <= 0:
                 break
-            attempt_ids = queue[:attempt_size]
+            attempt_ids = tuple(queue[:attempt_size])
             if on_attempt is not None:
                 on_attempt()
             try:
@@ -471,6 +502,8 @@ def iter_target_batches_with_retry(
                     yield result
             except (requests.RequestException, ValueError) as exc:
                 if attempt_size <= min_size:
+                    if _should_retry_single(attempt_ids, exc):
+                        continue
                     raise
                 next_size = int(math.floor(attempt_size * shrink_factor))
                 if next_size < min_size:
@@ -486,6 +519,8 @@ def iter_target_batches_with_retry(
                 )
                 current_size = next_size
                 continue
+            else:
+                single_retry_counts.pop(attempt_ids, None)
             del queue[:attempt_size]
             current_size = min(base_chunk_size, len(queue)) if queue else 0
 
