@@ -232,7 +232,7 @@ post-processing derives `lower_value`/`upper_value` using the rules described in
 ```
 get-testitem-data --input data/input/testitem.csv \
     --final-out output/testitems_$(date +%Y%m%d).csv \
-    --batch-size 1000 --timeout 60 --limit 400
+    --batch-size 250 --timeout 90 --limit 400
 ```
 
 After downloading molecules from ChEMBL, the pipeline enriches unique SMILES with

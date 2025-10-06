@@ -223,7 +223,7 @@ get-activity-data --input data/input/activity.csv \
 ```
 get-testitem-data --input data/input/testitem.csv \
     --final-out output/testitems_$(date +%Y%m%d).csv \
-    --batch-size 1000 --timeout 60 --limit 400
+    --batch-size 250 --timeout 90 --limit 400
 ```
 
 Пайплайн объединяет молекулы из ChEMBL с данными PubChem, нормализует результат и

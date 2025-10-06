@@ -59,15 +59,15 @@ sources:
         offset: 0
       testitem:
         column: "molecule_chembl_id"
-        batch_size: 1000
-        timeout: 30.0
+        batch_size: 250
+        timeout: 90.0
         limit: null
         offset: 0
         request_limit: 1000
         retries: 5
         backoff_factor: 0.5
         batch_retry:
-          enable: false
+          enable: true
           shrink_factor: 0.5
           min_size: 1
         fields:
