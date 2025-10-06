@@ -127,7 +127,7 @@ graph TD
 
 | Слой | Модули | Роль |
 |------|--------|------|
-| Конфигурация | `config/config.yaml`, `config.schema.json`, `library/config.py` | Определяют хосты API, лимиты, пути, опции нормализации и правила загрузки `.env`. |
+| Конфигурация | `config/config.yaml`, `config.schema.json`, пакет `library/config/` | Определяют хосты API, лимиты, пути, опции нормализации и правила загрузки `.env`. |
 | Точки входа | `scripts/*.py`, `library/cli/commands/*`, `library/utils/cli_tools/*` | Парсят CLI, подготавливают пути, запускают пайплайны, оркестратор `get-data` и вспомогательные утилиты. |
 | Клиенты | `library/clients/*`, `library/utils/http.py` | Устанавливают HTTP-сессии, ретраи, rate limiting и потоковую пагинацию. |
 | Нормализация и схемы | `library/schemas/*`, `library/normalization/*` | Приводят типы данных к стандарту, выравнивают операторы и применяют Pandera-схемы. |

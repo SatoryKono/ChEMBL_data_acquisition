@@ -45,7 +45,7 @@ make format      # run black and ruff --fix
 | Variable | Purpose |
 |----------|---------|
 | `CHEMBL_DA_BASE_PATH` | Overrides the placeholder used in `config/config.yaml` for relative paths. |
-| `CHEMBL_DA_*` | Short aliases for configuration overrides (see `library/config.py`). |
+| `CHEMBL_DA_*` | Short aliases for configuration overrides (see `library/config/models.py`). |
 | `HTTP_PROXY` / `HTTPS_PROXY` | Proxy configuration when running behind corporate networks. |
 
 Store sensitive values in `.env` (loaded by `python-dotenv` when present).

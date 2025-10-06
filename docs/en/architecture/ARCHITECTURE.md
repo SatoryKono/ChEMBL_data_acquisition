@@ -79,7 +79,7 @@ External services are accessed via token-bucket rate limiters configured by
 | Pipelines (`library/pipelines/*`) | Load inputs, perform API calls, merge results, validate schemas, produce exports. |
 | QA (`library/qa`, `library/table_quality.py`) | Run Pandera validations, compute quality metrics, emit warnings. |
 | Post-processing (`library/postprocessing`) | Column ordering, metadata generation, deterministic sorting. |
-| Config (`library/config.py`) | Load YAML files, environment overrides, enforce types and defaults. |
+| Config (`library/config/`) | Load YAML files, environment overrides, enforce types and defaults. |
 
 ## Execution model
 
