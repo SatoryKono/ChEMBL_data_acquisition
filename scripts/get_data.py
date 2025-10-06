@@ -48,7 +48,7 @@ from library.cli.logging import setup_cli_logging
 from library.clients import ChemblClient
 from library.orchestration import ETLContext
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
-from library.config import Config, load_config
+from library.config import Config, DEFAULT_CONFIG_PATH, load_config
 from library.pipelines.activity import (
     ActivityPipelineOptions,
     run_pipeline as run_activity_pipeline,
