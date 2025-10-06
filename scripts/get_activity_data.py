@@ -154,6 +154,92 @@ def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
     return tuple(str(arg) for arg in invocation)
 
 
+def _prepare_assay_src_lookup(dictionary_dir: Path) -> pd.Series:
+    """Return a lookup Series mapping assay IDs to source assay identifiers."""
+
+    path = Path(dictionary_dir) / "_assay" / "assay.csv"
+    try:
+        frame = pd.read_csv(path, dtype="string")
+    except FileNotFoundError:
+        logger.warning("assay_dictionary_missing", path=str(path))
+        return pd.Series(dtype="string")
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.warning(
+            "assay_dictionary_load_failed",
+            path=str(path),
+            error=str(exc),
+        )
+        return pd.Series(dtype="string")
+
+    required = ["assay_chembl_id", "src_assay_id"]
+    missing = [column for column in required if column not in frame.columns]
+    if missing:
+        logger.warning(
+            "assay_dictionary_missing_columns",
+            path=str(path),
+            columns=missing,
+        )
+        return pd.Series(dtype="string")
+
+    subset = frame[required].dropna(subset=["assay_chembl_id"])
+    if subset.empty:
+        return pd.Series(dtype="string")
+    cleaned = subset.copy()
+    cleaned["assay_chembl_id"] = cleaned["assay_chembl_id"].astype("string")
+    cleaned["src_assay_id"] = cleaned["src_assay_id"].astype("string")
+    deduped = cleaned.drop_duplicates(subset=["assay_chembl_id"], keep="first")
+    series = deduped.set_index("assay_chembl_id")["src_assay_id"]
+    if series.empty:
+        return pd.Series(dtype="string")
+    return series.astype("string")
+
+
+def _ensure_src_assay_id(
+    frame: pd.DataFrame, lookup: pd.Series | Mapping[str, object]
+) -> pd.DataFrame:
+    """Populate ``src_assay_id`` using the provided assay dictionary lookup."""
+
+    if isinstance(lookup, Mapping) and not isinstance(lookup, pd.Series):
+        lookup = pd.Series(dict(lookup), dtype="string")
+
+    result = frame.copy()
+    if result.empty:
+        if "src_assay_id" not in result.columns:
+            result["src_assay_id"] = pd.Series([], dtype="string")
+        return result
+
+    if not isinstance(lookup, pd.Series) or lookup.empty:
+        if "src_assay_id" not in result.columns:
+            result["src_assay_id"] = pd.Series(pd.NA, index=result.index, dtype="string")
+        else:
+            result["src_assay_id"] = result["src_assay_id"].astype("string")
+        return result
+
+    if "assay_chembl_id" not in result.columns:
+        if "src_assay_id" not in result.columns:
+            result["src_assay_id"] = pd.Series(pd.NA, index=result.index, dtype="string")
+        else:
+            result["src_assay_id"] = result["src_assay_id"].astype("string")
+        logger.debug("activity_src_assay_missing_assay_id_column")
+        return result
+
+    assay_series = result["assay_chembl_id"].astype("string")
+    mapped = assay_series.map(lookup).astype("string")
+    if "src_assay_id" in result.columns:
+        existing = result["src_assay_id"].astype("string").replace("", pd.NA)
+        combined = existing.fillna(mapped).astype("string")
+    else:
+        combined = mapped
+    result["src_assay_id"] = combined
+    missing_count = int(combined.isna().sum())
+    if missing_count:
+        logger.debug(
+            "activity_src_assay_unmapped",
+            count=missing_count,
+        )
+    return result
+
+
 file_sha256 = _cli_file_sha256
 write_meta_yaml = _cli_write_meta_yaml
 configure_logger = cli.configure_logger
@@ -429,6 +515,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             fillers[column] = pd.Series(pd.NA, index=frame.index, dtype=fill_dtype)
         return frame.assign(**fillers)
 
+    assay_src_lookup = _prepare_assay_src_lookup(cfg.resources.dictionary_dir)
+
+    def _ensure_src_assay(frame: pd.DataFrame) -> pd.DataFrame:
+        return _ensure_src_assay_id(frame, assay_src_lookup)
+
     available_columns: set[str] = set()
 
     def _record_columns(frame: pd.DataFrame) -> pd.DataFrame:
@@ -437,6 +528,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     metadata_hooks = [
         _ensure_required_activity_columns,
+        _ensure_src_assay,
         _ensure_extended_activity_columns,
         normalize_activities,
         add_pipeline_metadata,

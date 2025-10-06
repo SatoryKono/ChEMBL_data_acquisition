@@ -383,3 +383,25 @@ def test_ensure_extended_activity_columns__adds_defaults() -> None:
     assert enriched.loc[0, "log_value"] == pytest.approx(5.3)
     assert enriched["compound_name"].isna().all()
     assert "salt_chembl_id" in enriched.columns
+
+
+def test_ensure_src_assay_id__fills_from_lookup() -> None:
+    frame = pd.DataFrame(
+        {
+            "assay_chembl_id": ["ASSAY1", "ASSAY2"],
+            "src_assay_id": [pd.NA, "legacy"],
+        }
+    )
+    lookup = pd.Series({"ASSAY1": "SRC1", "ASSAY2": "SRC2"}, dtype="string")
+
+    enriched = get_activity_data._ensure_src_assay_id(frame, lookup)
+
+    assert enriched["src_assay_id"].tolist() == ["SRC1", "legacy"]
+
+
+def test_ensure_src_assay_id__handles_missing_lookup() -> None:
+    frame = pd.DataFrame({"assay_chembl_id": ["ASSAY1"]})
+
+    enriched = get_activity_data._ensure_src_assay_id(frame, pd.Series(dtype="string"))
+
+    assert enriched["src_assay_id"].isna().all()

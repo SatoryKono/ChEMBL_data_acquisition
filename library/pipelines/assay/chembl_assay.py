@@ -425,6 +425,7 @@ def get_activities(
         return pd.DataFrame(columns=ACTIVITY_COLUMNS)
 
     records: list[pd.DataFrame] = []
+    observed_columns: set[str] = set()
     base = f"{cfg.chembl_base.rstrip('/')}/activity.json?format=json"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
@@ -441,6 +442,7 @@ def get_activities(
             if items:
                 df_chunk = json_normalize_pyarrow(items)
                 if not df_chunk.empty:
+                    observed_columns.update(str(column) for column in df_chunk.columns)
                     chunk_frames.append(df_chunk)
             page_meta = data.get("page_meta") or {}
             next_token = page_meta.get("next")
@@ -467,6 +469,20 @@ def get_activities(
         for column in extra_columns:
             if column not in columns:
                 columns.append(column)
+    if observed_columns:
+        expected_core = set(ACTIVITY_COLUMNS)
+        missing_core = sorted(expected_core - observed_columns)
+        unexpected = sorted(observed_columns - expected_core)
+        if missing_core:
+            logger.debug(
+                "activity_columns_missing",
+                extra={"columns": missing_core},
+            )
+        if unexpected:
+            logger.debug(
+                "activity_columns_unexpected",
+                extra={"columns": unexpected},
+            )
     return df.reindex(columns=columns)
 
 

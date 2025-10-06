@@ -72,6 +72,24 @@ def _install_fetch_stubs(
     return captured
 
 
+def _install_assay_lookup_stub(monkeypatch: pytest.MonkeyPatch) -> pd.Series:
+    lookup = pd.Series(
+        {
+            "ASSAY1": "SRC_ASSAY_1",
+            "ASSAY2": "SRC_ASSAY_2",
+            "ASSAY3": "SRC_ASSAY_3",
+        },
+        dtype="string",
+    )
+
+    monkeypatch.setattr(
+        get_activity_data,
+        "_prepare_assay_src_lookup",
+        lambda *_: lookup,
+    )
+    return lookup
+
+
 def _install_writer_stub(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, pd.DataFrame]]:
     written: list[tuple[Path, pd.DataFrame]] = []
 
@@ -136,6 +154,7 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
     output_csv = tmp_path / "activities.csv"
     chunk_df = pd.read_csv(activity_resource_dir / "chunk_happy.csv")
 
+    _install_assay_lookup_stub(monkeypatch)
     captured = _install_fetch_stubs(monkeypatch, chunk_df)
     written = _install_writer_stub(monkeypatch)
     logger_stub = _RecordingLogger()
@@ -165,6 +184,12 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
     assert list(written_df["activity_id"]) == ["ACT1", "ACT2", "ACT3"]
     assert pd.api.types.is_float_dtype(written_df["standard_value"])  # type: ignore[arg-type]
     assert written_df["standard_value"].tolist() == [5.5, 7.25, 9.0]
+    assert "src_assay_id" in written_df.columns
+    assert written_df["src_assay_id"].tolist() == [
+        "SRC_ASSAY_1",
+        "SRC_ASSAY_2",
+        "SRC_ASSAY_3",
+    ]
 
 
 @pytest.mark.integration
@@ -177,6 +202,7 @@ def test_activity_pipeline__missing_column_input(activity_resource_dir: Path, cf
     # Ensure we never reach the fetch stage when validation of inputs fails.
     monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
     monkeypatch.setattr(get_activity_data.cl, "get_activities", lambda *_, **__: pd.DataFrame())
+    _install_assay_lookup_stub(monkeypatch)
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
     monkeypatch.setattr("library.validation.logger", logger_stub)
@@ -235,6 +261,7 @@ def test_activity_pipeline__deduplicates_identifiers(activity_resource_dir: Path
     output_csv = tmp_path / "activities.csv"
     chunk_df = pd.read_csv(activity_resource_dir / "chunk_happy.csv")
 
+    _install_assay_lookup_stub(monkeypatch)
     captured = _install_fetch_stubs(monkeypatch, chunk_df)
     written = _install_writer_stub(monkeypatch)
     logger_stub = _RecordingLogger()
