@@ -59,6 +59,11 @@ class _RecordingLogger:
     def error(self, event: str, **kwargs: object) -> None:
         self.events.append(("error", event, dict(kwargs)))
 
+    def messages(self, level: str | None = None) -> list[str]:
+        if level is None:
+            return [event for _, event, _ in self.events]
+        return [event for lvl, event, _ in self.events if lvl == level]
+
 
 @pytest.mark.parametrize(
     "invocation, expected",
@@ -100,9 +105,9 @@ def test_run_chembl__dry_run_short_circuits(cfg, tmp_path, monkeypatch) -> None:
     exit_code = get_activity_data.run_chembl(cfg, args)
 
     assert exit_code == 0
-    assert ("info", "dry_run", {"limit": 7}) in [
-        (level, event, context) for level, event, context in logger_stub.events
-    ]
+    messages = [event for _, event, _ in logger_stub.events]
+    assert any("Dry-run mode enabled" in message for message in messages)
+    assert any("up to 7 identifiers" in message for message in messages)
 
 
 @pytest.mark.parametrize(
@@ -260,7 +265,7 @@ def test_run_chembl__offset_and_workers(monkeypatch, cfg, tmp_path) -> None:
     assert exit_code == 0
     assert captured["workers"] == max(1, cfg.activity.workers)
     events = [event for _, event, _ in logger_stub.events]
-    assert "process_offset" in events
+    assert any("Skipping the first" in event for event in events)
 
 
 @pytest.mark.parametrize(
@@ -285,7 +290,7 @@ def test_run_chembl__read_ids_failures(error_factory, cfg, tmp_path, monkeypatch
 
     assert exit_code == 1
     events = [event for _, event, _ in logger_stub.events]
-    assert "read_fail" in events
+    assert any("Failed to read activity identifiers" in event for event in events)
 
 
 def test_run_chembl__pipeline_failure_logs_error(cfg, tmp_path, monkeypatch) -> None:
@@ -339,7 +344,7 @@ def test_run_chembl__pipeline_failure_logs_error(cfg, tmp_path, monkeypatch) -> 
 
     assert exit_code == 1
     error_events = [event for level, event, _ in logger_stub.events if level == "error"]
-    assert "activity_pipeline_failed" in error_events
+    assert any("Activity pipeline failed" in event for event in error_events)
 
 
 def test_main__dry_run_skip_limit(monkeypatch, tmp_path, capsys) -> None:
@@ -358,7 +363,7 @@ def test_main__dry_run_skip_limit(monkeypatch, tmp_path, capsys) -> None:
 
     assert exit_code == 0
     events = [event for _, event, _ in logger_stub.events]
-    assert "pipeline_skip_limit" in events
+    assert any("Pipeline exit requested" in event for event in events)
 
 
 def test_activity_columns__cover_extended_requirements() -> None:

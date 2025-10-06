@@ -42,6 +42,11 @@ class _RecordingLogger:
     def error(self, event: str, **kwargs: object) -> None:
         self.events.append(("error", event, dict(kwargs)))
 
+    def messages(self, level: str | None = None) -> list[str]:
+        if level is None:
+            return [event for _, event, _ in self.events]
+        return [event for lvl, event, _ in self.events if lvl == level]
+
 
 @pytest.fixture()
 def activity_resource_dir(snapshot_resource: Path) -> Path:
@@ -179,19 +184,14 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
 
     exit_code = get_activity_data.run_chembl(cfg, args)
 
-    activity_events = [event for _, event, _ in logger_stub.events]
-
     assert exit_code == 0
     assert {path for path, _ in written} == {output_csv}
-    assert set(activity_events).issuperset(
-        {
-            "activity_pipeline_start",
-            "activity_pipeline_done",
-            "records_dropped",
-            "schema_validate_start",
-            "schema_validate_done",
-        }
-    )
+    messages = logger_stub.messages()
+    assert any(message.startswith("Starting activity data pipeline") for message in messages)
+    assert any(message.startswith("Loaded activity configuration") for message in messages)
+    assert any("Filtered activity records" in message for message in messages)
+    assert any(message.startswith("Successfully exported") for message in messages)
+    assert {"schema_validate_start", "schema_validate_done"}.issubset(set(messages))
     assert captured.activities == [("ACT1", "ACT2", "ACT3")]
     assert captured.testitems
 
@@ -224,10 +224,9 @@ def test_activity_pipeline__missing_column_input(activity_resource_dir: Path, cf
 
     exit_code = get_activity_data.run_chembl(cfg, args)
 
-    activity_events = [event for _, event, _ in logger_stub.events]
-
     assert exit_code == 1
-    assert "read_fail" in activity_events
+    activity_events = logger_stub.messages()
+    assert any("Failed to read activity identifiers" in event for event in activity_events)
     assert not output_csv.exists()
 
 
@@ -250,10 +249,9 @@ def test_activity_pipeline__malformed_values(activity_resource_dir: Path, cfg, t
 
     exit_code = get_activity_data.run_chembl(cfg, args)
 
-    activity_events = [event for _, event, _ in logger_stub.events]
-
     assert exit_code == 1
     assert not written
+    activity_events = logger_stub.messages()
     assert "validation_failed" in activity_events
     failure_path = output_csv.with_name("activities_failure_cases.csv")
     assert failure_path.exists()
@@ -263,8 +261,9 @@ def test_activity_pipeline__malformed_values(activity_resource_dir: Path, cfg, t
     failure_cases = " ".join(str(value) for value in failure_df["failure_case"])
     assert "not-a-number" in failure_cases
     assert ">=" in failure_cases
-    error_events = {event for level, event, _ in logger_stub.events if level == "error"}
-    assert {"validation_failed", "activity_pipeline_failed"}.issubset(error_events)
+    error_events = set(logger_stub.messages(level="error"))
+    assert "validation_failed" in error_events
+    assert any("Activity pipeline failed" in event for event in error_events)
 
 
 @pytest.mark.integration
@@ -293,10 +292,10 @@ def test_activity_pipeline__deduplicates_identifiers(activity_resource_dir: Path
     assert len(written) == 1
     written_df = written[0][1]
     assert written_df["activity_id"].tolist() == ["ACT1", "ACT2", "ACT3"]
-    info_events = {event for _, event, _ in logger_stub.events}
-    assert "records_dropped" in info_events
+    info_events = set(logger_stub.messages())
+    assert any("Filtered activity records" in event for event in info_events)
     assert "schema_validate_done" in info_events
-    warning_events = {event for level, event, _ in logger_stub.events if level == "warning"}
+    warning_events = set(logger_stub.messages(level="warning"))
     assert "read_ids_dropped_na_markers" not in warning_events
 
 

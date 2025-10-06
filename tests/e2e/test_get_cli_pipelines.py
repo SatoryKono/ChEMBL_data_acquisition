@@ -60,6 +60,11 @@ class _MemoryLogger:
     def error(self, event: str, **kwargs: object) -> None:
         self.events.append(("error", event, dict(kwargs)))
 
+    def messages(self, level: str | None = None) -> list[str]:
+        if level is None:
+            return [event for _, event, _ in self.events]
+        return [event for lvl, event, _ in self.events if lvl == level]
+
 
 def _patch_logger(monkeypatch: pytest.MonkeyPatch, module: object) -> _MemoryLogger:
     logger = _MemoryLogger()
@@ -296,8 +301,8 @@ def test_get_testitem_run_skip_existing(
 
     assert rc == 0
     assert call_counter["called"] == 0
-    events = [event for _, event, _ in logger_stub.events]
-    assert "pipeline_skip_existing" in events
+    events = logger_stub.messages()
+    assert any("Skipping pipeline execution" in event for event in events)
 
 
 @pytest.mark.e2e
@@ -340,10 +345,10 @@ def test_get_activity_cli__retry_and_idempotent(
     assert first_exit == 0
     assert output_csv.exists()
     first_content = output_csv.read_text(encoding="utf-8")
-    events = [event for _, event, _ in logger_stub.events]
-    assert "activity_fetch_retry" in events
-    assert "activity_pipeline_done" in events
-    assert not any(event == "activity_pipeline_failed" for event in events)
+    events = logger_stub.messages()
+    assert any("Retrying" in event for event in events)
+    assert any(event.startswith("Successfully exported") for event in events)
+    assert not any("Activity pipeline failed" in event for event in events)
     assert attempts["count"] >= 2
     assert len(written) == 1
     assert list(written[0][1]["activity_id"]) == ["ACT1", "ACT2", "ACT3"]
@@ -356,9 +361,9 @@ def test_get_activity_cli__retry_and_idempotent(
     assert second_exit == 0
     second_content = output_csv.read_text(encoding="utf-8")
     assert second_content == first_content
-    done_events = [event for _, event, _ in logger_stub.events]
-    assert done_events.count("activity_pipeline_done") >= 1
-    assert not any(event == "activity_pipeline_failed" for event in done_events)
+    done_events = logger_stub.messages()
+    assert sum(1 for event in done_events if event.startswith("Successfully exported")) >= 1
+    assert not any("Activity pipeline failed" in event for event in done_events)
 
 
 @pytest.mark.e2e
@@ -435,9 +440,9 @@ def test_get_activity_cli__workers_and_offset(
     assert len(written) == 1
     written_df = written[0][1]
     assert written_df["activity_id"].tolist() == ["ACT2", "ACT3"]
-    events = [event for _, event, _ in logger_stub.events]
-    assert "process_offset" in events
-    assert "activity_pipeline_done" in events
+    events = logger_stub.messages()
+    assert any("Skipping the first" in event for event in events)
+    assert any(event.startswith("Successfully exported") for event in events)
 
 
 @pytest.mark.e2e
@@ -516,9 +521,9 @@ def test_get_activity_cli__chembl_identifier_backfill_ratio(
         == id_series[id_present].iloc[:5].tolist()
     )
 
-    events = [event for _, event, _ in logger_stub.events]
-    assert "activity_pipeline_done" in events
-    assert "activity_pipeline_failed" not in events
+    events = logger_stub.messages()
+    assert any(event.startswith("Successfully exported") for event in events)
+    assert not any("Activity pipeline failed" in event for event in events)
 
 
 @pytest.mark.e2e
@@ -560,8 +565,8 @@ def test_get_activity_cli__non_csv_output_path(
     assert "\t" in content.splitlines()[1]
     assert len(written) == 1
     assert written[0][2] == "\t"
-    events = [event for _, event, _ in logger_stub.events]
-    assert "activity_pipeline_done" in events
+    events = logger_stub.messages()
+    assert any(event.startswith("Successfully exported") for event in events)
 
 
 @pytest.mark.e2e
@@ -784,8 +789,8 @@ def test_get_target_run_skip_existing(
     rc = get_target_data.run(cfg, args)
 
     assert rc == 0
-    events = [event for _, event, _ in logger_stub.events]
-    assert "pipeline_skip_existing" in events
+    events = logger_stub.messages()
+    assert any("Skipping pipeline execution" in event for event in events)
 
 
 @pytest.mark.e2e
@@ -997,7 +1002,7 @@ def test_get_activity_run_success(
         missing = numeric.isna()
         if int(missing.sum()):
             get_activity_data.logger.error(
-                "activity_missing_value", count=int(missing.sum())
+                f"Encountered {int(missing.sum())} activity rows with missing numeric values."
             )
         frame["standard_value_numeric"] = numeric.astype("Float64")
         frame["is_valid"] = (~missing).astype("boolean")
@@ -1007,7 +1012,7 @@ def test_get_activity_run_success(
         _ensure_parent(output_path)
         frame.to_csv(output_path, index=False)
         get_activity_data.logger.info(
-            "activity_pipeline_done", output=str(args.final_out), rows=len(frame)
+            f"Successfully exported {len(frame)} activity records to '{args.final_out}'."
         )
         return 0
 
@@ -1027,9 +1032,9 @@ def test_get_activity_run_success(
     assert "standard_value_numeric" in result.columns
     assert "is_valid" in result.columns
     assert not result[result["activity_id"] == "A3"]["is_valid"].iloc[0]
-    events = [event for _, event, _ in logger_stub.events]
-    assert "activity_pipeline_done" in events
-    assert "activity_missing_value" in events
+    events = logger_stub.messages()
+    assert any(event.startswith("Successfully exported") for event in events)
+    assert any("missing numeric values" in event for event in events)
 
 
 @pytest.mark.e2e
@@ -1060,8 +1065,8 @@ def test_get_activity_run_skip_existing(
     rc = get_activity_data.run(cfg, args)
 
     assert rc == 0
-    events = [event for _, event, _ in logger_stub.events]
-    assert "pipeline_skip_existing" in events
+    events = logger_stub.messages()
+    assert any("Skipping pipeline execution" in event for event in events)
 
 
 @pytest.mark.e2e
@@ -1077,7 +1082,7 @@ def test_get_activity_run_failure(
 
     def _failing_run(config: Config, args: argparse.Namespace) -> int:
         get_activity_data.logger.error(
-            "activity_pipeline_failed", output=str(args.final_out), exit_code=1
+            f"Activity pipeline failed after processing 0 identifiers. Intended output path was '{args.final_out}'. Exit code 1."
         )
         return 1
 
@@ -1093,8 +1098,8 @@ def test_get_activity_run_failure(
     rc = get_activity_data.run(cfg, args)
 
     assert rc == 1
-    events = [event for _, event, _ in logger_stub.events]
-    assert "activity_pipeline_failed" in events
+    events = logger_stub.messages()
+    assert any("Activity pipeline failed" in event for event in events)
 
 
 @pytest.mark.e2e
@@ -1175,17 +1180,17 @@ def test_get_activity_run_retry_and_idempotent(
 
     assert rc == 0
     assert call_counter["count"] == 2
-    events = [event for _, event, _ in logger_stub.events]
-    assert "activity_fetch_retry" in events
-    assert "activity_pipeline_done" in events
+    events = logger_stub.messages()
+    assert any("Retrying" in event for event in events)
+    assert any(event.startswith("Successfully exported") for event in events)
     assert output_csv in written
 
     args.skip_existing = True
     rc_second = get_activity_data.run(cfg, args)
 
     assert rc_second == 0
-    events_second = [event for _, event, _ in logger_stub.events]
-    assert "pipeline_skip_existing" in events_second
+    events_second = logger_stub.messages()
+    assert any("Skipping pipeline execution" in event for event in events_second)
 
 
 @pytest.mark.e2e
@@ -1256,8 +1261,8 @@ def test_get_activity_run_workers_offset_and_non_csv(
     rc = get_activity_data.run(cfg, args)
 
     assert rc == 0
-    events = [event for _, event, _ in logger_stub.events]
-    assert "activity_pipeline_done" in events
-    assert any(event_name == "process_offset" for _, event_name, _ in logger_stub.events)
+    events = logger_stub.messages()
+    assert any(event.startswith("Successfully exported") for event in events)
+    assert any("Skipping the first" in event for event in events)
     assert captured["workers"] == max(1, cfg.activity.workers)
     assert output_csv.exists()
