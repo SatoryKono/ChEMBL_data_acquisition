@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import warnings
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Iterable
 
 import pandas as pd
@@ -199,6 +201,59 @@ def test_activity_pipeline__timeout_clamped_when_below_minimum(cfg, tmp_path, mo
     assert captured_timeout["timeout"] == pytest.approx(get_activity_data.MIN_ACTIVITY_TIMEOUT)
     assert cfg.activity.timeout == pytest.approx(get_activity_data.MIN_ACTIVITY_TIMEOUT)
     assert exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("deterministic_env")
+def test_activity_pipeline_cli__timeout_argument_clamped(tmp_path, monkeypatch):
+    input_csv = tmp_path / "ids.csv"
+    input_csv.write_text("activity_id\nACT1\n", encoding="utf-8")
+    output_csv = tmp_path / "activities.csv"
+
+    config_path = Path(__file__).resolve().parents[2] / "config" / "config.yaml"
+
+    monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(tmp_path))
+
+    logger_stub = _RecordingLogger()
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    monkeypatch.setattr("library.cli.configure_logger", lambda *_: logger_stub)
+    monkeypatch.setattr("library.cli_utils.cli.configure_logger", lambda *_: logger_stub)
+    monkeypatch.setattr(get_activity_data, "configure_logger", lambda *_: logger_stub)
+
+    @contextmanager
+    def fake_setup_cli_logging(script_name, log_cfg, date_str, *, log_dir=None):
+        del script_name, date_str, log_dir
+        yield SimpleNamespace(log_cfg=log_cfg, log_path=tmp_path / "cli.log", console_stream=None)
+
+    monkeypatch.setattr(get_activity_data, "setup_cli_logging", fake_setup_cli_logging)
+
+    captured: dict[str, float | None] = {}
+
+    def _run_chembl_stub(passed_cfg, passed_args):
+        captured["cfg_timeout"] = float(passed_cfg.activity.timeout)
+        captured["args_timeout"] = getattr(passed_args, "timeout", None)
+        return 0
+
+    monkeypatch.setattr(get_activity_data, "run_chembl", _run_chembl_stub)
+
+    exit_code = get_activity_data.main(
+        [
+            "--config",
+            str(config_path),
+            "--input",
+            str(input_csv),
+            "--output",
+            str(output_csv),
+            "--timeout",
+            str(get_activity_data.MIN_ACTIVITY_TIMEOUT - 15),
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["cfg_timeout"] == pytest.approx(get_activity_data.MIN_ACTIVITY_TIMEOUT)
+    assert captured["args_timeout"] == pytest.approx(get_activity_data.MIN_ACTIVITY_TIMEOUT)
+    warning_events = [event for level, event, _ in logger_stub.events if level == "warning"]
+    assert "activity_timeout_clamped" in warning_events
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
 def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_path, monkeypatch):

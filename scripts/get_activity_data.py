@@ -1245,7 +1245,13 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             f"Configured timeout {timeout} is below the minimum of {MIN_ACTIVITY_TIMEOUT}; "
             f"increasing to {MIN_ACTIVITY_TIMEOUT}."
         )
-        cfg.activity.timeout = float(MIN_ACTIVITY_TIMEOUT)
+        minimum_timeout = float(MIN_ACTIVITY_TIMEOUT)
+        cfg.activity.timeout = minimum_timeout
+        if hasattr(args, "timeout"):
+            try:
+                args.timeout = float(minimum_timeout)
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                args.timeout = minimum_timeout
 
     final_out_attr = getattr(args, "final_out", None)
     if final_out_attr in (None, argparse.SUPPRESS):
@@ -1303,8 +1309,8 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=float,
         default=90.0,
         help=(
-            "Timeout in seconds for each HTTP request (a minimum of "
-            f"{int(MIN_ACTIVITY_TIMEOUT)} seconds is enforced)"
+            "Timeout in seconds for each HTTP request (values below "
+            f"{int(MIN_ACTIVITY_TIMEOUT)} seconds are automatically clamped)"
         ),
     )
     parser.add_argument(
