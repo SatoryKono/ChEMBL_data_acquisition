@@ -426,14 +426,11 @@ def get_assays(
                 frames = filtered_frames
             return frames
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    for chunk in _chunked(valid, chunk_size):
-        chunk_key = ",".join(chunk)
-        logger.info(
-            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
-        )
-        url = _build_url({"assay_chembl_id__in": ",".join(chunk), "limit": len(chunk)})
+    def _fetch_chunk_recursive(chunk_ids: Sequence[str]) -> list[pd.DataFrame]:
+        chunk_key = ",".join(chunk_ids)
+        url = _build_url({"assay_chembl_id__in": chunk_key, "limit": len(chunk_ids)})
         try:
-            chunk_frames = _fetch_chunk(url)
+            return _fetch_chunk(url)
         except requests.HTTPError as exc:
             response = exc.response
             if response is not None and response.status_code == 404:
@@ -442,15 +439,44 @@ def get_assays(
                     extra={
                         "stage": "chunk_retry",
                         "chunk_key": chunk_key,
-                        "chunk_size": len(chunk),
+                        "chunk_size": len(chunk_ids),
                         "status": 404,
                     },
                 )
-                chunk_frames = []
-                for identifier in chunk:
-                    chunk_frames.extend(_fetch_single(identifier))
-            else:
+                frames: list[pd.DataFrame] = []
+                for identifier in chunk_ids:
+                    frames.extend(_fetch_single(identifier))
+                return frames
+            raise
+        except (requests.RequestException, ValueError) as exc:
+            if len(chunk_ids) <= 1:
                 raise
+            logger.warning(
+                "chunk_split_retry",
+                extra={
+                    "stage": "chunk_retry",
+                    "chunk_key": chunk_key,
+                    "chunk_size": len(chunk_ids),
+                    "status": getattr(getattr(exc, "response", None), "status_code", None),
+                },
+                error=str(exc),
+            )
+            midpoint = max(1, len(chunk_ids) // 2)
+            left = tuple(chunk_ids[:midpoint])
+            right = tuple(chunk_ids[midpoint:])
+            frames: list[pd.DataFrame] = []
+            if left:
+                frames.extend(_fetch_chunk_recursive(left))
+            if right:
+                frames.extend(_fetch_chunk_recursive(right))
+            return frames
+
+    for chunk in _chunked(valid, chunk_size):
+        chunk_key = ",".join(chunk)
+        logger.info(
+            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+        )
+        chunk_frames = _fetch_chunk_recursive(chunk)
         if chunk_frames:
             records.append(pd.concat(chunk_frames, ignore_index=True))
             logger.info(
