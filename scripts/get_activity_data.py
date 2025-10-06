@@ -206,6 +206,90 @@ _EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series | Non
 }
 
 
+def _string_blank_mask(series: pd.Series) -> pd.Series:
+    """Return mask of entries that are null or contain only whitespace."""
+
+    values = series.astype("string")
+    stripped = values.str.strip()
+    return values.isna() | stripped.fillna("").eq("")
+
+
+def _ensure_molecule_pref_name(
+    frame: pd.DataFrame,
+    *,
+    cfg: Config,
+    client: ChemblClient,
+    cache: dict[str, str | None],
+) -> pd.DataFrame:
+    """Populate ``molecule_pref_name`` via the test item API when missing."""
+
+    if frame.empty or "molecule_chembl_id" not in frame.columns:
+        return frame
+
+    result = frame.copy()
+
+    if "molecule_pref_name" in result.columns:
+        missing_mask = _string_blank_mask(result["molecule_pref_name"])
+    else:
+        result["molecule_pref_name"] = pd.Series(pd.NA, index=result.index, dtype="string")
+        missing_mask = pd.Series(True, index=result.index, dtype="boolean")
+
+    if not missing_mask.any():
+        return result
+
+    molecule_ids = (
+        result.loc[missing_mask, "molecule_chembl_id"].astype("string").str.strip()
+    )
+    molecule_ids = molecule_ids[molecule_ids != ""]
+    unique_ids = tuple(dict.fromkeys(molecule_ids.dropna().tolist()))
+
+    if not unique_ids:
+        return result
+
+    pending: list[str] = []
+    for identifier in unique_ids:
+        if identifier not in cache:
+            pending.append(identifier)
+
+    if pending:
+        fields = list(cfg.testitem.fields)
+        for column in ("molecule_chembl_id", "pref_name"):
+            if column not in fields:
+                fields.append(column)
+        lookup = cl.get_testitem(
+            pending,
+            cfg=cfg.api,
+            client=client,
+            chunk_size=cfg.testitem.batch_size,
+            timeout=cfg.testitem.timeout,
+            fields=fields,
+            page_limit=cfg.testitem.request_limit,
+        )
+        if not lookup.empty and {"molecule_chembl_id", "pref_name"}.issubset(lookup.columns):
+            mapped = (
+                lookup[["molecule_chembl_id", "pref_name"]]
+                .dropna(subset=["molecule_chembl_id"])
+                .astype({"molecule_chembl_id": "string"})
+            )
+            for chembl_id, pref_name in mapped.itertuples(index=False):
+                cache[str(chembl_id)] = str(pref_name) if pd.notna(pref_name) else None
+        for identifier in pending:
+            cache.setdefault(identifier, None)
+
+    fill_map = {key: value for key, value in cache.items() if value}
+    if not fill_map:
+        return result
+
+    replacements = molecule_ids.map(fill_map)
+    available = replacements.notna()
+    if available.any():
+        result.loc[molecule_ids.index[available], "molecule_pref_name"] = (
+            replacements[available].astype("string")
+        )
+
+    return result
+
+
 def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
     """Guarantee columns expected by the post-processing stage."""
 
@@ -513,6 +597,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     last_error_extra: dict[str, object] | None = None
     last_error_context: dict[str, object] = {}
 
+    pref_name_cache: dict[str, str | None] = {}
+
     with ChemblClient(
         cfg.api,
         cfg.retry,
@@ -573,7 +659,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 else:
                     last_error_extra = None
                     last_error_context = {}
-                    return result
+                    return _ensure_molecule_pref_name(
+                        result, cfg=cfg, client=client, cache=pref_name_cache
+                    )
             return pd.DataFrame(columns=ACTIVITY_COLUMNS)
 
         worker_count = getattr(cfg.activity, "workers", 1) or 1

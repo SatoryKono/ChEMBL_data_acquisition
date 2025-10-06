@@ -9,6 +9,8 @@ from typing import Iterable
 import pandas as pd
 import pytest
 
+from dataclasses import dataclass
+
 from scripts import get_activity_data
 
 
@@ -52,15 +54,24 @@ def _copy_resource(resource_dir: Path, name: str, destination: Path) -> Path:
     return target
 
 
+@dataclass
+class _FetchCapture:
+    activities: list[tuple[str, ...]]
+    testitems: list[tuple[str, ...]]
+
+
 def _install_fetch_stubs(
     monkeypatch: pytest.MonkeyPatch,
     frame: pd.DataFrame,
-) -> list[tuple[str, ...]]:
-    captured: list[tuple[str, ...]] = []
+    *,
+    testitem_frame: pd.DataFrame | None = None,
+) -> _FetchCapture:
+    captured_activities: list[tuple[str, ...]] = []
+    captured_testitems: list[tuple[str, ...]] = []
 
     def _fake_get_activities(chunk_ids: Iterable[str], **_: object) -> pd.DataFrame:
         identifiers = [str(item) for item in chunk_ids]
-        captured.append(tuple(identifiers))
+        captured_activities.append(tuple(identifiers))
         mask = frame["activity_id"].astype(str).isin(identifiers)
         result = frame.loc[mask].copy().reset_index(drop=True)
         if identifiers:
@@ -68,8 +79,20 @@ def _install_fetch_stubs(
         return result
 
     monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
+    if testitem_frame is None:
+        testitem_frame = pd.DataFrame(columns=["molecule_chembl_id", "pref_name"])
+
+    def _fake_get_testitem(chunk_ids: Iterable[str], **_: object) -> pd.DataFrame:
+        identifiers = [str(item) for item in chunk_ids]
+        captured_testitems.append(tuple(identifiers))
+        if identifiers:
+            mask = testitem_frame["molecule_chembl_id"].astype(str).isin(identifiers)
+            return testitem_frame.loc[mask].copy().reset_index(drop=True)
+        return testitem_frame.iloc[0:0].copy()
+
+    monkeypatch.setattr(get_activity_data.cl, "get_testitem", _fake_get_testitem)
     monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
-    return captured
+    return _FetchCapture(captured_activities, captured_testitems)
 
 
 def _install_writer_stub(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, pd.DataFrame]]:
@@ -159,7 +182,8 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
             "schema_validate_done",
         }
     )
-    assert captured == [("ACT1", "ACT2", "ACT3")]
+    assert captured.activities == [("ACT1", "ACT2", "ACT3")]
+    assert captured.testitems
 
     written_df = written[0][1]
     assert list(written_df["activity_id"]) == ["ACT1", "ACT2", "ACT3"]
@@ -246,8 +270,8 @@ def test_activity_pipeline__deduplicates_identifiers(activity_resource_dir: Path
     exit_code = get_activity_data.run_chembl(cfg, args)
 
     assert exit_code == 0
-    assert len(captured) == 1
-    recorded = captured[0]
+    assert len(captured.activities) == 1
+    recorded = captured.activities[0]
     assert len({item.lower() for item in recorded}) == 3
     assert len(written) == 1
     written_df = written[0][1]
@@ -257,3 +281,62 @@ def test_activity_pipeline__deduplicates_identifiers(activity_resource_dir: Path
     assert "schema_validate_done" in info_events
     warning_events = {event for level, event, _ in logger_stub.events if level == "warning"}
     assert "read_ids_dropped_na_markers" not in warning_events
+
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("deterministic_env")
+def test_activity_pipeline__fills_compound_name_from_pref_name(cfg, tmp_path, monkeypatch):
+    _configure_cfg(cfg)
+
+    total_records = 40
+    filled_records = 38  # 95%
+
+    input_csv = tmp_path / "ids_many.csv"
+    records = [f"ACT{i}" for i in range(1, total_records + 1)]
+    input_csv.write_text("activity_id\n" + "\n".join(records) + "\n", encoding="utf-8")
+
+    chunk_records = []
+    for idx, activity in enumerate(records, start=1):
+        chunk_records.append(
+            {
+                "activity_id": activity,
+                "molecule_chembl_id": f"CHEMBL{idx}",
+                "assay_chembl_id": f"ASSAY{idx}",
+                "standard_value": float(idx),
+                "standard_units": "nM",
+                "standard_type": "IC50",
+                "relation": "=",
+            }
+        )
+    chunk_df = pd.DataFrame.from_records(chunk_records)
+
+    pref_name_records = []
+    for idx in range(1, filled_records + 1):
+        pref_name_records.append(
+            {
+                "molecule_chembl_id": f"CHEMBL{idx}",
+                "pref_name": f"Compound {idx}",
+            }
+        )
+    testitem_df = pd.DataFrame.from_records(pref_name_records)
+
+    capture = _install_fetch_stubs(monkeypatch, chunk_df, testitem_frame=testitem_df)
+    written = _install_writer_stub(monkeypatch)
+    logger_stub = _RecordingLogger()
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    monkeypatch.setattr("library.validation.logger", logger_stub)
+
+    output_csv = tmp_path / "activities.csv"
+    args = _make_args(input_csv, output_csv)
+
+    exit_code = get_activity_data.run_chembl(cfg, args)
+
+    assert exit_code == 0
+    assert capture.testitems, "expected test item enrichment to be invoked"
+    assert written, "pipeline should write output"
+
+    written_df = written[0][1]
+    compound_series = written_df["compound_name"].astype("string")
+    fill_mask = compound_series.notna() & compound_series.str.strip().ne("")
+    fill_rate = fill_mask.sum() / len(compound_series)
+    assert fill_rate >= 0.95
