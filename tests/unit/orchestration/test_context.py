@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from library.orchestration import ETLContext
+
 
 @pytest.mark.unit
 def test_etl_context_reuses_single_client(stub_etl_context):
@@ -34,6 +36,19 @@ def test_etl_context_recreates_client_after_close(stub_etl_context):
 
 
 @pytest.mark.unit
+def test_etl_context_global_limiter(cfg):
+    cfg.rate.global_rps = 5
+    cfg.rate.global_burst = 7
+
+    with ETLContext(cfg) as context:
+        limiter = context.global_limiter
+        assert limiter is not None
+        assert limiter.rps == cfg.rate.global_rps
+        assert limiter.burst == cfg.rate.global_burst
+        assert context.global_limiter is limiter
+
+    with ETLContext(cfg) as reopened:
+        assert reopened.global_limiter is limiter
 def test_etl_context_custom_cleanup(stub_etl_context):
     context, clients = stub_etl_context
 
