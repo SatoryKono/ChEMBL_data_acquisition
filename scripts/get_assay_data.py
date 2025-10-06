@@ -112,6 +112,34 @@ def _drop_assay_output_columns(frame: pd.DataFrame) -> pd.DataFrame:
     return trimmed
 
 
+ASSAY_OUTPUT_DROP_COLUMNS: list[str] = [
+    "ASSAY_ID",
+    "Target TYPE",
+    "acts_per_assay_step5",
+    "cited_assay_corr",
+    "error_assay_corr",
+    "higly_correlated_cit",
+    "month",
+    "shuffled_cit",
+    "shuffled_target_assay",
+    "substrate_name",
+    "target_name",
+    "version",
+    "assay_category",
+    "src_assay_id",
+]
+
+
+def remove_assay_output_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Return ``df`` without columns disallowed in ``output.assay_*`` exports."""
+
+    allowed_cols = [column for column in df.columns if column not in ASSAY_OUTPUT_DROP_COLUMNS]
+    cleaned = df.drop(columns=ASSAY_OUTPUT_DROP_COLUMNS, errors="ignore")
+    if allowed_cols:
+        cleaned = cleaned.loc[:, allowed_cols]
+    return cleaned
+
+
 def _option(
     metadata: ConfigMetadata | None,
     *,
@@ -260,11 +288,20 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     def _enrich_with_dictionaries(frame: pd.DataFrame) -> pd.DataFrame:
         return enrich_assay_metadata(frame, dictionary_dir=cfg.resources.dictionary_dir)
 
+    dropped_columns_seen: set[str] = set()
+
+    def _drop_output_columns(frame: pd.DataFrame) -> pd.DataFrame:
+        removed = [column for column in ASSAY_OUTPUT_DROP_COLUMNS if column in frame.columns]
+        if removed:
+            dropped_columns_seen.update(removed)
+        return remove_assay_output_columns(frame)
+
     metadata_hooks = [
         _enrich_with_dictionaries,
         ap.postprocess_assays,
         normalize_assays,
         add_pipeline_metadata,
+        _drop_output_columns,
         _drop_assay_output_columns,
     ]
 
@@ -392,6 +429,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
         finally:
             chunk_failures.save(fetch_failure_path, cfg=cfg)
+
+    dropped_columns_report = [
+        column for column in ASSAY_OUTPUT_DROP_COLUMNS if column in dropped_columns_seen
+    ]
+    if dropped_columns_report:
+        logger.info(
+            "Dropped columns from output.assay_*: %s",
+            ", ".join(dropped_columns_report),
+        )
+    else:
+        logger.info("Dropped columns from output.assay_*: <none>")
 
     if limit is not None:
         logger.info("process_limit", limit=processed_ids)
