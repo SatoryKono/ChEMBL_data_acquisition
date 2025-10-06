@@ -167,6 +167,38 @@ def _make_args(input_csv: Path, output_csv: Path) -> argparse.Namespace:
         dry_run=False,
         invocation=None,
     )
+
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("deterministic_env")
+def test_activity_pipeline__timeout_clamped_when_below_minimum(cfg, tmp_path, monkeypatch):
+    _configure_cfg(cfg)
+    cfg.activity.timeout = get_activity_data.MIN_ACTIVITY_TIMEOUT - 5
+
+    input_csv = tmp_path / "ids.csv"
+    input_csv.write_text("activity_id\nACT1\n", encoding="utf-8")
+    output_csv = tmp_path / "activities.csv"
+
+    logger_stub = _RecordingLogger()
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+
+    captured_timeout: dict[str, float] = {}
+
+    def _run_chembl_stub(passed_cfg, _passed_args):
+        captured_timeout["timeout"] = float(passed_cfg.activity.timeout)
+        return 0
+
+    monkeypatch.setattr(get_activity_data, "run_chembl", _run_chembl_stub)
+
+    args = _make_args(input_csv, output_csv)
+
+    exit_code = get_activity_data.run(cfg, args)
+
+    warning_events = [event for level, event, _ in logger_stub.events if level == "warning"]
+    assert "activity_timeout_clamped" in warning_events
+    assert captured_timeout["timeout"] == pytest.approx(get_activity_data.MIN_ACTIVITY_TIMEOUT)
+    assert cfg.activity.timeout == pytest.approx(get_activity_data.MIN_ACTIVITY_TIMEOUT)
+    assert exit_code == 0
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
 def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_path, monkeypatch):
