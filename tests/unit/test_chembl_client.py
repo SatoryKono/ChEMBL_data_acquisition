@@ -92,6 +92,69 @@ def test_request_json__falls_back_to_extensionless_endpoint() -> None:
 
 
 @pytest.mark.unit
+def test_request_json__resets_session_after_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A timeout should invalidate the current session before retrying."""
+
+    base = "https://example.test/chembl/api/data"
+    url = f"{base}/assay.json?format=json&assay_chembl_id__in=CHEMBL1&limit=1"
+    payload = {"assays": [{"assay_chembl_id": "CHEMBL1"}]}
+
+    class _TimeoutSession:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, object]] = []
+            self.closed = False
+
+        def get(self, request_url: str, timeout: object) -> _StubResponse:
+            self.calls.append((request_url, timeout))
+            raise requests.ReadTimeout("timeout")
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _SuccessSession:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, object]] = []
+            self.closed = False
+
+        def get(self, request_url: str, timeout: object) -> _StubResponse:
+            self.calls.append((request_url, timeout))
+            return _StubResponse(request_url, 200, payload)
+
+        def close(self) -> None:
+            self.closed = True
+
+    timeout_session = _TimeoutSession()
+    success_session = _SuccessSession()
+    created: list[object] = []
+
+    def factory() -> object:
+        index = len(created)
+        session = timeout_session if index == 0 else success_session
+        created.append(session)
+        return session
+
+    client = ChemblClient(session_factory=factory)
+    cfg = ApiCfg(chembl_base=base, timeout_read=5.0, retries=1)
+    monkeypatch.setattr("library.clients.chembl.sleep", lambda delay: None)
+
+    result = client.request_json(url, cfg=cfg)
+
+    assert result == payload
+    assert created == [timeout_session, success_session]
+    assert timeout_session.closed is True
+    assert success_session.closed is False
+    assert [call[0] for call in timeout_session.calls] == [url]
+    assert [call[0] for call in success_session.calls] == [url]
+
+    cached = client.request_json(url, cfg=cfg)
+    assert cached == payload
+    assert created == [timeout_session, success_session]
+    assert len(success_session.calls) == 1
+
+
+@pytest.mark.unit
 def test_backoff_delay__deterministic_jitter() -> None:
     api_cfg = ApiCfg(backoff_factor=0.5)
     jitter_one = RetryCfg(jitter_seed=11).build_jitter()
