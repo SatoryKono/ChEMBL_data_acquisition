@@ -10,7 +10,7 @@ or via the console scripts installed from `pyproject.toml` (`get-data`,
 |--------|-------------|
 | `--config` | Path to the YAML configuration file. Defaults to `config/config.yaml`. |
 | `--input` | CSV file containing identifiers for the pipeline. When omitted the orchestrator builds the path from `--base-path` and `--input-dir`. |
-| `--final-out` / `--output` | Destination CSV. If omitted a deterministic filename `output.<stem>_<YYYYMMDD>.csv` is generated inside the resolved output directory. |
+| `--final-out` | Destination CSV. If omitted a deterministic filename `output.<stem>_<YYYYMMDD>.csv` is generated inside the resolved output directory. |
 | `--sep`, `--encoding` | CSV delimiter and encoding. Inherit defaults from the configuration. |
 | `--log-level` | Logging verbosity (`DEBUG`, `INFO`, `WARN`, `ERROR`). |
 | `--force` | Overwrite existing outputs. |
@@ -188,9 +188,9 @@ py -3 scripts\get_target_data.py all ^
   --limit 10
 ```
 
-The `^` line continuations are optional but keep the command readable. The
-`--final-out` option supersedes the deprecated `--output` alias printed by older
-examples.
+The `^` line continuations are optional but keep the command readable.
+`--final-out` replaces earlier flag names; a hidden `--out` compatibility alias
+remains only for legacy automation.
 
 ## Assay pipeline `get_assay_data`
 
@@ -287,7 +287,7 @@ the first 25 rows of the input file.
 ```bash
 python scripts/get_cellline_data.py \
   --input data/input/cellline.csv \
-  --output output/cellline.csv \
+  --final-out output/cellline.csv \
   --batch-size 10 \
   --limit 25
 ```

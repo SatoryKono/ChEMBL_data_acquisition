@@ -10,7 +10,7 @@
 |-------|----------|
 | `--config` | Путь к YAML-конфигурации (по умолчанию `config/config.yaml`). |
 | `--input` | CSV с идентификаторами. Если не указан, оркестратор строит путь из `--base-path` и `--input-dir`. |
-| `--final-out` / `--output` | Итоговый CSV. При отсутствии генерируется детерминированное имя `output.<stem>_<YYYYMMDD>.csv` в каталоге вывода. |
+| `--final-out` | Итоговый CSV. При отсутствии генерируется детерминированное имя `output.<stem>_<YYYYMMDD>.csv` в каталоге вывода. |
 | `--sep`, `--encoding` | Разделитель и кодировка CSV (наследуются из конфигурации). |
 | `--log-level` | Уровень логирования (`DEBUG`, `INFO`, `WARN`, `ERROR`). |
 | `--force` | Перезаписывать существующие файлы. |
@@ -184,7 +184,8 @@ py -3 scripts\get_target_data.py all ^
 ```
 
 Символ `^` на конце строк необязателен, но помогает разбить длинную команду.
-Используйте параметр `--final-out` вместо устаревшего алиаса `--output`.
+Используйте `--final-out`: прежние названия флага скрыты, доступен только
+служебный алиас `--out` для обратной совместимости со старыми скриптами.
 
 ## Конвейер ассайев `get_assay_data`
 
@@ -281,7 +282,7 @@ python scripts/get_tissue_data.py \
 ```bash
 python scripts/get_cellline_data.py \
   --input data/input/cellline.csv \
-  --output output/cellline.csv \
+  --final-out output/cellline.csv \
   --batch-size 10 \
   --limit 25
 ```
