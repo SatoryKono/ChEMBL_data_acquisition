@@ -5,6 +5,8 @@ import pytest
 import library.config.loader as loader
 from pathlib import Path
 
+from config.paths import DICTIONARY_DIR
+
 from library.config import Config, load_config
 
 
@@ -96,3 +98,31 @@ def test_load_config__metadata_records_cli_override(tmp_path, monkeypatch):
     assert cli_entry == {"value": "DEBUG", "source": "cli", "detail": "--log-level"}
     path_entry = metadata.get("system.log.level")
     assert path_entry["source"] == "cli"
+
+
+@pytest.mark.unit
+def test_load_config__preserves_dictionary_resource_reference(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(
+        """
+        local:
+          resources:
+            dictionary_dir: dictionary_root
+        """.strip()
+    )
+
+    monkeypatch.setattr(loader, "configure_rate_limiters", lambda cfg: None)
+    monkeypatch.setattr(loader, "list_resources", lambda: {"dictionary_root": object()})
+    loader._dictionary_resource_names.cache_clear()
+    monkeypatch.setattr(
+        "library.config.models.resolve_resource_reference",
+        lambda value: DICTIONARY_DIR if value == "dictionary_root" else Path(value),
+    )
+    monkeypatch.setattr(
+        "library.config.models.get_resource_path",
+        lambda name: DICTIONARY_DIR if name == "dictionary_root" else Path(name),
+    )
+
+    cfg = load_config(cfg_path)
+
+    assert cfg.resources.dictionary_dir == DICTIONARY_DIR.resolve()
