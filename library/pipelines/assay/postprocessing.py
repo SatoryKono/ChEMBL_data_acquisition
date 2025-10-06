@@ -39,12 +39,24 @@ def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:
         Copy of the input with the additional ``assay_with_same_target`` column.
 
     """
-    AssayPostprocessSchema.validate(df)
-    group_cols = ["document_chembl_id", "target_chembl_id"]
-    groups = df.groupby(group_cols)
-    logger.debug("Calculated counts for %d document/target groups", groups.ngroups)
+    df = df.copy()
+    required_columns = ["document_chembl_id", "target_chembl_id"]
+    for column in required_columns:
+        if column not in df.columns:
+            df[column] = pd.Series(dtype="string")
+
+    df = AssayPostprocessSchema.validate(df)
     result = df.copy()
-    result["assay_with_same_target"] = groups["document_chembl_id"].transform("size")
+
+    if result.empty:
+        result["assay_with_same_target"] = pd.Series(dtype="Int64")
+        return result
+
+    group_cols = ["document_chembl_id", "target_chembl_id"]
+    groups = result.groupby(group_cols)
+    logger.debug("Calculated counts for %d document/target groups", groups.ngroups)
+    counts = groups["document_chembl_id"].transform("size").astype("Int64")
+    result["assay_with_same_target"] = counts
     return result
 
 
