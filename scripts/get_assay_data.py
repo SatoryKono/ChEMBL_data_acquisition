@@ -12,6 +12,7 @@ from pathlib import Path
 from time import sleep
 
 import argparse
+from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from functools import partial
 from itertools import islice
@@ -338,44 +339,76 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         def fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
             attempts = max(1, retry_cfg.max_attempts)
-            for attempt in range(1, attempts + 1):
-                try:
-                    return cl.get_assays(
-                        chunk_ids,
-                        cfg=cfg.api,
-                        client=client,
-                        chunk_size=cfg.assay.batch_size,
-                        timeout=cfg.assay.timeout,
-                    )
-                except (requests.RequestException, ValueError) as exc:
-                    error_message = str(exc)
-                    context = {
-                        "chunk_ids": list(chunk_ids),
-                        "chunk_size": len(chunk_ids),
-                        "attempt": attempt,
-                        "max_attempts": attempts,
-                        "batch_size": cfg.assay.batch_size,
-                        "timeout": cfg.assay.timeout,
-                    }
-                    log_context = {k: v for k, v in context.items() if k != "chunk_ids"}
-                    if attempt >= attempts:
-                        logger.error(
-                            "assay_fetch_failed",
+            pending: deque[list[str]] = deque([list(chunk_ids)])
+            frames: list[pd.DataFrame] = []
+
+            while pending:
+                current = pending.popleft()
+                if not current:
+                    continue
+
+                for attempt in range(1, attempts + 1):
+                    try:
+                        frame = cl.get_assays(
+                            current,
+                            cfg=cfg.api,
+                            client=client,
+                            chunk_size=min(cfg.assay.batch_size, len(current)),
+                            timeout=cfg.assay.timeout,
+                        )
+                    except (requests.RequestException, ValueError) as exc:
+                        error_message = str(exc)
+                        context = {
+                            "chunk_ids": list(current),
+                            "chunk_size": len(current),
+                            "attempt": attempt,
+                            "max_attempts": attempts,
+                            "batch_size": cfg.assay.batch_size,
+                            "timeout": cfg.assay.timeout,
+                        }
+                        log_context = {k: v for k, v in context.items() if k != "chunk_ids"}
+
+                        if attempt >= attempts:
+                            if len(current) > 1:
+                                split_index = max(1, len(current) // 2)
+                                left = current[:split_index]
+                                right = current[split_index:]
+                                logger.warning(
+                                    "assay_fetch_split",
+                                    extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
+                                    **log_context,
+                                )
+                                if right:
+                                    pending.appendleft(right)
+                                if left:
+                                    pending.appendleft(left)
+                                break
+
+                            logger.error(
+                                "assay_fetch_failed",
+                                extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
+                                error=error_message,
+                                **log_context,
+                            )
+                            chunk_failures.add_failure(current, error_message)
+                            break
+
+                        delay = compute_backoff_delay(attempt, retry_cfg)
+                        logger.warning(
+                            "assay_fetch_retry",
                             extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
-                            error=error_message,
+                            delay=delay,
                             **log_context,
                         )
-                        chunk_failures.add_failure(chunk_ids, error_message)
-                        return pd.DataFrame(columns=ASSAY_COLUMNS)
-                    delay = compute_backoff_delay(attempt, retry_cfg)
-                    logger.warning(
-                        "assay_fetch_retry",
-                        extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
-                        delay=delay,
-                        **log_context,
-                    )
-                    if delay > 0:
-                        sleep(delay)
+                        if delay > 0:
+                            sleep(delay)
+                    else:
+                        frames.append(frame)
+                        break
+
+            if frames:
+                return pd.concat(frames, ignore_index=True)
+
             return pd.DataFrame(columns=ASSAY_COLUMNS)
 
         fetch_config = ChunkedFetchConfig(
