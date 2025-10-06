@@ -16,6 +16,9 @@ resources:
       # to ``efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a``.
       # Accept it so Windows users on the latest tooling can run the pipeline
       # without rebuilding the bundled dictionaries.
+      # Windows Git >=2.46 with ``core.autocrlf=true`` applied *after* the
+      # manifest was generated started producing this checksum.  Keep it in the
+      # allow-list so local validation remains deterministic across platforms.
       - "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
