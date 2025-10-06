@@ -154,7 +154,7 @@ def test_process_activity_extended__fills_missing_optional_columns(tmp_path, cap
 
     _prepare_dictionary(dictionary_root)
 
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.INFO):
         output_path = process_activity_extended(
             input_path=activity_path,
             dictionary_dir=dictionary_root,
@@ -162,14 +162,93 @@ def test_process_activity_extended__fills_missing_optional_columns(tmp_path, cap
 
     assert output_path.exists()
 
-    filled_warnings = [
+    filled_records = [
         record for record in caplog.records if "activity_extended_missing_columns_filled" in record.message
     ]
-    assert filled_warnings, "Expected warning about backfilled columns not emitted"
+    assert filled_records, "Expected log about backfilled columns not emitted"
 
-    message = filled_warnings[0].message
+    message = filled_records[0].message
+    assert filled_records[0].levelno == logging.INFO
     for column_name in ("activity_chembl_id", "compound_key", "log_value"):
         assert column_name in message
+
+
+@pytest.mark.integration
+def test_process_activity_extended__warns_on_unresolved_parent(tmp_path, caplog):
+    """Warn when parent identifiers remain unresolved after enrichment."""
+
+    _fix_seed()
+
+    activity_dir = tmp_path / "input"
+    dictionary_root = tmp_path / "dictionary"
+    activity_dir.mkdir()
+
+    _prepare_dictionary(dictionary_root)
+
+    hierarchy_path = dictionary_root / "_testitem" / "molecule_hierarchy.csv"
+    hierarchy_path.parent.mkdir(parents=True, exist_ok=True)
+    with hierarchy_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle, fieldnames=["molecule_chembl_id", "parent_molecule_chembl_id"]
+        )
+        writer.writeheader()
+
+    activity_path = activity_dir / "output.activities_20240103.csv"
+    activity_columns = [
+        "activity_id",
+        "molecule_chembl_id",
+        "target_chembl_id",
+        "assay_chembl_id",
+        "document_chembl_id",
+        "bao_endpoint",
+        "standard_type",
+        "standard_value",
+        "bao_format",
+        "molecule_pref_name",
+        "pchembl_value",
+    ]
+    with activity_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=activity_columns)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "activity_id": "201",
+                "molecule_chembl_id": "CHEMBL1",
+                "target_chembl_id": "CHEMBLT1",
+                "assay_chembl_id": "ASSAY1",
+                "document_chembl_id": "DOC1",
+                "bao_endpoint": "endpoint",
+                "standard_type": "IC50",
+                "standard_value": "9.0",
+                "bao_format": "format",
+                "molecule_pref_name": "Example compound",
+                "pchembl_value": "6.5",
+            }
+        )
+
+    with caplog.at_level(logging.INFO):
+        output_path = process_activity_extended(
+            input_path=activity_path,
+            dictionary_dir=dictionary_root,
+        )
+
+    assert output_path.exists()
+
+    unresolved_logs = [
+        record
+        for record in caplog.records
+        if "activity_extended_missing_columns_unresolved" in record.message
+    ]
+    assert unresolved_logs, "Expected warning about unresolved columns not emitted"
+    assert unresolved_logs[0].levelno == logging.WARNING
+    assert "parent_molecule_chembl_id" in unresolved_logs[0].message
+
+    filled_logs = [
+        record for record in caplog.records if "activity_extended_missing_columns_filled" in record.message
+    ]
+    assert filled_logs, "Expected info log about filled columns not emitted"
+    assert filled_logs[0].levelno == logging.INFO
+    assert "compound_key" in filled_logs[0].message
 
 
 @pytest.mark.integration
