@@ -12,6 +12,7 @@ import sys
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence, Callable
 
+from datetime import datetime, timezone
 from functools import partial
 from itertools import islice
 from pathlib import Path
@@ -81,7 +82,6 @@ from library.cli import (
 from library.cli import (
     build_parser as base_parser,
 )
-from library.cli.logging import setup_cli_logging
 from library.cli_utils import (
     PipelineError,
     resolve_invocation,
@@ -95,7 +95,7 @@ from library.cli_utils import (
     write_meta_yaml as _cli_write_meta_yaml,
 )
 from library.config import Config, _serialize_paths
-from library.common.log import logger
+from library.utils.logger import StructuredLogger, get_logger
 from library.pipelines.common import add_pipeline_metadata
 from library.processing.activity import (
     apply_activity_annotations,
@@ -156,6 +156,7 @@ def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
 
 file_sha256 = _cli_file_sha256
 write_meta_yaml = _cli_write_meta_yaml
+logger = get_logger(__name__)
 configure_logger = cli.configure_logger
 
 __all__ = (
@@ -310,6 +311,60 @@ _EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series | Non
     "compound_name": lambda df: df.get("molecule_pref_name"),
     "log_value": lambda df: df.get("pchembl_value"),
 }
+
+
+def _coerce_extended_series(
+    series: pd.Series,
+    dtype: str,
+    column: str,
+) -> tuple[pd.Series, pd.Series]:
+    """Return ``series`` coerced to ``dtype`` and a mask of conversion failures."""
+
+    if not isinstance(series, pd.Series):
+        series = pd.Series(series)
+
+    if dtype == "string":
+        converted = series.astype(pd.StringDtype())
+        failures = pd.Series(False, index=converted.index)
+        return converted, failures
+
+    if dtype == "Float64":
+        numeric = pd.to_numeric(series, errors="coerce")
+        converted = pd.Series(pd.array(numeric, dtype="Float64"), index=series.index)
+        failures = series.notna() & converted.isna()
+        return converted, failures
+
+    if dtype == "Int64":
+        numeric = pd.to_numeric(series, errors="coerce")
+        converted_float = pd.Series(pd.array(numeric, dtype="Float64"), index=series.index)
+        failures = series.notna() & converted_float.isna()
+        non_integral_mask = converted_float.notna() & converted_float.ne(converted_float.round())
+        if non_integral_mask.any():
+            converted_float.loc[non_integral_mask] = pd.NA
+            failures = failures | non_integral_mask
+        try:
+            converted = converted_float.astype("Int64")
+        except (TypeError, ValueError):
+            converted = pd.Series(pd.NA, index=series.index, dtype="Int64")
+            failures = series.notna()
+        return converted, failures
+
+    if dtype == "boolean":
+        try:
+            converted = series.astype("boolean")
+            failures = series.notna() & converted.isna()
+        except (TypeError, ValueError):
+            converted = pd.Series(pd.NA, index=series.index, dtype="boolean")
+            failures = series.notna()
+        return converted, failures
+
+    try:
+        converted = series.astype(dtype)
+        failures = series.notna() & converted.isna()
+    except (TypeError, ValueError):
+        converted = pd.Series(pd.NA, index=series.index, dtype=dtype)
+        failures = series.notna()
+    return converted, failures
 
 
  
@@ -541,13 +596,13 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
     for column, dtype in _EXTENDED_ACTIVITY_DTYPES.items():
         fallback = _EXTENDED_ACTIVITY_FALLBACKS.get(column)
         if column in result.columns:
-            result[column] = _coerce_series_dtype(result[column], dtype)
+            coerced_existing, _ = _coerce_extended_series(result[column], dtype, column)
+            result[column] = coerced_existing
             if fallback is not None:
-                existing = result[column]
-                if dtype in {"Float64", "Int64"}:
-                    missing_mask = existing.isna()
+                if dtype in {"Float64", "Int64", "boolean"}:
+                    missing_mask = coerced_existing.isna()
                 else:
-                    missing_mask = _string_like_missing(existing)
+                    missing_mask = _string_like_missing(coerced_existing)
                 if missing_mask.any():
                     candidate = fallback(result)
                     if candidate is not None:
@@ -555,12 +610,36 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
                         filled = _coerce_series_dtype(aligned, dtype)
                         combined = existing.mask(missing_mask, filled)
                         result[column] = _coerce_series_dtype(combined, dtype)
+                        coerced_fallback, fallback_failures = _coerce_extended_series(
+                            aligned, dtype, column
+                        )
+                        failure_subset = fallback_failures & missing_mask
+                        if failure_subset.any():
+                            logger.debug(
+                                "activity_extended_fallback_conversion_failed",
+                                column=column,
+                                dtype=dtype,
+                                rows=int(failure_subset.sum()),
+                                context="existing",
+                            )
+                        result.loc[missing_mask, column] = coerced_fallback.loc[missing_mask]
             continue
         if fallback is not None:
             candidate = fallback(result)
             if candidate is not None:
                 aligned = candidate.reindex(result.index)
-                result[column] = _coerce_series_dtype(aligned, dtype)
+                coerced_fallback, fallback_failures = _coerce_extended_series(
+                    aligned, dtype, column
+                )
+                if fallback_failures.any():
+                    logger.debug(
+                        "activity_extended_fallback_conversion_failed",
+                        column=column,
+                        dtype=dtype,
+                        rows=int(fallback_failures.sum()),
+                        context="missing_column",
+                    )
+                result[column] = coerced_fallback
                 continue
         if dtype == "boolean":
             filler = pd.Series(pd.NA, index=result.index, dtype="boolean")
@@ -1149,6 +1228,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
     args.invocation = resolve_invocation(parser.prog, argv)
+
+    date_override = getattr(args, "date", None)
+    if date_override:
+        date_str = str(date_override)
+    else:
+        date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    log_file = Path("logs") / f"{PROGRAM_NAME}_{date_str}.log"
+
+    structured_logger = get_logger(__name__, log_file=log_file)
+
+    global logger
+    if isinstance(logger, StructuredLogger):
+        logger = structured_logger
+    print(f"[INFO] Structured logs are mirrored to '{log_file}'.")
     cli.prepare_io_paths(
         args,
         input_default=DEFAULT_INPUT_NAME,
@@ -1162,26 +1255,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--limit must be zero or a positive integer")
     if args.offset < 0:
         parser.error("--offset must be zero or a positive integer")
-    with setup_cli_logging(
-        Path(__file__).with_suffix("").name, log_cfg, getattr(args, "date", None)
-    ) as logging_ctx:
-        exit_code = run_cli_command(
-            args=args,
-            parser=parser,
-            log_cfg=logging_ctx.log_cfg,
-            mapping={
-                "timeout": "activity.timeout",
-                "column": "activity.column",
-                "batch_size": "activity.batch_size",
-                "limit": "activity.limit",
-                "offset": "activity.offset",
-                "dry_run": "activity.dry_run",
-                "workers": "activity.workers",
-            },
-            run=run,
-            logger=logger,
-        )
-    configure_logger(log_cfg)
+
+    exit_code = run_cli_command(
+        args=args,
+        parser=parser,
+        log_cfg=log_cfg,
+        mapping={
+            "timeout": "activity.timeout",
+            "column": "activity.column",
+            "batch_size": "activity.batch_size",
+            "limit": "activity.limit",
+            "offset": "activity.offset",
+            "dry_run": "activity.dry_run",
+            "workers": "activity.workers",
+        },
+        run=run,
+        logger=logger,
+    )
     return exit_code
 
 
