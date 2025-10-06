@@ -43,11 +43,10 @@ from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from config import DICTIONARY_DIR
-
 from .common.log import logger
 from .common.rate_limiter import configure_limiter_cache
 from .document_defaults import ALL_DEFAULTS, CHEMBL_DEFAULTS, PUBMED_DEFAULTS
+from .resources.dictionaries import get_resource_path, resolve_resource_reference
 from .utils.config import ConfigLoaderError, load_yaml_config
 
 
@@ -313,10 +312,10 @@ def _build_snapshot(
     return snapshot
 
 
-def _dictionary_resource(*parts: str) -> Path:
-    """Return a filesystem path for a bundled dictionary resource."""
+def _dictionary_resource(name: str) -> Path:
+    """Return a manifest-backed filesystem path for a dictionary resource."""
 
-    return DICTIONARY_DIR.joinpath(*parts)
+    return get_resource_path(name)
 
 
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
@@ -493,8 +492,8 @@ class MoleculeCatalogCfg(_BaseModel):
     endpoint: str = "molecule"
     child_field: str = "molecule_chembl_id"
     parent_field: str = "parent_molecule_chembl_id"
-    hierarchy_lookup_path: Path | None = (
-        DICTIONARY_DIR / "_testitem" / "molecule_hierarchy.csv"
+    hierarchy_lookup_path: Path | None = Field(
+        default_factory=lambda: get_resource_path("testitem_molecule_hierarchy")
     )
     hierarchy_lookup_encoding: str = "utf-8-sig"
     hierarchy_lookup_delimiter: str = ","
@@ -508,6 +507,13 @@ class MoleculeCatalogCfg(_BaseModel):
     )
     page_size: int = Field(500, ge=1)
     fallback_single_limit: int | None = Field(default=None, ge=1)
+
+    @field_validator("hierarchy_lookup_path", mode="before")
+    @classmethod
+    def _resolve_hierarchy_path(cls, value: Any) -> Path | None | Any:
+        if value is None:
+            return value
+        return resolve_resource_reference(value)
 
 
 class OpenAlexCfg(_BaseModel):
@@ -773,22 +779,20 @@ class DocQualityCfg(_BaseModel):
 
 
 class ResourcesCfg(_BaseModel):
-    dictionary_dir: Path = Field(default_factory=_dictionary_resource)
+    dictionary_dir: Path = Field(
+        default_factory=lambda: _dictionary_resource("dictionary_root")
+    )
     iuphar_target_csv: Path = Field(
-        default_factory=lambda: _dictionary_resource(
-            "_target", "_IUPHAR", "_IUPHAR_target.csv"
-        )
+        default_factory=lambda: _dictionary_resource("target_iuphar_target")
     )
     iuphar_family_csv: Path = Field(
-        default_factory=lambda: _dictionary_resource(
-            "_target", "_IUPHAR", "_IUPHAR_family.csv"
-        )
+        default_factory=lambda: _dictionary_resource("target_iuphar_family")
     )
     uniprot_data_dir: Path = Field(
-        default_factory=lambda: _dictionary_resource("_target", "_uniprot")
+        default_factory=lambda: _dictionary_resource("target_uniprot_cache")
     )
     targets_type_csv: Path = Field(
-        default_factory=lambda: _dictionary_resource("_target", "targets_type.csv")
+        default_factory=lambda: _dictionary_resource("target_types")
     )
 
     @field_validator(
@@ -801,9 +805,9 @@ class ResourcesCfg(_BaseModel):
     )
     @classmethod
     def _coerce_path(cls, value: Any) -> Path | Any:
-        if isinstance(value, (str, os.PathLike)):
-            return Path(value)
-        return value
+        if value is None:
+            return value
+        return resolve_resource_reference(value)
 
 
 class IoCfg(_BoolModel):
@@ -1173,12 +1177,19 @@ class TestitemCfg(_BaseModel):
 
 
 class TestitemMoleculeEnrichmentSourcesCfg(_BaseModel):
-    molecule_catalog_path: Path = (
-        DICTIONARY_DIR / "_testitem" / "molecule_catalog.csv"
+    molecule_catalog_path: Path = Field(
+        default_factory=lambda: get_resource_path("testitem_molecule_catalog")
     )
-    molecule_hierarchy_path: Path = (
-        DICTIONARY_DIR / "_testitem" / "molecule_hierarchy.csv"
+    molecule_hierarchy_path: Path = Field(
+        default_factory=lambda: get_resource_path("testitem_molecule_hierarchy")
     )
+
+    @field_validator("molecule_catalog_path", "molecule_hierarchy_path", mode="before")
+    @classmethod
+    def _resolve_manifest_paths(cls, value: Any) -> Path | Any:
+        if value is None:
+            return value
+        return resolve_resource_reference(value)
 
 
 class TestitemMoleculeEnrichmentOutputCfg(_BoolModel):
@@ -1264,11 +1275,20 @@ class DocumentCfg(_BaseModel):
 
 class TargetUniprotCfg(_BaseModel):
     column: str = "uniprot_id"
-    data_dir: Path = DICTIONARY_DIR / "_target" / "_uniprot"
+    data_dir: Path = Field(
+        default_factory=lambda: get_resource_path("target_uniprot_cache")
+    )
     limit: int | None = Field(default=None, ge=0)
     chunk_size: int = Field(100, ge=1)
     timeout: float = Field(30.0, gt=0)
     offset: int = Field(0, ge=0)
+
+    @field_validator("data_dir", mode="before")
+    @classmethod
+    def _resolve_data_dir(cls, value: Any) -> Path | Any:
+        if value is None:
+            return value
+        return resolve_resource_reference(value)
 
 
 class TargetChemblBatchRetryCfg(_BoolModel):
@@ -1310,24 +1330,33 @@ class TargetIupharCfg(_BaseModel):
     timeout: float = Field(30.0, gt=0)
     limit: int | None = Field(default=None, ge=0)
     offset: int = Field(0, ge=0)
-    target_csv: Path = (
-        DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_target.csv"
+    target_csv: Path = Field(
+        default_factory=lambda: get_resource_path("target_iuphar_target")
     )
-    family_csv: Path = (
-        DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_family.csv"
+    family_csv: Path = Field(
+        default_factory=lambda: get_resource_path("target_iuphar_family")
     )
+
+    @field_validator("target_csv", "family_csv", mode="before")
+    @classmethod
+    def _resolve_iuphar_paths(cls, value: Any) -> Path | Any:
+        if value is None:
+            return value
+        return resolve_resource_reference(value)
 
 
 class TargetAllCfg(_BaseModel):
     """Defaults for the combined target pipeline."""
 
     column: str = "target_chembl_id"
-    data_dir: Path = DICTIONARY_DIR / "_target" / "_uniprot"
-    target_csv: Path = (
-        DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_target.csv"
+    data_dir: Path = Field(
+        default_factory=lambda: get_resource_path("target_uniprot_cache")
     )
-    family_csv: Path = (
-        DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_family.csv"
+    target_csv: Path = Field(
+        default_factory=lambda: get_resource_path("target_iuphar_target")
+    )
+    family_csv: Path = Field(
+        default_factory=lambda: get_resource_path("target_iuphar_family")
     )
     chunk_size: int = Field(3, ge=1)
     timeout: float = Field(90.0, gt=0)
@@ -1337,6 +1366,13 @@ class TargetAllCfg(_BaseModel):
     iuphar_out: Path | None = None
     limit: int | None = Field(default=None, ge=1)
     offset: int = Field(0, ge=0)
+
+    @field_validator("data_dir", "target_csv", "family_csv", mode="before")
+    @classmethod
+    def _resolve_all_paths(cls, value: Any) -> Path | Any:
+        if value is None:
+            return value
+        return resolve_resource_reference(value)
 
 
 class TargetCfg(_BaseModel):
