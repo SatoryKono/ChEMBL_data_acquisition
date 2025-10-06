@@ -67,7 +67,7 @@ from library import io
 from library.clients import ChemblClient
 from library.common.csv_utils import write_csv_chunks_deterministic  # re-exported for tests
 from library.common.rate_limiter import get_global_limiter
-from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS
+from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS, MAX_ACTIVITY_CHUNK_SIZE
 from library.pipelines.common import (
     ChunkedFetchConfig,
     CsvWriterConfig,
@@ -1219,6 +1219,19 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the activity pipeline handling ``--skip-existing`` semantics."""
 
     start_time = perf_counter()
+
+    batch_size = getattr(cfg.activity, "batch_size", None)
+    if batch_size is not None and batch_size > MAX_ACTIVITY_CHUNK_SIZE:
+        logger.warning(
+            "activity_batch_size_clamped",
+            configured=batch_size,
+            limit=MAX_ACTIVITY_CHUNK_SIZE,
+        )
+        logger.warning(
+            f"Configured batch size {batch_size} exceeds the hard cap of {MAX_ACTIVITY_CHUNK_SIZE}; "
+            f"reducing to {MAX_ACTIVITY_CHUNK_SIZE}."
+        )
+        cfg.activity.batch_size = MAX_ACTIVITY_CHUNK_SIZE
 
     final_out_attr = getattr(args, "final_out", None)
     if final_out_attr in (None, argparse.SUPPRESS):
