@@ -68,6 +68,28 @@ class _StubSession:
         return None
 
 
+class _TimeoutSession:
+    """Raise a timeout on the primary URL before succeeding on fallback."""
+
+    def __init__(self, primary: str, fallback: str, payload: dict[str, object]) -> None:
+        self.primary_url = primary
+        self.fallback_url = fallback
+        self.payload = payload
+        self.calls: list[str] = []
+
+    def get(self, url: str, timeout: object) -> _StubResponse:
+        del timeout
+        self.calls.append(url)
+        if url == self.primary_url:
+            raise requests.ReadTimeout(f"timeout for {url}")
+        if url == self.fallback_url:
+            return _StubResponse(url, 200, self.payload)
+        raise AssertionError(f"Unexpected URL requested: {url}")
+
+    def close(self) -> None:  # pragma: no cover - compatibility shim
+        return None
+
+
 @pytest.mark.unit
 def test_request_json__falls_back_to_extensionless_endpoint() -> None:
     """The client retries with an extensionless URL when a 404 is returned."""
@@ -88,6 +110,25 @@ def test_request_json__falls_back_to_extensionless_endpoint() -> None:
 
     cached = client.request_json(primary_url, cfg=cfg)
     assert cached == payload
+    assert session.calls == [primary_url, fallback_url]
+
+
+@pytest.mark.unit
+def test_request_json__falls_back_after_timeout() -> None:
+    """Connection timeouts trigger the extensionless fallback."""
+
+    base = "https://example.test/chembl/api/data"
+    query = "format=json&assay_chembl_id__in=CHEMBL1&limit=1"
+    primary_url = f"{base}/assay.json?{query}"
+    fallback_url = f"{base}/assay?{query}"
+    payload = {"assays": [{"assay_chembl_id": "CHEMBL1"}]}
+    session = _TimeoutSession(primary_url, fallback_url, payload)
+    client = ChemblClient(session=session)
+    cfg = ApiCfg(chembl_base=base, timeout_read=5.0)
+
+    result = client.request_json(primary_url, cfg=cfg)
+
+    assert result == payload
     assert session.calls == [primary_url, fallback_url]
 
 

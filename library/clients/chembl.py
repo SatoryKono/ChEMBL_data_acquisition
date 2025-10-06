@@ -372,6 +372,25 @@ class ChemblClient:
                 except requests.RequestException as exc:
                     elapsed = monotonic() - start_time
                     last_exc = exc
+                    if (
+                        not used_fallback
+                        and fallback_url is not None
+                        and fallback_url != request_url
+                        and _should_switch_to_fallback(exc)
+                    ):
+                        used_fallback = True
+                        request_url = fallback_url
+                        logger.debug(
+                            "request_fallback_switch",
+                            extra={
+                                "original_url": url,
+                                "fallback_url": request_url,
+                                "attempt": attempt,
+                                "rps": cfg.rps,
+                                "elapsed": elapsed,
+                            },
+                        )
+                        continue
                     if attempt >= total_attempts:
                         logger.exception(
                             "request_fail",
@@ -523,6 +542,18 @@ def _log_retry_delay(
             "delay": delay,
             "retry_after": header_delay,
         },
+    )
+
+
+def _should_switch_to_fallback(exception: requests.RequestException) -> bool:
+    """Return ``True`` when ``exception`` warrants trying the fallback URL."""
+
+    return isinstance(
+        exception,
+        (
+            requests.Timeout,
+            requests.ConnectionError,
+        ),
     )
 
 
