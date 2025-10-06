@@ -9,6 +9,7 @@ from .helpers import (
   run_chunked_pipeline,
 )
 from .metadata import add_pipeline_metadata, pipeline_metadata
+from .results import PipelineRunResult
 
 __all__ = [
   "ChunkedFetchConfig",
@@ -17,4 +18,5 @@ __all__ = [
   "pipeline_metadata",
   "prepare_chunked_pipeline",
   "run_chunked_pipeline",
+  "PipelineRunResult",
 ]
