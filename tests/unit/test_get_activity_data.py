@@ -100,16 +100,15 @@ def test_run_chembl__dry_run_short_circuits(cfg, tmp_path, monkeypatch) -> None:
     exit_code = get_activity_data.run_chembl(cfg, args)
 
     assert exit_code == 0
-    assert ("info", "dry_run", {"limit": 7}) in [
-        (level, event, context) for level, event, context in logger_stub.events
+    events = [(level, event, context) for level, event, context in logger_stub.events]
+    assert ("info", "dry_run", {"limit": 7, "expected": 7}) in events
+    summaries = [
+        context
+        for level, event, context in events
+        if level == "info" and event == "activity_completion_summary"
     ]
-    completion_events = [
-        event
-        for _, event, _ in logger_stub.events
-        if event.startswith("Completed get_activity_data pipeline:")
-    ]
-    assert completion_events
-    assert "mode=dry_run" in completion_events[-1]
+    assert summaries
+    assert summaries[-1]["mode"] == "dry_run"
 
 
 @pytest.mark.parametrize(
@@ -165,16 +164,18 @@ def test_run__skip_existing_matrix(
 
     assert exit_code == 0
     assert len(call_counter) == expected_calls
-    summary_events = [
-        event
-        for _, event, _ in logger_stub.events
-        if event.startswith("Completed get_activity_data pipeline:")
+    summary_contexts = [
+        context
+        for level, event, context in logger_stub.events
+        if level == "info" and event == "activity_completion_summary"
     ]
     if skip_existing and has_existing and not force:
-        assert summary_events
-        assert "mode=skip_existing" in summary_events[-1]
+        assert summary_contexts
+        last_summary = summary_contexts[-1]
+        assert last_summary["mode"] == "skip_existing"
+        assert last_summary["output"] == str(output_path)
     else:
-        assert not summary_events
+        assert not summary_contexts
 
 
 @pytest.mark.parametrize(
@@ -304,7 +305,7 @@ def test_run_chembl__read_ids_failures(error_factory, cfg, tmp_path, monkeypatch
 
     assert exit_code == 1
     events = [event for _, event, _ in logger_stub.events]
-    assert "read_fail" in events
+    assert "activity_read_failed" in events
 
 
 def test_run_chembl__pipeline_failure_logs_error(cfg, tmp_path, monkeypatch) -> None:

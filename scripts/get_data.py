@@ -805,6 +805,7 @@ def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
             "parent_catalog_warm_failed",
             elapsed=elapsed,
             error=str(exc),
+            exc_info=exc,
             **log_kwargs,
         )
         raise
@@ -841,11 +842,19 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
                 _warm_parent_catalog(cfg)
             except TimeoutError as exc:
                 overall_status = 1
-                _LOGGER.error("parent_catalog_warm_timeout", error=str(exc))
+                _LOGGER.error(
+                    "parent_catalog_warm_timeout",
+                    error=str(exc),
+                    exc_info=exc,
+                )
                 break
             except Exception as exc:  # pragma: no cover - defensive guard
                 overall_status = 1
-                _LOGGER.error("parent_catalog_warm_error", error=str(exc))
+                _LOGGER.error(
+                    "parent_catalog_warm_error",
+                    error=str(exc),
+                    exc_info=exc,
+                )
                 break
         try:
             result = _run_step(step, cfg, final_output, working_output)
@@ -926,7 +935,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             cfg = _prepare_config(args)
         except (FileNotFoundError, OSError, ValueError) as exc:
-            _LOGGER.error("configuration_error", error=str(exc))
+            _LOGGER.error("configuration_error", error=str(exc), exc_info=exc)
             status = 1
         else:
             status = run_pipeline(cfg)

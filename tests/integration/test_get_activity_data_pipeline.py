@@ -319,15 +319,15 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
     src_assay_series = written_df["src_assay_id"].astype("string")
     assert src_assay_series.tolist() == ["SRC-ASSAY1", "SRC-ASSAY2", "SRC-ASSAY3"]
     assert src_assay_series.str.strip().ne("").all()
-    completion_messages = [
-        event
-        for _, event, _ in logger_stub.events
-        if event.startswith("Completed get_activity_data pipeline:")
+    completion_contexts = [
+        context
+        for level, event, context in logger_stub.events
+        if level == "info" and event == "activity_completion_summary"
     ]
-    assert completion_messages
-    summary_message = completion_messages[-1]
-    assert "mode=run" in summary_message
-    assert "rows=3" in summary_message
+    assert completion_contexts
+    summary_context = completion_contexts[-1]
+    assert summary_context["mode"] == "run"
+    assert summary_context["rows"] == 3
 
 
 @pytest.mark.integration
@@ -492,7 +492,7 @@ def test_activity_pipeline__missing_column_input(activity_resource_dir: Path, cf
     activity_events = [event for _, event, _ in logger_stub.events]
 
     assert exit_code == 1
-    assert "read_fail" in activity_events
+    assert "activity_read_failed" in activity_events
     assert not output_csv.exists()
 
 
