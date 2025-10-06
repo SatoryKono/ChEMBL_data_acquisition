@@ -12,6 +12,7 @@ import sys
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence, Callable
 
+from datetime import datetime, timezone
 from functools import partial
 from itertools import islice
 from pathlib import Path
@@ -81,7 +82,6 @@ from library.cli import (
 from library.cli import (
     build_parser as base_parser,
 )
-from library.cli.logging import setup_cli_logging
 from library.cli_utils import (
     PipelineError,
     resolve_invocation,
@@ -95,7 +95,7 @@ from library.cli_utils import (
     write_meta_yaml as _cli_write_meta_yaml,
 )
 from library.config import Config, _serialize_paths
-from library.common.log import logger
+from library.utils.logger import StructuredLogger, get_logger
 from library.pipelines.common import add_pipeline_metadata
 from library.processing.activity import (
     apply_activity_annotations,
@@ -156,6 +156,7 @@ def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
 
 file_sha256 = _cli_file_sha256
 write_meta_yaml = _cli_write_meta_yaml
+logger = get_logger(__name__)
 configure_logger = cli.configure_logger
 
 __all__ = (
@@ -1006,6 +1007,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
     args.invocation = resolve_invocation(parser.prog, argv)
+
+    date_override = getattr(args, "date", None)
+    if date_override:
+        date_str = str(date_override)
+    else:
+        date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    log_file = Path("logs") / f"{PROGRAM_NAME}_{date_str}.log"
+
+    structured_logger = get_logger(__name__, log_file=log_file)
+
+    global logger
+    if isinstance(logger, StructuredLogger):
+        logger = structured_logger
+    print(f"[INFO] Structured logs are mirrored to '{log_file}'.")
     cli.prepare_io_paths(
         args,
         input_default=DEFAULT_INPUT_NAME,
@@ -1019,26 +1034,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--limit must be zero or a positive integer")
     if args.offset < 0:
         parser.error("--offset must be zero or a positive integer")
-    with setup_cli_logging(
-        Path(__file__).with_suffix("").name, log_cfg, getattr(args, "date", None)
-    ) as logging_ctx:
-        exit_code = run_cli_command(
-            args=args,
-            parser=parser,
-            log_cfg=logging_ctx.log_cfg,
-            mapping={
-                "timeout": "activity.timeout",
-                "column": "activity.column",
-                "batch_size": "activity.batch_size",
-                "limit": "activity.limit",
-                "offset": "activity.offset",
-                "dry_run": "activity.dry_run",
-                "workers": "activity.workers",
-            },
-            run=run,
-            logger=logger,
-        )
-    configure_logger(log_cfg)
+
+    exit_code = run_cli_command(
+        args=args,
+        parser=parser,
+        log_cfg=log_cfg,
+        mapping={
+            "timeout": "activity.timeout",
+            "column": "activity.column",
+            "batch_size": "activity.batch_size",
+            "limit": "activity.limit",
+            "offset": "activity.offset",
+            "dry_run": "activity.dry_run",
+            "workers": "activity.workers",
+        },
+        run=run,
+        logger=logger,
+    )
     return exit_code
 
 

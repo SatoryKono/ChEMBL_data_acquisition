@@ -163,18 +163,6 @@ def _patch_activity_cli(monkeypatch: pytest.MonkeyPatch, cfg: Config) -> None:
     monkeypatch.setattr(cli_utils, "apply_config_overrides", fake_apply_config_overrides)
     monkeypatch.setattr(cli_utils, "ensure_dirs", lambda _cfg: None)
 
-    def fake_configure_logger(log_cfg):
-        return get_activity_data.logger
-
-    monkeypatch.setattr(cli_utils.cli, "configure_logger", fake_configure_logger)
-    monkeypatch.setattr(get_activity_data.cli, "configure_logger", fake_configure_logger)
-    monkeypatch.setattr(get_activity_data, "configure_logger", fake_configure_logger)
-
-    @contextmanager
-    def fake_setup_cli_logging(script_name, log_cfg, date_str=None, **_kwargs):
-        yield SimpleNamespace(log_cfg=log_cfg, console_stream=None)
-
-    monkeypatch.setattr(get_activity_data, "setup_cli_logging", fake_setup_cli_logging)
 
 @pytest.mark.e2e
 def test_get_testitem_run_success(
