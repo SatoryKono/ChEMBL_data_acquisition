@@ -389,6 +389,34 @@ def get_assays(
             next_url = urljoin(join_base, next_token) if next_token else None
         return frames
 
+    def _fallback_single(identifier: str) -> list[pd.DataFrame]:
+        fallback_df = get_assay(
+            identifier,
+            cfg=cfg,
+            client=client,
+            timeout=effective_timeout,
+        )
+        if require_variant_sequence and not fallback_df.empty:
+            sequence_series = fallback_df.get("sequence")
+            if sequence_series is not None:
+                fallback_df = fallback_df[sequence_series.notna()]
+        if fallback_df.empty:
+            return []
+        return [fallback_df]
+
+    def _filter_variant_frames(frames: list[pd.DataFrame]) -> list[pd.DataFrame]:
+        if not require_variant_sequence:
+            return frames
+        filtered_frames: list[pd.DataFrame] = []
+        for frame in frames:
+            sequence_series = frame.get("sequence")
+            if sequence_series is None:
+                continue
+            filtered = frame[sequence_series.notna()]
+            if not filtered.empty:
+                filtered_frames.append(filtered)
+        return filtered_frames
+
     def _fetch_single(identifier: str) -> list[pd.DataFrame]:
         single_url = _build_url({"assay_chembl_id": identifier, "limit": 1})
         try:
@@ -399,31 +427,20 @@ def get_assays(
                 logger.info(
                     "assay_missing", extra={"stage": "chunk_skip", "assay_chembl_id": identifier}
                 )
-                fallback_df = get_assay(
-                    identifier,
-                    cfg=cfg,
-                    client=client,
-                    timeout=effective_timeout,
-                )
-                if require_variant_sequence and not fallback_df.empty:
-                    sequence_series = fallback_df.get("sequence")
-                    if sequence_series is not None:
-                        fallback_df = fallback_df[sequence_series.notna()]
-                if fallback_df.empty:
-                    return []
-                return [fallback_df]
+                return _fallback_single(identifier)
             raise
+        except requests.RequestException as exc:
+            logger.warning(
+                "single_fetch_retry",
+                extra={
+                    "stage": "chunk_retry",
+                    "assay_chembl_id": identifier,
+                    "error": exc.__class__.__name__,
+                },
+            )
+            return _fallback_single(identifier)
         else:
-            if require_variant_sequence and frames:
-                filtered_frames: list[pd.DataFrame] = []
-                for frame in frames:
-                    sequence_series = frame.get("sequence")
-                    if sequence_series is None:
-                        continue
-                    filtered = frame[sequence_series.notna()]
-                    if not filtered.empty:
-                        filtered_frames.append(filtered)
-                frames = filtered_frames
+            frames = _filter_variant_frames(frames)
             return frames
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
