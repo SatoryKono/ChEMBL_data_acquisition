@@ -1,0 +1,48 @@
+diff --git a/scripts/get_assay_data.py b/scripts/get_assay_data.py
+index 339d7f2..3da0352 100644
+--- a/scripts/get_assay_data.py
++++ b/scripts/get_assay_data.py
+@@ -218,11 +218,43 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
+     def _enrich_with_dictionaries(frame: pd.DataFrame) -> pd.DataFrame:
+         return enrich_assay_metadata(frame, dictionary_dir=cfg.resources.dictionary_dir)
+ 
++    drop_cols = [
++        "acts_per_assay_step5",
++        "higly_correlated_cit",
++        "month",
++        "shuffled_cit",
++        "error_assay_corr",
++        "shuffled_target_assay",
++        "substrate_name",
++        "version",
++        "ASSAY_ID",
++        "Target TYPE",
++    ]
++
++    drop_columns_logged = False
++
++    def _drop_assay_columns(frame: pd.DataFrame) -> pd.DataFrame:
++        nonlocal drop_columns_logged
++        columns_to_drop = [c for c in drop_cols if c in frame.columns]
++        if not drop_columns_logged:
++            if columns_to_drop:
++                logger.info(
++                    "Dropped columns from output.assay_*: %s",
++                    ", ".join(columns_to_drop),
++                )
++            else:
++                logger.info("Dropped columns from output.assay_*: <none>")
++            drop_columns_logged = True
++        if columns_to_drop:
++            frame = frame.drop(columns=columns_to_drop, errors="ignore")
++        return frame
++
+     metadata_hooks = [
+         _enrich_with_dictionaries,
+         ap.postprocess_assays,
+         normalize_assays,
+         add_pipeline_metadata,
++        _drop_assay_columns,
+     ]
+ 
+     validators = [partial(validate_assays, return_result=True)]
