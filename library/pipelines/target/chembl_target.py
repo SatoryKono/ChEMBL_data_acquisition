@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 import pandas as pd
 import requests
+from requests.exceptions import ReadTimeout
 
 from library.clients import ChemblClient, _chunked
 from ...config import ApiCfg, TargetChemblBatchRetryCfg, UniprotMappingCfg
