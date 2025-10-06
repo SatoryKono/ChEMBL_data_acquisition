@@ -91,19 +91,19 @@ atexit.register(_RESOURCE_STACK.close)
 
 
 def _default_base_path() -> Path:
-    """Return the default base directory delegated to :mod:`loader`."""
+    """Return the default base directory delegated to :mod:`env`."""
 
-    from . import loader
+    from . import env
 
-    return loader._default_base_path()
+    return env._default_base_path()
 
 
 def _default_cache_home() -> Path:
-    """Return the default cache directory delegated to :mod:`loader`."""
+    """Return the default cache directory delegated to :mod:`env`."""
 
-    from . import loader
+    from . import env
 
-    return loader._default_cache_home()
+    return env._default_cache_home()
 
 _UNSET = object()
 
