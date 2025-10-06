@@ -21,7 +21,8 @@
 
 - Upload `reports/test_report.json` and `reports/test_summary.md` from every CI run.
 - When smoke pipelines are enabled, archive output CSVs and metadata for manual QA.
-- Capture logs (`logs/*.log`) to simplify debugging.
+- Capture logs (`<base>/logs/*.log`, `<base>` defaults to `data`) to simplify
+  debugging.
 
 ## Branching model
 

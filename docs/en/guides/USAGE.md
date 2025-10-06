@@ -34,9 +34,10 @@ three tiers:
    flags in the target pipeline or DOI fallbacks in the document pipeline).
 
 All commands exit with a non-zero status on validation errors, IO issues, or
-upstream API failures. Each run writes a text log to `logs/<script>_<YYYYMMDD>.log`
-using the `[timestamp] [LEVEL] [logger] message` format so that warnings and
-errors can be audited after the fact.
+upstream API failures. Each run writes a text log to
+`<base>/logs/<script>_<YYYYMMDD>.log` (with `<base>` defaulting to `data` and
+overridable via `CHEMBL_DA_BASE_PATH`) using the `[timestamp] [LEVEL] [logger]
+message` format so that warnings and errors can be audited after the fact.
 
 ### Input templates
 
