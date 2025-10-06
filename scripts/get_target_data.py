@@ -2646,6 +2646,22 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     tmp_path: Path | None = None
     source_csv = args.input_csv
 
+    output_path_candidate = getattr(args, "output_csv", None)
+    if output_path_candidate not in (None, argparse.SUPPRESS):
+        output_path = Path(output_path_candidate)
+        if not isinstance(output_path_candidate, Path):
+            args.output_csv = output_path
+        args.final_out = output_path
+    else:
+        final_out_attr = getattr(args, "final_out", None)
+        if final_out_attr in (None, argparse.SUPPRESS):
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+        else:
+            output_path = Path(final_out_attr)
+            if not isinstance(final_out_attr, Path):
+                args.final_out = output_path
+
     try:
         df_to_process: pd.DataFrame | None = None
         offset = cfg.target.iuphar.offset
@@ -2694,14 +2710,6 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
             family_path=cfg.target.iuphar.family_csv,
             encoding=cfg.io.csv_encoding,
         )
-        final_out_attr = getattr(args, "final_out", None)
-        if final_out_attr in (None, argparse.SUPPRESS):
-            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
-            args.final_out = output_path
-        else:
-            output_path = Path(final_out_attr)
-            if not isinstance(final_out_attr, Path):
-                args.final_out = output_path
         data.map_uniprot_file(
             input_path=source_csv,
             output_path=str(output_path),
@@ -3449,7 +3457,9 @@ def fetch_iuphar(
 
         iuphar_input = Path(tmp.name)
 
-    iuphar_args = argparse.Namespace(input_csv=iuphar_input, output_csv=output_csv)
+    iuphar_args = argparse.Namespace(
+        input_csv=iuphar_input, output_csv=output_csv, final_out=output_csv
+    )
     orig_target = cfg.target.iuphar.target_csv
     orig_family = cfg.target.iuphar.family_csv
     cfg.target.iuphar.target_csv = cfg.target.all.target_csv
