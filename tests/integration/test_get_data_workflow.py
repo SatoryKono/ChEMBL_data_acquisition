@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 from dataclasses import replace
 from pathlib import Path
 from typing import Callable
@@ -78,6 +79,12 @@ def _write_input(cfg: get_data.PipelineRunConfig, name: str, frame: pd.DataFrame
     return path
 
 
+def _load_manifest(cfg: get_data.PipelineRunConfig) -> dict[str, object]:
+    manifest_path = cfg.base_path / "reports" / "run_manifest.json"
+    assert manifest_path.exists(), "expected run manifest to be created"
+    return json.loads(manifest_path.read_text(encoding="utf-8"))
+
+
 @pytest.mark.integration
 def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = _prepare_environment(tmp_path)
@@ -122,6 +129,11 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
     assert list(output_frame["document_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
     logs = parse_log_lines(stream.getvalue())
     assert any(record.get("event") == "duplicates_detected" for record in logs)
+    manifest_success = _load_manifest(cfg)
+    assert manifest_success["run"]["exit_code"] == 0
+    assert manifest_success["steps"][0]["status"] == "success"
+    assert manifest_success["steps"][0]["output"]["exists"] is True
+    assert manifest_success["steps"][0]["output"]["checksum_sha256"]
 
     malformed = frame.drop(columns=["title"])
     _write_input(cfg, "document", malformed)
@@ -132,6 +144,11 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
     assert status_malformed == 1
     logs = parse_log_lines(stream.getvalue())
     assert any(record.get("event") == "schema_mismatch" for record in logs)
+    manifest_failure = _load_manifest(cfg)
+    assert manifest_failure["run"]["exit_code"] == 1
+    assert manifest_failure["steps"][0]["status"] == "failed"
+    assert manifest_failure["steps"][0]["reason"] == "non_zero_exit"
+    assert manifest_failure["steps"][0]["output"]["exists"] is False
 
 
 @pytest.mark.integration
@@ -175,6 +192,9 @@ def test_pipeline_subset__skip_existing_and_force(tmp_path: Path, monkeypatch: p
     status_first = get_data.run_pipeline(cfg)
     assert status_first == 0
     assert executions == [2]
+    manifest_first = _load_manifest(cfg)
+    assert manifest_first["steps"][0]["status"] == "success"
+    assert manifest_first["steps"][0]["output"]["exists"] is True
 
     cfg_skip = replace(cfg, skip_existing=True)
     status_skip = get_data.run_pipeline(cfg_skip)
@@ -182,11 +202,20 @@ def test_pipeline_subset__skip_existing_and_force(tmp_path: Path, monkeypatch: p
     assert executions == [2]
     logs = parse_log_lines(stream.getvalue())
     assert any(record.get("event") == "step_skipped_existing" for record in logs)
+    manifest_skip = _load_manifest(cfg_skip)
+    skip_entry = manifest_skip["steps"][0]
+    assert skip_entry["status"] == "skipped"
+    assert skip_entry["reason"] == "skip_existing"
+    assert skip_entry["executed"] is False
+    assert skip_entry["output"]["exists"] is True
 
     cfg_force = replace(cfg, skip_existing=True, force=True)
     status_force = get_data.run_pipeline(cfg_force)
     assert status_force == 0
     assert executions == [2, 2]
+    manifest_force = _load_manifest(cfg_force)
+    assert manifest_force["steps"][0]["status"] == "success"
+    assert manifest_force["steps"][0]["output"]["exists"] is True
 
 
 @pytest.mark.integration
@@ -268,6 +297,11 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
     assert not working.exists()
     sentinel = get_data._failure_sentinel_path(step.expected_output(cfg))
     assert sentinel.exists()
+    manifest_failure = _load_manifest(cfg)
+    failure_entry = manifest_failure["steps"][0]
+    assert failure_entry["status"] == "failed"
+    assert failure_entry["reason"] == "non_zero_exit"
+    assert failure_entry["output"]["exists"] is False
 
     sentinel.unlink()
     second_status = get_data.run_pipeline(cfg)
@@ -275,6 +309,9 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
     final_output = step.expected_output(cfg)
     assert final_output.exists()
     assert attempts["count"] == 2
+    manifest_success = _load_manifest(cfg)
+    assert manifest_success["steps"][0]["status"] == "success"
+    assert manifest_success["steps"][0]["output"]["exists"] is True
     result = pd.read_csv(final_output)
     expected_columns = [
         "assay_chembl_id",
@@ -385,4 +422,14 @@ def test_pipeline_subset__target_postprocess_sidecars(
     }
     for path in sidecars.values():
         assert path.exists()
+    manifest = _load_manifest(cfg)
+    step_entry = manifest["steps"][0]
+    assert step_entry["status"] == "success"
+    assert step_entry["output"]["exists"] is True
+    recorded_sidecars = {item["path"]: item for item in step_entry["sidecars"]}
+    assert len(recorded_sidecars) == 4
+    for path in sidecars.values():
+        meta = recorded_sidecars[str(path)]
+        assert meta["exists"] is True
+        assert meta["checksum_sha256"]
 

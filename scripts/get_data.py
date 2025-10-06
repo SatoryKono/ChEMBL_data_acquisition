@@ -22,6 +22,8 @@ that the pipelines can be executed programmatically from other callers as well.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import logging
 import sys
 import time
@@ -31,7 +33,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Callable, Iterable, IO, Sequence
+from typing import Any, Callable, Iterable, IO, Sequence
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -342,6 +344,8 @@ class StepExecutionResult:
 
     exit_code: int
     executed: bool
+    status: str
+    reason: str | None = None
 
 
 def _temporary_output_path(output_path: Path) -> Path:
@@ -572,10 +576,20 @@ def _run_step(
     input_path = step.required_input(cfg)
     if not input_path.exists():
         _LOGGER.error("step_input_missing", step=step.name, path=str(input_path))
-        return StepExecutionResult(exit_code=1, executed=False)
+        return StepExecutionResult(
+            exit_code=1,
+            executed=False,
+            status="failed",
+            reason="input_missing",
+        )
     if cfg.skip_existing and final_output.exists() and not cfg.force:
         _LOGGER.info("step_skipped_existing", step=step.name, path=str(final_output))
-        return StepExecutionResult(exit_code=0, executed=False)
+        return StepExecutionResult(
+            exit_code=0,
+            executed=False,
+            status="skipped",
+            reason="skip_existing",
+        )
 
     arguments = step.build_arguments(cfg, output_path=working_output)
     _LOGGER.debug("step_arguments", step=step.name, arguments=arguments)
@@ -583,10 +597,22 @@ def _run_step(
         exit_code = step.main(arguments)
     except SystemExit as exc:
         exit_code = _coerce_exit_code(exc.code)
-        return StepExecutionResult(exit_code=exit_code, executed=True)
+        status = "success" if exit_code == 0 else "failed"
+        return StepExecutionResult(
+            exit_code=exit_code,
+            executed=True,
+            status=status,
+            reason="system_exit",
+        )
     except BaseException:
         raise
-    return StepExecutionResult(exit_code=exit_code, executed=True)
+    status = "success" if exit_code == 0 else "failed"
+    return StepExecutionResult(
+        exit_code=exit_code,
+        executed=True,
+        status=status,
+        reason=None if status == "success" else "non_zero_exit",
+    )
 
 
 def _finalize_step_success(
@@ -821,36 +847,270 @@ def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
     _LOGGER.info("parent_catalog_warm_done", elapsed=elapsed, **log_kwargs)
 
 
+def _compute_file_checksum(path: Path, *, chunk_size: int = 65536) -> str:
+    """Return the hexadecimal SHA256 checksum for ``path``."""
+
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while True:
+            chunk = stream.read(chunk_size)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _describe_file(path: Path) -> dict[str, Any]:
+    """Return manifest metadata for ``path`` including checksum when available."""
+
+    info: dict[str, Any] = {"path": str(path)}
+    try:
+        exists = path.exists()
+    except OSError:
+        exists = False
+    if not exists or not path.is_file():
+        info.update({
+            "exists": False,
+            "size_bytes": None,
+            "checksum_sha256": None,
+        })
+        return info
+    try:
+        stat_result = path.stat()
+    except OSError:
+        info.update({
+            "exists": False,
+            "size_bytes": None,
+            "checksum_sha256": None,
+        })
+        return info
+    info.update(
+        {
+            "exists": True,
+            "size_bytes": stat_result.st_size,
+            "checksum_sha256": _compute_file_checksum(path),
+        }
+    )
+    return info
+
+
+def _describe_sidecars(final_output: Path, working_output: Path) -> list[dict[str, Any]]:
+    """Return manifest metadata for sidecars associated with ``final_output``."""
+
+    include_patterns = (
+        f"*{final_output.name}",
+        f"*{final_output.with_suffix('').name}",
+        f"*{working_output.name}",
+        f"*{working_output.with_suffix('').name}",
+    )
+    sidecars = _discover_sidecars(
+        final_output,
+        working_output,
+        include_patterns=include_patterns,
+    )
+    described: list[dict[str, Any]] = []
+    for artefact in sorted(sidecars.values(), key=lambda item: str(item.destination)):
+        candidates: tuple[Path | None, ...] = (
+            artefact.destination,
+            artefact.final_path,
+            artefact.working_path,
+        )
+        selected: Path | None = None
+        for candidate in candidates:
+            if candidate is None:
+                continue
+            if candidate.exists():
+                selected = candidate
+                break
+        if selected is None:
+            selected = artefact.destination
+        described.append(_describe_file(selected))
+    return described
+
+
+def _complete_manifest_entry(
+    entry: dict[str, Any],
+    *,
+    final_output: Path,
+    working_output: Path,
+    started_at: float,
+) -> None:
+    """Populate completion metadata for a manifest ``entry``."""
+
+    entry["completed_at"] = datetime.now(UTC).isoformat()
+    entry["duration_sec"] = round(time.perf_counter() - started_at, 6)
+    entry["output"] = _describe_file(final_output)
+    entry["sidecars"] = _describe_sidecars(final_output, working_output)
+
+
+def _pending_manifest_entry(step: PipelineStep, cfg: PipelineRunConfig) -> dict[str, Any]:
+    """Return a manifest entry for ``step`` that has not been executed."""
+
+    final_output = step.expected_output(cfg)
+    working_output = _temporary_output_path(final_output)
+    entry: dict[str, Any] = {
+        "name": step.name,
+        "status": "pending",
+        "exit_code": None,
+        "executed": False,
+        "reason": None,
+        "started_at": None,
+        "completed_at": None,
+        "duration_sec": None,
+        "output": _describe_file(final_output),
+        "sidecars": _describe_sidecars(final_output, working_output),
+    }
+    return entry
+
+
+def _write_run_manifest(
+    cfg: PipelineRunConfig,
+    *,
+    run_started_at: datetime,
+    run_completed_at: datetime,
+    duration_seconds: float,
+    exit_code: int,
+    steps: Sequence[dict[str, Any]],
+) -> None:
+    """Persist the manifest for the pipeline execution."""
+
+    manifest = {
+        "run": {
+            "started_at": run_started_at.isoformat(),
+            "completed_at": run_completed_at.isoformat(),
+            "duration_sec": round(duration_seconds, 6),
+            "exit_code": exit_code,
+            "status": "success" if exit_code == 0 else "failed",
+            "date_prefix": cfg.date_prefix,
+            "base_path": str(cfg.base_path),
+            "input_dir": str(cfg.input_dir),
+            "output_dir": str(cfg.output_dir),
+            "config_path": str(cfg.config_path),
+            "log_level": cfg.log_level,
+            "limit": cfg.limit,
+            "force": cfg.force,
+            "skip_existing": cfg.skip_existing,
+            "dry_run": cfg.dry_run,
+        },
+        "steps": list(steps),
+    }
+
+    manifest_path = cfg.base_path / "reports" / "run_manifest.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    except OSError as exc:  # pragma: no cover - defensive guard
+        _LOGGER.warning(
+            "manifest_write_failed",
+            path=str(manifest_path),
+            error=str(exc),
+        )
+
+
 def run_pipeline(cfg: PipelineRunConfig) -> int:
     """Execute all configured steps and return the resulting exit status."""
 
     overall_status = 0
+    run_started_at = datetime.now(UTC)
+    run_started_clock = time.perf_counter()
+    manifest_entries: list[dict[str, Any]] = []
+    failed_index: int | None = None
     _LOGGER.info("pipeline_start", stage="pipeline")
-    for step in _PIPELINE_STEPS:
-        _LOGGER.info("step_start", step=step.name)
-        if cfg.dry_run:
-            _LOGGER.info("step_skip_dry_run", step=step.name)
-            continue
+    for index, step in enumerate(_PIPELINE_STEPS):
         final_output = step.expected_output(cfg)
         working_output = _temporary_output_path(final_output)
         sentinel_path = _failure_sentinel_path(final_output)
+        entry: dict[str, Any] = {
+            "name": step.name,
+            "status": "pending",
+            "exit_code": None,
+            "executed": False,
+            "reason": None,
+            "started_at": datetime.now(UTC).isoformat(),
+            "completed_at": None,
+            "duration_sec": None,
+            "output": _describe_file(final_output),
+            "sidecars": _describe_sidecars(final_output, working_output),
+        }
+        manifest_entries.append(entry)
+        _LOGGER.info("step_start", step=step.name)
+        step_started_clock = time.perf_counter()
+
+        if cfg.dry_run:
+            _LOGGER.info("step_skip_dry_run", step=step.name)
+            entry.update(
+                {
+                    "status": "skipped",
+                    "exit_code": 0,
+                    "executed": False,
+                    "reason": "dry_run",
+                }
+            )
+            _complete_manifest_entry(
+                entry,
+                final_output=final_output,
+                working_output=working_output,
+                started_at=step_started_clock,
+            )
+            continue
+
         if working_output.exists():
             _remove_path(working_output)
+
         if step.name == "testitem":
             try:
                 _warm_parent_catalog(cfg)
             except TimeoutError as exc:
                 overall_status = 1
+                entry.update(
+                    {
+                        "status": "failed",
+                        "exit_code": overall_status,
+                        "executed": False,
+                        "reason": "parent_catalog_timeout",
+                    }
+                )
                 _LOGGER.error("parent_catalog_warm_timeout", error=str(exc))
+                _complete_manifest_entry(
+                    entry,
+                    final_output=final_output,
+                    working_output=working_output,
+                    started_at=step_started_clock,
+                )
+                failed_index = index
                 break
             except Exception as exc:  # pragma: no cover - defensive guard
                 overall_status = 1
+                entry.update(
+                    {
+                        "status": "failed",
+                        "exit_code": overall_status,
+                        "executed": False,
+                        "reason": "parent_catalog_error",
+                    }
+                )
                 _LOGGER.error("parent_catalog_warm_error", error=str(exc))
+                _complete_manifest_entry(
+                    entry,
+                    final_output=final_output,
+                    working_output=working_output,
+                    started_at=step_started_clock,
+                )
+                failed_index = index
                 break
+
         try:
             result = _run_step(step, cfg, final_output, working_output)
         except SystemExit as exc:  # pragma: no cover - defensive guard
             exit_code = _coerce_exit_code(exc.code)
+            entry.update(
+                {
+                    "status": "failed",
+                    "exit_code": exit_code,
+                    "executed": True,
+                    "reason": "system_exit",
+                }
+            )
             _LOGGER.error("step_system_exit", step=step.name, exit_code=exit_code)
             _cleanup_failed_step(
                 final_output,
@@ -858,9 +1118,24 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
                 sentinel_path,
                 executed=True,
             )
+            _complete_manifest_entry(
+                entry,
+                final_output=final_output,
+                working_output=working_output,
+                started_at=step_started_clock,
+            )
             overall_status = exit_code
+            failed_index = index
             break
         except BaseException as exc:  # pragma: no cover - defensive guard
+            entry.update(
+                {
+                    "status": "failed",
+                    "exit_code": 1,
+                    "executed": True,
+                    "reason": "exception",
+                }
+            )
             _LOGGER.exception("step_exception", step=step.name, error=str(exc))
             _cleanup_failed_step(
                 final_output,
@@ -868,22 +1143,70 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
                 sentinel_path,
                 executed=True,
             )
+            _complete_manifest_entry(
+                entry,
+                final_output=final_output,
+                working_output=working_output,
+                started_at=step_started_clock,
+            )
             overall_status = 1
+            failed_index = index
             break
+
+        entry.update(
+            {
+                "exit_code": result.exit_code,
+                "executed": result.executed,
+                "reason": result.reason,
+            }
+        )
+
         if result.exit_code != 0:
             _LOGGER.error("step_failed", step=step.name, exit_code=result.exit_code)
+            entry["status"] = result.status
             _cleanup_failed_step(
                 final_output,
                 working_output,
                 sentinel_path,
                 executed=result.executed,
             )
+            _complete_manifest_entry(
+                entry,
+                final_output=final_output,
+                working_output=working_output,
+                started_at=step_started_clock,
+            )
             overall_status = result.exit_code
+            failed_index = index
             break
+
+        entry["status"] = result.status
         _finalize_step_success(final_output, working_output, sentinel_path)
+        _complete_manifest_entry(
+            entry,
+            final_output=final_output,
+            working_output=working_output,
+            started_at=step_started_clock,
+        )
         _LOGGER.info("step_done", step=step.name)
     else:
         _LOGGER.info("workflow_complete")
+
+    if failed_index is not None and failed_index + 1 < len(_PIPELINE_STEPS):
+        for step in _PIPELINE_STEPS[failed_index + 1 :]:
+            manifest_entries.append(_pending_manifest_entry(step, cfg))
+
+    run_completed_at = datetime.now(UTC)
+    duration_seconds = time.perf_counter() - run_started_clock
+    _write_run_manifest(
+        cfg,
+        run_started_at=run_started_at,
+        run_completed_at=run_completed_at,
+        duration_seconds=duration_seconds,
+        exit_code=overall_status,
+        steps=manifest_entries,
+    )
+
     _LOGGER.info("pipeline_done", stage="pipeline", exit_code=overall_status)
     return overall_status
 
