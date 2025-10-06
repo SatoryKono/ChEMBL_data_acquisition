@@ -1447,9 +1447,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         no_reindex_default: object = False if defaults else argparse.SUPPRESS
         normalize_default: object = False if defaults else argparse.SUPPRESS
         option_actions = parser_obj._option_string_actions
-        if "--final-out" not in option_actions:
+        if not any(alias in option_actions for alias in ("--final-out", "--out", "--output")):
             parser_obj.add_argument(
                 "--final-out",
+                "--out",
+                "--output",
                 dest="final_out",
                 type=path_argument,
                 default=final_default,
