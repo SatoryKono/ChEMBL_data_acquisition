@@ -12,6 +12,7 @@
 | `_testitem/molecule_catalog.csv` | Test item | Справочник `molecule_chembl_id`→`parent_molecule_chembl_id` и связанных признаков. |
 | `_testitem/molecule_hierarchy.csv` | Test item | Фолбэк-иерархия родителей при отсутствии данных в API. |
 | `_document/fallback_doi_template.csv` | Document | Шаблон структуры CSV для DOI-фолбэков. |
+| `_taxonomy/taxonomy.csv` | Assay | Карта `tax_id` в нормализованные `assay_group` и `assay_strain`, используемые при обогащении assay. |
 
 ## Правила сопровождения
 
