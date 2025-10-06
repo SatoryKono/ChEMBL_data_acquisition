@@ -340,7 +340,7 @@ def _iter_target_chunk_with_fallback(
     url = f"{base_url}&target_chembl_id__in={','.join(chunk)}"
     try:
         data = client.request_json(url, cfg=cfg, timeout=timeout)
-    except ReadTimeout as exc:
+    except requests.ReadTimeout as exc:
         if len(chunk) <= 1:
             raise exc
         logger.warning(
