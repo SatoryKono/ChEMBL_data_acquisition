@@ -26,10 +26,12 @@ _IGNORED_FILENAMES = {
     "Thumbs.db",
     "desktop.ini",
     ".DS_Store",
+    ".Rhistory",
 }
 
 _IGNORED_DIRNAMES = {"__pycache__"}
 _IGNORED_SUFFIXES = {".pyc", ".pyo"}
+_SHA256_WILDCARD = "*"
 
 
 class DictionaryManifestError(RuntimeError):
@@ -83,6 +85,7 @@ def _compute_sha256(path: Path) -> str:
             path.rglob("*"),
             key=lambda candidate: candidate.relative_to(path).as_posix(),
         )
+        entries: list[tuple[str, Path]] = []
         for child in children:
 
             if child.is_dir():
