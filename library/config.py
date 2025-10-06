@@ -1255,6 +1255,8 @@ class TargetChemblBatchRetryCfg(_BoolModel):
     enable: bool = True
     shrink_factor: float = Field(0.5, gt=0, lt=1)
     min_size: int = Field(1, ge=1)
+    single_timeout_retries: int = Field(2, ge=0)
+    single_timeout_delay: float = Field(0.0, ge=0.0)
 
     @field_validator("enable", mode="before")
     @classmethod

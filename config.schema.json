@@ -1913,6 +1913,18 @@
           "minimum": 1,
           "title": "Min Size",
           "type": "integer"
+        },
+        "single_timeout_retries": {
+          "default": 2,
+          "minimum": 0,
+          "title": "Single Timeout Retries",
+          "type": "integer"
+        },
+        "single_timeout_delay": {
+          "default": 0.0,
+          "minimum": 0.0,
+          "title": "Single Timeout Delay",
+          "type": "number"
         }
       },
       "title": "TargetChemblBatchRetryCfg",
