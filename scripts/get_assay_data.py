@@ -7,7 +7,14 @@ instead of terminating the interpreter to make orchestration easier.
 
 from __future__ import annotations
 
-import sys
+if __package__ in {None, ""}:
+    from _bootstrap import bootstrap_cli
+else:  # pragma: no cover - executed when imported as a package module
+    from ._bootstrap import bootstrap_cli
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+
 from pathlib import Path
 from time import sleep
 
@@ -19,16 +26,6 @@ from itertools import islice
 
 import pandas as pd
 import requests
-
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
-
-from library.utils.bootstrap import ensure_project_root
-
-
-if __package__ in {None, ""}:
-    ensure_project_root()
 
 from library.integration import chembl_library as cl
 from library.pipelines.assay import postprocessing as ap

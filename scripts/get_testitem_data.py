@@ -9,8 +9,15 @@ that still include the misspelled parent identifier column.
 
 from __future__ import annotations
 
+if __package__ in {None, ""}:
+    from _bootstrap import bootstrap_cli
+else:  # pragma: no cover - executed when imported as a package module
+    from ._bootstrap import bootstrap_cli
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+
 import argparse
-import sys
 from pathlib import Path
 from typing import Hashable, MutableMapping, NamedTuple, Sequence, cast
 
@@ -19,19 +26,9 @@ import pandas as pd
 
 # ===== Parameters =====
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT_NAME = "testitem.csv"
 DEFAULT_OUTPUT_STEM = "testitems"
 
-
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from library.utils.bootstrap import ensure_project_root
-
-
-if __package__ in {None, ""}:
-    ensure_project_root()
 
 from library import cli  # noqa: F401 - re-exported for monkeypatching in tests
 from library import io
