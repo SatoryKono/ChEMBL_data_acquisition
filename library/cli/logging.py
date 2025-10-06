@@ -14,7 +14,8 @@ from typing import IO, Iterator
 from ..common.logging_setup import LoggerConfig
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_DEFAULT_LOG_DIR = (_PROJECT_ROOT / "logs").resolve()
+_DEFAULT_BASE_DIR = (_PROJECT_ROOT / "data").resolve()
+_DEFAULT_LOG_DIR = (_DEFAULT_BASE_DIR / "logs").resolve()
 
 
 def _normalize_log_dir(path: Path | str) -> Path:
