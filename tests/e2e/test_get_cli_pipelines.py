@@ -439,6 +439,87 @@ def test_get_activity_cli__workers_and_offset(
 
 
 @pytest.mark.e2e
+def test_get_activity_cli__chembl_identifier_backfill_ratio(
+    tmp_path: Path,
+    cfg: Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_activity_cfg(cfg)
+
+    total_rows = 200
+    activity_ids = [f"ACT{i:05d}" for i in range(total_rows)]
+    chunk_df = pd.DataFrame(
+        {
+            "activity_id": pd.Series(activity_ids, dtype="string"),
+            "activity_chembl_id": pd.Series([pd.NA] * total_rows, dtype="string"),
+            "molecule_chembl_id": pd.Series(
+                [f"CHEMBL{i % 7:05d}" for i in range(total_rows)], dtype="string"
+            ),
+            "assay_chembl_id": pd.Series(
+                [f"ASSAY{i % 11:05d}" for i in range(total_rows)], dtype="string"
+            ),
+            "standard_value": pd.Series(
+                [float(i % 50 + 1) for i in range(total_rows)]
+            ),
+            "standard_units": pd.Series(["nM"] * total_rows, dtype="string"),
+            "standard_type": pd.Series(["IC50"] * total_rows, dtype="string"),
+            "relation": pd.Series(["="] * total_rows, dtype="string"),
+        }
+    )
+
+    input_csv = tmp_path / "activities_input.csv"
+    input_csv.write_text(
+        "activity_id\n" + "\n".join(activity_ids),
+        encoding="utf-8",
+    )
+
+    def _fake_get_activities(chunk_ids, **_kwargs):
+        identifiers = [str(item) for item in chunk_ids]
+        mask = chunk_df["activity_id"].astype(str).isin(identifiers)
+        return chunk_df.loc[mask].reset_index(drop=True)
+
+    output_csv = tmp_path / "out" / "activities.csv"
+
+    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
+
+    written = _install_activity_writer(monkeypatch)
+    logger_stub = _patch_logger(monkeypatch, get_activity_data)
+    _patch_activity_cli(monkeypatch, cfg)
+
+    args = ["--input", str(input_csv), "--final-out", str(output_csv)]
+
+    exit_code = get_activity_data.main(args)
+
+    assert exit_code == 0
+    assert output_csv.exists()
+    assert written, "expected pipeline to emit output"
+
+    written_df = written[0][1]
+    assert "activity_id" in written_df.columns
+    assert "activity_chembl_id" in written_df.columns
+
+    id_series = written_df["activity_id"].astype("string")
+    chembl_series = written_df["activity_chembl_id"].astype("string")
+    id_present = id_series.notna() & id_series.str.strip().ne("")
+    assert int(id_present.sum()) == total_rows
+
+    chembl_present = chembl_series.notna() & chembl_series.str.strip().ne("")
+    filled_ratio = chembl_present[id_present].sum() / id_present.sum()
+    assert filled_ratio >= 0.99
+
+    # Spot-check fallback alignment for a few rows.
+    assert (
+        chembl_series[id_present].iloc[:5].tolist()
+        == id_series[id_present].iloc[:5].tolist()
+    )
+
+    events = [event for _, event, _ in logger_stub.events]
+    assert "activity_pipeline_done" in events
+    assert "activity_pipeline_failed" not in events
+
+
+@pytest.mark.e2e
 def test_get_activity_cli__non_csv_output_path(
     tmp_path: Path,
     activity_resource_dir: Path,
