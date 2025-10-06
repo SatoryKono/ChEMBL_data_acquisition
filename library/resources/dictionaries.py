@@ -24,6 +24,7 @@ __all__ = [
 ]
 
 _MANIFEST_FILENAME = "manifest.yaml"
+_MANIFEST_ALLOWLIST_FILENAME = "manifest.allowlist.yaml"
 _IGNORED_FILENAMES = {
     "thumbs.db",
     "ehthumbs.db",
@@ -90,10 +91,67 @@ def _env_checksum_allowlist() -> Mapping[str, tuple[str, ...]]:
     return result
 
 
-def _iter_additional_checksums(name: str) -> tuple[str, ...]:
+def _load_allowlist(base_dir: Path) -> Mapping[str, tuple[str, ...]]:
+    """Return checksum overrides declared in ``manifest.allowlist.yaml``."""
+
+    return _load_allowlist_cached(str(base_dir.resolve()))
+
+
+@lru_cache(maxsize=None)
+def _load_allowlist_cached(root: str) -> Mapping[str, tuple[str, ...]]:
+    base_dir = Path(root)
+    path = (base_dir / _MANIFEST_ALLOWLIST_FILENAME).resolve()
+    if not path.exists():
+        return {}
+
+    with path.open("r", encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle) or {}
+
+    if not isinstance(payload, Mapping):
+        raise DictionaryManifestError(
+            f"Allowlist {path} must contain a mapping of resource names to checksums"
+        )
+
+    result: dict[str, tuple[str, ...]] = {}
+    for resource_name, checksums in payload.items():
+        entries: list[str] = []
+        if isinstance(checksums, str):
+            candidate_values = [checksums]
+        elif isinstance(checksums, (list, tuple)):
+            candidate_values = list(checksums)
+        else:
+            raise DictionaryManifestError(
+                "Allowlist entries must be strings or lists of strings;"
+                f" got {type(checksums)!r} for resource {resource_name!r}"
+            )
+
+        for idx, candidate in enumerate(candidate_values):
+            if not isinstance(candidate, str):
+                raise DictionaryManifestError(
+                    "Allowlist checksums must be strings;"
+                    f" resource {resource_name!r} has non-string entry at index {idx}"
+                )
+            value = candidate.strip()
+            if value and value not in entries:
+                entries.append(value)
+
+        if entries:
+            result[resource_name] = tuple(entries)
+
+    return result
+
+
+def _iter_additional_checksums(
+    name: str, *, base_dir: Path | None = None
+) -> tuple[str, ...]:
     """Return allowed checksum variants for ``name`` beyond the manifest."""
 
     variants = list(_KNOWN_CHECKSUM_VARIANTS.get(name, ()))
+    if base_dir is not None:
+        allowlist_variants = _load_allowlist(base_dir).get(name, ())
+        for candidate in allowlist_variants:
+            if candidate not in variants:
+                variants.append(candidate)
     env_variants = _env_checksum_allowlist().get(name, ())
     for candidate in env_variants:
         if candidate not in variants:
@@ -257,7 +315,7 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
             raise DictionaryManifestError(
                 f"Resource {name!r} is missing a string or list 'sha256'"
             )
-        for candidate in _iter_additional_checksums(name):  # pragma: no branch
+        for candidate in _iter_additional_checksums(name, base_dir=manifest_root):  # pragma: no branch
             if candidate not in sha256_expected_list:
                 sha256_expected_list.append(candidate)
         sha256_expected = tuple(sha256_expected_list)
