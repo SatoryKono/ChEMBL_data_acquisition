@@ -309,28 +309,32 @@ def test_run_uniprot__doc_quality_reports(
 
     captured: dict[str, object] = {}
 
-    def _fake_analyze(
-        df: pd.DataFrame,
+    def _fake_build_quality(
+        quality_cfg,
         *,
-        table_name: str,
-        destination_dir: Path,
-        sample_rows: int | None,
-        include_columns: Sequence[str] | None,
-        exclude_columns: Sequence[str] | None,
-    ) -> None:
-        captured["table_name"] = table_name
-        captured["destination_dir"] = destination_dir
-        captured["sample_rows"] = sample_rows
-        captured["df"] = df.copy()
+        table_name: Path,
+        destination: Path,
+    ):
+        captured["table_name"] = str(table_name)
+        captured["destination_dir"] = destination
+        captured["sample_rows"] = getattr(quality_cfg, "sample_rows", None)
 
-    monkeypatch.setattr(get_target_data, "analyze_table_quality", _fake_analyze)
+        def _hook(target: Path | pd.DataFrame) -> None:
+            if isinstance(target, Path):
+                captured["df"] = pd.read_csv(target)
+            else:
+                captured["df"] = target.copy()
+
+        return _hook
+
+    monkeypatch.setattr(get_target_data, "build_table_quality_hook", _fake_build_quality)
 
     args = argparse.Namespace(input_csv=input_csv, final_out=output_csv)
 
     exit_code = get_target_data.run_uniprot(cfg, args)
 
     assert exit_code == 0
-    assert captured["table_name"] == output_csv.resolve().stem
+    assert Path(captured["table_name"]).name == output_csv.with_suffix("").name
     assert captured["destination_dir"] == output_csv.resolve().parent
     pd.testing.assert_frame_equal(
         captured["df"], pd.DataFrame({"uniprot_id": ["P12345"]})

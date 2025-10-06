@@ -7,7 +7,7 @@ import random
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 import sys
 
@@ -148,6 +148,84 @@ def disable_network(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr("requests.sessions.Session.request", deny)
 
+
+@pytest.fixture()
+def make_stub_etl_context():
+    def _factory(
+        chembl_factory: Callable[[Any, Any], Any],
+        *,
+        pubmed_factory: Callable[[Any], Any] | None = None,
+        limiter: Any = None,
+        on_close: Callable[[Any], None] | None = None,
+    ) -> type:
+        class _StubContext:
+            def __init__(self, cfg: Config, **_: object) -> None:
+                self.cfg = cfg
+                self._chembl_factory = chembl_factory
+                self._pubmed_factory = pubmed_factory
+                self._limiter = limiter
+                self._chembl_instance: Any | None = None
+                self._chembl_resource: Any | None = None
+                self._pubmed_instance: Any | None = None
+                self.closed = False
+                self.factory_calls = 0
+
+            def __enter__(self) -> "_StubContext":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return self._close(exc_type, exc, tb)
+
+            def _close(self, exc_type, exc, tb) -> bool:
+                if self.closed:
+                    return False
+                self.closed = True
+                if self._chembl_instance is not None:
+                    exit_method = getattr(self._chembl_instance, "__exit__", None)
+                    if callable(exit_method):
+                        exit_method(exc_type, exc, tb)
+                    close_method = getattr(self._chembl_instance, "close", None)
+                    if callable(close_method):
+                        close_method()
+                if self._pubmed_instance is not None:
+                    close_method = getattr(self._pubmed_instance, "close", None)
+                    if callable(close_method):
+                        close_method()
+                if callable(on_close):
+                    on_close(self)
+                return False
+
+            def close(self) -> None:
+                self._close(None, None, None)
+
+            @property
+            def global_limiter(self) -> Any:
+                return self._limiter
+
+            @property
+            def chembl(self) -> Any:
+                if self._chembl_resource is None:
+                    self.factory_calls += 1
+                    client = self._chembl_factory(self.cfg, self._limiter)
+                    self._chembl_instance = client
+                    enter = getattr(client, "__enter__", None)
+                    if callable(enter):
+                        self._chembl_resource = enter()
+                    else:
+                        self._chembl_resource = client
+                return self._chembl_resource
+
+            @property
+            def pubmed(self) -> Any:
+                if self._pubmed_factory is None:
+                    raise AttributeError("pubmed factory not provided")
+                if self._pubmed_instance is None:
+                    self._pubmed_instance = self._pubmed_factory(self.cfg)
+                return self._pubmed_instance
+
+        return _StubContext
+
+    return _factory
 
 @pytest.fixture()
 def cfg() -> Config:

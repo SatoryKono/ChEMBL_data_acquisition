@@ -33,7 +33,7 @@ from library import cli
 from library import io
 from library.clients import ChemblClient
 from library.common.csv_utils import write_csv_chunks_deterministic  # re-exported for tests
-from library.common.rate_limiter import get_global_limiter
+from library.orchestration.context import ETLContext
 from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS, MAX_ACTIVITY_CHUNK_SIZE
 from library.pipelines.common import (
     ChunkedFetchConfig,
@@ -970,22 +970,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         destination=Path(output_path).parent,
     )
 
-    rate_cfg = cfg.rate
-    global_limiter = None
-    if (rate_cfg.global_rps or 0) > 0:
-        global_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
-
     last_error_extra: dict[str, object] | None = None
     last_error_context: dict[str, object] = {}
 
     pref_name_cache: dict[str, str | None] = {}
 
-    with ChemblClient(
-        cfg.api,
-        cfg.retry,
-        cfg.chembl,
-        global_limiter=global_limiter,
-    ) as client:
+    with ETLContext(cfg) as context:
+        client = context.chembl
 
         retry_cfg = cfg.retry
         chunk_failures = ChunkFailureTracker()

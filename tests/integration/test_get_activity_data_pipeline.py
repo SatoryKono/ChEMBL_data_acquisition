@@ -7,7 +7,7 @@ import warnings
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Iterable
+from typing import Any, Callable, Iterable
 
 import pandas as pd
 import pytest
@@ -80,9 +80,20 @@ class _FetchCapture:
     testitems: list[tuple[str, ...]]
 
 
+def _patch_etl_context(
+    monkeypatch: pytest.MonkeyPatch,
+    make_stub_etl_context: Callable[[Callable[[Any, Any], Any]], type],
+    factory: Callable[[Any, Any], Any],
+) -> type:
+    context_cls = make_stub_etl_context(factory)
+    monkeypatch.setattr(get_activity_data, "ETLContext", context_cls)
+    return context_cls
+
+
 def _install_fetch_stubs(
     monkeypatch: pytest.MonkeyPatch,
     frame: pd.DataFrame,
+    make_stub_etl_context: Callable[[Callable[[Any, Any], Any]], type],
     *,
     testitem_frame: pd.DataFrame | None = None,
 ) -> _FetchCapture:
@@ -111,7 +122,7 @@ def _install_fetch_stubs(
         return testitem_frame.iloc[0:0].copy()
 
     monkeypatch.setattr(get_activity_data.cl, "get_testitem", _fake_get_testitem)
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    _patch_etl_context(monkeypatch, make_stub_etl_context, lambda *_: _DummyChemblClient())
     return _FetchCapture(captured_activities, captured_testitems)
 
 
@@ -175,7 +186,7 @@ def _make_args(input_csv: Path, output_csv: Path) -> argparse.Namespace:
 
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
-def test_activity_pipeline__timeout_clamped_when_below_minimum(cfg, tmp_path, monkeypatch):
+def test_activity_pipeline__timeout_clamped_when_below_minimum(cfg, tmp_path, monkeypatch, make_stub_etl_context):
     _configure_cfg(cfg)
     cfg.activity.timeout = get_activity_data.MIN_ACTIVITY_TIMEOUT - 5
 
@@ -207,7 +218,7 @@ def test_activity_pipeline__timeout_clamped_when_below_minimum(cfg, tmp_path, mo
 
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
-def test_activity_pipeline__warns_when_retry_disabled(cfg, tmp_path, monkeypatch):
+def test_activity_pipeline__warns_when_retry_disabled(cfg, tmp_path, monkeypatch, make_stub_etl_context):
     _configure_cfg(cfg)
     cfg.retry.max_attempts = 1
 
@@ -235,7 +246,7 @@ def test_activity_pipeline__warns_when_retry_disabled(cfg, tmp_path, monkeypatch
 
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
-def test_activity_pipeline__warns_when_api_retries_disabled(cfg, tmp_path, monkeypatch):
+def test_activity_pipeline__warns_when_api_retries_disabled(cfg, tmp_path, monkeypatch, make_stub_etl_context):
     _configure_cfg(cfg)
     cfg.api.retries = 0
 
@@ -261,7 +272,7 @@ def test_activity_pipeline__warns_when_api_retries_disabled(cfg, tmp_path, monke
     assert exit_code == 0
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
-def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_path, monkeypatch):
+def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_path, monkeypatch, make_stub_etl_context):
     _configure_cfg(cfg)
     input_csv = _copy_resource(activity_resource_dir, "ids_happy.csv", tmp_path)
     output_csv = tmp_path / "activities.csv"
@@ -277,7 +288,7 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
         },
     )
 
-    captured = _install_fetch_stubs(monkeypatch, chunk_df)
+    captured = _install_fetch_stubs(monkeypatch, chunk_df, make_stub_etl_context)
     written = _install_writer_stub(monkeypatch)
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
@@ -355,7 +366,7 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
 def test_activity_pipeline__extended_columns_dtype_coercion(
-    activity_resource_dir: Path, cfg, tmp_path, monkeypatch
+    activity_resource_dir: Path, cfg, tmp_path, monkeypatch, make_stub_etl_context
 ):
     _configure_cfg(cfg)
     input_csv = _copy_resource(activity_resource_dir, "ids_happy.csv", tmp_path)
@@ -381,7 +392,7 @@ def test_activity_pipeline__extended_columns_dtype_coercion(
         lambda *_: {"ASSAY1": "SRC-ASSAY1", "ASSAY2": "SRC-ASSAY2", "ASSAY3": "SRC-ASSAY3"},
     )
 
-    _install_fetch_stubs(monkeypatch, chunk_df, testitem_frame=testitem_frame)
+    _install_fetch_stubs(monkeypatch, chunk_df, make_stub_etl_context, testitem_frame=testitem_frame)
     written = _install_writer_stub(monkeypatch)
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
@@ -425,7 +436,7 @@ def test_activity_pipeline__extended_columns_dtype_coercion(
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
 def test_activity_pipeline__extended_columns_dtype_coercion(
-    activity_resource_dir: Path, cfg, tmp_path, monkeypatch
+    activity_resource_dir: Path, cfg, tmp_path, monkeypatch, make_stub_etl_context
 ):
     _configure_cfg(cfg)
     input_csv = _copy_resource(activity_resource_dir, "ids_happy.csv", tmp_path)
@@ -451,7 +462,7 @@ def test_activity_pipeline__extended_columns_dtype_coercion(
         lambda *_: {"ASSAY1": "SRC-ASSAY1", "ASSAY2": "SRC-ASSAY2", "ASSAY3": "SRC-ASSAY3"},
     )
 
-    _install_fetch_stubs(monkeypatch, chunk_df, testitem_frame=testitem_frame)
+    _install_fetch_stubs(monkeypatch, chunk_df, make_stub_etl_context, testitem_frame=testitem_frame)
     written = _install_writer_stub(monkeypatch)
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
@@ -494,13 +505,13 @@ def test_activity_pipeline__extended_columns_dtype_coercion(
 
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
-def test_activity_pipeline__missing_column_input(activity_resource_dir: Path, cfg, tmp_path, monkeypatch):
+def test_activity_pipeline__missing_column_input(activity_resource_dir: Path, cfg, tmp_path, monkeypatch, make_stub_etl_context):
     _configure_cfg(cfg)
     input_csv = _copy_resource(activity_resource_dir, "ids_missing_column.csv", tmp_path)
     output_csv = tmp_path / "activities.csv"
 
     # Ensure we never reach the fetch stage when validation of inputs fails.
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    _patch_etl_context(monkeypatch, make_stub_etl_context, lambda *_: _DummyChemblClient())
     monkeypatch.setattr(get_activity_data.cl, "get_activities", lambda *_, **__: pd.DataFrame())
     monkeypatch.setattr(get_activity_data, "_load_assay_src_lookup", lambda *_: {})
     logger_stub = _RecordingLogger()
@@ -520,7 +531,7 @@ def test_activity_pipeline__missing_column_input(activity_resource_dir: Path, cf
 
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
-def test_activity_pipeline__batch_size_clamped(cfg, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_activity_pipeline__batch_size_clamped(cfg, tmp_path: Path, monkeypatch, make_stub_etl_context: pytest.MonkeyPatch):
     _configure_cfg(cfg)
     cfg.activity.batch_size = get_activity_data.MAX_ACTIVITY_CHUNK_SIZE + 5
 
@@ -553,14 +564,14 @@ def test_activity_pipeline__batch_size_clamped(cfg, tmp_path: Path, monkeypatch:
     ]
     assert any(event == "activity_batch_size_clamped" for _, event, _ in warning_events)
 
-def test_activity_pipeline__malformed_values(activity_resource_dir: Path, cfg, tmp_path, monkeypatch):
+def test_activity_pipeline__malformed_values(activity_resource_dir: Path, cfg, tmp_path, monkeypatch, make_stub_etl_context):
     _configure_cfg(cfg)
     input_csv = _copy_resource(activity_resource_dir, "ids_happy.csv", tmp_path)
     output_csv = tmp_path / "activities.csv"
     chunk_df = pd.read_csv(activity_resource_dir / "chunk_malformed.csv")
 
     monkeypatch.setattr(get_activity_data, "_load_assay_src_lookup", lambda *_: {})
-    _install_fetch_stubs(monkeypatch, chunk_df)
+    _install_fetch_stubs(monkeypatch, chunk_df, make_stub_etl_context)
     written = _install_writer_stub(monkeypatch)
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
@@ -589,14 +600,14 @@ def test_activity_pipeline__malformed_values(activity_resource_dir: Path, cfg, t
 
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
-def test_activity_pipeline__deduplicates_identifiers(activity_resource_dir: Path, cfg, tmp_path, monkeypatch):
+def test_activity_pipeline__deduplicates_identifiers(activity_resource_dir: Path, cfg, tmp_path, monkeypatch, make_stub_etl_context):
     _configure_cfg(cfg)
     input_csv = _copy_resource(activity_resource_dir, "ids_duplicates.csv", tmp_path)
     output_csv = tmp_path / "activities.csv"
     chunk_df = pd.read_csv(activity_resource_dir / "chunk_happy.csv")
 
     monkeypatch.setattr(get_activity_data, "_load_assay_src_lookup", lambda *_: {})
-    captured = _install_fetch_stubs(monkeypatch, chunk_df)
+    captured = _install_fetch_stubs(monkeypatch, chunk_df, make_stub_etl_context)
     written = _install_writer_stub(monkeypatch)
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
@@ -622,7 +633,7 @@ def test_activity_pipeline__deduplicates_identifiers(activity_resource_dir: Path
 
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
-def test_activity_pipeline__fills_compound_name_from_pref_name(cfg, tmp_path, monkeypatch):
+def test_activity_pipeline__fills_compound_name_from_pref_name(cfg, tmp_path, monkeypatch, make_stub_etl_context):
     _configure_cfg(cfg)
 
     total_records = 40
@@ -658,7 +669,7 @@ def test_activity_pipeline__fills_compound_name_from_pref_name(cfg, tmp_path, mo
     testitem_df = pd.DataFrame.from_records(pref_name_records)
 
     monkeypatch.setattr(get_activity_data, "_load_assay_src_lookup", lambda *_: {})
-    capture = _install_fetch_stubs(monkeypatch, chunk_df, testitem_frame=testitem_df)
+    capture = _install_fetch_stubs(monkeypatch, chunk_df, make_stub_etl_context, testitem_frame=testitem_df)
     written = _install_writer_stub(monkeypatch)
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
