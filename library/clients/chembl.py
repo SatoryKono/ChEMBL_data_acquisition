@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from itertools import islice
 from dataclasses import dataclass, field
-from time import monotonic, perf_counter
+from time import monotonic
 from types import TracebackType
 from typing import Any, Callable, TypeVar, cast
 from urllib.parse import urlsplit, urlunsplit
@@ -192,11 +192,23 @@ class ChemblClient:
             cached = self.cache.get(cache_key)
             if cached is not None:
                 logger.debug(
-                    "cache_hit", extra={"url": url, "rps": cfg.rps, "status": "hit"}
+                    "cache_hit",
+                    extra={
+                        "url": url,
+                        "rps": cfg.rps,
+                        "status": "hit",
+                        "timeout": read_timeout,
+                    },
                 )
                 return cast(dict[str, Any], cached)
             logger.debug(
-                "cache_miss", extra={"url": url, "rps": cfg.rps, "status": "miss"}
+                "cache_miss",
+                extra={
+                    "url": url,
+                    "rps": cfg.rps,
+                    "status": "miss",
+                    "timeout": read_timeout,
+                },
             )
 
         last_exc: requests.RequestException | ValueError | None = None
@@ -216,12 +228,16 @@ class ChemblClient:
                     event = "request_start" if attempt == 1 else "request_retry"
                 logger.debug(
                     event,
-                    extra={"url": request_url, "attempt": attempt, "rps": cfg.rps},
+                    extra={
+                        "url": request_url,
+                        "attempt": attempt,
+                        "rps": cfg.rps,
+                        "timeout": read_timeout,
+                    },
                 )
                 try:
                     start_time = monotonic()
                     session = self._get_session()
-                    start_time = perf_counter()
                     with session.get(
                         request_url, timeout=(cfg.timeout_connect, read_timeout)
                     ) as response:
@@ -237,11 +253,18 @@ class ChemblClient:
                             raise ValueError(
                                 f"invalid JSON in response from {request_url}"
                             ) from exc
-                        elapsed = getattr(response, "elapsed", None)
-                        if elapsed is not None and hasattr(elapsed, "total_seconds"):
-                            duration = elapsed.total_seconds()
+                        response_elapsed = getattr(response, "elapsed", None)
+                        response_elapsed_seconds: float | None
+                        if (
+                            response_elapsed is not None
+                            and hasattr(response_elapsed, "total_seconds")
+                        ):
+                            response_elapsed_seconds = float(
+                                response_elapsed.total_seconds()
+                            )
                         else:
-                            duration = perf_counter() - start_time
+                            response_elapsed_seconds = None
+                        duration = monotonic() - start_time
                         logger.debug(
                             "request_ok",
                             extra={
@@ -249,6 +272,8 @@ class ChemblClient:
                                 "status": getattr(response, "status_code", None),
                                 "rps": cfg.rps,
                                 "elapsed": duration,
+                                "response_elapsed": response_elapsed_seconds,
+                                "timeout": read_timeout,
                             },
                         )
                         with self._cache_lock:
@@ -267,7 +292,9 @@ class ChemblClient:
                                     "fallback_url": request_url,
                                     "attempt": attempt,
                                     "rps": cfg.rps,
-                                    "elapsed": elapsed,
+                                    "elapsed": duration,
+                                    "response_elapsed": response_elapsed_seconds,
+                                    "timeout": read_timeout,
                                 },
                             )
                         return data
@@ -283,6 +310,7 @@ class ChemblClient:
                                 "rps": cfg.rps,
                                 "elapsed": elapsed,
                                 "attempt": attempt,
+                                "timeout": read_timeout,
                             },
                         )
                         break
@@ -323,6 +351,7 @@ class ChemblClient:
                                 "rps": cfg.rps,
                                 "elapsed": elapsed,
                                 "attempt": attempt,
+                                "timeout": read_timeout,
                             },
                         )
                         break
@@ -343,6 +372,7 @@ class ChemblClient:
                                 "rps": cfg.rps,
                                 "elapsed": elapsed,
                                 "attempt": attempt,
+                                "timeout": read_timeout,
                             },
                         )
                         break

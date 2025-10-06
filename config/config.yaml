@@ -101,16 +101,16 @@ sources:
           limit: null
         chembl:
           column: "document_chembl_id"
-          chunk_size: 50
-          timeout: 30.0
+          chunk_size: 20
+          timeout: 90.0
           limit: null
         all:
           column: "document_chembl_id"
-          chunk_size: 5
+          chunk_size: 20
           sleep: 5.0
           workers: 1
           batch_size: 5
-          timeout: 30.0
+          timeout: 90.0
           limit: null
       target:
         uniprot:
