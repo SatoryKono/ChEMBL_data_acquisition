@@ -56,7 +56,6 @@ from library.integration import chembl_library as cl
 from library.document_defaults import ALL_DEFAULTS, CHEMBL_DEFAULTS, PUBMED_DEFAULTS
 from library.pipelines.document import postprocessing as dp
 from library.postprocessing import document as document_export_postprocessing
-from library.clients import ChemblClient
 from library.cli import (
     LoggerConfig,
     ConfigMetadata,
@@ -96,11 +95,11 @@ from library.reporting.run_manifest import (
 )
 from library.postprocessing.document import preprocess_documents_csv
 from library.pipelines.common import add_pipeline_metadata
-from library.common.rate_limiter import get_global_limiter
 from library.common.sidecar import SidecarErrors
 from library.qa.table_quality import TableQualityProfiler
 from library.schemas import DocumentsSchema, normalize_documents
 from library.schemas.document_spec import DOCUMENT_EXPORT_COLUMNS
+from library.orchestration import ETLContext
 
 
 DEFAULT_INPUT_NAME = "document.csv"
@@ -1000,15 +999,8 @@ def run_chembl(
         ),
     )
 
-    # Configure session for ChEMBL requests
-    rate_cfg = cfg.rate
-    global_limiter = None
-    if (rate_cfg.global_rps or 0) > 0:
-        global_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
-
-    with ChemblClient(
-        cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
-    ) as client:
+    with ETLContext(cfg) as context:
+        client = context.chembl_client
         try:
             ids_iter = io.read_ids(
                 args.input_csv,
@@ -1109,12 +1101,6 @@ def run_all(
     if limit is not None and limit < 0:
         logger.error("invalid_limit", section="document.all", limit=limit)
         return 1
-
-    # Prepare shared session before performing any API calls
-    rate_cfg = cfg.rate
-    global_limiter = None
-    if (rate_cfg.global_rps or 0) > 0:
-        global_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
 
     try:
         ids_iter = io.read_ids(
@@ -1238,13 +1224,11 @@ def run_all(
         fallback_state.metrics.mark_total_candidates(len(fallback_state.mapping))
 
     try:
-        with ChemblClient(
-            cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
-        ) as client:
+        with ETLContext(cfg) as context:
             doc_df = cl.get_documents(
                 ids_for_fetch,
                 cfg=cfg.api,
-                client=client,
+                client=context.chembl_client,
                 chunk_size=getattr(
                     args, "chembl_chunk_size", all_defaults.chunk_size
                 ),

@@ -21,6 +21,7 @@ import pandas as pd
 import pytest
 
 from library.config import Config
+from library.orchestration import ETLContext
 
 
 FROZEN_UTC = datetime(2020, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
@@ -165,3 +166,48 @@ def make_dataframe() -> Iterable[pd.DataFrame]:
 @pytest.fixture()
 def utc_now_iso() -> str:
     return FROZEN_UTC.isoformat()
+
+
+class _StubChemblClient:
+    def __init__(self, registry: dict[str, list["_StubChemblClient"]], *args, **kwargs):
+        self._registry = registry
+        self._registry.setdefault("created", []).append(self)
+        self._registry.setdefault("closed", [])
+        self._closed = False
+
+    def close(self) -> None:
+        if not self._closed:
+            self._registry.setdefault("closed", []).append(self)
+            self._closed = True
+
+    def __enter__(self) -> "_StubChemblClient":  # pragma: no cover - trivial helper
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - trivial helper
+        self.close()
+        return False
+
+
+@pytest.fixture()
+def stub_etl_context() -> "StubETLFactory":
+    registry: dict[str, list[_StubChemblClient]] = {"created": [], "closed": []}
+
+    class StubETLFactory:
+        def __call__(self, cfg: Config, **kwargs: object) -> ETLContext:
+            return ETLContext(
+                cfg,
+                chembl_client_factory=lambda *args, **kw: _StubChemblClient(
+                    registry, *args, **kw
+                ),
+                **kwargs,
+            )
+
+        @property
+        def created_clients(self) -> list[_StubChemblClient]:
+            return registry["created"]
+
+        @property
+        def closed_clients(self) -> list[_StubChemblClient]:
+            return registry["closed"]
+
+    return StubETLFactory()

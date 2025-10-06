@@ -146,7 +146,15 @@ def test_run_chembl__successful_execution(
         return 0
 
     monkeypatch.setattr(get_assay_data.io, "read_ids", fake_read_ids)
-    monkeypatch.setattr(get_assay_data, "ChemblClient", lambda *args, **kwargs: FakeClient())
+    monkeypatch.setattr(
+        get_assay_data,
+        "ETLContext",
+        lambda cfg_arg, **kwargs: ETLContext(
+            cfg_arg,
+            chembl_client_factory=lambda *args, **kw: FakeClient(),
+            **kwargs,
+        ),
+    )
     monkeypatch.setattr(get_assay_data, "ChunkFailureTracker", lambda: tracker)
     monkeypatch.setattr(get_assay_data.cl, "get_assays", lambda *args, **kwargs: pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]}))
     monkeypatch.setattr(get_assay_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline)
@@ -230,7 +238,15 @@ def test_run_chembl__splits_chunk_on_timeout(
         return 0
 
     monkeypatch.setattr(get_assay_data.io, "read_ids", fake_read_ids)
-    monkeypatch.setattr(get_assay_data, "ChemblClient", lambda *_, **__: FakeClient())
+    monkeypatch.setattr(
+        get_assay_data,
+        "ETLContext",
+        lambda cfg_arg, **kwargs: ETLContext(
+            cfg_arg,
+            chembl_client_factory=lambda *args, **kw: FakeClient(),
+            **kwargs,
+        ),
+    )
     monkeypatch.setattr(get_assay_data, "ChunkFailureTracker", lambda: tracker)
     monkeypatch.setattr(get_assay_data.cl, "get_assays", fake_get_assays)
     monkeypatch.setattr(get_assay_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline)

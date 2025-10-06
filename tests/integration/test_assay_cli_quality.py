@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 from library.config import Config
+from library.orchestration import ETLContext
 from library.pipelines.assay.chembl_assay import MAX_ASSAY_CHUNK_SIZE
 from scripts import get_assay_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
@@ -184,7 +185,15 @@ def test_get_assay_cli__clamps_batch_size(
         del path, column, cfg
         return iter(identifiers)
 
-    monkeypatch.setattr(get_assay_data, "ChemblClient", _StubChemblClient)
+    monkeypatch.setattr(
+        get_assay_data,
+        "ETLContext",
+        lambda cfg_arg, **kwargs: ETLContext(
+            cfg_arg,
+            chembl_client_factory=lambda *args, **kw: _StubChemblClient(*args, **kw),
+            **kwargs,
+        ),
+    )
     monkeypatch.setattr(get_assay_data, "ChunkFailureTracker", _StubChunkFailureTracker)
     monkeypatch.setattr(get_assay_data, "prepare_chunked_pipeline", _fake_prepare_chunked_pipeline)
     monkeypatch.setattr(get_assay_data, "run_pipeline", _fake_run_pipeline)
