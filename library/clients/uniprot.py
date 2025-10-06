@@ -48,6 +48,7 @@ _session_local = threading.local()
 _sessions: set[Session] = set()
 _active_requests = 0
 _retry_cfg: RetryCfg = RetryCfg()
+_jitter_provider: Callable[[float], float] | None = None
 
 
 def _close_sessions(sessions: Iterable[Session]) -> None:
@@ -82,10 +83,15 @@ def _session_context() -> Iterator[Session]:
                 _session_condition.notify_all()
 
 
-def init_session(api: ApiCfg, retry: RetryCfg) -> None:
+def init_session(
+    api: ApiCfg,
+    retry: RetryCfg,
+    *,
+    jitter: Callable[[float], float] | None = None,
+) -> None:
     """Initialise the shared HTTP session."""
 
-    global _session_factory, _session_local, _retry_cfg
+    global _session_factory, _session_local, _retry_cfg, _jitter_provider
 
     factory = _make_session_factory(api, retry)
     with _session_condition:
@@ -96,6 +102,7 @@ def init_session(api: ApiCfg, retry: RetryCfg) -> None:
         _session_factory = factory
         _session_local = threading.local()
         _retry_cfg = retry
+        _jitter_provider = jitter if jitter is not None else retry.build_jitter()
 
     _close_sessions(old_sessions)
 
@@ -118,6 +125,7 @@ def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> dict[str, Any]:
     while True:
         with _session_condition:
             retry_cfg = _retry_cfg.model_copy(deep=True)
+            jitter_provider = _jitter_provider
 
         if attempt > retry_cfg.max_attempts:
             break
@@ -144,8 +152,14 @@ def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> dict[str, Any]:
                 ) from exc
 
             backoff = retry_cfg.backoff_factor * (2 ** (attempt - 1))
-            jitter = random.uniform(0, retry_cfg.backoff_factor)
-            delay = backoff + jitter + (cfg.delay if cfg.delay else 0)
+            if retry_cfg.backoff_factor > 0:
+                if jitter_provider is not None:
+                    jitter_value = jitter_provider(retry_cfg.backoff_factor)
+                else:
+                    jitter_value = random.uniform(0, retry_cfg.backoff_factor)
+            else:
+                jitter_value = 0.0
+            delay = backoff + jitter_value + (cfg.delay if cfg.delay else 0)
             if delay > 0:
                 sleep(delay)
 

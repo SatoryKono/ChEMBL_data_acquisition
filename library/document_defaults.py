@@ -27,17 +27,17 @@ PUBMED_DEFAULTS = DocumentModeDefaults(
 
 CHEMBL_DEFAULTS = DocumentModeDefaults(
     column="document_chembl_id",
-    chunk_size=5,
-    timeout=30.0,
+    chunk_size=20,
+    timeout=90.0,
 )
 
 ALL_DEFAULTS = DocumentModeDefaults(
     column="document_chembl_id",
     batch_size=50,
-    chunk_size=5,
+    chunk_size=20,
     sleep=5.0,
     workers=1,
-    timeout=30.0,
+    timeout=90.0,
 )
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -12,7 +13,27 @@ from typing import IO, Iterator
 
 from ..common.logging_setup import LoggerConfig
 
-_DEFAULT_LOG_DIR = Path("logs")
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_DEFAULT_LOG_DIR = (_PROJECT_ROOT / "logs").resolve()
+
+
+def _normalize_log_dir(path: Path | str) -> Path:
+    """Return an absolute path for the requested log directory."""
+
+    candidate = Path(path).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    return (_PROJECT_ROOT / candidate).resolve()
+
+
+def _default_log_dir() -> Path:
+    """Return the default log directory considering environment overrides."""
+
+    env_base = os.environ.get("CHEMBL_DA_BASE_PATH")
+    if env_base:
+        base_dir = _normalize_log_dir(env_base)
+        return (base_dir / "logs").resolve()
+    return _DEFAULT_LOG_DIR
 
 
 def _current_date_str() -> str:
@@ -40,7 +61,10 @@ def setup_cli_logging(
 ) -> Iterator[CLILoggingContext]:
     """Configure logging to mirror output to a file and the console."""
 
-    resolved_dir = Path(log_dir) if log_dir is not None else _DEFAULT_LOG_DIR
+    if log_dir is not None:
+        resolved_dir = _normalize_log_dir(log_dir)
+    else:
+        resolved_dir = _default_log_dir()
     resolved_dir.mkdir(parents=True, exist_ok=True)
 
     if date_str:

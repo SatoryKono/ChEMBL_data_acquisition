@@ -11,11 +11,12 @@ import argparse
 import sys
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence, Callable
+from datetime import datetime, timezone
 
 from functools import partial
 from itertools import islice
 from pathlib import Path
-from time import sleep
+from time import sleep, perf_counter
 
 try:
     from library.utils.bootstrap import ensure_project_root
@@ -66,7 +67,7 @@ from library import io
 from library.clients import ChemblClient
 from library.common.csv_utils import write_csv_chunks_deterministic  # re-exported for tests
 from library.common.rate_limiter import get_global_limiter
-from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS
+from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS, MAX_ACTIVITY_CHUNK_SIZE
 from library.pipelines.common import (
     ChunkedFetchConfig,
     CsvWriterConfig,
@@ -76,12 +77,10 @@ from library.pipelines.common import (
 from library.cli import (
     LoggerConfig,
     positive_int,
-    ConfigMetadata,
 )
 from library.cli import (
     build_parser as base_parser,
 )
-from library.cli.logging import setup_cli_logging
 from library.cli_utils import (
     PipelineError,
     resolve_invocation,
@@ -96,6 +95,7 @@ from library.cli_utils import (
 )
 from library.config import Config, _serialize_paths
 from library.common.log import logger
+from library.cli.logging import setup_cli_logging
 from library.pipelines.common import add_pipeline_metadata
 from library.processing.activity import (
     apply_activity_annotations,
@@ -109,43 +109,8 @@ from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_dela
 
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
+MIN_ACTIVITY_TIMEOUT = 60.0
 PROGRAM_NAME = Path(__file__).with_suffix("").name
-
-_OPTION_UNSET = object()
-
-
-def _option(
-    metadata: ConfigMetadata | None,
-    *,
-    argument: str | None = None,
-    path: str | None = None,
-    value: object = _OPTION_UNSET,
-    default_source: str = "unknown",
-    default_detail: str | None = None,
-) -> dict[str, object]:
-    """Return structured option metadata for pipeline logging."""
-
-    if metadata is not None:
-        if value is _OPTION_UNSET:
-            return metadata.option(
-                argument=argument,
-                path=path,
-                default_source=default_source,
-                default_detail=default_detail,
-            )
-        return metadata.option(
-            argument=argument,
-            path=path,
-            value=value,
-            default_source=default_source,
-            default_detail=default_detail,
-        )
-    actual = None if value is _OPTION_UNSET else value
-    entry: dict[str, object] = {"value": actual, "source": default_source}
-    if default_detail is not None:
-        entry["detail"] = default_detail
-    return entry
-
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
     invocation = getattr(args, "invocation", None)
@@ -198,12 +163,458 @@ _EXTENDED_ACTIVITY_DTYPES: dict[str, str] = {
     "log_value": "Float64",
 }
 
+
+_OUTPUT_ACTIVITY_DROP_COLUMNS: tuple[str, ...] = (
+    "approx_cited_activity",
+    "exact_cited_activity",
+    "higly_correlated_cit",
+    "multmol_assay",
+    "original_activity_approx",
+    "original_activity_exact",
+    "review_doc",
+    "rounded_data_citation",
+    "standard_lower_value",
+    "standard_upper_value",
+    "shuffled_cit",
+)
+
+
+
+def _coerce_series_dtype(series: pd.Series, dtype: str) -> pd.Series:
+    """Return ``series`` converted to ``dtype`` where feasible."""
+
+    try:
+        return series.astype(dtype)
+    except (TypeError, ValueError):
+        if dtype in {"Float64", "Int64"}:
+            coerced = pd.to_numeric(series, errors="coerce")
+            return coerced.astype(dtype)
+        if dtype == "boolean":
+            lowered = series.astype("string").str.lower()
+            truthy = lowered.isin({"true", "1", "yes"})
+            falsy = lowered.isin({"false", "0", "no"})
+            result = pd.Series(pd.NA, index=series.index, dtype="boolean")
+            result.loc[truthy] = True
+            result.loc[falsy] = False
+            return result
+        return series.astype("string")
+
+
+def _extract_adapter_retry_metadata(
+    session: requests.Session, base_url: str
+) -> dict[str, object]:
+    """Return retry configuration extracted from ``session`` for ``base_url``.
+
+    The helper is defensive to accommodate test doubles that expose partial
+    ``requests.Session`` interfaces. Only basic numeric attributes from the
+    underlying :class:`urllib3.util.retry.Retry` instance are returned so the
+    payload is JSON/log friendly.
+    """
+
+    adapters: list[requests.adapters.HTTPAdapter] = []
+    try:
+        adapters.append(session.get_adapter(base_url))
+    except Exception:  # pragma: no cover - defensive for alternative sessions
+        pass
+    try:
+        adapters.append(session.get_adapter("https://"))
+    except Exception:  # pragma: no cover - defensive for alternative sessions
+        pass
+    metadata: dict[str, object] = {}
+    for adapter in adapters:
+        if adapter is None:
+            continue
+        retries = getattr(adapter, "max_retries", None)
+        if retries is None:
+            continue
+        for attr, key in (
+            ("total", "adapter_total"),
+            ("connect", "adapter_connect"),
+            ("read", "adapter_read"),
+            ("status", "adapter_status"),
+        ):
+            value = getattr(retries, attr, None)
+            if value is not None:
+                metadata[key] = value
+        backoff = getattr(retries, "backoff_factor", None)
+        if backoff is not None:
+            metadata["adapter_backoff_factor"] = backoff
+        # Prefer the first adapter that exposes retry settings.
+        if metadata:
+            break
+    return metadata
+
+
+def _gather_http_diagnostics(cfg: Config, client: object) -> dict[str, object]:
+    """Collect HTTP-related configuration values for logging and errors."""
+
+    diagnostics: dict[str, object] = {
+        "activity_batch_size": getattr(cfg.activity, "batch_size", None),
+        "activity_timeout": getattr(cfg.activity, "timeout", None),
+        "api_timeout_read": getattr(cfg.api, "timeout_read", None),
+        "api_retries": getattr(cfg.api, "retries", None),
+        "api_backoff_factor": getattr(cfg.api, "backoff_factor", None),
+        "retry_max_attempts": getattr(cfg.retry, "max_attempts", None),
+        "retry_backoff_factor": getattr(cfg.retry, "backoff_factor", None),
+    }
+
+    session_obj = getattr(client, "session", None)
+    if isinstance(session_obj, requests.Session):
+        adapter_meta = _extract_adapter_retry_metadata(session_obj, cfg.api.chembl_base)
+        diagnostics.update(adapter_meta)
+
+    clean: dict[str, object] = {}
+    for key, value in diagnostics.items():
+        if value is None:
+            continue
+        clean[key] = value
+    return clean
+
+def _compute_output_statistics(output_path: Path, cfg: Config) -> tuple[int | None, float | None]:
+    """Return row count and null ratio for the final pipeline output."""
+
+    if not output_path.exists():
+        return None, None
+
+    read_kwargs = {
+        "sep": getattr(cfg.io, "csv_sep", ","),
+        "encoding": getattr(cfg.io, "csv_encoding", "utf-8"),
+    }
+
+    chunk_size = getattr(cfg.io, "csv_chunksize", None)
+    total_rows = 0
+    total_cells = 0
+    total_nulls = 0
+
+    try:
+        if chunk_size and chunk_size > 0:
+            reader = pd.read_csv(output_path, chunksize=int(chunk_size), **read_kwargs)
+            for chunk in reader:
+                rows = len(chunk)
+                total_rows += rows
+                mask = chunk.isna()
+                total_cells += mask.size
+                total_nulls += int(mask.values.sum())
+        else:
+            frame = pd.read_csv(output_path, **read_kwargs)
+            total_rows = len(frame)
+            if frame.size:
+                mask = frame.isna()
+                total_cells = mask.size
+                total_nulls = int(mask.values.sum())
+            else:
+                total_cells = 0
+    except pd.errors.EmptyDataError:
+        return 0, 0.0
+    except FileNotFoundError:
+        return None, None
+    except Exception as exc:  # pragma: no cover - defensive for malformed CSVs
+        logger.warning(
+            f"Could not compute summary statistics for '{output_path}': {exc}"
+        )
+        return None, None
+
+    if total_cells == 0:
+        null_fraction = 0.0
+    else:
+        null_fraction = total_nulls / total_cells
+
+    return total_rows, float(null_fraction)
+
+
+def _emit_completion_message(
+    *,
+    cfg: Config,
+    output_path: Path | None,
+    processed_rows: int | None,
+    duration_s: float,
+    mode: str,
+) -> None:
+    """Log a human-readable completion summary for the pipeline."""
+
+    resolved_rows = processed_rows if processed_rows is not None else 0
+    null_fraction_value: float | None = None
+
+    if output_path is not None:
+        stats_rows, stats_null_fraction = _compute_output_statistics(output_path, cfg)
+        if stats_rows is not None:
+            resolved_rows = stats_rows
+        if stats_null_fraction is not None:
+            null_fraction_value = stats_null_fraction
+
+    null_fraction_display = (
+        f"{null_fraction_value:.6f}" if null_fraction_value is not None else "nan"
+    )
+
+    message = (
+        "Completed get_activity_data pipeline: "
+        f"rows={resolved_rows}, null_fraction={null_fraction_display}, "
+        f"duration={duration_s:.3f}s, mode={mode}, "
+        f"output={str(output_path) if output_path is not None else 'n/a'}"
+    )
+    logger.info(message)
+
 _EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series | None]] = {
     "activity_chembl_id": lambda df: df.get("activity_id"),
     "compound_name": lambda df: df.get("molecule_pref_name"),
     "log_value": lambda df: df.get("pchembl_value"),
-    "salt_chembl_id": lambda df: df.get("molecule_chembl_id"),
 }
+
+
+def _coerce_extended_series(
+    series: pd.Series,
+    dtype: str,
+    column: str,
+) -> tuple[pd.Series, pd.Series]:
+    """Return ``series`` coerced to ``dtype`` and a mask of conversion failures."""
+
+    if not isinstance(series, pd.Series):
+        series = pd.Series(series)
+
+    if dtype == "string":
+        converted = series.astype(pd.StringDtype())
+        failures = pd.Series(False, index=converted.index)
+        return converted, failures
+
+    if dtype == "Float64":
+        numeric = pd.to_numeric(series, errors="coerce")
+        converted = pd.Series(pd.array(numeric, dtype="Float64"), index=series.index)
+        failures = series.notna() & converted.isna()
+        return converted, failures
+
+    if dtype == "Int64":
+        numeric = pd.to_numeric(series, errors="coerce")
+        converted_float = pd.Series(pd.array(numeric, dtype="Float64"), index=series.index)
+        failures = series.notna() & converted_float.isna()
+        non_integral_mask = converted_float.notna() & converted_float.ne(converted_float.round())
+        if non_integral_mask.any():
+            converted_float.loc[non_integral_mask] = pd.NA
+            failures = failures | non_integral_mask
+        try:
+            converted = converted_float.astype("Int64")
+        except (TypeError, ValueError):
+            converted = pd.Series(pd.NA, index=series.index, dtype="Int64")
+            failures = series.notna()
+        return converted, failures
+
+    if dtype == "boolean":
+        try:
+            converted = series.astype("boolean")
+            failures = series.notna() & converted.isna()
+        except (TypeError, ValueError):
+            converted = pd.Series(pd.NA, index=series.index, dtype="boolean")
+            failures = series.notna()
+        return converted, failures
+
+    try:
+        converted = series.astype(dtype)
+        failures = series.notna() & converted.isna()
+    except (TypeError, ValueError):
+        converted = pd.Series(pd.NA, index=series.index, dtype=dtype)
+        failures = series.notna()
+    return converted, failures
+
+
+ 
+def _string_like_missing(series: pd.Series) -> pd.Series:
+    """Return a boolean mask for ``series`` treating blanks as missing."""
+
+    mask = series.isna()
+    if pd.api.types.is_string_dtype(series) or series.dtype == "object":
+        string_values = series.astype("string")
+        mask = mask | string_values.str.strip().fillna("").eq("")
+    return mask
+ 
+ 
+def _string_blank_mask(series: pd.Series) -> pd.Series:
+    """Return mask of entries that are null or contain only whitespace."""
+
+    values = series.astype("string")
+    stripped = values.str.strip()
+    return values.isna() | stripped.fillna("").eq("")
+
+
+def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
+    """Return mapping of assay identifiers to ``src_assay_id`` values."""
+
+    if dictionary_dir is None:
+        return {}
+
+    candidate = Path(dictionary_dir) / "_assay" / "assay.csv"
+    try:
+        frame = pd.read_csv(
+            candidate,
+            usecols=["assay_chembl_id", "src_assay_id"],
+            dtype="string",
+        )
+    except FileNotFoundError:
+        logger.warning(
+            f"Assay lookup file '{candidate}' was not found; src_assay_id enrichment will be skipped."
+        )
+        return {}
+    except pd.errors.EmptyDataError:
+        logger.warning(
+            f"Assay lookup file '{candidate}' is empty; src_assay_id enrichment will be skipped."
+        )
+        return {}
+    except ValueError as exc:
+        logger.warning(
+            f"Assay lookup file '{candidate}' has invalid columns and cannot be read: {exc}"
+        )
+        return {}
+    except OSError as exc:
+        logger.warning(
+            f"Reading assay lookup file '{candidate}' failed due to an OS error: {exc}"
+        )
+        return {}
+
+    if frame.empty:
+        return {}
+
+    cleaned = frame.dropna(subset=["assay_chembl_id", "src_assay_id"])
+    if cleaned.empty:
+        return {}
+
+    cleaned = cleaned.assign(
+        assay_chembl_id=cleaned["assay_chembl_id"].str.strip(),
+        src_assay_id=cleaned["src_assay_id"].str.strip(),
+    )
+
+    cleaned = cleaned[cleaned["assay_chembl_id"].ne("") & cleaned["src_assay_id"].ne("")]
+    if cleaned.empty:
+        return {}
+
+    return {
+        str(assay_id): str(src_id)
+        for assay_id, src_id in cleaned[["assay_chembl_id", "src_assay_id"]]
+        .itertuples(index=False, name=None)
+    }
+
+
+def _ensure_src_assay_id(
+    frame: pd.DataFrame, *, lookup: Mapping[str, str]
+) -> pd.DataFrame:
+    """Populate ``src_assay_id`` using ``lookup`` when missing."""
+
+    if "src_assay_id" not in frame.columns and "assay_chembl_id" not in frame.columns:
+        return frame
+
+    result = frame.copy()
+
+    if "src_assay_id" in result.columns:
+        try:
+            result["src_assay_id"] = result["src_assay_id"].astype("string")
+        except TypeError:
+            result["src_assay_id"] = result["src_assay_id"].astype("string")
+    else:
+        result["src_assay_id"] = pd.Series(pd.NA, index=result.index, dtype="string")
+
+    if not lookup or result.empty or "assay_chembl_id" not in result.columns:
+        return result
+
+    assay_ids = result["assay_chembl_id"].astype("string")
+    missing_mask = _string_like_missing(result["src_assay_id"])
+    if not missing_mask.any():
+        return result
+
+    normalized_ids = assay_ids.where(~assay_ids.isna(), None).astype(object)
+
+    def _resolve(value: object) -> str | None:
+        if value is None:
+            return None
+        return lookup.get(str(value))
+
+    mapped = normalized_ids.map(_resolve)
+    available = missing_mask & mapped.notna()
+    if not available.any():
+        return result
+
+    result.loc[available, "src_assay_id"] = mapped[available].astype("string")
+    return result
+
+
+def _ensure_molecule_pref_name(
+    frame: pd.DataFrame,
+    *,
+    cfg: Config,
+    client: ChemblClient,
+    cache: dict[str, str | None],
+) -> pd.DataFrame:
+    """Populate ``molecule_pref_name`` via the test item API when missing."""
+
+    if frame.empty or "molecule_chembl_id" not in frame.columns:
+        return frame
+
+    result = frame.copy()
+
+    if "molecule_pref_name" in result.columns:
+        missing_mask = _string_blank_mask(result["molecule_pref_name"])
+    else:
+        result["molecule_pref_name"] = pd.Series(pd.NA, index=result.index, dtype="string")
+        missing_mask = pd.Series(True, index=result.index, dtype="boolean")
+
+    if not missing_mask.any():
+        return result
+
+    molecule_ids = (
+        result.loc[missing_mask, "molecule_chembl_id"].astype("string").str.strip()
+    )
+    molecule_ids = molecule_ids[molecule_ids != ""]
+    unique_ids = tuple(dict.fromkeys(molecule_ids.dropna().tolist()))
+
+    if not unique_ids:
+        return result
+
+    pending: list[str] = []
+    for identifier in unique_ids:
+        if identifier not in cache:
+            pending.append(identifier)
+
+    if pending:
+        fields = list(cfg.testitem.fields)
+        for column in ("molecule_chembl_id", "pref_name"):
+            if column not in fields:
+                fields.append(column)
+        try:
+            lookup = cl.get_testitem(
+                pending,
+                cfg=cfg.api,
+                client=client,
+                chunk_size=cfg.testitem.batch_size,
+                timeout=cfg.testitem.timeout,
+                fields=fields,
+                page_limit=cfg.testitem.request_limit,
+            )
+        except (requests.RequestException, ValueError, AttributeError) as exc:
+            logger.warning(
+                f"Failed to fetch molecule preferred names for {len(pending)} identifiers: {exc}"
+            )
+            lookup = pd.DataFrame(columns=["molecule_chembl_id", "pref_name"])
+        if not lookup.empty and {"molecule_chembl_id", "pref_name"}.issubset(lookup.columns):
+            mapped = (
+                lookup[["molecule_chembl_id", "pref_name"]]
+                .dropna(subset=["molecule_chembl_id"])
+                .astype({"molecule_chembl_id": "string"})
+            )
+            for chembl_id, pref_name in mapped.itertuples(index=False):
+                cache[str(chembl_id)] = str(pref_name) if pd.notna(pref_name) else None
+        for identifier in pending:
+            cache.setdefault(identifier, None)
+
+    fill_map = {key: value for key, value in cache.items() if value}
+    if not fill_map:
+        return result
+
+    replacements = molecule_ids.map(fill_map)
+    available = replacements.notna()
+    if available.any():
+        result.loc[molecule_ids.index[available], "molecule_pref_name"] = (
+            replacements[available].astype("string")
+        )
+
+    return result
+ 
+ 
 
 
 def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
@@ -216,18 +627,72 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
                 result[column] = pd.Series([], dtype=dtype)
         return result
 
+    if "activity_id" in result.columns:
+        if "activity_chembl_id" in result.columns:
+            missing_id = _string_like_missing(result["activity_id"])
+            if missing_id.any():
+                result.loc[missing_id, "activity_id"] = result.loc[
+                    missing_id, "activity_chembl_id"
+                ]
+        else:
+            missing_id = _string_like_missing(result["activity_id"])
+            if missing_id.any():
+                # Preserve dtype by assigning NA values without coercing existing entries.
+                result.loc[missing_id, "activity_id"] = pd.NA
+    elif "activity_chembl_id" in result.columns:
+        result["activity_id"] = result["activity_chembl_id"].copy()
+
     for column, dtype in _EXTENDED_ACTIVITY_DTYPES.items():
-        if column in result.columns:
-            continue
         fallback = _EXTENDED_ACTIVITY_FALLBACKS.get(column)
+        if column in result.columns:
+            coerced_existing, _ = _coerce_extended_series(result[column], dtype, column)
+            result[column] = coerced_existing
+            if fallback is not None:
+                if dtype in {"Float64", "Int64", "boolean"}:
+                    missing_mask = coerced_existing.isna()
+                else:
+                    missing_mask = _string_like_missing(coerced_existing)
+                if missing_mask.any():
+                    candidate = fallback(result)
+                    if candidate is not None:
+                        aligned = candidate.reindex(result.index)
+                        filled = _coerce_series_dtype(aligned, dtype)
+                        current = result[column]
+                        # ``Series.mask`` preserves the extension dtype and avoids
+                        # implicit "object" upcasts that would otherwise trigger
+                        # ``FutureWarning`` about incompatible assignments (see
+                        # pandas GH-53964).
+                        result[column] = current.mask(missing_mask, filled)
+                        coerced_fallback, fallback_failures = _coerce_extended_series(
+                            aligned, dtype, column
+                        )
+                        failure_subset = fallback_failures & missing_mask
+                        if failure_subset.any():
+                            logger.debug(
+                                "activity_extended_fallback_conversion_failed",
+                                column=column,
+                                dtype=dtype,
+                                rows=int(failure_subset.sum()),
+                                mode="existing",
+                            )
+                        result.loc[missing_mask, column] = coerced_fallback.loc[missing_mask]
+            continue
         if fallback is not None:
             candidate = fallback(result)
             if candidate is not None:
                 aligned = candidate.reindex(result.index)
-                try:
-                    result[column] = aligned.astype(dtype)
-                except TypeError:
-                    result[column] = aligned.astype("string")
+                coerced_fallback, fallback_failures = _coerce_extended_series(
+                    aligned, dtype, column
+                )
+                if fallback_failures.any():
+                    logger.debug(
+                        "activity_extended_fallback_conversion_failed",
+                        column=column,
+                        dtype=dtype,
+                        rows=int(fallback_failures.sum()),
+                        mode="new_column",
+                    )
+                result[column] = coerced_fallback
                 continue
         if dtype == "boolean":
             filler = pd.Series(pd.NA, index=result.index, dtype="boolean")
@@ -239,6 +704,35 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
             filler = pd.Series(pd.NA, index=result.index, dtype=dtype)
         result[column] = filler
     return result
+
+
+def _filter_activity_output_columns(
+    frame: pd.DataFrame,
+    *,
+    column_order: Sequence[str] | None = None,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Return ``frame`` restricted to the allowed output columns."""
+
+    drop_list = list(_OUTPUT_ACTIVITY_DROP_COLUMNS)
+    dropped_columns = [column for column in drop_list if column in frame.columns]
+    filtered = frame.drop(columns=drop_list, errors="ignore")
+
+    if column_order is None:
+        allowed_head: list[str] = [
+            column for column in filtered.columns if column not in _OUTPUT_ACTIVITY_DROP_COLUMNS
+        ]
+    else:
+        allowed_head = [
+            column
+            for column in column_order
+            if column in filtered.columns and column not in _OUTPUT_ACTIVITY_DROP_COLUMNS
+        ]
+
+    extras = [column for column in filtered.columns if column not in allowed_head]
+    if allowed_head or extras:
+        filtered = filtered.loc[:, allowed_head + extras]
+
+    return filtered, dropped_columns
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -267,7 +761,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """
     limit = cfg.activity.limit
     if limit is not None and limit < 0:
-        logger.error("invalid_limit", section="activity.limit", limit=limit)
+        logger.error(
+            f"Configuration error: activity.limit must be non-negative but was set to {limit}."
+        )
         return 1
 
     offset = getattr(args, "offset", 0)
@@ -277,74 +773,68 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if workers_override is not None
         else getattr(cfg.activity, "workers", 1)
     )
-    output_path = Path(
-        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    )
+    final_out_attr = getattr(args, "final_out", None)
+    if final_out_attr in (None, argparse.SUPPRESS):
+        legacy_output = getattr(args, "output_csv", None)
+        if legacy_output not in (None, argparse.SUPPRESS):
+            output_path = Path(legacy_output)
+            if not isinstance(legacy_output, Path):
+                args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+        else:
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+    else:
+        output_path = Path(final_out_attr)
+        if not isinstance(final_out_attr, Path):
+            args.final_out = output_path
+        setattr(args, "output_csv", output_path)
 
-    metadata_obj = getattr(args, "_config_metadata", None)
-    if not isinstance(metadata_obj, ConfigMetadata):
-        metadata_obj = None
+    start_time = perf_counter()
 
-    output_source = "cli" if getattr(args, "output_csv", None) else "derived"
     logger.info(
         "activity_pipeline_start",
-        input=_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
-        output=_option(
-            metadata_obj,
-            value=str(output_path),
-            default_source=output_source,
-        ),
-        limit=_option(
-            metadata_obj,
-            argument="limit",
-            path="sources.chembl.pipelines.activity.limit",
-            value=limit,
-        ),
-        offset=_option(
-            metadata_obj,
-            argument="offset",
-            path="sources.chembl.pipelines.activity.offset",
-            value=offset,
-        ),
-        batch_size=_option(
-            metadata_obj,
-            argument="batch_size",
-            path="sources.chembl.pipelines.activity.batch_size",
-            value=cfg.activity.batch_size,
-        ),
-        timeout=_option(
-            metadata_obj,
-            argument="timeout",
-            path="sources.chembl.pipelines.activity.timeout",
-            value=cfg.activity.timeout,
-        ),
-        dry_run=_option(
-            metadata_obj,
-            argument="dry_run",
-            path="sources.chembl.pipelines.activity.dry_run",
-            value=cfg.activity.dry_run,
-            default_source="cli",
-        ),
-        workers=_option(
-            metadata_obj,
-            argument="workers",
-            path="sources.chembl.pipelines.activity.workers",
-            value=configured_workers,
-        ),
+        input=str(args.input_csv),
+        output=str(output_path),
+        workers=configured_workers,
+        limit=limit,
+        offset=offset,
+    )
+    logger.info(
+        f"Starting activity pipeline with input '{args.input_csv}' and output '{output_path}'."
+    )
+    logger.info(
+        f"Loaded config: limit={limit}, offset={offset}, batch_size={cfg.activity.batch_size}, "
+        f"timeout={cfg.activity.timeout}, dry_run={cfg.activity.dry_run}, workers={configured_workers}."
     )
 
     if cfg.activity.dry_run:
         expected = limit if limit is not None else 0
-        logger.info("dry_run", limit=expected)
+        logger.info("dry_run", limit=limit)
+        logger.info(
+            f"Dry-run mode enabled; pipeline would process up to {expected} identifiers before exiting."
+        )
+        _emit_completion_message(
+            cfg=cfg,
+            output_path=output_path,
+            processed_rows=0,
+            duration_s=perf_counter() - start_time,
+            mode="dry_run",
+        )
         return 0
 
+    logger.info(f"Reading input identifiers from '{args.input_csv}'.")
     try:
         ids_iter = io.read_ids(args.input_csv, column=cfg.activity.column, cfg=cfg.io)
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
             "read_fail",
+            input=str(args.input_csv),
             error=str(exc),
-            path=str(args.input_csv),
+        )
+        logger.error(
+            f"Failed to read identifiers from '{args.input_csv}': {exc}"
         )
         return 1
 
@@ -401,6 +891,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         ]
         if not missing:
             return frame
+        logger.warning(
+            f"Missing required activity columns detected: {', '.join(missing)}. Placeholder values will be inserted before validation."
+        )
         fillers: dict[str, pd.Series] = {}
         for column in missing:
             dtype_info = _ACTIVITY_REQUIRED_DTYPES.get(column)
@@ -416,6 +909,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return frame.assign(**fillers)
 
     available_columns: set[str] = set()
+    assay_src_lookup = _load_assay_src_lookup(cfg.resources.dictionary_dir)
 
     def _record_columns(frame: pd.DataFrame) -> pd.DataFrame:
         available_columns.update(frame.columns)
@@ -423,6 +917,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     metadata_hooks = [
         _ensure_required_activity_columns,
+        partial(_ensure_src_assay_id, lookup=assay_src_lookup),
         _ensure_extended_activity_columns,
         normalize_activities,
         add_pipeline_metadata,
@@ -443,14 +938,37 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     ) -> Path:
         sort_columns = list(key_cols) or sorted(col_order)
         column_order = list(col_order)
-        filtered_order = [
-            column for column in column_order if column in available_columns
+        filtered_order = [column for column in column_order if column in available_columns]
+
+        drop_candidates = [
+            column
+            for column in _OUTPUT_ACTIVITY_DROP_COLUMNS
+            if column in available_columns
         ]
+        if drop_candidates:
+            logger.info(
+                "Dropped columns from output.activity_*: %s",
+                ", ".join(drop_candidates),
+            )
+
+        whitelist_order = [
+            column for column in filtered_order if column not in _OUTPUT_ACTIVITY_DROP_COLUMNS
+        ]
+
+        def _apply_whitelist(chunk: pd.DataFrame) -> pd.DataFrame:
+            filtered_chunk, _ = _filter_activity_output_columns(
+                chunk,
+                column_order=filtered_order,
+            )
+            return filtered_chunk
+
+        filtered_chunks = (_apply_whitelist(chunk) for chunk in chunks)
+
         output_path = write_csv_chunks_deterministic(
-            chunks,
+            filtered_chunks,
             destination,
             key_cols=sort_columns,
-            col_order=filtered_order,
+            col_order=whitelist_order,
             chunksize=cfg.io.csv_chunksize,
             sort_chunksize=cfg.io.csv_chunksize,
             sep=cfg.io.csv_sep,
@@ -471,7 +989,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     encoding=cfg.io.csv_encoding,
                 )
             except Exception:  # pragma: no cover - defensive for patched writers
-                logger.debug("io_write_csv_stub_failed")
+                logger.debug(
+                    "Fallback CSV writer stub raised an exception; deterministic export succeeded and execution will continue."
+                )
         return path_obj
 
 
@@ -499,6 +1019,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     last_error_extra: dict[str, object] | None = None
     last_error_context: dict[str, object] = {}
 
+    pref_name_cache: dict[str, str | None] = {}
+
     with ChemblClient(
         cfg.api,
         cfg.retry,
@@ -508,59 +1030,123 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         retry_cfg = cfg.retry
         chunk_failures = ChunkFailureTracker()
+        http_diagnostics = _gather_http_diagnostics(cfg, client)
+        if http_diagnostics:
+            logger.info("activity_http_config", **http_diagnostics)
 
         def fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
             nonlocal last_error_extra, last_error_context
-            attempts = max(1, retry_cfg.max_attempts)
-            for attempt in range(1, attempts + 1):
-                try:
-                    result = cl.get_activities(
-                        chunk_ids,
-                        cfg=cfg.api,
-                        client=client,
-                        chunk_size=cfg.activity.batch_size,
-                        timeout=cfg.activity.timeout,
-                        **extra_kwargs,
-                    )
-                except (requests.RequestException, ValueError) as exc:
-                    error_message = str(exc)
-                    context = {
-                        "chunk_ids": list(chunk_ids),
-                        "chunk_size": len(chunk_ids),
-                        "attempt": attempt,
-                        "max_attempts": attempts,
-                        "batch_size": cfg.activity.batch_size,
-                        "timeout": cfg.activity.timeout,
-                    }
-                    log_context = {k: v for k, v in context.items() if k != "chunk_ids"}
-                    last_error_extra = {
-                        "msg": error_message,
-                        "chunk_ids": context["chunk_ids"],
-                    }
-                    last_error_context = dict(log_context)
-                    if attempt >= attempts:
-                        logger.error(
-                            "activity_fetch_failed",
-                            extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
-                            error=error_message,
+
+            timeout_error_types = (
+                requests.Timeout,
+                requests.ReadTimeout,
+                requests.ConnectTimeout,
+                requests.exceptions.RetryError,
+            )
+
+            def _is_timeout_error(exc: Exception) -> bool:
+                if isinstance(exc, timeout_error_types):
+                    return True
+                message = str(exc).strip().lower()
+                if not message:
+                    return False
+                return "timed out" in message or "timeout" in message
+
+            def _fetch(ids: Sequence[str], *, depth: int = 0) -> pd.DataFrame:
+                nonlocal last_error_extra, last_error_context
+
+                attempts = max(1, retry_cfg.max_attempts)
+                id_list = [str(identifier) for identifier in ids]
+
+                for attempt in range(1, attempts + 1):
+                    try:
+                        result = cl.get_activities(
+                            id_list,
+                            cfg=cfg.api,
+                            client=client,
+                            chunk_size=cfg.activity.batch_size,
+                            timeout=cfg.activity.timeout,
+                            **extra_kwargs,
+                        )
+                    except (requests.RequestException, ValueError) as exc:
+                        error_message = str(exc)
+                        context = {
+                            "chunk_ids": list(id_list),
+                            "chunk_size": len(id_list),
+                            "attempt": attempt,
+                            "max_attempts": attempts,
+                            "batch_size": cfg.activity.batch_size,
+                            "timeout": cfg.activity.timeout,
+                        }
+                        for key in (
+                            "adapter_total",
+                            "api_retries",
+                            "retry_max_attempts",
+                            "activity_timeout",
+                            "api_timeout_read",
+                        ):
+                            if key in http_diagnostics:
+                                context[key] = http_diagnostics[key]
+                        log_context = {
+                            key: value for key, value in context.items() if key != "chunk_ids"
+                        }
+                        last_error_extra = {
+                            "msg": error_message,
+                            "chunk_ids": context["chunk_ids"],
+                        }
+                        last_error_context = dict(log_context)
+                        if attempt >= attempts:
+                            if len(id_list) > 1 and _is_timeout_error(exc):
+                                split_context = dict(log_context)
+                                split_context["depth"] = depth
+                                logger.warning(
+                                    "activity_fetch_split",
+                                    extra=last_error_extra,
+                                    **split_context,
+                                )
+                                midpoint = max(1, len(id_list) // 2)
+                                left_ids = tuple(id_list[:midpoint])
+                                right_ids = tuple(id_list[midpoint:])
+                                frames: list[pd.DataFrame] = []
+                                if left_ids:
+                                    frames.append(_fetch(left_ids, depth=depth + 1))
+                                if right_ids:
+                                    frames.append(_fetch(right_ids, depth=depth + 1))
+                                if frames:
+                                    combined = pd.concat(
+                                        frames, ignore_index=True, sort=False
+                                    )
+                                else:
+                                    combined = pd.DataFrame(columns=ACTIVITY_COLUMNS)
+                                last_error_extra = None
+                                last_error_context = {}
+                                return combined
+                            logger.error(
+                                "activity_fetch_failed",
+                                extra=last_error_extra,
+                                error=error_message,
+                                **log_context,
+                            )
+                            chunk_failures.add_failure(id_list, error_message)
+                            raise PipelineError("chunk_fetch_failed")
+                        delay = compute_backoff_delay(attempt, retry_cfg)
+                        logger.warning(
+                            "activity_fetch_retry",
+                            extra=last_error_extra,
+                            delay=delay,
                             **log_context,
                         )
-                        chunk_failures.add_failure(chunk_ids, error_message)
-                        raise PipelineError("chunk_fetch_failed")
-                    delay = compute_backoff_delay(attempt, retry_cfg)
-                    logger.warning(
-                        "activity_fetch_retry",
-                        extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
-                        delay=delay,
-                        **log_context,
-                    )
-                    if delay > 0:
-                        sleep(delay)
-                else:
-                    last_error_extra = None
-                    last_error_context = {}
-                    return result
-            return pd.DataFrame(columns=ACTIVITY_COLUMNS)
+                        if delay > 0:
+                            sleep(delay)
+                    else:
+                        last_error_extra = None
+                        last_error_context = {}
+                        return _ensure_molecule_pref_name(
+                            result, cfg=cfg, client=client, cache=pref_name_cache
+                        )
+                return pd.DataFrame(columns=ACTIVITY_COLUMNS)
+
+            return _fetch(chunk_ids, depth=0)
 
         worker_count = getattr(cfg.activity, "workers", 1) or 1
         fetch_config = ChunkedFetchConfig(
@@ -608,47 +1194,106 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 logger=logger,
                 stats_callback=_capture_stats,
             )
+        except Exception:
+            logger.exception("Activity pipeline execution failed during chunked processing.")
+            raise
         finally:
             chunk_failures.save(fetch_failure_path, cfg=cfg)
 
     if exit_code == 0:
-        extended_output_path = process_activity_extended(
-            input_path=output_path,
-            search_dir=output_path.parent,
-            dictionary_dir=cfg.resources.dictionary_dir,
-            targets_csv=cfg.resources.targets_type_csv,
+        logger.info(
+            f"Merged data checkpoint: wrote merged activity records to '{output_path}'."
         )
+        try:
+            extended_output_path = process_activity_extended(
+                input_path=output_path,
+                search_dir=output_path.parent,
+                dictionary_dir=cfg.resources.dictionary_dir,
+                targets_csv=cfg.resources.targets_type_csv,
+            )
+        except Exception:
+            logger.exception(
+                "Activity extended post-processing failed while enriching merged activity data."
+            )
+            raise
 
     if limit is not None:
-        logger.info("process_limit", limit=processed_ids)
+        logger.info(
+            "process_limit",
+            processed=processed_ids,
+            limit=limit,
+        )
+    else:
+        logger.info("processed_count", count=processed_ids)
 
     if pipeline_stats is not None:
+        rows_total = int(pipeline_stats.get("rows_total", processed_ids))
+        rows_kept = int(pipeline_stats.get("rows_kept", 0))
+        rows_dropped = int(pipeline_stats.get("rows_dropped", 0))
         logger.info(
             "records_dropped",
-            rows_total=int(pipeline_stats.get("rows_total", processed_ids)),
-            rows_kept=int(pipeline_stats.get("rows_kept", 0)),
-            rows_dropped=int(pipeline_stats.get("rows_dropped", 0)),
+            rows_total=rows_total,
+            rows_kept=rows_kept,
+            rows_dropped=rows_dropped,
         )
 
     if exit_code == 0:
-        log_payload = {
+        completion_rows = processed_ids
+        if pipeline_stats is not None:
+            completion_rows = int(
+                pipeline_stats.get(
+                    "rows_kept",
+                    pipeline_stats.get("rows_total", processed_ids),
+                )
+            )
+        pipeline_done_payload: dict[str, object] = {
             "output": str(output_path),
-            "processed": processed_ids,
-            "dry_run": False,
+            "rows": completion_rows,
         }
         if extended_output_path is not None:
-            log_payload["extended_output"] = str(extended_output_path)
-        logger.info("activity_pipeline_done", **log_payload)
+            pipeline_done_payload["extended_output"] = str(extended_output_path)
+        logger.info("activity_pipeline_done", **pipeline_done_payload)
+        if extended_output_path is not None:
+            logger.info(
+                f"Successful export checkpoint: primary data at '{output_path}', extended data at '{extended_output_path}'."
+            )
+        else:
+            logger.info(
+                f"Successful export checkpoint: activity data written to '{output_path}'."
+            )
+        _emit_completion_message(
+            cfg=cfg,
+            output_path=output_path,
+            processed_rows=completion_rows,
+            duration_s=perf_counter() - start_time,
+            mode="run",
+        )
     else:
         extra_payload = last_error_extra
         context_payload = dict(last_error_context) if last_error_context else {}
+        error_message = None
+        chunk_ids: Sequence[str] | None = None
+        if extra_payload:
+            error_message = extra_payload.get("msg")
+            chunk_ids = extra_payload.get("chunk_ids")  # type: ignore[assignment]
+        details = []
+        if error_message:
+            details.append(f"last error: {error_message}")
+        if chunk_ids:
+            details.append(f"chunk_ids={list(chunk_ids)}")
+        if context_payload:
+            attempt_info = ", ".join(f"{key}={value}" for key, value in context_payload.items())
+            details.append(attempt_info)
+        detail_text = "; ".join(details)
         logger.error(
             "activity_pipeline_failed",
-            extra=extra_payload,
             output=str(output_path),
             processed=processed_ids,
             exit_code=exit_code,
-            **context_payload,
+            details=detail_text or None,
+        )
+        logger.error(
+            f"Activity pipeline failed with exit code {exit_code} after processing {processed_ids} identifiers destined for '{output_path}'. {detail_text}"
         )
 
     return exit_code
@@ -657,12 +1302,93 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the activity pipeline handling ``--skip-existing`` semantics."""
 
-    output_path = Path(
-        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    )
-    args.output_csv = output_path
+    start_time = perf_counter()
+
+    batch_size = getattr(cfg.activity, "batch_size", None)
+    if batch_size is not None and batch_size > MAX_ACTIVITY_CHUNK_SIZE:
+        logger.warning(
+            "activity_batch_size_clamped",
+            configured=batch_size,
+            limit=MAX_ACTIVITY_CHUNK_SIZE,
+        )
+        logger.warning(
+            f"Configured batch size {batch_size} exceeds the hard cap of {MAX_ACTIVITY_CHUNK_SIZE}; "
+            f"reducing to {MAX_ACTIVITY_CHUNK_SIZE}."
+        )
+        cfg.activity.batch_size = MAX_ACTIVITY_CHUNK_SIZE
+
+    timeout = getattr(cfg.activity, "timeout", None)
+    if timeout is not None and timeout < MIN_ACTIVITY_TIMEOUT:
+        logger.warning(
+            "activity_timeout_clamped",
+            configured=timeout,
+            minimum=MIN_ACTIVITY_TIMEOUT,
+        )
+        logger.warning(
+            f"Configured timeout {timeout} is below the minimum of {MIN_ACTIVITY_TIMEOUT}; "
+            f"increasing to {MIN_ACTIVITY_TIMEOUT}."
+        )
+        minimum_timeout = float(MIN_ACTIVITY_TIMEOUT)
+        cfg.activity.timeout = minimum_timeout
+        if hasattr(args, "timeout"):
+            try:
+                args.timeout = float(minimum_timeout)
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                args.timeout = minimum_timeout
+
+    retry_attempts = getattr(cfg.retry, "max_attempts", None)
+    if retry_attempts is not None and retry_attempts <= 1:
+        logger.warning(
+            "activity_retry_disabled",
+            configured=retry_attempts,
+        )
+        logger.warning(
+            "Configured system.retry.max_attempts=%s disables urllib3 retry handling; "
+            "increase to at least 2 to tolerate transient network issues.",
+            retry_attempts,
+        )
+
+    api_retries = getattr(cfg.api, "retries", None)
+    if api_retries is not None and api_retries <= 0:
+        logger.warning(
+            "activity_api_retry_disabled",
+            configured=api_retries,
+        )
+        logger.warning(
+            "Configured chembl.api.retries=%s disables client-level request retries; "
+            "increase to 1 or more for resilience.",
+            api_retries,
+        )
+
+    final_out_attr = getattr(args, "final_out", None)
+    if final_out_attr in (None, argparse.SUPPRESS):
+        legacy_output = getattr(args, "output_csv", None)
+        if legacy_output not in (None, argparse.SUPPRESS):
+            output_path = Path(legacy_output)
+            if not isinstance(legacy_output, Path):
+                args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+        else:
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+    else:
+        output_path = Path(final_out_attr)
+        if not isinstance(final_out_attr, Path):
+            args.final_out = output_path
+        setattr(args, "output_csv", output_path)
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
+        logger.info(
+            f"Skipping execution because '{output_path}' already exists and --force was not provided."
+        )
+        _emit_completion_message(
+            cfg=cfg,
+            output_path=output_path,
+            processed_rows=None,
+            duration_s=perf_counter() - start_time,
+            mode="skip_existing",
+        )
         return 0
     return run_chembl(cfg, args)
 
@@ -688,8 +1414,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     parser.add_argument(
         "--timeout",
         type=float,
-        default=30.0,
-        help="Timeout in seconds for each HTTP request",
+        default=90.0,
+        help=(
+            "Timeout in seconds for each HTTP request (values below "
+            f"{int(MIN_ACTIVITY_TIMEOUT)} seconds are automatically clamped)"
+        ),
     )
     parser.add_argument(
         "--limit",
@@ -743,6 +1472,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
     args.invocation = resolve_invocation(parser.prog, argv)
+
     cli.prepare_io_paths(
         args,
         input_default=DEFAULT_INPUT_NAME,
@@ -750,14 +1480,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     if args.limit == 0:
         logger.info("pipeline_skip_limit", limit=args.limit)
+        logger.info("Limit set to 0; exiting before starting the activity pipeline.")
         return 0
     if args.limit is not None and args.limit < 0:
         # Reject negative limits early to provide clear CLI feedback.
         parser.error("--limit must be zero or a positive integer")
     if args.offset < 0:
         parser.error("--offset must be zero or a positive integer")
+
     with setup_cli_logging(
-        Path(__file__).with_suffix("").name, log_cfg, getattr(args, "date", None)
+        Path(__file__).with_suffix("").name,
+        log_cfg,
+        getattr(args, "date", None),
     ) as logging_ctx:
         exit_code = run_cli_command(
             args=args,

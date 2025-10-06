@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 
@@ -17,7 +19,9 @@ def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
     output_dir = base_path / "output"
     input_dir.mkdir()
     output_dir.mkdir()
-    for name, filename in get_data._DEFAULT_INPUT_FILES.items():
+    input_files = dict(get_data.DEFAULT_INPUT_FILES)
+    output_stems = dict(get_data.DEFAULT_OUTPUT_STEMS)
+    for name, filename in input_files.items():
         target = input_dir / filename
         target.write_text("id\nplaceholder\n", encoding="utf-8")
     config_path = base_path / "config.yaml"
@@ -33,7 +37,15 @@ def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
         force=False,
         skip_existing=False,
         dry_run=False,
+        input_files=input_files,
+        output_stems=output_stems,
     )
+
+
+def _load_manifest(cfg: get_data.PipelineRunConfig) -> dict[str, object]:
+    manifest_path = cfg.base_path / "reports" / "run_manifest.json"
+    assert manifest_path.exists(), "expected manifest to be written"
+    return json.loads(manifest_path.read_text(encoding="utf-8"))
 
 
 @pytest.mark.unit
@@ -52,6 +64,10 @@ def test_parse_args__defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert args.force is False
     assert args.skip_existing is False
     assert args.dry_run is False
+    assert args.pipeline_registry is None
+    assert args.override_input == []
+    assert args.override_output_stem == []
+    assert args.override_subcommand == []
 
 
 @pytest.mark.unit
@@ -77,6 +93,14 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
             "--skip-existing",
             "--dry-run",
             "--verbose",
+            "--pipeline-registry",
+            str(tmp_path / "registry.yaml"),
+            "--override-input",
+            "document=document_custom.csv",
+            "--override-output-stem",
+            "target=custom_targets",
+            "--override-subcommand",
+            "target=sync",
         ]
     )
     assert args.base_path == base
@@ -90,6 +114,10 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
     assert args.force is True
     assert args.skip_existing is True
     assert args.dry_run is True
+    assert args.pipeline_registry == tmp_path / "registry.yaml"
+    assert args.override_input == ["document=document_custom.csv"]
+    assert args.override_output_stem == ["target=custom_targets"]
+    assert args.override_subcommand == ["target=sync"]
 
 
 @pytest.mark.unit
@@ -122,7 +150,7 @@ def test_prepare_config__verbose_overrides_level(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_pipeline_step_registration__expected_shape() -> None:
-    steps = get_data._PIPELINE_STEPS
+    steps = get_data.DEFAULT_PIPELINE_STEPS
     names = [step.name for step in steps]
     assert names == ["document", "target", "assay", "testitem", "activity"]
     assert steps[0].extra_args == ("--mode", "all")
@@ -156,6 +184,22 @@ def test_configure_logging__invalid_level() -> None:
 
 
 @pytest.mark.unit
+def test_resolve_pipeline_steps__applies_overrides() -> None:
+    args = argparse.Namespace(
+        pipeline_registry=None,
+        override_input=["document=doc.csv"],
+        override_output_stem=["activity=custom"],
+        override_subcommand=["target="],
+    )
+
+    steps = get_data._resolve_pipeline_steps(args)
+    mapping = {step.name: step for step in steps}
+    assert mapping["document"].input_filename == "doc.csv"
+    assert mapping["activity"].output_stem == "custom"
+    assert mapping["target"].subcommand is None
+
+
+@pytest.mark.unit
 def test_run_pipeline__propagates_step_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = _make_config(tmp_path)
     failure_calls: list[Sequence[str]] = []
@@ -171,21 +215,51 @@ def test_run_pipeline__propagates_step_failure(tmp_path: Path, monkeypatch: pyte
         return 2
 
     steps = (
-        get_data.PipelineStep("document", _success, None),
-        get_data.PipelineStep("target", _failure, None),
-        get_data.PipelineStep("assay", _success, None),
+        get_data.PipelineStep(
+            name="document",
+            main=_success,
+            input_filename="document.csv",
+            output_stem="documents",
+        ),
+        get_data.PipelineStep(
+            name="target",
+            main=_failure,
+            input_filename="target.csv",
+            output_stem="targets",
+        ),
+        get_data.PipelineStep(
+            name="assay",
+            main=_success,
+            input_filename="assay.csv",
+            output_stem="assays",
+        ),
     )
 
     stream = io.StringIO()
     logger = get_data.configure_logger(
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="unit")
     )
-    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", steps, raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
-    status = get_data.run_pipeline(cfg)
+    status = get_data.run_pipeline(cfg, steps=steps)
     assert status == 2
     assert failure_calls, "expected failing step to execute"
+
+    manifest = _load_manifest(cfg)
+    assert manifest["run"]["exit_code"] == 2
+    step_entries = manifest["steps"]
+    assert len(step_entries) == 3
+    first, second, third = step_entries
+    assert first["status"] == "success"
+    assert first["output"]["exists"] is True
+    assert first["output"]["checksum_sha256"]
+    assert second["status"] == "failed"
+    assert second["executed"] is True
+    assert second["exit_code"] == 2
+    assert second["reason"] == "non_zero_exit"
+    assert second["output"]["exists"] is False
+    assert third["status"] == "pending"
+
     records = parse_log_lines(stream.getvalue())
     events = list(iter_events(records))
     assert "step_failed" in events
@@ -199,15 +273,66 @@ def test_run_pipeline__handles_step_exception(tmp_path: Path, monkeypatch: pytes
     def _raising(argv: Sequence[str]) -> int:  # pragma: no cover - executed via pipeline
         raise RuntimeError("malformed output")
 
-    steps = (get_data.PipelineStep("document", _raising, None),)
+    steps = (
+        get_data.PipelineStep(
+            name="document",
+            main=_raising,
+            input_filename="document.csv",
+            output_stem="documents",
+        ),
+    )
     stream = io.StringIO()
     logger = get_data.configure_logger(
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="unit")
+    )
+    monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+
+    status = get_data.run_pipeline(cfg, steps=steps)
+    assert status == 1
+    manifest = _load_manifest(cfg)
+    assert manifest["run"]["exit_code"] == 1
+    step_entries = manifest["steps"]
+    assert len(step_entries) == 1
+    step_entry = step_entries[0]
+    assert step_entry["status"] == "failed"
+    assert step_entry["reason"] == "exception"
+    assert step_entry["output"]["exists"] is False
+    records = parse_log_lines(stream.getvalue())
+    assert any(entry["event"] == "step_exception" for entry in records)
+
+
+@pytest.mark.unit
+def test_run_pipeline__dry_run_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = _make_config(tmp_path)
+    cfg = replace(cfg, dry_run=True)
+
+    executions: list[int] = []
+
+    def _record(argv: Sequence[str]) -> int:
+        executions.append(len(argv))
+        return 0
+
+    steps = (
+        get_data.PipelineStep("document", _record, None),
+        get_data.PipelineStep("target", _record, None),
+    )
+
+    stream = io.StringIO()
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="unit"),
     )
     monkeypatch.setattr(get_data, "_PIPELINE_STEPS", steps, raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
     status = get_data.run_pipeline(cfg)
-    assert status == 1
-    records = parse_log_lines(stream.getvalue())
-    assert any(entry["event"] == "step_exception" for entry in records)
+    assert status == 0
+    assert not executions
+
+    manifest = _load_manifest(cfg)
+    assert manifest["run"]["dry_run"] is True
+    assert manifest["run"]["exit_code"] == 0
+    step_entries = manifest["steps"]
+    assert [entry["status"] for entry in step_entries] == ["skipped", "skipped"]
+    for entry in step_entries:
+        assert entry["reason"] == "dry_run"
+        assert entry["output"]["exists"] is False

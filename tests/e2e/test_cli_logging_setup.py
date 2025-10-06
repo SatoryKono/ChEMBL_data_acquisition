@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -21,8 +22,8 @@ _SCRIPT_CASES = (
         "module": get_activity_data,
         "command": None,
         "input_flag": "--input",
-        "output_flag": "--output",
-        "output_attr": "output_csv",
+        "output_flag": "--final-out",
+        "output_attr": "final_out",
         "prefix": "activity_pipeline",
         "extra_args": (),
     },
@@ -30,8 +31,8 @@ _SCRIPT_CASES = (
         "module": get_assay_data,
         "command": None,
         "input_flag": "--input",
-        "output_flag": "--output",
-        "output_attr": "output_csv",
+        "output_flag": "--final-out",
+        "output_attr": "final_out",
         "prefix": "assay_pipeline",
         "extra_args": (),
     },
@@ -39,8 +40,8 @@ _SCRIPT_CASES = (
         "module": get_document_data,
         "command": "pubmed",
         "input_flag": "--input",
-        "output_flag": "--output",
-        "output_attr": "output_csv",
+        "output_flag": "--final-out",
+        "output_attr": "final_out",
         "prefix": "document_pipeline",
         "extra_args": (),
     },
@@ -57,8 +58,8 @@ _SCRIPT_CASES = (
         "module": get_testitem_data,
         "command": None,
         "input_flag": "--input",
-        "output_flag": "--output",
-        "output_attr": "output_csv",
+        "output_flag": "--final-out",
+        "output_attr": "final_out",
         "prefix": "testitem_pipeline",
         "extra_args": (),
     },
@@ -73,6 +74,7 @@ def test_cli_logging__creates_log_file(
     base_path = tmp_path
     log_dir = base_path / "logs"
     log_dir.mkdir(parents=True)
+    monkeypatch.setattr("library.cli.logging._DEFAULT_LOG_DIR", log_dir)
 
     config_path = base_path / "config.yaml"
     config_path.write_text("io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n", encoding="utf-8")
@@ -84,9 +86,15 @@ def test_cli_logging__creates_log_file(
 
     monkeypatch.chdir(base_path)
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
-    monkeypatch.setattr(
-        "library.cli.logging._current_date_str", lambda: "20240102"
-    )
+    monkeypatch.setattr("library.cli.logging._current_date_str", lambda: "20240102")
+
+    class _FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            tzinfo = tz or timezone.utc
+            return datetime(2024, 1, 2, 0, 0, tzinfo=tzinfo)
+
+    monkeypatch.setattr(get_activity_data, "datetime", _FixedDateTime)
 
     module = case["module"]
     prefix = case["prefix"]
@@ -162,7 +170,15 @@ def test_cli_logging__creates_log_file(
     exit_code = module.main(argv)
     assert exit_code == 0
 
-    log_files = sorted(log_dir.glob("*.log"))
+    expected_prefix = Path(module.__file__).stem
+    log_files = sorted(
+        path for path in log_dir.glob("*.log") if path.name.startswith(expected_prefix)
+    )
+    if not log_files:
+        fallback_dir = base_path / "logs"
+        log_files = sorted(
+            path for path in fallback_dir.glob("*.log") if path.name.startswith(expected_prefix)
+        )
     assert len(log_files) == 1
     log_path = log_files[0]
     expected_name = f"{Path(module.__file__).stem}_20240102.log"

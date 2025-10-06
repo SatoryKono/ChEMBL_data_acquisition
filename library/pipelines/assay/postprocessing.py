@@ -39,12 +39,38 @@ def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:
         Copy of the input with the additional ``assay_with_same_target`` column.
 
     """
-    AssayPostprocessSchema.validate(df)
-    group_cols = ["document_chembl_id", "target_chembl_id"]
-    groups = df.groupby(group_cols)
-    logger.debug("Calculated counts for %d document/target groups", groups.ngroups)
+    df = df.copy()
+    required_columns = ["document_chembl_id", "target_chembl_id"]
+
+    # ``pandera`` raises ``SchemaError`` on completely empty frames because the
+    # required columns are absent.  When the pipeline processes an empty chunk we
+    # still want to synthesise the expected columns so that downstream hooks see
+    # a consistent schema.  Additionally, normalise the dtype to ``string`` so
+    # that subsequent concatenation does not introduce ``object`` columns.
+    for column in required_columns:
+        if column not in df.columns:
+            df[column] = pd.Series(dtype="string")
+        else:
+            df[column] = df[column].astype("string")
+
+    if df.empty:
+        ordered = required_columns + [
+            column for column in df.columns if column not in required_columns
+        ]
+        df = df.reindex(columns=ordered)
+    else:
+        df = AssayPostprocessSchema.validate(df)
     result = df.copy()
-    result["assay_with_same_target"] = groups["document_chembl_id"].transform("size")
+
+    if result.empty:
+        result["assay_with_same_target"] = pd.Series(dtype="Int64")
+        return result
+
+    group_cols = ["document_chembl_id", "target_chembl_id"]
+    groups = result.groupby(group_cols)
+    logger.debug("Calculated counts for %d document/target groups", groups.ngroups)
+    counts = groups["document_chembl_id"].transform("size").astype("Int64")
+    result["assay_with_same_target"] = counts
     return result
 
 

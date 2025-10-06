@@ -1,0 +1,3 @@
+assay_chembl_id,assay_strain,assay_group,year,accession
+CHEMBLA1,Homo sapiens,Binding panel,2019,ACC1234
+CHEMBLA2,Mus musculus,Functional subset,2020,ACC5678

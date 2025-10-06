@@ -12,6 +12,7 @@ reference summarises each dataset, the consuming pipeline and important fields.
 | `_testitem/molecule_catalog.csv` | Test item | Parent/child molecule relationships including `parent_molecule_chembl_id`. |
 | `_testitem/molecule_hierarchy.csv` | Test item | Precomputed fallback hierarchy used when the API omits parent data. |
 | `_document/fallback_doi_template.csv` | Document (optional) | Template structure for DOI override files consumed via `--fallback-doi-*`. |
+| `_taxonomy/taxonomy.csv` | Assay | Maps `tax_id` values to canonical `assay_group` and `assay_strain` labels used during assay enrichment. |
 
 ### Maintaining dictionary data
 

@@ -12,6 +12,7 @@ from pathlib import Path
 from time import sleep
 
 import argparse
+from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from functools import partial
 from itertools import islice
@@ -31,10 +32,11 @@ if __package__ in {None, ""}:
 
 from library.integration import chembl_library as cl
 from library.pipelines.assay import postprocessing as ap
+from library.postprocessing import enrich_assay_metadata
 from library import cli
 from library import io
 from library.common.csv_utils import write_csv_chunks_deterministic
-from library.pipelines.assay.chembl_assay import ASSAY_COLUMNS
+from library.pipelines.assay.chembl_assay import ASSAY_COLUMNS, MAX_ASSAY_CHUNK_SIZE
 from library.clients import ChemblClient
 from library.common.rate_limiter import get_global_limiter
 from library.cli import (
@@ -45,6 +47,7 @@ from library.cli import (
 from library.cli import build_parser as base_parser
 from library.cli_utils import run_cli_command, run_pipeline
 from library.cli.logging import setup_cli_logging
+from library.cli.metadata import prepare_option
 from library.config import Config, _serialize_paths
 from library.common.log import logger
 from library.pipelines.common import add_pipeline_metadata
@@ -66,38 +69,85 @@ __all__ = ["ap", "configure_logger", "main", "run", "run_chembl"]
 DEFAULT_INPUT_NAME = "assay.csv"
 DEFAULT_OUTPUT_STEM = "assays"
 
-_OPTION_UNSET = object()
+# Backwards compatibility: legacy configs referenced the private
+# ``_ASSAY_MAX_IDS_PER_REQUEST`` constant before it was renamed to
+# :data:`MAX_ASSAY_CHUNK_SIZE`.  Re-expose the alias so that pipelines relying on
+# the old setting fail gracefully instead of raising ``NameError`` during chunk
+# processing.
+ASSAY_MAX_IDS_PER_REQUEST = MAX_ASSAY_CHUNK_SIZE
+_ASSAY_MAX_IDS_PER_REQUEST = MAX_ASSAY_CHUNK_SIZE
+
+_ASSAY_OUTPUT_DROP_COLUMNS = [
+    "ASSAY_ID",
+    "Target TYPE",
+    "acts_per_assay_step5",
+    "cited_assay_corr",
+    "error_assay_corr",
+    "higly_correlated_cit",
+    "month",
+    "shuffled_cit",
+    "shuffled_target_assay",
+    "substrate_name",
+    "target_name",
+    "version",
+    "assay_category",
+    "src_assay_id",
+]
 
 
-def _option(
-    metadata: ConfigMetadata | None,
-    *,
-    argument: str | None = None,
-    path: str | None = None,
-    value: object = _OPTION_UNSET,
-    default_source: str = "unknown",
-    default_detail: str | None = None,
-) -> dict[str, object]:
-    if metadata is not None:
-        if value is _OPTION_UNSET:
-            return metadata.option(
-                argument=argument,
-                path=path,
-                default_source=default_source,
-                default_detail=default_detail,
-            )
-        return metadata.option(
-            argument=argument,
-            path=path,
-            value=value,
-            default_source=default_source,
-            default_detail=default_detail,
-        )
-    actual = None if value is _OPTION_UNSET else value
-    entry: dict[str, object] = {"value": actual, "source": default_source}
-    if default_detail is not None:
-        entry["detail"] = default_detail
-    return entry
+def _drop_assay_output_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Remove disallowed columns from the final assay output."""
+
+    allowed_cols = [
+        column for column in frame.columns if column not in _ASSAY_OUTPUT_DROP_COLUMNS
+    ]
+    dropped_present = [
+        column for column in _ASSAY_OUTPUT_DROP_COLUMNS if column in frame.columns
+    ]
+
+    # ``errors='ignore'`` guarantees the pipeline remains stable if a column is absent.
+    trimmed = frame.drop(columns=_ASSAY_OUTPUT_DROP_COLUMNS, errors="ignore")
+    trimmed = trimmed.loc[:, allowed_cols]
+
+    dropped_display = ", ".join(dropped_present) if dropped_present else "<none>"
+    logger.log(
+        "INFO",
+        "get_assay_data",
+        msg=f"Dropped columns from output.assay_*: {dropped_display}",
+        dropped_columns=dropped_present,
+    )
+
+    return trimmed
+
+
+ASSAY_OUTPUT_DROP_COLUMNS: list[str] = [
+    "ASSAY_ID",
+    "Target TYPE",
+    "acts_per_assay_step5",
+    "cited_assay_corr",
+    "error_assay_corr",
+    "higly_correlated_cit",
+    "month",
+    "shuffled_cit",
+    "shuffled_target_assay",
+    "substrate_name",
+    "target_name",
+    "version",
+    "assay_category",
+    "src_assay_id",
+]
+
+
+def remove_assay_output_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Return ``df`` without columns disallowed in ``output.assay_*`` exports."""
+
+    allowed_cols = [column for column in df.columns if column not in ASSAY_OUTPUT_DROP_COLUMNS]
+    cleaned = df.drop(columns=ASSAY_OUTPUT_DROP_COLUMNS, errors="ignore")
+    if allowed_cols:
+        cleaned = cleaned.loc[:, allowed_cols]
+    return cleaned
+
+
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -138,40 +188,54 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     offset = getattr(args, "offset", 0)
-    output_path = Path(
-        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    )
+    final_out_attr = getattr(args, "final_out", None)
+    if final_out_attr in (None, argparse.SUPPRESS):
+        legacy_output = getattr(args, "output_csv", None)
+        if legacy_output not in (None, argparse.SUPPRESS):
+            output_path = Path(legacy_output)
+            if not isinstance(legacy_output, Path):
+                args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+        else:
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+    else:
+        output_path = Path(final_out_attr)
+        if not isinstance(final_out_attr, Path):
+            args.final_out = output_path
+        setattr(args, "output_csv", output_path)
     metadata_obj = getattr(args, "_config_metadata", None)
     if not isinstance(metadata_obj, ConfigMetadata):
         metadata_obj = None
-    output_source = "cli" if getattr(args, "output_csv", None) else "derived"
+    output_source = "cli" if getattr(args, "final_out", None) else "derived"
     logger.info(
         "assay_pipeline_start",
-        input=_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
-        output=_option(
+        input=prepare_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
+        output=prepare_option(
             metadata_obj,
             value=str(output_path),
             default_source=output_source,
         ),
-        limit=_option(
+        limit=prepare_option(
             metadata_obj,
             argument="limit",
             path="sources.chembl.pipelines.assay.limit",
             value=limit,
         ),
-        offset=_option(
+        offset=prepare_option(
             metadata_obj,
             argument="offset",
             path="sources.chembl.pipelines.assay.offset",
             value=offset,
         ),
-        batch_size=_option(
+        batch_size=prepare_option(
             metadata_obj,
             argument="batch_size",
             path="sources.chembl.pipelines.assay.batch_size",
             value=cfg.assay.batch_size,
         ),
-        timeout=_option(
+        timeout=prepare_option(
             metadata_obj,
             argument="timeout",
             path="sources.chembl.pipelines.assay.timeout",
@@ -200,10 +264,24 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         f"{output_path.stem}_fetch_failures.csv"
     )
 
+    def _enrich_with_dictionaries(frame: pd.DataFrame) -> pd.DataFrame:
+        return enrich_assay_metadata(frame, dictionary_dir=cfg.resources.dictionary_dir)
+
+    dropped_columns_seen: set[str] = set()
+
+    def _drop_output_columns(frame: pd.DataFrame) -> pd.DataFrame:
+        removed = [column for column in ASSAY_OUTPUT_DROP_COLUMNS if column in frame.columns]
+        if removed:
+            dropped_columns_seen.update(removed)
+        return remove_assay_output_columns(frame)
+
     metadata_hooks = [
+        _enrich_with_dictionaries,
         ap.postprocess_assays,
         normalize_assays,
         add_pipeline_metadata,
+        _drop_output_columns,
+        _drop_assay_output_columns,
     ]
 
     validators = [partial(validate_assays, return_result=True)]
@@ -239,44 +317,76 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         def fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
             attempts = max(1, retry_cfg.max_attempts)
-            for attempt in range(1, attempts + 1):
-                try:
-                    return cl.get_assays(
-                        chunk_ids,
-                        cfg=cfg.api,
-                        client=client,
-                        chunk_size=cfg.assay.batch_size,
-                        timeout=cfg.assay.timeout,
-                    )
-                except (requests.RequestException, ValueError) as exc:
-                    error_message = str(exc)
-                    context = {
-                        "chunk_ids": list(chunk_ids),
-                        "chunk_size": len(chunk_ids),
-                        "attempt": attempt,
-                        "max_attempts": attempts,
-                        "batch_size": cfg.assay.batch_size,
-                        "timeout": cfg.assay.timeout,
-                    }
-                    log_context = {k: v for k, v in context.items() if k != "chunk_ids"}
-                    if attempt >= attempts:
-                        logger.error(
-                            "assay_fetch_failed",
+            pending: deque[list[str]] = deque([list(chunk_ids)])
+            frames: list[pd.DataFrame] = []
+
+            while pending:
+                current = pending.popleft()
+                if not current:
+                    continue
+
+                for attempt in range(1, attempts + 1):
+                    try:
+                        frame = cl.get_assays(
+                            current,
+                            cfg=cfg.api,
+                            client=client,
+                            chunk_size=min(cfg.assay.batch_size, len(current)),
+                            timeout=cfg.assay.timeout,
+                        )
+                    except (requests.RequestException, ValueError) as exc:
+                        error_message = str(exc)
+                        context = {
+                            "chunk_ids": list(current),
+                            "chunk_size": len(current),
+                            "attempt": attempt,
+                            "max_attempts": attempts,
+                            "batch_size": cfg.assay.batch_size,
+                            "timeout": cfg.assay.timeout,
+                        }
+                        log_context = {k: v for k, v in context.items() if k != "chunk_ids"}
+
+                        if attempt >= attempts:
+                            if len(current) > 1:
+                                split_index = max(1, len(current) // 2)
+                                left = current[:split_index]
+                                right = current[split_index:]
+                                logger.warning(
+                                    "assay_fetch_split",
+                                    extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
+                                    **log_context,
+                                )
+                                if right:
+                                    pending.appendleft(right)
+                                if left:
+                                    pending.appendleft(left)
+                                break
+
+                            logger.error(
+                                "assay_fetch_failed",
+                                extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
+                                error=error_message,
+                                **log_context,
+                            )
+                            chunk_failures.add_failure(current, error_message)
+                            break
+
+                        delay = compute_backoff_delay(attempt, retry_cfg)
+                        logger.warning(
+                            "assay_fetch_retry",
                             extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
-                            error=error_message,
+                            delay=delay,
                             **log_context,
                         )
-                        chunk_failures.add_failure(chunk_ids, error_message)
-                        return pd.DataFrame(columns=ASSAY_COLUMNS)
-                    delay = compute_backoff_delay(attempt, retry_cfg)
-                    logger.warning(
-                        "assay_fetch_retry",
-                        extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
-                        delay=delay,
-                        **log_context,
-                    )
-                    if delay > 0:
-                        sleep(delay)
+                        if delay > 0:
+                            sleep(delay)
+                    else:
+                        frames.append(frame)
+                        break
+
+            if frames:
+                return pd.concat(frames, ignore_index=True)
+
             return pd.DataFrame(columns=ASSAY_COLUMNS)
 
         fetch_config = ChunkedFetchConfig(
@@ -331,6 +441,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         finally:
             chunk_failures.save(fetch_failure_path, cfg=cfg)
 
+    dropped_columns_report = [
+        column for column in ASSAY_OUTPUT_DROP_COLUMNS if column in dropped_columns_seen
+    ]
+    if dropped_columns_report:
+        logger.info(
+            "Dropped columns from output.assay_*: %s",
+            ", ".join(dropped_columns_report),
+        )
+    else:
+        logger.info("Dropped columns from output.assay_*: <none>")
+
     if limit is not None:
         logger.info("process_limit", limit=processed_ids)
     else:
@@ -364,10 +485,23 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the assay pipeline handling ``--skip-existing`` semantics."""
 
-    output_path = Path(
-        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    )
-    args.output_csv = output_path
+    final_out_attr = getattr(args, "final_out", None)
+    if final_out_attr in (None, argparse.SUPPRESS):
+        legacy_output = getattr(args, "output_csv", None)
+        if legacy_output not in (None, argparse.SUPPRESS):
+            output_path = Path(legacy_output)
+            if not isinstance(legacy_output, Path):
+                args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+        else:
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+    else:
+        output_path = Path(final_out_attr)
+        if not isinstance(final_out_attr, Path):
+            args.final_out = output_path
+        setattr(args, "output_csv", output_path)
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0

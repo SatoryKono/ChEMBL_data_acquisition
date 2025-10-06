@@ -23,39 +23,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT_NAME = "testitem.csv"
 DEFAULT_OUTPUT_STEM = "testitems"
 
-_OPTION_UNSET = object()
-
-
-def _option(
-    metadata: ConfigMetadata | None,
-    *,
-    argument: str | None = None,
-    path: str | None = None,
-    value: object = _OPTION_UNSET,
-    default_source: str = "unknown",
-    default_detail: str | None = None,
-) -> dict[str, object]:
-    if metadata is not None:
-        if value is _OPTION_UNSET:
-            return metadata.option(
-                argument=argument,
-                path=path,
-                default_source=default_source,
-                default_detail=default_detail,
-            )
-        return metadata.option(
-            argument=argument,
-            path=path,
-            value=value,
-            default_source=default_source,
-            default_detail=default_detail,
-        )
-    actual = None if value is _OPTION_UNSET else value
-    entry: dict[str, object] = {"value": actual, "source": default_source}
-    if default_detail is not None:
-        entry["detail"] = default_detail
-    return entry
-
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -74,6 +41,7 @@ from library.cli import LoggerConfig, ConfigMetadata
 from library.cli import build_parser as base_parser
 from library.cli_utils import run_cli_command
 from library.cli.logging import setup_cli_logging
+from library.cli.metadata import prepare_option
 from library.config import (
     ApiCfg,
     Config,
@@ -585,10 +553,24 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         network requests or CSV export failed inside the test item pipeline.
     """
 
-    output_csv = getattr(args, "output_csv", None)
+    final_out_attr = getattr(args, "final_out", None)
+    if final_out_attr in (None, argparse.SUPPRESS):
+        legacy_output = getattr(args, "output_csv", None)
+        if legacy_output not in (None, argparse.SUPPRESS):
+            output_path = Path(legacy_output)
+            if not isinstance(legacy_output, Path):
+                args.final_out = output_path
+        else:
+            output_path = None
+    else:
+        output_path = Path(final_out_attr)
+        if not isinstance(final_out_attr, Path):
+            args.final_out = output_path
+    if output_path is not None:
+        setattr(args, "output_csv", output_path)
     options = TestitemPipelineOptions(
         input_csv=Path(args.input_csv),
-        output_csv=Path(output_csv) if output_csv else None,
+        output_csv=output_path,
     )
     return run_testitem_pipeline(cfg, options)
 
@@ -596,52 +578,63 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the test item pipeline handling ``--skip-existing`` semantics."""
 
-    output_path = Path(
-        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    )
-    args.output_csv = output_path
+    final_out_attr = getattr(args, "final_out", None)
+    if final_out_attr in (None, argparse.SUPPRESS):
+        legacy_output = getattr(args, "output_csv", None)
+        if legacy_output not in (None, argparse.SUPPRESS):
+            output_path = Path(legacy_output)
+            if not isinstance(legacy_output, Path):
+                args.final_out = output_path
+        else:
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+    else:
+        output_path = Path(final_out_attr)
+        if not isinstance(final_out_attr, Path):
+            args.final_out = output_path
+    setattr(args, "output_csv", output_path)
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0
     metadata_obj = getattr(args, "_config_metadata", None)
     if not isinstance(metadata_obj, ConfigMetadata):
         metadata_obj = None
-    output_source = "cli" if getattr(args, "output_csv", None) else "derived"
+    output_source = "cli" if getattr(args, "final_out", None) else "derived"
     limit_value = getattr(cfg.testitem, "limit", None)
     offset_value = getattr(args, "offset", getattr(cfg.testitem, "offset", None))
     logger.info(
         "testitem_pipeline_start",
-        input=_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
-        output=_option(
+        input=prepare_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
+        output=prepare_option(
             metadata_obj,
             value=str(output_path),
             default_source=output_source,
         ),
-        limit=_option(
+        limit=prepare_option(
             metadata_obj,
             argument="limit",
             path="sources.chembl.pipelines.testitem.limit",
             value=limit_value,
         ),
-        offset=_option(
+        offset=prepare_option(
             metadata_obj,
             argument="offset",
             path="sources.chembl.pipelines.testitem.offset",
             value=offset_value,
         ),
-        batch_size=_option(
+        batch_size=prepare_option(
             metadata_obj,
             argument="batch_size",
             path="sources.chembl.pipelines.testitem.batch_size",
             value=getattr(cfg.testitem, "batch_size", None),
         ),
-        timeout=_option(
+        timeout=prepare_option(
             metadata_obj,
             argument="timeout",
             path="sources.chembl.pipelines.testitem.timeout",
             value=getattr(cfg.testitem, "timeout", None),
         ),
-        column=_option(
+        column=prepare_option(
             metadata_obj,
             argument="column",
             path="sources.chembl.pipelines.testitem.column",

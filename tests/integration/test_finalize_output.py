@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -137,6 +138,42 @@ def test_finalize_output__optional_columns_missing_warns(
 
     assert exit_code == 0
     assert any(event == "optional_columns_missing" for event, _ in warnings)
+
+
+@pytest.mark.integration
+def test_finalize_output__aligns_nullable_numeric_columns(
+    tmp_path: Path, sample_input_csv: Path, cfg
+) -> None:
+    cfg.system.doc_quality.enable = False
+
+    first_chunk = pd.DataFrame(
+        {
+            "molecule_chembl_id": pd.Series(["CHEMBL1"], dtype="string"),
+            "first_approval": pd.Series([1999.0], dtype="Float64"),
+        }
+    )
+    second_chunk = pd.DataFrame(
+        {
+            "molecule_chembl_id": pd.Series(["CHEMBL2"], dtype="string"),
+        }
+    )
+    output_path = tmp_path / "numeric_alignment.csv"
+    stats_supplier = _StatsSupplier(_base_stats())
+
+    exit_code = cli.finalize_output(
+        [first_chunk, second_chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=stats_supplier,
+        input_csv=sample_input_csv,
+    )
+
+    assert exit_code == 0
+
+    final = pd.read_csv(output_path)
+    assert "first_approval" in final.columns
+    assert final["first_approval"].iloc[0] == pytest.approx(1999.0)
+    assert math.isnan(final["first_approval"].iloc[1])
 
 
 @pytest.mark.integration

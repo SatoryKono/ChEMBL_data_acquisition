@@ -13,24 +13,18 @@ remain valid.  All columns are nullable to accommodate missing values.
 Column overview
 ---------------
 * ``assay_chembl_id`` (:class:`str`): Primary ChEMBL assay identifier.
-* ``ASSAY_ID`` (:class:`str`): Secondary assay identifier from the source file.
-* ``Target TYPE`` (:class:`str`): Category of the biological target.
 * ``accession`` (:class:`str`): UniProt accession of the target protein.
 * ``acts_per_assay_step5`` (:class:`object`): Number of activities per assay step 5.
 * ``assay_cell_type`` (:class:`str`): Cell type used in the assay.
 * ``assay_subcellular_fraction`` (:class:`str`): Sub-cellular fraction tested.
 * ``assay_tissue`` (:class:`str`): Tissue or organ where the assay is performed.
 * ``bao_format`` (:class:`str`): BAO format code.
-* ``cited_assay_corr`` (:class:`object`): Whether the assay is cited as correlated.
 * ``description`` (:class:`str`): Textual description of the assay.
 * ``document_chembl_id`` (:class:`str`): Identifier of the source document.
 * ``error_assay_corr`` (:class:`object`): Error flag for the correlation citation.
-* ``higly_correlated_cit`` (:class:`object`): Flag for highly correlated citations.
 * ``isoform`` (:class:`str`): Protein isoform number or identifier.
 * ``month`` (:class:`object`): Month in which the assay was reported.
 * ``mutation`` (:class:`str`): Target mutation details.
-* ``shuffled_cit`` (:class:`object`): Indicator for shuffled citation.
-* ``shuffled_target_assay`` (:class:`object`): Indicator for shuffled target/assay pair.
 * ``substrate_name`` (:class:`str`): Name of the substrate used in the assay.
 * ``target_chembl_id`` (:class:`str`): ChEMBL identifier of the target.
 * ``target_name`` (:class:`str`): Human-readable target name.
@@ -49,31 +43,23 @@ FLEXIBLE_DTYPE: Final[Any] = cast(Any, None)
 
 AssaysSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
-        "assay_chembl_id": pa.Column(str, required=True, nullable=True),
-        "ASSAY_ID": pa.Column(str, required=False, nullable=True),
-        "Target TYPE": pa.Column(str, required=False, nullable=True),
+        "assay_chembl_id": pa.Column(str, required=True, nullable=True),      
         "accession": pa.Column(str, required=False, nullable=True),
         "acts_per_assay_step5": pa.Column(
             FLEXIBLE_DTYPE, required=False, nullable=True
         ),
         "assay_cell_type": pa.Column(str, required=False, nullable=True),
         "assay_subcellular_fraction": pa.Column(str, required=False, nullable=True),
+        "assay_group": pa.Column(str, required=False, nullable=True),
         "assay_tissue": pa.Column(str, required=False, nullable=True),
+        "assay_strain": pa.Column(str, required=False, nullable=True),
         "bao_format": pa.Column(str, required=False, nullable=True),
         "cited_assay_corr": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
         "description": pa.Column(str, required=False, nullable=True),
         "document_chembl_id": pa.Column(str, required=False, nullable=True),
-        "error_assay_corr": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
-        "higly_correlated_cit": pa.Column(
-            FLEXIBLE_DTYPE, required=False, nullable=True
-        ),
         "isoform": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
         "month": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
-        "mutation": pa.Column(str, required=False, nullable=True),
-        "shuffled_cit": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
-        "shuffled_target_assay": pa.Column(
-            FLEXIBLE_DTYPE, required=False, nullable=True
-        ),
+        "mutation": pa.Column(str, required=False, nullable=True),   
         "substrate_name": pa.Column(str, required=False, nullable=True),
         "target_chembl_id": pa.Column(str, required=False, nullable=True),
         "target_name": pa.Column(str, required=False, nullable=True),

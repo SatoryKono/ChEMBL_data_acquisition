@@ -7,9 +7,11 @@ flowchart LR
         A2[get-target-data]
         A3[get-assay-data]
         A4[get-testitem-data]
-        A5[get-tissue-data]
-        A6[get-activity-data]
+        A5[get-activity-data]
         A0[get-data orchestrator]
+    end
+    subgraph Optional manual
+        A6[get-tissue-data]
     end
     subgraph Library
         B1[library/clients]
@@ -22,8 +24,9 @@ flowchart LR
         C2[config/dictionary]
     end
 
-    A0 --> A1 & A2 & A3 & A4 & A5 & A6
-    A1 & A2 & A3 & A4 & A5 & A6 --> B2
+    A0 --> A1 & A2 & A3 & A4 & A5
+    A6 -.->|справочники| A5
+    A1 & A2 & A3 & A4 & A5 --> B2
     B2 --> B1
     B2 --> B3
     B2 --> B4
@@ -32,12 +35,16 @@ flowchart LR
 ```
 
 Оркестратор инициализирует общую конфигурацию, логирование, лимитеры и по очереди
-вызвает CLI для каждой сущности. Внутри используются общие компоненты `library/`:
+вызвает CLI до этапа активностей. Когда нужны связи по тканям, `get_tissue_data`
+запускают отдельно, чтобы подготовить справочники перед объединением активностей.
+Внутри используются общие компоненты `library/`:
 
 - `library/clients` — HTTP-клиенты с ретраями и лимитами для ChEMBL, UniProt,
   PubMed, OpenAlex, CrossRef, PubChem.
 - `library/pipelines` — логика загрузки, трансформации и экспорта по
   сущностям (`document`, `target`, `assay`, `testitem`, `tissue`, `activity`).
+  Даже если оркестратор проходит только «документы → таргеты → ассайи → тестовые
+  объекты → активности», все подпакеты доступны для ручного запуска.
 - `library/utils` — вспомогательные утилиты: CLI-бустрап, детерминированное I/O,
   загрузка конфигурации.
 - `library/qa` и `library/table_quality.py` — валидация Pandera, профили качества,
@@ -51,11 +58,12 @@ flowchart LR
 | Target | `scripts/get_target_data.py` | ChEMBL `/target`, UniProt, Guide to PHARMACOLOGY, локальные словари. | `output.targets_<stamp>.csv` и вспомогательные таблицы (`organism`, `isoform`, `names`, `IUPHAR`). |
 | Assay | `scripts/get_assay_data.py` | ChEMBL `/assay`. | `output.assays_<stamp>.csv` с QC-артефактами. |
 | Test item | `scripts/get_testitem_data.py` | ChEMBL `/molecule`, PubChem PUG-REST. | `output.testitems_<stamp>.csv` и метаданные. |
-| Tissue | `scripts/get_tissue_data.py` | ChEMBL `/tissue`, онтологии UBERON, EFO, BTO, Caloha, LINCS, CCLE. | `output.tissue_<stamp>.csv` и отчёты качества. |
+| Tissue | `scripts/get_tissue_data.py` | ChEMBL `/tissue`, онтологии UBERON, EFO, BTO, Caloha, LINCS, CCLE. | `output.tissue_<stamp>.csv` и отчёты качества; запускается вручную перед пайплайном активностей, если нужны связи по тканям. |
 | Activity | `scripts/get_activity_data.py` | ChEMBL `/activity`. | `output.activities_<stamp>.csv` с обогащениями. |
 
-Оркестратор выполняет эти скрипты последовательно, если отдельные этапы не
-отключены флагами CLI.
+Оркестратор выполняет последовательно «документы → таргеты → ассайи → тестовые
+объекты → активности», если отдельные этапы не отключены флагами CLI. Пайплайн
+тканей запускается отдельно.
 
 Внешние сервисы вызываются через токен-бакетные лимитеры (`sources.*`), все
 запросы проходят через `system.retry`.

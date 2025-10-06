@@ -5,7 +5,10 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+from contextlib import contextmanager
+import io
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -39,6 +42,7 @@ def _make_record(nodeid: str, status: str) -> run_tests.TestRecord:
 def test_build_json__stores_fractional_success_rate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _install_fake_cli_logging(monkeypatch, tmp_path)
     monkeypatch.setattr(run_tests, "_git_output", _stub_git_output)
 
     collector = run_tests.ReportCollector()
@@ -73,6 +77,7 @@ def test_build_json__stores_fractional_success_rate(
 def test_build_json__uses_full_success_for_empty_suite(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _install_fake_cli_logging(monkeypatch, tmp_path)
     monkeypatch.setattr(run_tests, "_git_output", _stub_git_output)
 
     collector = run_tests.ReportCollector()
@@ -95,12 +100,16 @@ def test_build_json__uses_full_success_for_empty_suite(
 def test_main__downgrades_exit_code_when_threshold_not_met(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    log_path, captured_cfgs = _install_fake_cli_logging(monkeypatch, tmp_path)
     monkeypatch.setattr(run_tests, "_git_output", _stub_git_output)
 
     def _fake_pytest_main(pytest_args: list[str], plugins: list[object]) -> int:
         assert plugins, "Collector plugin must be provided"
         collector = plugins[0]
         assert isinstance(collector, run_tests.ReportCollector)
+        assert captured_cfgs, "configure_logger should be called before pytest executes"
+        assert f"--log-file={log_path}" in pytest_args
+        assert f"--log-file-level={captured_cfgs[-1].level}" in pytest_args
 
         collector.start_time = 0.0
         collector.end_time = 0.5
@@ -134,3 +143,57 @@ def test_main__downgrades_exit_code_when_threshold_not_met(
 
     markdown_text = markdown_path.read_text(encoding="utf-8")
     assert "Success rate: 50.00%" in markdown_text
+    assert captured_cfgs[-1].level == "INFO"
+
+
+@pytest.mark.unit
+def test_main__verbose_propagates_debug_logging(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    log_path, captured_cfgs = _install_fake_cli_logging(monkeypatch, tmp_path)
+    monkeypatch.setattr(run_tests, "_git_output", _stub_git_output)
+
+    def _fake_pytest_main(pytest_args: list[str], plugins: list[object]) -> int:
+        assert f"--log-file={log_path}" in pytest_args
+        assert f"--log-file-level=DEBUG" in pytest_args
+        return 0
+
+    monkeypatch.setattr(run_tests.pytest, "main", _fake_pytest_main)
+
+    exit_code = run_tests.main([
+        "--json",
+        str(tmp_path / "report.json"),
+        "--markdown",
+        str(tmp_path / "summary.md"),
+        "--verbose",
+    ])
+
+    assert exit_code == 0
+    assert captured_cfgs and captured_cfgs[-1].level == "DEBUG"
+
+
+def _install_fake_cli_logging(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> tuple[Path, list[run_tests.LoggerConfig]]:
+    log_path = tmp_path / "run_tests.log"
+    captured_cfgs: list[run_tests.LoggerConfig] = []
+
+    def _fake_configure(cfg: run_tests.LoggerConfig, *_: object, **__: object) -> object:
+        captured_cfgs.append(cfg)
+        return object()
+
+    @contextmanager
+    def _fake_setup(script_name: str, log_cfg: run_tests.LoggerConfig, *_: object, **__: object):
+        assert script_name == "run_tests"
+        stream = io.StringIO()
+        cloned_cfg = run_tests.LoggerConfig(
+            level=log_cfg.level,
+            run_id=log_cfg.run_id,
+            redact_secrets=log_cfg.redact_secrets,
+            stream=stream,
+            handlers=list(log_cfg.handlers),
+            logger_name=log_cfg.logger_name,
+        )
+        yield SimpleNamespace(log_path=log_path, log_cfg=cloned_cfg, console_stream=stream)
+
+    monkeypatch.setattr(run_tests, "configure_logger", _fake_configure)
+    monkeypatch.setattr(run_tests, "setup_cli_logging", _fake_setup)
+    return log_path, captured_cfgs

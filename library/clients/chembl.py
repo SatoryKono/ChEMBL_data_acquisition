@@ -9,8 +9,10 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from itertools import islice
 from dataclasses import dataclass, field
+from time import monotonic
 from types import TracebackType
 from typing import Any, Callable, TypeVar, cast
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 from cachetools import TTLCache
@@ -39,6 +41,10 @@ class ChemblClient:
     global_limiter:
         Optional system-wide :class:`RateLimiter` enforcing ``Config.rate``
         across all HTTP clients.
+    jitter:
+        Optional callable producing jitter values for retry backoff. When not
+        provided the jitter is derived from ``retry`` using
+        :meth:`library.config.RetryCfg.build_jitter`.
     """
 
     cache: TTLCache[str, dict[str, Any]] = field(init=False)
@@ -57,9 +63,11 @@ class ChemblClient:
         *,
         session: Session | None = None,
         global_limiter: RateLimiter | None = None,
+        jitter: Callable[[float], float] | None = None,
     ) -> None:
         api = api or ApiCfg()
         retry = retry or RetryCfg()
+        self._jitter = jitter if jitter is not None else retry.build_jitter()
         if session is not None:
             def _session_from_argument(provided: Session = session) -> Session:
                 return provided
@@ -190,86 +198,196 @@ class ChemblClient:
             cached = self.cache.get(cache_key)
             if cached is not None:
                 logger.debug(
-                    "cache_hit", extra={"url": url, "rps": cfg.rps, "status": "hit"}
+                    "cache_hit",
+                    extra={
+                        "url": url,
+                        "rps": cfg.rps,
+                        "status": "hit",
+                        "timeout": read_timeout,
+                    },
                 )
                 return cast(dict[str, Any], cached)
             logger.debug(
-                "cache_miss", extra={"url": url, "rps": cfg.rps, "status": "miss"}
+                "cache_miss",
+                extra={
+                    "url": url,
+                    "rps": cfg.rps,
+                    "status": "miss",
+                    "timeout": read_timeout,
+                },
             )
 
         last_exc: requests.RequestException | ValueError | None = None
         total_attempts = cfg.retries + 1
+        fallback_url = _strip_json_suffix(url)
 
         for attempt in range(1, total_attempts + 1):
-            if self._global_limiter is not None:
-                self._global_limiter.acquire()
-            limiter.acquire()
-            event = "request_start" if attempt == 1 else "request_retry"
-            logger.debug(event, extra={"url": url, "attempt": attempt, "rps": cfg.rps})
-            try:
-                session = self._get_session()
-                with session.get(
-                    url, timeout=(cfg.timeout_connect, read_timeout)
-                ) as response:
-                    response.raise_for_status()
-                    try:
-                        data = cast(dict[str, Any], response.json())
-                    except ValueError as exc:
-                        logger.exception("json_error", extra={"url": url})
-                        raise ValueError(
-                            f"invalid JSON in response from {url}"
-                        ) from exc
-                    logger.debug(
-                        "request_ok",
-                        extra={
-                            "url": url,
-                            "status": getattr(response, "status_code", None),
-                            "rps": cfg.rps,
-                        },
-                    )
-                    with self._cache_lock:
-                        cached = self.cache.get(cache_key)
-                        if cached is not None:
-                            return cast(dict[str, Any], cached)
-                        self.cache[cache_key] = data
-                        logger.debug("cache_set", extra={"url": url, "rps": cfg.rps})
+            request_url = url
+            used_fallback = False
+            while True:
+                if self._global_limiter is not None:
+                    self._global_limiter.acquire()
+                limiter.acquire()
+                if used_fallback:
+                    event = "request_fallback"
+                else:
+                    event = "request_start" if attempt == 1 else "request_retry"
+                logger.debug(
+                    event,
+                    extra={
+                        "url": request_url,
+                        "attempt": attempt,
+                        "rps": cfg.rps,
+                        "timeout": read_timeout,
+                    },
+                )
+                try:
+                    start_time = monotonic()
+                    session = self._get_session()
+                    with session.get(
+                        request_url, timeout=(cfg.timeout_connect, read_timeout)
+                    ) as response:
+                        response.raise_for_status()
+                        try:
+                            data = cast(dict[str, Any], response.json())
+                        except ValueError as exc:
+                            elapsed = monotonic() - start_time
+                            logger.exception(
+                                "json_error",
+                                extra={"url": request_url, "elapsed": elapsed},
+                            )
+                            raise ValueError(
+                                f"invalid JSON in response from {request_url}"
+                            ) from exc
+                        response_elapsed = getattr(response, "elapsed", None)
+                        response_elapsed_seconds: float | None
+                        if (
+                            response_elapsed is not None
+                            and hasattr(response_elapsed, "total_seconds")
+                        ):
+                            response_elapsed_seconds = float(
+                                response_elapsed.total_seconds()
+                            )
+                        else:
+                            response_elapsed_seconds = None
+                        duration = monotonic() - start_time
+                        logger.debug(
+                            "request_ok",
+                            extra={
+                                "url": request_url,
+                                "status": getattr(response, "status_code", None),
+                                "rps": cfg.rps,
+                                "elapsed": duration,
+                                "response_elapsed": response_elapsed_seconds,
+                                "timeout": read_timeout,
+                            },
+                        )
+                        with self._cache_lock:
+                            cached = self.cache.get(cache_key)
+                            if cached is not None:
+                                return cast(dict[str, Any], cached)
+                            self.cache[cache_key] = data
+                            logger.debug(
+                                "cache_set", extra={"url": url, "rps": cfg.rps}
+                            )
+                        if used_fallback:
+                            logger.debug(
+                                "request_fallback_ok",
+                                extra={
+                                    "original_url": url,
+                                    "fallback_url": request_url,
+                                    "attempt": attempt,
+                                    "rps": cfg.rps,
+                                    "elapsed": duration,
+                                    "response_elapsed": response_elapsed_seconds,
+                                    "timeout": read_timeout,
+                                },
+                            )
                         return data
-            except ValueError as exc:
-                last_exc = exc
-                if attempt >= total_attempts:
-                    logger.exception(
-                        "request_fail",
-                        extra={"url": url, "status": None, "rps": cfg.rps},
-                    )
+                except ValueError as exc:
+                    elapsed = monotonic() - start_time
+                    last_exc = exc
+                    if attempt >= total_attempts:
+                        logger.exception(
+                            "request_fail",
+                            extra={
+                                "url": request_url,
+                                "status": None,
+                                "rps": cfg.rps,
+                                "elapsed": elapsed,
+                                "attempt": attempt,
+                                "timeout": read_timeout,
+                            },
+                        )
+                        break
+                    delay = _backoff_delay(attempt, cfg, header_delay=None, jitter=self._jitter)
+                    _log_retry_delay(request_url, attempt, None, delay)
+                    sleep(delay)
                     break
-                delay = _backoff_delay(attempt, cfg, header_delay=None)
-                _log_retry_delay(url, attempt, None, delay)
-                sleep(delay)
-            except requests.HTTPError as exc:
-                last_exc = exc
-                response = exc.response
-                status = getattr(response, "status_code", None)
-                if attempt >= total_attempts:
-                    logger.exception(
-                        "request_fail",
-                        extra={"url": url, "status": status, "rps": cfg.rps},
+                except requests.HTTPError as exc:
+                    elapsed = monotonic() - start_time
+                    last_exc = exc
+                    response = exc.response
+                    status = getattr(response, "status_code", None)
+                    if (
+                        status == 404
+                        and not used_fallback
+                        and fallback_url is not None
+                        and fallback_url != request_url
+                    ):
+                        used_fallback = True
+                        request_url = fallback_url
+                        logger.debug(
+                            "request_fallback_switch",
+                            extra={
+                                "original_url": url,
+                                "fallback_url": request_url,
+                                "attempt": attempt,
+                                "rps": cfg.rps,
+                                "elapsed": elapsed,
+                            },
+                        )
+                        continue
+                    if attempt >= total_attempts:
+                        logger.exception(
+                            "request_fail",
+                            extra={
+                                "url": request_url,
+                                "status": status,
+                                "rps": cfg.rps,
+                                "elapsed": elapsed,
+                                "attempt": attempt,
+                                "timeout": read_timeout,
+                            },
+                        )
+                        break
+                    header_delay = _retry_after_delay(response)
+                    delay = _backoff_delay(
+                        attempt, cfg, header_delay, jitter=self._jitter
                     )
+                    _log_retry_delay(request_url, attempt, status, delay, header_delay)
+                    sleep(delay)
                     break
-                header_delay = _retry_after_delay(response)
-                delay = _backoff_delay(attempt, cfg, header_delay)
-                _log_retry_delay(url, attempt, status, delay, header_delay)
-                sleep(delay)
-            except requests.RequestException as exc:
-                last_exc = exc
-                if attempt >= total_attempts:
-                    logger.exception(
-                        "request_fail",
-                        extra={"url": url, "status": None, "rps": cfg.rps},
-                    )
+                except requests.RequestException as exc:
+                    elapsed = monotonic() - start_time
+                    last_exc = exc
+                    if attempt >= total_attempts:
+                        logger.exception(
+                            "request_fail",
+                            extra={
+                                "url": request_url,
+                                "status": None,
+                                "rps": cfg.rps,
+                                "elapsed": elapsed,
+                                "attempt": attempt,
+                                "timeout": read_timeout,
+                            },
+                        )
+                        break
+                    delay = _backoff_delay(attempt, cfg, header_delay=None, jitter=self._jitter)
+                    _log_retry_delay(request_url, attempt, None, delay)
+                    sleep(delay)
                     break
-                delay = _backoff_delay(attempt, cfg, header_delay=None)
-                _log_retry_delay(url, attempt, None, delay)
-                sleep(delay)
 
         if last_exc is not None:
             raise last_exc
@@ -318,6 +436,19 @@ def _chunked(items: Iterable[T], size: int) -> Iterator[list[T]]:
         yield chunk
 
 
+def _strip_json_suffix(url: str) -> str | None:
+    """Return ``url`` without a trailing ``.json`` path component if present."""
+
+    split = urlsplit(url)
+    path = split.path
+    if not path.endswith(".json"):
+        return None
+    stripped = path[:-5]
+    if not stripped:
+        return None
+    return urlunsplit(split._replace(path=stripped))
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -356,11 +487,20 @@ def _is_retry_after_applicable(status: int) -> bool:
 
 
 def _backoff_delay(
-    attempt: int, cfg: ApiCfg, header_delay: float | None
+    attempt: int,
+    cfg: ApiCfg,
+    header_delay: float | None,
+    *,
+    jitter: Callable[[float], float] | None = None,
 ) -> float:
     base = cfg.backoff_factor * (2 ** (attempt - 1))
-    jitter = random.uniform(0, cfg.backoff_factor)
-    delay = base + jitter
+    jitter_value = 0.0
+    if cfg.backoff_factor > 0:
+        if jitter is not None:
+            jitter_value = jitter(cfg.backoff_factor)
+        else:
+            jitter_value = random.uniform(0, cfg.backoff_factor)
+    delay = base + jitter_value
     if header_delay is not None:
         delay = max(delay, header_delay)
     return float(delay)

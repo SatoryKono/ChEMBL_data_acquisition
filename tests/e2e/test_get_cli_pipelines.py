@@ -23,6 +23,8 @@ from scripts import (
     get_testitem_data,
 )
 
+from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
+
 
 @pytest.fixture()
 def sample_csv(tmp_path: Path) -> Callable[[str], Path]:
@@ -49,14 +51,29 @@ class _MemoryLogger:
     def __init__(self) -> None:
         self.events: list[tuple[str, str, dict[str, object]]] = []
 
-    def info(self, event: str, **kwargs: object) -> None:
-        self.events.append(("info", event, dict(kwargs)))
+    def _record(
+        self,
+        level: str,
+        event: str,
+        args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> None:
+        payload = dict(kwargs)
+        if args:
+            payload["args"] = args
+        self.events.append((level, event, payload))
 
-    def warning(self, event: str, **kwargs: object) -> None:
-        self.events.append(("warning", event, dict(kwargs)))
+    def info(self, event: str, *args: object, **kwargs: object) -> None:
+        self._record("info", event, args, dict(kwargs))
 
-    def error(self, event: str, **kwargs: object) -> None:
-        self.events.append(("error", event, dict(kwargs)))
+    def warning(self, event: str, *args: object, **kwargs: object) -> None:
+        self._record("warning", event, args, dict(kwargs))
+
+    def error(self, event: str, *args: object, **kwargs: object) -> None:
+        self._record("error", event, args, dict(kwargs))
+
+    def debug(self, event: str, *args: object, **kwargs: object) -> None:
+        self._record("debug", event, args, dict(kwargs))
 
 
 def _patch_logger(monkeypatch: pytest.MonkeyPatch, module: object) -> _MemoryLogger:
@@ -139,8 +156,15 @@ def _patch_activity_cli(monkeypatch: pytest.MonkeyPatch, cfg: Config) -> None:
         base_parser=None,
     ) -> Config:
         args._config_metadata = None
-        if hasattr(args, "output_csv") and args.output_csv is not None:
-            args.output_csv = Path(args.output_csv)
+        final_out = getattr(args, "final_out", None)
+        if final_out is not None:
+            final_path = Path(final_out)
+            args.final_out = final_path
+            setattr(args, "output_csv", final_path)
+        elif hasattr(args, "output_csv") and args.output_csv is not None:
+            output_path = Path(args.output_csv)
+            args.final_out = output_path
+            args.output_csv = output_path
         cfg.activity.batch_size = getattr(args, "batch_size", cfg.activity.batch_size)
         cfg.activity.limit = getattr(args, "limit", cfg.activity.limit)
         cfg.activity.offset = getattr(args, "offset", cfg.activity.offset)
@@ -154,18 +178,6 @@ def _patch_activity_cli(monkeypatch: pytest.MonkeyPatch, cfg: Config) -> None:
     monkeypatch.setattr(cli_utils, "apply_config_overrides", fake_apply_config_overrides)
     monkeypatch.setattr(cli_utils, "ensure_dirs", lambda _cfg: None)
 
-    def fake_configure_logger(log_cfg):
-        return get_activity_data.logger
-
-    monkeypatch.setattr(cli_utils.cli, "configure_logger", fake_configure_logger)
-    monkeypatch.setattr(get_activity_data.cli, "configure_logger", fake_configure_logger)
-    monkeypatch.setattr(get_activity_data, "configure_logger", fake_configure_logger)
-
-    @contextmanager
-    def fake_setup_cli_logging(script_name, log_cfg, date_str=None, **_kwargs):
-        yield SimpleNamespace(log_cfg=log_cfg, console_stream=None)
-
-    monkeypatch.setattr(get_activity_data, "setup_cli_logging", fake_setup_cli_logging)
 
 @pytest.mark.e2e
 def test_get_testitem_run_success(
@@ -199,7 +211,7 @@ def test_get_testitem_run_success(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
@@ -243,7 +255,7 @@ def test_get_testitem_run_failure_logs(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
@@ -278,7 +290,7 @@ def test_get_testitem_run_skip_existing(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=True,
         force=False,
     )
@@ -325,7 +337,7 @@ def test_get_activity_cli__retry_and_idempotent(
     logger_stub = _patch_logger(monkeypatch, get_activity_data)
     _patch_activity_cli(monkeypatch, cfg)
 
-    args = ["--input", str(input_csv), "--output", str(output_csv)]
+    args = ["--input", str(input_csv), "--final-out", str(output_csv)]
 
     first_exit = get_activity_data.main(args)
     assert first_exit == 0
@@ -350,6 +362,109 @@ def test_get_activity_cli__retry_and_idempotent(
     done_events = [event for _, event, _ in logger_stub.events]
     assert done_events.count("activity_pipeline_done") >= 1
     assert not any(event == "activity_pipeline_failed" for event in done_events)
+
+
+@pytest.mark.e2e
+def test_get_activity_cli__timeout_split_recovers(
+    tmp_path: Path,
+    cfg: Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_activity_cfg(cfg)
+    cfg.activity.batch_size = 4
+    cfg.retry.max_attempts = 2
+    input_csv = tmp_path / "activities.csv"
+    input_csv.write_text(
+        "activity_id\nACT1\nACT2\nACT3\nACT4\n",
+        encoding="utf-8",
+    )
+    output_csv = tmp_path / "out" / "activities.csv"
+
+    activity_rows = {
+        "ACT1": {
+            "activity_id": "ACT1",
+            "molecule_chembl_id": "CHEMBL1",
+            "assay_chembl_id": "ASSAY1",
+            "standard_value": 1.0,
+            "standard_units": "nM",
+            "standard_type": "IC50",
+            "relation": "=",
+            "molecule_pref_name": "Compound 1",
+        },
+        "ACT2": {
+            "activity_id": "ACT2",
+            "molecule_chembl_id": "CHEMBL2",
+            "assay_chembl_id": "ASSAY2",
+            "standard_value": 2.0,
+            "standard_units": "nM",
+            "standard_type": "IC50",
+            "relation": "=",
+            "molecule_pref_name": "Compound 2",
+        },
+        "ACT3": {
+            "activity_id": "ACT3",
+            "molecule_chembl_id": "CHEMBL3",
+            "assay_chembl_id": "ASSAY3",
+            "standard_value": 3.0,
+            "standard_units": "nM",
+            "standard_type": "IC50",
+            "relation": "=",
+            "molecule_pref_name": "Compound 3",
+        },
+        "ACT4": {
+            "activity_id": "ACT4",
+            "molecule_chembl_id": "CHEMBL4",
+            "assay_chembl_id": "ASSAY4",
+            "standard_value": 4.0,
+            "standard_units": "nM",
+            "standard_type": "IC50",
+            "relation": "=",
+            "molecule_pref_name": "Compound 4",
+        },
+    }
+
+    call_log: list[tuple[str, ...]] = []
+
+    def _fake_get_activities(chunk_ids: Iterable[str], **_: object) -> pd.DataFrame:
+        identifiers = [str(item) for item in chunk_ids]
+        call_log.append(tuple(identifiers))
+        if len(identifiers) > 1:
+            raise requests.ReadTimeout("simulated timeout")
+        row = activity_rows[identifiers[0]]
+        return pd.DataFrame([row])
+
+    monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
+    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(get_activity_data, "sleep", lambda *_args, **_kwargs: None)
+
+    written = _install_activity_writer(monkeypatch)
+    logger_stub = _patch_logger(monkeypatch, get_activity_data)
+    _patch_activity_cli(monkeypatch, cfg)
+
+    args = [
+        "--input",
+        str(input_csv),
+        "--final-out",
+        str(output_csv),
+        "--batch-size",
+        "4",
+    ]
+
+    exit_code = get_activity_data.main(args)
+
+    assert exit_code == 0
+    assert output_csv.exists()
+    result = pd.read_csv(output_csv)
+    assert list(result["activity_id"]) == ["ACT1", "ACT2", "ACT3", "ACT4"]
+    assert len(written) == 1
+
+    events = [event for _, event, _ in logger_stub.events]
+    assert "activity_fetch_split" in events
+    assert "activity_pipeline_done" in events
+    assert not any(event == "activity_pipeline_failed" for event in events)
+
+    assert call_log[0] == ("ACT1", "ACT2", "ACT3", "ACT4")
+    assert any(len(ids) == 1 for ids in call_log)
 
 
 @pytest.mark.e2e
@@ -408,7 +523,7 @@ def test_get_activity_cli__workers_and_offset(
     args = [
         "--input",
         str(input_csv),
-        "--output",
+        "--final-out",
         str(output_csv),
         "--workers",
         "2",
@@ -429,6 +544,87 @@ def test_get_activity_cli__workers_and_offset(
     events = [event for _, event, _ in logger_stub.events]
     assert "process_offset" in events
     assert "activity_pipeline_done" in events
+
+
+@pytest.mark.e2e
+def test_get_activity_cli__chembl_identifier_backfill_ratio(
+    tmp_path: Path,
+    cfg: Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_activity_cfg(cfg)
+
+    total_rows = 200
+    activity_ids = [f"ACT{i:05d}" for i in range(total_rows)]
+    chunk_df = pd.DataFrame(
+        {
+            "activity_id": pd.Series(activity_ids, dtype="string"),
+            "activity_chembl_id": pd.Series([pd.NA] * total_rows, dtype="string"),
+            "molecule_chembl_id": pd.Series(
+                [f"CHEMBL{i % 7:05d}" for i in range(total_rows)], dtype="string"
+            ),
+            "assay_chembl_id": pd.Series(
+                [f"ASSAY{i % 11:05d}" for i in range(total_rows)], dtype="string"
+            ),
+            "standard_value": pd.Series(
+                [float(i % 50 + 1) for i in range(total_rows)]
+            ),
+            "standard_units": pd.Series(["nM"] * total_rows, dtype="string"),
+            "standard_type": pd.Series(["IC50"] * total_rows, dtype="string"),
+            "relation": pd.Series(["="] * total_rows, dtype="string"),
+        }
+    )
+
+    input_csv = tmp_path / "activities_input.csv"
+    input_csv.write_text(
+        "activity_id\n" + "\n".join(activity_ids),
+        encoding="utf-8",
+    )
+
+    def _fake_get_activities(chunk_ids, **_kwargs):
+        identifiers = [str(item) for item in chunk_ids]
+        mask = chunk_df["activity_id"].astype(str).isin(identifiers)
+        return chunk_df.loc[mask].reset_index(drop=True)
+
+    output_csv = tmp_path / "out" / "activities.csv"
+
+    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
+
+    written = _install_activity_writer(monkeypatch)
+    logger_stub = _patch_logger(monkeypatch, get_activity_data)
+    _patch_activity_cli(monkeypatch, cfg)
+
+    args = ["--input", str(input_csv), "--final-out", str(output_csv)]
+
+    exit_code = get_activity_data.main(args)
+
+    assert exit_code == 0
+    assert output_csv.exists()
+    assert written, "expected pipeline to emit output"
+
+    written_df = written[0][1]
+    assert "activity_id" in written_df.columns
+    assert "activity_chembl_id" in written_df.columns
+
+    id_series = written_df["activity_id"].astype("string")
+    chembl_series = written_df["activity_chembl_id"].astype("string")
+    id_present = id_series.notna() & id_series.str.strip().ne("")
+    assert int(id_present.sum()) == total_rows
+
+    chembl_present = chembl_series.notna() & chembl_series.str.strip().ne("")
+    filled_ratio = chembl_present[id_present].sum() / id_present.sum()
+    assert filled_ratio >= 0.99
+
+    # Spot-check fallback alignment for a few rows.
+    assert (
+        chembl_series[id_present].iloc[:5].tolist()
+        == id_series[id_present].iloc[:5].tolist()
+    )
+
+    events = [event for _, event, _ in logger_stub.events]
+    assert "activity_pipeline_done" in events
+    assert "activity_pipeline_failed" not in events
 
 
 @pytest.mark.e2e
@@ -461,7 +657,7 @@ def test_get_activity_cli__non_csv_output_path(
     _patch_activity_cli(monkeypatch, cfg)
 
     exit_code = get_activity_data.main(
-        ["--input", str(input_csv), "--output", str(output_csv)]
+        ["--input", str(input_csv), "--final-out", str(output_csv)]
     )
 
     assert exit_code == 0
@@ -498,10 +694,11 @@ def test_get_document_run_all_success(
             get_document_data.logger.warning(
                 "document_missing_pubmed", count=int(missing)
             )
-        _ensure_parent(Path(args.output_csv))
-        frame.to_csv(args.output_csv, index=False)
+        output_path = Path(args.final_out)
+        _ensure_parent(output_path)
+        frame.to_csv(output_path, index=False)
         get_document_data.logger.info(
-            "document_all_done", output=str(args.output_csv), rows=len(frame)
+            "document_all_done", output=str(args.final_out), rows=len(frame)
         )
         return 0
 
@@ -509,7 +706,7 @@ def test_get_document_run_all_success(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
         command="all",
@@ -548,7 +745,7 @@ def test_get_document_run_missing_handler(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
         command="all",
@@ -575,7 +772,7 @@ def test_get_document_run_all_failure(
 
     def _failing_all(config: Config, args: argparse.Namespace) -> int:
         get_document_data.logger.error(
-            "document_all_failed", output=str(args.output_csv), exit_code=1
+            "document_all_failed", output=str(args.final_out), exit_code=1
         )
         return 1
 
@@ -583,7 +780,7 @@ def test_get_document_run_all_failure(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
         command="all",
@@ -749,17 +946,44 @@ def test_get_assay_run_success(
     input_csv = sample_csv("assay")
     output_csv = tmp_path / "out" / "assays.csv"
     logger_stub = _patch_logger(monkeypatch, get_assay_data)
+    data_dir = Path(__file__).resolve().parents[1] / "data"
+    dictionary_path = data_dir / "assay_dictionary.csv"
 
     def _stub_run_chembl(config: Config, args: argparse.Namespace) -> int:
         frame = pd.read_csv(args.input_csv)
-        frame["description"] = frame["description"].astype("string").str.strip()
-        frame["description_length"] = frame["description"].str.len().astype("Int64")
-        frame = frame.drop_duplicates(subset=["assay_chembl_id"])
-        frame = frame.sort_values("assay_chembl_id").reset_index(drop=True)
-        _ensure_parent(args.output_csv)
-        frame.to_csv(args.output_csv, index=False)
+        dictionary = pd.read_csv(dictionary_path)
+        dictionary["assay_chembl_id"] = dictionary["assay_chembl_id"].astype("string")
+        enriched = frame.merge(dictionary, on="assay_chembl_id", how="left")
+        enriched["description"] = enriched["description"].astype("string").str.strip()
+        enriched["description_length"] = (
+            enriched["description"].str.len().astype("Int64")
+        )
+        enriched["year"] = pd.to_numeric(enriched["year"], errors="coerce").astype("Int64")
+        enriched = enriched.drop_duplicates(subset=["assay_chembl_id"])
+        enriched = enriched.sort_values("assay_chembl_id").reset_index(drop=True)
+        quality_columns = ["assay_strain", "assay_group", "year", "accession"]
+        completeness = 1.0 - enriched[quality_columns].isna().mean()
+        if float(completeness.min()) < ASSAY_ENRICHMENT_MIN_RATIO:
+            raise AssertionError(
+                "assay enrichment below threshold "
+                f"(threshold={ASSAY_ENRICHMENT_MIN_RATIO}, completeness={completeness.to_dict()})"
+            )
+        output_path = Path(args.final_out)
+        _ensure_parent(output_path)
+        columns = [
+            "assay_chembl_id",
+            "target_chembl_id",
+            "document_chembl_id",
+            "description",
+            "description_length",
+            "assay_strain",
+            "assay_group",
+            "year",
+            "accession",
+        ]
+        enriched.to_csv(output_path, index=False, columns=columns)
         get_assay_data.logger.info(
-            "assay_pipeline_done", output=str(args.output_csv), processed=len(frame)
+            "assay_pipeline_done", output=str(args.final_out), processed=len(enriched)
         )
         return 0
 
@@ -767,7 +991,7 @@ def test_get_assay_run_success(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
@@ -782,8 +1006,15 @@ def test_get_assay_run_success(
         "document_chembl_id",
         "description",
         "description_length",
+        "assay_strain",
+        "assay_group",
+        "year",
+        "accession",
     ]
     assert (result["description_length"] == result["description"].str.len()).all()
+    quality_columns = ["assay_strain", "assay_group", "year", "accession"]
+    completeness = 1.0 - result[quality_columns].isna().mean()
+    assert (completeness >= ASSAY_ENRICHMENT_MIN_RATIO).all(), completeness
     events = [event for _, event, _ in logger_stub.events]
     assert "assay_pipeline_done" in events
 
@@ -808,7 +1039,7 @@ def test_get_assay_run_skip_existing(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=True,
         force=False,
     )
@@ -833,7 +1064,7 @@ def test_get_assay_run_failure(
 
     def _failing_run(config: Config, args: argparse.Namespace) -> int:
         get_assay_data.logger.error(
-            "assay_pipeline_failed", output=str(args.output_csv), processed=0, exit_code=1
+            "assay_pipeline_failed", output=str(args.final_out), processed=0, exit_code=1
         )
         return 1
 
@@ -841,7 +1072,7 @@ def test_get_assay_run_failure(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
@@ -878,10 +1109,11 @@ def test_get_activity_run_success(
         frame["is_valid"] = (~missing).astype("boolean")
         frame["standard_units"] = frame["standard_units"].astype("string").str.strip()
         frame = frame.sort_values("activity_id").reset_index(drop=True)
-        _ensure_parent(args.output_csv)
-        frame.to_csv(args.output_csv, index=False)
+        output_path = Path(args.final_out)
+        _ensure_parent(output_path)
+        frame.to_csv(output_path, index=False)
         get_activity_data.logger.info(
-            "activity_pipeline_done", output=str(args.output_csv), rows=len(frame)
+            "activity_pipeline_done", output=str(args.final_out), rows=len(frame)
         )
         return 0
 
@@ -889,7 +1121,7 @@ def test_get_activity_run_success(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
@@ -926,7 +1158,7 @@ def test_get_activity_run_skip_existing(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=True,
         force=False,
     )
@@ -951,7 +1183,7 @@ def test_get_activity_run_failure(
 
     def _failing_run(config: Config, args: argparse.Namespace) -> int:
         get_activity_data.logger.error(
-            "activity_pipeline_failed", output=str(args.output_csv), exit_code=1
+            "activity_pipeline_failed", output=str(args.final_out), exit_code=1
         )
         return 1
 
@@ -959,7 +1191,7 @@ def test_get_activity_run_failure(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
@@ -1040,7 +1272,7 @@ def test_get_activity_run_retry_and_idempotent(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
@@ -1120,7 +1352,7 @@ def test_get_activity_run_workers_offset_and_non_csv(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
         offset=1,

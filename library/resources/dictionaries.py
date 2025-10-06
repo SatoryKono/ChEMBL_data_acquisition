@@ -1,0 +1,185 @@
+"""Load and validate bundled dictionary resources from the manifest."""
+
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+from typing import Mapping
+
+import yaml
+
+from config.paths import DICTIONARY_DIR
+
+__all__ = [
+    "DictionaryManifestError",
+    "DictionaryResource",
+    "get_resource",
+    "get_resource_path",
+    "list_resources",
+    "resolve_resource_reference",
+]
+
+_MANIFEST_FILENAME = "manifest.yaml"
+
+
+class DictionaryManifestError(RuntimeError):
+    """Raised when the dictionary manifest cannot be parsed or validated."""
+
+
+@dataclass(frozen=True)
+class DictionaryResource:
+    """Describe a dictionary resource declared in the manifest."""
+
+    name: str
+    relative_path: Path
+    path: Path
+    version: str
+    sha256: str
+    generator: Path
+
+
+def _compute_sha256(path: Path) -> str:
+    """Return the SHA256 checksum for ``path``.
+
+    Directories are hashed by iterating over files in lexicographic order and
+    feeding both the relative path and file content into the digest.  This
+    strategy guarantees deterministic results regardless of filesystem ordering.
+    """
+
+    hasher = hashlib.sha256()
+    if path.is_dir():
+        for child in sorted(path.rglob("*")):
+            if child.is_dir():
+                continue
+            hasher.update(str(child.relative_to(path)).encode("utf-8"))
+            with child.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(8192), b""):
+                    hasher.update(chunk)
+        return hasher.hexdigest()
+    if not path.is_file():
+        raise FileNotFoundError(f"Dictionary resource missing: {path}")
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(8192), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _manifest_path(base_dir: Path | None = None) -> Path:
+    root = DICTIONARY_DIR if base_dir is None else Path(base_dir)
+    return (root / _MANIFEST_FILENAME).resolve()
+
+
+def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryResource]:
+    manifest_path = _manifest_path(base_dir)
+    if not manifest_path.exists():
+        raise DictionaryManifestError(f"Manifest not found: {manifest_path}")
+
+    with manifest_path.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+
+    resources = data.get("resources")
+    if not isinstance(resources, Mapping):
+        raise DictionaryManifestError("Manifest 'resources' section must be a mapping")
+
+    manifest_root = manifest_path.parent
+    parsed: dict[str, DictionaryResource] = {}
+    for name, meta in resources.items():
+        if not isinstance(meta, Mapping):
+            raise DictionaryManifestError(f"Invalid manifest entry for {name!r}")
+
+        path_value = meta.get("path")
+        version = meta.get("version")
+        sha256_expected = meta.get("sha256")
+        generator = meta.get("generator")
+
+        if not isinstance(path_value, str):
+            raise DictionaryManifestError(f"Resource {name!r} is missing a string 'path'")
+        if Path(path_value).is_absolute():
+            raise DictionaryManifestError(f"Resource {name!r} must use a relative path")
+        if not isinstance(version, str):
+            raise DictionaryManifestError(f"Resource {name!r} is missing a string 'version'")
+        if not isinstance(sha256_expected, str):
+            raise DictionaryManifestError(f"Resource {name!r} is missing a string 'sha256'")
+        if not isinstance(generator, str):
+            raise DictionaryManifestError(f"Resource {name!r} is missing a string 'generator'")
+
+        relative_path = Path(path_value)
+        absolute_path = (manifest_root / relative_path).resolve()
+        if name in parsed:
+            raise DictionaryManifestError(f"Duplicate manifest entry: {name}")
+
+        sha256_actual = _compute_sha256(absolute_path)
+        if sha256_actual != sha256_expected:
+            raise DictionaryManifestError(
+                "Checksum mismatch for resource"
+                f" {name!r}: expected {sha256_expected}, got {sha256_actual}"
+            )
+
+        parsed[name] = DictionaryResource(
+            name=name,
+            relative_path=relative_path,
+            path=absolute_path,
+            version=version,
+            sha256=sha256_expected,
+            generator=Path(generator),
+        )
+
+    return parsed
+
+
+@lru_cache(maxsize=1)
+def _load_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryResource]:
+    return _parse_manifest(base_dir)
+
+
+def list_resources() -> Mapping[str, DictionaryResource]:
+    """Return a mapping with all resources declared in the manifest."""
+
+    return _load_manifest()
+
+
+def get_resource(name: str, *, base_dir: Path | None = None) -> DictionaryResource:
+    """Return the manifest entry for ``name``.
+
+    Parameters
+    ----------
+    name:
+        Resource identifier declared in ``manifest.yaml``.
+    base_dir:
+        Optional dictionary directory override used in tests.
+    """
+
+    manifest = _load_manifest(base_dir)
+    try:
+        return manifest[name]
+    except KeyError as exc:
+        raise KeyError(f"Unknown dictionary resource: {name}") from exc
+
+
+def get_resource_path(name: str, *, base_dir: Path | None = None) -> Path:
+    """Return the absolute filesystem path for resource ``name``."""
+
+    return get_resource(name, base_dir=base_dir).path
+
+
+def resolve_resource_reference(value: object) -> Path | object:
+    """Resolve manifest keys in configuration values.
+
+    Strings matching resource names are replaced with the validated absolute
+    :class:`~pathlib.Path`.  Other values pass through unchanged so that callers
+    can still provide custom paths when needed.
+    """
+
+    if isinstance(value, Path):
+        return value
+    if isinstance(value, str):
+        try:
+            return get_resource_path(value)
+        except KeyError:
+            return Path(value)
+    try:
+        return Path(value)  # type: ignore[arg-type]
+    except TypeError:
+        return value

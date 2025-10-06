@@ -65,7 +65,7 @@ whether user input is required (`Yes` = must be provided explicitly).
 |-----|----------|---------|-------|
 | `chembl_base` | No | `https://www.ebi.ac.uk/chembl/api/data` | Base URL of the REST API. |
 | `timeout_connect` | No | `5` | Connection timeout (seconds). |
-| `timeout_read` | No | `30` | Read timeout (seconds). |
+| `timeout_read` | No | `90` | Read timeout (seconds). |
 | `retries` | No | `3` | HTTP retry attempts. |
 | `backoff_factor` | No | `0.5` | Exponential backoff multiplier. |
 | `rps` | No | `20` | Requests-per-second limit. |
@@ -103,9 +103,9 @@ and may be overridden via CLI or environment variables.
 | Key | Default | Notes |
 |-----|---------|-------|
 | `column` | `activity_chembl_id` | Input identifier column. |
-| `batch_size` | `50` | Identifiers per request. |
+| `batch_size` | `20` | Identifiers per request. |
 | `workers` | `1` | Worker threads. |
-| `timeout` | `30.0` | Read timeout (seconds). |
+| `timeout` | `90.0` | Read timeout (seconds). |
 | `limit` | `null` | Max records; `null` processes all. |
 | `dry_run` | `false` | Enable CLI `--dry-run`. |
 
@@ -123,14 +123,14 @@ and may be overridden via CLI or environment variables.
 | Key | Default | Notes |
 |-----|---------|-------|
 | `column` | `molecule_chembl_id` | Input column. |
-| `batch_size` | `1000` | Identifiers per request. |
-| `timeout` | `30.0` | Read timeout. |
+| `batch_size` | `250` | Identifiers per request. |
+| `timeout` | `90.0` | Read timeout. |
 | `limit` | `null` | Max records. |
 | `offset` | `0` | Start offset. |
 | `request_limit` | `1000` | Hard cap for API requests. |
 | `retries` | `5` | Batch retries. |
 | `backoff_factor` | `0.5` | Retry backoff multiplier. |
-| `batch_retry.enable` | `false` | Enable shrinking batches on repeated failures. |
+| `batch_retry.enable` | `true` | Enable shrinking batches on repeated failures. |
 | `batch_retry.shrink_factor` | `0.5` | Reduction factor per retry. |
 | `batch_retry.min_size` | `1` | Minimum batch size. |
 | `fields` | list | Fields requested from the API (see config for full list, includes `parent_molecule`, PubChem columns, etc.). |

@@ -154,6 +154,7 @@ UNIPROT_OUTPUT_COLUMNS: list[str] = [
 
 _GTOP_JSON_FAILURE_CACHE: set[tuple[str, str]] = set()
 _GTOP_NON_JSON_CONTENT_TYPE_CACHE: set[tuple[str, str]] = set()
+_GTOP_SKIPPED_FAILURE_LOG: set[tuple[str, str]] = set()
 
 
 def _collect_name_fields(name_obj: dict[str, Any]) -> Iterable[str]:
@@ -877,6 +878,13 @@ def _fetch_gtop_endpoint(
 
     cache_key = (gtop_id, endpoint)
     if cache_key in _GTOP_JSON_FAILURE_CACHE:
+        if cache_key not in _GTOP_SKIPPED_FAILURE_LOG:
+            logger.debug(
+                "gtop_fetch_skipped_after_failure",
+                gtop_id=gtop_id,
+                endpoint=endpoint,
+            )
+            _GTOP_SKIPPED_FAILURE_LOG.add(cache_key)
         return None
 
     limiter = get_limiter("iuphar", cfg.rps, cfg.burst)
@@ -933,6 +941,7 @@ def _fetch_gtop_endpoint(
         logger.warning(
             "gtop_request_failed", gtop_id=gtop_id, endpoint=endpoint, error=str(exc)
         )
+        _GTOP_JSON_FAILURE_CACHE.add(cache_key)
     return None
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 from dataclasses import replace
 from pathlib import Path
 from typing import Callable
@@ -11,6 +12,7 @@ import pytest
 
 from library.config import Config
 from scripts import get_data, get_target_data
+from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_lines
 
 
@@ -57,6 +59,8 @@ def _prepare_environment(tmp_path: Path) -> get_data.PipelineRunConfig:
     output_dir.mkdir()
     config_path = base_path / "config.yaml"
     config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
+    input_files = dict(get_data.DEFAULT_INPUT_FILES)
+    output_stems = dict(get_data.DEFAULT_OUTPUT_STEMS)
     return get_data.PipelineRunConfig(
         base_path=base_path,
         input_dir=input_dir,
@@ -68,6 +72,8 @@ def _prepare_environment(tmp_path: Path) -> get_data.PipelineRunConfig:
         force=False,
         skip_existing=False,
         dry_run=False,
+        input_files=input_files,
+        output_stems=output_stems,
     )
 
 
@@ -75,6 +81,12 @@ def _write_input(cfg: get_data.PipelineRunConfig, name: str, frame: pd.DataFrame
     path = cfg.input_path(name)
     frame.to_csv(path, index=False)
     return path
+
+
+def _load_manifest(cfg: get_data.PipelineRunConfig) -> dict[str, object]:
+    manifest_path = cfg.base_path / "reports" / "run_manifest.json"
+    assert manifest_path.exists(), "expected run manifest to be created"
+    return json.loads(manifest_path.read_text(encoding="utf-8"))
 
 
 @pytest.mark.integration
@@ -98,39 +110,50 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
         return 0
 
     step = get_data.PipelineStep(
-        "document",
-        _build_stub_step(
+        name="document",
+        main=_build_stub_step(
             required_columns=["document_chembl_id", "title", "pubmed_id"],
             key_column="document_chembl_id",
             on_execute=_on_execute,
         ),
-        None,
+        input_filename="document.csv",
+        output_stem="documents",
     )
 
     stream = io.StringIO()
     logger = get_data.configure_logger(
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
     )
-    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", (step,), raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
-    status = get_data.run_pipeline(cfg)
+    steps = (step,)
+    status = get_data.run_pipeline(cfg, steps=steps)
     assert status == 0
     assert output_payload, "expected pipeline to write output"
     output_frame = output_payload[0]
     assert list(output_frame["document_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
     logs = parse_log_lines(stream.getvalue())
     assert any(record.get("event") == "duplicates_detected" for record in logs)
+    manifest_success = _load_manifest(cfg)
+    assert manifest_success["run"]["exit_code"] == 0
+    assert manifest_success["steps"][0]["status"] == "success"
+    assert manifest_success["steps"][0]["output"]["exists"] is True
+    assert manifest_success["steps"][0]["output"]["checksum_sha256"]
 
     malformed = frame.drop(columns=["title"])
     _write_input(cfg, "document", malformed)
     stream.truncate(0)
     stream.seek(0)
 
-    status_malformed = get_data.run_pipeline(cfg)
+    status_malformed = get_data.run_pipeline(cfg, steps=steps)
     assert status_malformed == 1
     logs = parse_log_lines(stream.getvalue())
     assert any(record.get("event") == "schema_mismatch" for record in logs)
+    manifest_failure = _load_manifest(cfg)
+    assert manifest_failure["run"]["exit_code"] == 1
+    assert manifest_failure["steps"][0]["status"] == "failed"
+    assert manifest_failure["steps"][0]["reason"] == "non_zero_exit"
+    assert manifest_failure["steps"][0]["output"]["exists"] is False
 
 
 @pytest.mark.integration
@@ -155,37 +178,50 @@ def test_pipeline_subset__skip_existing_and_force(tmp_path: Path, monkeypatch: p
         return 0
 
     step = get_data.PipelineStep(
-        "target",
-        _build_stub_step(
+        name="target",
+        main=_build_stub_step(
             required_columns=["target_chembl_id", "name", "organism"],
             key_column="target_chembl_id",
             on_execute=_on_execute,
         ),
-        None,
+        input_filename="target.csv",
+        output_stem="targets",
     )
 
     stream = io.StringIO()
     logger = get_data.configure_logger(
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
     )
-    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", (step,), raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
-    status_first = get_data.run_pipeline(cfg)
+    steps = (step,)
+    status_first = get_data.run_pipeline(cfg, steps=steps)
     assert status_first == 0
     assert executions == [2]
+    manifest_first = _load_manifest(cfg)
+    assert manifest_first["steps"][0]["status"] == "success"
+    assert manifest_first["steps"][0]["output"]["exists"] is True
 
     cfg_skip = replace(cfg, skip_existing=True)
-    status_skip = get_data.run_pipeline(cfg_skip)
+    status_skip = get_data.run_pipeline(cfg_skip, steps=steps)
     assert status_skip == 0
     assert executions == [2]
     logs = parse_log_lines(stream.getvalue())
     assert any(record.get("event") == "step_skipped_existing" for record in logs)
+    manifest_skip = _load_manifest(cfg_skip)
+    skip_entry = manifest_skip["steps"][0]
+    assert skip_entry["status"] == "skipped"
+    assert skip_entry["reason"] == "skip_existing"
+    assert skip_entry["executed"] is False
+    assert skip_entry["output"]["exists"] is True
 
     cfg_force = replace(cfg, skip_existing=True, force=True)
-    status_force = get_data.run_pipeline(cfg_force)
+    status_force = get_data.run_pipeline(cfg_force, steps=steps)
     assert status_force == 0
     assert executions == [2, 2]
+    manifest_force = _load_manifest(cfg_force)
+    assert manifest_force["steps"][0]["status"] == "success"
+    assert manifest_force["steps"][0]["output"]["exists"] is True
 
 
 @pytest.mark.integration
@@ -197,16 +233,17 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
         pd.DataFrame(
             [
                 {
-                    "assay_chembl_id": "A1",
-                    "target_chembl_id": "T1",
-                    "document_chembl_id": "D1",
-                    "description": "First",
+                    "assay_chembl_id": "CHEMBLA1",
+                    "target_chembl_id": "CHEMBLT1",
+                    "document_chembl_id": "CHEMBL123",
+                    "description": "Binding assay",
                 }
             ]
         ),
     )
 
     attempts = {"count": 0}
+    dictionary_path = Path(__file__).resolve().parents[1] / "data" / "assay_dictionary.csv"
 
     def _on_execute(rows: pd.DataFrame, destination: Path) -> int:
         attempts["count"] += 1
@@ -215,12 +252,32 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
             tmp_path = destination.with_suffix(".tmp")
             tmp_path.write_text("partial\n", encoding="utf-8")
             return 1
-        destination.write_text("assay_chembl_id\nA1\n", encoding="utf-8")
+        dictionary = pd.read_csv(dictionary_path)
+        dictionary["assay_chembl_id"] = dictionary["assay_chembl_id"].astype("string")
+        enriched = rows.merge(dictionary, on="assay_chembl_id", how="left")
+        enriched["description"] = enriched["description"].astype("string").str.strip()
+        enriched["description_length"] = enriched["description"].str.len().astype("Int64")
+        enriched["year"] = pd.to_numeric(enriched["year"], errors="coerce").astype("Int64")
+        quality_columns = ["assay_strain", "assay_group", "year", "accession"]
+        completeness = 1.0 - enriched[quality_columns].isna().mean()
+        assert (completeness >= ASSAY_ENRICHMENT_MIN_RATIO).all(), completeness.to_dict()
+        columns = [
+            "assay_chembl_id",
+            "target_chembl_id",
+            "document_chembl_id",
+            "description",
+            "description_length",
+            "assay_strain",
+            "assay_group",
+            "year",
+            "accession",
+        ]
+        enriched.to_csv(destination, index=False, columns=columns)
         return 0
 
     step = get_data.PipelineStep(
-        "assay",
-        _build_stub_step(
+        name="assay",
+        main=_build_stub_step(
             required_columns=[
                 "assay_chembl_id",
                 "target_chembl_id",
@@ -230,29 +287,54 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
             key_column="assay_chembl_id",
             on_execute=_on_execute,
         ),
-        None,
+        input_filename="assay.csv",
+        output_stem="assays",
     )
 
     stream = io.StringIO()
     logger = get_data.configure_logger(
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
     )
-    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", (step,), raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
-    first_status = get_data.run_pipeline(cfg)
+    steps = (step,)
+    first_status = get_data.run_pipeline(cfg, steps=steps)
     assert first_status == 1
     working = get_data._temporary_output_path(step.expected_output(cfg))
     assert not working.exists()
     sentinel = get_data._failure_sentinel_path(step.expected_output(cfg))
     assert sentinel.exists()
+    manifest_failure = _load_manifest(cfg)
+    failure_entry = manifest_failure["steps"][0]
+    assert failure_entry["status"] == "failed"
+    assert failure_entry["reason"] == "non_zero_exit"
+    assert failure_entry["output"]["exists"] is False
 
     sentinel.unlink()
-    second_status = get_data.run_pipeline(cfg)
+    second_status = get_data.run_pipeline(cfg, steps=steps)
     assert second_status == 0
     final_output = step.expected_output(cfg)
     assert final_output.exists()
     assert attempts["count"] == 2
+    manifest_success = _load_manifest(cfg)
+    assert manifest_success["steps"][0]["status"] == "success"
+    assert manifest_success["steps"][0]["output"]["exists"] is True
+    result = pd.read_csv(final_output)
+    expected_columns = [
+        "assay_chembl_id",
+        "target_chembl_id",
+        "document_chembl_id",
+        "description",
+        "description_length",
+        "assay_strain",
+        "assay_group",
+        "year",
+        "accession",
+    ]
+    assert list(result.columns) == expected_columns
+    quality_columns = ["assay_strain", "assay_group", "year", "accession"]
+    completeness = 1.0 - result[quality_columns].isna().mean()
+    assert (completeness >= ASSAY_ENRICHMENT_MIN_RATIO).all(), completeness.to_dict()
 
 
 @pytest.mark.integration
@@ -318,9 +400,14 @@ def test_pipeline_subset__target_postprocess_sidecars(
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
     )
 
-    step = get_data.PipelineStep("target", get_target_data.main, "all")
+    step = get_data.PipelineStep(
+        name="target",
+        main=get_target_data.main,
+        input_filename="target.csv",
+        output_stem="targets",
+        subcommand="all",
+    )
 
-    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", (step,), raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
     monkeypatch.setattr(get_target_data, "run_all", _stub_run_all)
     monkeypatch.setattr(
@@ -332,7 +419,7 @@ def test_pipeline_subset__target_postprocess_sidecars(
     monkeypatch.setattr(get_target_data, "_postprocess_names_export", _fake_names)
     monkeypatch.setattr(get_target_data, "_postprocess_iuphar_export", _fake_iuphar)
 
-    status = get_data.run_pipeline(cfg)
+    status = get_data.run_pipeline(cfg, steps=(step,))
 
     assert status == 0
     assert call_order == ["organism", "isoform", "names", "iuphar"]
@@ -347,4 +434,14 @@ def test_pipeline_subset__target_postprocess_sidecars(
     }
     for path in sidecars.values():
         assert path.exists()
+    manifest = _load_manifest(cfg)
+    step_entry = manifest["steps"][0]
+    assert step_entry["status"] == "success"
+    assert step_entry["output"]["exists"] is True
+    recorded_sidecars = {item["path"]: item for item in step_entry["sidecars"]}
+    assert len(recorded_sidecars) == 4
+    for path in sidecars.values():
+        meta = recorded_sidecars[str(path)]
+        assert meta["exists"] is True
+        assert meta["checksum_sha256"]
 

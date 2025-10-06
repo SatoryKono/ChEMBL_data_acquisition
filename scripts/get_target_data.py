@@ -188,6 +188,28 @@ NORMALIZED_SUFFIX = "_normalized"
 COMMAND_CHOICES: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
 
 
+_IUPHAR_OVERRIDE_COLUMNS: frozenset[str] = frozenset(
+    {
+        "target_id",
+        "GuidetoPHARMACOLOGY",
+        "gtop_synonyms",
+        "gtop_natural_ligands_n",
+        "gtop_interactions_n",
+        "gtop_function_text_short",
+        "IUPHAR_family_id",
+        "IUPHAR_type",
+        "IUPHAR_class",
+        "IUPHAR_subclass",
+        "IUPHAR_chain",
+        "IUPHAR_name",
+        "iuphar_name",
+        "full_id_path",
+        "full_name_path",
+        "iuphar_synonyms",
+    }
+)
+
+
 class StoreWithSource(argparse.Action):
     """Store CLI values while tracking their origin."""
 
@@ -268,6 +290,10 @@ def _normalise_target_export_name(path: Path) -> str:
     name = path.name
     lowered_name = name.lower()
 
+    while lowered_name.startswith("."):
+        name = name[1:]
+        lowered_name = name.lower()
+
     for suffix in _TEMPORARY_EXPORT_SUFFIXES:
         suffix_lower = suffix.lower()
         while lowered_name.endswith(suffix_lower):
@@ -286,7 +312,16 @@ def _normalise_target_export_name(path: Path) -> str:
             lowered_name = name.lower()
             break
 
-    return name
+    canonical = name.lower()
+
+    if canonical.startswith("output.") and not target_pp._matches_expected_input_name(
+        canonical
+    ):
+        candidate = canonical[len("output.") :]
+        if target_pp._matches_expected_input_name(candidate):
+            canonical = candidate
+
+    return canonical
 
 
 def _export_stem(name: str) -> str:
@@ -318,8 +353,10 @@ def _is_supported_target_export(path: Path) -> bool:
     if target_pp._matches_expected_input_name(export_name):
         return True
 
+    export_lower = export_name.lower()
+
     if path.suffix.lower() != ".csv":
-        if not export_name.lower().endswith(".csv"):
+        if not export_lower.endswith(".csv"):
             return False
         logger.info(
             "target_postprocess_noncanonical_name",
@@ -333,8 +370,9 @@ def _is_supported_target_export(path: Path) -> bool:
         "target_postprocess_noncanonical_name",
         path=str(path),
         reason="noncanonical_filename",
+        canonical=export_name,
     )
-    return False
+    return True
 
 
 def _postprocess_isoform_export(
@@ -1447,9 +1485,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         no_reindex_default: object = False if defaults else argparse.SUPPRESS
         normalize_default: object = False if defaults else argparse.SUPPRESS
         option_actions = parser_obj._option_string_actions
-        if "--final-out" not in option_actions:
+        if not any(alias in option_actions for alias in ("--final-out", "--out", "--output")):
             parser_obj.add_argument(
                 "--final-out",
+                "--out",
+                "--output",
                 dest="final_out",
                 type=path_argument,
                 default=final_default,
@@ -1923,6 +1963,10 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 1
 
+    output_path: Path | None = None
+    export_path: Path | None = None
+    resolved_export_path: Path | None = None
+
     try:
         df = pd.read_csv(
             args.input_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
@@ -1959,14 +2003,20 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             encoding=cfg.io.csv_encoding,
         )
 
-        output_candidate = getattr(args, "output_csv", None)
-        output = output_candidate or io.default_output_path(args.input_csv, cfg.io)
+        final_out_attr = getattr(args, "final_out", None)
+        if final_out_attr in (None, argparse.SUPPRESS):
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+        else:
+            output_path = Path(final_out_attr)
+            if not isinstance(final_out_attr, Path):
+                args.final_out = output_path
         data_dir = cfg.target.uniprot.data_dir
         uu.init_session(cfg.api, cfg.retry)
         try:
             uu.process(
                 input_csv=str(tmp_path),
-                output_csv=str(output),
+                output_csv=str(output_path),
                 data_dir=data_dir,
                 cfg=cfg.uniprot,
                 gtop_cfg=cfg.iuphar,
@@ -1977,7 +2027,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             tmp_path.unlink(missing_ok=True)
 
         out_df = pd.read_csv(
-            output, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+            output_path, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
         )
         rows_kept = len(out_df)
         if "mapping_uniprot_id" in df.columns:
@@ -1988,7 +2038,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             )
         csv_path = io.write_csv(
             out_df,
-            output,
+            output_path,
             cfg=cfg,
             sep=cfg.io.csv_sep,
             encoding=cfg.io.csv_encoding,
@@ -2023,26 +2073,36 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             "uniprot_processing_failed",
             error=str(exc),
             input=str(args.input_csv),
-            output=str(output),
+            output=str(output_path) if output_path is not None else None,
         )
         return 1
     doc_quality_cfg = cfg.system.doc_quality
     try:
         if doc_quality_cfg.enable:
-            quality_table_name = output.stem
+            if export_path is None:
+                raise RuntimeError("export path not available for quality analysis")
+            resolved_export_path = export_path.resolve()
+            quality_table_name = resolved_export_path.stem
             analyze_table_quality(
                 out_df,
                 table_name=quality_table_name,
-                destination_dir=output.parent,
+                destination_dir=resolved_export_path.parent,
                 sample_rows=doc_quality_cfg.sample_rows,
                 include_columns=doc_quality_cfg.include_columns,
                 exclude_columns=doc_quality_cfg.exclude_columns,
             )
     except Exception as exc:
+        quality_log_path: Path | None = None
+        if resolved_export_path is not None:
+            quality_log_path = resolved_export_path
+        elif export_path is not None:
+            quality_log_path = export_path.resolve()
+        elif output_path is not None:
+            quality_log_path = output_path.resolve()
         logger.exception(
             "quality_report_failed",
             error=str(exc),
-            path=str(output),
+            path=str(quality_log_path) if quality_log_path is not None else None,
             exc=exc,
         )
         return 1
@@ -2118,10 +2178,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     counted_ids_iter = _counted_ids()
 
-    output_candidate = getattr(args, "output_csv", None)
-    base_output = Path(
-        output_candidate or io.default_output_path(args.input_csv, cfg.io)
-    )
+    final_out_attr = getattr(args, "final_out", None)
+    if final_out_attr in (None, argparse.SUPPRESS):
+        base_output = Path(io.default_output_path(args.input_csv, cfg.io))
+        args.final_out = base_output
+    else:
+        base_output = Path(final_out_attr)
+        if not isinstance(final_out_attr, Path):
+            args.final_out = base_output
 
     raw_candidate = getattr(args, "raw_out", None)
     if raw_candidate in (None, argparse.SUPPRESS):
@@ -2165,15 +2229,22 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     cfg.chembl,
                     global_limiter=global_limiter,
                 ) as client:
-                    for _, raw_chunk, parsed_chunk in cl.iter_target_batches(
+                    def _count_attempt() -> None:
+                        nonlocal chembl_http_requests
+                        chembl_http_requests += 1
+
+                    batch_iter = cl.iter_target_batches_with_retry(
                         counted_ids_iter,
                         cfg=cfg.api,
                         client=client,
                         mapping_cfg=cfg.uniprot_mapping,
                         chunk_size=cfg.target.chembl.chunk_size,
                         timeout=cfg.target.chembl.timeout,
-                    ):
-                        chembl_http_requests += 1
+                        retry_cfg=cfg.target.chembl.batch_retry,
+                        log=logger,
+                        on_attempt=_count_attempt,
+                    )
+                    for _, raw_chunk, parsed_chunk in batch_iter:
                         raw_dump_rows_total += len(raw_chunk)
                         fetched_rows_total += len(parsed_chunk)
                         if raw_chunk.empty:
@@ -2258,13 +2329,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     final_candidate = getattr(args, "final_out", None)
     if final_candidate in (None, argparse.SUPPRESS):
-        output_candidate = getattr(args, "output_csv", None)
-        if output_candidate not in (None, argparse.SUPPRESS):
-            final_output = Path(output_candidate)
-        else:
-            final_output = Path(io.default_output_path(args.input_csv, cfg.io))
+        final_output = Path(io.default_output_path(args.input_csv, cfg.io))
+        args.final_out = final_output
     else:
         final_output = Path(final_candidate)
+        if not isinstance(final_candidate, Path):
+            args.final_out = final_output
 
     if raw_path_override is None:
         raw_output = final_output
@@ -2337,15 +2407,22 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 cfg.chembl,
                 global_limiter=global_limiter,
             ) as client:
-                for _, raw_chunk, parsed_chunk in cl.iter_target_batches(
+                def _count_attempt() -> None:
+                    nonlocal chembl_http_requests
+                    chembl_http_requests += 1
+
+                batch_iter = cl.iter_target_batches_with_retry(
                     counted_ids_iter,
                     cfg=cfg.api,
                     client=client,
                     mapping_cfg=cfg.uniprot_mapping,
                     chunk_size=cfg.target.chembl.chunk_size,
                     timeout=cfg.target.chembl.timeout,
-                ):
-                    chembl_http_requests += 1
+                    retry_cfg=cfg.target.chembl.batch_retry,
+                    log=logger,
+                    on_attempt=_count_attempt,
+                )
+                for _, raw_chunk, parsed_chunk in batch_iter:
                     raw_dump_rows_total += len(raw_chunk)
                     try:
                         raw_dump_writer.write(raw_chunk)
@@ -2569,6 +2646,22 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     tmp_path: Path | None = None
     source_csv = args.input_csv
 
+    output_path_candidate = getattr(args, "output_csv", None)
+    if output_path_candidate not in (None, argparse.SUPPRESS):
+        output_path = Path(output_path_candidate)
+        if not isinstance(output_path_candidate, Path):
+            args.output_csv = output_path
+        args.final_out = output_path
+    else:
+        final_out_attr = getattr(args, "final_out", None)
+        if final_out_attr in (None, argparse.SUPPRESS):
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+        else:
+            output_path = Path(final_out_attr)
+            if not isinstance(final_out_attr, Path):
+                args.final_out = output_path
+
     try:
         df_to_process: pd.DataFrame | None = None
         offset = cfg.target.iuphar.offset
@@ -2617,11 +2710,9 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
             family_path=cfg.target.iuphar.family_csv,
             encoding=cfg.io.csv_encoding,
         )
-        output_candidate = getattr(args, "output_csv", None)
-        output = output_candidate or io.default_output_path(args.input_csv, cfg.io)
         data.map_uniprot_file(
             input_path=source_csv,
-            output_path=output,
+            output_path=str(output_path),
             encoding=cfg.io.csv_encoding,
             sep=cfg.io.csv_sep,
         )
@@ -2641,9 +2732,9 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     try:
         if doc_quality_cfg.enable:
             analyze_table_quality(
-                output,
-                table_name=str(output.with_suffix("")),
-                destination_dir=output.parent,
+                output_path,
+                table_name=str(output_path.with_suffix("")),
+                destination_dir=output_path.parent,
                 sample_rows=doc_quality_cfg.sample_rows,
                 include_columns=doc_quality_cfg.include_columns,
                 exclude_columns=doc_quality_cfg.exclude_columns,
@@ -2652,7 +2743,7 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
         logger.exception(
             "quality_report_failed",
             error=str(exc),
-            path=str(output),
+            path=str(output_path),
             exc=exc,
         )
         return 1
@@ -2774,12 +2865,38 @@ def fetch_uniprot(
         unique=len(plan.unique_records),
         candidate_columns=plan.candidate_columns,
     )
-    if plan.unique_records:
-        id_df = pd.DataFrame(plan.unique_records, dtype=object)
-    else:
-        id_df = pd.DataFrame(
-            columns=["uniprot_id", "original_id", "source_column"], dtype=object
+    if not plan.unique_records:
+        logger.info(
+            "fetch_uniprot_no_candidates",
+            output=str(output_csv),
+            rows=len(plan.row_index),
+            candidate_columns=plan.candidate_columns,
         )
+        empty_df = pd.DataFrame(
+            {
+                "uniprot_id": pd.Series(dtype=object),
+                "original_id": pd.Series(dtype=object),
+                "source_column": pd.Series(dtype=object),
+                "mapping_uniprot_id": pd.Series(dtype=object),
+            }
+        )
+        write_csv_deterministic(
+            empty_df,
+            output_csv,
+            col_order=[
+                "uniprot_id",
+                "original_id",
+                "source_column",
+                "mapping_uniprot_id",
+            ],
+            key_cols=["uniprot_id"],
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            cfg=cfg,
+        )
+        return empty_df
+
+    id_df = pd.DataFrame(plan.unique_records, dtype=object)
 
     id_df = id_df.copy()
     id_df["__query_order"] = range(len(id_df))
@@ -2799,7 +2916,11 @@ def fetch_uniprot(
         encoding=cfg.io.csv_encoding,
     )
 
-    uniprot_args = argparse.Namespace(input_csv=tmp_path, output_csv=output_csv)
+    uniprot_args = argparse.Namespace(
+        input_csv=tmp_path,
+        final_out=output_csv,
+        output_csv=output_csv,
+    )
     orig_dir = cfg.target.uniprot.data_dir
     cfg.target.uniprot.data_dir = cfg.target.all.data_dir
     try:
@@ -2808,6 +2929,34 @@ def fetch_uniprot(
     finally:
         cfg.target.uniprot.data_dir = orig_dir
         tmp_path.unlink(missing_ok=True)
+
+    if not output_csv.exists():
+        logger.warning(
+            "fetch_uniprot_output_missing",
+            path=str(output_csv),
+        )
+        placeholder = pd.DataFrame(
+            {
+                "uniprot_id": pd.Series(dtype=object),
+                "original_id": pd.Series(dtype=object),
+                "source_column": pd.Series(dtype=object),
+                "mapping_uniprot_id": pd.Series(dtype=object),
+            }
+        )
+        write_csv_deterministic(
+            placeholder,
+            output_csv,
+            col_order=[
+                "uniprot_id",
+                "original_id",
+                "source_column",
+                "mapping_uniprot_id",
+            ],
+            key_cols=["uniprot_id"],
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            cfg=cfg,
+        )
 
     fetched_df = pd.read_csv(
         output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
@@ -2883,6 +3032,26 @@ def fetch_uniprot(
     df["mapping_uniprot_id"] = df["mapping_uniprot_id"].fillna("").astype(str)
     logger.info("fetch_uniprot_done", rows=len(df))
     return df
+
+
+def _prepare_iuphar_merge_frames(
+    combined_df: pd.DataFrame, iuphar_df: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return frames ready for merging IUPHAR classifications."""
+
+    sanitised_combined = combined_df.drop(
+        columns=[col for col in _IUPHAR_OVERRIDE_COLUMNS if col in combined_df.columns],
+        errors="ignore",
+    )
+    existing_cols = set(sanitised_combined.columns)
+    keep_columns: list[str] = ["uniprot_id"]
+    for column in iuphar_df.columns:
+        if column == "uniprot_id":
+            continue
+        if column in _IUPHAR_OVERRIDE_COLUMNS or column not in existing_cols:
+            keep_columns.append(column)
+    trimmed_iuphar = iuphar_df.loc[:, keep_columns].copy()
+    return sanitised_combined, trimmed_iuphar
 
 
 def fetch_iuphar(
@@ -3288,7 +3457,9 @@ def fetch_iuphar(
 
         iuphar_input = Path(tmp.name)
 
-    iuphar_args = argparse.Namespace(input_csv=iuphar_input, output_csv=output_csv)
+    iuphar_args = argparse.Namespace(
+        input_csv=iuphar_input, output_csv=output_csv, final_out=output_csv
+    )
     orig_target = cfg.target.iuphar.target_csv
     orig_family = cfg.target.iuphar.family_csv
     cfg.target.iuphar.target_csv = cfg.target.all.target_csv
@@ -3300,6 +3471,21 @@ def fetch_iuphar(
         cfg.target.iuphar.target_csv = orig_target
         cfg.target.iuphar.family_csv = orig_family
         iuphar_input.unlink(missing_ok=True)
+
+    if not output_csv.exists():
+        logger.warning(
+            "missing_iuphar_output_file",
+            path=str(output_csv),
+        )
+        output_csv.parent.mkdir(parents=True, exist_ok=True)
+        empty_iuphar = pd.DataFrame({"uniprot_id": pd.Series(dtype=object)})
+        write_csv_deterministic(
+            empty_iuphar,
+            output_csv,
+            key_cols=["uniprot_id"],
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+        )
 
     try:
         iuphar_df = pd.read_csv(
@@ -3320,9 +3506,7 @@ def fetch_iuphar(
             )
             iuphar_df = iuphar_df.copy()
             iuphar_df.insert(0, "uniprot_id", placeholder)
-    existing_cols = set(combined_df.columns)
-    classification_cols = [c for c in iuphar_df.columns if c not in existing_cols]
-    iuphar_df = iuphar_df[["uniprot_id", *classification_cols]].copy()
+    combined_df, iuphar_df = _prepare_iuphar_merge_frames(combined_df, iuphar_df)
     logger.info("fetch_iuphar_done", rows=len(iuphar_df))
     return combined_df, iuphar_df
 
@@ -3742,19 +3926,16 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     final_candidate = getattr(args, "final_out", None)
     if final_candidate in (None, argparse.SUPPRESS):
         final_output = Path(io.default_output_path(args.input_csv, cfg.io))
+        args.final_out = final_output
     else:
         final_output = Path(final_candidate)
-    args.final_out = final_output
-    args.output_csv = final_output
+        if not isinstance(final_candidate, Path):
+            args.final_out = final_output
+        else:
+            args.final_out = final_candidate
     if args.skip_existing and final_output.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(final_output))
         return 0
-    if getattr(args, "_out_alias_used", False):
-        logger.warning(
-            "deprecated_output_alias_used",
-            alias="--out",
-            replacement="--final-out",
-        )
     func = getattr(args, "func", None)
     if func is None:
         logger.error(
@@ -3876,27 +4057,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "iuphar_offset": "target.iuphar.offset",
                 }
                 args_dict = vars(args).copy()
-                output_candidate = args_dict.get("output_csv")
-                if output_candidate in (
-                    None,
-                    argparse.SUPPRESS,
-                ):
-                    final_value = args_dict.get("final_out")
-                    if final_value in (None, argparse.SUPPRESS):
-                        date_token = args_dict.get(
-                            "date", datetime.now(timezone.utc).strftime("%Y%m%d")
-                        )
-                        inferred = Path(args_dict["input_csv"]).with_name(
-                            f"output.{DEFAULT_OUTPUT_STEM}_{date_token}.csv"
-                        )
-                        args_dict["final_out"] = inferred
-                        args_dict["output_csv"] = inferred
-                    else:
-                        candidate = Path(final_value)
-                        args_dict["final_out"] = candidate
-                        args_dict["output_csv"] = candidate
+                final_value = args_dict.get("final_out")
+                if final_value in (None, argparse.SUPPRESS):
+                    date_token = args_dict.get(
+                        "date", datetime.now(timezone.utc).strftime("%Y%m%d")
+                    )
+                    inferred = Path(args_dict["input_csv"]).with_name(
+                        f"output.{DEFAULT_OUTPUT_STEM}_{date_token}.csv"
+                    )
+                    args_dict["final_out"] = inferred
                 else:
-                    args_dict["output_csv"] = Path(output_candidate)
+                    args_dict["final_out"] = Path(final_value)
                 args_namespace = argparse.Namespace(**args_dict)
             if mapping:
                 exit_code = run_cli_command(

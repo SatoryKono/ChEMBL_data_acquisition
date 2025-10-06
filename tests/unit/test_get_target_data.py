@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 import pandas as pd
 from types import SimpleNamespace
@@ -26,6 +26,9 @@ class _MemoryLogger:
 
     def warning(self, event: str, **payload: object) -> None:
         self.events.append(("warning", event, dict(payload)))
+
+    def debug(self, event: str, **payload: object) -> None:
+        self.events.append(("debug", event, dict(payload)))
 
     def error(self, event: str, **payload: object) -> None:
         self.events.append(("error", event, dict(payload)))
@@ -77,6 +80,7 @@ def test_keyboard_aliases__cases(command: str) -> None:
         ("targets_20251005_normalized.csv", True),
         ("output.targets_20251005.csv.tmp", True),
         (".output.targets_20251005.csv_normalized.tmp", True),
+        ("targets.csv", True),
         ("out.csv", False),
         ("out_chembl.csv", False),
         ("out_uniprot.csv", False),
@@ -266,7 +270,7 @@ def test_run_uniprot__invokes_target_postprocess(
         _fake_postprocess,
     )
 
-    args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
+    args = argparse.Namespace(input_csv=input_csv, final_out=output_csv)
 
     exit_code = get_target_data.run_uniprot(cfg, args)
 
@@ -275,6 +279,222 @@ def test_run_uniprot__invokes_target_postprocess(
     assert isinstance(recorded["context"], get_target_data.IsoformPostprocessContext)
     assert recorded["context"].args is args
     assert recorded["ambiguous"] is None
+
+
+def test_run_uniprot__doc_quality_reports(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg.system.doc_quality.enable = True
+    cfg.system.doc_quality.sample_rows = 5
+    input_csv = tmp_path / "uniprot_ids.csv"
+    input_csv.write_text("uniprot_id\nP12345\n", encoding="utf-8")
+    output_csv = tmp_path / "output.target_20250101.csv"
+
+    monkeypatch.setattr(get_target_data.uu, "init_session", lambda *_, **__: None)
+
+    def _fake_process(**kwargs: object) -> None:
+        Path(kwargs["output_csv"]).write_text(
+            "uniprot_id\nP12345\n", encoding=cfg.io.csv_encoding
+        )
+
+    monkeypatch.setattr(get_target_data.uu, "process", _fake_process)
+
+    monkeypatch.setattr(
+        get_target_data,
+        "_postprocess_target_exports",
+        lambda *_, **__: None,
+    )
+
+    captured: dict[str, object] = {}
+
+    def _fake_analyze(
+        df: pd.DataFrame,
+        *,
+        table_name: str,
+        destination_dir: Path,
+        sample_rows: int | None,
+        include_columns: Sequence[str] | None,
+        exclude_columns: Sequence[str] | None,
+    ) -> None:
+        captured["table_name"] = table_name
+        captured["destination_dir"] = destination_dir
+        captured["sample_rows"] = sample_rows
+        captured["df"] = df.copy()
+
+    monkeypatch.setattr(get_target_data, "analyze_table_quality", _fake_analyze)
+
+    args = argparse.Namespace(input_csv=input_csv, final_out=output_csv)
+
+    exit_code = get_target_data.run_uniprot(cfg, args)
+
+    assert exit_code == 0
+    assert captured["table_name"] == output_csv.resolve().stem
+    assert captured["destination_dir"] == output_csv.resolve().parent
+    pd.testing.assert_frame_equal(
+        captured["df"], pd.DataFrame({"uniprot_id": ["P12345"]})
+    )
+
+
+def test_fetch_uniprot__no_candidates_writes_empty_output(
+    cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_csv = tmp_path / "output_uniprot.csv"
+    chembl_df = pd.DataFrame({"target_chembl_id": ["CHEMBL1"]})
+
+    plan = get_target_data._UniprotQueryPlan(
+        unique_records=[],
+        row_candidates=[[] for _ in chembl_df.index],
+        row_index=list(chembl_df.index),
+        candidate_columns=[],
+    )
+
+    monkeypatch.setattr(
+        get_target_data,
+        "_build_uniprot_query_plan",
+        lambda *_: plan,
+    )
+
+    def _unexpected(*_: object, **__: object) -> None:  # pragma: no cover - defensive
+        raise AssertionError("run_uniprot should not be invoked when no candidates are found")
+
+    monkeypatch.setattr(get_target_data, "run_uniprot", _unexpected)
+
+    result = get_target_data.fetch_uniprot(cfg, chembl_df, output_csv)
+
+    assert output_csv.exists()
+    pd.testing.assert_frame_equal(
+        result,
+        pd.DataFrame(
+            {
+                "uniprot_id": pd.Series(dtype=object),
+                "original_id": pd.Series(dtype=object),
+                "source_column": pd.Series(dtype=object),
+                "mapping_uniprot_id": pd.Series(dtype=object),
+            }
+        ),
+        check_index_type=False,
+    )
+
+    written = pd.read_csv(
+        output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+    )
+    assert list(written.columns) == [
+        "uniprot_id",
+        "original_id",
+        "source_column",
+        "mapping_uniprot_id",
+    ]
+    assert written.empty
+
+
+def test_fetch_uniprot__missing_output_creates_placeholder(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logger_stub: _MemoryLogger,
+) -> None:
+    cfg.io.csv_sep = ","
+    cfg.io.csv_encoding = "utf-8"
+    cfg.target.all.uniprot_column = "uniprot_id"
+    cfg.target.all.target_csv = tmp_path / "all_targets.csv"
+    cfg.target.all.family_csv = tmp_path / "all_families.csv"
+    cfg.target.iuphar.target_csv = tmp_path / "iuphar_targets.csv"
+    cfg.target.iuphar.family_csv = tmp_path / "iuphar_families.csv"
+
+    chembl_df = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1"],
+            "uniprot_id": ["P12345"],
+            "mapping_uniprot_id": ["P12345"],
+            "pref_name": ["Example"],
+        }
+    )
+    uniprot_df = pd.DataFrame({"uniprot_id": ["P12345"], "pref_name": ["Example"]})
+
+    output_csv = tmp_path / "output.targets_iuphar.csv"
+    captured: dict[str, Path] = {}
+
+    def _fake_run_iuphar(local_cfg: Config, args: argparse.Namespace) -> int:
+        captured["cfg"] = local_cfg
+        captured["output_csv"] = Path(args.output_csv)
+        return 0
+
+    monkeypatch.setattr(get_target_data, "run_iuphar", _fake_run_iuphar)
+
+    combined_df, iuphar_df = get_target_data.fetch_iuphar(
+        cfg, chembl_df, uniprot_df, output_csv
+    )
+
+    assert captured["cfg"] is cfg
+    assert captured["output_csv"] == output_csv
+    assert output_csv.exists()
+    assert "uniprot_id" in combined_df.columns
+    pd.testing.assert_frame_equal(
+        iuphar_df,
+        pd.DataFrame({"uniprot_id": pd.Series(dtype=object)}),
+        check_index_type=False,
+    )
+    assert any(
+        level == "warning"
+        and event == "missing_iuphar_output_file"
+        and payload["path"] == str(output_csv)
+        for level, event, payload in logger_stub.events
+    )
+
+    output_csv = tmp_path / "output_uniprot.csv"
+    chembl_df = pd.DataFrame(
+        {"target_chembl_id": ["CHEMBL1"], "uniprot_id": ["P12345"]}
+    )
+
+    plan = get_target_data._UniprotQueryPlan(
+        unique_records=[
+            {
+                "uniprot_id": "P12345",
+                "original_id": "P12345",
+                "source_column": "uniprot_id",
+            }
+        ],
+        row_candidates=[
+            [get_target_data._UniprotCandidate("P12345", "uniprot_id", "P12345")]
+        ],
+        row_index=list(chembl_df.index),
+        candidate_columns=["uniprot_id"],
+    )
+
+    monkeypatch.setattr(
+        get_target_data, "_build_uniprot_query_plan", lambda *_: plan
+    )
+
+    def _fake_run(cfg_obj: Config, args: argparse.Namespace) -> int:
+        assert Path(args.final_out) == output_csv
+        return 0
+
+    monkeypatch.setattr(get_target_data, "run_uniprot", _fake_run)
+
+    result = get_target_data.fetch_uniprot(cfg, chembl_df, output_csv)
+
+    assert output_csv.exists()
+    written = pd.read_csv(
+        output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+    )
+    assert list(written.columns) == [
+        "uniprot_id",
+        "original_id",
+        "source_column",
+        "mapping_uniprot_id",
+    ]
+    assert written.empty
+
+    assert len(result.index) == 1
+    assert result.loc[result.index[0], "uniprot_id"] == "P12345"
+    assert any(
+        level == "warning"
+        and event == "fetch_uniprot_output_missing"
+        and payload == {"path": str(output_csv)}
+        for level, event, payload in logger_stub.events
+    )
 
 
 def test_run__delegates_to_handler(
@@ -357,7 +577,7 @@ def test_postprocess_organism_export__failure(
     ) in logger_stub.events
 
 
-def test_postprocess_isoform_export__skips_for_custom_name(
+def test_postprocess_isoform_export__runs_for_custom_name(
     cfg: Config,
     tmp_path: Path,
     logger_stub: _MemoryLogger,
@@ -366,27 +586,36 @@ def test_postprocess_isoform_export__skips_for_custom_name(
     source = tmp_path / "custom_export.csv"
     source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
 
-    def _unexpected(*_: object, **__: object) -> None:  # pragma: no cover - defensive
-        raise AssertionError("isoform post-processing should be skipped")
+    called: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
-    monkeypatch.setattr(get_target_data.target_pp, "process_targets", _unexpected)
+    def _record(*args: object, **kwargs: object) -> str:
+        called.append((args, dict(kwargs)))
+        return str(source)
+
+    monkeypatch.setattr(get_target_data.target_pp, "process_targets", _record)
 
     result = get_target_data._postprocess_isoform_export(source, cfg=cfg)
 
-    assert result is None
+    assert result == source
+    assert called == [((str(source),), {"verbose": True})]
     assert (
         "info",
-        "target_isoform_postprocess_skipped",
-        {"path": str(source), "reason": "unsupported_export_name"},
+        "target_isoform_postprocess_done",
+        {"path": str(source), "source": str(source)},
     ) in logger_stub.events
 
 
+@pytest.mark.parametrize(
+    "filename",
+    ["output.target_20250101.csv", "targets.csv"],
+)
 def test_postprocess_target_exports__chains_helpers(
     cfg: Config,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    filename: str,
 ) -> None:
-    source = tmp_path / "output.target_20250101.csv"
+    source = tmp_path / filename
     source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
 
     call_order: list[str] = []

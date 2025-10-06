@@ -11,8 +11,9 @@
 
 1. **Общие флаги** из `library.cli.parser.add_common_arguments`:
    - `--input / --final-out` — путь к входному CSV и результирующему файлу.
-     Алиасы `--output` и `--out` оставлены для совместимости, но сопровождаются
-     предупреждением; используйте `--final-out`.
+     Сохраняется только скрытый алиас `--out` для обратной совместимости,
+     который выводит предупреждение; документы и новые скрипты должны
+     использовать `--final-out`.
    - `--log-level` — уровень логирования (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
    - `--verbose` — включает детальный (`DEBUG`) вывод без изменения YAML-конфига.
    - `--sep`, `--encoding` — разделитель и кодировка CSV (`utf-8-sig` по умолчанию).
@@ -210,7 +211,7 @@ get-assay-data --input data/input/assay.csv \
 ```
 get-activity-data --input data/input/activity.csv \
     --final-out output/activities_$(date +%Y%m%d).csv \
-    --batch-size 50 --workers 4 --timeout 60 --limit 500
+    --batch-size 20 --workers 4 --timeout 90 --limit 500
 ```
 
 Флаг `--dry-run` уникален для данного пайплайна: он проверяет аргументы и входной
@@ -222,7 +223,7 @@ get-activity-data --input data/input/activity.csv \
 ```
 get-testitem-data --input data/input/testitem.csv \
     --final-out output/testitems_$(date +%Y%m%d).csv \
-    --batch-size 1000 --timeout 60 --limit 400
+    --batch-size 250 --timeout 90 --limit 400
 ```
 
 Пайплайн объединяет молекулы из ChEMBL с данными PubChem, нормализует результат и

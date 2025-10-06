@@ -144,8 +144,17 @@ def test_get_tissue_data_cli__end_to_end(
         args._config_metadata = SimpleNamespace(snapshot={"config": str(config_path)})
         if hasattr(args, "input_csv"):
             args.input_csv = Path(args.input_csv)
-        if hasattr(args, "output_csv") and args.output_csv is not None:
-            args.output_csv = Path(args.output_csv)
+            final_out = getattr(args, "final_out", None)
+            if final_out is not None:
+                final_path = Path(final_out)
+                args.final_out = final_path
+                setattr(args, "output_csv", final_path)
+            else:
+                legacy_out = getattr(args, "output_csv", None)
+                if legacy_out is not None:
+                    output_path = Path(legacy_out)
+                    args.final_out = output_path
+                    args.output_csv = output_path
         cfg.io.output_dir = tmp_path
         cfg.io.csv_sep = ","
         cfg.io.csv_encoding = "utf-8"
@@ -199,8 +208,8 @@ def test_get_tissue_data_cli__end_to_end(
         str(config_path),
         "--input",
         str(input_csv),
-        "--output",
-        str(output_csv),
+            "--final-out",
+            str(output_csv),
         "--batch-size",
         "2",
     ]

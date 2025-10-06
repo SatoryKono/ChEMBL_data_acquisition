@@ -10,7 +10,7 @@ or via the console scripts installed from `pyproject.toml` (`get-data`,
 |--------|-------------|
 | `--config` | Path to the YAML configuration file. Defaults to `config/config.yaml`. |
 | `--input` | CSV file containing identifiers for the pipeline. When omitted the orchestrator builds the path from `--base-path` and `--input-dir`. |
-| `--final-out` / `--output` | Destination CSV. If omitted a deterministic filename `output.<stem>_<YYYYMMDD>.csv` is generated inside the resolved output directory. |
+| `--final-out` | Destination CSV. If omitted a deterministic filename `output.<stem>_<YYYYMMDD>.csv` is generated inside the resolved output directory. |
 | `--sep`, `--encoding` | CSV delimiter and encoding. Inherit defaults from the configuration. |
 | `--log-level` | Logging verbosity (`DEBUG`, `INFO`, `WARN`, `ERROR`). |
 | `--force` | Overwrite existing outputs. |
@@ -54,6 +54,12 @@ Important flags:
 
 The orchestrator stops on the first non-zero exit code and reports per-pipeline
 elapsed time in the logs.
+
+After every execution the orchestrator also writes `reports/run_manifest.json`
+relative to `--base-path`. The manifest records each step with the resolved CSV
+destination, discovered sidecars, status (`success`, `skipped`, `failed`, etc.),
+timings and SHA256 checksums for all artefacts. The file is emitted even when
+the workflow aborts part way through so partial results can be inspected.
 
 ## Document pipeline `get_document_data`
 
@@ -188,9 +194,9 @@ py -3 scripts\get_target_data.py all ^
   --limit 10
 ```
 
-The `^` line continuations are optional but keep the command readable. The
-`--final-out` option supersedes the deprecated `--output` alias printed by older
-examples.
+The `^` line continuations are optional but keep the command readable.
+`--final-out` replaces earlier flag names; a hidden `--out` compatibility alias
+remains only for legacy automation.
 
 ## Assay pipeline `get_assay_data`
 
@@ -220,8 +226,8 @@ addition to the shared flags the command accepts:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--column` | `activity_chembl_id` | Column containing activity identifiers. |
-| `--batch-size` | `50` | Number of identifiers per request. |
-| `--timeout` | `30.0` | HTTP timeout per request. |
+| `--batch-size` | `20` | Number of identifiers per request. |
+| `--timeout` | `90.0` | HTTP timeout per request. |
 | `--limit`, `--offset` | `None`, `0` | Range selection; negative values are rejected. |
 | `--workers` | `1` | Worker threads fetching activities. |
 | `--dry-run` | `False` | Validate inputs without contacting ChEMBL or writing files. |
@@ -235,8 +241,8 @@ flags are:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--column` | `molecule_chembl_id` | Identifier column in the input CSV. |
-| `--batch-size` | `1000` | Identifiers fetched per request. |
-| `--timeout` | `30.0` | HTTP timeout per request. |
+| `--batch-size` | `250` | Identifiers fetched per request. |
+| `--timeout` | `90.0` | HTTP timeout per request. |
 | `--limit`, `--offset` | `None`, `0` | Range selection. |
 
 Retry, back-off and PubChem enrichment settings are sourced from the YAML
@@ -287,7 +293,7 @@ the first 25 rows of the input file.
 ```bash
 python scripts/get_cellline_data.py \
   --input data/input/cellline.csv \
-  --output output/cellline.csv \
+  --final-out output/cellline.csv \
   --batch-size 10 \
   --limit 25
 ```

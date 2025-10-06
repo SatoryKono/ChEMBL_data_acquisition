@@ -1,0 +1,37 @@
+version: 1
+resources:
+  dictionary_root:
+    path: .
+    version: "2025-10-06"
+    sha256: "28a8e29feb723c27f5d94a18f90aff0ec89d963bb23cbfd10aedb2f20d7c81d9"
+    generator: tools/build_dictionary_resources.py
+  target_iuphar_target:
+    path: _target/_IUPHAR/_IUPHAR_target.csv
+    version: "2025-10-05"
+    sha256: "842895e301f9214ba3d2073ca5fde821efefaf68f9686088e91ce1a6e0be0461"
+    generator: tools/build_dictionary_resources.py
+  target_iuphar_family:
+    path: _target/_IUPHAR/_IUPHAR_family.csv
+    version: "2025-10-05"
+    sha256: "56bbdf8bde1111fdc63509a8e2fd1c7843754d275d63975c1d879506fad6bf20"
+    generator: tools/build_dictionary_resources.py
+  target_uniprot_cache:
+    path: _target/_uniprot
+    version: "2025-10-05"
+    sha256: "014e183b12959a4e5f060faf3b77c6a6d143cc00e0dd0121fdd1d1e51a210a2a"
+    generator: tools/build_dictionary_resources.py
+  target_types:
+    path: _target/targets_type.csv
+    version: "2025-10-05"
+    sha256: "2d2e252cccba799ed7809ba0aab3776edc96312f8f53fa7fd8b3d2f009936826"
+    generator: tools/build_dictionary_resources.py
+  testitem_molecule_catalog:
+    path: _testitem/molecule_catalog.csv
+    version: "2025-10-06"
+    sha256: "cae2e9a7ec9f4b37f7aa6d25e3b2bbbdc5580a8c3f4b87bfd30d14c2f4ed4b88"
+    generator: tools/build_dictionary_resources.py
+  testitem_molecule_hierarchy:
+    path: _testitem/molecule_hierarchy.csv
+    version: "2025-10-06"
+    sha256: "55b407b6cf02c4304b1edfe03e6aea8f2a4455f75d7a34a70542183e681c6276"
+    generator: tools/build_dictionary_resources.py

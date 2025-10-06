@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable, Sequence
 
 import pandas as pd
 import pytest
+import requests
 
+from library.cli_utils import run_pipeline as cli_run_pipeline
 from library.config import Config
+from library.pipelines.assay.chembl_assay import MAX_ASSAY_CHUNK_SIZE
+from library.schemas import AssaysSchema
 from scripts import get_assay_data
 
 
@@ -28,6 +32,12 @@ class _MemoryLogger:
     def error(self, event: str, **payload: object) -> None:
         self.events.append(("error", event, dict(payload)))
 
+    def debug(self, event: str, **payload: object) -> None:
+        self.events.append(("debug", event, dict(payload)))
+
+    def exception(self, event: str, **payload: object) -> None:
+        self.events.append(("exception", event, dict(payload)))
+
 
 @pytest.fixture()
 def logger_stub(monkeypatch: pytest.MonkeyPatch) -> _MemoryLogger:
@@ -36,14 +46,22 @@ def logger_stub(monkeypatch: pytest.MonkeyPatch) -> _MemoryLogger:
     return logger
 
 
+@pytest.mark.unit
+def test_legacy_assay_max_ids_constant__matches_chunk_size() -> None:
+    """Ensure backwards compatible aliases match the public chunk size limit."""
+
+    assert get_assay_data._ASSAY_MAX_IDS_PER_REQUEST == MAX_ASSAY_CHUNK_SIZE
+    assert get_assay_data.ASSAY_MAX_IDS_PER_REQUEST == MAX_ASSAY_CHUNK_SIZE
+
+
 @pytest.fixture()
 def minimal_args(tmp_path: Path) -> argparse.Namespace:
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("assay_chembl_id\nCHEMBL1\n", encoding="utf-8")
-    output_csv = tmp_path / "output.csv"
+    final_out = tmp_path / "output.csv"
     return argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=final_out,
         skip_existing=False,
         force=False,
         offset=0,
@@ -119,7 +137,7 @@ def test_run_chembl__successful_execution(
             yield pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]})
 
         def writer(**_: object) -> Path:
-            return minimal_args.output_csv
+            return minimal_args.final_out
 
         return fetcher, writer
 
@@ -143,6 +161,92 @@ def test_run_chembl__successful_execution(
     assert any(event == "process_limit" for _, event, _ in logger_stub.events)
 
 
+@pytest.mark.unit
+def test_run_chembl__splits_chunk_on_timeout(
+    cfg: Config,
+    minimal_args: argparse.Namespace,
+    logger_stub: _MemoryLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg.assay.limit = None
+    cfg.assay.batch_size = 4
+    cfg.retry.max_attempts = 2
+    cfg.retry.backoff_factor = 0
+
+    def fake_read_ids(path: Path, *, column: str, cfg: Any) -> Iterable[str]:
+        return iter(["CHEMBL100", "CHEMBL200"])
+
+    class FakeClient:
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    class FakeTracker:
+        def __init__(self) -> None:
+            self._failures: list[tuple[list[str], str]] = []
+
+        def add_failure(self, chunk_ids: Iterable[str], error: str) -> None:
+            self._failures.append((list(chunk_ids), error))
+
+        def save(self, path: Path, *, cfg: Config) -> None:
+            self.saved_path = path
+
+        def stats(self) -> dict[str, object]:
+            return {"failures": len(self._failures)}
+
+    tracker = FakeTracker()
+    call_history: list[list[str]] = []
+
+    def fake_get_assays(
+        identifiers: Sequence[str],
+        *,
+        cfg: Any,
+        client: Any,
+        chunk_size: int,
+        timeout: float,
+    ) -> pd.DataFrame:
+        call_history.append(list(identifiers))
+        if len(identifiers) > 1:
+            raise requests.ReadTimeout("timeout while fetching chunk")
+        return pd.DataFrame({"assay_chembl_id": list(identifiers)})
+
+    def fake_prepare_chunked_pipeline(**kwargs: object):
+        fetch_chunk = kwargs["fetch_chunk"]
+
+        def fetcher() -> Iterable[pd.DataFrame]:
+            yield fetch_chunk(["CHEMBL100", "CHEMBL200"])
+
+        def writer(**_: object) -> Path:
+            return minimal_args.final_out
+
+        return fetcher, writer
+
+    def fake_run_pipeline(*, fetcher: Callable[[], Iterable[pd.DataFrame]], **kwargs: object) -> int:
+        list(fetcher())
+        if "stats_callback" in kwargs:
+            kwargs["stats_callback"]({})
+        return 0
+
+    monkeypatch.setattr(get_assay_data.io, "read_ids", fake_read_ids)
+    monkeypatch.setattr(get_assay_data, "ChemblClient", lambda *_, **__: FakeClient())
+    monkeypatch.setattr(get_assay_data, "ChunkFailureTracker", lambda: tracker)
+    monkeypatch.setattr(get_assay_data.cl, "get_assays", fake_get_assays)
+    monkeypatch.setattr(get_assay_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline)
+    monkeypatch.setattr(get_assay_data, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(get_assay_data, "sleep", lambda *_: None)
+
+    exit_code = get_assay_data.run_chembl(cfg, minimal_args)
+
+    assert exit_code == 0
+    assert call_history[0] == ["CHEMBL100", "CHEMBL200"]
+    assert call_history.count(["CHEMBL100", "CHEMBL200"]) == 2
+    assert ["CHEMBL100"] in call_history
+    assert ["CHEMBL200"] in call_history
+    assert tracker._failures == []
+    assert any(event == "assay_fetch_split" for _, event, _ in logger_stub.events)
+
 def test_run__skip_existing_returns_zero(
     cfg: Config,
     minimal_args: argparse.Namespace,
@@ -151,7 +255,7 @@ def test_run__skip_existing_returns_zero(
 ) -> None:
     minimal_args.skip_existing = True
     minimal_args.force = False
-    minimal_args.output_csv.write_text("existing", encoding="utf-8")
+    minimal_args.final_out.write_text("existing", encoding="utf-8")
 
     called = False
 
@@ -169,7 +273,7 @@ def test_run__skip_existing_returns_zero(
     assert (
         "info",
         "pipeline_skip_existing",
-        {"output": str(minimal_args.output_csv)},
+        {"output": str(minimal_args.final_out)},
     ) in logger_stub.events
 
 
@@ -180,7 +284,7 @@ def test_run__force_overrides_skip(
 ) -> None:
     minimal_args.skip_existing = True
     minimal_args.force = True
-    minimal_args.output_csv.write_text("existing", encoding="utf-8")
+    minimal_args.final_out.write_text("existing", encoding="utf-8")
 
     calls: list[str] = []
 
@@ -202,6 +306,63 @@ def test_run__propagates_exit_code(cfg: Config, minimal_args: argparse.Namespace
     exit_code = get_assay_data.run(cfg, minimal_args)
 
     assert exit_code == 7
+
+
+@pytest.mark.unit
+def test_run_pipeline__adds_missing_assay_optional_columns(tmp_path: Path) -> None:
+    frame = pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]})
+
+    def fetcher() -> Iterable[pd.DataFrame]:
+        yield frame
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: Iterable[str] | None,
+        key_cols: Iterable[str] | None,
+        **_: object,
+    ) -> Path:
+        frames = [chunk.copy() for chunk in chunks]
+        if frames:
+            result = pd.concat(frames, ignore_index=True)
+        else:
+            result = pd.DataFrame(columns=list(col_order or []))
+        if col_order:
+            result = result.reindex(columns=list(col_order), fill_value=pd.NA)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        result.to_csv(destination, index=False)
+        return destination
+
+    logger = _MemoryLogger()
+    output_path = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failures.csv"
+
+    exit_code = cli_run_pipeline(
+        fetcher=fetcher,
+        schema=AssaysSchema,
+        schema_name="AssaysSchema",
+        validators=[],
+        metadata_hooks=[],
+        writer=writer,
+        output_path=output_path,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=lambda _: None,
+        cfg=None,
+        stats_extra=None,
+        logger=logger,
+    )
+
+    assert exit_code == 0
+    assert output_path.exists()
+    result = pd.read_csv(output_path)
+    assert "assay_group" in result.columns
+    assert "assay_strain" in result.columns
+    assert result["assay_group"].isna().all()
+    assert result["assay_strain"].isna().all()
 
 
 def test_build_parser__defaults() -> None:

@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections.abc import Iterable, Iterator, Sequence
-from typing import Any
+from time import monotonic
+from typing import Any, Callable
 
 import pandas as pd
+import requests
+from requests.exceptions import ReadTimeout
 
 from library.clients import ChemblClient, _chunked
-from ...config import ApiCfg, UniprotMappingCfg
+from ...config import ApiCfg, TargetChemblBatchRetryCfg, UniprotMappingCfg
 from ...common.log import logger
+from ...common.rate_limiter import sleep
 
 TARGET_FIELDS = [
     "pref_name",
@@ -298,8 +303,19 @@ def iter_target_batches(
     mapping_cfg: UniprotMappingCfg,
     chunk_size: int = 5,
     timeout: float | None = None,
+    enable_split_fallback: bool = True,
 ) -> Iterator[tuple[list[dict[str, Any]], pd.DataFrame, pd.DataFrame]]:
-    """Yield payloads, raw and parsed target data frames for ``ids``."""
+    """Yield payloads, raw and parsed target data frames for ``ids``.
+
+    Parameters
+    ----------
+    enable_split_fallback:
+        When ``True`` (default), a :class:`requests.ReadTimeout` for a chunk
+        results in recursive splitting down to single identifiers. When
+        ``False``, the exception is propagated to the caller so that higher
+        level retry strategies can react, for example by shrinking the chunk
+        size.
+    """
 
     if not ids:
         return
@@ -311,26 +327,227 @@ def iter_target_batches(
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
 
     for chunk in _chunked(ids, chunk_size):
-        url = f"{base}&target_chembl_id__in={','.join(chunk)}"
-        data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
-        items = data.get("targets") or data.get("target") or []
-        payloads = [
-            _extract_target_payload(item)
-            for item in items
-            if isinstance(item, (dict, list))
-        ]
-        payloads = [payload for payload in payloads if payload]
-        if not payloads:
-            continue
-        raw_frame = _normalise_target_payloads(payloads)
-        records = [_parse_target_record(payload, mapping_cfg) for payload in payloads]
-        parsed_frame = pd.DataFrame(records)
-        if parsed_frame.empty:
-            parsed_frame = pd.DataFrame(columns=TARGET_FIELDS)
-        else:
-            parsed_frame = parsed_frame.reindex(columns=TARGET_FIELDS)
-        yield payloads, raw_frame, parsed_frame
+        yield from _iter_target_chunk_with_fallback(
+            chunk,
+            base_url=base,
+            cfg=cfg,
+            client=client,
+            mapping_cfg=mapping_cfg,
+            timeout=effective_timeout,
+            enable_split_fallback=enable_split_fallback,
+        )
 
+
+def _iter_target_chunk_with_fallback(
+    chunk: Sequence[str],
+    *,
+    base_url: str,
+    cfg: ApiCfg,
+    client: ChemblClient,
+    mapping_cfg: UniprotMappingCfg,
+    timeout: float,
+    enable_split_fallback: bool,
+) -> Iterator[tuple[list[dict[str, Any]], pd.DataFrame, pd.DataFrame]]:
+    """Yield processed records for ``chunk`` with timeout-aware retries."""
+
+    if not chunk:
+        return
+
+    url = f"{base_url}&target_chembl_id__in={','.join(chunk)}"
+    handled_exc: requests.RequestException | None
+    start_time = monotonic()
+    try:
+        data = client.request_json(url, cfg=cfg, timeout=timeout)
+    except requests.ReadTimeout as exc:
+        elapsed = monotonic() - start_time
+        if len(chunk) <= 1 or not enable_split_fallback:
+            raise exc
+        event = "chembl_timeout_split"
+        handled_exc = exc
+    except requests.RequestException as exc:
+        elapsed = monotonic() - start_time
+        event = "chembl_request_split"
+        handled_exc = exc
+    else:
+        event = ""
+        handled_exc = None
+        elapsed = monotonic() - start_time
+
+    if event:
+        if len(chunk) <= 1 or handled_exc is None:
+            raise handled_exc
+        logger.warning(
+            event,
+            extra={
+                "chunk_size": len(chunk),
+                "ids": list(chunk),
+                "timeout": timeout,
+                "error": str(handled_exc),
+                "elapsed": elapsed,
+            },
+        )
+        for identifier in chunk:
+            yield from _iter_target_chunk_with_fallback(
+                [identifier],
+                base_url=base_url,
+                cfg=cfg,
+                client=client,
+                mapping_cfg=mapping_cfg,
+                timeout=timeout,
+                enable_split_fallback=enable_split_fallback,
+            )
+        return
+
+    items = data.get("targets") or data.get("target") or []
+    payloads = [
+        _extract_target_payload(item)
+        for item in items
+        if isinstance(item, (dict, list))
+    ]
+    payloads = [payload for payload in payloads if payload]
+    logger.debug(
+        "chembl_target_chunk_ok",
+        extra={
+            "chunk_size": len(chunk),
+            "ids": list(chunk),
+            "timeout": timeout,
+            "elapsed": elapsed,
+            "records": len(payloads),
+        },
+    )
+    if not payloads:
+        return
+    raw_frame = _normalise_target_payloads(payloads)
+    records = [_parse_target_record(payload, mapping_cfg) for payload in payloads]
+    parsed_frame = pd.DataFrame(records)
+    if parsed_frame.empty:
+        parsed_frame = pd.DataFrame(columns=TARGET_FIELDS)
+    else:
+        parsed_frame = parsed_frame.reindex(columns=TARGET_FIELDS)
+    yield payloads, raw_frame, parsed_frame
+
+
+def iter_target_batches_with_retry(
+    ids: Iterable[str],
+    *,
+    cfg: ApiCfg,
+    client: ChemblClient,
+    mapping_cfg: UniprotMappingCfg,
+    chunk_size: int = 5,
+    timeout: float | None = None,
+    retry_cfg: TargetChemblBatchRetryCfg | None = None,
+    log: Any | None = None,
+    on_attempt: Callable[[], None] | None = None,
+) -> Iterator[tuple[list[dict[str, Any]], pd.DataFrame, pd.DataFrame]]:
+    """Yield payloads, raw and parsed frames with adaptive chunk sizing."""
+
+    effective_logger = log or logger
+    base_chunk_size = max(1, chunk_size)
+
+    if retry_cfg is None or not getattr(retry_cfg, "enable", False):
+        for batch in iter_target_batches(
+            ids,
+            cfg=cfg,
+            client=client,
+            mapping_cfg=mapping_cfg,
+            chunk_size=base_chunk_size,
+            timeout=timeout,
+            enable_split_fallback=True,
+        ):
+            if on_attempt is not None:
+                on_attempt()
+            yield batch
+        return
+
+    shrink_factor = retry_cfg.shrink_factor
+    min_size = max(1, retry_cfg.min_size)
+    single_retry_limit = max(0, getattr(retry_cfg, "single_timeout_retries", 0))
+    single_retry_delay = max(0.0, getattr(retry_cfg, "single_timeout_delay", 0.0))
+
+    single_retry_counts: dict[tuple[str, ...], int] = {}
+
+    buffer: list[str] = []
+
+    def _drain_buffer(batch: list[str]) -> Iterator[tuple[list[dict[str, Any]], pd.DataFrame, pd.DataFrame]]:
+        queue = list(batch)
+        current_size = min(len(queue), base_chunk_size)
+
+        def _should_retry_single(
+            key: tuple[str, ...], exc: Exception
+        ) -> bool:
+            if single_retry_limit <= 0:
+                return False
+            if not isinstance(exc, ReadTimeout):
+                return False
+            attempts = single_retry_counts.get(key, 0)
+            if attempts >= single_retry_limit:
+                return False
+            next_attempt = attempts + 1
+            single_retry_counts[key] = next_attempt
+            log_kwargs = {
+                "chunk_size": len(key),
+                "ids": list(key),
+                "attempt": next_attempt,
+                "max_attempts": single_retry_limit,
+                "error": str(exc),
+            }
+            if single_retry_delay > 0:
+                log_kwargs["delay"] = single_retry_delay
+            effective_logger.warning("chembl_single_retry", **log_kwargs)
+            if single_retry_delay > 0:
+                sleep(single_retry_delay)
+            return True
+
+        while queue:
+            attempt_size = min(current_size, len(queue))
+            if attempt_size <= 0:
+                break
+            attempt_ids = tuple(queue[:attempt_size])
+            if on_attempt is not None:
+                on_attempt()
+            try:
+                for result in iter_target_batches(
+                    attempt_ids,
+                    cfg=cfg,
+                    client=client,
+                    mapping_cfg=mapping_cfg,
+                    chunk_size=attempt_size,
+                    timeout=timeout,
+                    enable_split_fallback=False,
+                ):
+                    yield result
+            except (requests.RequestException, ValueError) as exc:
+                if attempt_size <= min_size:
+                    if _should_retry_single(attempt_ids, exc):
+                        continue
+                    raise
+                next_size = int(math.floor(attempt_size * shrink_factor))
+                if next_size < min_size:
+                    next_size = min_size
+                if next_size >= attempt_size:
+                    next_size = max(min_size, attempt_size - 1)
+                effective_logger.warning(
+                    "chembl_chunk_retry",
+                    chunk_size=attempt_size,
+                    next_chunk_size=next_size,
+                    remaining=len(queue),
+                    error=str(exc),
+                )
+                current_size = next_size
+                continue
+            else:
+                single_retry_counts.pop(attempt_ids, None)
+            del queue[:attempt_size]
+            current_size = min(base_chunk_size, len(queue)) if queue else 0
+
+        batch.clear()
+
+    for target_id in ids:
+        buffer.append(target_id)
+        if len(buffer) >= base_chunk_size:
+            yield from _drain_buffer(buffer)
+    if buffer:
+        yield from _drain_buffer(buffer)
 
 def get_target(
     chembl_target_id: str,

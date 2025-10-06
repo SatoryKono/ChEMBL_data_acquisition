@@ -19,6 +19,7 @@ from ..pipelines.target.chembl_target import (
     get_targets_payloads,
     get_targets_raw_frame,
     iter_target_batches,
+    iter_target_batches_with_retry,
 )
 from ..pipelines.tissue import get_tissues
 
@@ -35,6 +36,7 @@ __all__ = [
     "get_targets_payloads",
     "get_targets_raw_frame",
     "iter_target_batches",
+    "iter_target_batches_with_retry",
     "extend_target",
     "_chunked",
 ]

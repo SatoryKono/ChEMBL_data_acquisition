@@ -14,10 +14,22 @@ from typing import Any, Sequence
 import pytest
 
 
+from library.common.logging_setup import LoggerConfig, configure_logger
+from library.cli.logging import setup_cli_logging
+
+
 SUCCESS_RATE_THRESHOLD = 0.95
 
 
 logger = logging.getLogger(__name__)
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+TEST_DIRECTORIES = (
+    ROOT_DIR / "tests" / "unit",
+    ROOT_DIR / "tests" / "integration",
+    ROOT_DIR / "tests" / "postprocessing",
+    ROOT_DIR / "tests" / "e2e",
+)
 
 
 @dataclass
@@ -168,6 +180,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Execute pytest with reporting helpers.")
     parser.add_argument("--suite", default="full", help="Label for the executed suite (used in log naming).")
     parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging for the CLI and pytest log capture.",
+    )
+    parser.add_argument(
         "--report-dir",
         default="reports",
         type=Path,
@@ -181,44 +198,80 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _has_explicit_targets(extra_args: Sequence[str] | None) -> bool:
+    if not extra_args:
+        return False
+    for token in extra_args:
+        if token == "--":
+            continue
+        if token.startswith("-"):
+            continue
+        return True
+    return False
+
+
+def _normalise_extra_args(extra_args: Sequence[str] | None) -> list[str]:
+    if not extra_args:
+        return []
+    if extra_args and extra_args[0] == "--":
+        return list(extra_args[1:])
+    return list(extra_args)
+
+
+def _default_test_targets() -> list[str]:
+    return [str(path) for path in TEST_DIRECTORIES if path.exists()]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
     report_dir: Path = args.report_dir
     report_dir.mkdir(parents=True, exist_ok=True)
-    logs_dir = report_dir / "logs"
-    logs_dir.mkdir(parents=True, exist_ok=True)
-
-    log_path = logs_dir / f"{args.suite}.log"
 
     if "PYTHONHASHSEED" not in os.environ:
         os.environ["PYTHONHASHSEED"] = "0"
 
-    pytest_args = ["tests", f"--log-file={log_path}", "--log-file-level=DEBUG", "--maxfail=0"]
-    if args.pytest_args:
-        pytest_args.extend(args.pytest_args)
+    level = "DEBUG" if args.verbose else "INFO"
+    base_logger_cfg = LoggerConfig(level=level, logger_name="run_test_suite")
 
-    plugin = JsonReportPlugin(log_path)
-    pytest_exit_code = pytest.main(pytest_args, plugins=[plugin])
-    exit_code = int(pytest_exit_code)
+    with setup_cli_logging("run_test_suite", base_logger_cfg) as logging_ctx:
+        configure_logger(logging_ctx.log_cfg)
 
-    results = plugin.results
-    summary = summarize_results(results)
+        log_path = logging_ctx.log_path
+        extra_args = _normalise_extra_args(args.pytest_args)
 
-    if summary["success_rate"] < SUCCESS_RATE_THRESHOLD:
-        logger.error(
-            "Success rate %.2f%% is below the required threshold of %.2f%%",
-            summary["success_rate"] * 100,
-            SUCCESS_RATE_THRESHOLD * 100,
-        )
-        if exit_code == 0:
-            exit_code = 1
+        pytest_args = [
+            f"--log-file={log_path}",
+            f"--log-file-level={logging_ctx.log_cfg.level}",
+            "--maxfail=0",
+        ]
 
-    json_path = report_dir / "test_report.json"
-    summary_path = report_dir / "test_summary.md"
-    _write_json(json_path, results, exit_code, summary)
-    _write_summary(summary_path, results, exit_code, summary)
+        if not _has_explicit_targets(extra_args):
+            pytest_args.extend(_default_test_targets())
+
+        pytest_args.extend(extra_args)
+
+        plugin = JsonReportPlugin(log_path)
+        pytest_exit_code = pytest.main(pytest_args, plugins=[plugin])
+        exit_code = int(pytest_exit_code)
+
+        results = plugin.results
+        summary = summarize_results(results)
+
+        if summary["success_rate"] < SUCCESS_RATE_THRESHOLD:
+            logger.error(
+                "Success rate %.2f%% is below the required threshold of %.2f%%",
+                summary["success_rate"] * 100,
+                SUCCESS_RATE_THRESHOLD * 100,
+            )
+            if exit_code == 0:
+                exit_code = 1
+
+        json_path = report_dir / "test_report.json"
+        summary_path = report_dir / "test_summary.md"
+        _write_json(json_path, results, exit_code, summary)
+        _write_summary(summary_path, results, exit_code, summary)
 
     return int(exit_code)
 

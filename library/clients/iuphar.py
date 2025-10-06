@@ -55,6 +55,7 @@ _session_factory: Callable[[], Session] = _make_session_factory(ApiCfg(), RetryC
 _session_local = threading.local()
 _sessions: set[Session] = set()
 _active_requests = 0
+_jitter_provider: Callable[[float], float] | None = None
 
 
 def _close_sessions(sessions: Iterable[Session]) -> None:
@@ -108,10 +109,15 @@ EXPECTED_FAMILY_COLUMNS: tuple[str, ...] = (
 )
 
 
-def init_session(api: ApiCfg, retry: RetryCfg) -> None:
+def init_session(
+    api: ApiCfg,
+    retry: RetryCfg,
+    *,
+    jitter: Callable[[float], float] | None = None,
+) -> None:
     """Initialise the shared HTTP session used by the IUPHAR client."""
 
-    global _session_factory, _session_local
+    global _session_factory, _session_local, _jitter_provider
 
     factory = _make_session_factory(api, retry)
     with _session_condition:
@@ -121,6 +127,7 @@ def init_session(api: ApiCfg, retry: RetryCfg) -> None:
         _sessions.clear()
         _session_factory = factory
         _session_local = threading.local()
+        _jitter_provider = jitter if jitter is not None else retry.build_jitter()
 
     _close_sessions(old_sessions)
 
@@ -173,6 +180,9 @@ def _download_csv(url: str, cfg: IupharCfg, retry: RetryCfg) -> pd.DataFrame:
     timeout = (cfg.timeout_connect, cfg.timeout_read)
     limiter = get_limiter("iuphar", cfg.rps, cfg.burst)
 
+    with _session_condition:
+        jitter_provider = _jitter_provider
+
     for attempt in range(1, retry.max_attempts + 1):
         limiter.acquire()
         try:
@@ -191,8 +201,14 @@ def _download_csv(url: str, cfg: IupharCfg, retry: RetryCfg) -> pd.DataFrame:
                 )
                 raise
             backoff = retry.backoff_factor * (2 ** (attempt - 1))
-            jitter = random.uniform(0, backoff)
-            sleep(backoff + jitter)
+            if backoff > 0:
+                if jitter_provider is not None:
+                    jitter_value = jitter_provider(backoff)
+                else:
+                    jitter_value = random.uniform(0, backoff)
+            else:
+                jitter_value = 0.0
+            sleep(backoff + jitter_value)
 
     raise RuntimeError("Failed to download CSV")
 
@@ -232,6 +248,9 @@ def _query_gene_symbol(
     timeout = (cfg.timeout_connect, cfg.timeout_read)
     limiter = get_limiter("iuphar", cfg.rps, cfg.burst)
 
+    with _session_condition:
+        jitter_provider = _jitter_provider
+
     for attempt in range(1, retry.max_attempts + 1):
         limiter.acquire()
         try:
@@ -250,8 +269,14 @@ def _query_gene_symbol(
                 )
                 break
             backoff = retry.backoff_factor * (2 ** (attempt - 1))
-            jitter = random.uniform(0, backoff)
-            sleep(backoff + jitter)
+            if backoff > 0:
+                if jitter_provider is not None:
+                    jitter_value = jitter_provider(backoff)
+                else:
+                    jitter_value = random.uniform(0, backoff)
+            else:
+                jitter_value = 0.0
+            sleep(backoff + jitter_value)
     return {}
 
 

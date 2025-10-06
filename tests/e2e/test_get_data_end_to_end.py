@@ -8,6 +8,7 @@ import shutil
 from collections import deque
 from collections.abc import Callable
 from datetime import UTC
+from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
@@ -15,6 +16,7 @@ import pytest
 
 from library.common.csv_utils import sha256_file
 from scripts import get_data
+from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_file, parse_log_lines
 
 
@@ -120,13 +122,28 @@ def _assays_transform(frame: pd.DataFrame, logger: get_data.Logger) -> pd.DataFr
     frame = frame.copy()
     frame["description"] = frame["description"].astype("string").str.strip()
     frame["description_length"] = frame["description"].str.len().astype("Int64")
-    return frame[
+    lookup = _load_assay_dictionary()
+    enriched = frame.merge(lookup, on="assay_chembl_id", how="left")
+    quality_columns = ["assay_strain", "assay_group", "year", "accession"]
+    completeness = 1.0 - enriched[quality_columns].isna().mean()
+    min_ratio = float(completeness.min()) if len(completeness) else 1.0
+    if min_ratio < ASSAY_ENRICHMENT_MIN_RATIO:
+        raise AssertionError(
+            "assay enrichment below threshold "
+            f"(threshold={ASSAY_ENRICHMENT_MIN_RATIO}, completeness={completeness.to_dict()})"
+        )
+    enriched["year"] = enriched["year"].astype("Int64")
+    return enriched[
         [
             "assay_chembl_id",
             "target_chembl_id",
             "document_chembl_id",
             "description",
             "description_length",
+            "assay_strain",
+            "assay_group",
+            "year",
+            "accession",
         ]
     ]
 
@@ -266,31 +283,34 @@ def test_get_data_end_to_end__miniature_pipeline(
     report_writer = _make_report_writer(5)
     stub_steps = (
         get_data.PipelineStep(
-            "document",
-            _build_stub_pipeline(
+            name="document",
+            main=_build_stub_pipeline(
                 "document",
                 "document_chembl_id",
                 ["document_chembl_id", "title", "pubmed_id"],
                 _documents_transform,
                 accept_mode=True,
             ),
-            None,
+            input_filename="document.csv",
+            output_stem="documents",
             extra_args=("--mode", "all"),
         ),
         get_data.PipelineStep(
-            "target",
-            _build_stub_pipeline(
+            name="target",
+            main=_build_stub_pipeline(
                 "target",
                 "target_chembl_id",
                 ["target_chembl_id", "target_name", "organism"],
                 _targets_transform,
                 accept_subcommand=True,
             ),
-            "all",
+            input_filename="target.csv",
+            output_stem="targets",
+            subcommand="all",
         ),
         get_data.PipelineStep(
-            "assay",
-            _build_stub_pipeline(
+            name="assay",
+            main=_build_stub_pipeline(
                 "assay",
                 "assay_chembl_id",
                 [
@@ -301,21 +321,23 @@ def test_get_data_end_to_end__miniature_pipeline(
                 ],
                 _assays_transform,
             ),
-            None,
+            input_filename="assay.csv",
+            output_stem="assays",
         ),
         get_data.PipelineStep(
-            "testitem",
-            _build_stub_pipeline(
+            name="testitem",
+            main=_build_stub_pipeline(
                 "testitem",
                 "molecule_chembl_id",
                 ["molecule_chembl_id", "preferred_name"],
                 _testitems_transform,
             ),
-            None,
+            input_filename="testitem.csv",
+            output_stem="testitems",
         ),
         get_data.PipelineStep(
-            "activity",
-            _build_stub_pipeline(
+            name="activity",
+            main=_build_stub_pipeline(
                 "activity",
                 "activity_id",
                 [
@@ -329,10 +351,11 @@ def test_get_data_end_to_end__miniature_pipeline(
                 optional_columns=["force_failure"],
                 post_process=report_writer,
             ),
-            None,
+            input_filename="activity.csv",
+            output_stem="activities",
         ),
     )
-    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", stub_steps, raising=False)
+    monkeypatch.setattr(get_data, "_resolve_pipeline_steps", lambda _: stub_steps)
 
     date_prefix = "20240102"
 
@@ -364,7 +387,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     exit_code, logs = _invoke(argv)
     assert exit_code == 0
 
-    log_dir = base_path / "logs"
+    log_dir = base_path / "data" / "logs"
     orchestrator_log = log_dir / f"get_data_{date_prefix}.log"
     assert orchestrator_log.exists()
     orchestrator_records = parse_log_file(orchestrator_log)
@@ -388,7 +411,7 @@ def test_get_data_end_to_end__miniature_pipeline(
         "activity": "activity_id",
     }
     output_paths: dict[str, Path] = {}
-    for step_name, stem in get_data._DEFAULT_OUTPUT_STEMS.items():
+    for step_name, stem in get_data.DEFAULT_OUTPUT_STEMS.items():
         final_path = output_dir / f"output.{stem}_{date_prefix}.csv"
         output_paths[step_name] = final_path
         assert final_path.exists(), f"expected output for {step_name} missing"
@@ -396,6 +419,10 @@ def test_get_data_end_to_end__miniature_pipeline(
         expected = pd.read_csv(expected_dir / f"{stem}.csv")
         pd.testing.assert_frame_equal(actual, expected)
         assert not actual[key_columns[step_name]].duplicated().any()
+        if step_name == "assay":
+            quality_columns = ["assay_strain", "assay_group", "year", "accession"]
+            completeness = 1.0 - actual[quality_columns].isna().mean()
+            assert (completeness >= ASSAY_ENRICHMENT_MIN_RATIO).all(), completeness
 
     hashes_before = {name: sha256_file(path) for name, path in output_paths.items()}
 
@@ -458,7 +485,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert new_exit_code == 0
     new_log_path = log_dir / f"get_data_{new_date_prefix}.log"
     assert new_log_path.exists()
-    for step_name, stem in get_data._DEFAULT_OUTPUT_STEMS.items():
+    for step_name, stem in get_data.DEFAULT_OUTPUT_STEMS.items():
         new_path = output_dir / f"output.{stem}_{new_date_prefix}.csv"
         assert new_path.exists()
 
@@ -561,3 +588,17 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert not missing_target.exists()
     sentinel_path = missing_output / f"output.targets_{date_prefix}.csv.failed"
     assert sentinel_path.exists()
+_ASSAY_DICTIONARY_PATH = Path(__file__).resolve().parents[1] / "data" / "assay_dictionary.csv"
+
+
+@lru_cache(maxsize=1)
+def _load_assay_dictionary() -> pd.DataFrame:
+    lookup = pd.read_csv(_ASSAY_DICTIONARY_PATH)
+    lookup = lookup.copy()
+    lookup["assay_chembl_id"] = lookup["assay_chembl_id"].astype("string").str.strip()
+    lookup["assay_strain"] = lookup["assay_strain"].astype("string")
+    lookup["assay_group"] = lookup["assay_group"].astype("string")
+    lookup["accession"] = lookup["accession"].astype("string")
+    lookup["year"] = pd.to_numeric(lookup["year"], errors="coerce").astype("Int64")
+    return lookup
+

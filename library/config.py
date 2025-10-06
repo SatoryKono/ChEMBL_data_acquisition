@@ -16,14 +16,15 @@ from __future__ import annotations
 import atexit
 import logging
 import os
+import random
 import re
-import atexit
+import threading
 from collections.abc import Iterator, Sequence
 from contextlib import ExitStack
 from importlib import resources
 from pathlib import Path
 from types import UnionType
-from typing import Any, Mapping, Union, get_args, get_origin
+from typing import Any, Callable, Mapping, Union, get_args, get_origin
 
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
@@ -42,11 +43,10 @@ from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from config import DICTIONARY_DIR
-
 from .common.log import logger
 from .common.rate_limiter import configure_limiter_cache
 from .document_defaults import ALL_DEFAULTS, CHEMBL_DEFAULTS, PUBMED_DEFAULTS
+from .resources.dictionaries import get_resource_path, resolve_resource_reference
 from .utils.config import ConfigLoaderError, load_yaml_config
 
 
@@ -312,10 +312,10 @@ def _build_snapshot(
     return snapshot
 
 
-def _dictionary_resource(*parts: str) -> Path:
-    """Return a filesystem path for a bundled dictionary resource."""
+def _dictionary_resource(name: str) -> Path:
+    """Return a manifest-backed filesystem path for a dictionary resource."""
 
-    return DICTIONARY_DIR.joinpath(*parts)
+    return get_resource_path(name)
 
 
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
@@ -444,7 +444,7 @@ class ApiCfg(_BaseModel):
 
     chembl_base: str = "https://www.ebi.ac.uk/chembl/api/data"
     timeout_connect: float = Field(5.0, ge=1)
-    timeout_read: float = Field(30.0, ge=1)
+    timeout_read: float = Field(60.0, ge=1)
     retries: int = Field(3, ge=0)
     backoff_factor: float = Field(0.5, ge=0)
     rps: int = Field(5, ge=1)
@@ -492,8 +492,8 @@ class MoleculeCatalogCfg(_BaseModel):
     endpoint: str = "molecule"
     child_field: str = "molecule_chembl_id"
     parent_field: str = "parent_molecule_chembl_id"
-    hierarchy_lookup_path: Path | None = (
-        DICTIONARY_DIR / "_testitem" / "molecule_hierarchy.csv"
+    hierarchy_lookup_path: Path | None = Field(
+        default_factory=lambda: get_resource_path("testitem_molecule_hierarchy")
     )
     hierarchy_lookup_encoding: str = "utf-8-sig"
     hierarchy_lookup_delimiter: str = ","
@@ -507,6 +507,13 @@ class MoleculeCatalogCfg(_BaseModel):
     )
     page_size: int = Field(500, ge=1)
     fallback_single_limit: int | None = Field(default=None, ge=1)
+
+    @field_validator("hierarchy_lookup_path", mode="before")
+    @classmethod
+    def _resolve_hierarchy_path(cls, value: Any) -> Path | None | Any:
+        if value is None:
+            return value
+        return resolve_resource_reference(value)
 
 
 class OpenAlexCfg(_BaseModel):
@@ -772,22 +779,20 @@ class DocQualityCfg(_BaseModel):
 
 
 class ResourcesCfg(_BaseModel):
-    dictionary_dir: Path = Field(default_factory=_dictionary_resource)
+    dictionary_dir: Path = Field(
+        default_factory=lambda: _dictionary_resource("dictionary_root")
+    )
     iuphar_target_csv: Path = Field(
-        default_factory=lambda: _dictionary_resource(
-            "_target", "_IUPHAR", "_IUPHAR_target.csv"
-        )
+        default_factory=lambda: _dictionary_resource("target_iuphar_target")
     )
     iuphar_family_csv: Path = Field(
-        default_factory=lambda: _dictionary_resource(
-            "_target", "_IUPHAR", "_IUPHAR_family.csv"
-        )
+        default_factory=lambda: _dictionary_resource("target_iuphar_family")
     )
     uniprot_data_dir: Path = Field(
-        default_factory=lambda: _dictionary_resource("_target", "_uniprot")
+        default_factory=lambda: _dictionary_resource("target_uniprot_cache")
     )
     targets_type_csv: Path = Field(
-        default_factory=lambda: _dictionary_resource("_target", "targets_type.csv")
+        default_factory=lambda: _dictionary_resource("target_types")
     )
 
     @field_validator(
@@ -800,9 +805,9 @@ class ResourcesCfg(_BaseModel):
     )
     @classmethod
     def _coerce_path(cls, value: Any) -> Path | Any:
-        if isinstance(value, (str, os.PathLike)):
-            return Path(value)
-        return value
+        if value is None:
+            return value
+        return resolve_resource_reference(value)
 
 
 class IoCfg(_BoolModel):
@@ -893,12 +898,31 @@ class RateCfg(_BaseModel):
 
 
 class RetryCfg(_BaseModel):
-    max_attempts: int = Field(3, ge=1)
+    max_attempts: int = Field(4, ge=1)
     backoff_factor: float = Field(0.5, ge=0)
     backoff_cap: float | None = Field(default=None, ge=0)
     status_forcelist: list[StrictInt] = Field(
         default_factory=lambda: [429, 500, 502, 503, 504]
     )
+    jitter_seed: int | None = Field(0, ge=0)
+
+    def build_jitter(self) -> Callable[[float], float] | None:
+        """Return a deterministic jitter provider configured by ``jitter_seed``."""
+
+        if self.jitter_seed is None:
+            return None
+
+        seed = int(self.jitter_seed)
+        rng = random.Random(seed)
+        lock = threading.Lock()
+
+        def _jitter(max_value: float) -> float:
+            if max_value <= 0:
+                return 0.0
+            with lock:
+                return rng.uniform(0.0, max_value)
+
+        return _jitter
 
 
 class ActivityBoundsCfg(_BoolModel):
@@ -1081,7 +1105,7 @@ class ActivityCfg(_BoolModel):
     column: str = "activity_id"
     batch_size: int = Field(5, ge=1)
     workers: int = Field(1, ge=1)
-    timeout: float = Field(30.0, gt=0)
+    timeout: float = Field(90.0, gt=0)
     limit: int | None = Field(default=None, ge=0)
     offset: int = Field(0, ge=0)
     dry_run: bool = False
@@ -1094,8 +1118,8 @@ class ActivityCfg(_BoolModel):
 
 class AssayCfg(_BaseModel):
     column: str = "assay_chembl_id"
-    batch_size: int = Field(10, ge=1)
-    timeout: float = Field(30.0, gt=0)
+    batch_size: int = Field(25, ge=1)
+    timeout: float = Field(60.0, gt=0)
     limit: int | None = Field(default=None, ge=0)
 
 
@@ -1116,7 +1140,7 @@ class TissueCfg(_BaseModel):
 
 
 class TestitemBatchRetryCfg(_BoolModel):
-    enable: bool = False
+    enable: bool = True
     shrink_factor: float = Field(0.5, gt=0, lt=1)
     min_size: int = Field(1, ge=1)
 
@@ -1128,8 +1152,8 @@ class TestitemBatchRetryCfg(_BoolModel):
 
 class TestitemCfg(_BaseModel):
     column: str = "molecule_chembl_id"
-    batch_size: int = Field(1000, ge=1, le=1000)
-    timeout: float = Field(30.0, gt=0)
+    batch_size: int = Field(250, ge=1, le=1000)
+    timeout: float = Field(90.0, gt=0)
     limit: int | None = Field(default=None, ge=0)
     offset: int = Field(0, ge=0)
     fields: tuple[str, ...] = Field(default=TESTITEM_FIELD_DEFAULTS)
@@ -1153,12 +1177,19 @@ class TestitemCfg(_BaseModel):
 
 
 class TestitemMoleculeEnrichmentSourcesCfg(_BaseModel):
-    molecule_catalog_path: Path = (
-        DICTIONARY_DIR / "_testitem" / "molecule_catalog.csv"
+    molecule_catalog_path: Path = Field(
+        default_factory=lambda: get_resource_path("testitem_molecule_catalog")
     )
-    molecule_hierarchy_path: Path = (
-        DICTIONARY_DIR / "_testitem" / "molecule_hierarchy.csv"
+    molecule_hierarchy_path: Path = Field(
+        default_factory=lambda: get_resource_path("testitem_molecule_hierarchy")
     )
+
+    @field_validator("molecule_catalog_path", "molecule_hierarchy_path", mode="before")
+    @classmethod
+    def _resolve_manifest_paths(cls, value: Any) -> Path | Any:
+        if value is None:
+            return value
+        return resolve_resource_reference(value)
 
 
 class TestitemMoleculeEnrichmentOutputCfg(_BoolModel):
@@ -1244,11 +1275,33 @@ class DocumentCfg(_BaseModel):
 
 class TargetUniprotCfg(_BaseModel):
     column: str = "uniprot_id"
-    data_dir: Path = DICTIONARY_DIR / "_target" / "_uniprot"
+    data_dir: Path = Field(
+        default_factory=lambda: get_resource_path("target_uniprot_cache")
+    )
     limit: int | None = Field(default=None, ge=0)
     chunk_size: int = Field(100, ge=1)
     timeout: float = Field(30.0, gt=0)
     offset: int = Field(0, ge=0)
+
+    @field_validator("data_dir", mode="before")
+    @classmethod
+    def _resolve_data_dir(cls, value: Any) -> Path | Any:
+        if value is None:
+            return value
+        return resolve_resource_reference(value)
+
+
+class TargetChemblBatchRetryCfg(_BoolModel):
+    enable: bool = True
+    shrink_factor: float = Field(0.5, gt=0, lt=1)
+    min_size: int = Field(1, ge=1)
+    single_timeout_retries: int = Field(2, ge=0)
+    single_timeout_delay: float = Field(0.0, ge=0.0)
+
+    @field_validator("enable", mode="before")
+    @classmethod
+    def _bools(cls, value: Any) -> bool:
+        return cls._parse_bool(value)
 
 
 class TargetChemblCfg(_BaseModel):
@@ -1260,11 +1313,14 @@ class TargetChemblCfg(_BaseModel):
 
     column: str = "target_chembl_id"
 
-    chunk_size: int = Field(5, ge=1)
-    timeout: float = Field(30.0, gt=0)
+    chunk_size: int = Field(3, ge=1)
+    timeout: float = Field(90.0, gt=0)
 
     limit: int | None = Field(default=None, ge=0)
     offset: int = Field(0, ge=0)
+    batch_retry: TargetChemblBatchRetryCfg = Field(
+        default_factory=lambda: TargetChemblBatchRetryCfg()
+    )
 
 
 
@@ -1274,33 +1330,49 @@ class TargetIupharCfg(_BaseModel):
     timeout: float = Field(30.0, gt=0)
     limit: int | None = Field(default=None, ge=0)
     offset: int = Field(0, ge=0)
-    target_csv: Path = (
-        DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_target.csv"
+    target_csv: Path = Field(
+        default_factory=lambda: get_resource_path("target_iuphar_target")
     )
-    family_csv: Path = (
-        DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_family.csv"
+    family_csv: Path = Field(
+        default_factory=lambda: get_resource_path("target_iuphar_family")
     )
+
+    @field_validator("target_csv", "family_csv", mode="before")
+    @classmethod
+    def _resolve_iuphar_paths(cls, value: Any) -> Path | Any:
+        if value is None:
+            return value
+        return resolve_resource_reference(value)
 
 
 class TargetAllCfg(_BaseModel):
     """Defaults for the combined target pipeline."""
 
     column: str = "target_chembl_id"
-    data_dir: Path = DICTIONARY_DIR / "_target" / "_uniprot"
-    target_csv: Path = (
-        DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_target.csv"
+    data_dir: Path = Field(
+        default_factory=lambda: get_resource_path("target_uniprot_cache")
     )
-    family_csv: Path = (
-        DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_family.csv"
+    target_csv: Path = Field(
+        default_factory=lambda: get_resource_path("target_iuphar_target")
     )
-    chunk_size: int = Field(5, ge=1)
-    timeout: float = Field(30.0, gt=0)
+    family_csv: Path = Field(
+        default_factory=lambda: get_resource_path("target_iuphar_family")
+    )
+    chunk_size: int = Field(3, ge=1)
+    timeout: float = Field(90.0, gt=0)
     uniprot_column: str = "uniprot_id"
     chembl_out: Path | None = None
     uniprot_out: Path | None = None
     iuphar_out: Path | None = None
     limit: int | None = Field(default=None, ge=1)
     offset: int = Field(0, ge=0)
+
+    @field_validator("data_dir", "target_csv", "family_csv", mode="before")
+    @classmethod
+    def _resolve_all_paths(cls, value: Any) -> Path | Any:
+        if value is None:
+            return value
+        return resolve_resource_reference(value)
 
 
 class TargetCfg(_BaseModel):
@@ -1519,16 +1591,20 @@ def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
     """
 
     session = Session()
-    retry_cfg = Retry(
-        total=max(0, retry.max_attempts - 1),
-        backoff_factor=retry.backoff_factor,
-        status_forcelist=retry.status_forcelist,
+    retry_kwargs: dict[str, Any] = {
+        "total": max(0, retry.max_attempts - 1),
+        "backoff_factor": retry.backoff_factor,
+        "status_forcelist": retry.status_forcelist,
         # ``None`` disables method filtering and retries all HTTP methods.
         # Using ``None`` directly avoids ``Collection`` union type evaluation
         # issues under Python 3.12.
-        allowed_methods=None,
-        raise_on_status=False,
-    )
+        "allowed_methods": None,
+        "raise_on_status": False,
+    }
+    if retry.backoff_cap is not None:
+        retry_kwargs["backoff_max"] = retry.backoff_cap
+
+    retry_cfg = Retry(**retry_kwargs)
     adapter = HTTPAdapter(max_retries=retry_cfg)
     session.mount("http://", adapter)
     session.mount("https://", adapter)

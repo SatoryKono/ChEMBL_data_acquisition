@@ -12,8 +12,8 @@ three tiers:
 
 1. **Shared options** provided by `library.cli.parser.add_common_arguments`:
    - `--input / --final-out` – input CSV and destination for the cleaned export.
-     `--output` and `--out` remain as deprecated aliases that trigger a
-     deprecation warning; prefer `--final-out`.
+     A hidden `--out` compatibility alias still exists for automation but emits a
+     warning; documentation and new jobs should rely on `--final-out`.
    - `--log-level` – logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
    - `--verbose` – shortcut enabling `DEBUG` logging without overriding
      configuration files.
@@ -219,7 +219,7 @@ validates the table, then emits the standard CSV + sidecar + quality reports.
 ```
 get-activity-data --input data/input/activity.csv \
     --final-out output/activities_$(date +%Y%m%d).csv \
-    --batch-size 50 --workers 4 --timeout 60 --limit 500
+    --batch-size 20 --workers 4 --timeout 90 --limit 500
 ```
 
 `--dry-run` is unique to this pipeline: it validates CLI arguments and input
@@ -232,7 +232,7 @@ post-processing derives `lower_value`/`upper_value` using the rules described in
 ```
 get-testitem-data --input data/input/testitem.csv \
     --final-out output/testitems_$(date +%Y%m%d).csv \
-    --batch-size 1000 --timeout 60 --limit 400
+    --batch-size 250 --timeout 90 --limit 400
 ```
 
 After downloading molecules from ChEMBL, the pipeline enriches unique SMILES with

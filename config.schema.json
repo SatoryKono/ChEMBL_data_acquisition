@@ -21,7 +21,7 @@
           "type": "integer"
         },
         "timeout": {
-          "default": 30.0,
+          "default": 90.0,
           "minimum": 0,
           "title": "Timeout",
           "type": "number"
@@ -346,7 +346,7 @@
           "type": "number"
         },
         "timeout_read": {
-          "default": 30.0,
+          "default": 60.0,
           "minimum": 1,
           "title": "Timeout Read",
           "type": "number"
@@ -393,13 +393,13 @@
           "type": "string"
         },
         "batch_size": {
-          "default": 10,
+          "default": 25,
           "minimum": 1,
           "title": "Batch Size",
           "type": "integer"
         },
         "timeout": {
-          "default": 30.0,
+          "default": 60.0,
           "exclusiveMinimum": 0,
           "title": "Timeout",
           "type": "number"
@@ -908,7 +908,7 @@
           "type": "array"
         },
         "request_limit": {
-          "default": 1000,
+          "default": 250,
           "minimum": 1,
           "maximum": 1000,
           "title": "Request Limit",
@@ -969,13 +969,13 @@
           "type": "string"
         },
         "chunk_size": {
-          "default": 5,
+          "default": 3,
           "minimum": 1,
           "title": "Chunk Size",
           "type": "integer"
         },
         "timeout": {
-          "default": 30.0,
+          "default": 90.0,
           "exclusiveMinimum": 0,
           "title": "Timeout",
           "type": "number"
@@ -1192,7 +1192,7 @@
           "type": "number"
         },
         "timeout_read": {
-          "default": 30.0,
+          "default": 90.0,
           "minimum": 1,
           "title": "Timeout Read",
           "type": "number"
@@ -1582,7 +1582,7 @@
       "additionalProperties": false,
       "properties": {
         "max_attempts": {
-          "default": 3,
+          "default": 4,
           "minimum": 1,
           "title": "Max Attempts",
           "type": "integer"
@@ -1599,6 +1599,15 @@
           "title": "Backoff Cap",
           "type": [
             "number",
+            "null"
+          ]
+        },
+        "jitter_seed": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Jitter Seed",
+          "type": [
+            "integer",
             "null"
           ]
         },
@@ -1749,13 +1758,13 @@
           "type": "string"
         },
         "chunk_size": {
-          "default": 5,
+          "default": 3,
           "minimum": 1,
           "title": "Chunk Size",
           "type": "integer"
         },
         "timeout": {
-          "default": 30.0,
+          "default": 90.0,
           "exclusiveMinimum": 0,
           "title": "Timeout",
           "type": "number"
@@ -1856,13 +1865,13 @@
           "type": "string"
         },
         "chunk_size": {
-          "default": 5,
+          "default": 3,
           "minimum": 1,
           "title": "Chunk Size",
           "type": "integer"
         },
         "timeout": {
-          "default": 30.0,
+          "default": 90.0,
           "exclusiveMinimum": 0,
           "title": "Timeout",
           "type": "number"
@@ -1885,9 +1894,49 @@
           "minimum": 0,
           "title": "Offset",
           "type": "integer"
+        },
+        "batch_retry": {
+          "$ref": "#/$defs/TargetChemblBatchRetryCfg"
         }
       },
       "title": "TargetChemblCfg",
+      "type": "object"
+    },
+    "TargetChemblBatchRetryCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "default": true,
+          "title": "Enable",
+          "type": "boolean"
+        },
+        "shrink_factor": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1,
+          "title": "Shrink Factor",
+          "type": "number"
+        },
+        "min_size": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Min Size",
+          "type": "integer"
+        },
+        "single_timeout_retries": {
+          "default": 2,
+          "minimum": 0,
+          "title": "Single Timeout Retries",
+          "type": "integer"
+        },
+        "single_timeout_delay": {
+          "default": 0.0,
+          "minimum": 0.0,
+          "title": "Single Timeout Delay",
+          "type": "number"
+        }
+      },
+      "title": "TargetChemblBatchRetryCfg",
       "type": "object"
     },
     "TargetIupharCfg": {
@@ -1987,7 +2036,7 @@
       "additionalProperties": false,
       "properties": {
         "enable": {
-          "default": false,
+          "default": true,
           "title": "Enable",
           "type": "boolean"
         },
@@ -2017,14 +2066,14 @@
           "type": "string"
         },
         "batch_size": {
-          "default": 1000,
+          "default": 250,
           "minimum": 1,
           "maximum": 1000,
           "title": "Batch Size",
           "type": "integer"
         },
         "timeout": {
-          "default": 30.0,
+          "default": 90.0,
           "minimum": 0,
           "title": "Timeout",
           "type": "number"

@@ -142,6 +142,7 @@ def run_cli_command(
             "config_error",
             error=str(exc),
             config=str(getattr(args, "config", "")),
+            exc_info=exc,
         )
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
@@ -162,6 +163,7 @@ def run_cli_command(
             "config_error",
             error=str(exc),
             config=str(config_path),
+            exc_info=exc,
         )
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
@@ -176,12 +178,16 @@ def run_cli_command(
             use_logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
-        use_logger = cli.configure_logger(log_cfg)
+        if logger is None:
+            use_logger = cli.configure_logger(log_cfg)
+        else:
+            cli.configure_logger(log_cfg)
     except (ValueError, TypeError) as exc:
         use_logger.error(
             "config_error",
             error=str(exc),
             config=str(config_path),
+            exc_info=exc,
         )
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
@@ -189,6 +195,7 @@ def run_cli_command(
         use_logger.error(
             "directory_setup_failed",
             error=str(exc),
+            exc_info=exc,
         )
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
@@ -379,7 +386,7 @@ def run_pipeline(
     except PipelineError:
         return 1
     except Exception as exc:  # pragma: no cover - exercised in integration tests
-        use_logger.error("fetch_failed", error=str(exc))
+        use_logger.error("fetch_failed", error=str(exc), exc_info=exc)
         return 1
 
     class _AbortPipeline(RuntimeError):
@@ -453,6 +460,7 @@ def run_pipeline(
                             chunk_index=chunk_index,
                             rows=chunk_rows_total,
                             strict_mode=strict_mode,
+                            exc_info=exc,
                         )
                         failed_metadata_hooks.add(hook_name)
                         if strict_mode:
@@ -485,6 +493,7 @@ def run_pipeline(
                                     "validation_failed",
                                     failures=len(failure_cases),
                                     path=str(failure_path),
+                                    exc_info=exc,
                                 )
                             validated_chunk = getattr(
                                 exc, "validated_data", validated_chunk
@@ -528,6 +537,7 @@ def run_pipeline(
             use_logger.error(
                 "chunk_processing_failed",
                 error=str(exc),
+                exc_info=exc,
             )
             aborted = True
             raise _AbortPipeline(1) from exc
@@ -546,6 +556,7 @@ def run_pipeline(
                             error_type=exc.__class__.__name__,
                             context="empty_frame",
                             strict_mode=strict_mode,
+                            exc_info=exc,
                         )
                         failed_metadata_hooks.add(hook_name)
                         if strict_mode:
@@ -685,6 +696,7 @@ def run_pipeline(
             "write_fail",
             error=str(exc),
             path=str(output_path),
+            exc_info=exc,
         )
         return 1
 

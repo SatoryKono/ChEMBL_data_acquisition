@@ -31,9 +31,9 @@ flowchart LR
 * **Cleanup IDs** — trim whitespace, deduplicate rows and isolate placeholder identifiers while retaining them in raw snapshots.
 * **Normalize** — harmonise datatypes, operators and casing to prepare deterministic validation. Controlled through the `--normalize-at-export` / `--no-normalize-at-export` pair in the target pipeline.
 * **Validate** — run the Pandera schemas, routing violations to sidecar CSVs referenced in the metadata YAML.
-* **Final export** — write the cleaned table to `--final-out`/`--out`, append metadata and table-quality diagnostics. The boolean pair `--normalize-at-export` / `--no-normalize-at-export` governs whether normalisation occurs at this stage (default: enabled) or the final CSV mirrors the raw snapshot byte-for-byte.
+* **Final export** — write the cleaned table to `--final-out`, append metadata and table-quality diagnostics. A compatibility alias `--out` remains for legacy automation but emits a warning and is not documented elsewhere. The boolean pair `--normalize-at-export` / `--no-normalize-at-export` governs whether normalisation occurs at this stage (default: enabled) or the final CSV mirrors the raw snapshot byte-for-byte.
 
-> **Note.** The staging switches (`--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the boolean pair `--normalize-at-export` / `--no-normalize-at-export`) remain specific to `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`, but `--final-out` itself is now shared across all entry points. The legacy aliases (`--output`, `--out`) emit deprecation warnings when used.
+> **Note.** The staging switches (`--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the boolean pair `--normalize-at-export` / `--no-normalize-at-export`) remain specific to `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`, but `--final-out` itself is now shared across all entry points. Only the hidden `--out` compatibility alias persists for older scripts and continues to log a warning.
 
 Placeholder identifiers such as temporary ChEMBL or PubMed IDs are converted into explicit placeholder rows during the cleanup
 stage. The raw export retains them for auditing, while the final output omits them and surfaces aggregate counts via

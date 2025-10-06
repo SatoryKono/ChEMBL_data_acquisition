@@ -22,16 +22,20 @@ that the pipelines can be executed programmatically from other callers as well.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import logging
 import sys
 import time
 import uuid
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Callable, Iterable, IO, Sequence
+
+from typing import Any, Callable, Iterable, IO, Mapping, Sequence
+
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -46,39 +50,29 @@ from library.utils.bootstrap import ensure_project_root
 if __package__ in {None, ""}:
     ensure_project_root()
 
-from scripts import (
-    get_activity_data,
-    get_assay_data,
-    get_document_data,
-    get_target_data,
-    get_testitem_data,
-)
-
 from library.cli.logging import setup_cli_logging
 from library.clients import ChemblClient
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
 from library.config import Config, load_config
 from library.integration.molecule_catalog import load_parent_catalog
+from library.pipelines.registry import PipelineStep, load_pipeline_registry
 from library.utils.config import DEFAULT_CONFIG_PATH
 
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
 
-_DEFAULT_INPUT_FILES = {
-    "document": "document.csv",
-    "target": "target.csv",
-    "assay": "assay.csv",
-    "testitem": "testitem.csv",
-    "activity": "activity.csv",
+DEFAULT_PIPELINE_STEPS: tuple[PipelineStep, ...] = load_pipeline_registry()
+DEFAULT_INPUT_FILES: Mapping[str, str] = {
+    step.name: step.input_filename for step in DEFAULT_PIPELINE_STEPS
+}
+DEFAULT_OUTPUT_STEMS: Mapping[str, str] = {
+    step.name: step.output_stem for step in DEFAULT_PIPELINE_STEPS
 }
 
-_DEFAULT_OUTPUT_STEMS = {
-    "document": "documents",
-    "target": "targets",
-    "assay": "assays",
-    "testitem": "testitems",
-    "activity": "activities",
-}
+# Backwards compatibility for existing callers/tests that patch the legacy names.
+_PIPELINE_STEPS = DEFAULT_PIPELINE_STEPS
+_DEFAULT_INPUT_FILES = DEFAULT_INPUT_FILES
+_DEFAULT_OUTPUT_STEMS = DEFAULT_OUTPUT_STEMS
 
 
 _UNLINK_MAX_ATTEMPTS = 5
@@ -100,86 +94,21 @@ class PipelineRunConfig:
     force: bool
     skip_existing: bool
     dry_run: bool
+    input_files: Mapping[str, str]
+    output_stems: Mapping[str, str]
 
     def input_path(self, name: str) -> Path:
         """Return the fully resolved path for ``name`` in the input directory."""
 
-        filename = _DEFAULT_INPUT_FILES[name]
+        filename = self.input_files[name]
         return self.input_dir / filename
 
     def output_path(self, name: str) -> Path:
         """Return the fully resolved path for ``name`` in the output directory."""
 
-        stem = _DEFAULT_OUTPUT_STEMS[name]
+        stem = self.output_stems[name]
         filename = f"output.{stem}_{self.date_prefix}.csv"
         return self.output_dir / filename
-
-
-@dataclass(frozen=True)
-class PipelineStep:
-    """Describe a single pipeline invocation."""
-
-    name: str
-    main: Callable[[Sequence[str] | None], int]
-    subcommand: str | None
-    extra_args: tuple[str, ...] = ()
-    output_flag: str = "--final-out"
-    supports_dry_run: bool = False
-
-    def build_arguments(
-        self, cfg: PipelineRunConfig, output_path: Path | None = None
-    ) -> list[str]:
-        """Return CLI arguments forwarded to the wrapped ``main`` function."""
-
-        input_csv = cfg.input_path(self.name)
-        output_csv = (
-            output_path if output_path is not None else cfg.output_path(self.name)
-        )
-        args = ["--config", str(cfg.config_path), "--input", str(input_csv)]
-        args.extend([self.output_flag, str(output_csv)])
-        args.extend(["--log-level", cfg.log_level])
-        if cfg.limit is not None:
-            args.extend(["--limit", str(cfg.limit)])
-        if cfg.force:
-            args.append("--force")
-        if cfg.skip_existing:
-            args.append("--skip-existing")
-        if cfg.dry_run and self.supports_dry_run:
-            args.append("--dry-run")
-        if self.extra_args:
-            args = [*self.extra_args, *args]
-        if self.subcommand is not None:
-            return [self.subcommand, *args]
-        return args
-
-    def expected_output(self, cfg: PipelineRunConfig) -> Path:
-        """Return the path where the pipeline will create its CSV artefact."""
-
-        return cfg.output_path(self.name)
-
-    def required_input(self, cfg: PipelineRunConfig) -> Path:
-        """Return the CSV that the pipeline expects as input."""
-
-        return cfg.input_path(self.name)
-
-
-_PIPELINE_STEPS: tuple[PipelineStep, ...] = (
-    PipelineStep(
-        "document",
-        get_document_data.main,
-        None,
-        extra_args=("--mode", "all"),
-    ),
-    PipelineStep(
-        "target",
-        get_target_data.main,
-        "all",
-        output_flag="--final-out",
-    ),
-    PipelineStep("assay", get_assay_data.main, None),
-    PipelineStep("testitem", get_testitem_data.main, None),
-    PipelineStep("activity", get_activity_data.main, None, supports_dry_run=True),
-)
 
 
 def _resolve_path(base: Path, candidate: Path) -> Path:
@@ -189,6 +118,84 @@ def _resolve_path(base: Path, candidate: Path) -> Path:
     if expanded.is_absolute():
         return expanded.resolve()
     return (base / expanded).resolve()
+
+
+def _parse_overrides(
+    values: Sequence[str] | None,
+    *,
+    allow_empty_value: bool = False,
+) -> dict[str, str]:
+    """Parse ``STEP=value`` pairs from the CLI into a dictionary."""
+
+    overrides: dict[str, str] = {}
+    if not values:
+        return overrides
+    for raw in values:
+        if "=" not in raw:
+            raise ValueError(f"invalid override format: {raw!r}")
+        name, value = raw.split("=", 1)
+        key = name.strip()
+        if not key:
+            raise ValueError(f"override missing step name: {raw!r}")
+        if not value and not allow_empty_value:
+            raise ValueError(f"override missing value for step {key!r}")
+        overrides[key] = value
+    return overrides
+
+
+def _resolve_pipeline_steps(args: argparse.Namespace | None = None) -> tuple[PipelineStep, ...]:
+    """Load pipeline definitions applying CLI overrides when provided."""
+
+    registry_source = getattr(args, "pipeline_registry", None)
+    steps = (
+        load_pipeline_registry(registry_source)
+        if registry_source is not None
+        else DEFAULT_PIPELINE_STEPS
+    )
+    steps = tuple(steps)
+
+    input_overrides = _parse_overrides(getattr(args, "override_input", None))
+    output_overrides = _parse_overrides(
+        getattr(args, "override_output_stem", None)
+    )
+    subcommand_overrides = _parse_overrides(
+        getattr(args, "override_subcommand", None), allow_empty_value=True
+    )
+
+    if not input_overrides and not output_overrides and not subcommand_overrides:
+        return steps
+
+    known_steps = {step.name for step in steps}
+    _validate_override_keys(input_overrides, known_steps, "input")
+    _validate_override_keys(output_overrides, known_steps, "output")
+    _validate_override_keys(subcommand_overrides, known_steps, "subcommand")
+
+    mutated: list[PipelineStep] = []
+    for step in steps:
+        updated = step
+        if step.name in input_overrides:
+            updated = replace(updated, input_filename=input_overrides[step.name])
+        if step.name in output_overrides:
+            updated = replace(updated, output_stem=output_overrides[step.name])
+        if step.name in subcommand_overrides:
+            raw_value = subcommand_overrides[step.name]
+            new_subcommand = raw_value if raw_value else None
+            updated = replace(updated, subcommand=new_subcommand)
+        mutated.append(updated)
+    return tuple(mutated)
+
+
+def _validate_override_keys(
+    overrides: Mapping[str, str],
+    known: set[str],
+    kind: str,
+) -> None:
+    """Ensure override keys reference known steps."""
+
+    unknown = sorted(set(overrides) - known)
+    if unknown:
+        joined = ", ".join(unknown)
+        raise ValueError(f"unknown {kind} override for step(s): {joined}")
 
 
 def _configure_logging(
@@ -295,11 +302,44 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "including output directory creation"
         ),
     )
+    parser.add_argument(
+        "--pipeline-registry",
+        type=Path,
+        default=None,
+        help="Optional YAML file describing pipeline step definitions",
+    )
+    parser.add_argument(
+        "--override-input",
+        action="append",
+        metavar="STEP=FILENAME",
+        default=[],
+        help="Override the input CSV filename for a pipeline step",
+    )
+    parser.add_argument(
+        "--override-output-stem",
+        action="append",
+        metavar="STEP=STEM",
+        default=[],
+        help="Override the output filename stem for a pipeline step",
+    )
+    parser.add_argument(
+        "--override-subcommand",
+        action="append",
+        metavar="STEP=SUBCOMMAND",
+        default=[],
+        help="Override the CLI subcommand used to invoke a pipeline step",
+    )
     return parser.parse_args(argv)
 
 
-def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
+def _prepare_config(
+    args: argparse.Namespace, steps: Sequence[PipelineStep] | None = None
+) -> PipelineRunConfig:
     """Validate CLI inputs and construct :class:`PipelineRunConfig`."""
+
+    effective_steps = tuple(DEFAULT_PIPELINE_STEPS if steps is None else steps)
+    input_files = {step.name: step.input_filename for step in effective_steps}
+    output_stems = {step.name: step.output_stem for step in effective_steps}
 
     base_path = args.base_path.expanduser().resolve()
     input_dir = _resolve_path(base_path, args.input_dir)
@@ -333,6 +373,8 @@ def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
         force=args.force,
         skip_existing=args.skip_existing,
         dry_run=dry_run,
+        input_files=input_files,
+        output_stems=output_stems,
     )
 
 
@@ -342,6 +384,8 @@ class StepExecutionResult:
 
     exit_code: int
     executed: bool
+    status: str
+    reason: str | None = None
 
 
 def _temporary_output_path(output_path: Path) -> Path:
@@ -572,10 +616,20 @@ def _run_step(
     input_path = step.required_input(cfg)
     if not input_path.exists():
         _LOGGER.error("step_input_missing", step=step.name, path=str(input_path))
-        return StepExecutionResult(exit_code=1, executed=False)
+        return StepExecutionResult(
+            exit_code=1,
+            executed=False,
+            status="failed",
+            reason="input_missing",
+        )
     if cfg.skip_existing and final_output.exists() and not cfg.force:
         _LOGGER.info("step_skipped_existing", step=step.name, path=str(final_output))
-        return StepExecutionResult(exit_code=0, executed=False)
+        return StepExecutionResult(
+            exit_code=0,
+            executed=False,
+            status="skipped",
+            reason="skip_existing",
+        )
 
     arguments = step.build_arguments(cfg, output_path=working_output)
     _LOGGER.debug("step_arguments", step=step.name, arguments=arguments)
@@ -583,10 +637,22 @@ def _run_step(
         exit_code = step.main(arguments)
     except SystemExit as exc:
         exit_code = _coerce_exit_code(exc.code)
-        return StepExecutionResult(exit_code=exit_code, executed=True)
+        status = "success" if exit_code == 0 else "failed"
+        return StepExecutionResult(
+            exit_code=exit_code,
+            executed=True,
+            status=status,
+            reason="system_exit",
+        )
     except BaseException:
         raise
-    return StepExecutionResult(exit_code=exit_code, executed=True)
+    status = "success" if exit_code == 0 else "failed"
+    return StepExecutionResult(
+        exit_code=exit_code,
+        executed=True,
+        status=status,
+        reason=None if status == "success" else "non_zero_exit",
+    )
 
 
 def _finalize_step_success(
@@ -821,36 +887,275 @@ def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
     _LOGGER.info("parent_catalog_warm_done", elapsed=elapsed, **log_kwargs)
 
 
+
+def _compute_file_checksum(path: Path, *, chunk_size: int = 65536) -> str:
+    """Return the hexadecimal SHA256 checksum for ``path``."""
+
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while True:
+            chunk = stream.read(chunk_size)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _describe_file(path: Path) -> dict[str, Any]:
+    """Return manifest metadata for ``path`` including checksum when available."""
+
+    info: dict[str, Any] = {"path": str(path)}
+    try:
+        exists = path.exists()
+    except OSError:
+        exists = False
+    if not exists or not path.is_file():
+        info.update({
+            "exists": False,
+            "size_bytes": None,
+            "checksum_sha256": None,
+        })
+        return info
+    try:
+        stat_result = path.stat()
+    except OSError:
+        info.update({
+            "exists": False,
+            "size_bytes": None,
+            "checksum_sha256": None,
+        })
+        return info
+    info.update(
+        {
+            "exists": True,
+            "size_bytes": stat_result.st_size,
+            "checksum_sha256": _compute_file_checksum(path),
+        }
+    )
+    return info
+
+
+def _describe_sidecars(final_output: Path, working_output: Path) -> list[dict[str, Any]]:
+    """Return manifest metadata for sidecars associated with ``final_output``."""
+
+    include_patterns = (
+        f"*{final_output.name}",
+        f"*{final_output.with_suffix('').name}",
+        f"*{working_output.name}",
+        f"*{working_output.with_suffix('').name}",
+    )
+    sidecars = _discover_sidecars(
+        final_output,
+        working_output,
+        include_patterns=include_patterns,
+    )
+    described: list[dict[str, Any]] = []
+    for artefact in sorted(sidecars.values(), key=lambda item: str(item.destination)):
+        candidates: tuple[Path | None, ...] = (
+            artefact.destination,
+            artefact.final_path,
+            artefact.working_path,
+        )
+        selected: Path | None = None
+        for candidate in candidates:
+            if candidate is None:
+                continue
+            if candidate.exists():
+                selected = candidate
+                break
+        if selected is None:
+            selected = artefact.destination
+        described.append(_describe_file(selected))
+    return described
+
+
+def _complete_manifest_entry(
+    entry: dict[str, Any],
+    *,
+    final_output: Path,
+    working_output: Path,
+    started_at: float,
+) -> None:
+    """Populate completion metadata for a manifest ``entry``."""
+
+    entry["completed_at"] = datetime.now(UTC).isoformat()
+    entry["duration_sec"] = round(time.perf_counter() - started_at, 6)
+    entry["output"] = _describe_file(final_output)
+    entry["sidecars"] = _describe_sidecars(final_output, working_output)
+
+
+def _pending_manifest_entry(step: PipelineStep, cfg: PipelineRunConfig) -> dict[str, Any]:
+    """Return a manifest entry for ``step`` that has not been executed."""
+
+    final_output = step.expected_output(cfg)
+    working_output = _temporary_output_path(final_output)
+    entry: dict[str, Any] = {
+        "name": step.name,
+        "status": "pending",
+        "exit_code": None,
+        "executed": False,
+        "reason": None,
+        "started_at": None,
+        "completed_at": None,
+        "duration_sec": None,
+        "output": _describe_file(final_output),
+        "sidecars": _describe_sidecars(final_output, working_output),
+    }
+    return entry
+
+
+def _write_run_manifest(
+    cfg: PipelineRunConfig,
+    *,
+    run_started_at: datetime,
+    run_completed_at: datetime,
+    duration_seconds: float,
+    exit_code: int,
+    steps: Sequence[dict[str, Any]],
+) -> None:
+    """Persist the manifest for the pipeline execution."""
+
+    manifest = {
+        "run": {
+            "started_at": run_started_at.isoformat(),
+            "completed_at": run_completed_at.isoformat(),
+            "duration_sec": round(duration_seconds, 6),
+            "exit_code": exit_code,
+            "status": "success" if exit_code == 0 else "failed",
+            "date_prefix": cfg.date_prefix,
+            "base_path": str(cfg.base_path),
+            "input_dir": str(cfg.input_dir),
+            "output_dir": str(cfg.output_dir),
+            "config_path": str(cfg.config_path),
+            "log_level": cfg.log_level,
+            "limit": cfg.limit,
+            "force": cfg.force,
+            "skip_existing": cfg.skip_existing,
+            "dry_run": cfg.dry_run,
+        },
+        "steps": list(steps),
+    }
+
+    manifest_path = cfg.base_path / "reports" / "run_manifest.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    except OSError as exc:  # pragma: no cover - defensive guard
+        _LOGGER.warning(
+            "manifest_write_failed",
+            path=str(manifest_path),
+            error=str(exc),
+        )
+
+
 def run_pipeline(cfg: PipelineRunConfig) -> int:
+
     """Execute all configured steps and return the resulting exit status."""
 
+    effective_steps = tuple(DEFAULT_PIPELINE_STEPS if steps is None else steps)
     overall_status = 0
+    run_started_at = datetime.now(UTC)
+    run_started_clock = time.perf_counter()
+    manifest_entries: list[dict[str, Any]] = []
+    failed_index: int | None = None
     _LOGGER.info("pipeline_start", stage="pipeline")
-    for step in _PIPELINE_STEPS:
-        _LOGGER.info("step_start", step=step.name)
-        if cfg.dry_run:
-            _LOGGER.info("step_skip_dry_run", step=step.name)
-            continue
+
+    for index, step in enumerate(_PIPELINE_STEPS):
         final_output = step.expected_output(cfg)
         working_output = _temporary_output_path(final_output)
         sentinel_path = _failure_sentinel_path(final_output)
+        entry: dict[str, Any] = {
+            "name": step.name,
+            "status": "pending",
+            "exit_code": None,
+            "executed": False,
+            "reason": None,
+            "started_at": datetime.now(UTC).isoformat(),
+            "completed_at": None,
+            "duration_sec": None,
+            "output": _describe_file(final_output),
+            "sidecars": _describe_sidecars(final_output, working_output),
+        }
+        manifest_entries.append(entry)
+
+        _LOGGER.info("step_start", step=step.name)
+        step_started_clock = time.perf_counter()
+
+        if cfg.dry_run:
+            _LOGGER.info("step_skip_dry_run", step=step.name)
+            entry.update(
+                {
+                    "status": "skipped",
+                    "exit_code": 0,
+                    "executed": False,
+                    "reason": "dry_run",
+                }
+            )
+            _complete_manifest_entry(
+                entry,
+                final_output=final_output,
+                working_output=working_output,
+                started_at=step_started_clock,
+            )
+            continue
+
         if working_output.exists():
             _remove_path(working_output)
+
         if step.name == "testitem":
             try:
                 _warm_parent_catalog(cfg)
             except TimeoutError as exc:
                 overall_status = 1
+                entry.update(
+                    {
+                        "status": "failed",
+                        "exit_code": overall_status,
+                        "executed": False,
+                        "reason": "parent_catalog_timeout",
+                    }
+                )
                 _LOGGER.error("parent_catalog_warm_timeout", error=str(exc))
+                _complete_manifest_entry(
+                    entry,
+                    final_output=final_output,
+                    working_output=working_output,
+                    started_at=step_started_clock,
+                )
+                failed_index = index
                 break
             except Exception as exc:  # pragma: no cover - defensive guard
                 overall_status = 1
+                entry.update(
+                    {
+                        "status": "failed",
+                        "exit_code": overall_status,
+                        "executed": False,
+                        "reason": "parent_catalog_error",
+                    }
+                )
                 _LOGGER.error("parent_catalog_warm_error", error=str(exc))
+                _complete_manifest_entry(
+                    entry,
+                    final_output=final_output,
+                    working_output=working_output,
+                    started_at=step_started_clock,
+                )
+                failed_index = index
                 break
+
         try:
             result = _run_step(step, cfg, final_output, working_output)
         except SystemExit as exc:  # pragma: no cover - defensive guard
             exit_code = _coerce_exit_code(exc.code)
+            entry.update(
+                {
+                    "status": "failed",
+                    "exit_code": exit_code,
+                    "executed": True,
+                    "reason": "system_exit",
+                }
+            )
             _LOGGER.error("step_system_exit", step=step.name, exit_code=exit_code)
             _cleanup_failed_step(
                 final_output,
@@ -858,9 +1163,24 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
                 sentinel_path,
                 executed=True,
             )
+            _complete_manifest_entry(
+                entry,
+                final_output=final_output,
+                working_output=working_output,
+                started_at=step_started_clock,
+            )
             overall_status = exit_code
+            failed_index = index
             break
         except BaseException as exc:  # pragma: no cover - defensive guard
+            entry.update(
+                {
+                    "status": "failed",
+                    "exit_code": 1,
+                    "executed": True,
+                    "reason": "exception",
+                }
+            )
             _LOGGER.exception("step_exception", step=step.name, error=str(exc))
             _cleanup_failed_step(
                 final_output,
@@ -868,22 +1188,70 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
                 sentinel_path,
                 executed=True,
             )
+            _complete_manifest_entry(
+                entry,
+                final_output=final_output,
+                working_output=working_output,
+                started_at=step_started_clock,
+            )
             overall_status = 1
+            failed_index = index
             break
+
+        entry.update(
+            {
+                "exit_code": result.exit_code,
+                "executed": result.executed,
+                "reason": result.reason,
+            }
+        )
+
         if result.exit_code != 0:
             _LOGGER.error("step_failed", step=step.name, exit_code=result.exit_code)
+            entry["status"] = result.status
             _cleanup_failed_step(
                 final_output,
                 working_output,
                 sentinel_path,
                 executed=result.executed,
             )
+            _complete_manifest_entry(
+                entry,
+                final_output=final_output,
+                working_output=working_output,
+                started_at=step_started_clock,
+            )
             overall_status = result.exit_code
+            failed_index = index
             break
+
+        entry["status"] = result.status
         _finalize_step_success(final_output, working_output, sentinel_path)
+        _complete_manifest_entry(
+            entry,
+            final_output=final_output,
+            working_output=working_output,
+            started_at=step_started_clock,
+        )
         _LOGGER.info("step_done", step=step.name)
     else:
         _LOGGER.info("workflow_complete")
+
+    if failed_index is not None and failed_index + 1 < len(_PIPELINE_STEPS):
+        for step in _PIPELINE_STEPS[failed_index + 1 :]:
+            manifest_entries.append(_pending_manifest_entry(step, cfg))
+
+    run_completed_at = datetime.now(UTC)
+    duration_seconds = time.perf_counter() - run_started_clock
+    _write_run_manifest(
+        cfg,
+        run_started_at=run_started_at,
+        run_completed_at=run_completed_at,
+        duration_seconds=duration_seconds,
+        exit_code=overall_status,
+        steps=manifest_entries,
+    )
+
     _LOGGER.info("pipeline_done", stage="pipeline", exit_code=overall_status)
     return overall_status
 
@@ -900,7 +1268,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     script_name = Path(__file__).with_suffix("").name
     base_cfg = LoggerConfig(level=desired_level, run_id=uuid.uuid4().hex)
-    log_directory = Path(args.base_path).expanduser().resolve() / "logs"
+    resolved_base_path = Path(args.base_path).expanduser().resolve()
+    log_directory = resolved_base_path / "logs"
     status = 1
 
     with setup_cli_logging(
@@ -923,16 +1292,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         _LOGGER = logger
 
         try:
-            cfg = _prepare_config(args)
-        except (FileNotFoundError, OSError, ValueError) as exc:
-            _LOGGER.error("configuration_error", error=str(exc))
+            steps = _resolve_pipeline_steps(args)
+        except (FileNotFoundError, OSError, TypeError, ValueError) as exc:
+            _LOGGER.error("registry_error", error=str(exc))
             status = 1
         else:
-            status = run_pipeline(cfg)
-            if status != 0:
-                _LOGGER.error("workflow_failed", exit_code=status)
+            try:
+                cfg = _prepare_config(args, steps)
+            except (FileNotFoundError, OSError, ValueError) as exc:
+                _LOGGER.error("configuration_error", error=str(exc))
+                status = 1
             else:
-                _LOGGER.info("workflow_succeeded")
+                status = run_pipeline(cfg, steps=steps)
+                if status != 0:
+                    _LOGGER.error("workflow_failed", exit_code=status)
+                else:
+                    _LOGGER.info("workflow_succeeded")
 
     return status
 
