@@ -93,10 +93,12 @@ def test_transform__missing_identifier_columns_warns_and_returns_empty_result():
         "out_chembl.csv",
         "out_normalized.csv",
         "out_uniprot.csv",
+        "output.targets.csv",
+        "output.targets_normalized.csv",
     ],
 )
 def test_matches_expected_input_name__supports_modern_exports(filename: str) -> None:
-    """Modern ``out*.csv`` exports are accepted for isoform processing."""
+    """Modern aggregated exports are accepted for isoform processing."""
 
     assert isoform._matches_expected_input_name(filename)
 
