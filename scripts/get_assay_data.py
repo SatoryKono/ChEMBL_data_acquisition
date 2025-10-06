@@ -19,6 +19,7 @@ from pathlib import Path
 from time import sleep
 
 import argparse
+import sys
 from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from functools import partial
@@ -35,7 +36,7 @@ from library import io
 from library.common.csv_utils import write_csv_chunks_deterministic
 from library.pipelines.assay.chembl_assay import ASSAY_COLUMNS, MAX_ASSAY_CHUNK_SIZE
 from library.clients import ChemblClient
-from library.common.rate_limiter import get_global_limiter
+from library.orchestration.context import ETLContext
 from library.cli import (
     LoggerConfig,
     ConfigMetadata,
@@ -290,17 +291,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         destination=output_path.parent,
     )
 
-    rate_cfg = cfg.rate
-    global_limiter = None
-    if (rate_cfg.global_rps or 0) > 0:
-        global_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
-
-    with ChemblClient(
-        cfg.api,
-        cfg.retry,
-        cfg.chembl,
-        global_limiter=global_limiter,
-    ) as client:
+    with ETLContext(cfg) as context:
+        client = context.chembl
 
         retry_cfg = cfg.retry
         chunk_failures = ChunkFailureTracker()

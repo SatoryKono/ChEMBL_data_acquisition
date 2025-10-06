@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Callable, Iterable
 
 import pandas as pd
 import pytest
@@ -42,6 +42,18 @@ class _DummyClient:
 
     def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - trivial helper
         return False
+
+
+def _patch_activity_context(
+    monkeypatch: pytest.MonkeyPatch,
+    make_stub_etl_context: Callable[[Callable[[Any, Any], Any]], type],
+    factory: Callable[[Any, Any], Any] | None = None,
+) -> type:
+    if factory is None:
+        factory = lambda *_: _DummyClient()
+    context_cls = make_stub_etl_context(factory)
+    monkeypatch.setattr(get_activity_data, "ETLContext", context_cls)
+    return context_cls
 
 
 class _RecordingLogger:
@@ -227,7 +239,7 @@ def test_main__missing_cli_option_values(argv, monkeypatch, tmp_path, capsys) ->
     assert f"argument {option}: expected one argument" in stderr
 
 
-def test_run_chembl__offset_and_workers(monkeypatch, cfg, tmp_path) -> None:
+def test_run_chembl__offset_and_workers(monkeypatch, cfg, tmp_path, make_stub_etl_context) -> None:
     args = _make_args(tmp_path)
     args.offset = 1
     cfg.activity.dry_run = False
@@ -270,7 +282,7 @@ def test_run_chembl__offset_and_workers(monkeypatch, cfg, tmp_path) -> None:
         return _fetcher, _writer
 
     monkeypatch.setattr(get_activity_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline)
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyClient)
+    _patch_activity_context(monkeypatch, make_stub_etl_context)
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
 
@@ -289,14 +301,14 @@ def test_run_chembl__offset_and_workers(monkeypatch, cfg, tmp_path) -> None:
         lambda: ValueError("malformed CSV"),
     ],
 )
-def test_run_chembl__read_ids_failures(error_factory, cfg, tmp_path, monkeypatch) -> None:
+def test_run_chembl__read_ids_failures(error_factory, cfg, tmp_path, monkeypatch, make_stub_etl_context) -> None:
     args = _make_args(tmp_path)
 
     def _raise(*_args, **_kwargs):
         raise error_factory()
 
     monkeypatch.setattr(get_activity_data.io, "read_ids", _raise)
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyClient)
+    _patch_activity_context(monkeypatch, make_stub_etl_context)
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
 
@@ -307,7 +319,7 @@ def test_run_chembl__read_ids_failures(error_factory, cfg, tmp_path, monkeypatch
     assert "read_fail" in events
 
 
-def test_run_chembl__pipeline_failure_logs_error(cfg, tmp_path, monkeypatch) -> None:
+def test_run_chembl__pipeline_failure_logs_error(cfg, tmp_path, monkeypatch, make_stub_etl_context) -> None:
     args = _make_args(tmp_path)
 
     monkeypatch.setattr(
@@ -315,7 +327,7 @@ def test_run_chembl__pipeline_failure_logs_error(cfg, tmp_path, monkeypatch) -> 
         "read_ids",
         lambda *_args, **_kwargs: iter(["ACT1"]),
     )
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyClient)
+    _patch_activity_context(monkeypatch, make_stub_etl_context)
 
     def fake_prepare_chunked_pipeline(*, fetch_config, fetch_chunk, csv_writer):
         def _fetcher() -> Iterable[pd.DataFrame]:

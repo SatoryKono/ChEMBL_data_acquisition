@@ -356,6 +356,7 @@ def test_get_data_end_to_end__miniature_pipeline(
         ),
     )
     monkeypatch.setattr(get_data, "_resolve_pipeline_steps", lambda _: stub_steps)
+    monkeypatch.setattr(get_data, "_PIPELINE_APIS", {})
 
     date_prefix = "20240102"
 
@@ -387,9 +388,17 @@ def test_get_data_end_to_end__miniature_pipeline(
     exit_code, logs = _invoke(argv)
     assert exit_code == 0
 
-    log_dir = base_path / "data" / "logs"
-    orchestrator_log = log_dir / f"get_data_{date_prefix}.log"
+    log_dir_candidates = [base_path / "logs", base_path / "data" / "logs"]
+    orchestrator_log = None
+    for candidate in log_dir_candidates:
+        path = candidate / f"get_data_{date_prefix}.log"
+        if path.exists():
+            orchestrator_log = path
+            break
+    if orchestrator_log is None:
+        orchestrator_log = log_dir_candidates[0] / f"get_data_{date_prefix}.log"
     assert orchestrator_log.exists()
+    log_dir = orchestrator_log.parent
     orchestrator_records = parse_log_file(orchestrator_log)
     orchestrator_events = {entry.get("event") for entry in orchestrator_records}
     assert "pipeline_start" in orchestrator_events

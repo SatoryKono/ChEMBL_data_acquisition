@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Iterator, Sequence
+from typing import Any, Callable
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -12,6 +13,16 @@ from library.config import Config
 from library.pipelines.assay.chembl_assay import MAX_ASSAY_CHUNK_SIZE
 from scripts import get_assay_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
+
+
+def _patch_etl_context(
+    monkeypatch: pytest.MonkeyPatch,
+    make_stub_etl_context: Callable[[Callable[[Any, Any], Any]], type],
+    factory: Callable[[Any, Any], Any],
+) -> type:
+    context_cls = make_stub_etl_context(factory)
+    monkeypatch.setattr(get_assay_data, "ETLContext", context_cls)
+    return context_cls
 
 
 def _ensure_parent(path: Path) -> None:
@@ -91,7 +102,7 @@ def test_get_assay_cli__enrichment_quality(
 
 @pytest.mark.integration
 def test_get_assay_cli__clamps_batch_size(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, cfg: Config
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, cfg: Config, make_stub_etl_context
 ) -> None:
     cfg.assay.batch_size = MAX_ASSAY_CHUNK_SIZE * 2
 
@@ -184,7 +195,7 @@ def test_get_assay_cli__clamps_batch_size(
         del path, column, cfg
         return iter(identifiers)
 
-    monkeypatch.setattr(get_assay_data, "ChemblClient", _StubChemblClient)
+    _patch_etl_context(monkeypatch, make_stub_etl_context, lambda *_: _StubChemblClient())
     monkeypatch.setattr(get_assay_data, "ChunkFailureTracker", _StubChunkFailureTracker)
     monkeypatch.setattr(get_assay_data, "prepare_chunked_pipeline", _fake_prepare_chunked_pipeline)
     monkeypatch.setattr(get_assay_data, "run_pipeline", _fake_run_pipeline)

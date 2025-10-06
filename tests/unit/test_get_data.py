@@ -334,18 +334,17 @@ def test_run_pipeline__dry_run_manifest(tmp_path: Path, monkeypatch: pytest.Monk
         return 0
 
     steps = (
-        get_data.PipelineStep("document", _record, None),
-        get_data.PipelineStep("target", _record, None),
+        get_data.PipelineStep("document", _record, "document.csv", "documents"),
+        get_data.PipelineStep("target", _record, "target.csv", "targets"),
     )
 
     stream = io.StringIO()
     logger = get_data.configure_logger(
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="unit"),
     )
-    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", steps, raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
-    status = get_data.run_pipeline(cfg)
+    status = get_data.run_pipeline(cfg, steps=steps)
     assert status == 0
     assert not executions
 
@@ -353,7 +352,8 @@ def test_run_pipeline__dry_run_manifest(tmp_path: Path, monkeypatch: pytest.Monk
     assert manifest["run"]["dry_run"] is True
     assert manifest["run"]["exit_code"] == 0
     step_entries = manifest["steps"]
-    assert [entry["status"] for entry in step_entries] == ["skipped", "skipped"]
+    assert len(step_entries) == len(steps)
+    assert [entry["status"] for entry in step_entries] == ["skipped"] * len(steps)
     for entry in step_entries:
         assert entry["reason"] == "dry_run"
         assert entry["output"]["exists"] is False

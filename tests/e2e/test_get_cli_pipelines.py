@@ -7,6 +7,7 @@ from collections import Counter
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, Callable
 from typing import Callable, Iterable
 
 import pandas as pd
@@ -93,6 +94,18 @@ class _DummyChemblClient:
 
     def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - trivial helper
         return False
+
+
+def _patch_activity_etl_context(
+    monkeypatch: pytest.MonkeyPatch,
+    make_stub_etl_context: Callable[[Callable[[Any, Any], Any]], type],
+    factory: Callable[[Any, Any], Any] | None = None,
+) -> type:
+    if factory is None:
+        factory = lambda *_: _DummyChemblClient()
+    context_cls = make_stub_etl_context(factory)
+    monkeypatch.setattr(get_activity_data, "ETLContext", context_cls)
+    return context_cls
 
 
 @pytest.fixture()
@@ -184,7 +197,7 @@ def test_get_testitem_run_success(
     tmp_path: Path,
     sample_csv: Callable[[str], Path],
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = sample_csv("testitem")
     output_csv = tmp_path / "out" / "testitems.csv"
@@ -239,7 +252,7 @@ def test_get_testitem_run_failure_logs(
     tmp_path: Path,
     sample_csv: Callable[[str], Path],
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = sample_csv("testitem")
     output_csv = tmp_path / "out" / "testitems.csv"
@@ -272,7 +285,7 @@ def test_get_testitem_run_skip_existing(
     tmp_path: Path,
     sample_csv: Callable[[str], Path],
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = sample_csv("testitem")
     output_csv = tmp_path / "out" / "testitems.csv"
@@ -308,7 +321,7 @@ def test_get_activity_cli__retry_and_idempotent(
     tmp_path: Path,
     activity_resource_dir: Path,
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     _configure_activity_cfg(cfg)
     input_csv = tmp_path / "activities_input.csv"
@@ -329,7 +342,7 @@ def test_get_activity_cli__retry_and_idempotent(
         mask = chunk_df["activity_id"].astype(str).isin(identifiers)
         return chunk_df.loc[mask].reset_index(drop=True)
 
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    _patch_activity_etl_context(monkeypatch, make_stub_etl_context)
     monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
     monkeypatch.setattr(get_activity_data, "sleep", lambda *_args, **_kwargs: None)
 
@@ -368,7 +381,7 @@ def test_get_activity_cli__retry_and_idempotent(
 def test_get_activity_cli__timeout_split_recovers(
     tmp_path: Path,
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     _configure_activity_cfg(cfg)
     cfg.activity.batch_size = 4
@@ -434,7 +447,7 @@ def test_get_activity_cli__timeout_split_recovers(
         return pd.DataFrame([row])
 
     monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    _patch_activity_etl_context(monkeypatch, make_stub_etl_context)
     monkeypatch.setattr(get_activity_data, "sleep", lambda *_args, **_kwargs: None)
 
     written = _install_activity_writer(monkeypatch)
@@ -472,7 +485,7 @@ def test_get_activity_cli__workers_and_offset(
     tmp_path: Path,
     activity_resource_dir: Path,
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     _configure_activity_cfg(cfg)
     input_csv = tmp_path / "activities_input.csv"
@@ -508,7 +521,7 @@ def test_get_activity_cli__workers_and_offset(
 
         return _fetcher, _writer
 
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    _patch_activity_etl_context(monkeypatch, make_stub_etl_context)
     monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
     monkeypatch.setattr(
         get_activity_data,
@@ -550,7 +563,7 @@ def test_get_activity_cli__workers_and_offset(
 def test_get_activity_cli__chembl_identifier_backfill_ratio(
     tmp_path: Path,
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     _configure_activity_cfg(cfg)
 
@@ -588,7 +601,7 @@ def test_get_activity_cli__chembl_identifier_backfill_ratio(
 
     output_csv = tmp_path / "out" / "activities.csv"
 
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    _patch_activity_etl_context(monkeypatch, make_stub_etl_context)
     monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
 
     written = _install_activity_writer(monkeypatch)
@@ -632,7 +645,7 @@ def test_get_activity_cli__non_csv_output_path(
     tmp_path: Path,
     activity_resource_dir: Path,
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     _configure_activity_cfg(cfg)
     cfg.io.csv_sep = "\t"
@@ -649,7 +662,7 @@ def test_get_activity_cli__non_csv_output_path(
         mask = chunk_df["activity_id"].astype(str).isin(identifiers)
         return chunk_df.loc[mask].reset_index(drop=True)
 
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    _patch_activity_etl_context(monkeypatch, make_stub_etl_context)
     monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
 
     written = _install_activity_writer(monkeypatch)
@@ -675,7 +688,7 @@ def test_get_document_run_all_success(
     tmp_path: Path,
     sample_csv: Callable[[str], Path],
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = sample_csv("document")
     output_csv = tmp_path / "out" / "documents.csv"
@@ -737,7 +750,7 @@ def test_get_document_run_missing_handler(
     tmp_path: Path,
     sample_csv: Callable[[str], Path],
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = sample_csv("document")
     output_csv = tmp_path / "out" / "documents.csv"
@@ -764,7 +777,7 @@ def test_get_document_run_all_failure(
     tmp_path: Path,
     sample_csv: Callable[[str], Path],
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = sample_csv("document")
     output_csv = tmp_path / "out" / "documents.csv"
@@ -799,7 +812,7 @@ def test_get_target_run_all_success(
     tmp_path: Path,
     sample_csv: Callable[[str], Path],
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = sample_csv("target")
     final_out = tmp_path / "out" / "targets.csv"
@@ -858,7 +871,7 @@ def test_get_target_run_skip_existing(
     tmp_path: Path,
     sample_csv: Callable[[str], Path],
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = sample_csv("target")
     final_out = tmp_path / "out" / "targets.csv"
@@ -899,7 +912,7 @@ def test_get_target_run_all_failure(
     tmp_path: Path,
     sample_csv: Callable[[str], Path],
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = sample_csv("target")
     final_out = tmp_path / "out" / "targets.csv"
@@ -941,7 +954,7 @@ def test_get_assay_run_success(
     tmp_path: Path,
     sample_csv: Callable[[str], Path],
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = sample_csv("assay")
     output_csv = tmp_path / "out" / "assays.csv"
@@ -1024,7 +1037,7 @@ def test_get_assay_run_skip_existing(
     tmp_path: Path,
     sample_csv: Callable[[str], Path],
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = sample_csv("assay")
     output_csv = tmp_path / "out" / "assays.csv"
@@ -1056,7 +1069,7 @@ def test_get_assay_run_failure(
     tmp_path: Path,
     sample_csv: Callable[[str], Path],
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = sample_csv("assay")
     output_csv = tmp_path / "out" / "assays.csv"
@@ -1089,7 +1102,7 @@ def test_get_activity_run_success(
     tmp_path: Path,
     sample_csv: Callable[[str], Path],
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = sample_csv("activity")
     output_csv = tmp_path / "out" / "activities.csv"
@@ -1143,7 +1156,7 @@ def test_get_activity_run_skip_existing(
     tmp_path: Path,
     sample_csv: Callable[[str], Path],
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = sample_csv("activity")
     output_csv = tmp_path / "out" / "activities.csv"
@@ -1175,7 +1188,7 @@ def test_get_activity_run_failure(
     tmp_path: Path,
     sample_csv: Callable[[str], Path],
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = sample_csv("activity")
     output_csv = tmp_path / "out" / "activities.csv"
@@ -1207,7 +1220,7 @@ def test_get_activity_run_failure(
 def test_get_activity_run_retry_and_idempotent(
     tmp_path: Path,
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = tmp_path / "activities.csv"
     input_csv.write_text("activity_id\nACT1\n", encoding="utf-8")
@@ -1243,7 +1256,7 @@ def test_get_activity_run_retry_and_idempotent(
         return frame.copy()
 
     monkeypatch.setattr(get_activity_data.cl, "get_activities", _fetch_with_retry)
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    _patch_activity_etl_context(monkeypatch, make_stub_etl_context)
 
     written: list[Path] = []
 
@@ -1298,7 +1311,7 @@ def test_get_activity_run_retry_and_idempotent(
 def test_get_activity_run_workers_offset_and_non_csv(
     tmp_path: Path,
     cfg: Config,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make_stub_etl_context,
 ) -> None:
     input_csv = tmp_path / "activities.csv"
     input_csv.write_text("activity_id\nACT1\nACT2\n", encoding="utf-8")
@@ -1348,7 +1361,7 @@ def test_get_activity_run_workers_offset_and_non_csv(
         return _fetcher, _writer
 
     monkeypatch.setattr(get_activity_data, "prepare_chunked_pipeline", _prepare_stub)
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    _patch_activity_etl_context(monkeypatch, make_stub_etl_context)
 
     args = argparse.Namespace(
         input_csv=input_csv,

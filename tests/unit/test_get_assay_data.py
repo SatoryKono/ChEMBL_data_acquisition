@@ -49,6 +49,16 @@ def logger_stub(monkeypatch: pytest.MonkeyPatch) -> _MemoryLogger:
     return logger
 
 
+def _patch_etl_context(
+    monkeypatch: pytest.MonkeyPatch,
+    make_stub_etl_context: Callable[[Callable[[Any, Any], Any]], type],
+    factory: Callable[[Any, Any], Any],
+) -> type:
+    context_cls = make_stub_etl_context(factory)
+    monkeypatch.setattr(get_assay_data, "ETLContext", context_cls)
+    return context_cls
+
+
 @pytest.mark.unit
 def test_legacy_assay_max_ids_constant__matches_chunk_size() -> None:
     """Ensure backwards compatible aliases match the public chunk size limit."""
@@ -104,6 +114,7 @@ def test_run_chembl__successful_execution(
     minimal_args: argparse.Namespace,
     logger_stub: _MemoryLogger,
     monkeypatch: pytest.MonkeyPatch,
+    make_stub_etl_context,
     offset: int,
 ) -> None:
     minimal_args.offset = offset
@@ -149,7 +160,7 @@ def test_run_chembl__successful_execution(
         return 0
 
     monkeypatch.setattr(get_assay_data.io, "read_ids", fake_read_ids)
-    monkeypatch.setattr(get_assay_data, "ChemblClient", lambda *args, **kwargs: FakeClient())
+    _patch_etl_context(monkeypatch, make_stub_etl_context, lambda *_: FakeClient())
     monkeypatch.setattr(get_assay_data, "ChunkFailureTracker", lambda: tracker)
     monkeypatch.setattr(get_assay_data.cl, "get_assays", lambda *args, **kwargs: pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]}))
     monkeypatch.setattr(get_assay_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline)
@@ -170,6 +181,7 @@ def test_run_chembl__splits_chunk_on_timeout(
     minimal_args: argparse.Namespace,
     logger_stub: _MemoryLogger,
     monkeypatch: pytest.MonkeyPatch,
+    make_stub_etl_context,
 ) -> None:
     cfg.assay.limit = None
     cfg.assay.batch_size = 4
@@ -233,7 +245,7 @@ def test_run_chembl__splits_chunk_on_timeout(
         return 0
 
     monkeypatch.setattr(get_assay_data.io, "read_ids", fake_read_ids)
-    monkeypatch.setattr(get_assay_data, "ChemblClient", lambda *_, **__: FakeClient())
+    _patch_etl_context(monkeypatch, make_stub_etl_context, lambda *_: FakeClient())
     monkeypatch.setattr(get_assay_data, "ChunkFailureTracker", lambda: tracker)
     monkeypatch.setattr(get_assay_data.cl, "get_assays", fake_get_assays)
     monkeypatch.setattr(get_assay_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline)
