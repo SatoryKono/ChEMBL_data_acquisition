@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Mapping, Sequence
+import sys
+from collections.abc import Mapping, Sequence, Callable
 from pathlib import Path
 from typing import Any
 
@@ -73,15 +74,27 @@ class PipelineCLIBase:
     def on_logging_ready(self, logging_ctx: CLILoggingContext) -> None:
         """Hook executed after log handlers have been initialised."""
 
+    def get_run_cli_command(self) -> Callable[..., int]:
+        """Return the :func:`run_cli_command` implementation to use."""
+
+        module = sys.modules.get(self.__class__.__module__)
+        if module is not None:
+            candidate = getattr(module, "run_cli_command", None)
+            if callable(candidate):
+                return candidate
+        from ..cli_utils import run_cli_command as _run_cli_command
+
+        return _run_cli_command
+
     def execute(
         self,
         args: argparse.Namespace,
         parser: argparse.ArgumentParser,
         logging_ctx: CLILoggingContext,
     ) -> int:
-        """Execute the pipeline using :func:`run_cli_command`."""
+        """Execute the pipeline using the resolved :func:`run_cli_command`."""
 
-        from ..cli_utils import run_cli_command
+        run_cli_command = self.get_run_cli_command()
 
         return run_cli_command(
             args=args,
