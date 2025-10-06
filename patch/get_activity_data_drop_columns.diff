@@ -1,0 +1,124 @@
+diff --git a/REPORT_activity_drop_columns.md b/REPORT_activity_drop_columns.md
+new file mode 100644
+index 0000000..f91d882
+--- /dev/null
++++ b/REPORT_activity_drop_columns.md
+@@ -0,0 +1,8 @@
++# Activity output column pruning
++
++## Summary
++- Updated `scripts/get_activity_data.py` to remove deprecated activity citation columns from the final export using a whitelist approach with safe dropping.
++- Added a unit smoke test ensuring the restricted columns are excluded and the removal is logged.
++
++## Verification
++- `pytest tests/test_activity_output_columns.py`
+diff --git a/scripts/get_activity_data.py b/scripts/get_activity_data.py
+index 848f1d9..9a112d2 100644
+--- a/scripts/get_activity_data.py
++++ b/scripts/get_activity_data.py
+@@ -163,6 +163,21 @@ _EXTENDED_ACTIVITY_DTYPES: dict[str, str] = {
+ }
+ 
+ 
++_ACTIVITY_DROP_COLUMNS: tuple[str, ...] = (
++    "approx_cited_activity",
++    "exact_cited_activity",
++    "higly_correlated_cit",
++    "multmol_assay",
++    "original_activity_approx",
++    "original_activity_exact",
++    "review_doc",
++    "rounded_data_citation",
++    "standard_lower_value",
++    "standard_upper_value",
++    "shuffled_cit",
++)
++
++
+ 
+ def _coerce_series_dtype(series: pd.Series, dtype: str) -> pd.Series:
+     """Return ``series`` converted to ``dtype`` where feasible."""
+@@ -611,6 +626,23 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
+     return result
+ 
+ 
++def _filter_activity_output_columns(frame: pd.DataFrame) -> pd.DataFrame:
++    drop_columns = list(_ACTIVITY_DROP_COLUMNS)
++    allowed_columns = [
++        column for column in frame.columns if column not in drop_columns
++    ]
++    dropped_columns = [column for column in drop_columns if column in frame.columns]
++    filtered = frame.drop(columns=drop_columns, errors="ignore")
++    if dropped_columns:
++        logger.info(
++            "Dropped columns from output.activity_*: %s",
++            ", ".join(dropped_columns),
++        )
++    if len(filtered.columns) == len(allowed_columns):
++        return filtered.loc[:, allowed_columns]
++    return filtered
++
++
+ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
+     """Execute activity retrieval from the ChEMBL API.
+ 
+@@ -787,6 +819,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
+         add_pipeline_metadata,
+         _compute_bounds,
+         _apply_annotations,
++        _filter_activity_output_columns,
+         _record_columns,
+     ]
+ 
+diff --git a/tests/test_activity_output_columns.py b/tests/test_activity_output_columns.py
+new file mode 100644
+index 0000000..4e17c3e
+--- /dev/null
++++ b/tests/test_activity_output_columns.py
+@@ -0,0 +1,46 @@
++from __future__ import annotations
++
++import pandas as pd
++import pytest
++
++from scripts import get_activity_data
++
++
++@pytest.mark.unit
++def test_filter_activity_output_columns__drops_expected_columns(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    frame = pd.DataFrame(
++        [
++            {
++                "activity_id": "CHEMBL1",
++                "approx_cited_activity": True,
++                "value": 1.23,
++                "standard_upper_value": 2.34,
++                "shuffled_cit": False,
++            }
++        ]
++    )
++
++    messages: list[str] = []
++
++    def _capture_info(message: str, *args: object, **kwargs: object) -> None:
++        if args:
++            try:
++                formatted = message % args
++            except TypeError:
++                formatted = message
++        else:
++            formatted = message
++        messages.append(formatted)
++
++    monkeypatch.setattr(get_activity_data.logger, "info", _capture_info)
++
++    result = get_activity_data._filter_activity_output_columns(frame)
++
++    assert list(result.columns) == ["activity_id", "value"]
++    assert result.iloc[0].to_dict() == {"activity_id": "CHEMBL1", "value": 1.23}
++    assert (
++        "Dropped columns from output.activity_*: approx_cited_activity, standard_upper_value, shuffled_cit"
++        in messages
++    )

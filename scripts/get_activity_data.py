@@ -163,6 +163,21 @@ _EXTENDED_ACTIVITY_DTYPES: dict[str, str] = {
 }
 
 
+_ACTIVITY_DROP_COLUMNS: tuple[str, ...] = (
+    "approx_cited_activity",
+    "exact_cited_activity",
+    "higly_correlated_cit",
+    "multmol_assay",
+    "original_activity_approx",
+    "original_activity_exact",
+    "review_doc",
+    "rounded_data_citation",
+    "standard_lower_value",
+    "standard_upper_value",
+    "shuffled_cit",
+)
+
+
 
 def _coerce_series_dtype(series: pd.Series, dtype: str) -> pd.Series:
     """Return ``series`` converted to ``dtype`` where feasible."""
@@ -611,6 +626,23 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def _filter_activity_output_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    drop_columns = list(_ACTIVITY_DROP_COLUMNS)
+    allowed_columns = [
+        column for column in frame.columns if column not in drop_columns
+    ]
+    dropped_columns = [column for column in drop_columns if column in frame.columns]
+    filtered = frame.drop(columns=drop_columns, errors="ignore")
+    if dropped_columns:
+        logger.info(
+            "Dropped columns from output.activity_*: %s",
+            ", ".join(dropped_columns),
+        )
+    if len(filtered.columns) == len(allowed_columns):
+        return filtered.loc[:, allowed_columns]
+    return filtered
+
+
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute activity retrieval from the ChEMBL API.
 
@@ -787,6 +819,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         add_pipeline_metadata,
         _compute_bounds,
         _apply_annotations,
+        _filter_activity_output_columns,
         _record_columns,
     ]
 
