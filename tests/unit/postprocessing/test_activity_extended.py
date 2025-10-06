@@ -67,3 +67,55 @@ def test_load_target_metadata__infers_unicellular_from_type(tmp_path: Path) -> N
     assert "unicellular_organism" in loaded.columns
     assert loaded["unicellular_organism"].dtype == "boolean"
     assert loaded["unicellular_organism"].tolist() == [True, False]
+
+
+def test_load_target_metadata__normalises_existing_boolean_column(tmp_path: Path) -> None:
+    csv_path = tmp_path / "targets_type.csv"
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1", "CHEMBL2"],
+            "target_sort_order": ["001", "002"],
+            "multifunctional_enzyme": ["FALSE", "TRUE"],
+            "IUPHAR_class": ["0100", "0200"],
+            "IUPHAR_subclass": ["0100-1", "0200-1"],
+            "genus": ["GenusA", "GenusB"],
+            "superkingdom": ["Sk1", "Sk2"],
+            "phylum": ["Ph1", "Ph2"],
+            "taxon_id": [1, 2],
+            "gene_index": ["GENE1", "GENE2"],
+            "taxon_index": ["IDX1", "IDX2"],
+            "Unicellular organism": ["TRUE", "FALSE"],
+        }
+    )
+    frame.to_csv(csv_path, index=False, encoding="cp1252")
+
+    loaded = _load_target_metadata(csv_path)
+
+    assert loaded["unicellular_organism"].dtype == "boolean"
+    assert loaded["unicellular_organism"].tolist() == [True, False]
+
+
+def test_load_target_metadata__fills_missing_unicellular_column(tmp_path: Path) -> None:
+    csv_path = tmp_path / "targets_type.csv"
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1", "CHEMBL2"],
+            "target_sort_order": ["001", "002"],
+            "multifunctional_enzyme": ["FALSE", "TRUE"],
+            "IUPHAR_class": ["0100", "0200"],
+            "IUPHAR_subclass": ["0100-1", "0200-1"],
+            "genus": ["GenusA", "GenusB"],
+            "superkingdom": ["Sk1", "Sk2"],
+            "phylum": ["Ph1", "Ph2"],
+            "taxon_id": [1, 2],
+            "gene_index": ["GENE1", "GENE2"],
+            "taxon_index": ["IDX1", "IDX2"],
+        }
+    )
+    frame.to_csv(csv_path, index=False, encoding="cp1252")
+
+    loaded = _load_target_metadata(csv_path)
+
+    assert "unicellular_organism" in loaded.columns
+    assert loaded["unicellular_organism"].dtype == "boolean"
+    assert loaded["unicellular_organism"].isna().all()

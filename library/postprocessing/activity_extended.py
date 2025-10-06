@@ -331,45 +331,8 @@ def _load_target_metadata(path: Path) -> pd.DataFrame:
         dtype_map=_TARGET_METADATA_READ_SCHEMA,
         na_values=_NA_MARKERS,
     )
-    if "unicellular_organism" not in frame.columns:
-        source_column: str | None = None
-        for candidate in ("type", "organism_type"):
-            if candidate in frame.columns:
-                source_column = candidate
-                break
-        if source_column is not None:
-            source = frame[source_column].astype("string")
-            normalised = source.str.strip().str.lower()
-            inferred = normalised == "unicellular organism"
-            frame["unicellular_organism"] = inferred.astype("boolean")
-        else:
-            frame["unicellular_organism"] = pd.Series(pd.NA, index=frame.index, dtype="boolean")
     frame = frame.rename(columns={"target_sort_order": "sortorder.target"})
-
-    if "unicellular_organism" not in frame.columns and "organism_type" in frame.columns:
-        frame = frame.copy()
-
-        unmapped_values: set[str] = set()
-
-        def _normalise_organism(value: object) -> bool | _NA_TYPE:
-            if pd.isna(value):
-                return pd.NA
-            text = str(value).strip()
-            if not text:
-                return pd.NA
-            resolved = _UNICELLULAR_NORMALISATIONS.get(text.casefold())
-            if resolved is None:
-                unmapped_values.add(text)
-                return pd.NA
-            return resolved
-
-        inferred = frame["organism_type"].map(_normalise_organism).astype("boolean")
-        if unmapped_values:
-            logger.warning(
-                "targets_type.csv contains organism_type values without boolean mapping: %s",
-                sorted(unmapped_values),
-            )
-        frame["unicellular_organism"] = inferred
+    frame = _ensure_unicellular_flag(frame)
 
     missing = [column for column in _TARGET_COLUMNS if column not in frame.columns]
     if missing:
@@ -377,6 +340,60 @@ def _load_target_metadata(path: Path) -> pd.DataFrame:
             "targets_type.csv missing expected columns: " + ", ".join(sorted(missing))
         )
     return frame.loc[:, list(_TARGET_COLUMNS)]
+
+
+def _ensure_unicellular_flag(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return ``frame`` with a normalised ``unicellular_organism`` column."""
+
+    normalised_lookup = {
+        str(column).strip().casefold().replace(" ", "_"): column for column in frame.columns
+    }
+
+    existing = normalised_lookup.get("unicellular_organism")
+    if existing is not None:
+        if existing != "unicellular_organism":
+            frame = frame.rename(columns={existing: "unicellular_organism"})
+        frame = frame.copy()
+        frame["unicellular_organism"] = _safe_to_bool(
+            frame["unicellular_organism"], "unicellular_organism"
+        )
+        return frame
+
+    source_column: str | None = None
+    for candidate in ("type", "organism_type"):
+        resolved = normalised_lookup.get(candidate)
+        if resolved is not None:
+            source_column = resolved
+            break
+
+    if source_column is None:
+        result = frame.copy()
+        result["unicellular_organism"] = pd.Series(pd.NA, index=frame.index, dtype="boolean")
+        return result
+
+    result = frame.copy()
+    unmapped_values: set[str] = set()
+
+    def _normalise_organism(value: object) -> bool | _NA_TYPE:
+        if pd.isna(value):
+            return pd.NA
+        text = str(value).strip()
+        if not text:
+            return pd.NA
+        resolved = _UNICELLULAR_NORMALISATIONS.get(text.casefold())
+        if resolved is None:
+            unmapped_values.add(text)
+            return pd.NA
+        return resolved
+
+    inferred = result[source_column].map(_normalise_organism).astype("boolean")
+    if unmapped_values:
+        logger.warning(
+            "targets_type.csv contains organism_type values without boolean mapping: %s",
+            sorted(unmapped_values),
+        )
+    result["unicellular_organism"] = inferred
+    return result
 
 
 def _load_document_lookup(dictionary_root: Path) -> pd.DataFrame:
