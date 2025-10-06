@@ -23,20 +23,14 @@ __all__ = [
 
 _MANIFEST_FILENAME = "manifest.yaml"
 _IGNORED_FILENAMES = {
-    "Thumbs.db",
+    "thumbs.db",
     "ehthumbs.db",
     "desktop.ini",
-    ".DS_Store",
-    ".Rhistory",
+    ".ds_store",
+    ".rhistory",
 }
 
-_IGNORED_DIRNAMES = {
-    "__pycache__",
-    ".git",
-    ".hg",
-    ".svn",
-    ".ipynb_checkpoints",
-}
+_IGNORED_DIRNAMES = {"__pycache__", ".ipynb_checkpoints"}
 _IGNORED_SUFFIXES = {".pyc", ".pyo"}
 _SHA256_WILDCARD = "*"
 
@@ -72,6 +66,47 @@ def _normalise_text_newlines(data: bytes) -> bytes:
     return text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
 
 
+def _should_ignore_file(candidate: Path, *, root: Path) -> bool:
+    """Return ``True`` when ``candidate`` should be excluded from hashing."""
+
+    if candidate.name.startswith("._"):
+        return True
+
+    if candidate.name.casefold() in _IGNORED_FILENAMES:
+        return True
+
+    if candidate.suffix.casefold() in _IGNORED_SUFFIXES:
+        return True
+
+    relative_parts = candidate.relative_to(root).parts
+    if any(part.casefold() in _IGNORED_DIRNAMES for part in relative_parts):
+        return True
+
+    return False
+
+
+def _iter_resource_entries(path: Path) -> list[tuple[str, Path]]:
+    """Return sorted file entries for hashing a dictionary resource."""
+
+    entries: list[tuple[str, Path]] = []
+    children = sorted(
+        path.rglob("*"),
+        key=lambda candidate: candidate.relative_to(path).as_posix(),
+    )
+
+    for child in children:
+        if child.is_dir():
+            continue
+        if child.name == _MANIFEST_FILENAME and child.parent == path:
+            continue
+        if _should_ignore_file(child, root=path):
+            continue
+        relative = child.relative_to(path).as_posix()
+        entries.append((relative, child))
+
+    return entries
+
+
 def _compute_sha256(path: Path) -> str:
     """Return the SHA256 checksum for ``path``.
 
@@ -90,29 +125,7 @@ def _compute_sha256(path: Path) -> str:
         # hashes for identical directory contents.  Sorting by the normalised
         # POSIX-style relative path guarantees a deterministic order across all
         # platforms and Python versions.
-        children = sorted(
-            path.rglob("*"),
-            key=lambda candidate: candidate.relative_to(path).as_posix(),
-        )
-        entries: list[tuple[str, Path]] = []
-        for child in children:
-
-            if child.is_dir():
-                continue
-            if child.name == _MANIFEST_FILENAME and child.parent == path:
-                continue
-            if any(part in _IGNORED_DIRNAMES for part in child.relative_to(path).parts):
-                continue
-            if child.suffix in _IGNORED_SUFFIXES:
-                continue
-            if (
-                child.name in _IGNORED_FILENAMES
-                or child.name.startswith("._")
-                or child.name.startswith("~$")
-            ):
-                continue
-            relative = child.relative_to(path).as_posix()
-            entries.append((relative, child))
+        entries = _iter_resource_entries(path)
 
         for relative, child in entries:
             hasher.update(relative.encode("utf-8"))
