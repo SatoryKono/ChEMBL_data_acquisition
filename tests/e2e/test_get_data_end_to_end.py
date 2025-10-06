@@ -364,7 +364,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     exit_code, logs = _invoke(argv)
     assert exit_code == 0
 
-    log_dir = base_path / "logs"
+    log_dir = base_path / "data" / "logs"
     orchestrator_log = log_dir / f"get_data_{date_prefix}.log"
     assert orchestrator_log.exists()
     orchestrator_records = parse_log_file(orchestrator_log)
