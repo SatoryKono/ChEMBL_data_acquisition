@@ -50,6 +50,7 @@ from library.pipelines.target import postprocessing as tp
 from library.pipelines.target.defaults import ModeDefaults, TARGET_MODE_DEFAULTS
 from library.clients import ChemblClient
 from library.common.rate_limiter import get_global_limiter
+from library.cli.pipeline_definition import normalise_definition
 from library.cli_utils import PipelineError, run_cli_command, run_pipeline
 from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
 from library.cli import (
@@ -127,7 +128,29 @@ def _run_pipeline_with_meta(**kwargs: object) -> int:
     """Invoke :func:`run_pipeline` with project-specific metadata writer."""
 
     with _override_cli_meta_writer():
-        return run_pipeline(**kwargs)
+        params = dict(kwargs)
+        try:
+            fetcher = params.pop("fetcher")
+            output_path = params.pop("output_path")
+            failure_path = params.pop("failure_path")
+        except KeyError as exc:  # pragma: no cover - defensive validation
+            missing = exc.args[0]
+            raise TypeError(f"run_pipeline missing required argument: {missing}") from exc
+
+        cfg = params.pop("cfg", None)
+        logger = params.pop("logger", None)
+        definition = params.pop("definition", None)
+
+        pipeline_definition = normalise_definition(definition, params)
+
+        return run_pipeline(
+            definition=pipeline_definition,
+            fetcher=fetcher,
+            output_path=output_path,
+            failure_path=failure_path,
+            cfg=cfg,
+            logger=logger,
+        )
 
 TARGETS_REQUIRED_COLUMNS: set[str] = {
     name for name, column in TargetsSchema.columns.items() if column.required
