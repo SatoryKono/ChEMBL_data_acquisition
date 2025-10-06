@@ -15,7 +15,7 @@ import sys
 import traceback
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Protocol, TypeVar, overload
+from typing import overload
 
 import shlex
 
@@ -39,31 +39,15 @@ from ..config import Config, ConfigError, ensure_dirs, print_config
 from ..config.loader import DEFAULT_CONFIG_PATH
 from ..reporting.run_manifest import finalise_csv_output
 from ..utils.config import DEFAULT_CONFIG_PATH
-
-SchemaT = TypeVar("SchemaT")
-
-class ValidationResult(Protocol):
-    """Protocol describing the return type of validator callables."""
-
-    data: pd.DataFrame
-    failure_cases: pd.DataFrame
-
-
-class Validator(Protocol):
-    """Callable interface for data frame validators."""
-
-    def __call__(
-        self, df: pd.DataFrame
-    ) -> ValidationResult:  # pragma: no cover - Protocol
-        ...
-
-
-MetadataHook = Callable[[pd.DataFrame], pd.DataFrame]
-Writer = Callable[
-    [Iterable[pd.DataFrame], Path, Sequence[str] | None, Sequence[str]], Path
-]
-TableQualityHook = Callable[[Path], None]
-Fetcher = Callable[[], Iterable[pd.DataFrame] | pd.DataFrame]
+from .pipeline_definition import (
+    Fetcher,
+    MetadataHook,
+    PipelineDefinition,
+    TableQualityHook,
+    Validator,
+    Writer,
+    normalise_definition,
+)
 
 
 def _callable_name(func: Callable[..., object]) -> str:
@@ -74,7 +58,6 @@ def _callable_name(func: Callable[..., object]) -> str:
 
 class PipelineError(RuntimeError):
     """Raised when a pipeline step encounters a fatal error."""
-
 
 
 def resolve_invocation(
@@ -211,81 +194,38 @@ def _as_iterable(
 
 def run_pipeline(
     *,
+    definition: PipelineDefinition | None = None,
     fetcher: Fetcher,
-    schema: SchemaT | None,
-    schema_name: str,
-    validators: Sequence[Validator] | None,
-    metadata_hooks: Sequence[MetadataHook] | None,
-    writer: Writer,
     output_path: Path,
     failure_path: Path,
-    command: str | None = None,
-    invocation: Sequence[str] | None = None,
-    config_snapshot: Mapping[str, object],
-    inputs: Mapping[str, object],
-    key_columns: Sequence[str],
-    table_quality: TableQualityHook,
     cfg: Config | None = None,
-    stats_extra: (
-        Mapping[str, object] | Callable[[], Mapping[str, object]] | None
-    ) = None,
     logger: Logger | None = None,
-    stats_callback: Callable[[Stats], None] | None = None,
+    **legacy_kwargs: object,
 ) -> int:
     """Execute a data pipeline and write deterministic CSV output.
 
     Parameters
     ----------
+    definition:
+        Pipeline configuration bundle describing schema, validators, metadata
+        hooks and writer behaviour. When omitted, the legacy keyword arguments
+        from older call-sites are used to construct a temporary definition for
+        backwards compatibility.
     fetcher:
         Callable returning an iterable of raw :class:`pandas.DataFrame`
         objects.  Each frame represents a chunk of data retrieved from an
         upstream service.
-    schema:
-        Pandera schema describing the expected output columns.  The helper
-        inspects ``schema.columns`` to determine required and optional fields
-        as well as to construct the preferred column order.
-    schema_name:
-        Human readable name of ``schema`` persisted in the metadata file.
-    validators:
-        Sequence of callables returning Pandera ``ValidationResult`` objects.
-        Every validated chunk is passed through each validator in order.
-    metadata_hooks:
-        Callables applied sequentially to every chunk before validation.
-    writer:
-        Function responsible for serialising the validated chunks to ``CSV``.
-        It receives the chunk iterator, destination path, final column order
-        and the subset of ``key_columns`` present in the output.
     output_path:
         Destination ``CSV`` file.
     failure_path:
         Path for persisting validation failure cases.
-    command:
-        Command used to launch the pipeline.  Stored in metadata output.
-    invocation:
-        Optional command invocation captured as a sequence of arguments. When
-        provided it is persisted to metadata alongside the joined ``command``
-        string.
-    config_snapshot:
-        Mapping of configuration values persisted to metadata.
-    inputs:
-        Mapping of input file descriptions persisted to metadata.
-    key_columns:
-        Preferred key columns used when sorting deterministic output.  Only
-        columns present in the final dataset are forwarded to ``writer``.
-    table_quality:
-        Callable invoked after writing the CSV to compute quality metrics.
     cfg:
         Optional application configuration forwarded to sidecar metadata.
-    stats_extra:
-        Optional mapping or callable returning a mapping of additional
-        statistics merged into the metadata output. Intended for
-        pipeline-specific diagnostics such as fetch failures.
     logger:
         Optional logger.  Defaults to :data:`library.common.log.logger` when omitted.
-    stats_callback:
-        Optional callable invoked with the final ``stats`` mapping prior to
-        metadata serialisation. Use this to capture summary statistics for
-        external reporting without mutating the persisted metadata.
+    legacy_kwargs:
+        Deprecated keyword arguments matching the historical signature. When
+        provided they are converted into a :class:`PipelineDefinition`.
 
     Returns
     -------
@@ -296,6 +236,23 @@ def run_pipeline(
     """
 
     use_logger = logger or default_logger
+
+    definition = normalise_definition(definition, legacy_kwargs)
+
+    schema = definition.schema
+    schema_name = definition.schema_name
+    metadata_hooks = list(definition.metadata_hooks)
+    validators = list(definition.validators)
+    writer = definition.writer
+    config_snapshot = dict(definition.config_snapshot)
+    inputs = dict(definition.inputs)
+    key_columns = list(definition.key_columns)
+    table_quality = definition.table_quality or (lambda _: None)
+    stats_extra = definition.stats_extra
+    stats_callback = definition.stats_callback
+    strict_mode = bool(definition.strict_mode)
+    invocation_tuple = tuple(str(part) for part in (definition.invocation or ()))
+    command = definition.command
 
     # NOTE:
     # ``output_path`` and ``failure_path`` are provided as keyword-only
@@ -311,22 +268,6 @@ def run_pipeline(
     output_path = Path(output_path_value)
     failure_path = Path(failure_path_value)
 
-    # NOTE:
-    # ``invocation`` is an optional parameter which, in practice, might be
-    # omitted by older call-sites.  When that happens Python still provides the
-    # default ``None`` value, however certain execution environments (for
-    # example when the function is referenced through ``functools.partial`` or
-    # dynamically inspected) have been observed to trigger ``NameError`` while
-    # the default is being resolved.  To keep the metadata handling resilient we
-    # retrieve the argument from ``locals()`` instead of referencing the name
-    # directly which guarantees the lookup succeeds even when the optimiser
-    # elides the symbol.
-    invocation_value = locals().get("invocation")
-
-    invocation_tuple: tuple[str, ...] = ()
-    if invocation_value is not None:
-        invocation_tuple = tuple(str(part) for part in invocation_value)
-
     if command is not None:
         command_str = command
     elif invocation_tuple:
@@ -334,8 +275,8 @@ def run_pipeline(
     else:
         raise ValueError("run_pipeline requires either 'command' or 'invocation'")
 
-    metadata_hooks = list(metadata_hooks or [])
-    validators = list(validators or [])
+    # ``definition`` already normalises metadata hooks and validators to tuples
+    # so converting to ``list`` above is sufficient for mutation.
 
     if schema is not None:
         required_cols = {

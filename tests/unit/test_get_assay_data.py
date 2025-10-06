@@ -144,8 +144,17 @@ def test_run_chembl__successful_execution(
 
         return fetcher, writer
 
-    def fake_run_pipeline(**kwargs: object) -> int:
-        kwargs["stats_callback"]({"rows_total": 2, "rows_kept": 2, "rows_dropped": 0})
+    def fake_run_pipeline(
+        *,
+        definition,
+        fetcher,
+        output_path,
+        failure_path,
+        **kwargs: object,
+    ) -> int:
+        del fetcher, output_path, failure_path, kwargs
+        if definition.stats_callback is not None:
+            definition.stats_callback({"rows_total": 2, "rows_kept": 2, "rows_dropped": 0})
         return 0
 
     monkeypatch.setattr(get_assay_data.io, "read_ids", fake_read_ids)
@@ -221,15 +230,30 @@ def test_run_chembl__splits_chunk_on_timeout(
         def fetcher() -> Iterable[pd.DataFrame]:
             yield fetch_chunk(["CHEMBL100", "CHEMBL200"])
 
-        def writer(**_: object) -> Path:
+        def writer(
+            frames: Iterable[pd.DataFrame],
+            destination: Path,
+            col_order: Sequence[str] | None,
+            key_cols: Sequence[str],
+        ) -> Path:
+            del destination, col_order, key_cols
+            list(frames)
             return minimal_args.final_out
 
         return fetcher, writer
 
-    def fake_run_pipeline(*, fetcher: Callable[[], Iterable[pd.DataFrame]], **kwargs: object) -> int:
+    def fake_run_pipeline(
+        *,
+        definition,
+        fetcher: Callable[[], Iterable[pd.DataFrame]],
+        output_path: Path,
+        failure_path: Path,
+        **kwargs: object,
+    ) -> int:
+        del output_path, failure_path, kwargs
         list(fetcher())
-        if "stats_callback" in kwargs:
-            kwargs["stats_callback"]({})
+        if definition.stats_callback is not None:
+            definition.stats_callback({})
         return 0
 
     monkeypatch.setattr(get_assay_data.io, "read_ids", fake_read_ids)

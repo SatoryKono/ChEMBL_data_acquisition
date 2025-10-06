@@ -49,7 +49,11 @@ from library.cli import (
 from library.cli import (
     build_parser as base_parser,
 )
+
+from library.cli.pipeline_definition import PipelineDefinition
+
 from library.cli.base import PipelineCLIBase
+
 from library.cli_utils import (
     PipelineError,
     resolve_invocation,
@@ -1136,28 +1140,31 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             pipeline_stats = dict(stats)
 
         try:
-            exit_code = run_pipeline(
-                fetcher=fetcher,
+            definition = PipelineDefinition(
                 schema=ActivitiesSchema,
                 schema_name="ActivitiesSchema",
                 validators=validators,
                 metadata_hooks=metadata_hooks,
                 writer=writer,
-                output_path=output_path,
-                failure_path=failure_path,
                 command=" ".join(_args_invocation(args)),
                 config_snapshot=_serialize_paths(cfg.to_dict()),
                 inputs={"input_csv": str(args.input_csv)},
                 key_columns=["activity_id"],
                 table_quality=table_quality,
-                cfg=cfg,
                 stats_extra=chunk_failures.stats,
-                logger=logger,
                 stats_callback=_capture_stats,
                 dictionary_resources=(
                     "dictionary_root",
                     "target_types",
                 ),
+            )
+            exit_code = run_pipeline(
+                definition=definition,
+                fetcher=fetcher,
+                output_path=output_path,
+                failure_path=failure_path,
+                cfg=cfg,
+                logger=logger,
             )
         except Exception:
             logger.exception("Activity pipeline execution failed during chunked processing.")

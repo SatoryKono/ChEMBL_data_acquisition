@@ -43,7 +43,11 @@ from library.cli import (
     configure_logger,
 )
 from library.cli import build_parser as base_parser
+
+from library.cli.pipeline_definition import PipelineDefinition
+
 from library.cli.base import PipelineCLIBase
+
 from library.cli_utils import run_cli_command, run_pipeline
 from library.cli.logging import setup_cli_logging
 from library.cli.metadata import prepare_option
@@ -411,25 +415,28 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             pipeline_stats = dict(stats)
 
         try:
-            exit_code = run_pipeline(
-                fetcher=fetcher,
+            definition = PipelineDefinition(
                 schema=AssaysSchema,
                 schema_name="AssaysSchema",
                 validators=validators,
                 metadata_hooks=metadata_hooks,
                 writer=writer,
-                output_path=output_path,
-                failure_path=failure_path,
                 command=" ".join(sys.argv),
                 config_snapshot=_serialize_paths(cfg.to_dict()),
                 inputs={"input_csv": str(args.input_csv)},
                 key_columns=["assay_chembl_id"],
                 table_quality=table_quality,
-                cfg=cfg,
                 stats_extra=chunk_failures.stats,
-                logger=logger,
                 stats_callback=_capture_stats,
                 dictionary_resources=("dictionary_root",),
+            )
+            exit_code = run_pipeline(
+                definition=definition,
+                fetcher=fetcher,
+                output_path=output_path,
+                failure_path=failure_path,
+                cfg=cfg,
+                logger=logger,
             )
         finally:
             chunk_failures.save(fetch_failure_path, cfg=cfg)
