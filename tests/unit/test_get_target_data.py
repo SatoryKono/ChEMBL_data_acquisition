@@ -385,6 +385,61 @@ def test_fetch_uniprot__no_candidates_writes_empty_output(
     assert written.empty
 
 
+def test_fetch_iuphar__missing_output_file_creates_empty(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logger_stub: _MemoryLogger,
+) -> None:
+    cfg.io.csv_sep = ","
+    cfg.io.csv_encoding = "utf-8"
+    cfg.target.all.uniprot_column = "uniprot_id"
+    cfg.target.all.target_csv = tmp_path / "all_targets.csv"
+    cfg.target.all.family_csv = tmp_path / "all_families.csv"
+    cfg.target.iuphar.target_csv = tmp_path / "iuphar_targets.csv"
+    cfg.target.iuphar.family_csv = tmp_path / "iuphar_families.csv"
+
+    chembl_df = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1"],
+            "uniprot_id": ["P12345"],
+            "mapping_uniprot_id": ["P12345"],
+            "pref_name": ["Example"],
+        }
+    )
+    uniprot_df = pd.DataFrame({"uniprot_id": ["P12345"], "pref_name": ["Example"]})
+
+    output_csv = tmp_path / "output.targets_iuphar.csv"
+    captured: dict[str, Path] = {}
+
+    def _fake_run_iuphar(local_cfg: Config, args: argparse.Namespace) -> int:
+        captured["cfg"] = local_cfg
+        captured["output_csv"] = Path(args.output_csv)
+        return 0
+
+    monkeypatch.setattr(get_target_data, "run_iuphar", _fake_run_iuphar)
+
+    combined_df, iuphar_df = get_target_data.fetch_iuphar(
+        cfg, chembl_df, uniprot_df, output_csv
+    )
+
+    assert captured["cfg"] is cfg
+    assert captured["output_csv"] == output_csv
+    assert output_csv.exists()
+    assert "uniprot_id" in combined_df.columns
+    pd.testing.assert_frame_equal(
+        iuphar_df,
+        pd.DataFrame({"uniprot_id": pd.Series(dtype=object)}),
+        check_index_type=False,
+    )
+    assert any(
+        level == "warning"
+        and event == "missing_iuphar_output_file"
+        and payload["path"] == str(output_csv)
+        for level, event, payload in logger_stub.events
+    )
+
+
 def test_run__delegates_to_handler(
     cfg: Config,
     tmp_path: Path,

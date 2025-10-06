@@ -3360,6 +3360,21 @@ def fetch_iuphar(
         cfg.target.iuphar.family_csv = orig_family
         iuphar_input.unlink(missing_ok=True)
 
+    if not output_csv.exists():
+        logger.warning(
+            "missing_iuphar_output_file",
+            path=str(output_csv),
+        )
+        output_csv.parent.mkdir(parents=True, exist_ok=True)
+        empty_iuphar = pd.DataFrame({"uniprot_id": pd.Series(dtype=object)})
+        write_csv_deterministic(
+            empty_iuphar,
+            output_csv,
+            key_cols=["uniprot_id"],
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+        )
+
     try:
         iuphar_df = pd.read_csv(
             output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
