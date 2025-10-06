@@ -19,8 +19,8 @@ flowchart LR
     B -->|enrich| C[Target pipeline]
     C -->|link| D[Assay pipeline]
     D -->|hydrate| E[Test item pipeline]
-    E -->|map| G[Tissue pipeline]
-    G -->|join| F[Activity pipeline]
+    E -->|map| F[Activity pipeline]
+    T[Tissue pipeline] -.->|optional join| F
     B -.->|citations| F
     C -.->|targets| F
     style F fill:#dfeaff,stroke:#1e3a8a,stroke-width:2px
@@ -28,8 +28,10 @@ flowchart LR
 
 Each pipeline is idempotent and can be executed independently. The
 [`get-data`](./scripts/get_data.py) orchestrator reuses the same configuration
-and logging options to run the Document → Target → Assay → Test item → Tissue →
-Activity sequence automatically while producing consistent outputs.
+and logging options to run the Document → Target → Assay → Test item → Activity
+sequence automatically while producing consistent outputs. Tissue enrichment is
+triggered separately via [`get_tissue_data.py`](./scripts/get_tissue_data.py)
+before launching the activity stage whenever manual joins are required.
 
 ## Repository layout
 

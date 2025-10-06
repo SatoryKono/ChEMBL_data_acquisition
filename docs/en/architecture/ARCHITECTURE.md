@@ -22,7 +22,7 @@ flowchart LR
         C2[config/dictionary]
     end
 
-    A0 --> A1 & A2 & A3 & A4 & A5 & A6
+    A0 --> A1 & A2 & A3 & A4 & A6
     A1 & A2 & A3 & A4 & A5 & A6 --> B2
     B2 --> B1
     B2 --> B3
@@ -32,8 +32,9 @@ flowchart LR
 ```
 
 The orchestrator initialises shared configuration, logging and rate limiting,
-then invokes each CLI module in order. Pipelines import reusable components from
-`library/`:
+then invokes the document, target, assay, test item and activity CLI modules in
+order. Tissue exports are triggered separately when joins into the activity
+stage are required. Pipelines import reusable components from `library/`:
 
 - `library/clients` — HTTP clients with retry and throttling logic for ChEMBL,
   UniProt, PubMed, OpenAlex, CrossRef, PubChem.
@@ -56,8 +57,9 @@ then invokes each CLI module in order. Pipelines import reusable components from
 | Tissue | `scripts/get_tissue_data.py` | ChEMBL `/tissue`, ontology caches (UBERON, EFO, BTO, Caloha, LINCS, CCLE). | `output.tissue_<stamp>.csv` plus quality reports and metadata. |
 | Activity | `scripts/get_activity_data.py` | ChEMBL `/activity`. | `output.activities_<stamp>.csv` with enrichment columns. |
 
-The orchestrator runs these modules sequentially unless specific stages are
-skipped via CLI flags.
+The orchestrator runs these five modules sequentially unless specific stages are
+skipped via CLI flags. The tissue CLI remains available as a standalone
+invocation for manual enrichment workflows.
 
 External services are accessed via token-bucket rate limiters configured by
 `sources.*` blocks. All network calls are wrapped with retry logic defined in

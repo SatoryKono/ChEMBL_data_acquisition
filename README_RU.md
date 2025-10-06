@@ -13,8 +13,8 @@ flowchart LR
     B -->|enrich| C[Target pipeline]
     C -->|link| D[Assay pipeline]
     D -->|hydrate| E[Test item pipeline]
-    E -->|map| G[Tissue pipeline]
-    G -->|join| F[Activity pipeline]
+    E -->|map| F[Activity pipeline]
+    T[Tissue pipeline] -.->|optional join| F
     B -.->|citations| F
     C -.->|targets| F
     style F fill:#dfeaff,stroke:#1e3a8a,stroke-width:2px
@@ -22,8 +22,10 @@ flowchart LR
 
 Каждый пайплайн идемпотентен и может запускаться независимо. Оркестратор
 [`get-data`](./scripts/get_data.py) использует единую конфигурацию и настройки
-логирования, чтобы выполнить всю цепочку («документы → таргеты → ассайи →
-тестовые объекты → ткани → активности») автоматически и воспроизводимо.
+логирования, чтобы выполнить цепочку «документы → таргеты → ассайи → тестовые
+объекты → активности» автоматически и воспроизводимо. Обогащение по тканям
+запускается отдельно через [`get_tissue_data.py`](./scripts/get_tissue_data.py)
+перед запуском этапа активностей, если требуются ручные объединения.
 
 ## Структура репозитория
 
