@@ -348,7 +348,8 @@ def test_run_chembl__pipeline_failure_logs_error(cfg, tmp_path, monkeypatch) -> 
         get_activity_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline
     )
 
-    def fake_run_pipeline(*, fetcher, writer, **kwargs):
+    def fake_run_pipeline(*, definition, fetcher, output_path, failure_path, **kwargs):
+        del definition, output_path, failure_path, kwargs
         list(fetcher())
         return 1
 
