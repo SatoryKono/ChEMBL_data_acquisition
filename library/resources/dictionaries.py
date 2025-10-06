@@ -186,7 +186,7 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
             relative_path=relative_path,
             path=absolute_path,
             version=version,
-            sha256=sha256_expected[0],
+            sha256=sha256_actual,
             generator=Path(generator),
         )
 
