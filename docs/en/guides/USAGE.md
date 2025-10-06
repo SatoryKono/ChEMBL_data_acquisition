@@ -12,8 +12,8 @@ three tiers:
 
 1. **Shared options** provided by `library.cli.parser.add_common_arguments`:
    - `--input / --final-out` – input CSV and destination for the cleaned export.
-     `--output` and `--out` remain as deprecated aliases that trigger a
-     deprecation warning; prefer `--final-out`.
+     A hidden `--out` compatibility alias still exists for automation but emits a
+     warning; documentation and new jobs should rely on `--final-out`.
    - `--log-level` – logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
    - `--verbose` – shortcut enabling `DEBUG` logging without overriding
      configuration files.
