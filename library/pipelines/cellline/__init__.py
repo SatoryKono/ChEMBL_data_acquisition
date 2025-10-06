@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ...config import Config
 from .chembl import (
     CELL_LINE_BASE_COLUMNS,
     CELL_LINE_COLUMN_ORDER,
@@ -24,4 +25,13 @@ __all__ = [
     "prepare_cellline_dataframe",
     "read_cellline_identifiers",
     "run_cellline_pipeline",
+    "run_pipeline",
 ]
+
+
+def run_pipeline(
+    config: Config, options: CellLinePipelineOptions
+) -> CellLinePipelineResult:
+    """Execute the cell line pipeline returning the detailed result."""
+
+    return run_cellline_pipeline(config, options)

@@ -15,6 +15,7 @@ from importlib.util import find_spec
 
 from . import enrichment as testitem_enrichment
 from .enrichment import enrich
+from ...config import Config
 from library.pipelines.assay.chembl_assay import TESTITEM_PUBCHEM_COLUMNS
 
 try:
@@ -111,9 +112,16 @@ __all__ = [
     "query_parent_catalog",
     "read_input_ids",
     "run_testitem_pipeline",
+    "run_pipeline",
     "update_parent_catalog_cache",
     "write_meta_yaml",
     "write_parent_catalog_cache",
 ]
 
 __all__.append("testitem_enrichment")
+
+
+def run_pipeline(config: Config, options: TestitemPipelineOptions) -> int:
+    """Execute the test item pipeline using the shared CLI implementation."""
+
+    return int(run_testitem_pipeline(config, options))

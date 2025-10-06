@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 import io
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 import pytest
 
@@ -125,11 +125,10 @@ def test_pipeline_step_registration__expected_shape() -> None:
     steps = get_data._PIPELINE_STEPS
     names = [step.name for step in steps]
     assert names == ["document", "target", "assay", "testitem", "activity"]
-    assert steps[0].extra_args == ("--mode", "all")
-    assert steps[1].subcommand == "all"
     assert steps[-1].supports_dry_run is True
     for step in steps:
-        assert callable(step.main)
+        assert callable(step.run)
+        assert callable(step.options_factory)
 
 
 @pytest.mark.unit
@@ -160,20 +159,27 @@ def test_run_pipeline__propagates_step_failure(tmp_path: Path, monkeypatch: pyte
     cfg = _make_config(tmp_path)
     failure_calls: list[Sequence[str]] = []
 
-    def _success(argv: Sequence[str]) -> int:
-        final_out = Path(argv[argv.index("--final-out") + 1])
-        final_out.parent.mkdir(parents=True, exist_ok=True)
-        final_out.write_text("id\n1\n", encoding="utf-8")
+    @dataclass
+    class _Options:
+        input_csv: Path
+        output_csv: Path
+
+    def _success(_cfg: get_data.Config, options: _Options) -> int:
+        options.output_csv.parent.mkdir(parents=True, exist_ok=True)
+        options.output_csv.write_text("id\n1\n", encoding="utf-8")
         return 0
 
-    def _failure(argv: Sequence[str]) -> int:
-        failure_calls.append(tuple(argv))
+    def _failure(_cfg: get_data.Config, options: _Options) -> int:
+        failure_calls.append((options.input_csv, options.output_csv))
         return 2
 
+    def _factory(_: get_data.PipelineRunConfig, input_csv: Path, output_csv: Path) -> _Options:
+        return _Options(input_csv=input_csv, output_csv=output_csv)
+
     steps = (
-        get_data.PipelineStep("document", _success, None),
-        get_data.PipelineStep("target", _failure, None),
-        get_data.PipelineStep("assay", _success, None),
+        get_data.PipelineStep("document", _success, _factory),
+        get_data.PipelineStep("target", _failure, _factory),
+        get_data.PipelineStep("assay", _success, _factory),
     )
 
     stream = io.StringIO()
@@ -196,10 +202,20 @@ def test_run_pipeline__propagates_step_failure(tmp_path: Path, monkeypatch: pyte
 def test_run_pipeline__handles_step_exception(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = _make_config(tmp_path)
 
-    def _raising(argv: Sequence[str]) -> int:  # pragma: no cover - executed via pipeline
+    @dataclass
+    class _Options:
+        input_csv: Path
+        output_csv: Path
+
+    def _factory(_: get_data.PipelineRunConfig, input_csv: Path, output_csv: Path) -> _Options:
+        return _Options(input_csv=input_csv, output_csv=output_csv)
+
+    def _raising(
+        _cfg: get_data.Config, _options: _Options
+    ) -> int:  # pragma: no cover - executed via pipeline
         raise RuntimeError("malformed output")
 
-    steps = (get_data.PipelineStep("document", _raising, None),)
+    steps = (get_data.PipelineStep("document", _raising, _factory),)
     stream = io.StringIO()
     logger = get_data.configure_logger(
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="unit")

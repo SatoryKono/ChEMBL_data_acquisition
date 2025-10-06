@@ -7,6 +7,7 @@ import json
 import shutil
 from collections import deque
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC
 from functools import lru_cache
 from pathlib import Path
@@ -21,6 +22,17 @@ from tests.helpers.logs import parse_log_file, parse_log_lines
 
 
 PipelineFunc = Callable[[list[str]], int]
+
+
+@dataclass
+class StubPipelineOptions:
+    input_csv: Path
+    output_csv: Path
+    limit: int | None
+    skip_existing: bool = False
+    force: bool = False
+    mode: str | None = None
+    subcommand: str | None = None
 
 
 def _build_stub_pipeline(
@@ -94,6 +106,43 @@ def _build_stub_pipeline(
         return 0
 
     return _main
+
+
+def _wrap_cli_pipeline(
+    main: PipelineFunc,
+    *,
+    accept_subcommand: bool = False,
+    accept_mode: bool = False,
+) -> Callable[[get_data.Config, StubPipelineOptions], int]:
+    """Return a runner bridging CLI-style stubs with the new pipeline API."""
+
+    def _run(_: get_data.Config, options: StubPipelineOptions) -> int:
+        argv: list[str] = []
+        if accept_subcommand and options.subcommand is not None:
+            argv.append(options.subcommand)
+        if accept_mode and options.mode is not None:
+            argv.extend(["--mode", options.mode])
+        argv.extend(
+            [
+                "--config",
+                "stub-config.yaml",
+                "--input",
+                str(options.input_csv),
+                "--final-out",
+                str(options.output_csv),
+                "--log-level",
+                "INFO",
+            ]
+        )
+        if options.limit is not None:
+            argv.extend(["--limit", str(options.limit)])
+        if options.force:
+            argv.append("--force")
+        if options.skip_existing:
+            argv.append("--skip-existing")
+        return main(argv)
+
+    return _run
 
 
 def _documents_transform(frame: pd.DataFrame, logger: get_data.Logger) -> pd.DataFrame:
@@ -281,72 +330,110 @@ def test_get_data_end_to_end__miniature_pipeline(
     monkeypatch.setattr(get_data, "configure_logger", _configure_logger_stub)
 
     report_writer = _make_report_writer(5)
+    document_main = _build_stub_pipeline(
+        "document",
+        "document_chembl_id",
+        ["document_chembl_id", "title", "pubmed_id"],
+        _documents_transform,
+        accept_mode=True,
+    )
+    target_main = _build_stub_pipeline(
+        "target",
+        "target_chembl_id",
+        ["target_chembl_id", "target_name", "organism"],
+        _targets_transform,
+        accept_subcommand=True,
+    )
+    assay_main = _build_stub_pipeline(
+        "assay",
+        "assay_chembl_id",
+        [
+            "assay_chembl_id",
+            "target_chembl_id",
+            "document_chembl_id",
+            "description",
+        ],
+        _assays_transform,
+    )
+    testitem_main = _build_stub_pipeline(
+        "testitem",
+        "molecule_chembl_id",
+        ["molecule_chembl_id", "preferred_name"],
+        _testitems_transform,
+    )
+    activity_main = _build_stub_pipeline(
+        "activity",
+        "activity_id",
+        [
+            "activity_id",
+            "assay_chembl_id",
+            "molecule_chembl_id",
+            "standard_value",
+            "standard_units",
+        ],
+        _activities_transform,
+        optional_columns=["force_failure"],
+        post_process=report_writer,
+    )
+
     stub_steps = (
         get_data.PipelineStep(
             "document",
-            _build_stub_pipeline(
-                "document",
-                "document_chembl_id",
-                ["document_chembl_id", "title", "pubmed_id"],
-                _documents_transform,
-                accept_mode=True,
+            _wrap_cli_pipeline(document_main, accept_mode=True),
+            lambda cfg, input_csv, output_csv: StubPipelineOptions(
+                input_csv=input_csv,
+                output_csv=output_csv,
+                limit=cfg.limit,
+                skip_existing=cfg.skip_existing,
+                force=cfg.force,
+                mode="all",
             ),
-            None,
-            extra_args=("--mode", "all"),
         ),
         get_data.PipelineStep(
             "target",
-            _build_stub_pipeline(
-                "target",
-                "target_chembl_id",
-                ["target_chembl_id", "target_name", "organism"],
-                _targets_transform,
-                accept_subcommand=True,
+            _wrap_cli_pipeline(target_main, accept_subcommand=True),
+            lambda cfg, input_csv, output_csv: StubPipelineOptions(
+                input_csv=input_csv,
+                output_csv=output_csv,
+                limit=cfg.limit,
+                skip_existing=cfg.skip_existing,
+                force=cfg.force,
+                subcommand="all",
             ),
-            "all",
         ),
         get_data.PipelineStep(
             "assay",
-            _build_stub_pipeline(
-                "assay",
-                "assay_chembl_id",
-                [
-                    "assay_chembl_id",
-                    "target_chembl_id",
-                    "document_chembl_id",
-                    "description",
-                ],
-                _assays_transform,
+            _wrap_cli_pipeline(assay_main),
+            lambda cfg, input_csv, output_csv: StubPipelineOptions(
+                input_csv=input_csv,
+                output_csv=output_csv,
+                limit=cfg.limit,
+                skip_existing=cfg.skip_existing,
+                force=cfg.force,
             ),
-            None,
         ),
         get_data.PipelineStep(
             "testitem",
-            _build_stub_pipeline(
-                "testitem",
-                "molecule_chembl_id",
-                ["molecule_chembl_id", "preferred_name"],
-                _testitems_transform,
+            _wrap_cli_pipeline(testitem_main),
+            lambda cfg, input_csv, output_csv: StubPipelineOptions(
+                input_csv=input_csv,
+                output_csv=output_csv,
+                limit=cfg.limit,
+                skip_existing=cfg.skip_existing,
+                force=cfg.force,
             ),
-            None,
         ),
         get_data.PipelineStep(
             "activity",
-            _build_stub_pipeline(
-                "activity",
-                "activity_id",
-                [
-                    "activity_id",
-                    "assay_chembl_id",
-                    "molecule_chembl_id",
-                    "standard_value",
-                    "standard_units",
-                ],
-                _activities_transform,
-                optional_columns=["force_failure"],
-                post_process=report_writer,
+            _wrap_cli_pipeline(activity_main),
+            lambda cfg, input_csv, output_csv: StubPipelineOptions(
+                input_csv=input_csv,
+                output_csv=output_csv,
+                limit=cfg.limit,
+                skip_existing=cfg.skip_existing,
+                force=cfg.force,
             ),
-            None,
+            supports_dry_run=True,
         ),
     )
     monkeypatch.setattr(get_data, "_PIPELINE_STEPS", stub_steps, raising=False)
@@ -394,7 +481,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert events["document_duplicates_dropped"].get("level") == "WARNING"
     assert "activity_missing_value" in events
     assert events["activity_missing_value"].get("level") == "ERROR"
-    assert not any(record.get("event") == "step_arguments" for record in logs)
+    assert not any(record.get("event") == "step_options" for record in logs)
 
     expected_dir = Path(__file__).resolve().parents[1] / "resources" / "expected_get_data"
     key_columns = {
@@ -428,7 +515,7 @@ def test_get_data_end_to_end__miniature_pipeline(
             and record.get("data", {}).get("step") == step_name
             for record in repeat_logs
         )
-    assert not any(record.get("event") == "step_arguments" for record in repeat_logs)
+    assert not any(record.get("event") == "step_options" for record in repeat_logs)
 
     hashes_after = {name: sha256_file(path) for name, path in output_paths.items()}
     assert hashes_before == hashes_after
@@ -436,12 +523,12 @@ def test_get_data_end_to_end__miniature_pipeline(
     verbose_argv = [*argv, "--verbose"]
     verbose_exit_code, verbose_logs = _invoke(verbose_argv)
     assert verbose_exit_code == 0
-    assert any(record.get("event") == "step_arguments" for record in verbose_logs)
+    assert any(record.get("event") == "step_options" for record in verbose_logs)
     assert any(record.get("level") == "DEBUG" for record in verbose_logs)
     verbose_hashes = {name: sha256_file(path) for name, path in output_paths.items()}
     assert hashes_before == verbose_hashes
     verbose_file_records = parse_log_file(orchestrator_log)
-    assert any(entry.get("event") == "step_arguments" for entry in verbose_file_records)
+    assert any(entry.get("event") == "step_options" for entry in verbose_file_records)
 
     reports_dir = base_path / "reports"
     report_json_path = reports_dir / "test_report.json"

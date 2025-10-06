@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import io
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
@@ -10,6 +10,10 @@ import pandas as pd
 import pytest
 
 from library.config import Config
+from library.pipelines.target import (
+    TargetPipelineOptions,
+    run_pipeline as run_target_pipeline,
+)
 from scripts import get_data, get_target_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_lines
@@ -20,18 +24,18 @@ def _build_stub_step(
     required_columns: list[str],
     key_column: str,
     on_execute: Callable[[pd.DataFrame, Path], int],
-) -> Callable[[list[str]], int]:
-    def _main(argv: list[str]) -> int:
-        parser = argparse.ArgumentParser(prog="stub")
-        parser.add_argument("--config", required=True)
-        parser.add_argument("--input", required=True)
-        parser.add_argument("--final-out", required=True)
-        parser.add_argument("--log-level")
-        parser.add_argument("--limit", type=int, default=None)
-        parser.add_argument("--force", action="store_true")
-        parser.add_argument("--skip-existing", action="store_true")
-        args, _ = parser.parse_known_args(argv)
-        frame = pd.read_csv(Path(args.input))
+) -> tuple[
+    Callable[[Config, object], int],
+    Callable[[get_data.PipelineRunConfig, Path, Path], object],
+]:
+    @dataclass
+    class _Options:
+        input_csv: Path
+        output_csv: Path
+        limit: int | None
+
+    def _run(_: Config, options: _Options) -> int:
+        frame = pd.read_csv(options.input_csv)
         missing = [col for col in required_columns if col not in frame.columns]
         if missing:
             get_data._LOGGER.error("schema_mismatch", missing=missing)
@@ -45,9 +49,14 @@ def _build_stub_step(
                 count=int(duplicates.sum()),
             )
             frame = frame.loc[~duplicates].copy()
-        return on_execute(frame, Path(args.final_out))
+        return on_execute(frame, options.output_csv)
 
-    return _main
+    def _factory(
+        cfg: get_data.PipelineRunConfig, input_csv: Path, output_csv: Path
+    ) -> _Options:
+        return _Options(input_csv=input_csv, output_csv=output_csv, limit=cfg.limit)
+
+    return _run, _factory
 
 
 def _prepare_environment(tmp_path: Path) -> get_data.PipelineRunConfig:
@@ -98,15 +107,12 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
         rows.to_csv(destination, index=False)
         return 0
 
-    step = get_data.PipelineStep(
-        "document",
-        _build_stub_step(
-            required_columns=["document_chembl_id", "title", "pubmed_id"],
-            key_column="document_chembl_id",
-            on_execute=_on_execute,
-        ),
-        None,
+    run_step, options_factory = _build_stub_step(
+        required_columns=["document_chembl_id", "title", "pubmed_id"],
+        key_column="document_chembl_id",
+        on_execute=_on_execute,
     )
+    step = get_data.PipelineStep("document", run_step, options_factory)
 
     stream = io.StringIO()
     logger = get_data.configure_logger(
@@ -155,15 +161,12 @@ def test_pipeline_subset__skip_existing_and_force(tmp_path: Path, monkeypatch: p
         destination.write_text("target_chembl_id\nT1\nT2\n", encoding="utf-8")
         return 0
 
-    step = get_data.PipelineStep(
-        "target",
-        _build_stub_step(
-            required_columns=["target_chembl_id", "name", "organism"],
-            key_column="target_chembl_id",
-            on_execute=_on_execute,
-        ),
-        None,
+    run_step, options_factory = _build_stub_step(
+        required_columns=["target_chembl_id", "name", "organism"],
+        key_column="target_chembl_id",
+        on_execute=_on_execute,
     )
+    step = get_data.PipelineStep("target", run_step, options_factory)
 
     stream = io.StringIO()
     logger = get_data.configure_logger(
@@ -240,20 +243,17 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
         enriched.to_csv(destination, index=False, columns=columns)
         return 0
 
-    step = get_data.PipelineStep(
-        "assay",
-        _build_stub_step(
-            required_columns=[
-                "assay_chembl_id",
-                "target_chembl_id",
-                "document_chembl_id",
-                "description",
-            ],
-            key_column="assay_chembl_id",
-            on_execute=_on_execute,
-        ),
-        None,
+    run_step, options_factory = _build_stub_step(
+        required_columns=[
+            "assay_chembl_id",
+            "target_chembl_id",
+            "document_chembl_id",
+            "description",
+        ],
+        key_column="assay_chembl_id",
+        on_execute=_on_execute,
     )
+    step = get_data.PipelineStep("assay", run_step, options_factory)
 
     stream = io.StringIO()
     logger = get_data.configure_logger(
@@ -356,7 +356,18 @@ def test_pipeline_subset__target_postprocess_sidecars(
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
     )
 
-    step = get_data.PipelineStep("target", get_target_data.main, "all")
+    step = get_data.PipelineStep(
+        "target",
+        run_target_pipeline,
+        lambda cfg_obj, input_csv, output_csv: TargetPipelineOptions(
+            input_csv=input_csv,
+            output_csv=output_csv,
+            command="all",
+            limit=cfg_obj.limit,
+            skip_existing=cfg_obj.skip_existing,
+            force=cfg_obj.force,
+        ),
+    )
 
     monkeypatch.setattr(get_data, "_PIPELINE_STEPS", (step,), raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)

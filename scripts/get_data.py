@@ -46,19 +46,31 @@ from library.utils.bootstrap import ensure_project_root
 if __package__ in {None, ""}:
     ensure_project_root()
 
-from scripts import (
-    get_activity_data,
-    get_assay_data,
-    get_document_data,
-    get_target_data,
-    get_testitem_data,
-)
-
 from library.cli.logging import setup_cli_logging
 from library.clients import ChemblClient
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
 from library.config import Config, load_config
 from library.integration.molecule_catalog import load_parent_catalog
+from library.pipelines.activity import (
+    ActivityPipelineOptions,
+    run_pipeline as run_activity_pipeline,
+)
+from library.pipelines.assay import (
+    AssayPipelineOptions,
+    run_pipeline as run_assay_pipeline,
+)
+from library.pipelines.document import (
+    DocumentPipelineOptions,
+    run_pipeline as run_document_pipeline,
+)
+from library.pipelines.target import (
+    TargetPipelineOptions,
+    run_pipeline as run_target_pipeline,
+)
+from library.pipelines.testitem import (
+    TestitemPipelineOptions,
+    run_pipeline as run_testitem_pipeline,
+)
 from library.utils.config import DEFAULT_CONFIG_PATH
 
 
@@ -120,37 +132,9 @@ class PipelineStep:
     """Describe a single pipeline invocation."""
 
     name: str
-    main: Callable[[Sequence[str] | None], int]
-    subcommand: str | None
-    extra_args: tuple[str, ...] = ()
-    output_flag: str = "--final-out"
+    run: Callable[[Config, object], int]
+    options_factory: Callable[[PipelineRunConfig, Path, Path], object]
     supports_dry_run: bool = False
-
-    def build_arguments(
-        self, cfg: PipelineRunConfig, output_path: Path | None = None
-    ) -> list[str]:
-        """Return CLI arguments forwarded to the wrapped ``main`` function."""
-
-        input_csv = cfg.input_path(self.name)
-        output_csv = (
-            output_path if output_path is not None else cfg.output_path(self.name)
-        )
-        args = ["--config", str(cfg.config_path), "--input", str(input_csv)]
-        args.extend([self.output_flag, str(output_csv)])
-        args.extend(["--log-level", cfg.log_level])
-        if cfg.limit is not None:
-            args.extend(["--limit", str(cfg.limit)])
-        if cfg.force:
-            args.append("--force")
-        if cfg.skip_existing:
-            args.append("--skip-existing")
-        if cfg.dry_run and self.supports_dry_run:
-            args.append("--dry-run")
-        if self.extra_args:
-            args = [*self.extra_args, *args]
-        if self.subcommand is not None:
-            return [self.subcommand, *args]
-        return args
 
     def expected_output(self, cfg: PipelineRunConfig) -> Path:
         """Return the path where the pipeline will create its CSV artefact."""
@@ -166,19 +150,62 @@ class PipelineStep:
 _PIPELINE_STEPS: tuple[PipelineStep, ...] = (
     PipelineStep(
         "document",
-        get_document_data.main,
-        None,
-        extra_args=("--mode", "all"),
+        run_document_pipeline,
+        lambda cfg, input_csv, output_csv: DocumentPipelineOptions(
+            input_csv=input_csv,
+            output_csv=output_csv,
+            mode="all",
+            limit=cfg.limit,
+            skip_existing=cfg.skip_existing,
+            force=cfg.force,
+        ),
     ),
     PipelineStep(
         "target",
-        get_target_data.main,
-        "all",
-        output_flag="--final-out",
+        run_target_pipeline,
+        lambda cfg, input_csv, output_csv: TargetPipelineOptions(
+            input_csv=input_csv,
+            output_csv=output_csv,
+            command="all",
+            limit=cfg.limit,
+            skip_existing=cfg.skip_existing,
+            force=cfg.force,
+        ),
     ),
-    PipelineStep("assay", get_assay_data.main, None),
-    PipelineStep("testitem", get_testitem_data.main, None),
-    PipelineStep("activity", get_activity_data.main, None, supports_dry_run=True),
+    PipelineStep(
+        "assay",
+        run_assay_pipeline,
+        lambda cfg, input_csv, output_csv: AssayPipelineOptions(
+            input_csv=input_csv,
+            output_csv=output_csv,
+            limit=cfg.limit,
+            skip_existing=cfg.skip_existing,
+            force=cfg.force,
+        ),
+    ),
+    PipelineStep(
+        "testitem",
+        run_testitem_pipeline,
+        lambda cfg, input_csv, output_csv: TestitemPipelineOptions(
+            input_csv=input_csv,
+            output_csv=output_csv,
+            limit=cfg.limit,
+            offset=0,
+        ),
+    ),
+    PipelineStep(
+        "activity",
+        run_activity_pipeline,
+        lambda cfg, input_csv, output_csv: ActivityPipelineOptions(
+            input_csv=input_csv,
+            output_csv=output_csv,
+            limit=cfg.limit,
+            skip_existing=cfg.skip_existing,
+            force=cfg.force,
+            dry_run=cfg.dry_run,
+        ),
+        supports_dry_run=True,
+    ),
 )
 
 
@@ -561,6 +588,54 @@ def _cleanup_empty_directories(path: Path, *, root: Path) -> None:
         current = parent
 
 
+def _describe_options(options: object, input_path: Path, output_path: Path) -> dict[str, object]:
+    """Return a serialisable summary of pipeline options for logging."""
+
+    return {
+        "input": str(getattr(options, "input_csv", input_path)),
+        "output": str(getattr(options, "output_csv", output_path)),
+        "limit": getattr(options, "limit", None),
+        "mode": getattr(options, "mode", None),
+        "command": getattr(options, "command", getattr(options, "subcommand", None)),
+        "skip_existing": getattr(options, "skip_existing", None),
+        "force": getattr(options, "force", None),
+    }
+
+
+def _apply_limit_override(
+    config: Config, step_name: str, options: object, limit: int | None
+) -> None:
+    """Propagate orchestrator-level limits into pipeline-specific configuration."""
+
+    if limit is None:
+        return
+
+    if step_name == "document":
+        mode = getattr(options, "mode", "all")
+        if mode == "chembl":
+            config.document.chembl.limit = limit
+        elif mode == "pubmed":
+            config.document.pubmed.limit = limit
+        else:
+            config.document.all.limit = limit
+    elif step_name == "target":
+        command = getattr(options, "command", "all")
+        if command == "chembl":
+            config.target.chembl.limit = limit
+        elif command == "uniprot":
+            config.target.uniprot.limit = limit
+        elif command == "iuphar":
+            config.target.iuphar.limit = limit
+        else:
+            config.target.all.limit = limit
+    elif step_name == "assay":
+        config.assay.limit = limit
+    elif step_name == "testitem":
+        config.testitem.limit = limit
+    elif step_name == "activity":
+        config.activity.limit = limit
+
+
 def _run_step(
     step: PipelineStep,
     cfg: PipelineRunConfig,
@@ -577,16 +652,22 @@ def _run_step(
         _LOGGER.info("step_skipped_existing", step=step.name, path=str(final_output))
         return StepExecutionResult(exit_code=0, executed=False)
 
-    arguments = step.build_arguments(cfg, output_path=working_output)
-    _LOGGER.debug("step_arguments", step=step.name, arguments=arguments)
+    local_cfg = load_config(cfg.config_path, base_path=cfg.base_path)
+    options = step.options_factory(cfg, input_path, working_output)
+    _LOGGER.debug(
+        "step_options",
+        step=step.name,
+        options=_describe_options(options, input_path, working_output),
+    )
+    _apply_limit_override(local_cfg, step.name, options, cfg.limit)
     try:
-        exit_code = step.main(arguments)
+        exit_code = step.run(local_cfg, options)
     except SystemExit as exc:
         exit_code = _coerce_exit_code(exc.code)
         return StepExecutionResult(exit_code=exit_code, executed=True)
     except BaseException:
         raise
-    return StepExecutionResult(exit_code=exit_code, executed=True)
+    return StepExecutionResult(exit_code=int(exit_code), executed=True)
 
 
 def _finalize_step_success(
