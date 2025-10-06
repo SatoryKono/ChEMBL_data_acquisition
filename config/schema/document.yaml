@@ -1,0 +1,592 @@
+title: Document metadata schema
+summary: |
+  Declarative schema describing the document metadata pipeline. Columns are
+  organised into logical groups matching the providers used by the pipeline
+  (ChEMBL, PubMed, Semantic Scholar, OpenAlex and CrossRef) plus derived and
+  runtime bookkeeping fields.  The declaration is used to construct the Pandera
+  validation schema as well as the export projection consumed by
+  ``scripts/get_document_data.py``.
+
+metadata:
+  owner: data-acquisition
+  version: "1.0"
+
+groups:
+  - name: chembl
+    title: ChEMBL source columns
+    description: |
+      Metadata retrieved directly from the ChEMBL document endpoint. These
+      fields form the baseline data that is enriched with additional provider
+      information.
+    columns:
+      - name: document_chembl_id
+        description: Primary ChEMBL document identifier.
+        dtype: string
+        required: true
+        nullable: true
+      - name: title
+        description: Document title supplied by ChEMBL.
+        dtype: string
+        required: false
+        nullable: true
+      - name: abstract
+        description: Abstract text provided by ChEMBL.
+        dtype: string
+        required: false
+        nullable: true
+      - name: doi
+        description: DOI value from the ChEMBL record.
+        dtype: string
+        required: false
+        nullable: true
+      - name: year
+        description: Publication year reported by ChEMBL.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: journal
+        description: Full journal title in the ChEMBL record.
+        dtype: string
+        required: false
+        nullable: true
+      - name: journal_abbrev
+        description: Abbreviated journal name from ChEMBL.
+        dtype: string
+        required: false
+        nullable: true
+      - name: volume
+        description: Journal volume identifier.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: issue
+        description: Journal issue identifier.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: first_page
+        description: First page of the article in the journal.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: last_page
+        description: Last page of the article in the journal.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: pubmed_id
+        description: Linked PubMed identifier recorded by ChEMBL.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: authors
+        description: Author list reported by ChEMBL.
+        dtype: string
+        required: false
+        nullable: true
+      - name: source
+        description: Identifier of the source system (expected "ChEMBL").
+        dtype: string
+        required: false
+        nullable: true
+
+  - name: derived
+    title: Derived publication fields
+    description: |
+      Columns computed by the Python pipeline to normalise identifiers and
+      summarise publication types across providers.
+    columns:
+      - name: doi_normalised
+        description: Canonical DOI resolved across providers.
+        dtype: string
+        required: false
+        nullable: true
+      - name: publication_types_normalised
+        description: Normalised publication type string produced from all sources.
+        dtype: string
+        required: false
+        nullable: true
+      - name: publication_type_score_review
+        description: Review score derived from publication type heuristics.
+        dtype: int
+        required: false
+        nullable: true
+        coerce: true
+      - name: publication_type_score_experimental
+        description: Experimental evidence score derived from publication types.
+        dtype: int
+        required: false
+        nullable: true
+        coerce: true
+      - name: publication_type_score_unknown
+        description: Unknown/other score derived from publication types.
+        dtype: int
+        required: false
+        nullable: true
+        coerce: true
+      - name: publication_class
+        description: Final publication class label (e.g. review/experimental).
+        dtype: string
+        required: false
+        nullable: true
+
+  - name: pipeline_status
+    title: Pipeline status columns
+    description: State of downstream enrichment tasks for the record.
+    columns:
+      - name: fetch_status
+        description: Status flag indicating whether enrichment succeeded.
+        dtype: string
+        required: false
+        nullable: true
+      - name: error_source
+        description: Provider responsible for the last fetch error, if any.
+        dtype: string
+        required: false
+        nullable: true
+
+  - name: pubmed
+    title: PubMed enrichment columns
+    description: |
+      Metadata fetched from the PubMed EFetch service. Numeric-like columns are
+      treated as objects so textual CSV exports remain valid.
+    columns:
+      - name: PubMed.PMID
+        description: Primary PubMed identifier returned by EFetch.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: PubMed.DOI
+        description: DOI reported in the PubMed record.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: PubMed.ArticleTitle
+        description: Article title from PubMed.
+        dtype: string
+        required: false
+        nullable: true
+      - name: PubMed.Abstract
+        description: Abstract text from PubMed.
+        dtype: string
+        required: false
+        nullable: true
+      - name: PubMed.JournalTitle
+        description: Journal title recorded by PubMed.
+        dtype: string
+        required: false
+        nullable: true
+      - name: PubMed.Volume
+        description: Journal volume in the PubMed record.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: PubMed.Issue
+        description: Journal issue in the PubMed record.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: PubMed.StartPage
+        description: First page recorded by PubMed.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: PubMed.EndPage
+        description: Last page recorded by PubMed.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: PubMed.PublicationType
+        description: Publication type(s) reported by PubMed.
+        dtype: string
+        required: false
+        nullable: true
+      - name: PubMed.MeSH_Descriptors
+        description: MeSH descriptors extracted from the PubMed record.
+        dtype: string
+        required: false
+        nullable: true
+      - name: PubMed.MeSH_Qualifiers
+        description: MeSH qualifiers associated with the record.
+        dtype: string
+        required: false
+        nullable: true
+      - name: PubMed.ChemicalList
+        description: Chemical substance list from PubMed annotations.
+        dtype: string
+        required: false
+        nullable: true
+      - name: PubMed.DayRevised
+        description: Day component of the revision date.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: PubMed.MonthRevised
+        description: Month component of the revision date.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: PubMed.YearRevised
+        description: Year component of the revision date.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: PubMed.YearCompleted
+        description: Year when the record was completed.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: PubMed.MonthCompleted
+        description: Month when the record was completed.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: PubMed.DayCompleted
+        description: Day when the record was completed.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: PubMed.Error
+        description: Error message captured when PubMed enrichment fails.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: PubMed.ISSN
+        description: ISSN value reported by PubMed.
+        dtype: string
+        required: false
+        nullable: true
+
+  - name: scholar
+    title: Semantic Scholar enrichment columns
+    description: Fields fetched from the Semantic Scholar Graph API.
+    columns:
+      - name: scholar.PMID
+        description: PubMed identifier matched by Semantic Scholar.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: scholar.Venue
+        description: Venue name reported by Semantic Scholar.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: scholar.PublicationTypes
+        description: Publication type classification from Semantic Scholar.
+        dtype: string
+        required: false
+        nullable: true
+      - name: scholar.SemanticScholarId
+        description: Semantic Scholar internal identifier.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: scholar.ExternalIds
+        description: JSON payload with external identifier mappings.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: scholar.DOI
+        description: DOI as recorded by Semantic Scholar.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: scholar.Error
+        description: Error information from Semantic Scholar lookups.
+        dtype: string
+        required: false
+        nullable: true
+
+  - name: openalex
+    title: OpenAlex enrichment columns
+    description: Fields populated using the OpenAlex Works endpoint.
+    columns:
+      - name: OpenAlex.PublicationTypes
+        description: Publication types reported by OpenAlex.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: OpenAlex.TypeCrossref
+        description: Crossref document type provided by OpenAlex.
+        dtype: string
+        required: false
+        nullable: true
+      - name: OpenAlex.Genre
+        description: OpenAlex genre descriptor.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: OpenAlex.Id
+        description: OpenAlex work identifier.
+        dtype: string
+        required: false
+        nullable: true
+      - name: OpenAlex.Venue
+        description: Venue information from OpenAlex.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: OpenAlex.MeshDescriptors
+        description: MeSH descriptors extracted by OpenAlex.
+        dtype: string
+        required: false
+        nullable: true
+      - name: OpenAlex.MeshQualifiers
+        description: MeSH qualifiers extracted by OpenAlex.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: OpenAlex.Error
+        description: Error information from OpenAlex lookups.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+
+  - name: crossref
+    title: CrossRef enrichment columns
+    description: Metadata retrieved from the CrossRef API.
+    columns:
+      - name: crossref.Type
+        description: CrossRef record type.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: crossref.Subtype
+        description: CrossRef subtype or additional category.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: crossref.Title
+        description: Preferred title as reported by CrossRef.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: crossref.Subtitle
+        description: Subtitle or secondary title from CrossRef.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: crossref.Subject
+        description: Subject categories returned by CrossRef.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: crossref.Error
+        description: Error information from CrossRef requests.
+        dtype: string
+        required: false
+        nullable: true
+
+  - name: pipeline_runtime
+    title: Runtime bookkeeping columns
+    description: Helper fields appended by the pipeline during export.
+    columns:
+      - name: date_code
+        description: Date partition code derived from source data.
+        dtype: string
+        required: false
+        nullable: true
+      - name: Index
+        description: Positional index column used by upstream tooling.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: PubMed.is_review
+        description: Provider-specific review flag from PubMed.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: scholar.is_review
+        description: Provider-specific review flag from Semantic Scholar.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: OpenAlex.is_review
+        description: Provider-specific review flag from OpenAlex.
+        dtype: object
+        required: false
+        nullable: true
+        coerce: true
+      - name: pipeline_version
+        description: Pipeline version string recorded in exports.
+        dtype: string
+        required: false
+        nullable: true
+      - name: timestamp_utc
+        description: UTC timestamp when the export row was produced.
+        dtype: string
+        required: false
+        nullable: true
+
+export:
+  title: Document export projection
+  description: |
+    Canonical column order for ``scripts/get_document_data.py`` exports. The
+    projection includes provider-prefixed aliases to maintain compatibility with
+    downstream Power Query pipelines.
+  columns:
+    - name: PubMed.PMID
+      description: Primary PubMed identifier for the exported row.
+    - name: PubMed.DOI
+      description: DOI sourced from PubMed metadata.
+    - name: PubMed.ArticleTitle
+      description: Article title reported by PubMed.
+    - name: PubMed.Abstract
+      description: Abstract text returned by PubMed.
+    - name: PubMed.JournalTitle
+      description: Journal title in the PubMed record.
+    - name: PubMed.JournalISOAbbrev
+      description: ISO journal abbreviation from legacy exports (may be empty).
+    - name: PubMed.Volume
+      description: Journal volume captured by PubMed.
+    - name: PubMed.Issue
+      description: Journal issue captured by PubMed.
+    - name: PubMed.StartPage
+      description: Starting page number from PubMed.
+    - name: PubMed.EndPage
+      description: Ending page number from PubMed.
+    - name: PubMed.ISSN
+      description: ISSN identifier reported by PubMed.
+    - name: PubMed.PublicationType
+      description: Publication type list provided by PubMed.
+    - name: PubMed.MeSH_Descriptors
+      description: MeSH descriptors exported for downstream parity.
+    - name: PubMed.MeSH_Qualifiers
+      description: MeSH qualifiers exported for downstream parity.
+    - name: PubMed.ChemicalList
+      description: Chemical substance list exported for downstream parity.
+    - name: PubMed.YearCompleted
+      description: Completion year recorded in PubMed.
+    - name: PubMed.MonthCompleted
+      description: Completion month recorded in PubMed.
+    - name: PubMed.DayCompleted
+      description: Completion day recorded in PubMed.
+    - name: PubMed.YearRevised
+      description: Revision year recorded in PubMed.
+    - name: PubMed.MonthRevised
+      description: Revision month recorded in PubMed.
+    - name: PubMed.DayRevised
+      description: Revision day recorded in PubMed.
+    - name: PubMed.Error
+      description: Error information associated with PubMed fetches.
+    - name: scholar.PMID
+      description: PubMed identifier reported by Semantic Scholar.
+    - name: scholar.DOI
+      description: DOI recorded by Semantic Scholar.
+    - name: scholar.PublicationTypes
+      description: Publication types returned by Semantic Scholar.
+    - name: scholar.Venue
+      description: Venue or journal information from Semantic Scholar.
+    - name: scholar.SemanticScholarId
+      description: Semantic Scholar internal identifier.
+    - name: scholar.ExternalIds
+      description: External identifier payload provided by Semantic Scholar.
+    - name: scholar.Error
+      description: Error notes from Semantic Scholar enrichment.
+    - name: OpenAlex.PMID
+      description: PubMed identifier resolved by OpenAlex (compatibility field).
+    - name: OpenAlex.DOI
+      description: DOI resolved by OpenAlex (compatibility field).
+    - name: OpenAlex.PublicationTypes
+      description: Publication types reported by OpenAlex.
+    - name: OpenAlex.TypeCrossref
+      description: CrossRef type classification via OpenAlex.
+    - name: OpenAlex.Genre
+      description: Genre descriptor from OpenAlex.
+    - name: OpenAlex.Venue
+      description: Venue name provided by OpenAlex.
+    - name: OpenAlex.MeshDescriptors
+      description: MeSH descriptors recorded by OpenAlex.
+    - name: OpenAlex.MeshQualifiers
+      description: MeSH qualifiers recorded by OpenAlex.
+    - name: OpenAlex.Id
+      description: OpenAlex work identifier.
+    - name: OpenAlex.Error
+      description: Error notes from OpenAlex enrichment.
+    - name: crossref.DOI
+      description: DOI returned by CrossRef.
+    - name: crossref.Type
+      description: CrossRef document type.
+    - name: crossref.Subtype
+      description: CrossRef subtype classification.
+    - name: crossref.Title
+      description: Preferred title reported by CrossRef.
+    - name: crossref.Subtitle
+      description: Subtitle reported by CrossRef.
+    - name: crossref.Subject
+      description: Subject categories returned by CrossRef.
+    - name: crossref.Error
+      description: Error notes from CrossRef enrichment.
+    - name: publication_types_normalised
+      description: Normalised publication type string.
+    - name: publication_review_score
+      description: Review score in the legacy export schema.
+    - name: publication_experimental_score
+      description: Experimental score in the legacy export schema.
+    - name: publication_class
+      description: Final publication class label.
+    - name: ChEMBL.document_chembl_id
+      description: Primary document identifier from ChEMBL.
+    - name: ChEMBL.title
+      description: Document title from ChEMBL (legacy alias).
+    - name: ChEMBL.abstract
+      description: Abstract text from ChEMBL (legacy alias).
+    - name: ChEMBL.doi
+      description: DOI captured by ChEMBL (legacy alias).
+    - name: ChEMBL.year
+      description: Publication year reported by ChEMBL (legacy alias).
+    - name: ChEMBL.journal
+      description: Journal title reported by ChEMBL (legacy alias).
+    - name: ChEMBL.journal_abbrev
+      description: Journal abbreviation reported by ChEMBL (legacy alias).
+    - name: ChEMBL.volume
+      description: Journal volume reported by ChEMBL (legacy alias).
+    - name: ChEMBL.issue
+      description: Journal issue reported by ChEMBL (legacy alias).
+    - name: ChEMBL.first_page
+      description: First page reported by ChEMBL (legacy alias).
+    - name: ChEMBL.last_page
+      description: Last page reported by ChEMBL (legacy alias).
+    - name: ChEMBL.pubmed_id
+      description: Linked PubMed identifier stored in ChEMBL (legacy alias).
+    - name: ChEMBL.authors
+      description: Author list reported by ChEMBL (legacy alias).
+    - name: ChEMBL.source
+      description: Source marker for ChEMBL rows.

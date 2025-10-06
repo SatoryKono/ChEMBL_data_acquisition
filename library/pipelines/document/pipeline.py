@@ -20,86 +20,27 @@ from typing import Any
 
 import pandas as pd
 
-from .chembl_document import DOCUMENT_COLUMNS as _CHEMBL_COLUMNS
 from .type_classifier import compute_scores, decide_label
 from .type_terms import parse_terms
 from ...common.pandas_utils import merge_series_prefer_left
+from ...schemas.document_spec import (
+    DOCUMENT_COLUMN_GROUPS,
+    DOCUMENT_SCHEMA_COLUMNS as _DECLARED_SCHEMA_COLUMNS,
+)
 
 # ---------------------------------------------------------------------------
-# Column declarations
+CH_EMBL_COLUMNS: list[str] = list(DOCUMENT_COLUMN_GROUPS["chembl"])
+DERIVED_COLUMNS: list[str] = list(DOCUMENT_COLUMN_GROUPS["derived"])
+PIPELINE_STATUS_COLUMNS: list[str] = list(DOCUMENT_COLUMN_GROUPS["pipeline_status"])
+PUBMED_COLUMNS: list[str] = list(DOCUMENT_COLUMN_GROUPS["pubmed"])
+SEMANTIC_SCHOLAR_COLUMNS: list[str] = list(DOCUMENT_COLUMN_GROUPS["scholar"])
+OPENALEX_COLUMNS: list[str] = list(DOCUMENT_COLUMN_GROUPS["openalex"])
+CROSSREF_COLUMNS: list[str] = list(DOCUMENT_COLUMN_GROUPS["crossref"])
+RUNTIME_COLUMNS: list[str] = list(DOCUMENT_COLUMN_GROUPS["pipeline_runtime"])
 
-# Keep local copies so callers cannot mutate the original definitions imported
-# from :mod:`library.pipelines.document.chembl_document`.
-CH_EMBL_COLUMNS: list[str] = list(_CHEMBL_COLUMNS)
+DOCUMENT_SCHEMA_COLUMNS: list[str] = list(_DECLARED_SCHEMA_COLUMNS)
 
-PUBMED_COLUMNS: list[str] = [
-    "PubMed.PMID",
-    "PubMed.DOI",
-    "PubMed.ArticleTitle",
-    "PubMed.Abstract",
-    "PubMed.JournalTitle",
-    "PubMed.Volume",
-    "PubMed.Issue",
-    "PubMed.StartPage",
-    "PubMed.EndPage",
-    "PubMed.PublicationType",
-    "PubMed.MeSH_Descriptors",
-    "PubMed.MeSH_Qualifiers",
-    "PubMed.ChemicalList",
-    "PubMed.DayRevised",
-    "PubMed.MonthRevised",
-    "PubMed.YearRevised",
-    "PubMed.YearCompleted",
-    "PubMed.MonthCompleted",
-    "PubMed.DayCompleted",
-    "PubMed.Error",
-    "PubMed.ISSN",
-]
-
-SEMANTIC_SCHOLAR_COLUMNS: list[str] = [
-    "scholar.PMID",
-    "scholar.Venue",
-    "scholar.PublicationTypes",
-    "scholar.SemanticScholarId",
-    "scholar.ExternalIds",
-    "scholar.DOI",
-    "scholar.Error",
-]
-
-OPENALEX_COLUMNS: list[str] = [
-    "OpenAlex.PublicationTypes",
-    "OpenAlex.TypeCrossref",
-    "OpenAlex.Genre",
-    "OpenAlex.Id",
-    "OpenAlex.Venue",
-    "OpenAlex.MeshDescriptors",
-    "OpenAlex.MeshQualifiers",
-    "OpenAlex.Error",
-]
-
-CROSSREF_COLUMNS: list[str] = [
-    "crossref.Type",
-    "crossref.Subtype",
-    "crossref.Title",
-    "crossref.Subtitle",
-    "crossref.Subject",
-    "crossref.Error",
-]
-
-DERIVED_COLUMNS: list[str] = [
-    "doi_normalised",
-    "publication_types_normalised",
-    "publication_type_score_review",
-    "publication_type_score_experimental",
-    "publication_type_score_unknown",
-    "publication_class",
-]
-
-PIPELINE_STATUS_COLUMNS: list[str] = ["fetch_status", "error_source"]
-
-# The combined list intentionally mirrors the downstream document pipeline so
-# CSV exports preserve a deterministic order.
-DOCUMENT_SCHEMA_COLUMNS: list[str] = (
+_EXPECTED_ORDER = (
     CH_EMBL_COLUMNS
     + DERIVED_COLUMNS
     + PIPELINE_STATUS_COLUMNS
@@ -107,16 +48,13 @@ DOCUMENT_SCHEMA_COLUMNS: list[str] = (
     + SEMANTIC_SCHOLAR_COLUMNS
     + OPENALEX_COLUMNS
     + CROSSREF_COLUMNS
-    + [
-        "date_code",
-        "Index",
-        "PubMed.is_review",
-        "scholar.is_review",
-        "OpenAlex.is_review",
-        "pipeline_version",
-        "timestamp_utc",
-    ]
+    + RUNTIME_COLUMNS
 )
+
+if _EXPECTED_ORDER != DOCUMENT_SCHEMA_COLUMNS:  # pragma: no cover - config error
+    raise RuntimeError(
+        "document schema declaration order mismatch between groups and schema"
+    )
 
 # Remove accidental duplicates while preserving declaration order. Downstream
 # code assumes a one-to-one mapping between column name and position.

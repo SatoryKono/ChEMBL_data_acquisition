@@ -125,6 +125,7 @@ from library.common.rate_limiter import get_global_limiter
 from library.common.sidecar import SidecarErrors
 from library.qa.table_quality import TableQualityProfiler, analyze_table_quality
 from library.schemas import DocumentsSchema, normalize_documents
+from library.schemas.document_spec import DOCUMENT_EXPORT_COLUMNS
 
 
 DEFAULT_INPUT_NAME = "document.csv"
@@ -145,72 +146,7 @@ class _FallbackPathAction(argparse.Action):
         setattr(namespace, "fallback_doi_csv", values)
 
 
-_EXPORT_COLUMNS = [
-    "PubMed.PMID",
-    "PubMed.DOI",
-    "PubMed.ArticleTitle",
-    "PubMed.Abstract",
-    "PubMed.JournalTitle",
-    "PubMed.JournalISOAbbrev",
-    "PubMed.Volume",
-    "PubMed.Issue",
-    "PubMed.StartPage",
-    "PubMed.EndPage",
-    "PubMed.ISSN",
-    "PubMed.PublicationType",
-    "PubMed.MeSH_Descriptors",
-    "PubMed.MeSH_Qualifiers",
-    "PubMed.ChemicalList",
-    "PubMed.YearCompleted",
-    "PubMed.MonthCompleted",
-    "PubMed.DayCompleted",
-    "PubMed.YearRevised",
-    "PubMed.MonthRevised",
-    "PubMed.DayRevised",
-    "PubMed.Error",
-    "scholar.PMID",
-    "scholar.DOI",
-    "scholar.PublicationTypes",
-    "scholar.Venue",
-    "scholar.SemanticScholarId",
-    "scholar.ExternalIds",
-    "scholar.Error",
-    "OpenAlex.PMID",
-    "OpenAlex.DOI",
-    "OpenAlex.PublicationTypes",
-    "OpenAlex.TypeCrossref",
-    "OpenAlex.Genre",
-    "OpenAlex.Venue",
-    "OpenAlex.MeshDescriptors",
-    "OpenAlex.MeshQualifiers",
-    "OpenAlex.Id",
-    "OpenAlex.Error",
-    "crossref.DOI",
-    "crossref.Type",
-    "crossref.Subtype",
-    "crossref.Title",
-    "crossref.Subtitle",
-    "crossref.Subject",
-    "crossref.Error",
-    "publication_types_normalised",
-    "publication_review_score",
-    "publication_experimental_score",
-    "publication_class",
-    "ChEMBL.document_chembl_id",
-    "ChEMBL.title",
-    "ChEMBL.abstract",
-    "ChEMBL.doi",
-    "ChEMBL.year",
-    "ChEMBL.journal",
-    "ChEMBL.journal_abbrev",
-    "ChEMBL.volume",
-    "ChEMBL.issue",
-    "ChEMBL.first_page",
-    "ChEMBL.last_page",
-    "ChEMBL.pubmed_id",
-    "ChEMBL.authors",
-    "ChEMBL.source",
-]
+_EXPORT_COLUMNS: tuple[str, ...] = DOCUMENT_EXPORT_COLUMNS
 
 
 def _resolve_numeric_export_columns() -> tuple[str, ...]:
