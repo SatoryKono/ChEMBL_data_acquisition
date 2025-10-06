@@ -5,38 +5,42 @@ import io
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Callable
 
 import pandas as pd
 import pytest
 
 from library.config import Config
+from library.pipelines.common import PipelineRunResult
 from scripts import get_data, get_target_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_lines
 
 
-def _build_stub_step(
+def _build_stub_api(
     *,
     required_columns: list[str],
     key_column: str,
     on_execute: Callable[[pd.DataFrame, Path], int],
-) -> Callable[[list[str]], int]:
-    def _main(argv: list[str]) -> int:
-        parser = argparse.ArgumentParser(prog="stub")
-        parser.add_argument("--config", required=True)
-        parser.add_argument("--input", required=True)
-        parser.add_argument("--final-out", required=True)
-        parser.add_argument("--log-level")
-        parser.add_argument("--limit", type=int, default=None)
-        parser.add_argument("--force", action="store_true")
-        parser.add_argument("--skip-existing", action="store_true")
-        args, _ = parser.parse_known_args(argv)
-        frame = pd.read_csv(Path(args.input))
+) -> get_data.PipelineApi:
+    def _builder(
+        cfg: get_data.PipelineRunConfig, input_path: Path, output_path: Path
+    ) -> SimpleNamespace:
+        return SimpleNamespace(input_csv=input_path, output_csv=output_path)
+
+    def _runner(config: Config, options: SimpleNamespace) -> PipelineRunResult:
+        frame = pd.read_csv(Path(options.input_csv))
         missing = [col for col in required_columns if col not in frame.columns]
         if missing:
             get_data._LOGGER.error("schema_mismatch", missing=missing)
-            return 1
+            return PipelineRunResult(
+                exit_code=1,
+                output_path=Path(options.output_csv),
+                executed=True,
+                reason="schema_mismatch",
+                written=False,
+            )
         frame = frame[required_columns].copy()
         frame[key_column] = frame[key_column].astype("string").str.strip()
         duplicates = frame[key_column].duplicated()
@@ -46,9 +50,18 @@ def _build_stub_step(
                 count=int(duplicates.sum()),
             )
             frame = frame.loc[~duplicates].copy()
-        return on_execute(frame, Path(args.final_out))
+        destination = Path(options.output_csv)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        result_code = on_execute(frame, destination)
+        return PipelineRunResult(
+            exit_code=result_code,
+            output_path=destination,
+            executed=True,
+            reason=None if result_code == 0 else "pipeline_failed",
+            written=result_code == 0,
+        )
 
-    return _main
+    return get_data.PipelineApi(_builder, _runner)
 
 
 def _prepare_environment(tmp_path: Path) -> get_data.PipelineRunConfig:
@@ -109,13 +122,14 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
         rows.to_csv(destination, index=False)
         return 0
 
+    api = _build_stub_api(
+        required_columns=["document_chembl_id", "title", "pubmed_id"],
+        key_column="document_chembl_id",
+        on_execute=_on_execute,
+    )
     step = get_data.PipelineStep(
         name="document",
-        main=_build_stub_step(
-            required_columns=["document_chembl_id", "title", "pubmed_id"],
-            key_column="document_chembl_id",
-            on_execute=_on_execute,
-        ),
+        main=lambda _: 0,
         input_filename="document.csv",
         output_stem="documents",
     )
@@ -125,6 +139,7 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
     )
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+    monkeypatch.setattr(get_data, "_PIPELINE_APIS", {"document": api}, raising=False)
 
     steps = (step,)
     status = get_data.run_pipeline(cfg, steps=steps)
@@ -152,7 +167,7 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
     manifest_failure = _load_manifest(cfg)
     assert manifest_failure["run"]["exit_code"] == 1
     assert manifest_failure["steps"][0]["status"] == "failed"
-    assert manifest_failure["steps"][0]["reason"] == "non_zero_exit"
+    assert manifest_failure["steps"][0]["reason"] == "schema_mismatch"
     assert manifest_failure["steps"][0]["output"]["exists"] is False
 
 
@@ -177,13 +192,14 @@ def test_pipeline_subset__skip_existing_and_force(tmp_path: Path, monkeypatch: p
         destination.write_text("target_chembl_id\nT1\nT2\n", encoding="utf-8")
         return 0
 
+    api = _build_stub_api(
+        required_columns=["target_chembl_id", "name", "organism"],
+        key_column="target_chembl_id",
+        on_execute=_on_execute,
+    )
     step = get_data.PipelineStep(
         name="target",
-        main=_build_stub_step(
-            required_columns=["target_chembl_id", "name", "organism"],
-            key_column="target_chembl_id",
-            on_execute=_on_execute,
-        ),
+        main=lambda _: 0,
         input_filename="target.csv",
         output_stem="targets",
     )
@@ -195,6 +211,7 @@ def test_pipeline_subset__skip_existing_and_force(tmp_path: Path, monkeypatch: p
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
     steps = (step,)
+    monkeypatch.setattr(get_data, "_PIPELINE_APIS", {"target": api}, raising=False)
     status_first = get_data.run_pipeline(cfg, steps=steps)
     assert status_first == 0
     assert executions == [2]
@@ -275,18 +292,19 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
         enriched.to_csv(destination, index=False, columns=columns)
         return 0
 
+    api = _build_stub_api(
+        required_columns=[
+            "assay_chembl_id",
+            "target_chembl_id",
+            "document_chembl_id",
+            "description",
+        ],
+        key_column="assay_chembl_id",
+        on_execute=_on_execute,
+    )
     step = get_data.PipelineStep(
         name="assay",
-        main=_build_stub_step(
-            required_columns=[
-                "assay_chembl_id",
-                "target_chembl_id",
-                "document_chembl_id",
-                "description",
-            ],
-            key_column="assay_chembl_id",
-            on_execute=_on_execute,
-        ),
+        main=lambda _: 0,
         input_filename="assay.csv",
         output_stem="assays",
     )
@@ -297,6 +315,7 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
     )
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
+    monkeypatch.setattr(get_data, "_PIPELINE_APIS", {"assay": api}, raising=False)
     steps = (step,)
     first_status = get_data.run_pipeline(cfg, steps=steps)
     assert first_status == 1

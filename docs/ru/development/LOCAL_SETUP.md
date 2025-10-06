@@ -44,7 +44,7 @@ make format
 | Переменная | Назначение |
 |------------|------------|
 | `CHEMBL_DA_BASE_PATH` | Базовый путь для плейсхолдера в `config/config.yaml`. |
-| `CHEMBL_DA_*` | Алиасы конфигурации (см. `library/config.py`). |
+| `CHEMBL_DA_*` | Алиасы конфигурации (см. `library/config/models.py`). |
 | `HTTP_PROXY` / `HTTPS_PROXY` | Прокси в корпоративных сетях. |
 
 Чувствительные значения храните в `.env` (подхватывается `python-dotenv`).
