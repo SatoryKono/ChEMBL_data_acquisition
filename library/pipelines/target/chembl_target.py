@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 import pandas as pd
 import requests
+from requests.exceptions import ReadTimeout
 
 from library.clients import ChemblClient, _chunked
 from ...config import ApiCfg, TargetChemblBatchRetryCfg, UniprotMappingCfg
@@ -351,17 +352,31 @@ def _iter_target_chunk_with_fallback(
         return
 
     url = f"{base_url}&target_chembl_id__in={','.join(chunk)}"
+    handled_exc: requests.RequestException | None
     try:
         data = client.request_json(url, cfg=cfg, timeout=timeout)
     except requests.ReadTimeout as exc:
         if len(chunk) <= 1 or not enable_split_fallback:
             raise exc
+        event = "chembl_timeout_split"
+        handled_exc = exc
+    except requests.RequestException as exc:
+        event = "chembl_request_split"
+        handled_exc = exc
+    else:
+        event = ""
+        handled_exc = None
+
+    if event:
+        if len(chunk) <= 1 or handled_exc is None:
+            raise handled_exc
         logger.warning(
-            "chembl_timeout_split",
+            event,
             extra={
                 "chunk_size": len(chunk),
                 "ids": list(chunk),
                 "timeout": timeout,
+                "error": str(handled_exc),
             },
         )
         for identifier in chunk:

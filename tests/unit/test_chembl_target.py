@@ -102,6 +102,14 @@ def test_iter_target_batches__propagates_timeout_without_split() -> None:
     cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=8.0)
     mapping_cfg = UniprotMappingCfg()
     timeout = 6.0
+def test_iter_target_batches__splits_chunk_on_connection_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Chunk-level connection errors should fall back to per-ID requests."""
+
+    cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=7.0)
+    mapping_cfg = UniprotMappingCfg()
+    timeout = 5.0
     base = cfg.chembl_base.rstrip("/")
 
     def _chunk_url(ids: Sequence[str]) -> str:
@@ -123,6 +131,18 @@ def test_iter_target_batches__propagates_timeout_without_split() -> None:
         list(
             iter_target_batches(
                 ["CHEMBL10", "CHEMBL11"],
+    combined_url = _chunk_url(["CHEMBL1", "CHEMBL2"])
+    responses = {
+        combined_url: requests.ConnectionError("simulated connection reset"),
+        _chunk_url(["CHEMBL1"]): _build_response("CHEMBL1", "Alpha"),
+        _chunk_url(["CHEMBL2"]): _build_response("CHEMBL2", "Beta"),
+    }
+    client = _StubChemblClient(responses)
+
+    with caplog.at_level("WARNING"):
+        batches = list(
+            iter_target_batches(
+                ["CHEMBL1", "CHEMBL2"],
                 cfg=cfg,
                 client=client,
                 mapping_cfg=mapping_cfg,
@@ -133,3 +153,18 @@ def test_iter_target_batches__propagates_timeout_without_split() -> None:
         )
 
     assert client.calls == [(combined_url, timeout)]
+            )
+        )
+
+    assert [call[0] for call in client.calls] == [
+        combined_url,
+        _chunk_url(["CHEMBL1"]),
+        _chunk_url(["CHEMBL2"]),
+    ]
+    assert all(call[1] == timeout for call in client.calls)
+
+    assert len(batches) == 2
+    parsed_ids = [parsed[2]["target_chembl_id"].iat[0] for parsed in batches]
+    assert parsed_ids == ["CHEMBL1", "CHEMBL2"]
+
+    assert any(record.getMessage().startswith("chembl_request_split") for record in caplog.records)
