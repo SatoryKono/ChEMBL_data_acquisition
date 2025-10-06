@@ -921,7 +921,7 @@ def finalize_output(
         return pandas_dtype
 
     def _ensure_column_alignment(frame: pd.DataFrame) -> None:
-        missing = (expected_columns | columns_to_fill) - set(frame.columns)
+        missing = (expected_columns | columns_to_fill | columns_seen) - set(frame.columns)
         if not missing:
             return
         for column in sorted(missing):
@@ -930,7 +930,14 @@ def finalize_output(
                 dtype = _column_dtype(column)
             dtype = _normalise_dtype(dtype)
             column_dtypes[column] = dtype
-            frame[column] = pd.Series(pd.NA, index=frame.index, dtype=dtype)
+            if isinstance(dtype, pd.api.extensions.ExtensionDtype):
+                empty_values = pd.array([pd.NA] * len(frame.index), dtype=dtype)
+                frame[column] = pd.Series(empty_values, index=frame.index)
+            else:
+                placeholder = pd.Series([pd.NA] * len(frame.index), index=frame.index, dtype="object")
+                if dtype is not object:
+                    placeholder = placeholder.astype(dtype, copy=False)
+                frame[column] = placeholder
 
     def _process_chunk(raw: pd.DataFrame) -> pd.DataFrame:
         nonlocal rows_total, rows_written, exit_code, columns_seen, failure_count
@@ -945,6 +952,7 @@ def finalize_output(
             column_dtypes.setdefault(column, _normalise_dtype(current.dtypes[column]))
         columns_seen.update(current.columns)
         expected_columns.update(columns_seen)
+        _ensure_column_alignment(current)
 
         chunk_missing_required = required_cols - set(current.columns)
         if chunk_missing_required:
@@ -995,9 +1003,12 @@ def finalize_output(
     def _validated_chunks() -> Iterator[pd.DataFrame]:
         for chunk in prepared_chunks:
             if not chunk.empty or columns_seen:
+                _ensure_column_alignment(chunk)
                 yield chunk
         for raw_chunk in chunk_iter:
-            yield _process_chunk(raw_chunk)
+            processed = _process_chunk(raw_chunk)
+            _ensure_column_alignment(processed)
+            yield processed
 
     missing_required = required_cols - columns_seen
     if missing_required:
@@ -1009,7 +1020,10 @@ def finalize_output(
 
     missing_optional = optional_cols - columns_seen
     if missing_optional:
-        added_optional = sorted(missing_optional)
+        logger.warning(
+            "optional_columns_missing",
+            columns=sorted(missing_optional),
+        )
         columns_to_fill.update(missing_optional)
         expected_columns.update(columns_to_fill)
         for column in missing_optional:
@@ -1022,11 +1036,6 @@ def finalize_output(
             logger.warning(
                 "optional_columns_missing",
                 columns=sorted(remaining_missing_optional),
-            )
-        else:
-            logger.debug(
-                "optional_columns_filled",
-                columns=added_optional,
             )
 
     if failure_count:
