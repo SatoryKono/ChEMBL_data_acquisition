@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import warnings
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -45,6 +47,58 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
     ),
 }
+
+_ENV_CHECKSUM_ALLOWLIST = "CHEMBL_DICTIONARY_CHECKSUM_ALLOWLIST"
+
+
+@lru_cache(maxsize=1)
+def _env_checksum_allowlist() -> Mapping[str, tuple[str, ...]]:
+    """Return checksum overrides provided through an environment variable."""
+
+    raw = os.environ.get(_ENV_CHECKSUM_ALLOWLIST)
+    if not raw:
+        return {}
+
+    result: dict[str, tuple[str, ...]] = {}
+    for chunk in raw.split(";"):
+        spec = chunk.strip()
+        if not spec:
+            continue
+        if "=" not in spec:
+            warnings.warn(
+                "Ignoring malformed entry in"
+                f" {_ENV_CHECKSUM_ALLOWLIST!r}: {spec!r}",
+                RuntimeWarning,
+            )
+            continue
+        name, checksum_blob = spec.split("=", 1)
+        checksums = tuple(
+            candidate.strip()
+            for candidate in checksum_blob.split(",")
+            if candidate.strip()
+        )
+        if not checksums:
+            warnings.warn(
+                "Ignoring empty checksum list for"
+                f" resource {name!r} declared in {_ENV_CHECKSUM_ALLOWLIST!r}",
+                RuntimeWarning,
+            )
+            continue
+        key = name.strip()
+        existing = result.get(key, ())
+        result[key] = existing + checksums
+    return result
+
+
+def _iter_additional_checksums(name: str) -> tuple[str, ...]:
+    """Return allowed checksum variants for ``name`` beyond the manifest."""
+
+    variants = list(_KNOWN_CHECKSUM_VARIANTS.get(name, ()))
+    env_variants = _env_checksum_allowlist().get(name, ())
+    for candidate in env_variants:
+        if candidate not in variants:
+            variants.append(candidate)
+    return tuple(variants)
 
 
 class DictionaryManifestError(RuntimeError):
@@ -203,7 +257,7 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
             raise DictionaryManifestError(
                 f"Resource {name!r} is missing a string or list 'sha256'"
             )
-        for candidate in _KNOWN_CHECKSUM_VARIANTS.get(name, ()):  # pragma: no branch
+        for candidate in _iter_additional_checksums(name):  # pragma: no branch
             if candidate not in sha256_expected_list:
                 sha256_expected_list.append(candidate)
         sha256_expected = tuple(sha256_expected_list)

@@ -1,7 +1,8 @@
-"""Tests for dictionary resource utilities."""
+"""Tests for dictionary manifest validation utilities."""
 
 from __future__ import annotations
 
+import textwrap
 from pathlib import Path, PureWindowsPath
 
 import pytest
@@ -45,3 +46,79 @@ def test_compute_sha256__independent_of_rglob_order(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "rglob", _reversed_rglob)
 
     assert dictionaries._compute_sha256(base) == expected
+
+
+def _write_manifest(tmp_path, body: str) -> None:
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text(textwrap.dedent(body), encoding="utf-8")
+
+
+@pytest.mark.unit
+def test_parse_manifest__accepts_known_checksum_variants(tmp_path, monkeypatch):
+    # Arrange
+    _write_manifest(
+        tmp_path,
+        """
+        version: 1
+        resources:
+          dictionary_root:
+            path: .
+            version: "test"
+            sha256:
+              - "deadbeef"
+            generator: tools/build_dictionary_resources.py
+        """,
+    )
+    (tmp_path / "placeholder.txt").write_text("data", encoding="utf-8")
+    monkeypatch.setattr(
+        dictionaries,
+        "_compute_sha256",
+        lambda path: "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+    )
+
+    # Act
+    dictionaries._env_checksum_allowlist.cache_clear()
+    resources = dictionaries._parse_manifest(base_dir=tmp_path)
+
+    # Assert
+    try:
+        assert (
+            resources["dictionary_root"].sha256
+            == "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"
+        )
+    finally:
+        dictionaries._env_checksum_allowlist.cache_clear()
+
+
+@pytest.mark.unit
+def test_parse_manifest__env_allowlist_accepts_unknown_checksum(tmp_path, monkeypatch):
+    # Arrange
+    resource_name = "custom_resource"
+    _write_manifest(
+        tmp_path,
+        f"""
+        version: 1
+        resources:
+          {resource_name}:
+            path: .
+            version: "test"
+            sha256: "baseline"
+            generator: generator.py
+        """,
+    )
+    monkeypatch.setattr(dictionaries, "_compute_sha256", lambda path: "override")
+    dictionaries._env_checksum_allowlist.cache_clear()
+
+    # Act & Assert
+    with pytest.raises(dictionaries.DictionaryManifestError):
+        dictionaries._parse_manifest(base_dir=tmp_path)
+
+    monkeypatch.setenv("CHEMBL_DICTIONARY_CHECKSUM_ALLOWLIST", f"{resource_name}=override")
+    dictionaries._env_checksum_allowlist.cache_clear()
+    resources = dictionaries._parse_manifest(base_dir=tmp_path)
+
+    # Assert
+    try:
+        assert resources[resource_name].sha256 == "override"
+    finally:
+        dictionaries._env_checksum_allowlist.cache_clear()
