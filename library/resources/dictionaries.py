@@ -31,6 +31,7 @@ _IGNORED_FILENAMES = {
 
 _IGNORED_DIRNAMES = {"__pycache__"}
 _IGNORED_SUFFIXES = {".pyc", ".pyo"}
+_SHA256_WILDCARD = "*"
 
 
 class DictionaryManifestError(RuntimeError):

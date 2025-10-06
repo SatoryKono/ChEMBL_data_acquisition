@@ -11,12 +11,11 @@ import pytest
 import requests
 import yaml
 
-from config.paths import DICTIONARY_DIR
-
 from library.cli_utils import run_pipeline as cli_run_pipeline
 from library.config import Config
 from library.pipelines.assay.chembl_assay import MAX_ASSAY_CHUNK_SIZE
 from library.schemas import AssaysSchema
+from library.resources.dictionaries import get_resource
 from scripts import get_assay_data
 
 
@@ -410,12 +409,10 @@ def test_run_pipeline__adds_missing_assay_optional_columns(tmp_path: Path) -> No
     dictionaries = meta.get("dictionaries")
     assert isinstance(dictionaries, dict)
 
-    manifest = yaml.safe_load((DICTIONARY_DIR / "manifest.yaml").read_text(encoding="utf-8"))
-    resources = manifest.get("resources", {}) if isinstance(manifest, dict) else {}
-    root_entry = resources.get("dictionary_root", {}) if isinstance(resources, dict) else {}
+    resource = get_resource("dictionary_root")
     assert dictionaries.get("dictionary_root") == {
-        "version": root_entry.get("version"),
-        "sha256": root_entry.get("sha256"),
+        "version": resource.version,
+        "sha256": resource.sha256,
     }
 
 
