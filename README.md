@@ -20,17 +20,19 @@ flowchart LR
     C -->|link| D[Assay pipeline]
     D -->|hydrate| E[Test item pipeline]
     E -->|join| F[Activity pipeline]
+    G[[Tissue pipeline\\n(manual run)]]
     B -.->|citations| F
     C -.->|targets| F
+    G -.->|reference tables| F
     style F fill:#dfeaff,stroke:#1e3a8a,stroke-width:2px
 ```
 
 Each pipeline is idempotent and can be executed independently. The
 [`get-data`](./scripts/get_data.py) orchestrator reuses the same configuration
 and logging options to run the Document → Target → Assay → Test item → Activity
-sequence automatically while producing consistent outputs. The tissue pipeline
-remains available as a standalone step that operators can execute manually
-before the activity run when tissue enrichment is required.
+sequence automatically while producing consistent outputs. When tissue lookups
+are needed, operators run `get_tissue_data` separately to refresh the reference
+tables before executing the activity pipeline.
 
 ## Repository layout
 

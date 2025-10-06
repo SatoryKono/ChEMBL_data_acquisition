@@ -10,6 +10,9 @@ flowchart LR
         A5[get-activity-data]
         A0[get-data orchestrator]
     end
+    subgraph Optional manual
+        A6[get-tissue-data]
+    end
     subgraph Library
         B1[library/clients]
         B2[library/pipelines]
@@ -22,6 +25,7 @@ flowchart LR
     end
 
     A0 --> A1 & A2 & A3 & A4 & A5
+    A6 -.->|справочники| A5
     A1 & A2 & A3 & A4 & A5 --> B2
     B2 --> B1
     B2 --> B3
@@ -31,8 +35,8 @@ flowchart LR
 ```
 
 Оркестратор инициализирует общую конфигурацию, логирование, лимитеры и по очереди
-вызвает CLI до этапа активностей. Пайплайн тканей запускается отдельно при
-необходимости, чтобы подготовить справочники перед объединением активностей.
+вызвает CLI до этапа активностей. Когда нужны связи по тканям, `get_tissue_data`
+запускают отдельно, чтобы подготовить справочники перед объединением активностей.
 Внутри используются общие компоненты `library/`:
 
 - `library/clients` — HTTP-клиенты с ретраями и лимитами для ChEMBL, UniProt,

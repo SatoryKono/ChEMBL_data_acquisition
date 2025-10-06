@@ -10,6 +10,9 @@ flowchart LR
         A5[get-activity-data]
         A0[get-data orchestrator]
     end
+    subgraph Optional manual
+        A6[get-tissue-data]
+    end
     subgraph Library
         B1[library/clients]
         B2[library/pipelines]
@@ -22,6 +25,7 @@ flowchart LR
     end
 
     A0 --> A1 & A2 & A3 & A4 & A5
+    A6 -.->|reference tables| A5
     A1 & A2 & A3 & A4 & A5 --> B2
     B2 --> B1
     B2 --> B3
@@ -31,8 +35,8 @@ flowchart LR
 ```
 
 The orchestrator initialises shared configuration, logging and rate limiting,
-then invokes each CLI module in order up to the activity stage. The tissue
-pipeline runs separately when required so that operators can refresh the
+then invokes each CLI module in order up to the activity stage. When tissue
+lookups are required, operators run `get_tissue_data` manually to refresh the
 reference tables before the activity join. Pipelines import reusable components
 from `library/`:
 
