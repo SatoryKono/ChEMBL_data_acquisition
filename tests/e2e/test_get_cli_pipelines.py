@@ -139,8 +139,15 @@ def _patch_activity_cli(monkeypatch: pytest.MonkeyPatch, cfg: Config) -> None:
         base_parser=None,
     ) -> Config:
         args._config_metadata = None
-        if hasattr(args, "output_csv") and args.output_csv is not None:
-            args.output_csv = Path(args.output_csv)
+        final_out = getattr(args, "final_out", None)
+        if final_out is not None:
+            final_path = Path(final_out)
+            args.final_out = final_path
+            setattr(args, "output_csv", final_path)
+        elif hasattr(args, "output_csv") and args.output_csv is not None:
+            output_path = Path(args.output_csv)
+            args.final_out = output_path
+            args.output_csv = output_path
         cfg.activity.batch_size = getattr(args, "batch_size", cfg.activity.batch_size)
         cfg.activity.limit = getattr(args, "limit", cfg.activity.limit)
         cfg.activity.offset = getattr(args, "offset", cfg.activity.offset)
@@ -199,7 +206,7 @@ def test_get_testitem_run_success(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
@@ -243,7 +250,7 @@ def test_get_testitem_run_failure_logs(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
@@ -278,7 +285,7 @@ def test_get_testitem_run_skip_existing(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=True,
         force=False,
     )
@@ -498,10 +505,11 @@ def test_get_document_run_all_success(
             get_document_data.logger.warning(
                 "document_missing_pubmed", count=int(missing)
             )
-        _ensure_parent(Path(args.output_csv))
-        frame.to_csv(args.output_csv, index=False)
+        output_path = Path(args.final_out)
+        _ensure_parent(output_path)
+        frame.to_csv(output_path, index=False)
         get_document_data.logger.info(
-            "document_all_done", output=str(args.output_csv), rows=len(frame)
+            "document_all_done", output=str(args.final_out), rows=len(frame)
         )
         return 0
 
@@ -509,7 +517,7 @@ def test_get_document_run_all_success(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
         command="all",
@@ -548,7 +556,7 @@ def test_get_document_run_missing_handler(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
         command="all",
@@ -575,7 +583,7 @@ def test_get_document_run_all_failure(
 
     def _failing_all(config: Config, args: argparse.Namespace) -> int:
         get_document_data.logger.error(
-            "document_all_failed", output=str(args.output_csv), exit_code=1
+            "document_all_failed", output=str(args.final_out), exit_code=1
         )
         return 1
 
@@ -583,7 +591,7 @@ def test_get_document_run_all_failure(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
         command="all",
@@ -756,10 +764,11 @@ def test_get_assay_run_success(
         frame["description_length"] = frame["description"].str.len().astype("Int64")
         frame = frame.drop_duplicates(subset=["assay_chembl_id"])
         frame = frame.sort_values("assay_chembl_id").reset_index(drop=True)
-        _ensure_parent(args.output_csv)
-        frame.to_csv(args.output_csv, index=False)
+        output_path = Path(args.final_out)
+        _ensure_parent(output_path)
+        frame.to_csv(output_path, index=False)
         get_assay_data.logger.info(
-            "assay_pipeline_done", output=str(args.output_csv), processed=len(frame)
+            "assay_pipeline_done", output=str(args.final_out), processed=len(frame)
         )
         return 0
 
@@ -767,7 +776,7 @@ def test_get_assay_run_success(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
@@ -808,7 +817,7 @@ def test_get_assay_run_skip_existing(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=True,
         force=False,
     )
@@ -833,7 +842,7 @@ def test_get_assay_run_failure(
 
     def _failing_run(config: Config, args: argparse.Namespace) -> int:
         get_assay_data.logger.error(
-            "assay_pipeline_failed", output=str(args.output_csv), processed=0, exit_code=1
+            "assay_pipeline_failed", output=str(args.final_out), processed=0, exit_code=1
         )
         return 1
 
@@ -841,7 +850,7 @@ def test_get_assay_run_failure(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
@@ -878,10 +887,11 @@ def test_get_activity_run_success(
         frame["is_valid"] = (~missing).astype("boolean")
         frame["standard_units"] = frame["standard_units"].astype("string").str.strip()
         frame = frame.sort_values("activity_id").reset_index(drop=True)
-        _ensure_parent(args.output_csv)
-        frame.to_csv(args.output_csv, index=False)
+        output_path = Path(args.final_out)
+        _ensure_parent(output_path)
+        frame.to_csv(output_path, index=False)
         get_activity_data.logger.info(
-            "activity_pipeline_done", output=str(args.output_csv), rows=len(frame)
+            "activity_pipeline_done", output=str(args.final_out), rows=len(frame)
         )
         return 0
 
@@ -889,7 +899,7 @@ def test_get_activity_run_success(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
@@ -926,7 +936,7 @@ def test_get_activity_run_skip_existing(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=True,
         force=False,
     )
@@ -951,7 +961,7 @@ def test_get_activity_run_failure(
 
     def _failing_run(config: Config, args: argparse.Namespace) -> int:
         get_activity_data.logger.error(
-            "activity_pipeline_failed", output=str(args.output_csv), exit_code=1
+            "activity_pipeline_failed", output=str(args.final_out), exit_code=1
         )
         return 1
 
@@ -959,7 +969,7 @@ def test_get_activity_run_failure(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
@@ -1040,7 +1050,7 @@ def test_get_activity_run_retry_and_idempotent(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
@@ -1120,7 +1130,7 @@ def test_get_activity_run_workers_offset_and_non_csv(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
         offset=1,

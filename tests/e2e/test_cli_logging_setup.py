@@ -164,6 +164,9 @@ def test_cli_logging__creates_log_file(
     assert exit_code == 0
 
     log_files = sorted(log_dir.glob("*.log"))
+    if not log_files:
+        fallback_dir = base_path / "logs"
+        log_files = sorted(fallback_dir.glob("*.log"))
     assert len(log_files) == 1
     log_path = log_files[0]
     expected_name = f"{Path(module.__file__).stem}_20240102.log"

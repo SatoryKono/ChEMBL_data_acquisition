@@ -40,10 +40,10 @@ def logger_stub(monkeypatch: pytest.MonkeyPatch) -> _MemoryLogger:
 def minimal_args(tmp_path: Path) -> argparse.Namespace:
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("assay_chembl_id\nCHEMBL1\n", encoding="utf-8")
-    output_csv = tmp_path / "output.csv"
+    final_out = tmp_path / "output.csv"
     return argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=final_out,
         skip_existing=False,
         force=False,
         offset=0,
@@ -119,7 +119,7 @@ def test_run_chembl__successful_execution(
             yield pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]})
 
         def writer(**_: object) -> Path:
-            return minimal_args.output_csv
+            return minimal_args.final_out
 
         return fetcher, writer
 
@@ -151,7 +151,7 @@ def test_run__skip_existing_returns_zero(
 ) -> None:
     minimal_args.skip_existing = True
     minimal_args.force = False
-    minimal_args.output_csv.write_text("existing", encoding="utf-8")
+    minimal_args.final_out.write_text("existing", encoding="utf-8")
 
     called = False
 
@@ -169,7 +169,7 @@ def test_run__skip_existing_returns_zero(
     assert (
         "info",
         "pipeline_skip_existing",
-        {"output": str(minimal_args.output_csv)},
+        {"output": str(minimal_args.final_out)},
     ) in logger_stub.events
 
 
@@ -180,7 +180,7 @@ def test_run__force_overrides_skip(
 ) -> None:
     minimal_args.skip_existing = True
     minimal_args.force = True
-    minimal_args.output_csv.write_text("existing", encoding="utf-8")
+    minimal_args.final_out.write_text("existing", encoding="utf-8")
 
     calls: list[str] = []
 
