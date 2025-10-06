@@ -31,3 +31,28 @@ def test_etl_context_recreates_client_after_close(stub_etl_context):
     assert first is not second
     assert len(clients) == 2
     assert all(client.close_calls == 1 for client in clients)
+
+
+@pytest.mark.unit
+def test_etl_context_custom_cleanup(stub_etl_context):
+    context, clients = stub_etl_context
+
+    cleanup_calls: list[str] = []
+
+    with context as active:
+        active.register_cleanup(lambda: cleanup_calls.append("cleanup"))
+        _ = active.chembl_client
+
+    assert cleanup_calls == ["cleanup"]
+    assert clients and clients[0].close_calls == 1
+
+
+@pytest.mark.unit
+def test_etl_context_register_cleanup_after_close(stub_etl_context):
+    context, _ = stub_etl_context
+
+    with context:
+        pass
+
+    with pytest.raises(RuntimeError):
+        context.register_cleanup(lambda: None)
