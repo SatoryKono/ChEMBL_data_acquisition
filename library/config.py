@@ -444,7 +444,7 @@ class ApiCfg(_BaseModel):
 
     chembl_base: str = "https://www.ebi.ac.uk/chembl/api/data"
     timeout_connect: float = Field(5.0, ge=1)
-    timeout_read: float = Field(30.0, ge=1)
+    timeout_read: float = Field(60.0, ge=1)
     retries: int = Field(3, ge=0)
     backoff_factor: float = Field(0.5, ge=0)
     rps: int = Field(5, ge=1)
@@ -893,7 +893,7 @@ class RateCfg(_BaseModel):
 
 
 class RetryCfg(_BaseModel):
-    max_attempts: int = Field(3, ge=1)
+    max_attempts: int = Field(4, ge=1)
     backoff_factor: float = Field(0.5, ge=0)
     backoff_cap: float | None = Field(default=None, ge=0)
     status_forcelist: list[StrictInt] = Field(
@@ -1081,7 +1081,7 @@ class ActivityCfg(_BoolModel):
     column: str = "activity_id"
     batch_size: int = Field(5, ge=1)
     workers: int = Field(1, ge=1)
-    timeout: float = Field(30.0, gt=0)
+    timeout: float = Field(90.0, gt=0)
     limit: int | None = Field(default=None, ge=0)
     offset: int = Field(0, ge=0)
     dry_run: bool = False
@@ -1094,8 +1094,8 @@ class ActivityCfg(_BoolModel):
 
 class AssayCfg(_BaseModel):
     column: str = "assay_chembl_id"
-    batch_size: int = Field(10, ge=1)
-    timeout: float = Field(30.0, gt=0)
+    batch_size: int = Field(25, ge=1)
+    timeout: float = Field(60.0, gt=0)
     limit: int | None = Field(default=None, ge=0)
 
 
@@ -1255,6 +1255,8 @@ class TargetChemblBatchRetryCfg(_BoolModel):
     enable: bool = True
     shrink_factor: float = Field(0.5, gt=0, lt=1)
     min_size: int = Field(1, ge=1)
+    single_timeout_retries: int = Field(2, ge=0)
+    single_timeout_delay: float = Field(0.0, ge=0.0)
 
     @field_validator("enable", mode="before")
     @classmethod
@@ -1271,8 +1273,8 @@ class TargetChemblCfg(_BaseModel):
 
     column: str = "target_chembl_id"
 
-    chunk_size: int = Field(5, ge=1)
-    timeout: float = Field(30.0, gt=0)
+    chunk_size: int = Field(3, ge=1)
+    timeout: float = Field(90.0, gt=0)
 
     limit: int | None = Field(default=None, ge=0)
     offset: int = Field(0, ge=0)
@@ -1307,8 +1309,8 @@ class TargetAllCfg(_BaseModel):
     family_csv: Path = (
         DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_family.csv"
     )
-    chunk_size: int = Field(5, ge=1)
-    timeout: float = Field(30.0, gt=0)
+    chunk_size: int = Field(3, ge=1)
+    timeout: float = Field(90.0, gt=0)
     uniprot_column: str = "uniprot_id"
     chembl_out: Path | None = None
     uniprot_out: Path | None = None

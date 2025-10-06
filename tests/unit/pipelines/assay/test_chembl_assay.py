@@ -9,7 +9,12 @@ from requests import ConnectionError, HTTPError, ReadTimeout, Response
 from urllib.parse import parse_qs, urlparse
 
 from library.config import ApiCfg
-from library.pipelines.assay.chembl_assay import get_activities, get_assays, get_testitem
+from library.pipelines.assay.chembl_assay import (
+    MAX_ASSAY_CHUNK_SIZE,
+    get_activities,
+    get_assays,
+    get_testitem,
+)
 
 
 class _StubClient:
@@ -118,6 +123,59 @@ def test_get_assays__recovers_from_request_exception() -> None:
 
 
 @pytest.mark.unit
+def test_get_assays__clamps_large_chunks() -> None:
+    """Requests exceeding the API limit are split across multiple calls."""
+
+    first_chunk_ids = [f"CHEMBL{i}" for i in range(1, MAX_ASSAY_CHUNK_SIZE + 1)]
+    remainder_ids = [
+        f"CHEMBL{i}"
+        for i in range(
+            MAX_ASSAY_CHUNK_SIZE + 1,
+            MAX_ASSAY_CHUNK_SIZE + 6,
+        )
+    ]
+    responders = [
+        {
+            "assays": [
+                {"assay_chembl_id": identifier} for identifier in first_chunk_ids
+            ],
+            "page_meta": {},
+        },
+        {
+            "assays": [
+                {"assay_chembl_id": identifier} for identifier in remainder_ids
+            ],
+            "page_meta": {},
+        },
+    ]
+    client = _StubClient(responders)
+    cfg = ApiCfg()
+
+    identifiers = first_chunk_ids + remainder_ids
+    df = get_assays(
+        identifiers,
+        cfg=cfg,
+        client=client,
+        chunk_size=MAX_ASSAY_CHUNK_SIZE * 3,
+    )
+
+    assert sorted(df["assay_chembl_id"]) == sorted(identifiers)
+    chunk_sizes = []
+    for call in client.calls:
+        parsed = urlparse(call)
+        ids_param = parse_qs(parsed.query).get("assay_chembl_id__in", [""])[0]
+        if ids_param:
+            chunk_sizes.append(len(ids_param.split(",")))
+
+    expected_chunk_sizes = [MAX_ASSAY_CHUNK_SIZE]
+    remainder = len(remainder_ids)
+    if remainder:
+        expected_chunk_sizes.append(remainder)
+
+    assert chunk_sizes == expected_chunk_sizes
+
+
+@pytest.mark.unit
 def test_get_testitem__splits_chunk_on_timeout() -> None:
     """Timeout failures trigger chunk splitting and retries."""
 
@@ -223,6 +281,26 @@ def test_get_activities__chunk_404_falls_back_to_single_requests() -> None:
     df = get_activities(["ACT1", "ACT2"], cfg=cfg, client=client, chunk_size=2)
 
     assert list(df["activity_id"]) == ["ACT1"]
+    assert any("activity_id__in" in call for call in client.calls)
+    assert sum("activity_id=ACT1" in call for call in client.calls) == 1
+    assert sum("activity_id=ACT2" in call for call in client.calls) == 1
+
+
+@pytest.mark.unit
+def test_get_activities__single_timeout_skips_identifier() -> None:
+    """Per-identifier timeouts are logged and skipped."""
+
+    responders = [
+        ReadTimeout("timeout"),
+        ReadTimeout("timeout"),
+        {"activities": [{"activity_id": "ACT2"}], "page_meta": {}},
+    ]
+    client = _StubClient(responders)
+    cfg = ApiCfg()
+
+    df = get_activities(["ACT1", "ACT2"], cfg=cfg, client=client, chunk_size=2)
+
+    assert list(df["activity_id"]) == ["ACT2"]
     assert any("activity_id__in" in call for call in client.calls)
     assert sum("activity_id=ACT1" in call for call in client.calls) == 1
     assert sum("activity_id=ACT2" in call for call in client.calls) == 1

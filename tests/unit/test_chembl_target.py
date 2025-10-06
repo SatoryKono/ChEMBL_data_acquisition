@@ -8,7 +8,10 @@ import pytest
 import requests
 
 from library.config import ApiCfg, UniprotMappingCfg
-from library.pipelines.target.chembl_target import iter_target_batches
+from library.pipelines.target.chembl_target import (
+    TARGET_INCLUDE_PARAMS,
+    iter_target_batches,
+)
 
 
 class _StubChemblClient:
@@ -45,6 +48,16 @@ def _build_response(target_id: str, pref_name: str) -> dict[str, object]:
     }
 
 
+def _chunk_url(cfg: ApiCfg, ids: Sequence[str]) -> str:
+    base = cfg.chembl_base.rstrip("/")
+    joined_ids = ",".join(ids)
+    return (
+        f"{base}/target.json?format=json"
+        f"&include={TARGET_INCLUDE_PARAMS}"
+        f"&target_chembl_id__in={joined_ids}"
+    )
+
+
 @pytest.mark.unit
 def test_iter_target_batches__splits_chunk_on_timeout(caplog: pytest.LogCaptureFixture) -> None:
     """The iterator should split large chunks when a read timeout occurs."""
@@ -52,20 +65,12 @@ def test_iter_target_batches__splits_chunk_on_timeout(caplog: pytest.LogCaptureF
     cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=12.0)
     mapping_cfg = UniprotMappingCfg()
     timeout = 9.5
-    base = cfg.chembl_base.rstrip("/")
 
-    def _chunk_url(ids: Sequence[str]) -> str:
-        return (
-            f"{base}/target.json?format=json"
-            f"&include=protein_classifications,cross_references"
-            f"&target_chembl_id__in={','.join(ids)}"
-        )
-
-    combined_url = _chunk_url(["CHEMBL1", "CHEMBL2"])
+    combined_url = _chunk_url(cfg, ["CHEMBL1", "CHEMBL2"])
     responses = {
         combined_url: requests.ReadTimeout("simulated timeout"),
-        _chunk_url(["CHEMBL1"]): _build_response("CHEMBL1", "Alpha"),
-        _chunk_url(["CHEMBL2"]): _build_response("CHEMBL2", "Beta"),
+        _chunk_url(cfg, ["CHEMBL1"]): _build_response("CHEMBL1", "Alpha"),
+        _chunk_url(cfg, ["CHEMBL2"]): _build_response("CHEMBL2", "Beta"),
     }
     client = _StubChemblClient(responses)
 
@@ -83,8 +88,8 @@ def test_iter_target_batches__splits_chunk_on_timeout(caplog: pytest.LogCaptureF
 
     assert [call[0] for call in client.calls] == [
         combined_url,
-        _chunk_url(["CHEMBL1"]),
-        _chunk_url(["CHEMBL2"]),
+        _chunk_url(cfg, ["CHEMBL1"]),
+        _chunk_url(cfg, ["CHEMBL2"]),
     ]
     assert all(call[1] == timeout for call in client.calls)
 
@@ -102,14 +107,7 @@ def test_iter_target_batches__propagates_timeout_without_split() -> None:
     cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=8.0)
     mapping_cfg = UniprotMappingCfg()
     timeout = 6.0
-def test_iter_target_batches__splits_chunk_on_connection_error(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Chunk-level connection errors should fall back to per-ID requests."""
 
-    cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=7.0)
-    mapping_cfg = UniprotMappingCfg()
-    timeout = 5.0
     base = cfg.chembl_base.rstrip("/")
 
     def _chunk_url(ids: Sequence[str]) -> str:
@@ -121,9 +119,7 @@ def test_iter_target_batches__splits_chunk_on_connection_error(
 
     combined_url = _chunk_url(["CHEMBL10", "CHEMBL11"])
     responses = {
-        combined_url: requests.ReadTimeout("simulated timeout"),
-        _chunk_url(["CHEMBL10"]): _build_response("CHEMBL10", "Gamma"),
-        _chunk_url(["CHEMBL11"]): _build_response("CHEMBL11", "Delta"),
+        _chunk_url(cfg, ["CHEMBL10", "CHEMBL11"]): requests.ReadTimeout("simulated timeout"),
     }
     client = _StubChemblClient(responses)
 
@@ -131,11 +127,48 @@ def test_iter_target_batches__splits_chunk_on_connection_error(
         list(
             iter_target_batches(
                 ["CHEMBL10", "CHEMBL11"],
+                cfg=cfg,
+                client=client,
+                mapping_cfg=mapping_cfg,
+                chunk_size=2,
+                timeout=timeout,
+                enable_split_fallback=False,
+            )
+        )
+
+    assert client.calls == [(_chunk_url(cfg, ["CHEMBL10", "CHEMBL11"]), timeout)]
+
+
+@pytest.mark.unit
+def test_iter_target_batches__splits_chunk_on_connection_error(caplog: pytest.LogCaptureFixture) -> None:
+    assert client.calls == [(combined_url, timeout)]
+
+
+@pytest.mark.unit
+def test_iter_target_batches__splits_chunk_on_connection_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Chunk-level connection errors should fall back to per-ID requests."""
+
+    cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=7.0)
+    mapping_cfg = UniprotMappingCfg()
+    timeout = 5.0
+
+    combined_url = _chunk_url(cfg, ["CHEMBL1", "CHEMBL2"])
+    base = cfg.chembl_base.rstrip("/")
+
+    def _chunk_url(ids: Sequence[str]) -> str:
+        return (
+            f"{base}/target.json?format=json"
+            f"&include=protein_classifications,cross_references"
+            f"&target_chembl_id__in={','.join(ids)}"
+        )
+
     combined_url = _chunk_url(["CHEMBL1", "CHEMBL2"])
     responses = {
         combined_url: requests.ConnectionError("simulated connection reset"),
-        _chunk_url(["CHEMBL1"]): _build_response("CHEMBL1", "Alpha"),
-        _chunk_url(["CHEMBL2"]): _build_response("CHEMBL2", "Beta"),
+        _chunk_url(cfg, ["CHEMBL1"]): _build_response("CHEMBL1", "Alpha"),
+        _chunk_url(cfg, ["CHEMBL2"]): _build_response("CHEMBL2", "Beta"),
     }
     client = _StubChemblClient(responses)
 
@@ -148,18 +181,13 @@ def test_iter_target_batches__splits_chunk_on_connection_error(
                 mapping_cfg=mapping_cfg,
                 chunk_size=2,
                 timeout=timeout,
-                enable_split_fallback=False,
-            )
-        )
-
-    assert client.calls == [(combined_url, timeout)]
             )
         )
 
     assert [call[0] for call in client.calls] == [
         combined_url,
-        _chunk_url(["CHEMBL1"]),
-        _chunk_url(["CHEMBL2"]),
+        _chunk_url(cfg, ["CHEMBL1"]),
+        _chunk_url(cfg, ["CHEMBL2"]),
     ]
     assert all(call[1] == timeout for call in client.calls)
 

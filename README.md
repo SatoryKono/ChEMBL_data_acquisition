@@ -100,6 +100,10 @@ is produced by `library.postprocessing.target.process_targets`, a direct port of
 the original Power Query workbook that keeps every row byte-identical. Refer to
 the [output reference](./docs/en/OUTPUT.md) for the complete specification.
 
+Custom file names such as `targets.csv` still trigger this post-processing
+chain, so downstream helpers are generated even when the export deviates from
+the canonical `output.target_<stamp>.csv` pattern.
+
 ## Documentation
 
 All guides are provided in English and Russian. The structure is mirrored across

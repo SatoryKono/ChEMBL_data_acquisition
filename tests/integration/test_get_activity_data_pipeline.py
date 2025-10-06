@@ -398,6 +398,39 @@ def test_activity_pipeline__missing_column_input(activity_resource_dir: Path, cf
 
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
+def test_activity_pipeline__batch_size_clamped(cfg, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    _configure_cfg(cfg)
+    cfg.activity.batch_size = get_activity_data.MAX_ACTIVITY_CHUNK_SIZE + 5
+
+    input_csv = tmp_path / "ids.csv"
+    input_csv.write_text("activity_id\nACT1\n", encoding="utf-8")
+    output_csv = tmp_path / "activities.csv"
+
+    logger_stub = _RecordingLogger()
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+
+    captured_batch_sizes: list[int | None] = []
+
+    def _fake_run_chembl(config: object, args: argparse.Namespace) -> int:
+        captured_batch_sizes.append(getattr(config.activity, "batch_size", None))
+        return 0
+
+    monkeypatch.setattr(get_activity_data, "run_chembl", _fake_run_chembl)
+
+    args = _make_args(input_csv, output_csv)
+
+    exit_code = get_activity_data.run(cfg, args)
+
+    assert exit_code == 0
+    assert captured_batch_sizes == [get_activity_data.MAX_ACTIVITY_CHUNK_SIZE]
+
+    warning_events = [
+        (level, event, payload)
+        for level, event, payload in logger_stub.events
+        if level == "warning"
+    ]
+    assert any(event == "activity_batch_size_clamped" for _, event, _ in warning_events)
+
 def test_activity_pipeline__malformed_values(activity_resource_dir: Path, cfg, tmp_path, monkeypatch):
     _configure_cfg(cfg)
     input_csv = _copy_resource(activity_resource_dir, "ids_happy.csv", tmp_path)
