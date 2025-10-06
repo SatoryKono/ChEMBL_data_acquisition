@@ -16,6 +16,10 @@ from typing import Any
 import pytest
 
 
+from library.common.logging_setup import LoggerConfig, configure_logger
+from library.cli.logging import setup_cli_logging
+
+
 REPO_NAME = "SatoryKono/ChEMBL_data_acquisition"
 
 SUCCESS_RATE_THRESHOLD = 0.95
@@ -244,6 +248,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Additional arguments forwarded to pytest",
     )
     parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging for the CLI and pytest log capture.",
+    )
+    parser.add_argument(
         "--json",
         type=Path,
         default=Path("reports/test_report.json"),
@@ -257,26 +266,37 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    level = "DEBUG" if args.verbose else "INFO"
+    base_logger_cfg = LoggerConfig(level=level, logger_name="run_tests")
+
     collector = ReportCollector()
-    pytest_args = ["-q"]
-    if args.pytest_args:
-        pytest_args.extend(args.pytest_args)
 
-    pytest_exit_code = pytest.main(pytest_args, plugins=[collector])
-    exit_code = int(pytest_exit_code)
+    with setup_cli_logging("run_tests", base_logger_cfg) as logging_ctx:
+        configure_logger(logging_ctx.log_cfg)
 
-    data = _build_json(collector, report_path=args.json)
-    _write_markdown(args.markdown, data)
+        pytest_args = [
+            "-q",
+            f"--log-file={logging_ctx.log_path}",
+            f"--log-file-level={logging_ctx.log_cfg.level}",
+        ]
+        if args.pytest_args:
+            pytest_args.extend(args.pytest_args)
 
-    success_rate_ratio = data["summary"]["success_rate"]
-    if success_rate_ratio < SUCCESS_RATE_THRESHOLD:
-        logger.error(
-            "Success rate %.2f%% is below the required threshold of %.2f%%",
-            success_rate_ratio * 100,
-            SUCCESS_RATE_THRESHOLD * 100,
-        )
-        if exit_code == 0:
-            exit_code = 1
+        pytest_exit_code = pytest.main(pytest_args, plugins=[collector])
+        exit_code = int(pytest_exit_code)
+
+        data = _build_json(collector, report_path=args.json)
+        _write_markdown(args.markdown, data)
+
+        success_rate_ratio = data["summary"]["success_rate"]
+        if success_rate_ratio < SUCCESS_RATE_THRESHOLD:
+            logger.error(
+                "Success rate %.2f%% is below the required threshold of %.2f%%",
+                success_rate_ratio * 100,
+                SUCCESS_RATE_THRESHOLD * 100,
+            )
+            if exit_code == 0:
+                exit_code = 1
 
     return exit_code
 
