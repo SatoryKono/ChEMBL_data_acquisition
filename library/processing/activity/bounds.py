@@ -14,6 +14,8 @@ from ...common.pandas_utils import merge_series_prefer_left
 
 __all__ = ["compute_activity_bounds"]
 
+_COVERAGE_WARN_THRESHOLD = 0.95
+
 _UNCERTAINTY_PATTERN = re.compile(
     r"^\s*(?P<value>-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*(?:±|\+/-|\+-)\s*(?P<delta>\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*$"
 )
@@ -211,6 +213,53 @@ def _clamp_nonnegative(
     return lower, upper
 
 
+def _log_bounds_coverage(
+    std_lower: pd.Series,
+    std_upper: pd.Series,
+    lower: pd.Series,
+    upper: pd.Series,
+) -> None:
+    total = len(lower)
+    if total == 0:
+        return
+
+    def _coverage(series: pd.Series) -> tuple[int, float]:
+        count = int(series.notna().sum())
+        ratio = count / total if total else 0.0
+        return count, ratio
+
+    std_lower_count, std_lower_ratio = _coverage(std_lower)
+    std_upper_count, std_upper_ratio = _coverage(std_upper)
+    lower_count, lower_ratio = _coverage(lower)
+    upper_count, upper_ratio = _coverage(upper)
+
+    logger.info(
+        "activity_bounds_coverage",
+        rows=total,
+        standard_lower_count=std_lower_count,
+        standard_lower_pct=round(std_lower_ratio * 100, 2),
+        standard_upper_count=std_upper_count,
+        standard_upper_pct=round(std_upper_ratio * 100, 2),
+        lower_count=lower_count,
+        lower_pct=round(lower_ratio * 100, 2),
+        upper_count=upper_count,
+        upper_pct=round(upper_ratio * 100, 2),
+    )
+
+    for column, input_ratio, output_ratio in (
+        ("lower_value", std_lower_ratio, lower_ratio),
+        ("upper_value", std_upper_ratio, upper_ratio),
+    ):
+        if input_ratio >= _COVERAGE_WARN_THRESHOLD and output_ratio < _COVERAGE_WARN_THRESHOLD:
+            logger.warning(
+                "activity_bounds_low_output_coverage",
+                column=column,
+                rows=total,
+                input_pct=round(input_ratio * 100, 2),
+                output_pct=round(output_ratio * 100, 2),
+            )
+
+
 def _normalize_relations(df: pd.DataFrame) -> pd.Series:
     return _relation_series(df).map(_normalize_relation)
 
@@ -334,4 +383,5 @@ def compute_activity_bounds(
         result["activity_id"].dtype
     ):
         result["activity_id"] = result["activity_id"].astype("object")
+    _log_bounds_coverage(std_lower, std_upper, result["lower_value"], result["upper_value"])
     return result

@@ -115,6 +115,15 @@ ACTIVITY_COLUMNS = [
     "action_type",
 ]
 
+
+_ACTIVITY_EXTRA_FIELDS: tuple[str, ...] = (
+    "standard_text_value",
+)
+
+ACTIVITY_QUERY_FIELDS: tuple[str, ...] = tuple(
+    dict.fromkeys(list(ACTIVITY_COLUMNS) + list(_ACTIVITY_EXTRA_FIELDS))
+)
+
 TESTITEM_PUBCHEM_COLUMNS: tuple[str, ...] = (
     "pubchem_cid",
     "pubchem_iupac_name",
@@ -425,7 +434,11 @@ def get_activities(
         return pd.DataFrame(columns=ACTIVITY_COLUMNS)
 
     records: list[pd.DataFrame] = []
-    base = f"{cfg.chembl_base.rstrip('/')}/activity.json?format=json"
+    base_params: list[tuple[str, str]] = [("format", "json")]
+    if ACTIVITY_QUERY_FIELDS:
+        base_params.append(("fields", ",".join(ACTIVITY_QUERY_FIELDS)))
+    base_query = urlencode(base_params)
+    base = f"{cfg.chembl_base.rstrip('/')}/activity.json?{base_query}"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
         chunk_key = ",".join(chunk)
