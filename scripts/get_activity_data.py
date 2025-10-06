@@ -11,8 +11,8 @@ import argparse
 import sys
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence, Callable
-
 from datetime import datetime, timezone
+
 from functools import partial
 from itertools import islice
 from pathlib import Path
@@ -94,7 +94,8 @@ from library.cli_utils import (
     write_meta_yaml as _cli_write_meta_yaml,
 )
 from library.config import Config, _serialize_paths
-from library.utils.logger import StructuredLogger, get_logger
+from library.common.log import logger
+from library.cli.logging import setup_cli_logging
 from library.pipelines.common import add_pipeline_metadata
 from library.processing.activity import (
     apply_activity_annotations,
@@ -119,7 +120,6 @@ def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
 
 file_sha256 = _cli_file_sha256
 write_meta_yaml = _cli_write_meta_yaml
-logger = get_logger(__name__)
 configure_logger = cli.configure_logger
 
 __all__ = (
@@ -582,7 +582,11 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
                         failure_subset = fallback_failures & missing_mask
                         if failure_subset.any():
                             logger.debug(
-                                f"Fallback conversion failed for column '{column}' with dtype '{dtype}' on {int(failure_subset.sum())} existing rows."
+                                "activity_extended_fallback_conversion_failed",
+                                column=column,
+                                dtype=dtype,
+                                rows=int(failure_subset.sum()),
+                                mode="existing",
                             )
                         result.loc[missing_mask, column] = coerced_fallback.loc[missing_mask]
             continue
@@ -595,7 +599,11 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
                 )
                 if fallback_failures.any():
                     logger.debug(
-                        f"Fallback conversion failed for column '{column}' with dtype '{dtype}' while creating missing column values on {int(fallback_failures.sum())} rows."
+                        "activity_extended_fallback_conversion_failed",
+                        column=column,
+                        dtype=dtype,
+                        rows=int(fallback_failures.sum()),
+                        mode="new_column",
                     )
                 result[column] = coerced_fallback
                 continue
@@ -670,6 +678,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     start_time = perf_counter()
 
     logger.info(
+        "activity_pipeline_start",
+        input=str(args.input_csv),
+        output=str(output_path),
+        workers=configured_workers,
+        limit=limit,
+        offset=offset,
+    )
+    logger.info(
         f"Starting activity pipeline with input '{args.input_csv}' and output '{output_path}'."
     )
     logger.info(
@@ -679,6 +695,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     if cfg.activity.dry_run:
         expected = limit if limit is not None else 0
+        logger.info("dry_run", limit=limit)
         logger.info(
             f"Dry-run mode enabled; pipeline would process up to {expected} identifiers before exiting."
         )
@@ -696,15 +713,18 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         ids_iter = io.read_ids(args.input_csv, column=cfg.activity.column, cfg=cfg.io)
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
+            "read_fail",
+            input=str(args.input_csv),
+            error=str(exc),
+        )
+        logger.error(
             f"Failed to read identifiers from '{args.input_csv}': {exc}"
         )
         return 1
 
     if offset:
         ids_iter = islice(ids_iter, offset, None)
-        logger.info(
-            f"Reading input checkpoint: skipping the first {offset} identifiers before processing."
-        )
+        logger.info("process_offset", offset=offset)
 
     processed_ids = 0
     extended_output_path: Path | None = None
@@ -903,15 +923,19 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     last_error_context = dict(log_context)
                     if attempt >= attempts:
                         logger.error(
-                            f"Failed to fetch activities for chunk of {len(chunk_ids)} identifiers "
-                            f"after {attempts} attempts: {error_message}"
+                            "activity_fetch_failed",
+                            extra=last_error_extra,
+                            error=error_message,
+                            **log_context,
                         )
                         chunk_failures.add_failure(chunk_ids, error_message)
                         raise PipelineError("chunk_fetch_failed")
                     delay = compute_backoff_delay(attempt, retry_cfg)
                     logger.warning(
-                        f"Retrying chunk of {len(chunk_ids)} identifiers (attempt {attempt} of {attempts}) "
-                        f"after error: {error_message}. Waiting {delay:.2f}s before next attempt."
+                        "activity_fetch_retry",
+                        extra=last_error_extra,
+                        delay=delay,
+                        **log_context,
                     )
                     if delay > 0:
                         sleep(delay)
@@ -994,26 +1018,25 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     if limit is not None:
         logger.info(
-            f"Processed {processed_ids} identifiers before reaching the configured limit of {limit}."
+            "process_limit",
+            processed=processed_ids,
+            limit=limit,
         )
+    else:
+        logger.info("processed_count", count=processed_ids)
 
     if pipeline_stats is not None:
         rows_total = int(pipeline_stats.get("rows_total", processed_ids))
         rows_kept = int(pipeline_stats.get("rows_kept", 0))
         rows_dropped = int(pipeline_stats.get("rows_dropped", 0))
         logger.info(
-            f"Filtered records checkpoint: kept {rows_kept} of {rows_total} rows and dropped {rows_dropped}."
+            "records_dropped",
+            rows_total=rows_total,
+            rows_kept=rows_kept,
+            rows_dropped=rows_dropped,
         )
 
     if exit_code == 0:
-        if extended_output_path is not None:
-            logger.info(
-                f"Successful export checkpoint: primary data at '{output_path}', extended data at '{extended_output_path}'."
-            )
-        else:
-            logger.info(
-                f"Successful export checkpoint: activity data written to '{output_path}'."
-            )
         completion_rows = processed_ids
         if pipeline_stats is not None:
             completion_rows = int(
@@ -1021,6 +1044,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     "rows_kept",
                     pipeline_stats.get("rows_total", processed_ids),
                 )
+            )
+        pipeline_done_payload: dict[str, object] = {
+            "output": str(output_path),
+            "rows": completion_rows,
+        }
+        if extended_output_path is not None:
+            pipeline_done_payload["extended_output"] = str(extended_output_path)
+        logger.info("activity_pipeline_done", **pipeline_done_payload)
+        if extended_output_path is not None:
+            logger.info(
+                f"Successful export checkpoint: primary data at '{output_path}', extended data at '{extended_output_path}'."
+            )
+        else:
+            logger.info(
+                f"Successful export checkpoint: activity data written to '{output_path}'."
             )
         _emit_completion_message(
             cfg=cfg,
@@ -1046,6 +1084,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             attempt_info = ", ".join(f"{key}={value}" for key, value in context_payload.items())
             details.append(attempt_info)
         detail_text = "; ".join(details)
+        logger.error(
+            "activity_pipeline_failed",
+            output=str(output_path),
+            processed=processed_ids,
+            exit_code=exit_code,
+            details=detail_text or None,
+        )
         logger.error(
             f"Activity pipeline failed with exit code {exit_code} after processing {processed_ids} identifiers destined for '{output_path}'. {detail_text}"
         )
@@ -1076,6 +1121,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             args.final_out = output_path
         setattr(args, "output_csv", output_path)
     if args.skip_existing and output_path.exists() and not args.force:
+        logger.info("pipeline_skip_existing", output=str(output_path))
         logger.info(
             f"Skipping execution because '{output_path}' already exists and --force was not provided."
         )
@@ -1167,25 +1213,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     args.invocation = resolve_invocation(parser.prog, argv)
 
-    date_override = getattr(args, "date", None)
-    if date_override:
-        date_str = str(date_override)
-    else:
-        date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
-    log_file = Path("logs") / f"{PROGRAM_NAME}_{date_str}.log"
-
-    structured_logger = get_logger(__name__, log_file=log_file)
-
-    global logger
-    if isinstance(logger, StructuredLogger):
-        logger = structured_logger
-    print(f"[INFO] Structured logs are mirrored to '{log_file}'.")
     cli.prepare_io_paths(
         args,
         input_default=DEFAULT_INPUT_NAME,
         output_stem=DEFAULT_OUTPUT_STEM,
     )
     if args.limit == 0:
+        logger.info("pipeline_skip_limit", limit=args.limit)
         logger.info("Limit set to 0; exiting before starting the activity pipeline.")
         return 0
     if args.limit is not None and args.limit < 0:
@@ -1194,22 +1228,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.offset < 0:
         parser.error("--offset must be zero or a positive integer")
 
-    exit_code = run_cli_command(
-        args=args,
-        parser=parser,
-        log_cfg=log_cfg,
-        mapping={
-            "timeout": "activity.timeout",
-            "column": "activity.column",
-            "batch_size": "activity.batch_size",
-            "limit": "activity.limit",
-            "offset": "activity.offset",
-            "dry_run": "activity.dry_run",
-            "workers": "activity.workers",
-        },
-        run=run,
-        logger=logger,
-    )
+    with setup_cli_logging(
+        Path(__file__).with_suffix("").name,
+        log_cfg,
+        getattr(args, "date", None),
+    ) as logging_ctx:
+        exit_code = run_cli_command(
+            args=args,
+            parser=parser,
+            log_cfg=logging_ctx.log_cfg,
+            mapping={
+                "timeout": "activity.timeout",
+                "column": "activity.column",
+                "batch_size": "activity.batch_size",
+                "limit": "activity.limit",
+                "offset": "activity.offset",
+                "dry_run": "activity.dry_run",
+                "workers": "activity.workers",
+            },
+            run=run,
+            logger=logger,
+        )
+    configure_logger(log_cfg)
     return exit_code
 
 
