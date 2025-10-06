@@ -48,7 +48,8 @@ from library.cli import build_parser as base_parser
 from library.cli_utils import run_cli_command, run_pipeline
 from library.cli.logging import setup_cli_logging
 from library.cli.metadata import prepare_option
-from library.config import Config, _serialize_paths
+from library.config.loader import _serialize_paths
+from library.config.models import Config
 from library.common.log import logger
 from library.pipelines.common import add_pipeline_metadata
 from library.table_quality import analyze_table_quality

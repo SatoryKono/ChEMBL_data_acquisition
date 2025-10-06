@@ -97,10 +97,8 @@ from library.cli import (
 from library.cli.logging import setup_cli_logging
 from library.cli.metadata import prepare_option
 from library.cli.utils import run_cli_command
-from library.config import (
-    Config,
-    _serialize_paths,
-)
+from library.config.loader import _serialize_paths
+from library.config.models import Config
 from library.pipelines.document.pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
     DocumentQualityAccumulator,

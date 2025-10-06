@@ -42,7 +42,7 @@ from library.cli import build_parser as base_parser
 from library.cli_utils import run_cli_command
 from library.cli.logging import setup_cli_logging
 from library.cli.metadata import prepare_option
-from library.config import (
+from library.config.models import (
     ApiCfg,
     Config,
     IoCfg,

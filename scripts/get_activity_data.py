@@ -93,7 +93,8 @@ from library.cli_utils import (
 from library.cli_utils import (
     write_meta_yaml as _cli_write_meta_yaml,
 )
-from library.config import Config, _serialize_paths
+from library.config.loader import _serialize_paths
+from library.config.models import Config
 from library.common.log import logger
 from library.cli.logging import setup_cli_logging
 from library.pipelines.common import add_pipeline_metadata

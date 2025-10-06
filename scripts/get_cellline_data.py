@@ -22,7 +22,7 @@ from library.cli import build_parser as base_parser
 from library.cli.logging import setup_cli_logging
 from library.cli_utils import run_cli_command
 from library.common.log import logger
-from library.config import Config
+from library.config.models import Config
 from library.pipelines.cellline import (
     CellLinePipelineOptions,
     run_cellline_pipeline,

@@ -13,7 +13,7 @@ import requests
 
 from library.integration import molecule_catalog
 from library.integration.chembl_client import ChemblClient
-from library.config import ApiCfg, IoCfg, MoleculeCatalogCfg
+from library.config.models import ApiCfg, IoCfg, MoleculeCatalogCfg
 from library.common.log import logger
 from library.integration.molecule_catalog import (
     load_parent_catalog,

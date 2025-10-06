@@ -17,7 +17,7 @@ from library.integration import chembl_library as cl
 from library.integration import pubchem_library as pl
 from library.pipelines.assay.chembl_assay import TESTITEM_PUBCHEM_COLUMNS
 from library.integration.chembl_client import ChemblClient
-from library.config import ApiCfg, PubChemCfg, RetryCfg
+from library.config.models import ApiCfg, PubChemCfg, RetryCfg
 from library.common.log import logger
 from library.utils.atomic import open_atomic
 

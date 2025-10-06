@@ -53,7 +53,8 @@ if __package__ in {None, ""}:
 from library.cli.logging import setup_cli_logging
 from library.clients import ChemblClient
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
-from library.config import Config, load_config
+from library.config.loader import load_config
+from library.config.models import Config
 from library.integration.molecule_catalog import load_parent_catalog
 from library.pipelines.registry import PipelineStep, load_pipeline_registry
 from library.utils.config import DEFAULT_CONFIG_PATH

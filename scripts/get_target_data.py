@@ -98,10 +98,8 @@ from library.cli import (
     prepare_io_paths,
 )
 from library.cli.logging import setup_cli_logging
-from library.config import (
-    Config,
-    _serialize_paths,
-)
+from library.config.loader import _serialize_paths
+from library.config.models import Config
 from library.common.csv_utils import write_csv_deterministic
 from library.common.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml

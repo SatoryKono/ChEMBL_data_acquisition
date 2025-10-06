@@ -20,14 +20,14 @@ from pandera.errors import SchemaErrors
 from library import io
 from library.integration.chembl_client import ChemblClient
 from library.clients import pubchem as pc
-from library.config import (
+from library.config.loader import _serialize_paths
+from library.config.models import (
     ApiCfg,
     Config,
     IoCfg,
     RetryCfg,
     TestitemBatchRetryCfg,
     TestitemMoleculeEnrichmentCfg,
-    _serialize_paths,
 )
 from library.common.csv_utils import write_csv_chunks_deterministic
 from library.common.log import logger
