@@ -65,7 +65,7 @@ whether user input is required (`Yes` = must be provided explicitly).
 |-----|----------|---------|-------|
 | `chembl_base` | No | `https://www.ebi.ac.uk/chembl/api/data` | Base URL of the REST API. |
 | `timeout_connect` | No | `5` | Connection timeout (seconds). |
-| `timeout_read` | No | `30` | Read timeout (seconds). |
+| `timeout_read` | No | `90` | Read timeout (seconds). |
 | `retries` | No | `3` | HTTP retry attempts. |
 | `backoff_factor` | No | `0.5` | Exponential backoff multiplier. |
 | `rps` | No | `20` | Requests-per-second limit. |
@@ -103,9 +103,9 @@ and may be overridden via CLI or environment variables.
 | Key | Default | Notes |
 |-----|---------|-------|
 | `column` | `activity_chembl_id` | Input identifier column. |
-| `batch_size` | `50` | Identifiers per request. |
+| `batch_size` | `20` | Identifiers per request. |
 | `workers` | `1` | Worker threads. |
-| `timeout` | `30.0` | Read timeout (seconds). |
+| `timeout` | `90.0` | Read timeout (seconds). |
 | `limit` | `null` | Max records; `null` processes all. |
 | `dry_run` | `false` | Enable CLI `--dry-run`. |
 

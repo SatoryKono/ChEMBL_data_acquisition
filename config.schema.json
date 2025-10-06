@@ -21,7 +21,7 @@
           "type": "integer"
         },
         "timeout": {
-          "default": 30.0,
+          "default": 90.0,
           "minimum": 0,
           "title": "Timeout",
           "type": "number"

@@ -1274,7 +1274,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     parser.add_argument(
         "--timeout",
         type=float,
-        default=30.0,
+        default=90.0,
         help="Timeout in seconds for each HTTP request",
     )
     parser.add_argument(

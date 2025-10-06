@@ -13,7 +13,7 @@ sources:
       # Base URL for ChEMBL API (env: CHEMBL_DA__SOURCES__CHEMBL__API__CHEMBL_BASE / CHEMBL_DA_BASE)
       chembl_base: "https://www.ebi.ac.uk/chembl/api/data"
       timeout_connect: 5  # Seconds to wait for a connection (env: CHEMBL_DA_TIMEOUT_CONNECT)
-      timeout_read: 60  # Seconds to wait for a response (env: CHEMBL_DA_TIMEOUT_READ)
+      timeout_read: 90  # Seconds to wait for a response (env: CHEMBL_DA_TIMEOUT_READ)
       retries: 3  # HTTP retry attempts
       backoff_factor: 0.5  # Exponential backoff multiplier
       rps: 20  # Requests per second limit (env: CHEMBL_DA_RPS)
@@ -35,9 +35,9 @@ sources:
     pipelines:
       activity:
         column: "activity_chembl_id"
-        batch_size: 50
+        batch_size: 20
         workers: 1
-        timeout: 30.0
+        timeout: 90.0
         limit: null
         dry_run: false
       assay:
