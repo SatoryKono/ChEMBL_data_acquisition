@@ -37,7 +37,7 @@ from library.common.metadata import (
 )
 from library.common.rate_limiter import get_global_limiter
 from library.common.sidecar import SidecarErrors
-from library.qa.table_quality import analyze_table_quality
+from library.qa.reporting import TableQualityReporter
 from library.qa.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
 
@@ -962,18 +962,13 @@ def finalize_output(
         schema="TestitemsSchema",
     )
 
-    doc_quality_cfg = cfg.system.doc_quality
-    fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
+    quality_reporter = TableQualityReporter.from_config(cfg)
     try:
-        if doc_quality_cfg.enable:
-            analyze_table_quality(
-                csv_path,
-                table_name=str(output.with_suffix("")),
-                destination_dir=output.parent,
-                sample_rows=doc_quality_cfg.sample_rows,
-                include_columns=doc_quality_cfg.include_columns,
-                exclude_columns=doc_quality_cfg.exclude_columns,
-            )
+        quality_reporter.run(
+            csv_path,
+            table_name=str(output.with_suffix("")),
+            destination_dir=output.parent,
+        )
     except Exception as exc:
         tb = traceback.format_exc()
         record_quality_failure(
@@ -981,7 +976,7 @@ def finalize_output(
             error=str(exc),
             error_type=exc.__class__.__name__,
             traceback=tb,
-            fatal=fatal_quality_error,
+            fatal=quality_reporter.fatal_on_error,
         )
         log_kwargs = {
             "error": str(exc),
@@ -989,10 +984,10 @@ def finalize_output(
             "path": str(output),
             "traceback": tb,
         }
-        if fatal_quality_error:
+        if quality_reporter.fatal_on_error:
             log_kwargs["fatal"] = True
         logger.warning("quality_report_failed", **log_kwargs)
-        if fatal_quality_error:
+        if quality_reporter.fatal_on_error:
             return 1
 
     return exit_code

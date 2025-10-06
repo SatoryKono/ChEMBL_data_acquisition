@@ -51,7 +51,7 @@ from library.cli.metadata import prepare_option
 from library.config import Config, _serialize_paths
 from library.common.log import logger
 from library.pipelines.common import add_pipeline_metadata
-from library.table_quality import analyze_table_quality
+from library.qa.reporting import TableQualityReporter
 from library.validation import validate_assays
 from library.schemas import AssaysSchema, normalize_assays
 from library.pipelines.common import (
@@ -286,19 +286,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     validators = [partial(validate_assays, return_result=True)]
 
-    doc_quality_cfg = cfg.system.doc_quality
-    if doc_quality_cfg.enable:
-        table_quality = partial(
-            analyze_table_quality,
-            table_name=str(output_path.with_suffix("")),
-            destination_dir=output_path.parent,
-            sample_rows=doc_quality_cfg.sample_rows,
-            include_columns=doc_quality_cfg.include_columns,
-            exclude_columns=doc_quality_cfg.exclude_columns,
-        )
-    else:
-        def table_quality(_: Path) -> None:
-            return None
+    quality_reporter = TableQualityReporter.from_config(cfg)
+    table_quality = quality_reporter.build_hook(
+        table_name=str(output_path.with_suffix("")),
+        destination_dir=output_path.parent,
+    )
 
     rate_cfg = cfg.rate
     global_limiter = None

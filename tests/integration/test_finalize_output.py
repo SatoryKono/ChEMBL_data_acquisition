@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from typing import Callable
 
 import pandas as pd
 import pytest
@@ -220,13 +221,26 @@ def test_finalize_output__quality_report_failure_non_fatal(
     stats_supplier = _StatsSupplier(_base_stats())
     recorded: list[dict[str, object]] = []
 
-    def fake_analyze(*_args: object, **_kwargs: object) -> None:
-        raise RuntimeError("quality failed")
+    class _FailingReporter:
+        enabled = True
+
+        def __init__(self) -> None:
+            self.fatal_on_error = cfg.system.doc_quality.fatal_on_error
+
+        @classmethod
+        def from_config(cls, _cfg) -> "_FailingReporter":
+            return cls()
+
+        def build_hook(self, **_: object) -> Callable[[Path], None]:
+            return lambda *_args, **_kwargs: None
+
+        def run(self, *_args: object, **_kwargs: object) -> None:
+            raise RuntimeError("quality failed")
 
     def capture_failure(*_args: object, **kwargs: object) -> None:
         recorded.append(kwargs)
 
-    monkeypatch.setattr(cli, "analyze_table_quality", fake_analyze)
+    monkeypatch.setattr(cli, "TableQualityReporter", _FailingReporter)
     monkeypatch.setattr(cli, "record_quality_failure", capture_failure)
 
     exit_code = cli.finalize_output(
@@ -255,10 +269,23 @@ def test_finalize_output__quality_report_failure_fatal(
     output_path = tmp_path / "quality_fatal.csv"
     stats_supplier = _StatsSupplier(_base_stats())
 
-    def fake_analyze(*_args: object, **_kwargs: object) -> None:
-        raise RuntimeError("quality failed")
+    class _FailingReporter:
+        enabled = True
 
-    monkeypatch.setattr(cli, "analyze_table_quality", fake_analyze)
+        def __init__(self) -> None:
+            self.fatal_on_error = cfg.system.doc_quality.fatal_on_error
+
+        @classmethod
+        def from_config(cls, _cfg) -> "_FailingReporter":
+            return cls()
+
+        def build_hook(self, **_: object) -> Callable[[Path], None]:
+            return lambda *_args, **_kwargs: None
+
+        def run(self, *_args: object, **_kwargs: object) -> None:
+            raise RuntimeError("quality failed")
+
+    monkeypatch.setattr(cli, "TableQualityReporter", _FailingReporter)
 
     exit_code = cli.finalize_output(
         [chunk],

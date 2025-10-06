@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Callable, Iterable, Sequence
 
 import pandas as pd
 from types import SimpleNamespace
@@ -308,22 +308,38 @@ def test_run_uniprot__doc_quality_reports(
     )
 
     captured: dict[str, object] = {}
+    doc_quality_cfg = cfg.system.doc_quality
 
-    def _fake_analyze(
-        df: pd.DataFrame,
-        *,
-        table_name: str,
-        destination_dir: Path,
-        sample_rows: int | None,
-        include_columns: Sequence[str] | None,
-        exclude_columns: Sequence[str] | None,
-    ) -> None:
-        captured["table_name"] = table_name
-        captured["destination_dir"] = destination_dir
-        captured["sample_rows"] = sample_rows
-        captured["df"] = df.copy()
+    class _ReporterStub:
+        fatal_on_error = False
+        enabled = True
 
-    monkeypatch.setattr(get_target_data, "analyze_table_quality", _fake_analyze)
+        @classmethod
+        def from_config(cls, _cfg: Config) -> "_ReporterStub":
+            return cls()
+
+        def build_hook(
+            self, *, table_name: str, destination_dir: Path
+        ) -> Callable[[Path], None]:
+            def _hook(_: Path) -> None:
+                captured["table_name"] = table_name
+                captured["destination_dir"] = destination_dir
+
+            return _hook
+
+        def run(
+            self,
+            table: pd.DataFrame,
+            *,
+            table_name: str,
+            destination_dir: Path,
+        ) -> None:
+            captured["table_name"] = table_name
+            captured["destination_dir"] = destination_dir
+            captured["sample_rows"] = doc_quality_cfg.sample_rows
+            captured["df"] = table.copy()
+
+    monkeypatch.setattr(get_target_data, "TableQualityReporter", _ReporterStub)
 
     args = argparse.Namespace(input_csv=input_csv, final_out=output_csv)
 

@@ -102,7 +102,7 @@ from library.processing.activity import (
     compute_activity_bounds,
 )
 from library.postprocessing.activity_extended import process_activity_extended
-from library.table_quality import analyze_table_quality
+from library.qa.reporting import TableQualityReporter
 from library.validation import validate_activities
 from library.schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
@@ -996,20 +996,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
 
 
-    doc_quality_cfg = cfg.system.doc_quality
-    if doc_quality_cfg.enable:
-        table_quality = partial(
-            analyze_table_quality,
-            table_name=str(Path(output_path).with_suffix("")),
-            destination_dir=Path(output_path).parent,
-            sample_rows=doc_quality_cfg.sample_rows,
-            include_columns=doc_quality_cfg.include_columns,
-            exclude_columns=doc_quality_cfg.exclude_columns,
-        )
-    else:
-
-        def table_quality(_: Path) -> None:
-            return None
+    quality_reporter = TableQualityReporter.from_config(cfg)
+    table_quality = quality_reporter.build_hook(
+        table_name=str(Path(output_path).with_suffix("")),
+        destination_dir=Path(output_path).parent,
+    )
 
     rate_cfg = cfg.rate
     global_limiter = None

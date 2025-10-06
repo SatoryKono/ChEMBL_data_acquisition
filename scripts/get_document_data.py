@@ -123,7 +123,8 @@ from library.postprocessing.document import preprocess_documents_csv
 from library.pipelines.common import add_pipeline_metadata
 from library.common.rate_limiter import get_global_limiter
 from library.common.sidecar import SidecarErrors
-from library.qa.table_quality import TableQualityProfiler, analyze_table_quality
+from library.qa.reporting import TableQualityReporter
+from library.qa.table_quality import TableQualityProfiler
 from library.schemas import DocumentsSchema, normalize_documents
 from library.schemas.document_spec import DOCUMENT_EXPORT_COLUMNS
 
@@ -688,24 +689,20 @@ def _finalise_export(
         )
         return 1
 
-    doc_quality_cfg = cfg.system.doc_quality
+    quality_reporter = TableQualityReporter.from_config(cfg)
     try:
-        if doc_quality_cfg.enable:
-            analyze_table_quality(
-                quality_profiler,
-                table_name=csv_path.with_suffix("").name,
-                destination_dir=csv_path.parent,
-                sample_rows=doc_quality_cfg.sample_rows,
-                include_columns=doc_quality_cfg.include_columns,
-                exclude_columns=doc_quality_cfg.exclude_columns,
-            )
-    except Exception as exc:
-        logger.exception(
-            "quality_report_generation_failed",
-            error=str(exc),
-            exc=exc,
+        quality_reporter.run(
+            quality_profiler,
+            table_name=csv_path.with_suffix("").name,
+            destination_dir=csv_path.parent,
         )
-        return 1
+    except Exception as exc:
+        log_kwargs = {"error": str(exc), "exc": exc}
+        if quality_reporter.fatal_on_error:
+            log_kwargs["fatal"] = True
+        logger.exception("quality_report_generation_failed", **log_kwargs)
+        if quality_reporter.fatal_on_error:
+            return 1
     return exit_code
 
 

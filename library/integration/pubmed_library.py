@@ -55,7 +55,7 @@ from ..pubmed import (
 )
 from ..common.rate_limiter import RateLimiter, get_limiter
 from ..cli_utils import MetadataHook, Validator, run_pipeline
-from ..table_quality import analyze_table_quality
+from ..qa.reporting import TableQualityReporter
 from ..pipelines.common import add_pipeline_metadata
 from ..normalization import normalize_documents
 from ..validation import ValidationResult as SchemaValidationResult
@@ -372,10 +372,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
 
+    quality_reporter = TableQualityReporter.from_config(cfg)
+
     def table_quality(destination: Path) -> None:
-        analyze_table_quality(
+        quality_reporter.run(
             destination,
             table_name=str(output_path.with_suffix("")),
+            destination_dir=output_path.parent,
         )
 
 

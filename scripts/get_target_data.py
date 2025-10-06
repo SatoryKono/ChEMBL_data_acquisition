@@ -107,7 +107,7 @@ from library.common.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipelines.common import add_pipeline_metadata
 from library import SidecarErrors
-from library.table_quality import analyze_table_quality
+from library.qa.reporting import TableQualityReporter
 from library.validation import ValidationResult
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
@@ -2076,20 +2076,16 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             output=str(output_path) if output_path is not None else None,
         )
         return 1
-    doc_quality_cfg = cfg.system.doc_quality
+    quality_reporter = TableQualityReporter.from_config(cfg)
     try:
-        if doc_quality_cfg.enable:
+        if quality_reporter.enabled:
             if export_path is None:
                 raise RuntimeError("export path not available for quality analysis")
             resolved_export_path = export_path.resolve()
-            quality_table_name = resolved_export_path.stem
-            analyze_table_quality(
+            quality_reporter.run(
                 out_df,
-                table_name=quality_table_name,
+                table_name=resolved_export_path.stem,
                 destination_dir=resolved_export_path.parent,
-                sample_rows=doc_quality_cfg.sample_rows,
-                include_columns=doc_quality_cfg.include_columns,
-                exclude_columns=doc_quality_cfg.exclude_columns,
             )
     except Exception as exc:
         quality_log_path: Path | None = None
@@ -2099,13 +2095,16 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             quality_log_path = export_path.resolve()
         elif output_path is not None:
             quality_log_path = output_path.resolve()
-        logger.exception(
-            "quality_report_failed",
-            error=str(exc),
-            path=str(quality_log_path) if quality_log_path is not None else None,
-            exc=exc,
-        )
-        return 1
+        log_kwargs = {
+            "error": str(exc),
+            "path": str(quality_log_path) if quality_log_path is not None else None,
+            "exc": exc,
+        }
+        if quality_reporter.fatal_on_error:
+            log_kwargs["fatal"] = True
+        logger.exception("quality_report_failed", **log_kwargs)
+        if quality_reporter.fatal_on_error:
+            return 1
     return 0
 
 
@@ -2549,19 +2548,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     failure_path = normalized_output.with_name(
         f"{normalized_output.stem}_failure_cases.csv"
     )
-    doc_quality_cfg = cfg.system.doc_quality
-    if doc_quality_cfg.enable:
-        table_quality = partial(
-            analyze_table_quality,
-            table_name=str(final_output.with_suffix("")),
-            destination_dir=final_output.parent,
-            sample_rows=doc_quality_cfg.sample_rows,
-            include_columns=doc_quality_cfg.include_columns,
-            exclude_columns=doc_quality_cfg.exclude_columns,
-        )
-    else:
-        def table_quality(_: Path) -> None:
-            return None
+    quality_reporter = TableQualityReporter.from_config(cfg)
+    table_quality = quality_reporter.build_hook(
+        table_name=str(final_output.with_suffix("")),
+        destination_dir=final_output.parent,
+    )
 
     metadata_hooks = [add_pipeline_metadata, _prepare_chunk]
     if not normalize_at_export:
@@ -2728,25 +2719,20 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     finally:
         if tmp_path is not None:
             tmp_path.unlink(missing_ok=True)
-    doc_quality_cfg = cfg.system.doc_quality
+    quality_reporter = TableQualityReporter.from_config(cfg)
     try:
-        if doc_quality_cfg.enable:
-            analyze_table_quality(
-                output_path,
-                table_name=str(output_path.with_suffix("")),
-                destination_dir=output_path.parent,
-                sample_rows=doc_quality_cfg.sample_rows,
-                include_columns=doc_quality_cfg.include_columns,
-                exclude_columns=doc_quality_cfg.exclude_columns,
-            )
-    except Exception as exc:
-        logger.exception(
-            "quality_report_failed",
-            error=str(exc),
-            path=str(output_path),
-            exc=exc,
+        quality_reporter.run(
+            output_path,
+            table_name=str(output_path.with_suffix("")),
+            destination_dir=output_path.parent,
         )
-        return 1
+    except Exception as exc:
+        log_kwargs = {"error": str(exc), "path": str(output_path), "exc": exc}
+        if quality_reporter.fatal_on_error:
+            log_kwargs["fatal"] = True
+        logger.exception("quality_report_failed", **log_kwargs)
+        if quality_reporter.fatal_on_error:
+            return 1
     return 0
 
 
@@ -3784,25 +3770,20 @@ def validate_and_write(
             table=str(output.with_suffix("")),
         )
     else:
-        doc_quality_cfg = cfg.system.doc_quality
+        quality_reporter = TableQualityReporter.from_config(cfg)
         try:
-            if doc_quality_cfg.enable:
-                analyze_table_quality(
-                    final_df,
-                    table_name=str(output.with_suffix("")),
-                    destination_dir=output.parent,
-                    sample_rows=doc_quality_cfg.sample_rows,
-                    include_columns=doc_quality_cfg.include_columns,
-                    exclude_columns=doc_quality_cfg.exclude_columns,
-                )
-        except Exception as exc:
-            logger.exception(
-                "quality_report_failed",
-                error=str(exc),
-                path=str(output),
-                exc=exc,
+            quality_reporter.run(
+                final_df,
+                table_name=str(output.with_suffix("")),
+                destination_dir=output.parent,
             )
-            return 1
+        except Exception as exc:
+            log_kwargs = {"error": str(exc), "path": str(output), "exc": exc}
+            if quality_reporter.fatal_on_error:
+                log_kwargs["fatal"] = True
+            logger.exception("quality_report_failed", **log_kwargs)
+            if quality_reporter.fatal_on_error:
+                return 1
     logger.info("validate_write_done", rows=len(final_df))
     return exit_code
 
