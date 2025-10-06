@@ -12,7 +12,7 @@ from scripts import get_activity_data
 def test_activity_logging__relative_env_base_anchored_to_repo_root(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     scripts_dir = repo_root / "scripts"
     monkeypatch.chdir(scripts_dir)
 

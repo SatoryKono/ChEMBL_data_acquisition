@@ -4,8 +4,26 @@ The test suite is organised around the key scenarios of the ChEMBL data acquisit
 
 - `unit/` – fast checks for isolated helpers (loading, normalisation, validation logic).
 - `integration/` – composed workflows that verify enrichment rules, schema validation and failure handling.
+- `postprocessing/` – regression tests for the standalone transformation helpers backed by snapshot fixtures.
 - `e2e/` – deterministic end-to-end runs of the test-item pipeline on synthetic fixtures, including export idempotence.
 - `resources/` – small CSV snapshots used by the integration and e2e scenarios.
+
+Standalone smoke checks that previously lived alongside `tests/run_tests.py` were moved into the directories above:
+
+- activity column filtering helpers now reside in `tests/unit/test_activity_output_columns.py`;
+- assay output pruning checks live in `tests/unit/test_assay_output_columns.py`;
+- CLI logging scenarios for `get_activity_data` were relocated to `tests/e2e/test_activity_logging.py` and
+  `tests/e2e/test_logging_get_activity_data.py`.
+
+When adding new coverage, select the directory that matches the scope (unit, integration, postprocessing or e2e) instead of
+placing the file at the repository root. This keeps the suite hierarchy stable and avoids accidental collection gaps.
+
+## Naming conventions
+
+- Test modules follow `test_<module>.py` (for example, `test_normalize_rules.py`).
+- Individual tests use `test_<unit_of_work>__<case>()` to encode both the subject and the scenario variant.
+- Apply `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.e2e`, `@pytest.mark.slow` and
+  `@pytest.mark.network` consistently so that subsets can be selected via `-m` filters.
 
 Shared fixtures live in `tests/conftest.py`. They configure a deterministic environment, disable outbound HTTP calls and expose helpers such as `sample_input_csv` and `snapshot_resource`.
 
