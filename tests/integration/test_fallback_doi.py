@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from library.config import Config, _serialize_paths
+from library.pipelines.document.service import DocumentPipeline
 from scripts import get_document_data
 
 
@@ -95,7 +96,7 @@ def test_main_pubmed__without_fallback_csv(
 
     fallback_maps: list[object] = []
 
-    def _fake_fetch(pmids, cfg, **kwargs):  # type: ignore[override]
+    def _fake_fetch(self, pmids, *args, **kwargs):  # type: ignore[override]
         fallback_maps.append(kwargs.get("fallback_doi_map"))
         frame = pd.DataFrame({"document_chembl_id": ["DOC1"], "PubMed.PMID": ["111"]})
         return iter([frame])
@@ -106,7 +107,7 @@ def test_main_pubmed__without_fallback_csv(
         emitted_frames.extend(list(frames))
         return 0
 
-    monkeypatch.setattr(get_document_data, "fetch_pubmed_records", _fake_fetch)
+    monkeypatch.setattr(DocumentPipeline, "fetch_pubmed_records", _fake_fetch)
     monkeypatch.setattr(get_document_data, "_finalise_export", _fake_finalise)
     monkeypatch.setattr(get_document_data, "normalize_documents", lambda frame: frame)
 
@@ -154,12 +155,12 @@ def test_main_pubmed__with_fallback_csv(
 
     fallback_maps: list[object] = []
 
-    def _fake_fetch(pmids, cfg, **kwargs):  # type: ignore[override]
+    def _fake_fetch(self, pmids, *args, **kwargs):  # type: ignore[override]
         fallback_maps.append(kwargs.get("fallback_doi_map"))
         frame = pd.DataFrame({"document_chembl_id": ["DOC1"], "PubMed.PMID": ["111"]})
         return iter([frame])
 
-    monkeypatch.setattr(get_document_data, "fetch_pubmed_records", _fake_fetch)
+    monkeypatch.setattr(DocumentPipeline, "fetch_pubmed_records", _fake_fetch)
     monkeypatch.setattr(
         get_document_data,
         "_finalise_export",
@@ -210,13 +211,13 @@ def test_main_pubmed__skip_existing_conflict(
 
     called = False
 
-    def _fake_fetch(pmids, cfg, **kwargs):  # type: ignore[override]
+    def _fake_fetch(self, pmids, *args, **kwargs):  # type: ignore[override]
         nonlocal called
         called = True
         frame = pd.DataFrame({"document_chembl_id": ["DOC1"], "PubMed.PMID": ["111"]})
         return iter([frame])
 
-    monkeypatch.setattr(get_document_data, "fetch_pubmed_records", _fake_fetch)
+    monkeypatch.setattr(DocumentPipeline, "fetch_pubmed_records", _fake_fetch)
     monkeypatch.setattr(
         get_document_data,
         "_finalise_export",
