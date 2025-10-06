@@ -5,6 +5,7 @@ from collections.abc import Callable, Iterator
 from types import SimpleNamespace
 
 import pytest
+import requests
 
 from library.config import IupharCfg
 from library.integration import uniprot_library as uniprot
@@ -16,9 +17,11 @@ def reset_gtop_caches() -> Iterator[None]:
 
     uniprot._GTOP_JSON_FAILURE_CACHE.clear()
     uniprot._GTOP_NON_JSON_CONTENT_TYPE_CACHE.clear()
+    uniprot._GTOP_SKIPPED_FAILURE_LOG.clear()
     yield
     uniprot._GTOP_JSON_FAILURE_CACHE.clear()
     uniprot._GTOP_NON_JSON_CONTENT_TYPE_CACHE.clear()
+    uniprot._GTOP_SKIPPED_FAILURE_LOG.clear()
 
 
 class _DummyResponse:
@@ -67,6 +70,20 @@ class _DummySession:
         self.last_url = url
         self.last_timeout = timeout
         return self._factory()
+
+
+class _FailingSession:
+    def __init__(self, exc: Exception):
+        self._exc = exc
+        self.calls = 0
+        self.last_url: str | None = None
+        self.last_timeout: tuple[float, float] | None = None
+
+    def get(self, url: str, timeout: tuple[float, float]) -> _DummyResponse:
+        self.calls += 1
+        self.last_url = url
+        self.last_timeout = timeout
+        raise self._exc
 
 
 def _patch_dependencies(monkeypatch: pytest.MonkeyPatch, session: _DummySession) -> None:
@@ -126,6 +143,42 @@ def test_fetch_gtop_endpoint__accepts_text_plain_json(
         )
     ]
     assert session.calls == 2
+
+
+@pytest.mark.unit
+def test_fetch_gtop_endpoint__caches_request_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    reset_gtop_caches: None,
+) -> None:
+    session = _FailingSession(requests.RequestException("boom"))
+    _patch_dependencies(monkeypatch, session)
+
+    warning_events: list[tuple[str, dict[str, object]]] = []
+
+    def capture_warning(event: str, *args: object, **kwargs: object) -> None:
+        warning_events.append((event, dict(kwargs)))
+
+    monkeypatch.setattr(uniprot.logger, "warning", capture_warning)
+
+    cfg = IupharCfg()
+
+    result = uniprot._fetch_gtop_endpoint("GTP4", "function", cfg=cfg)
+    assert result is None
+    assert warning_events == [
+        (
+            "gtop_request_failed",
+            {"gtop_id": "GTP4", "endpoint": "function", "error": "boom"},
+        )
+    ]
+    assert session.calls == 1
+    assert ("GTP4", "function") in uniprot._GTOP_JSON_FAILURE_CACHE
+
+    warning_events.clear()
+
+    second = uniprot._fetch_gtop_endpoint("GTP4", "function", cfg=cfg)
+    assert second is None
+    assert warning_events == []
+    assert session.calls == 1
 
 
 @pytest.mark.unit
