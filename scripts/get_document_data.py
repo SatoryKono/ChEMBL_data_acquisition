@@ -98,6 +98,7 @@ from library.postprocessing.document import preprocess_documents_csv
 from library.pipelines.common import add_pipeline_metadata
 from library.common.rate_limiter import get_global_limiter
 from library.common.sidecar import SidecarErrors
+from library.qa.reporting import build_table_quality_hook
 from library.qa.table_quality import TableQualityProfiler
 from library.schemas import DocumentsSchema, normalize_documents
 from library.schemas.document_spec import DOCUMENT_EXPORT_COLUMNS
@@ -637,6 +638,11 @@ def _finalise_export(
             _maybe_run_document_postprocessing(csv_path)
 
     doc_quality_cfg = getattr(cfg.system, "doc_quality", None)
+    quality_hook = build_table_quality_hook(
+        doc_quality_cfg,
+        table_name=csv_path.with_suffix(""),
+        destination=csv_path.parent,
+    )
     try:
         finalise_csv_output(
             csv_path=csv_path,
@@ -650,9 +656,7 @@ def _finalise_export(
             quality_builder=build_quality_report,
             quality_path=csv_path.with_suffix(".quality.json"),
             quality_profiler=quality_profiler,
-            quality_config=doc_quality_cfg,
-            quality_table_name=csv_path.with_suffix("").name,
-            quality_destination=csv_path.parent,
+            quality_hook=quality_hook,
         )
     except QualityReportError as exc:
         destination = exc.path or csv_path.with_suffix(".quality.json")

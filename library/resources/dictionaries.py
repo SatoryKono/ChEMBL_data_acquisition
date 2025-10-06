@@ -40,6 +40,18 @@ class DictionaryResource:
     generator: Path
 
 
+def _normalise_text_newlines(data: bytes) -> bytes:
+    """Return ``data`` with Windows-style newlines converted to ``\n``."""
+
+    if b"\r" not in data or b"\0" in data:
+        return data
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    return text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+
+
 def _compute_sha256(path: Path) -> str:
     """Return the SHA256 checksum for ``path``.
 
@@ -53,16 +65,16 @@ def _compute_sha256(path: Path) -> str:
         for child in sorted(path.rglob("*")):
             if child.is_dir():
                 continue
+            if child.name == _MANIFEST_FILENAME and child.parent == path:
+                continue
             hasher.update(str(child.relative_to(path)).encode("utf-8"))
-            with child.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(8192), b""):
-                    hasher.update(chunk)
+            data = _normalise_text_newlines(child.read_bytes())
+            hasher.update(data)
         return hasher.hexdigest()
     if not path.is_file():
         raise FileNotFoundError(f"Dictionary resource missing: {path}")
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(8192), b""):
-            hasher.update(chunk)
+    data = _normalise_text_newlines(path.read_bytes())
+    hasher.update(data)
     return hasher.hexdigest()
 
 

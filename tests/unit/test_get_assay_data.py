@@ -9,6 +9,9 @@ from typing import Any, Callable, Iterable, Sequence
 import pandas as pd
 import pytest
 import requests
+import yaml
+
+from config.paths import DICTIONARY_DIR
 
 from library.cli_utils import run_pipeline as cli_run_pipeline
 from library.config import Config
@@ -354,6 +357,7 @@ def test_run_pipeline__adds_missing_assay_optional_columns(tmp_path: Path) -> No
         cfg=None,
         stats_extra=None,
         logger=logger,
+        dictionary_resources=("dictionary_root",),
     )
 
     assert exit_code == 0
@@ -363,6 +367,20 @@ def test_run_pipeline__adds_missing_assay_optional_columns(tmp_path: Path) -> No
     assert "assay_strain" in result.columns
     assert result["assay_group"].isna().all()
     assert result["assay_strain"].isna().all()
+
+    meta_path = output_path.with_name(output_path.name + ".meta.yaml")
+    assert meta_path.exists()
+    meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    dictionaries = meta.get("dictionaries")
+    assert isinstance(dictionaries, dict)
+
+    manifest = yaml.safe_load((DICTIONARY_DIR / "manifest.yaml").read_text(encoding="utf-8"))
+    resources = manifest.get("resources", {}) if isinstance(manifest, dict) else {}
+    root_entry = resources.get("dictionary_root", {}) if isinstance(resources, dict) else {}
+    assert dictionaries.get("dictionary_root") == {
+        "version": root_entry.get("version"),
+        "sha256": root_entry.get("sha256"),
+    }
 
 
 def test_build_parser__defaults() -> None:

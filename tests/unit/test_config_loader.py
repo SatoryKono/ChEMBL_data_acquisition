@@ -27,10 +27,10 @@ def test_load_config__resolves_relative_paths_and_calls_runtime(tmp_path, monkey
 
     monkeypatch.setattr(loader, "configure_rate_limiters", fake_configure)
     monkeypatch.setattr(
-        "library.config.models.get_resource_path", lambda name: tmp_path / name
+        "library.config.model.get_resource_path", lambda name: tmp_path / name
     )
     monkeypatch.setattr(
-        "library.config.models.resolve_resource_reference",
+        "library.config.model.resolve_resource_reference",
         lambda value: Path(value),
     )
 
@@ -48,10 +48,10 @@ def test_load_config__metadata_records_cli_override(tmp_path, monkeypatch):
 
     monkeypatch.setattr(loader, "configure_rate_limiters", lambda cfg: None)
     monkeypatch.setattr(
-        "library.config.models.get_resource_path", lambda name: tmp_path / name
+        "library.config.model.get_resource_path", lambda name: tmp_path / name
     )
     monkeypatch.setattr(
-        "library.config.models.resolve_resource_reference",
+        "library.config.model.resolve_resource_reference",
         lambda value: Path(value),
     )
 

@@ -11,13 +11,17 @@ from __future__ import annotations
 import hashlib
 import platform
 from collections.abc import Mapping, Sequence
+from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypedDict
 
 import yaml
 
+from config.paths import DICTIONARY_DIR
+
 from ..config import _mask_secrets
+from ..resources.dictionaries import DictionaryManifestError, get_resource
 from .git import _git_sha
 from .log import logger
 from ..utils.atomic import open_atomic
@@ -93,6 +97,7 @@ def write_meta_yaml(
     *,
     invocation: Sequence[str] | None = None,
     extra_metadata: Mapping[str, Any] | None = None,
+    dictionary_resources: Sequence[str] | None = None,
 ) -> Path:
     """Write metadata for ``csv_path`` to ``<csv_path>.meta.yaml``.
 
@@ -117,6 +122,11 @@ def write_meta_yaml(
     extra_metadata:
         Optional mapping merged into the generated metadata prior to
         serialisation.
+    dictionary_resources:
+        Optional sequence of dictionary resource identifiers declared in the
+        bundled manifest.  When provided, the metadata output is enriched with
+        the corresponding version and SHA256 checksum for every listed
+        resource.
 
     Returns
     -------
@@ -147,6 +157,45 @@ def write_meta_yaml(
         metadata["invocation"] = list(invocation)
     if extra_metadata:
         metadata.update(dict(extra_metadata))
+
+    if dictionary_resources:
+        manifest_metadata = _dictionary_manifest_metadata()
+        dictionaries: dict[str, Mapping[str, str]] = {}
+        for name in dict.fromkeys(dictionary_resources):
+            try:
+                resource = get_resource(name)
+            except KeyError as exc:
+                logger.warning(
+                    "metadata_dictionary_lookup_failed",
+                    resource=name,
+                    error=str(exc),
+                )
+                entry = manifest_metadata.get(name)
+                if entry:
+                    dictionaries[name] = dict(entry)
+                continue
+            except DictionaryManifestError as exc:
+                logger.warning(
+                    "metadata_dictionary_lookup_failed",
+                    resource=name,
+                    error=str(exc),
+                )
+                entry = manifest_metadata.get(name)
+                if entry:
+                    dictionaries[name] = dict(entry)
+                continue
+            dictionaries[name] = {
+                "version": resource.version,
+                "sha256": resource.sha256,
+            }
+        if dictionaries:
+            existing_dictionaries = metadata.get("dictionaries")
+            if isinstance(existing_dictionaries, Mapping):
+                merged = dict(existing_dictionaries)
+                merged.update(dictionaries)
+                metadata["dictionaries"] = merged
+            else:
+                metadata["dictionaries"] = dictionaries
 
     with open_atomic(meta_path, encoding="utf-8") as fh:
         yaml.safe_dump(metadata, fh, sort_keys=False)
@@ -186,3 +235,26 @@ def record_quality_failure(
         logger.info("metadata_quality_status", path=str(path), status="failed")
 
     return path
+@lru_cache(maxsize=1)
+def _dictionary_manifest_metadata() -> Mapping[str, Mapping[str, str]]:
+    manifest_path = DICTIONARY_DIR / "manifest.yaml"
+    try:
+        with manifest_path.open("r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+    except OSError:
+        return {}
+
+    resources = data.get("resources")
+    if not isinstance(resources, Mapping):
+        return {}
+
+    entries: dict[str, Mapping[str, str]] = {}
+    for name, meta in resources.items():
+        if not isinstance(meta, Mapping):
+            continue
+        version = meta.get("version")
+        sha256 = meta.get("sha256")
+        if isinstance(version, str) and isinstance(sha256, str):
+            entries[name] = {"version": version, "sha256": sha256}
+    return entries
+

@@ -10,6 +10,7 @@ from typing import Any, Callable, Mapping, MutableMapping, Sequence
 import yaml
 
 from ..common.metadata import Stats, file_sha256, write_meta_yaml
+from ..qa.reporting import TableQualityHook
 from ..qa.table_quality import TableQualityProfiler, analyze_table_quality
 
 
@@ -136,6 +137,7 @@ def finalise_csv_output(
     quality_config: Any | None = None,
     quality_table_name: str | None = None,
     quality_destination: Path | None = None,
+    quality_hook: TableQualityHook | None = None,
 ) -> PipelineOutputReport:
     """Write metadata and optional quality artefacts for ``csv_path``."""
 
@@ -168,7 +170,13 @@ def finalise_csv_output(
         resolved_quality_path = destination
         quality_sha = file_sha256(destination)
 
-    if quality_profiler is not None and bool(_cfg_value(quality_config, "enable", False)):
+    quality_subject = quality_profiler if quality_profiler is not None else path
+    if quality_hook is not None:
+        try:
+            quality_hook(quality_subject)
+        except Exception as exc:  # pragma: no cover - propagated to caller
+            raise QualityAnalysisError(str(exc)) from exc
+    elif quality_profiler is not None and bool(_cfg_value(quality_config, "enable", False)):
         table_name = quality_table_name or path.with_suffix("").name
         destination_dir = quality_destination or path.parent
         try:

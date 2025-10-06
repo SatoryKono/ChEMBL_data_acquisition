@@ -40,7 +40,7 @@ from library.metadata import (
 from library.pipelines.common import add_pipeline_metadata
 from library.common.rate_limiter import get_global_limiter
 from library import SidecarErrors
-from library.table_quality import analyze_table_quality
+from library.qa.reporting import build_table_quality_hook
 from library.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
 
@@ -1113,16 +1113,13 @@ def finalize_output(
 
     doc_quality_cfg = cfg.system.doc_quality
     fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
+    table_quality = build_table_quality_hook(
+        doc_quality_cfg,
+        table_name=output.with_suffix(""),
+        destination=output.parent,
+    )
     try:
-        if doc_quality_cfg.enable:
-            analyze_table_quality(
-                csv_path,
-                table_name=str(output.with_suffix("")),
-                destination_dir=output.parent,
-                sample_rows=doc_quality_cfg.sample_rows,
-                include_columns=doc_quality_cfg.include_columns,
-                exclude_columns=doc_quality_cfg.exclude_columns,
-            )
+        table_quality(csv_path)
     except Exception as exc:
         tb = traceback.format_exc()
         record_quality_failure(

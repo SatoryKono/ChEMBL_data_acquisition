@@ -69,7 +69,7 @@ from library.processing.activity import (
     compute_activity_bounds,
 )
 from library.postprocessing.activity_extended import process_activity_extended
-from library.table_quality import analyze_table_quality
+from library.qa.reporting import build_table_quality_hook
 from library.validation import validate_activities
 from library.schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
@@ -964,19 +964,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
 
     doc_quality_cfg = cfg.system.doc_quality
-    if doc_quality_cfg.enable:
-        table_quality = partial(
-            analyze_table_quality,
-            table_name=str(Path(output_path).with_suffix("")),
-            destination_dir=Path(output_path).parent,
-            sample_rows=doc_quality_cfg.sample_rows,
-            include_columns=doc_quality_cfg.include_columns,
-            exclude_columns=doc_quality_cfg.exclude_columns,
-        )
-    else:
-
-        def table_quality(_: Path) -> None:
-            return None
+    table_quality = build_table_quality_hook(
+        doc_quality_cfg,
+        table_name=Path(output_path).with_suffix(""),
+        destination=Path(output_path).parent,
+    )
 
     rate_cfg = cfg.rate
     global_limiter = None
@@ -1160,6 +1152,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 stats_extra=chunk_failures.stats,
                 logger=logger,
                 stats_callback=_capture_stats,
+                dictionary_resources=(
+                    "dictionary_root",
+                    "target_types",
+                ),
             )
         except Exception:
             logger.exception("Activity pipeline execution failed during chunked processing.")
