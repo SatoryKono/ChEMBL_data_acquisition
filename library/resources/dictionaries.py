@@ -70,7 +70,18 @@ def _compute_sha256(path: Path) -> str:
 
     hasher = hashlib.sha256()
     if path.is_dir():
-        for child in sorted(path.rglob("*")):
+        # ``Path.rglob`` yields platform-specific ``Path`` objects whose
+        # ordering semantics differ between POSIX and Windows.  Iterating over
+        # ``sorted(Path.rglob("*"))`` therefore produces a different sequence
+        # on case-insensitive filesystems which, in turn, leads to diverging
+        # hashes for identical directory contents.  Sorting by the normalised
+        # POSIX-style relative path guarantees a deterministic order across all
+        # platforms and Python versions.
+        children = sorted(
+            path.rglob("*"),
+            key=lambda candidate: candidate.relative_to(path).as_posix(),
+        )
+        for child in children:
             if child.is_dir():
                 continue
             if child.name == _MANIFEST_FILENAME and child.parent == path:
