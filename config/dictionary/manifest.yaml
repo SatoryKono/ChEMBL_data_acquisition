@@ -12,6 +12,10 @@ resources:
       - "17bcbfbbdec38e474712a2fb1fe28c9ab7a27465ec57630ae77c6ff48c4f4898"
       # Windows checkouts where newline normalisation happens post-hash
       - "e4edafaa047eaa20e2d894218764a44e1448cc21414a5632a4ef25aa9b074293"
+      # Git 2.46 introduced an additional autocrlf conversion path that hashes
+      # to ``efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a``.
+      # Accept it so Windows users on the latest tooling can run the pipeline
+      # without rebuilding the bundled dictionaries.
       # Windows Git >=2.46 with ``core.autocrlf=true`` applied *after* the
       # manifest was generated started producing this checksum.  Keep it in the
       # allow-list so local validation remains deterministic across platforms.
