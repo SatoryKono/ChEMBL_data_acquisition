@@ -43,7 +43,7 @@ from library.cli import (
 )
 from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.common.log import logger
-from library.table_quality import analyze_table_quality
+from library.qa.reporting import build_table_quality_hook
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
@@ -107,16 +107,12 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         doc_quality_cfg = cfg.system.doc_quality
         for entity, path in paths.items():
             logger.info("profiling", entity=entity)
-            if not doc_quality_cfg.enable:
-                continue
-            analyze_table_quality(
-                path,
-                table_name=path.stem,
-                destination_dir=report_dir,
-                sample_rows=doc_quality_cfg.sample_rows,
-                include_columns=doc_quality_cfg.include_columns,
-                exclude_columns=doc_quality_cfg.exclude_columns,
+            table_quality = build_table_quality_hook(
+                doc_quality_cfg,
+                table_name=path.with_suffix(""),
+                destination=report_dir,
             )
+            table_quality(path)
 
         logger.info("save_done", tables=len(paths), path=str(out_dir))
         return 0

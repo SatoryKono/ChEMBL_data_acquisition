@@ -55,7 +55,7 @@ from ..pubmed import (
 )
 from ..common.rate_limiter import RateLimiter, get_limiter
 from ..cli_utils import MetadataHook, Validator, run_pipeline
-from ..table_quality import analyze_table_quality
+from ..qa.reporting import build_table_quality_hook
 from ..pipelines.common import add_pipeline_metadata
 from ..normalization import normalize_documents
 from ..validation import ValidationResult as SchemaValidationResult
@@ -372,11 +372,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
 
-    def table_quality(destination: Path) -> None:
-        analyze_table_quality(
-            destination,
-            table_name=str(output_path.with_suffix("")),
-        )
+    table_quality = build_table_quality_hook(
+        cfg.system.doc_quality,
+        table_name=output_path.with_suffix(""),
+        destination=output_path.parent,
+    )
 
 
     command = " ".join(["pubmed_library"] + (list(argv) if argv else []))
