@@ -22,6 +22,7 @@ from typing import Any, TypeVar
 
 import pandas as pd
 
+from ...cli.pipeline_definition import normalise_definition
 from ...cli_utils import PipelineError, run_pipeline
 from ...clients import _chunked
 
@@ -181,8 +182,26 @@ def run_chunked_pipeline(
         csv_writer=csv_writer,
     )
 
+    params = dict(pipeline_kwargs)
+    try:
+        output_path = params.pop("output_path")
+        failure_path = params.pop("failure_path")
+    except KeyError as exc:  # pragma: no cover - defensive validation
+        missing = exc.args[0]
+        raise TypeError(f"run_pipeline missing required argument: {missing}") from exc
+
+    cfg = params.pop("cfg", None)
+    logger = params.pop("logger", None)
+    definition = params.pop("definition", None)
+    params.setdefault("writer", writer)
+
+    pipeline_definition = normalise_definition(definition, params)
+
     return run_pipeline(
+        definition=pipeline_definition,
         fetcher=fetcher,
-        writer=writer,
-        **pipeline_kwargs,
+        output_path=output_path,
+        failure_path=failure_path,
+        cfg=cfg,
+        logger=logger,
     )

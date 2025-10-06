@@ -52,6 +52,7 @@ from ..pubmed import (
     text_or_none,
 )
 from ..common.rate_limiter import RateLimiter, get_limiter
+from ..cli.pipeline_definition import PipelineDefinition
 from ..cli_utils import MetadataHook, Validator, run_pipeline
 from ..qa.reporting import build_table_quality_hook
 from ..pipelines.common import add_pipeline_metadata
@@ -380,20 +381,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     command = " ".join(["pubmed_library"] + (list(argv) if argv else []))
     config_snapshot = _serialize_paths(cfg.to_dict())
     inputs = {"input_csv": str(args.input_csv)}
-    exit_code = run_pipeline(
-        fetcher=fetcher,
+    definition = PipelineDefinition(
         schema=_PUBMED_SCHEMA,
         schema_name="PubMedDocumentsSchema",
         validators=validators,
         metadata_hooks=metadata_hooks,
         writer=writer,
-        output_path=output_path,
-        failure_path=failure_path,
         command=command,
         config_snapshot=config_snapshot,
         inputs=inputs,
         key_columns=["PubMed.PMID"],
         table_quality=table_quality,
+    )
+    exit_code = run_pipeline(
+        definition=definition,
+        fetcher=fetcher,
+        output_path=output_path,
+        failure_path=failure_path,
         cfg=cfg,
         logger=logger,
     )
