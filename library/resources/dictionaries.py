@@ -26,6 +26,7 @@ _IGNORED_FILENAMES = {
     "Thumbs.db",
     "desktop.ini",
     ".DS_Store",
+    ".Rhistory",
 }
 
 _IGNORED_DIRNAMES = {"__pycache__"}
