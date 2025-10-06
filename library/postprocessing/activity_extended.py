@@ -1337,10 +1337,24 @@ def _transform_activity_frame(
     filled = ensured_filled | original_identifier_filled | original_filled | identifier_filled
 
     if filled:
-        logger.warning(
-            "activity_extended_missing_columns_filled",
-            columns=sorted(filled),
+        unresolved_columns = sorted(
+            column
+            for column in filled
+            if column not in df.columns or df[column].isna().all()
         )
+        resolved_columns = sorted(set(filled) - set(unresolved_columns))
+
+        if resolved_columns:
+            logger.info(
+                "activity_extended_missing_columns_filled",
+                columns=resolved_columns,
+            )
+
+        if unresolved_columns:
+            logger.warning(
+                "activity_extended_missing_columns_unresolved",
+                columns=unresolved_columns,
+            )
 
     _resolve_targets_path(dictionary_root, targets_override)
 
