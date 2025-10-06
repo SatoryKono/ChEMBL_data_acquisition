@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
+from time import monotonic
 from typing import Any
 
 import pandas as pd
+import requests
 
-from library.clients import ChemblClient
+from library.clients import ChemblClient, _chunked
+from ...common.log import logger
 from ...config import ApiCfg
 
 DOCUMENT_COLUMNS = [
@@ -61,32 +64,8 @@ def get_documents(
     """
     base = f"{cfg.chembl_base.rstrip('/')}/document.json?format=json"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    records: list[dict[str, Any]] = []
     seen: set[str] = set()
-    chunk: list[str] = []
-
-    def fetch_chunk(chunk_ids: list[str]) -> None:
-        url = f"{base}&document_chembl_id__in={','.join(chunk_ids)}"
-        data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
-        items = data.get("documents") or data.get("document") or []
-        for item in items:
-            record = {
-                "document_chembl_id": item.get("document_chembl_id"),
-                "title": item.get("title"),
-                "abstract": item.get("abstract"),
-                "doi": item.get("doi"),
-                "year": item.get("year"),
-                "journal": item.get("journal_full_title"),
-                "journal_abbrev": item.get("journal"),
-                "volume": item.get("volume"),
-                "issue": item.get("issue"),
-                "first_page": item.get("first_page"),
-                "last_page": item.get("last_page"),
-                "pubmed_id": item.get("pubmed_id"),
-                "authors": item.get("authors"),
-                "source": "ChEMBL",
-            }
-            records.append(record)
+    unique_ids: list[str] = []
 
     for identifier in ids:
         if identifier in INVALID_DOCUMENT_IDS:
@@ -94,19 +73,117 @@ def get_documents(
         if identifier in seen:
             continue
         seen.add(identifier)
-        chunk.append(identifier)
-        if len(chunk) >= chunk_size:
-            fetch_chunk(chunk)
-            chunk = []
+        unique_ids.append(identifier)
 
-    if chunk:
-        fetch_chunk(chunk)
+    if not unique_ids:
+        return pd.DataFrame(columns=DOCUMENT_COLUMNS)
 
-    if not seen or not records:
+    records: list[dict[str, Any]] = []
+    for chunk in _chunked(unique_ids, chunk_size):
+        records.extend(
+            _fetch_documents_chunk(
+                chunk,
+                base_url=base,
+                cfg=cfg,
+                client=client,
+                timeout=effective_timeout,
+            )
+        )
+
+    if not records:
         return pd.DataFrame(columns=DOCUMENT_COLUMNS)
 
     df = pd.DataFrame(records)
     return df.reindex(columns=DOCUMENT_COLUMNS)
+
+
+def _fetch_documents_chunk(
+    chunk_ids: Sequence[str],
+    *,
+    base_url: str,
+    cfg: ApiCfg,
+    client: ChemblClient,
+    timeout: float,
+) -> list[dict[str, Any]]:
+    """Return document records for ``chunk_ids`` with timeout-aware fallback."""
+
+    if not chunk_ids:
+        return []
+
+    url = f"{base_url}&document_chembl_id__in={','.join(chunk_ids)}"
+    start_time = monotonic()
+    try:
+        data = client.request_json(url, cfg=cfg, timeout=timeout)
+    except requests.ReadTimeout as exc:
+        if len(chunk_ids) <= 1:
+            raise
+        elapsed = monotonic() - start_time
+        logger.warning(
+            "chembl_document_timeout_split",
+            extra={
+                "chunk_size": len(chunk_ids),
+                "ids": list(chunk_ids),
+                "timeout": timeout,
+                "error": str(exc),
+                "elapsed": elapsed,
+            },
+        )
+        midpoint = max(1, len(chunk_ids) // 2)
+        left = chunk_ids[:midpoint]
+        right = chunk_ids[midpoint:]
+        records: list[dict[str, Any]] = []
+        if left:
+            records.extend(
+                _fetch_documents_chunk(
+                    left,
+                    base_url=base_url,
+                    cfg=cfg,
+                    client=client,
+                    timeout=timeout,
+                )
+            )
+        if right:
+            records.extend(
+                _fetch_documents_chunk(
+                    right,
+                    base_url=base_url,
+                    cfg=cfg,
+                    client=client,
+                    timeout=timeout,
+                )
+            )
+        return records
+    except requests.RequestException:
+        raise
+
+    items = data.get("documents") or data.get("document") or []
+    records = [
+        _normalise_document_record(item)
+        for item in items
+        if isinstance(item, Mapping)
+    ]
+    return [record for record in records if record]
+
+
+def _normalise_document_record(item: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a normalised document record extracted from ``item``."""
+
+    return {
+        "document_chembl_id": item.get("document_chembl_id"),
+        "title": item.get("title"),
+        "abstract": item.get("abstract"),
+        "doi": item.get("doi"),
+        "year": item.get("year"),
+        "journal": item.get("journal_full_title"),
+        "journal_abbrev": item.get("journal"),
+        "volume": item.get("volume"),
+        "issue": item.get("issue"),
+        "first_page": item.get("first_page"),
+        "last_page": item.get("last_page"),
+        "pubmed_id": item.get("pubmed_id"),
+        "authors": item.get("authors"),
+        "source": "ChEMBL",
+    }
 
 
 __all__ = ["get_documents"]
