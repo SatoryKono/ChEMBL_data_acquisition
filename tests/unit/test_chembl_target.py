@@ -108,6 +108,16 @@ def test_iter_target_batches__propagates_timeout_without_split() -> None:
     mapping_cfg = UniprotMappingCfg()
     timeout = 6.0
 
+    base = cfg.chembl_base.rstrip("/")
+
+    def _chunk_url(ids: Sequence[str]) -> str:
+        return (
+            f"{base}/target.json?format=json"
+            f"&include=protein_classifications,cross_references"
+            f"&target_chembl_id__in={','.join(ids)}"
+        )
+
+    combined_url = _chunk_url(["CHEMBL10", "CHEMBL11"])
     responses = {
         _chunk_url(cfg, ["CHEMBL10", "CHEMBL11"]): requests.ReadTimeout("simulated timeout"),
     }
@@ -131,6 +141,13 @@ def test_iter_target_batches__propagates_timeout_without_split() -> None:
 
 @pytest.mark.unit
 def test_iter_target_batches__splits_chunk_on_connection_error(caplog: pytest.LogCaptureFixture) -> None:
+    assert client.calls == [(combined_url, timeout)]
+
+
+@pytest.mark.unit
+def test_iter_target_batches__splits_chunk_on_connection_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Chunk-level connection errors should fall back to per-ID requests."""
 
     cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=7.0)
@@ -138,6 +155,16 @@ def test_iter_target_batches__splits_chunk_on_connection_error(caplog: pytest.Lo
     timeout = 5.0
 
     combined_url = _chunk_url(cfg, ["CHEMBL1", "CHEMBL2"])
+    base = cfg.chembl_base.rstrip("/")
+
+    def _chunk_url(ids: Sequence[str]) -> str:
+        return (
+            f"{base}/target.json?format=json"
+            f"&include=protein_classifications,cross_references"
+            f"&target_chembl_id__in={','.join(ids)}"
+        )
+
+    combined_url = _chunk_url(["CHEMBL1", "CHEMBL2"])
     responses = {
         combined_url: requests.ConnectionError("simulated connection reset"),
         _chunk_url(cfg, ["CHEMBL1"]): _build_response("CHEMBL1", "Alpha"),
