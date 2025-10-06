@@ -67,7 +67,8 @@ def _compute_sha256(path: Path) -> str:
                 continue
             if child.name == _MANIFEST_FILENAME and child.parent == path:
                 continue
-            hasher.update(str(child.relative_to(path)).encode("utf-8"))
+            relative = child.relative_to(path)
+            hasher.update(relative.as_posix().encode("utf-8"))
             data = _normalise_text_newlines(child.read_bytes())
             hasher.update(data)
         return hasher.hexdigest()
