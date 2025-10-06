@@ -42,13 +42,18 @@ from library.pipelines.common import (
 )
 
 from library.cli import (
+    Logger,
     LoggerConfig,
     positive_int,
 )
 from library.cli import (
     build_parser as base_parser,
 )
+
 from library.cli.pipeline_definition import PipelineDefinition
+
+from library.cli.base import PipelineCLIBase
+
 from library.cli_utils import (
     PipelineError,
     resolve_invocation,
@@ -1360,7 +1365,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     return run_chembl(cfg, args)
 
 
-def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
+def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Create the command-line argument parser.
 
     Returns
@@ -1416,68 +1421,75 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     return parser, log_cfg
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """Execute the activity pipeline with optional argument overrides.
+class ActivityPipelineCLI(PipelineCLIBase):
+    """CLI adapter for the activity data pipeline."""
 
-    Parameters
-    ----------
-    argv : Sequence[str] | None, optional
-        Command-line arguments to parse. When ``None`` the values from
-        :data:`sys.argv` are used.
+    def build_parser(self) -> tuple[argparse.ArgumentParser, LoggerConfig]:
+        return _build_parser_impl()
 
-    Returns
-    -------
-    int
-        ``0`` on success, non-zero otherwise. Errors are logged with
-        structured context for easier diagnosis.
-
-    Raises
-    ------
-    SystemExit
-        Raised when argument parsing fails, mirroring ``argparse`` behaviour.
-    """
-    parser, log_cfg = build_parser()
-    args = parser.parse_args(argv)
-    args.invocation = resolve_invocation(parser.prog, argv)
-
-    cli.prepare_io_paths(
-        args,
-        input_default=DEFAULT_INPUT_NAME,
-        output_stem=DEFAULT_OUTPUT_STEM,
-    )
-    if args.limit == 0:
-        logger.info("pipeline_skip_limit", limit=args.limit)
-        logger.info("Limit set to 0; exiting before starting the activity pipeline.")
-        return 0
-    if args.limit is not None and args.limit < 0:
-        # Reject negative limits early to provide clear CLI feedback.
-        parser.error("--limit must be zero or a positive integer")
-    if args.offset < 0:
-        parser.error("--offset must be zero or a positive integer")
-
-    with setup_cli_logging(
-        Path(__file__).with_suffix("").name,
-        log_cfg,
-        getattr(args, "date", None),
-    ) as logging_ctx:
-        exit_code = run_cli_command(
-            args=args,
-            parser=parser,
-            log_cfg=logging_ctx.log_cfg,
-            mapping={
-                "timeout": "activity.timeout",
-                "column": "activity.column",
-                "batch_size": "activity.batch_size",
-                "limit": "activity.limit",
-                "offset": "activity.offset",
-                "dry_run": "activity.dry_run",
-                "workers": "activity.workers",
-            },
-            run=run,
-            logger=logger,
+    def prepare_arguments(
+        self,
+        parser: argparse.ArgumentParser,
+        args: argparse.Namespace,
+        argv: Sequence[str] | None,
+    ) -> argparse.Namespace:
+        args.invocation = resolve_invocation(parser.prog, argv)
+        cli.prepare_io_paths(
+            args,
+            input_default=DEFAULT_INPUT_NAME,
+            output_stem=DEFAULT_OUTPUT_STEM,
         )
-    configure_logger(log_cfg)
-    return exit_code
+        return args
+
+    def handle_pre_run(
+        self, parser: argparse.ArgumentParser, args: argparse.Namespace
+    ) -> int | None:
+        if args.limit == 0:
+            logger.info("pipeline_skip_limit", limit=args.limit)
+            logger.info(
+                "Limit set to 0; exiting before starting the activity pipeline."
+            )
+            return 0
+        if args.limit is not None and args.limit < 0:
+            parser.error("--limit must be zero or a positive integer")
+        if args.offset < 0:
+            parser.error("--offset must be zero or a positive integer")
+        return None
+
+    def get_program_name(self) -> str:
+        return Path(__file__).with_suffix("").name
+
+    def get_logger(self) -> Logger:
+        return logger
+
+    def get_config_mapping(self) -> Mapping[str, str]:
+        return {
+            "timeout": "activity.timeout",
+            "column": "activity.column",
+            "batch_size": "activity.batch_size",
+            "limit": "activity.limit",
+            "offset": "activity.offset",
+            "dry_run": "activity.dry_run",
+            "workers": "activity.workers",
+        }
+
+    def run_pipeline(self, cfg: Config, args: argparse.Namespace) -> int:
+        return run(cfg, args)
+
+
+_CLI = ActivityPipelineCLI()
+
+
+def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
+    """Expose parser construction for existing imports."""
+
+    return _CLI.build_parser()
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Delegate to :class:`ActivityPipelineCLI` for backwards compatibility."""
+
+    return _CLI.main(argv)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
