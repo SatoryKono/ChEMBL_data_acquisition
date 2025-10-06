@@ -58,6 +58,8 @@ def _prepare_environment(tmp_path: Path) -> get_data.PipelineRunConfig:
     output_dir.mkdir()
     config_path = base_path / "config.yaml"
     config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
+    input_files = dict(get_data.DEFAULT_INPUT_FILES)
+    output_stems = dict(get_data.DEFAULT_OUTPUT_STEMS)
     return get_data.PipelineRunConfig(
         base_path=base_path,
         input_dir=input_dir,
@@ -69,6 +71,8 @@ def _prepare_environment(tmp_path: Path) -> get_data.PipelineRunConfig:
         force=False,
         skip_existing=False,
         dry_run=False,
+        input_files=input_files,
+        output_stems=output_stems,
     )
 
 
@@ -99,23 +103,24 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
         return 0
 
     step = get_data.PipelineStep(
-        "document",
-        _build_stub_step(
+        name="document",
+        main=_build_stub_step(
             required_columns=["document_chembl_id", "title", "pubmed_id"],
             key_column="document_chembl_id",
             on_execute=_on_execute,
         ),
-        None,
+        input_filename="document.csv",
+        output_stem="documents",
     )
 
     stream = io.StringIO()
     logger = get_data.configure_logger(
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
     )
-    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", (step,), raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
-    status = get_data.run_pipeline(cfg)
+    steps = (step,)
+    status = get_data.run_pipeline(cfg, steps=steps)
     assert status == 0
     assert output_payload, "expected pipeline to write output"
     output_frame = output_payload[0]
@@ -128,7 +133,7 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
     stream.truncate(0)
     stream.seek(0)
 
-    status_malformed = get_data.run_pipeline(cfg)
+    status_malformed = get_data.run_pipeline(cfg, steps=steps)
     assert status_malformed == 1
     logs = parse_log_lines(stream.getvalue())
     assert any(record.get("event") == "schema_mismatch" for record in logs)
@@ -156,35 +161,36 @@ def test_pipeline_subset__skip_existing_and_force(tmp_path: Path, monkeypatch: p
         return 0
 
     step = get_data.PipelineStep(
-        "target",
-        _build_stub_step(
+        name="target",
+        main=_build_stub_step(
             required_columns=["target_chembl_id", "name", "organism"],
             key_column="target_chembl_id",
             on_execute=_on_execute,
         ),
-        None,
+        input_filename="target.csv",
+        output_stem="targets",
     )
 
     stream = io.StringIO()
     logger = get_data.configure_logger(
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
     )
-    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", (step,), raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
-    status_first = get_data.run_pipeline(cfg)
+    steps = (step,)
+    status_first = get_data.run_pipeline(cfg, steps=steps)
     assert status_first == 0
     assert executions == [2]
 
     cfg_skip = replace(cfg, skip_existing=True)
-    status_skip = get_data.run_pipeline(cfg_skip)
+    status_skip = get_data.run_pipeline(cfg_skip, steps=steps)
     assert status_skip == 0
     assert executions == [2]
     logs = parse_log_lines(stream.getvalue())
     assert any(record.get("event") == "step_skipped_existing" for record in logs)
 
     cfg_force = replace(cfg, skip_existing=True, force=True)
-    status_force = get_data.run_pipeline(cfg_force)
+    status_force = get_data.run_pipeline(cfg_force, steps=steps)
     assert status_force == 0
     assert executions == [2, 2]
 
@@ -241,8 +247,8 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
         return 0
 
     step = get_data.PipelineStep(
-        "assay",
-        _build_stub_step(
+        name="assay",
+        main=_build_stub_step(
             required_columns=[
                 "assay_chembl_id",
                 "target_chembl_id",
@@ -252,17 +258,18 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
             key_column="assay_chembl_id",
             on_execute=_on_execute,
         ),
-        None,
+        input_filename="assay.csv",
+        output_stem="assays",
     )
 
     stream = io.StringIO()
     logger = get_data.configure_logger(
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
     )
-    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", (step,), raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
-    first_status = get_data.run_pipeline(cfg)
+    steps = (step,)
+    first_status = get_data.run_pipeline(cfg, steps=steps)
     assert first_status == 1
     working = get_data._temporary_output_path(step.expected_output(cfg))
     assert not working.exists()
@@ -270,7 +277,7 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
     assert sentinel.exists()
 
     sentinel.unlink()
-    second_status = get_data.run_pipeline(cfg)
+    second_status = get_data.run_pipeline(cfg, steps=steps)
     assert second_status == 0
     final_output = step.expected_output(cfg)
     assert final_output.exists()
@@ -356,9 +363,14 @@ def test_pipeline_subset__target_postprocess_sidecars(
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
     )
 
-    step = get_data.PipelineStep("target", get_target_data.main, "all")
+    step = get_data.PipelineStep(
+        name="target",
+        main=get_target_data.main,
+        input_filename="target.csv",
+        output_stem="targets",
+        subcommand="all",
+    )
 
-    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", (step,), raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
     monkeypatch.setattr(get_target_data, "run_all", _stub_run_all)
     monkeypatch.setattr(
@@ -370,7 +382,7 @@ def test_pipeline_subset__target_postprocess_sidecars(
     monkeypatch.setattr(get_target_data, "_postprocess_names_export", _fake_names)
     monkeypatch.setattr(get_target_data, "_postprocess_iuphar_export", _fake_iuphar)
 
-    status = get_data.run_pipeline(cfg)
+    status = get_data.run_pipeline(cfg, steps=(step,))
 
     assert status == 0
     assert call_order == ["organism", "isoform", "names", "iuphar"]
