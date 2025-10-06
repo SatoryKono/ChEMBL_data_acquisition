@@ -28,7 +28,7 @@ sources:
       endpoint: "molecule"  # API resource providing parent relationships
       child_field: "molecule_chembl_id"  # Column containing molecule identifiers
       parent_field: "parent_molecule_chembl_id"  # Column containing parent molecule identifiers
-      hierarchy_lookup_path: "config/dictionary/_testitem/molecule_hierarchy.csv"  # CSV with precomputed parent relationships
+      hierarchy_lookup_path: "testitem_molecule_hierarchy"  # CSV with precomputed parent relationships
       hierarchy_lookup_encoding: "utf-8-sig"  # Encoding used for the hierarchy CSV
       hierarchy_lookup_delimiter: ","  # Delimiter used for the hierarchy CSV
       page_size: 500  # Page size for catalog fetching
@@ -115,7 +115,7 @@ sources:
       target:
         uniprot:
           column: "uniprot_id"
-          data_dir: "config/dictionary/_target/_uniprot"
+        data_dir: "target_uniprot_cache"
           limit: null
         chembl:
           column: "target_chembl_id"  # Column containing ChEMBL target identifiers
@@ -128,14 +128,14 @@ sources:
             shrink_factor: 0.5
             min_size: 1
         iuphar:
-          target_csv: "config/dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
-          family_csv: "config/dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
+          target_csv: "target_iuphar_target"
+          family_csv: "target_iuphar_family"
           limit: null
         all:
           column: "target_chembl_id"  # Column containing ChEMBL target identifiers
-          data_dir: "config/dictionary/_target/_uniprot"
-          target_csv: "config/dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
-          family_csv: "config/dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
+          data_dir: "target_uniprot_cache"
+          target_csv: "target_iuphar_target"
+          family_csv: "target_iuphar_family"
           chunk_size: 3
           timeout: 90.0
           uniprot_column: mapping_uniprot_id  # Column containing primary UniProt accession used for merges
@@ -225,11 +225,11 @@ sources:
 
 local:
   resources:
-    dictionary_dir: "config/dictionary"  # Directory with supplementary lookup tables
-    iuphar_target_csv: "config/dictionary/_target/_IUPHAR/_IUPHAR_target.csv"  # IUPHAR target mapping file
-    iuphar_family_csv: "config/dictionary/_target/_IUPHAR/_IUPHAR_family.csv"  # IUPHAR family mapping file
-    uniprot_data_dir: "config/dictionary/_target/_uniprot"  # Directory containing cached UniProt JSON files
-    targets_type_csv: "config/dictionary/_target/targets_type.csv"  # Target type mapping table
+    dictionary_dir: "dictionary_root"  # Directory with supplementary lookup tables
+    iuphar_target_csv: "target_iuphar_target"  # IUPHAR target mapping file
+    iuphar_family_csv: "target_iuphar_family"  # IUPHAR family mapping file
+    uniprot_data_dir: "target_uniprot_cache"  # Directory containing cached UniProt JSON files
+    targets_type_csv: "target_types"  # Target type mapping table
   io:
     output_dir: "$CHEMBL_DA_BASE_PATH/output"  # Directory for generated datasets
     cache_dir: "~/.cache/chembl-da"  # Directory for cached HTTP responses (env: CHEMBL_DA_CACHE_DIR)
@@ -313,8 +313,8 @@ activity_enrichment:
 testitem_molecule_enrichment:
   enable: true
   sources:
-    molecule_catalog_path: "config/dictionary/_testitem/molecule_catalog.csv"
-    molecule_hierarchy_path: "config/dictionary/_testitem/molecule_hierarchy.csv"
+    molecule_catalog_path: "testitem_molecule_catalog"
+    molecule_hierarchy_path: "testitem_molecule_hierarchy"
   output:
     salt_as_null_when_absent: true
   flags:
