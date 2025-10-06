@@ -439,6 +439,9 @@ def test_fetch_uniprot__missing_output_creates_placeholder(
         level == "warning"
         and event == "missing_iuphar_output_file"
         and payload["path"] == str(output_csv)
+        for level, event, payload in logger_stub.events
+    )
+
     output_csv = tmp_path / "output_uniprot.csv"
     chembl_df = pd.DataFrame(
         {"target_chembl_id": ["CHEMBL1"], "uniprot_id": ["P12345"]}
