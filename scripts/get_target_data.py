@@ -188,6 +188,28 @@ NORMALIZED_SUFFIX = "_normalized"
 COMMAND_CHOICES: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
 
 
+_IUPHAR_OVERRIDE_COLUMNS: frozenset[str] = frozenset(
+    {
+        "target_id",
+        "GuidetoPHARMACOLOGY",
+        "gtop_synonyms",
+        "gtop_natural_ligands_n",
+        "gtop_interactions_n",
+        "gtop_function_text_short",
+        "IUPHAR_family_id",
+        "IUPHAR_type",
+        "IUPHAR_class",
+        "IUPHAR_subclass",
+        "IUPHAR_chain",
+        "IUPHAR_name",
+        "iuphar_name",
+        "full_id_path",
+        "full_name_path",
+        "iuphar_synonyms",
+    }
+)
+
+
 class StoreWithSource(argparse.Action):
     """Store CLI values while tracking their origin."""
 
@@ -3004,6 +3026,26 @@ def fetch_uniprot(
     return df
 
 
+def _prepare_iuphar_merge_frames(
+    combined_df: pd.DataFrame, iuphar_df: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return frames ready for merging IUPHAR classifications."""
+
+    sanitised_combined = combined_df.drop(
+        columns=[col for col in _IUPHAR_OVERRIDE_COLUMNS if col in combined_df.columns],
+        errors="ignore",
+    )
+    existing_cols = set(sanitised_combined.columns)
+    keep_columns: list[str] = ["uniprot_id"]
+    for column in iuphar_df.columns:
+        if column == "uniprot_id":
+            continue
+        if column in _IUPHAR_OVERRIDE_COLUMNS or column not in existing_cols:
+            keep_columns.append(column)
+    trimmed_iuphar = iuphar_df.loc[:, keep_columns].copy()
+    return sanitised_combined, trimmed_iuphar
+
+
 def fetch_iuphar(
     cfg: Config,
     chembl_df: pd.DataFrame,
@@ -3454,9 +3496,7 @@ def fetch_iuphar(
             )
             iuphar_df = iuphar_df.copy()
             iuphar_df.insert(0, "uniprot_id", placeholder)
-    existing_cols = set(combined_df.columns)
-    classification_cols = [c for c in iuphar_df.columns if c not in existing_cols]
-    iuphar_df = iuphar_df[["uniprot_id", *classification_cols]].copy()
+    combined_df, iuphar_df = _prepare_iuphar_merge_frames(combined_df, iuphar_df)
     logger.info("fetch_iuphar_done", rows=len(iuphar_df))
     return combined_df, iuphar_df
 
