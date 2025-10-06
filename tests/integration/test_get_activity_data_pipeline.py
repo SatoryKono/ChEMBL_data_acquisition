@@ -16,7 +16,7 @@ import yaml
 from dataclasses import dataclass
 
 from scripts import get_activity_data
-from config.paths import DICTIONARY_DIR
+from library.resources.dictionaries import get_resource
 
 
 class _DummyChemblClient:
@@ -343,18 +343,16 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
     dictionaries = meta.get("dictionaries")
     assert isinstance(dictionaries, dict)
 
-    manifest = yaml.safe_load((DICTIONARY_DIR / "manifest.yaml").read_text(encoding="utf-8"))
-    resources = manifest.get("resources", {}) if isinstance(manifest, dict) else {}
-    root_entry = resources.get("dictionary_root", {}) if isinstance(resources, dict) else {}
-    target_entry = resources.get("target_types", {}) if isinstance(resources, dict) else {}
+    root_resource = get_resource("dictionary_root")
+    target_resource = get_resource("target_types")
 
     assert dictionaries.get("dictionary_root") == {
-        "version": root_entry.get("version"),
-        "sha256": root_entry.get("sha256"),
+        "version": root_resource.version,
+        "sha256": root_resource.sha256,
     }
     assert dictionaries.get("target_types") == {
-        "version": target_entry.get("version"),
-        "sha256": target_entry.get("sha256"),
+        "version": target_resource.version,
+        "sha256": target_resource.sha256,
     }
 
 
