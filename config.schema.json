@@ -346,7 +346,7 @@
           "type": "number"
         },
         "timeout_read": {
-          "default": 30.0,
+          "default": 60.0,
           "minimum": 1,
           "title": "Timeout Read",
           "type": "number"
@@ -393,13 +393,13 @@
           "type": "string"
         },
         "batch_size": {
-          "default": 10,
+          "default": 25,
           "minimum": 1,
           "title": "Batch Size",
           "type": "integer"
         },
         "timeout": {
-          "default": 30.0,
+          "default": 60.0,
           "exclusiveMinimum": 0,
           "title": "Timeout",
           "type": "number"
@@ -1582,7 +1582,7 @@
       "additionalProperties": false,
       "properties": {
         "max_attempts": {
-          "default": 3,
+          "default": 4,
           "minimum": 1,
           "title": "Max Attempts",
           "type": "integer"

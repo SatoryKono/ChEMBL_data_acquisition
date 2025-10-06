@@ -118,6 +118,41 @@ def test_get_assays__recovers_from_request_exception() -> None:
 
 
 @pytest.mark.unit
+def test_get_assays__clamps_large_chunks() -> None:
+    """Requests are split when more than 25 assay IDs are provided."""
+
+    responders = [
+        {
+            "assays": [
+                {"assay_chembl_id": f"CHEMBL{i}"} for i in range(1, 26)
+            ],
+            "page_meta": {},
+        },
+        {
+            "assays": [
+                {"assay_chembl_id": f"CHEMBL{i}"} for i in range(26, 31)
+            ],
+            "page_meta": {},
+        },
+    ]
+    client = _StubClient(responders)
+    cfg = ApiCfg()
+
+    identifiers = [f"CHEMBL{i}" for i in range(1, 31)]
+    df = get_assays(identifiers, cfg=cfg, client=client, chunk_size=50)
+
+    assert sorted(df["assay_chembl_id"]) == sorted(identifiers)
+    chunk_sizes = []
+    for call in client.calls:
+        parsed = urlparse(call)
+        ids_param = parse_qs(parsed.query).get("assay_chembl_id__in", [""])[0]
+        if ids_param:
+            chunk_sizes.append(len(ids_param.split(",")))
+
+    assert chunk_sizes == [25, 5]
+
+
+@pytest.mark.unit
 def test_get_testitem__splits_chunk_on_timeout() -> None:
     """Timeout failures trigger chunk splitting and retries."""
 
