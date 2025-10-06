@@ -203,6 +203,15 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
     src_assay_series = written_df["src_assay_id"].astype("string")
     assert src_assay_series.tolist() == ["SRC-ASSAY1", "SRC-ASSAY2", "SRC-ASSAY3"]
     assert src_assay_series.str.strip().ne("").all()
+    completion_messages = [
+        event
+        for _, event, _ in logger_stub.events
+        if event.startswith("Completed get_activity_data pipeline:")
+    ]
+    assert completion_messages
+    summary_message = completion_messages[-1]
+    assert "mode=run" in summary_message
+    assert "rows=3" in summary_message
 
 
 @pytest.mark.integration
