@@ -1,0 +1,4 @@
+molecule_chembl_id,parent_molecule_chembl_id
+MOL-1,CMPD-1
+MOL-2,CMPD-2
+MOL-3,CMPD-3

@@ -485,7 +485,6 @@ def test_transform_activity_frame__fills_missing_columns(activity_resources: Pat
             "standard_value": [8.0],
             "pchembl_value": [5.0],
             "molecule_pref_name": ["Compound One"],
-            "parent_molecule_chembl_id": ["CMPD-1"],
         }
     )
 
@@ -636,7 +635,7 @@ def test_process_activity_extended__raises_for_missing_dictionary(
     missing_dictionary = tmp_path / "dictionary"
     missing_dictionary.mkdir()
 
-    with pytest.raises(ActivityExtendedError, match="targets_type.csv not found"):
+    with pytest.raises(ActivityExtendedError, match="molecule_hierarchy.csv not found"):
         process_activity_extended(
             search_dir=tmp_exports,
             dictionary_dir=missing_dictionary,
