@@ -47,6 +47,7 @@ from library.cli import (
 from library.cli import build_parser as base_parser
 from library.cli_utils import run_cli_command, run_pipeline
 from library.cli.logging import setup_cli_logging
+from library.cli.metadata import prepare_option
 from library.config import Config, _serialize_paths
 from library.common.log import logger
 from library.pipelines.common import add_pipeline_metadata
@@ -67,8 +68,6 @@ __all__ = ["ap", "configure_logger", "main", "run", "run_chembl"]
 
 DEFAULT_INPUT_NAME = "assay.csv"
 DEFAULT_OUTPUT_STEM = "assays"
-
-_OPTION_UNSET = object()
 
 # Backwards compatibility: legacy configs referenced the private
 # ``_ASSAY_MAX_IDS_PER_REQUEST`` constant before it was renamed to
@@ -149,35 +148,6 @@ def remove_assay_output_columns(df: pd.DataFrame) -> pd.DataFrame:
     return cleaned
 
 
-def _option(
-    metadata: ConfigMetadata | None,
-    *,
-    argument: str | None = None,
-    path: str | None = None,
-    value: object = _OPTION_UNSET,
-    default_source: str = "unknown",
-    default_detail: str | None = None,
-) -> dict[str, object]:
-    if metadata is not None:
-        if value is _OPTION_UNSET:
-            return metadata.option(
-                argument=argument,
-                path=path,
-                default_source=default_source,
-                default_detail=default_detail,
-            )
-        return metadata.option(
-            argument=argument,
-            path=path,
-            value=value,
-            default_source=default_source,
-            default_detail=default_detail,
-        )
-    actual = None if value is _OPTION_UNSET else value
-    entry: dict[str, object] = {"value": actual, "source": default_source}
-    if default_detail is not None:
-        entry["detail"] = default_detail
-    return entry
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -241,31 +211,31 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     output_source = "cli" if getattr(args, "final_out", None) else "derived"
     logger.info(
         "assay_pipeline_start",
-        input=_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
-        output=_option(
+        input=prepare_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
+        output=prepare_option(
             metadata_obj,
             value=str(output_path),
             default_source=output_source,
         ),
-        limit=_option(
+        limit=prepare_option(
             metadata_obj,
             argument="limit",
             path="sources.chembl.pipelines.assay.limit",
             value=limit,
         ),
-        offset=_option(
+        offset=prepare_option(
             metadata_obj,
             argument="offset",
             path="sources.chembl.pipelines.assay.offset",
             value=offset,
         ),
-        batch_size=_option(
+        batch_size=prepare_option(
             metadata_obj,
             argument="batch_size",
             path="sources.chembl.pipelines.assay.batch_size",
             value=cfg.assay.batch_size,
         ),
-        timeout=_option(
+        timeout=prepare_option(
             metadata_obj,
             argument="timeout",
             path="sources.chembl.pipelines.assay.timeout",
