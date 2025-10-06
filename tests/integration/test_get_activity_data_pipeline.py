@@ -205,55 +205,58 @@ def test_activity_pipeline__timeout_clamped_when_below_minimum(cfg, tmp_path, mo
 
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
-def test_activity_pipeline_cli__timeout_argument_clamped(tmp_path, monkeypatch):
+def test_activity_pipeline__warns_when_retry_disabled(cfg, tmp_path, monkeypatch):
+    _configure_cfg(cfg)
+    cfg.retry.max_attempts = 1
+
     input_csv = tmp_path / "ids.csv"
     input_csv.write_text("activity_id\nACT1\n", encoding="utf-8")
     output_csv = tmp_path / "activities.csv"
 
-    config_path = Path(__file__).resolve().parents[2] / "config" / "config.yaml"
+    logger_stub = _RecordingLogger()
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
 
-    monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(tmp_path))
+    def _run_stub(passed_cfg, _args):
+        assert passed_cfg.retry.max_attempts == 1
+        return 0
+
+    monkeypatch.setattr(get_activity_data, "run_chembl", _run_stub)
+
+    args = _make_args(input_csv, output_csv)
+
+    exit_code = get_activity_data.run(cfg, args)
+
+    warning_events = [event for level, event, _ in logger_stub.events if level == "warning"]
+    assert "activity_retry_disabled" in warning_events
+    assert exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("deterministic_env")
+def test_activity_pipeline__warns_when_api_retries_disabled(cfg, tmp_path, monkeypatch):
+    _configure_cfg(cfg)
+    cfg.api.retries = 0
+
+    input_csv = tmp_path / "ids.csv"
+    input_csv.write_text("activity_id\nACT1\n", encoding="utf-8")
+    output_csv = tmp_path / "activities.csv"
 
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
-    monkeypatch.setattr("library.cli.configure_logger", lambda *_: logger_stub)
-    monkeypatch.setattr("library.cli_utils.cli.configure_logger", lambda *_: logger_stub)
-    monkeypatch.setattr(get_activity_data, "configure_logger", lambda *_: logger_stub)
 
-    @contextmanager
-    def fake_setup_cli_logging(script_name, log_cfg, date_str, *, log_dir=None):
-        del script_name, date_str, log_dir
-        yield SimpleNamespace(log_cfg=log_cfg, log_path=tmp_path / "cli.log", console_stream=None)
-
-    monkeypatch.setattr(get_activity_data, "setup_cli_logging", fake_setup_cli_logging)
-
-    captured: dict[str, float | None] = {}
-
-    def _run_chembl_stub(passed_cfg, passed_args):
-        captured["cfg_timeout"] = float(passed_cfg.activity.timeout)
-        captured["args_timeout"] = getattr(passed_args, "timeout", None)
+    def _run_stub(passed_cfg, _args):
+        assert passed_cfg.api.retries == 0
         return 0
 
-    monkeypatch.setattr(get_activity_data, "run_chembl", _run_chembl_stub)
+    monkeypatch.setattr(get_activity_data, "run_chembl", _run_stub)
 
-    exit_code = get_activity_data.main(
-        [
-            "--config",
-            str(config_path),
-            "--input",
-            str(input_csv),
-            "--output",
-            str(output_csv),
-            "--timeout",
-            str(get_activity_data.MIN_ACTIVITY_TIMEOUT - 15),
-        ]
-    )
+    args = _make_args(input_csv, output_csv)
 
-    assert exit_code == 0
-    assert captured["cfg_timeout"] == pytest.approx(get_activity_data.MIN_ACTIVITY_TIMEOUT)
-    assert captured["args_timeout"] == pytest.approx(get_activity_data.MIN_ACTIVITY_TIMEOUT)
+    exit_code = get_activity_data.run(cfg, args)
+
     warning_events = [event for level, event, _ in logger_stub.events if level == "warning"]
-    assert "activity_timeout_clamped" in warning_events
+    assert "activity_api_retry_disabled" in warning_events
+    assert exit_code == 0
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
 def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_path, monkeypatch):
@@ -289,12 +292,22 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
     assert set(activity_events).issuperset(
         {
             "activity_pipeline_start",
+            "activity_http_config",
             "activity_pipeline_done",
             "records_dropped",
             "schema_validate_start",
             "schema_validate_done",
         }
     )
+    config_payloads = [
+        payload for level, event, payload in logger_stub.events if event == "activity_http_config"
+    ]
+    assert config_payloads
+    config_payload = config_payloads[0]
+    assert config_payload["activity_batch_size"] == cfg.activity.batch_size
+    assert config_payload["activity_timeout"] == cfg.activity.timeout
+    assert config_payload["api_retries"] == cfg.api.retries
+    assert config_payload["retry_max_attempts"] == cfg.retry.max_attempts
     assert captured.activities == [("ACT1", "ACT2", "ACT3")]
     assert captured.testitems
 

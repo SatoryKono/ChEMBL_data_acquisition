@@ -199,6 +199,77 @@ def _coerce_series_dtype(series: pd.Series, dtype: str) -> pd.Series:
             return result
         return series.astype("string")
 
+
+def _extract_adapter_retry_metadata(
+    session: requests.Session, base_url: str
+) -> dict[str, object]:
+    """Return retry configuration extracted from ``session`` for ``base_url``.
+
+    The helper is defensive to accommodate test doubles that expose partial
+    ``requests.Session`` interfaces. Only basic numeric attributes from the
+    underlying :class:`urllib3.util.retry.Retry` instance are returned so the
+    payload is JSON/log friendly.
+    """
+
+    adapters: list[requests.adapters.HTTPAdapter] = []
+    try:
+        adapters.append(session.get_adapter(base_url))
+    except Exception:  # pragma: no cover - defensive for alternative sessions
+        pass
+    try:
+        adapters.append(session.get_adapter("https://"))
+    except Exception:  # pragma: no cover - defensive for alternative sessions
+        pass
+    metadata: dict[str, object] = {}
+    for adapter in adapters:
+        if adapter is None:
+            continue
+        retries = getattr(adapter, "max_retries", None)
+        if retries is None:
+            continue
+        for attr, key in (
+            ("total", "adapter_total"),
+            ("connect", "adapter_connect"),
+            ("read", "adapter_read"),
+            ("status", "adapter_status"),
+        ):
+            value = getattr(retries, attr, None)
+            if value is not None:
+                metadata[key] = value
+        backoff = getattr(retries, "backoff_factor", None)
+        if backoff is not None:
+            metadata["adapter_backoff_factor"] = backoff
+        # Prefer the first adapter that exposes retry settings.
+        if metadata:
+            break
+    return metadata
+
+
+def _gather_http_diagnostics(cfg: Config, client: object) -> dict[str, object]:
+    """Collect HTTP-related configuration values for logging and errors."""
+
+    diagnostics: dict[str, object] = {
+        "activity_batch_size": getattr(cfg.activity, "batch_size", None),
+        "activity_timeout": getattr(cfg.activity, "timeout", None),
+        "api_timeout_read": getattr(cfg.api, "timeout_read", None),
+        "api_retries": getattr(cfg.api, "retries", None),
+        "api_backoff_factor": getattr(cfg.api, "backoff_factor", None),
+        "retry_max_attempts": getattr(cfg.retry, "max_attempts", None),
+        "retry_backoff_factor": getattr(cfg.retry, "backoff_factor", None),
+    }
+
+    session_obj = getattr(client, "session", None)
+    if isinstance(session_obj, requests.Session):
+        adapter_meta = _extract_adapter_retry_metadata(session_obj, cfg.api.chembl_base)
+        diagnostics.update(adapter_meta)
+
+    clean: dict[str, object] = {}
+    for key, value in diagnostics.items():
+        if value is None:
+            continue
+        clean[key] = value
+    return clean
+
 def _compute_output_statistics(output_path: Path, cfg: Config) -> tuple[int | None, float | None]:
     """Return row count and null ratio for the final pipeline output."""
 
@@ -959,6 +1030,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         retry_cfg = cfg.retry
         chunk_failures = ChunkFailureTracker()
+        http_diagnostics = _gather_http_diagnostics(cfg, client)
+        if http_diagnostics:
+            logger.info("activity_http_config", **http_diagnostics)
 
         def fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
             nonlocal last_error_extra, last_error_context
@@ -1004,6 +1078,15 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                             "batch_size": cfg.activity.batch_size,
                             "timeout": cfg.activity.timeout,
                         }
+                        for key in (
+                            "adapter_total",
+                            "api_retries",
+                            "retry_max_attempts",
+                            "activity_timeout",
+                            "api_timeout_read",
+                        ):
+                            if key in http_diagnostics:
+                                context[key] = http_diagnostics[key]
                         log_context = {
                             key: value for key, value in context.items() if key != "chunk_ids"
                         }
@@ -1252,6 +1335,30 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 args.timeout = float(minimum_timeout)
             except (TypeError, ValueError):  # pragma: no cover - defensive
                 args.timeout = minimum_timeout
+
+    retry_attempts = getattr(cfg.retry, "max_attempts", None)
+    if retry_attempts is not None and retry_attempts <= 1:
+        logger.warning(
+            "activity_retry_disabled",
+            configured=retry_attempts,
+        )
+        logger.warning(
+            "Configured system.retry.max_attempts=%s disables urllib3 retry handling; "
+            "increase to at least 2 to tolerate transient network issues.",
+            retry_attempts,
+        )
+
+    api_retries = getattr(cfg.api, "retries", None)
+    if api_retries is not None and api_retries <= 0:
+        logger.warning(
+            "activity_api_retry_disabled",
+            configured=api_retries,
+        )
+        logger.warning(
+            "Configured chembl.api.retries=%s disables client-level request retries; "
+            "increase to 1 or more for resilience.",
+            api_retries,
+        )
 
     final_out_attr = getattr(args, "final_out", None)
     if final_out_attr in (None, argparse.SUPPRESS):
