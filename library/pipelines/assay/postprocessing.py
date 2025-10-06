@@ -41,11 +41,25 @@ def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:
     """
     df = df.copy()
     required_columns = ["document_chembl_id", "target_chembl_id"]
+
+    # ``pandera`` raises ``SchemaError`` on completely empty frames because the
+    # required columns are absent.  When the pipeline processes an empty chunk we
+    # still want to synthesise the expected columns so that downstream hooks see
+    # a consistent schema.  Additionally, normalise the dtype to ``string`` so
+    # that subsequent concatenation does not introduce ``object`` columns.
     for column in required_columns:
         if column not in df.columns:
             df[column] = pd.Series(dtype="string")
+        else:
+            df[column] = df[column].astype("string")
 
-    df = AssayPostprocessSchema.validate(df)
+    if df.empty:
+        ordered = required_columns + [
+            column for column in df.columns if column not in required_columns
+        ]
+        df = df.reindex(columns=ordered)
+    else:
+        df = AssayPostprocessSchema.validate(df)
     result = df.copy()
 
     if result.empty:
