@@ -8,6 +8,7 @@ resources:
       - "cc60aa1e2160724c46e701e0bb21a8f2c4176e57b61180f0c9418db878144156"
       - "17bcbfbbdec38e474712a2fb1fe28c9ab7a27465ec57630ae77c6ff48c4f4898"
       - "e4edafaa047eaa20e2d894218764a44e1448cc21414a5632a4ef25aa9b074293"
+      - "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv
