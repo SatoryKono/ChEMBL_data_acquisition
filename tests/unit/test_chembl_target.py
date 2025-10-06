@@ -102,14 +102,6 @@ def test_iter_target_batches__propagates_timeout_without_split() -> None:
     cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=8.0)
     mapping_cfg = UniprotMappingCfg()
     timeout = 6.0
-def test_iter_target_batches__splits_chunk_on_connection_error(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Chunk-level connection errors should fall back to per-ID requests."""
-
-    cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=7.0)
-    mapping_cfg = UniprotMappingCfg()
-    timeout = 5.0
     base = cfg.chembl_base.rstrip("/")
 
     def _chunk_url(ids: Sequence[str]) -> str:
@@ -131,6 +123,36 @@ def test_iter_target_batches__splits_chunk_on_connection_error(
         list(
             iter_target_batches(
                 ["CHEMBL10", "CHEMBL11"],
+                cfg=cfg,
+                client=client,
+                mapping_cfg=mapping_cfg,
+                chunk_size=2,
+                timeout=timeout,
+                enable_split_fallback=False,
+            )
+        )
+
+    assert client.calls == [(combined_url, timeout)]
+
+
+@pytest.mark.unit
+def test_iter_target_batches__splits_chunk_on_connection_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Chunk-level connection errors should fall back to per-ID requests."""
+
+    cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=7.0)
+    mapping_cfg = UniprotMappingCfg()
+    timeout = 5.0
+    base = cfg.chembl_base.rstrip("/")
+
+    def _chunk_url(ids: Sequence[str]) -> str:
+        return (
+            f"{base}/target.json?format=json"
+            f"&include=protein_classifications,cross_references"
+            f"&target_chembl_id__in={','.join(ids)}"
+        )
+
     combined_url = _chunk_url(["CHEMBL1", "CHEMBL2"])
     responses = {
         combined_url: requests.ConnectionError("simulated connection reset"),
@@ -148,11 +170,6 @@ def test_iter_target_batches__splits_chunk_on_connection_error(
                 mapping_cfg=mapping_cfg,
                 chunk_size=2,
                 timeout=timeout,
-                enable_split_fallback=False,
-            )
-        )
-
-    assert client.calls == [(combined_url, timeout)]
             )
         )
 
