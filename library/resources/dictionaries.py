@@ -28,6 +28,9 @@ _IGNORED_FILENAMES = {
     ".DS_Store",
 }
 
+_IGNORED_DIRNAMES = {"__pycache__"}
+_IGNORED_SUFFIXES = {".pyc", ".pyo"}
+
 
 class DictionaryManifestError(RuntimeError):
     """Raised when the dictionary manifest cannot be parsed or validated."""
@@ -71,6 +74,10 @@ def _compute_sha256(path: Path) -> str:
             if child.is_dir():
                 continue
             if child.name == _MANIFEST_FILENAME and child.parent == path:
+                continue
+            if any(part in _IGNORED_DIRNAMES for part in child.relative_to(path).parts):
+                continue
+            if child.suffix in _IGNORED_SUFFIXES:
                 continue
             if child.name in _IGNORED_FILENAMES or child.name.startswith("._"):
                 continue
