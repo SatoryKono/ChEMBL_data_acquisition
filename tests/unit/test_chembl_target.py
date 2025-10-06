@@ -93,3 +93,43 @@ def test_iter_target_batches__splits_chunk_on_timeout(caplog: pytest.LogCaptureF
     assert parsed_ids == ["CHEMBL1", "CHEMBL2"]
 
     assert any(record.getMessage().startswith("chembl_timeout_split") for record in caplog.records)
+
+
+@pytest.mark.unit
+def test_iter_target_batches__propagates_timeout_without_split() -> None:
+    """Disable fallback splitting so that higher level retry logic can react."""
+
+    cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=8.0)
+    mapping_cfg = UniprotMappingCfg()
+    timeout = 6.0
+    base = cfg.chembl_base.rstrip("/")
+
+    def _chunk_url(ids: Sequence[str]) -> str:
+        return (
+            f"{base}/target.json?format=json"
+            f"&include=protein_classifications,cross_references"
+            f"&target_chembl_id__in={','.join(ids)}"
+        )
+
+    combined_url = _chunk_url(["CHEMBL10", "CHEMBL11"])
+    responses = {
+        combined_url: requests.ReadTimeout("simulated timeout"),
+        _chunk_url(["CHEMBL10"]): _build_response("CHEMBL10", "Gamma"),
+        _chunk_url(["CHEMBL11"]): _build_response("CHEMBL11", "Delta"),
+    }
+    client = _StubChemblClient(responses)
+
+    with pytest.raises(requests.ReadTimeout):
+        list(
+            iter_target_batches(
+                ["CHEMBL10", "CHEMBL11"],
+                cfg=cfg,
+                client=client,
+                mapping_cfg=mapping_cfg,
+                chunk_size=2,
+                timeout=timeout,
+                enable_split_fallback=False,
+            )
+        )
+
+    assert client.calls == [(combined_url, timeout)]
