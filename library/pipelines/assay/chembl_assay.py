@@ -18,6 +18,13 @@ from ...common.pandas_utils import json_normalize_pyarrow
 # Long", so keep the chunk size at or below this value to avoid retries.
 MAX_ASSAY_CHUNK_SIZE = 25
 
+# ``_ASSAY_MAX_IDS_PER_REQUEST`` used to be the public name for the chunk size
+# limit.  Keep the alias for compatibility with older call sites that still
+# reference it indirectly (for example through ``eval`` of serialized
+# expressions).  The leading underscore mirrors the historical constant name and
+# avoids polluting the public namespace beyond backward compatibility needs.
+_ASSAY_MAX_IDS_PER_REQUEST = MAX_ASSAY_CHUNK_SIZE
+
 MAX_ACTIVITY_CHUNK_SIZE = 20
 
 ASSAY_VARIANT_COLUMN_ALIASES = {
