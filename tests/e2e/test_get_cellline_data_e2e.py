@@ -112,7 +112,9 @@ def test_get_cellline_data_main_success(
         args._config_metadata = None
         if isinstance(args.input_csv, (str, Path)):
             args.input_csv = Path(args.input_csv)
-        if isinstance(args.output_csv, (str, Path)):
+        if isinstance(getattr(args, "final_out", None), (str, Path)):
+            args.final_out = Path(args.final_out)
+        if isinstance(getattr(args, "output_csv", None), (str, Path)):
             args.output_csv = Path(args.output_csv)
         cfg = Config()
         return run(cfg, args)
@@ -129,7 +131,7 @@ def test_get_cellline_data_main_success(
         [
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
             "--limit",
             "2",
