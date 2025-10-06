@@ -58,7 +58,10 @@ def _normalise_text_newlines(data: bytes) -> bytes:
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
-        return data
+        # Fall back to a binary-safe replacement so that legacy encodings
+        # (e.g. Latin-1) still produce deterministic hashes on Windows where
+        # ``git`` may transparently convert ``\n`` to ``\r\n`` during checkout.
+        return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
     return text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
 
 
