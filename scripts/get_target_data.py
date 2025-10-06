@@ -2189,15 +2189,22 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     cfg.chembl,
                     global_limiter=global_limiter,
                 ) as client:
-                    for _, raw_chunk, parsed_chunk in cl.iter_target_batches(
+                    def _count_attempt() -> None:
+                        nonlocal chembl_http_requests
+                        chembl_http_requests += 1
+
+                    batch_iter = cl.iter_target_batches_with_retry(
                         counted_ids_iter,
                         cfg=cfg.api,
                         client=client,
                         mapping_cfg=cfg.uniprot_mapping,
                         chunk_size=cfg.target.chembl.chunk_size,
                         timeout=cfg.target.chembl.timeout,
-                    ):
-                        chembl_http_requests += 1
+                        retry_cfg=cfg.target.chembl.batch_retry,
+                        log=logger,
+                        on_attempt=_count_attempt,
+                    )
+                    for _, raw_chunk, parsed_chunk in batch_iter:
                         raw_dump_rows_total += len(raw_chunk)
                         fetched_rows_total += len(parsed_chunk)
                         if raw_chunk.empty:
@@ -2360,15 +2367,22 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 cfg.chembl,
                 global_limiter=global_limiter,
             ) as client:
-                for _, raw_chunk, parsed_chunk in cl.iter_target_batches(
+                def _count_attempt() -> None:
+                    nonlocal chembl_http_requests
+                    chembl_http_requests += 1
+
+                batch_iter = cl.iter_target_batches_with_retry(
                     counted_ids_iter,
                     cfg=cfg.api,
                     client=client,
                     mapping_cfg=cfg.uniprot_mapping,
                     chunk_size=cfg.target.chembl.chunk_size,
                     timeout=cfg.target.chembl.timeout,
-                ):
-                    chembl_http_requests += 1
+                    retry_cfg=cfg.target.chembl.batch_retry,
+                    log=logger,
+                    on_attempt=_count_attempt,
+                )
+                for _, raw_chunk, parsed_chunk in batch_iter:
                     raw_dump_rows_total += len(raw_chunk)
                     try:
                         raw_dump_writer.write(raw_chunk)

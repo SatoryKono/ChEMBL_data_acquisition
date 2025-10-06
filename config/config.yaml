@@ -122,6 +122,11 @@ sources:
           chunk_size: 5
           timeout: 30.0
           limit: null
+          offset: 0
+          batch_retry:
+            enable: true
+            shrink_factor: 0.5
+            min_size: 1
         iuphar:
           target_csv: "config/dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
           family_csv: "config/dictionary/_target/_IUPHAR/_IUPHAR_family.csv"

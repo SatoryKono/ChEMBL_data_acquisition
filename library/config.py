@@ -1251,6 +1251,17 @@ class TargetUniprotCfg(_BaseModel):
     offset: int = Field(0, ge=0)
 
 
+class TargetChemblBatchRetryCfg(_BoolModel):
+    enable: bool = True
+    shrink_factor: float = Field(0.5, gt=0, lt=1)
+    min_size: int = Field(1, ge=1)
+
+    @field_validator("enable", mode="before")
+    @classmethod
+    def _bools(cls, value: Any) -> bool:
+        return cls._parse_bool(value)
+
+
 class TargetChemblCfg(_BaseModel):
     """Defaults for fetching ChEMBL targets.
 
@@ -1265,6 +1276,9 @@ class TargetChemblCfg(_BaseModel):
 
     limit: int | None = Field(default=None, ge=0)
     offset: int = Field(0, ge=0)
+    batch_retry: TargetChemblBatchRetryCfg = Field(
+        default_factory=lambda: TargetChemblBatchRetryCfg()
+    )
 
 
 
