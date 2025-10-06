@@ -313,25 +313,72 @@ def iter_target_batches(
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
 
     for chunk in _chunked(ids, chunk_size):
-        url = f"{base}&target_chembl_id__in={','.join(chunk)}"
-        data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
-        items = data.get("targets") or data.get("target") or []
-        payloads = [
-            _extract_target_payload(item)
-            for item in items
-            if isinstance(item, (dict, list))
-        ]
-        payloads = [payload for payload in payloads if payload]
-        if not payloads:
-            continue
-        raw_frame = _normalise_target_payloads(payloads)
-        records = [_parse_target_record(payload, mapping_cfg) for payload in payloads]
-        parsed_frame = pd.DataFrame(records)
-        if parsed_frame.empty:
-            parsed_frame = pd.DataFrame(columns=TARGET_FIELDS)
-        else:
-            parsed_frame = parsed_frame.reindex(columns=TARGET_FIELDS)
-        yield payloads, raw_frame, parsed_frame
+        yield from _iter_target_chunk_with_fallback(
+            chunk,
+            base_url=base,
+            cfg=cfg,
+            client=client,
+            mapping_cfg=mapping_cfg,
+            timeout=effective_timeout,
+        )
+
+
+def _iter_target_chunk_with_fallback(
+    chunk: Sequence[str],
+    *,
+    base_url: str,
+    cfg: ApiCfg,
+    client: ChemblClient,
+    mapping_cfg: UniprotMappingCfg,
+    timeout: float,
+) -> Iterator[tuple[list[dict[str, Any]], pd.DataFrame, pd.DataFrame]]:
+    """Yield processed records for ``chunk`` with timeout-aware retries."""
+
+    if not chunk:
+        return
+
+    url = f"{base_url}&target_chembl_id__in={','.join(chunk)}"
+    try:
+        data = client.request_json(url, cfg=cfg, timeout=timeout)
+    except ReadTimeout as exc:
+        if len(chunk) <= 1:
+            raise exc
+        logger.warning(
+            "chembl_timeout_split",
+            extra={
+                "chunk_size": len(chunk),
+                "ids": list(chunk),
+                "timeout": timeout,
+            },
+        )
+        for identifier in chunk:
+            yield from _iter_target_chunk_with_fallback(
+                [identifier],
+                base_url=base_url,
+                cfg=cfg,
+                client=client,
+                mapping_cfg=mapping_cfg,
+                timeout=timeout,
+            )
+        return
+
+    items = data.get("targets") or data.get("target") or []
+    payloads = [
+        _extract_target_payload(item)
+        for item in items
+        if isinstance(item, (dict, list))
+    ]
+    payloads = [payload for payload in payloads if payload]
+    if not payloads:
+        return
+    raw_frame = _normalise_target_payloads(payloads)
+    records = [_parse_target_record(payload, mapping_cfg) for payload in payloads]
+    parsed_frame = pd.DataFrame(records)
+    if parsed_frame.empty:
+        parsed_frame = pd.DataFrame(columns=TARGET_FIELDS)
+    else:
+        parsed_frame = parsed_frame.reindex(columns=TARGET_FIELDS)
+    yield payloads, raw_frame, parsed_frame
 
 
 def iter_target_batches_with_retry(

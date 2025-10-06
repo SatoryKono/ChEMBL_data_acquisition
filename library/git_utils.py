@@ -19,9 +19,20 @@ from .common.log import logger
 
 
 def _repo_root() -> Path:
-    """Return the repository root used for Git metadata."""
+    """Return the repository root used for Git metadata.
 
-    return Path(__file__).resolve().parent.parent
+    The helper walks up from the current module location until it encounters a
+    directory that contains Git metadata (``.git``) or the project manifest
+    (``pyproject.toml``).  This mirrors the behaviour in
+    :mod:`library.common.git` and keeps the lookup resilient to different import
+    locations.
+    """
+
+    current = Path(__file__).resolve().parent
+    for candidate in (current, *current.parents):
+        if (candidate / ".git").exists() or (candidate / "pyproject.toml").is_file():
+            return candidate
+    return current
 
 
 def _resolve_git_dir(repo_root: Path) -> Path | None:

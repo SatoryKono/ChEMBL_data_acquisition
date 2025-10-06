@@ -51,14 +51,29 @@ class _MemoryLogger:
     def __init__(self) -> None:
         self.events: list[tuple[str, str, dict[str, object]]] = []
 
-    def info(self, event: str, **kwargs: object) -> None:
-        self.events.append(("info", event, dict(kwargs)))
+    def _record(
+        self,
+        level: str,
+        event: str,
+        args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> None:
+        payload = dict(kwargs)
+        if args:
+            payload["args"] = args
+        self.events.append((level, event, payload))
 
-    def warning(self, event: str, **kwargs: object) -> None:
-        self.events.append(("warning", event, dict(kwargs)))
+    def info(self, event: str, *args: object, **kwargs: object) -> None:
+        self._record("info", event, args, dict(kwargs))
 
-    def error(self, event: str, **kwargs: object) -> None:
-        self.events.append(("error", event, dict(kwargs)))
+    def warning(self, event: str, *args: object, **kwargs: object) -> None:
+        self._record("warning", event, args, dict(kwargs))
+
+    def error(self, event: str, *args: object, **kwargs: object) -> None:
+        self._record("error", event, args, dict(kwargs))
+
+    def debug(self, event: str, *args: object, **kwargs: object) -> None:
+        self._record("debug", event, args, dict(kwargs))
 
 
 def _patch_logger(monkeypatch: pytest.MonkeyPatch, module: object) -> _MemoryLogger:
@@ -347,6 +362,109 @@ def test_get_activity_cli__retry_and_idempotent(
     done_events = [event for _, event, _ in logger_stub.events]
     assert done_events.count("activity_pipeline_done") >= 1
     assert not any(event == "activity_pipeline_failed" for event in done_events)
+
+
+@pytest.mark.e2e
+def test_get_activity_cli__timeout_split_recovers(
+    tmp_path: Path,
+    cfg: Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_activity_cfg(cfg)
+    cfg.activity.batch_size = 4
+    cfg.retry.max_attempts = 2
+    input_csv = tmp_path / "activities.csv"
+    input_csv.write_text(
+        "activity_id\nACT1\nACT2\nACT3\nACT4\n",
+        encoding="utf-8",
+    )
+    output_csv = tmp_path / "out" / "activities.csv"
+
+    activity_rows = {
+        "ACT1": {
+            "activity_id": "ACT1",
+            "molecule_chembl_id": "CHEMBL1",
+            "assay_chembl_id": "ASSAY1",
+            "standard_value": 1.0,
+            "standard_units": "nM",
+            "standard_type": "IC50",
+            "relation": "=",
+            "molecule_pref_name": "Compound 1",
+        },
+        "ACT2": {
+            "activity_id": "ACT2",
+            "molecule_chembl_id": "CHEMBL2",
+            "assay_chembl_id": "ASSAY2",
+            "standard_value": 2.0,
+            "standard_units": "nM",
+            "standard_type": "IC50",
+            "relation": "=",
+            "molecule_pref_name": "Compound 2",
+        },
+        "ACT3": {
+            "activity_id": "ACT3",
+            "molecule_chembl_id": "CHEMBL3",
+            "assay_chembl_id": "ASSAY3",
+            "standard_value": 3.0,
+            "standard_units": "nM",
+            "standard_type": "IC50",
+            "relation": "=",
+            "molecule_pref_name": "Compound 3",
+        },
+        "ACT4": {
+            "activity_id": "ACT4",
+            "molecule_chembl_id": "CHEMBL4",
+            "assay_chembl_id": "ASSAY4",
+            "standard_value": 4.0,
+            "standard_units": "nM",
+            "standard_type": "IC50",
+            "relation": "=",
+            "molecule_pref_name": "Compound 4",
+        },
+    }
+
+    call_log: list[tuple[str, ...]] = []
+
+    def _fake_get_activities(chunk_ids: Iterable[str], **_: object) -> pd.DataFrame:
+        identifiers = [str(item) for item in chunk_ids]
+        call_log.append(tuple(identifiers))
+        if len(identifiers) > 1:
+            raise requests.ReadTimeout("simulated timeout")
+        row = activity_rows[identifiers[0]]
+        return pd.DataFrame([row])
+
+    monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
+    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(get_activity_data, "sleep", lambda *_args, **_kwargs: None)
+
+    written = _install_activity_writer(monkeypatch)
+    logger_stub = _patch_logger(monkeypatch, get_activity_data)
+    _patch_activity_cli(monkeypatch, cfg)
+
+    args = [
+        "--input",
+        str(input_csv),
+        "--final-out",
+        str(output_csv),
+        "--batch-size",
+        "4",
+    ]
+
+    exit_code = get_activity_data.main(args)
+
+    assert exit_code == 0
+    assert output_csv.exists()
+    result = pd.read_csv(output_csv)
+    assert list(result["activity_id"]) == ["ACT1", "ACT2", "ACT3", "ACT4"]
+    assert len(written) == 1
+
+    events = [event for _, event, _ in logger_stub.events]
+    assert "activity_fetch_split" in events
+    assert "activity_pipeline_done" in events
+    assert not any(event == "activity_pipeline_failed" for event in events)
+
+    assert call_log[0] == ("ACT1", "ACT2", "ACT3", "ACT4")
+    assert any(len(ids) == 1 for ids in call_log)
 
 
 @pytest.mark.e2e
