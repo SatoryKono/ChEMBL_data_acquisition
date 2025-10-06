@@ -205,6 +205,60 @@ _EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series | Non
 }
 
 
+def _coerce_extended_series(
+    series: pd.Series,
+    dtype: str,
+    column: str,
+) -> tuple[pd.Series, pd.Series]:
+    """Return ``series`` coerced to ``dtype`` and a mask of conversion failures."""
+
+    if not isinstance(series, pd.Series):
+        series = pd.Series(series)
+
+    if dtype == "string":
+        converted = series.astype(pd.StringDtype())
+        failures = pd.Series(False, index=converted.index)
+        return converted, failures
+
+    if dtype == "Float64":
+        numeric = pd.to_numeric(series, errors="coerce")
+        converted = pd.Series(pd.array(numeric, dtype="Float64"), index=series.index)
+        failures = series.notna() & converted.isna()
+        return converted, failures
+
+    if dtype == "Int64":
+        numeric = pd.to_numeric(series, errors="coerce")
+        converted_float = pd.Series(pd.array(numeric, dtype="Float64"), index=series.index)
+        failures = series.notna() & converted_float.isna()
+        non_integral_mask = converted_float.notna() & converted_float.ne(converted_float.round())
+        if non_integral_mask.any():
+            converted_float.loc[non_integral_mask] = pd.NA
+            failures = failures | non_integral_mask
+        try:
+            converted = converted_float.astype("Int64")
+        except (TypeError, ValueError):
+            converted = pd.Series(pd.NA, index=series.index, dtype="Int64")
+            failures = series.notna()
+        return converted, failures
+
+    if dtype == "boolean":
+        try:
+            converted = series.astype("boolean")
+            failures = series.notna() & converted.isna()
+        except (TypeError, ValueError):
+            converted = pd.Series(pd.NA, index=series.index, dtype="boolean")
+            failures = series.notna()
+        return converted, failures
+
+    try:
+        converted = series.astype(dtype)
+        failures = series.notna() & converted.isna()
+    except (TypeError, ValueError):
+        converted = pd.Series(pd.NA, index=series.index, dtype=dtype)
+        failures = series.notna()
+    return converted, failures
+
+
  
 def _string_like_missing(series: pd.Series) -> pd.Series:
     """Return a boolean mask for ``series`` treating blanks as missing."""
@@ -434,30 +488,47 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
     for column, dtype in _EXTENDED_ACTIVITY_DTYPES.items():
         fallback = _EXTENDED_ACTIVITY_FALLBACKS.get(column)
         if column in result.columns:
+            coerced_existing, _ = _coerce_extended_series(result[column], dtype, column)
+            result[column] = coerced_existing
             if fallback is not None:
-                existing = result[column]
-                if dtype in {"Float64", "Int64"}:
-                    missing_mask = existing.isna()
+                if dtype in {"Float64", "Int64", "boolean"}:
+                    missing_mask = coerced_existing.isna()
                 else:
-                    missing_mask = _string_like_missing(existing)
+                    missing_mask = _string_like_missing(coerced_existing)
                 if missing_mask.any():
                     candidate = fallback(result)
                     if candidate is not None:
                         aligned = candidate.reindex(result.index)
-                        try:
-                            filled = aligned.astype(dtype)
-                        except (TypeError, ValueError):
-                            filled = aligned.astype("string")
-                        result.loc[missing_mask, column] = filled.loc[missing_mask]
+                        coerced_fallback, fallback_failures = _coerce_extended_series(
+                            aligned, dtype, column
+                        )
+                        failure_subset = fallback_failures & missing_mask
+                        if failure_subset.any():
+                            logger.debug(
+                                "activity_extended_fallback_conversion_failed",
+                                column=column,
+                                dtype=dtype,
+                                rows=int(failure_subset.sum()),
+                                context="existing",
+                            )
+                        result.loc[missing_mask, column] = coerced_fallback.loc[missing_mask]
             continue
         if fallback is not None:
             candidate = fallback(result)
             if candidate is not None:
                 aligned = candidate.reindex(result.index)
-                try:
-                    result[column] = aligned.astype(dtype)
-                except TypeError:
-                    result[column] = aligned.astype("string")
+                coerced_fallback, fallback_failures = _coerce_extended_series(
+                    aligned, dtype, column
+                )
+                if fallback_failures.any():
+                    logger.debug(
+                        "activity_extended_fallback_conversion_failed",
+                        column=column,
+                        dtype=dtype,
+                        rows=int(fallback_failures.sum()),
+                        context="missing_column",
+                    )
+                result[column] = coerced_fallback
                 continue
         if dtype == "boolean":
             filler = pd.Series(pd.NA, index=result.index, dtype="boolean")
