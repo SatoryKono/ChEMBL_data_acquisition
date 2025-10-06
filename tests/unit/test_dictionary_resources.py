@@ -39,3 +39,24 @@ def test_compute_sha256__ignores_crlf_in_directories(tmp_path: Path) -> None:
     (crlf_dir / "nested" / "more.csv").write_bytes("x\r\ny\r\n".encode("utf-8"))
 
     assert dictionaries._compute_sha256(lf_dir) == dictionaries._compute_sha256(crlf_dir)
+
+
+@pytest.mark.unit
+def test_compute_sha256__ignores_bytecode_artifacts(tmp_path: Path) -> None:
+    """Ensure cached Python bytecode files do not affect resource checksums."""
+
+    root = tmp_path / "dictionary"
+    root.mkdir()
+
+    data_file = root / "data.csv"
+    data_file.write_text("id\n1\n", encoding="utf-8")
+
+    expected = dictionaries._compute_sha256(root)
+
+    pycache = root / "__pycache__"
+    pycache.mkdir()
+    (pycache / "module.cpython-313.pyc").write_bytes(b"\x00\x01")
+    (pycache / "module.pyo").write_bytes(b"\x02\x03")
+    (root / "standalone.pyc").write_bytes(b"\x04\x05")
+
+    assert dictionaries._compute_sha256(root) == expected
