@@ -961,58 +961,108 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         def fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
             nonlocal last_error_extra, last_error_context
-            attempts = max(1, retry_cfg.max_attempts)
-            for attempt in range(1, attempts + 1):
-                try:
-                    result = cl.get_activities(
-                        chunk_ids,
-                        cfg=cfg.api,
-                        client=client,
-                        chunk_size=cfg.activity.batch_size,
-                        timeout=cfg.activity.timeout,
-                        **extra_kwargs,
-                    )
-                except (requests.RequestException, ValueError) as exc:
-                    error_message = str(exc)
-                    context = {
-                        "chunk_ids": list(chunk_ids),
-                        "chunk_size": len(chunk_ids),
-                        "attempt": attempt,
-                        "max_attempts": attempts,
-                        "batch_size": cfg.activity.batch_size,
-                        "timeout": cfg.activity.timeout,
-                    }
-                    log_context = {k: v for k, v in context.items() if k != "chunk_ids"}
-                    last_error_extra = {
-                        "msg": error_message,
-                        "chunk_ids": context["chunk_ids"],
-                    }
-                    last_error_context = dict(log_context)
-                    if attempt >= attempts:
-                        logger.error(
-                            "activity_fetch_failed",
+
+            timeout_error_types = (
+                requests.Timeout,
+                requests.ReadTimeout,
+                requests.ConnectTimeout,
+                requests.exceptions.RetryError,
+            )
+
+            def _is_timeout_error(exc: Exception) -> bool:
+                if isinstance(exc, timeout_error_types):
+                    return True
+                message = str(exc).strip().lower()
+                if not message:
+                    return False
+                return "timed out" in message or "timeout" in message
+
+            def _fetch(ids: Sequence[str], *, depth: int = 0) -> pd.DataFrame:
+                nonlocal last_error_extra, last_error_context
+
+                attempts = max(1, retry_cfg.max_attempts)
+                id_list = [str(identifier) for identifier in ids]
+
+                for attempt in range(1, attempts + 1):
+                    try:
+                        result = cl.get_activities(
+                            id_list,
+                            cfg=cfg.api,
+                            client=client,
+                            chunk_size=cfg.activity.batch_size,
+                            timeout=cfg.activity.timeout,
+                            **extra_kwargs,
+                        )
+                    except (requests.RequestException, ValueError) as exc:
+                        error_message = str(exc)
+                        context = {
+                            "chunk_ids": list(id_list),
+                            "chunk_size": len(id_list),
+                            "attempt": attempt,
+                            "max_attempts": attempts,
+                            "batch_size": cfg.activity.batch_size,
+                            "timeout": cfg.activity.timeout,
+                        }
+                        log_context = {
+                            key: value for key, value in context.items() if key != "chunk_ids"
+                        }
+                        last_error_extra = {
+                            "msg": error_message,
+                            "chunk_ids": context["chunk_ids"],
+                        }
+                        last_error_context = dict(log_context)
+                        if attempt >= attempts:
+                            if len(id_list) > 1 and _is_timeout_error(exc):
+                                split_context = dict(log_context)
+                                split_context["depth"] = depth
+                                logger.warning(
+                                    "activity_fetch_split",
+                                    extra=last_error_extra,
+                                    **split_context,
+                                )
+                                midpoint = max(1, len(id_list) // 2)
+                                left_ids = tuple(id_list[:midpoint])
+                                right_ids = tuple(id_list[midpoint:])
+                                frames: list[pd.DataFrame] = []
+                                if left_ids:
+                                    frames.append(_fetch(left_ids, depth=depth + 1))
+                                if right_ids:
+                                    frames.append(_fetch(right_ids, depth=depth + 1))
+                                if frames:
+                                    combined = pd.concat(
+                                        frames, ignore_index=True, sort=False
+                                    )
+                                else:
+                                    combined = pd.DataFrame(columns=ACTIVITY_COLUMNS)
+                                last_error_extra = None
+                                last_error_context = {}
+                                return combined
+                            logger.error(
+                                "activity_fetch_failed",
+                                extra=last_error_extra,
+                                error=error_message,
+                                **log_context,
+                            )
+                            chunk_failures.add_failure(id_list, error_message)
+                            raise PipelineError("chunk_fetch_failed")
+                        delay = compute_backoff_delay(attempt, retry_cfg)
+                        logger.warning(
+                            "activity_fetch_retry",
                             extra=last_error_extra,
-                            error=error_message,
+                            delay=delay,
                             **log_context,
                         )
-                        chunk_failures.add_failure(chunk_ids, error_message)
-                        raise PipelineError("chunk_fetch_failed")
-                    delay = compute_backoff_delay(attempt, retry_cfg)
-                    logger.warning(
-                        "activity_fetch_retry",
-                        extra=last_error_extra,
-                        delay=delay,
-                        **log_context,
-                    )
-                    if delay > 0:
-                        sleep(delay)
-                else:
-                    last_error_extra = None
-                    last_error_context = {}
-                    return _ensure_molecule_pref_name(
-                        result, cfg=cfg, client=client, cache=pref_name_cache
-                    )
-            return pd.DataFrame(columns=ACTIVITY_COLUMNS)
+                        if delay > 0:
+                            sleep(delay)
+                    else:
+                        last_error_extra = None
+                        last_error_context = {}
+                        return _ensure_molecule_pref_name(
+                            result, cfg=cfg, client=client, cache=pref_name_cache
+                        )
+                return pd.DataFrame(columns=ACTIVITY_COLUMNS)
+
+            return _fetch(chunk_ids, depth=0)
 
         worker_count = getattr(cfg.activity, "workers", 1) or 1
         fetch_config = ChunkedFetchConfig(
