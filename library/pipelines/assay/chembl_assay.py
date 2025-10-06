@@ -13,6 +13,11 @@ from ...config import ApiCfg, TESTITEM_FIELD_DEFAULTS
 from ...common.log import logger
 from ...common.pandas_utils import json_normalize_pyarrow
 
+# ChEMBL bulk endpoints accept at most 25 identifiers per request when using
+# ``__in`` filters. Requests above this threshold return HTTP 414 "URI Too
+# Long", so keep the chunk size at or below this value to avoid retries.
+MAX_ASSAY_CHUNK_SIZE = 25
+
 MAX_ACTIVITY_CHUNK_SIZE = 20
 
 ASSAY_VARIANT_COLUMN_ALIASES = {
@@ -479,7 +484,7 @@ def get_assays(
             frames = _filter_variant_frames(frames)
             return frames
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    effective_chunk_size = min(chunk_size, _ASSAY_MAX_IDS_PER_REQUEST)
+    effective_chunk_size = min(int(chunk_size), MAX_ASSAY_CHUNK_SIZE)
     if effective_chunk_size <= 0:
         raise ValueError("chunk_size must be positive")
     if effective_chunk_size < chunk_size:
@@ -488,6 +493,7 @@ def get_assays(
             extra={
                 "requested_chunk_size": chunk_size,
                 "effective_chunk_size": effective_chunk_size,
+                "limit": MAX_ASSAY_CHUNK_SIZE,
                 "stage": "chunk_prepare",
             },
         )

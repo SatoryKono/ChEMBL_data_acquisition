@@ -9,7 +9,12 @@ from requests import ConnectionError, HTTPError, ReadTimeout, Response
 from urllib.parse import parse_qs, urlparse
 
 from library.config import ApiCfg
-from library.pipelines.assay.chembl_assay import get_activities, get_assays, get_testitem
+from library.pipelines.assay.chembl_assay import (
+    MAX_ASSAY_CHUNK_SIZE,
+    get_activities,
+    get_assays,
+    get_testitem,
+)
 
 
 class _StubClient:
@@ -119,18 +124,26 @@ def test_get_assays__recovers_from_request_exception() -> None:
 
 @pytest.mark.unit
 def test_get_assays__clamps_large_chunks() -> None:
-    """Requests are split when more than 25 assay IDs are provided."""
+    """Requests exceeding the API limit are split across multiple calls."""
 
+    first_chunk_ids = [f"CHEMBL{i}" for i in range(1, MAX_ASSAY_CHUNK_SIZE + 1)]
+    remainder_ids = [
+        f"CHEMBL{i}"
+        for i in range(
+            MAX_ASSAY_CHUNK_SIZE + 1,
+            MAX_ASSAY_CHUNK_SIZE + 6,
+        )
+    ]
     responders = [
         {
             "assays": [
-                {"assay_chembl_id": f"CHEMBL{i}"} for i in range(1, 26)
+                {"assay_chembl_id": identifier} for identifier in first_chunk_ids
             ],
             "page_meta": {},
         },
         {
             "assays": [
-                {"assay_chembl_id": f"CHEMBL{i}"} for i in range(26, 31)
+                {"assay_chembl_id": identifier} for identifier in remainder_ids
             ],
             "page_meta": {},
         },
@@ -138,8 +151,13 @@ def test_get_assays__clamps_large_chunks() -> None:
     client = _StubClient(responders)
     cfg = ApiCfg()
 
-    identifiers = [f"CHEMBL{i}" for i in range(1, 31)]
-    df = get_assays(identifiers, cfg=cfg, client=client, chunk_size=50)
+    identifiers = first_chunk_ids + remainder_ids
+    df = get_assays(
+        identifiers,
+        cfg=cfg,
+        client=client,
+        chunk_size=MAX_ASSAY_CHUNK_SIZE * 3,
+    )
 
     assert sorted(df["assay_chembl_id"]) == sorted(identifiers)
     chunk_sizes = []
@@ -149,7 +167,12 @@ def test_get_assays__clamps_large_chunks() -> None:
         if ids_param:
             chunk_sizes.append(len(ids_param.split(",")))
 
-    assert chunk_sizes == [25, 5]
+    expected_chunk_sizes = [MAX_ASSAY_CHUNK_SIZE]
+    remainder = len(remainder_ids)
+    if remainder:
+        expected_chunk_sizes.append(remainder)
+
+    assert chunk_sizes == expected_chunk_sizes
 
 
 @pytest.mark.unit
