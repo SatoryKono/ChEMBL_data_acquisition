@@ -71,8 +71,9 @@ def test_cli_logging__creates_log_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: dict[str, Any]
 ) -> None:
     base_path = tmp_path
-    log_dir = base_path / "logs"
+    log_dir = base_path / "data" / "logs"
     log_dir.mkdir(parents=True)
+    monkeypatch.setattr("library.cli.logging._DEFAULT_LOG_DIR", log_dir)
 
     config_path = base_path / "config.yaml"
     config_path.write_text("io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n", encoding="utf-8")
