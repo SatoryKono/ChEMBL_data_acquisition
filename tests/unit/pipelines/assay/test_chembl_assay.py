@@ -51,6 +51,26 @@ def test_get_assays__splits_chunk_on_404() -> None:
 
 
 @pytest.mark.unit
+def test_get_assays__detail_fallback_on_single_404() -> None:
+    """Single-item 404 fallbacks query the detail endpoint."""
+
+    responders = [
+        "HTTP404",
+        "HTTP404",
+        {"assay": {"assay_chembl_id": "CHEMBL1"}},
+        "HTTP404",
+        {"assays": []},
+    ]
+    client = _StubClient(responders)
+    cfg = ApiCfg()
+
+    df = get_assays(["CHEMBL1", "CHEMBL2"], cfg=cfg, client=client, chunk_size=2)
+
+    assert list(df["assay_chembl_id"]) == ["CHEMBL1"]
+    assert any("/assay/CHEMBL1" in call for call in client.calls)
+
+
+@pytest.mark.unit
 def test_get_assays__preserves_data_segment_in_pagination() -> None:
     """Relative ``page_meta.next`` links keep the ``/data`` segment."""
 
