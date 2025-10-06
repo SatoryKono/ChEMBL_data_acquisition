@@ -70,6 +70,7 @@ def _compute_sha256(path: Path) -> str:
 
     hasher = hashlib.sha256()
     if path.is_dir():
+
         # ``Path.rglob`` yields platform-specific ``Path`` objects whose
         # ordering semantics differ between POSIX and Windows.  Iterating over
         # ``sorted(Path.rglob("*"))`` therefore produces a different sequence
@@ -82,6 +83,7 @@ def _compute_sha256(path: Path) -> str:
             key=lambda candidate: candidate.relative_to(path).as_posix(),
         )
         for child in children:
+
             if child.is_dir():
                 continue
             if child.name == _MANIFEST_FILENAME and child.parent == path:
@@ -93,6 +95,9 @@ def _compute_sha256(path: Path) -> str:
             if child.name in _IGNORED_FILENAMES or child.name.startswith("._"):
                 continue
             relative = child.relative_to(path).as_posix()
+            entries.append((relative, child))
+
+        for relative, child in sorted(entries, key=lambda item: item[0]):
             hasher.update(relative.encode("utf-8"))
             data = _normalise_text_newlines(child.read_bytes())
             hasher.update(data)
