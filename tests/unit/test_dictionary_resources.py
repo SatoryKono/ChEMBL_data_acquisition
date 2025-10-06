@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from library.resources import dictionaries
 
@@ -76,3 +77,15 @@ def test_compute_sha256__normalises_crlf_in_non_utf8_files(tmp_path: Path) -> No
     crlf_path.write_bytes(latin1_bytes_crlf)
 
     assert dictionaries._compute_sha256(lf_path) == dictionaries._compute_sha256(crlf_path)
+
+
+@pytest.mark.unit
+def test_manifest_allows_windows_textmode_checksum() -> None:
+    """Ensure the dictionary manifest accepts the Windows CRLF hash variant."""
+
+    manifest_path = Path("config/dictionary/manifest.yaml")
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+
+    sha256_values = manifest["resources"]["dictionary_root"]["sha256"]
+
+    assert "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a" in sha256_values
