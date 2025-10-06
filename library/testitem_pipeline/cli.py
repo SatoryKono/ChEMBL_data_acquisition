@@ -894,12 +894,31 @@ def finalize_output(
     def _column_dtype(column: str) -> pd.api.extensions.ExtensionDtype | str | type:
         dtype_name = schema_dtype_lookup.get(column, "string")
         if dtype_name in {"str", "string"}:
-            return "string"
+            return pd.StringDtype()
         if dtype_name == "boolean":
             return pd.BooleanDtype()
         if dtype_name == "object":
             return object
-        return "string"
+        return pd.StringDtype()
+
+    def _normalise_dtype(
+        dtype: pd.api.extensions.ExtensionDtype | str | type | None,
+    ) -> pd.api.extensions.ExtensionDtype | str | type:
+        if dtype is None:
+            return pd.StringDtype()
+        try:
+            pandas_dtype = pd.api.types.pandas_dtype(dtype)
+        except TypeError:
+            return dtype
+        if isinstance(pandas_dtype, pd.BooleanDtype):
+            return pd.BooleanDtype()
+        if isinstance(pandas_dtype, pd.StringDtype):
+            return pd.StringDtype()
+        if pd.api.types.is_integer_dtype(pandas_dtype):
+            return pd.Int64Dtype()
+        if pd.api.types.is_float_dtype(pandas_dtype):
+            return pd.Float64Dtype()
+        return pandas_dtype
 
     def _ensure_column_alignment(frame: pd.DataFrame) -> None:
         missing = (expected_columns | columns_to_fill) - set(frame.columns)
@@ -909,7 +928,8 @@ def finalize_output(
             dtype = column_dtypes.get(column)
             if dtype is None:
                 dtype = _column_dtype(column)
-                column_dtypes[column] = dtype
+            dtype = _normalise_dtype(dtype)
+            column_dtypes[column] = dtype
             frame[column] = pd.Series(pd.NA, index=frame.index, dtype=dtype)
 
     def _process_chunk(raw: pd.DataFrame) -> pd.DataFrame:
@@ -922,7 +942,7 @@ def finalize_output(
         current = add_pipeline_metadata(current)
         _ensure_column_alignment(current)
         for column in current.columns:
-            column_dtypes.setdefault(column, current.dtypes[column])
+            column_dtypes.setdefault(column, _normalise_dtype(current.dtypes[column]))
         columns_seen.update(current.columns)
         expected_columns.update(columns_seen)
 
