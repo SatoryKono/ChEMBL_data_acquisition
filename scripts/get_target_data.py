@@ -1959,14 +1959,20 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             encoding=cfg.io.csv_encoding,
         )
 
-        output_candidate = getattr(args, "output_csv", None)
-        output = output_candidate or io.default_output_path(args.input_csv, cfg.io)
+        final_out_attr = getattr(args, "final_out", None)
+        if final_out_attr in (None, argparse.SUPPRESS):
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+        else:
+            output_path = Path(final_out_attr)
+            if not isinstance(final_out_attr, Path):
+                args.final_out = output_path
         data_dir = cfg.target.uniprot.data_dir
         uu.init_session(cfg.api, cfg.retry)
         try:
             uu.process(
                 input_csv=str(tmp_path),
-                output_csv=str(output),
+                output_csv=str(output_path),
                 data_dir=data_dir,
                 cfg=cfg.uniprot,
                 gtop_cfg=cfg.iuphar,
@@ -1977,7 +1983,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             tmp_path.unlink(missing_ok=True)
 
         out_df = pd.read_csv(
-            output, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+            output_path, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
         )
         rows_kept = len(out_df)
         if "mapping_uniprot_id" in df.columns:
@@ -1988,7 +1994,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             )
         csv_path = io.write_csv(
             out_df,
-            output,
+            output_path,
             cfg=cfg,
             sep=cfg.io.csv_sep,
             encoding=cfg.io.csv_encoding,
@@ -2118,10 +2124,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     counted_ids_iter = _counted_ids()
 
-    output_candidate = getattr(args, "output_csv", None)
-    base_output = Path(
-        output_candidate or io.default_output_path(args.input_csv, cfg.io)
-    )
+    final_out_attr = getattr(args, "final_out", None)
+    if final_out_attr in (None, argparse.SUPPRESS):
+        base_output = Path(io.default_output_path(args.input_csv, cfg.io))
+        args.final_out = base_output
+    else:
+        base_output = Path(final_out_attr)
+        if not isinstance(final_out_attr, Path):
+            args.final_out = base_output
 
     raw_candidate = getattr(args, "raw_out", None)
     if raw_candidate in (None, argparse.SUPPRESS):
@@ -2258,13 +2268,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     final_candidate = getattr(args, "final_out", None)
     if final_candidate in (None, argparse.SUPPRESS):
-        output_candidate = getattr(args, "output_csv", None)
-        if output_candidate not in (None, argparse.SUPPRESS):
-            final_output = Path(output_candidate)
-        else:
-            final_output = Path(io.default_output_path(args.input_csv, cfg.io))
+        final_output = Path(io.default_output_path(args.input_csv, cfg.io))
+        args.final_out = final_output
     else:
         final_output = Path(final_candidate)
+        if not isinstance(final_candidate, Path):
+            args.final_out = final_output
 
     if raw_path_override is None:
         raw_output = final_output
@@ -2617,11 +2626,17 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
             family_path=cfg.target.iuphar.family_csv,
             encoding=cfg.io.csv_encoding,
         )
-        output_candidate = getattr(args, "output_csv", None)
-        output = output_candidate or io.default_output_path(args.input_csv, cfg.io)
+        final_out_attr = getattr(args, "final_out", None)
+        if final_out_attr in (None, argparse.SUPPRESS):
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+        else:
+            output_path = Path(final_out_attr)
+            if not isinstance(final_out_attr, Path):
+                args.final_out = output_path
         data.map_uniprot_file(
             input_path=source_csv,
-            output_path=output,
+            output_path=str(output_path),
             encoding=cfg.io.csv_encoding,
             sep=cfg.io.csv_sep,
         )
@@ -2641,9 +2656,9 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     try:
         if doc_quality_cfg.enable:
             analyze_table_quality(
-                output,
-                table_name=str(output.with_suffix("")),
-                destination_dir=output.parent,
+                output_path,
+                table_name=str(output_path.with_suffix("")),
+                destination_dir=output_path.parent,
                 sample_rows=doc_quality_cfg.sample_rows,
                 include_columns=doc_quality_cfg.include_columns,
                 exclude_columns=doc_quality_cfg.exclude_columns,
@@ -2652,7 +2667,7 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
         logger.exception(
             "quality_report_failed",
             error=str(exc),
-            path=str(output),
+            path=str(output_path),
             exc=exc,
         )
         return 1
@@ -3742,19 +3757,16 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     final_candidate = getattr(args, "final_out", None)
     if final_candidate in (None, argparse.SUPPRESS):
         final_output = Path(io.default_output_path(args.input_csv, cfg.io))
+        args.final_out = final_output
     else:
         final_output = Path(final_candidate)
-    args.final_out = final_output
-    args.output_csv = final_output
+        if not isinstance(final_candidate, Path):
+            args.final_out = final_output
+        else:
+            args.final_out = final_candidate
     if args.skip_existing and final_output.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(final_output))
         return 0
-    if getattr(args, "_out_alias_used", False):
-        logger.warning(
-            "deprecated_output_alias_used",
-            alias="--out",
-            replacement="--final-out",
-        )
     func = getattr(args, "func", None)
     if func is None:
         logger.error(
@@ -3876,27 +3888,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "iuphar_offset": "target.iuphar.offset",
                 }
                 args_dict = vars(args).copy()
-                output_candidate = args_dict.get("output_csv")
-                if output_candidate in (
-                    None,
-                    argparse.SUPPRESS,
-                ):
-                    final_value = args_dict.get("final_out")
-                    if final_value in (None, argparse.SUPPRESS):
-                        date_token = args_dict.get(
-                            "date", datetime.now(timezone.utc).strftime("%Y%m%d")
-                        )
-                        inferred = Path(args_dict["input_csv"]).with_name(
-                            f"output.{DEFAULT_OUTPUT_STEM}_{date_token}.csv"
-                        )
-                        args_dict["final_out"] = inferred
-                        args_dict["output_csv"] = inferred
-                    else:
-                        candidate = Path(final_value)
-                        args_dict["final_out"] = candidate
-                        args_dict["output_csv"] = candidate
+                final_value = args_dict.get("final_out")
+                if final_value in (None, argparse.SUPPRESS):
+                    date_token = args_dict.get(
+                        "date", datetime.now(timezone.utc).strftime("%Y%m%d")
+                    )
+                    inferred = Path(args_dict["input_csv"]).with_name(
+                        f"output.{DEFAULT_OUTPUT_STEM}_{date_token}.csv"
+                    )
+                    args_dict["final_out"] = inferred
                 else:
-                    args_dict["output_csv"] = Path(output_candidate)
+                    args_dict["final_out"] = Path(final_value)
                 args_namespace = argparse.Namespace(**args_dict)
             if mapping:
                 exit_code = run_cli_command(
