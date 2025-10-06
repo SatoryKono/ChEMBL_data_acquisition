@@ -55,11 +55,19 @@ def _normalise_text_newlines(data: bytes) -> bytes:
 
     if b"\r" not in data or b"\0" in data:
         return data
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        return data
-    return text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+
+    # ``bytes.replace`` keeps the original encoding intact, which means that
+    # newline normalisation also works for inputs encoded with legacy codepages
+    # (for example cp1252) that cannot be losslessly decoded as UTF-8.  Git on
+    # Windows transparently converts text files to ``\r\n`` line endings during
+    # checkout, so relying on ``bytes.decode("utf-8")`` would raise
+    # ``UnicodeDecodeError`` for those resources and result in platform-specific
+    # hashes.  Operating directly on the byte sequence guarantees consistent
+    # results without mutating the payload beyond newline handling.
+    normalised = data.replace(b"\r\n", b"\n")
+    if b"\r" in normalised:
+        normalised = normalised.replace(b"\r", b"\n")
+    return normalised
 
 
 def _compute_sha256(path: Path) -> str:
