@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import pytest
 
@@ -21,6 +21,13 @@ from library.cli.logging import setup_cli_logging
 
 
 REPO_NAME = "SatoryKono/ChEMBL_data_acquisition"
+TEST_ROOT = Path(__file__).resolve().parent
+TEST_DIRECTORIES = (
+    TEST_ROOT / "unit",
+    TEST_ROOT / "integration",
+    TEST_ROOT / "postprocessing",
+    TEST_ROOT / "e2e",
+)
 
 SUCCESS_RATE_THRESHOLD = 0.95
 
@@ -240,6 +247,30 @@ def _write_markdown(summary_path: Path, data: dict[str, Any]) -> None:
     summary_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _has_explicit_targets(extra_args: Sequence[str] | None) -> bool:
+    if not extra_args:
+        return False
+    for token in extra_args:
+        if token == "--":
+            continue
+        if token.startswith("-"):
+            continue
+        return True
+    return False
+
+
+def _normalise_extra_args(extra_args: Sequence[str] | None) -> list[str]:
+    if not extra_args:
+        return []
+    if extra_args and extra_args[0] == "--":
+        return list(extra_args[1:])
+    return list(extra_args)
+
+
+def _default_test_targets() -> list[str]:
+    return [str(path) for path in TEST_DIRECTORIES if path.exists()]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run pytest and emit reports")
     parser.add_argument(
@@ -274,13 +305,18 @@ def main(argv: list[str] | None = None) -> int:
     with setup_cli_logging("run_tests", base_logger_cfg) as logging_ctx:
         configure_logger(logging_ctx.log_cfg)
 
+        extra_args = _normalise_extra_args(args.pytest_args)
+
         pytest_args = [
             "-q",
             f"--log-file={logging_ctx.log_path}",
             f"--log-file-level={logging_ctx.log_cfg.level}",
         ]
-        if args.pytest_args:
-            pytest_args.extend(args.pytest_args)
+
+        if not _has_explicit_targets(extra_args):
+            pytest_args.extend(_default_test_targets())
+
+        pytest_args.extend(extra_args)
 
         pytest_exit_code = pytest.main(pytest_args, plugins=[collector])
         exit_code = int(pytest_exit_code)

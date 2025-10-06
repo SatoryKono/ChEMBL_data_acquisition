@@ -21,8 +21,13 @@ COVERAGE_DIR = REPORTS_DIR / "coverage"
 COVERAGE_XML = COVERAGE_DIR / "coverage.xml"
 COVERAGE_HTML = COVERAGE_DIR / "html"
 REPO_SLUG = "SatoryKono/ChEMBL_data_acquisition"
-
-PYTEST_COMMAND: tuple[str, ...] = (
+TEST_DIRECTORIES = (
+    ROOT_DIR / "tests" / "unit",
+    ROOT_DIR / "tests" / "integration",
+    ROOT_DIR / "tests" / "postprocessing",
+    ROOT_DIR / "tests" / "e2e",
+)
+_BASE_PYTEST_COMMAND: list[str] = [
     sys.executable,
     "-m",
     "pytest",
@@ -36,7 +41,11 @@ PYTEST_COMMAND: tuple[str, ...] = (
     f"--cov-report=xml:{COVERAGE_XML}",
     f"--cov-report=html:{COVERAGE_HTML}",
     "-vv",
+]
+_DEFAULT_TEST_TARGETS: tuple[str, ...] = tuple(
+    str(path) for path in TEST_DIRECTORIES if path.exists()
 )
+PYTEST_COMMAND: tuple[str, ...] = tuple(_BASE_PYTEST_COMMAND + list(_DEFAULT_TEST_TARGETS))
 
 
 def ensure_reports_directory() -> None:

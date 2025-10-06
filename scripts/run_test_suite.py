@@ -23,6 +23,14 @@ SUCCESS_RATE_THRESHOLD = 0.95
 
 logger = logging.getLogger(__name__)
 
+ROOT_DIR = Path(__file__).resolve().parents[1]
+TEST_DIRECTORIES = (
+    ROOT_DIR / "tests" / "unit",
+    ROOT_DIR / "tests" / "integration",
+    ROOT_DIR / "tests" / "postprocessing",
+    ROOT_DIR / "tests" / "e2e",
+)
+
 
 @dataclass
 class TestResult:
@@ -190,6 +198,30 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _has_explicit_targets(extra_args: Sequence[str] | None) -> bool:
+    if not extra_args:
+        return False
+    for token in extra_args:
+        if token == "--":
+            continue
+        if token.startswith("-"):
+            continue
+        return True
+    return False
+
+
+def _normalise_extra_args(extra_args: Sequence[str] | None) -> list[str]:
+    if not extra_args:
+        return []
+    if extra_args and extra_args[0] == "--":
+        return list(extra_args[1:])
+    return list(extra_args)
+
+
+def _default_test_targets() -> list[str]:
+    return [str(path) for path in TEST_DIRECTORIES if path.exists()]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -207,14 +239,18 @@ def main(argv: list[str] | None = None) -> int:
         configure_logger(logging_ctx.log_cfg)
 
         log_path = logging_ctx.log_path
+        extra_args = _normalise_extra_args(args.pytest_args)
+
         pytest_args = [
-            "tests",
             f"--log-file={log_path}",
             f"--log-file-level={logging_ctx.log_cfg.level}",
             "--maxfail=0",
         ]
-        if args.pytest_args:
-            pytest_args.extend(args.pytest_args)
+
+        if not _has_explicit_targets(extra_args):
+            pytest_args.extend(_default_test_targets())
+
+        pytest_args.extend(extra_args)
 
         plugin = JsonReportPlugin(log_path)
         pytest_exit_code = pytest.main(pytest_args, plugins=[plugin])

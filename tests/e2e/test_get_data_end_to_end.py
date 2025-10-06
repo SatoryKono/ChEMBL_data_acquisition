@@ -283,31 +283,34 @@ def test_get_data_end_to_end__miniature_pipeline(
     report_writer = _make_report_writer(5)
     stub_steps = (
         get_data.PipelineStep(
-            "document",
-            _build_stub_pipeline(
+            name="document",
+            main=_build_stub_pipeline(
                 "document",
                 "document_chembl_id",
                 ["document_chembl_id", "title", "pubmed_id"],
                 _documents_transform,
                 accept_mode=True,
             ),
-            None,
+            input_filename="document.csv",
+            output_stem="documents",
             extra_args=("--mode", "all"),
         ),
         get_data.PipelineStep(
-            "target",
-            _build_stub_pipeline(
+            name="target",
+            main=_build_stub_pipeline(
                 "target",
                 "target_chembl_id",
                 ["target_chembl_id", "target_name", "organism"],
                 _targets_transform,
                 accept_subcommand=True,
             ),
-            "all",
+            input_filename="target.csv",
+            output_stem="targets",
+            subcommand="all",
         ),
         get_data.PipelineStep(
-            "assay",
-            _build_stub_pipeline(
+            name="assay",
+            main=_build_stub_pipeline(
                 "assay",
                 "assay_chembl_id",
                 [
@@ -318,21 +321,23 @@ def test_get_data_end_to_end__miniature_pipeline(
                 ],
                 _assays_transform,
             ),
-            None,
+            input_filename="assay.csv",
+            output_stem="assays",
         ),
         get_data.PipelineStep(
-            "testitem",
-            _build_stub_pipeline(
+            name="testitem",
+            main=_build_stub_pipeline(
                 "testitem",
                 "molecule_chembl_id",
                 ["molecule_chembl_id", "preferred_name"],
                 _testitems_transform,
             ),
-            None,
+            input_filename="testitem.csv",
+            output_stem="testitems",
         ),
         get_data.PipelineStep(
-            "activity",
-            _build_stub_pipeline(
+            name="activity",
+            main=_build_stub_pipeline(
                 "activity",
                 "activity_id",
                 [
@@ -346,10 +351,11 @@ def test_get_data_end_to_end__miniature_pipeline(
                 optional_columns=["force_failure"],
                 post_process=report_writer,
             ),
-            None,
+            input_filename="activity.csv",
+            output_stem="activities",
         ),
     )
-    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", stub_steps, raising=False)
+    monkeypatch.setattr(get_data, "_resolve_pipeline_steps", lambda _: stub_steps)
 
     date_prefix = "20240102"
 
@@ -405,7 +411,7 @@ def test_get_data_end_to_end__miniature_pipeline(
         "activity": "activity_id",
     }
     output_paths: dict[str, Path] = {}
-    for step_name, stem in get_data._DEFAULT_OUTPUT_STEMS.items():
+    for step_name, stem in get_data.DEFAULT_OUTPUT_STEMS.items():
         final_path = output_dir / f"output.{stem}_{date_prefix}.csv"
         output_paths[step_name] = final_path
         assert final_path.exists(), f"expected output for {step_name} missing"
@@ -479,7 +485,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert new_exit_code == 0
     new_log_path = log_dir / f"get_data_{new_date_prefix}.log"
     assert new_log_path.exists()
-    for step_name, stem in get_data._DEFAULT_OUTPUT_STEMS.items():
+    for step_name, stem in get_data.DEFAULT_OUTPUT_STEMS.items():
         new_path = output_dir / f"output.{stem}_{new_date_prefix}.csv"
         assert new_path.exists()
 

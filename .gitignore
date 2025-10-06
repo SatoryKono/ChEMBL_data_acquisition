@@ -46,3 +46,4 @@ data/logs/get_target_data_20251003.log
 data/logs/get_target_data_20251003.log
 build/
 *.egg-info/
+*.rar
