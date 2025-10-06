@@ -553,7 +553,8 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
                     if candidate is not None:
                         aligned = candidate.reindex(result.index)
                         filled = _coerce_series_dtype(aligned, dtype)
-                        result.loc[missing_mask, column] = filled.loc[missing_mask]
+                        combined = existing.mask(missing_mask, filled)
+                        result[column] = _coerce_series_dtype(combined, dtype)
             continue
         if fallback is not None:
             candidate = fallback(result)
