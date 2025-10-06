@@ -103,6 +103,13 @@ def test_run_chembl__dry_run_short_circuits(cfg, tmp_path, monkeypatch) -> None:
     assert ("info", "dry_run", {"limit": 7}) in [
         (level, event, context) for level, event, context in logger_stub.events
     ]
+    completion_events = [
+        event
+        for _, event, _ in logger_stub.events
+        if event.startswith("Completed get_activity_data pipeline:")
+    ]
+    assert completion_events
+    assert "mode=dry_run" in completion_events[-1]
 
 
 @pytest.mark.parametrize(
@@ -143,9 +150,11 @@ def test_run__skip_existing_matrix(
 
     if has_existing:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text("existing", encoding="utf-8")
+        output_path.write_text("activity_id\nA1\n", encoding="utf-8")
 
     call_counter: list[str] = []
+    logger_stub = _RecordingLogger()
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
     monkeypatch.setattr(
         get_activity_data,
         "run_chembl",
@@ -156,6 +165,16 @@ def test_run__skip_existing_matrix(
 
     assert exit_code == 0
     assert len(call_counter) == expected_calls
+    summary_events = [
+        event
+        for _, event, _ in logger_stub.events
+        if event.startswith("Completed get_activity_data pipeline:")
+    ]
+    if skip_existing and has_existing and not force:
+        assert summary_events
+        assert "mode=skip_existing" in summary_events[-1]
+    else:
+        assert not summary_events
 
 
 @pytest.mark.parametrize(
