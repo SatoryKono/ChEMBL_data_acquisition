@@ -114,6 +114,9 @@ class _DummyChemblClient:
     def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - trivial helper
         return False
 
+    def close(self) -> None:  # pragma: no cover - interface compatibility
+        return None
+
 
 @pytest.fixture()
 def activity_resource_dir(snapshot_resource: Path) -> Path:
@@ -349,7 +352,10 @@ def test_get_activity_cli__retry_and_idempotent(
         mask = chunk_df["activity_id"].astype(str).isin(identifiers)
         return chunk_df.loc[mask].reset_index(drop=True)
 
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(
+        "library.orchestration.context.ChemblClient",
+        _DummyChemblClient,
+    )
     monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
     monkeypatch.setattr(get_activity_data, "sleep", lambda *_args, **_kwargs: None)
 
@@ -454,7 +460,10 @@ def test_get_activity_cli__timeout_split_recovers(
         return pd.DataFrame([row])
 
     monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(
+        "library.orchestration.context.ChemblClient",
+        _DummyChemblClient,
+    )
     monkeypatch.setattr(get_activity_data, "sleep", lambda *_args, **_kwargs: None)
 
     written = _install_activity_writer(monkeypatch)
@@ -528,7 +537,10 @@ def test_get_activity_cli__workers_and_offset(
 
         return _fetcher, _writer
 
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(
+        "library.orchestration.context.ChemblClient",
+        _DummyChemblClient,
+    )
     monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
     monkeypatch.setattr(
         get_activity_data,
@@ -608,7 +620,10 @@ def test_get_activity_cli__chembl_identifier_backfill_ratio(
 
     output_csv = tmp_path / "out" / "activities.csv"
 
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(
+        "library.orchestration.context.ChemblClient",
+        _DummyChemblClient,
+    )
     monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
 
     written = _install_activity_writer(monkeypatch)
@@ -669,7 +684,10 @@ def test_get_activity_cli__non_csv_output_path(
         mask = chunk_df["activity_id"].astype(str).isin(identifiers)
         return chunk_df.loc[mask].reset_index(drop=True)
 
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(
+        "library.orchestration.context.ChemblClient",
+        _DummyChemblClient,
+    )
     monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
 
     written = _install_activity_writer(monkeypatch)
@@ -1263,7 +1281,10 @@ def test_get_activity_run_retry_and_idempotent(
         return frame.copy()
 
     monkeypatch.setattr(get_activity_data.cl, "get_activities", _fetch_with_retry)
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(
+        "library.orchestration.context.ChemblClient",
+        _DummyChemblClient,
+    )
 
     written: list[Path] = []
 
@@ -1368,7 +1389,10 @@ def test_get_activity_run_workers_offset_and_non_csv(
         return _fetcher, _writer
 
     monkeypatch.setattr(get_activity_data, "prepare_chunked_pipeline", _prepare_stub)
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(
+        "library.orchestration.context.ChemblClient",
+        _DummyChemblClient,
+    )
 
     args = argparse.Namespace(
         input_csv=input_csv,

@@ -123,6 +123,9 @@ def test_run_chembl__successful_execution(
         def __exit__(self, exc_type, exc, tb) -> None:
             return None
 
+        def close(self) -> None:
+            return None
+
     class FakeTracker:
         def __init__(self) -> None:
             self.stats: dict[str, object] = {"failures": 0}
@@ -158,7 +161,10 @@ def test_run_chembl__successful_execution(
         return 0
 
     monkeypatch.setattr(get_assay_data.io, "read_ids", fake_read_ids)
-    monkeypatch.setattr(get_assay_data, "ChemblClient", lambda *args, **kwargs: FakeClient())
+    monkeypatch.setattr(
+        "library.orchestration.context.ChemblClient",
+        lambda *args, **kwargs: FakeClient(),
+    )
     monkeypatch.setattr(get_assay_data, "ChunkFailureTracker", lambda: tracker)
     monkeypatch.setattr(get_assay_data.cl, "get_assays", lambda *args, **kwargs: pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]}))
     monkeypatch.setattr(get_assay_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline)
@@ -193,6 +199,9 @@ def test_run_chembl__splits_chunk_on_timeout(
             return self
 
         def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def close(self) -> None:
             return None
 
     class FakeTracker:
@@ -257,7 +266,10 @@ def test_run_chembl__splits_chunk_on_timeout(
         return 0
 
     monkeypatch.setattr(get_assay_data.io, "read_ids", fake_read_ids)
-    monkeypatch.setattr(get_assay_data, "ChemblClient", lambda *_, **__: FakeClient())
+    monkeypatch.setattr(
+        "library.orchestration.context.ChemblClient",
+        lambda *_, **__: FakeClient(),
+    )
     monkeypatch.setattr(get_assay_data, "ChunkFailureTracker", lambda: tracker)
     monkeypatch.setattr(get_assay_data.cl, "get_assays", fake_get_assays)
     monkeypatch.setattr(get_assay_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline)

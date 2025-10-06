@@ -46,6 +46,7 @@ from typing import Any, Callable, Iterable, IO, Mapping, Sequence
 
 from library.cli.logging import setup_cli_logging
 from library.clients import ChemblClient
+from library.orchestration import ETLContext
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
 from library.config import Config, load_config
 from library.pipelines.activity import (
@@ -978,14 +979,18 @@ def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
 
     testitem_cfg = chembl_sources.pipelines.testitem
     _LOGGER.info("parent_catalog_warm_start", **log_kwargs)
-    try:
-        with ChemblClient(
+    def _catalog_client_factory(context: ETLContext) -> ChemblClient:
+        return ChemblClient(
             api=chembl_sources.api,
             retry=config.system.retry,
             chembl=chembl_sources.cache,
-        ) as client:
+            global_limiter=context.global_limiter,
+        )
+
+    try:
+        with ETLContext(config, chembl_client_factory=_catalog_client_factory) as context:
             load_parent_catalog(
-                client=client,
+                client=context.chembl_client,
                 api_cfg=chembl_sources.api,
                 catalog_cfg=catalog_cfg,
                 timeout=testitem_cfg.timeout,

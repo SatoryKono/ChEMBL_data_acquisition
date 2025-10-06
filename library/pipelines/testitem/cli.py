@@ -35,7 +35,7 @@ from library.common.metadata import (
     write_meta_yaml,
     record_quality_failure,
 )
-from library.common.rate_limiter import get_global_limiter
+from library.orchestration import ETLContext
 from library.common.sidecar import SidecarErrors
 from library.qa.reporting import build_table_quality_hook
 from library.qa.validation import validate_testitems
@@ -547,14 +547,16 @@ def run_testitem_pipeline(
     output_csv = Path(options.output_csv) if options.output_csv is not None else None
     offset = options.offset if options.offset is not None else cfg.testitem.offset
 
-    rate_cfg = cfg.rate
-    global_limiter = None
-    if (rate_cfg.global_rps or 0) > 0:
-        global_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
+    def _client_factory(context: ETLContext) -> ChemblClient:
+        return ChemblClient(
+            api_cfg,
+            cfg.retry,
+            cfg.chembl,
+            global_limiter=context.global_limiter,
+        )
 
-    with ChemblClient(
-        api_cfg, cfg.retry, cfg.chembl, global_limiter=global_limiter
-    ) as client:
+    with ETLContext(cfg, chembl_client_factory=_client_factory) as context:
+        client = context.chembl_client
         read_status, read_result = read_input_ids(
             input_csv,
             column=cfg.testitem.column,

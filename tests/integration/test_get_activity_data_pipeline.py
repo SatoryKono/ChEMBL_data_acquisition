@@ -31,6 +31,9 @@ class _DummyChemblClient:
     def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - trivial
         return False
 
+    def close(self) -> None:  # pragma: no cover - interface compatibility
+        return None
+
 
 class _RecordingLogger:
     """Capture structured events emitted during the pipeline run."""
@@ -111,7 +114,10 @@ def _install_fetch_stubs(
         return testitem_frame.iloc[0:0].copy()
 
     monkeypatch.setattr(get_activity_data.cl, "get_testitem", _fake_get_testitem)
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(
+        "library.orchestration.context.ChemblClient",
+        _DummyChemblClient,
+    )
     return _FetchCapture(captured_activities, captured_testitems)
 
 
@@ -500,7 +506,10 @@ def test_activity_pipeline__missing_column_input(activity_resource_dir: Path, cf
     output_csv = tmp_path / "activities.csv"
 
     # Ensure we never reach the fetch stage when validation of inputs fails.
-    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(
+        "library.orchestration.context.ChemblClient",
+        _DummyChemblClient,
+    )
     monkeypatch.setattr(get_activity_data.cl, "get_activities", lambda *_, **__: pd.DataFrame())
     monkeypatch.setattr(get_activity_data, "_load_assay_src_lookup", lambda *_: {})
     logger_stub = _RecordingLogger()

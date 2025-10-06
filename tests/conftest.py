@@ -23,6 +23,7 @@ import yaml
 
 from config.paths import DICTIONARY_DIR
 from library.config import Config
+from library.orchestration import ETLContext
 from library.resources import dictionaries as dictionary_resources
 
 
@@ -157,6 +158,31 @@ def cfg() -> Config:
     config.api.user_agent = "test@example.org"
     config.sources.pubchem.user_agent = "pubchem-contact@example.org"
     return config
+
+
+@pytest.fixture()
+def stub_etl_context(cfg: Config):
+    """Return an :class:`ETLContext` wired with stubbed Chembl clients."""
+
+    class _StubClient:
+        def __init__(self) -> None:
+            self.close_calls = 0
+
+        def close(self) -> None:
+            self.close_calls += 1
+
+    created_clients: list[_StubClient] = []
+
+    def _factory(_context: ETLContext) -> _StubClient:
+        client = _StubClient()
+        created_clients.append(client)
+        return client
+
+    context = ETLContext(cfg, chembl_client_factory=_factory)
+    try:
+        yield context, created_clients
+    finally:
+        context.close()
 
 
 @pytest.fixture()
