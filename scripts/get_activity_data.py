@@ -361,15 +361,24 @@ def _ensure_molecule_pref_name(
         for column in ("molecule_chembl_id", "pref_name"):
             if column not in fields:
                 fields.append(column)
-        lookup = cl.get_testitem(
-            pending,
-            cfg=cfg.api,
-            client=client,
-            chunk_size=cfg.testitem.batch_size,
-            timeout=cfg.testitem.timeout,
-            fields=fields,
-            page_limit=cfg.testitem.request_limit,
-        )
+        try:
+            lookup = cl.get_testitem(
+                pending,
+                cfg=cfg.api,
+                client=client,
+                chunk_size=cfg.testitem.batch_size,
+                timeout=cfg.testitem.timeout,
+                fields=fields,
+                page_limit=cfg.testitem.request_limit,
+            )
+        except (requests.RequestException, ValueError, AttributeError) as exc:
+            logger.warning(
+                "testitem_pref_name_lookup_failed",
+                error=str(exc),
+                error_type=exc.__class__.__name__,
+                pending_ids=list(pending),
+            )
+            lookup = pd.DataFrame(columns=["molecule_chembl_id", "pref_name"])
         if not lookup.empty and {"molecule_chembl_id", "pref_name"}.issubset(lookup.columns):
             mapped = (
                 lookup[["molecule_chembl_id", "pref_name"]]

@@ -25,6 +25,7 @@ The input file must contain a ``PMID`` column.
 from __future__ import annotations
 
 import argparse
+import inspect
 import os
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -1586,7 +1587,30 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         return 1
     current_handler = getattr(sys.modules[__name__], handler.__name__, handler)
     service = DocumentPipeline(cfg)
-    result = current_handler(cfg, args, pipeline=service)
+
+    supports_pipeline = True
+    try:
+        signature = inspect.signature(current_handler)
+    except (TypeError, ValueError):  # pragma: no cover - builtins or C extensions
+        signature = None
+
+    if signature is not None:
+        supports_pipeline = any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            or parameter.name == "pipeline"
+            for parameter in signature.parameters.values()
+            if parameter.kind
+            in {
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+                inspect.Parameter.VAR_KEYWORD,
+            }
+        )
+
+    if supports_pipeline:
+        result = current_handler(cfg, args, pipeline=service)
+    else:
+        result = current_handler(cfg, args)
     return int(result)
 
 
