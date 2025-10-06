@@ -41,6 +41,10 @@ class ChemblClient:
     global_limiter:
         Optional system-wide :class:`RateLimiter` enforcing ``Config.rate``
         across all HTTP clients.
+    jitter:
+        Optional callable producing jitter values for retry backoff. When not
+        provided the jitter is derived from ``retry`` using
+        :meth:`library.config.RetryCfg.build_jitter`.
     """
 
     cache: TTLCache[str, dict[str, Any]] = field(init=False)
@@ -59,9 +63,11 @@ class ChemblClient:
         *,
         session: Session | None = None,
         global_limiter: RateLimiter | None = None,
+        jitter: Callable[[float], float] | None = None,
     ) -> None:
         api = api or ApiCfg()
         retry = retry or RetryCfg()
+        self._jitter = jitter if jitter is not None else retry.build_jitter()
         if session is not None:
             def _session_from_argument(provided: Session = session) -> Session:
                 return provided
@@ -314,7 +320,7 @@ class ChemblClient:
                             },
                         )
                         break
-                    delay = _backoff_delay(attempt, cfg, header_delay=None)
+                    delay = _backoff_delay(attempt, cfg, header_delay=None, jitter=self._jitter)
                     _log_retry_delay(request_url, attempt, None, delay)
                     sleep(delay)
                     break
@@ -356,7 +362,9 @@ class ChemblClient:
                         )
                         break
                     header_delay = _retry_after_delay(response)
-                    delay = _backoff_delay(attempt, cfg, header_delay)
+                    delay = _backoff_delay(
+                        attempt, cfg, header_delay, jitter=self._jitter
+                    )
                     _log_retry_delay(request_url, attempt, status, delay, header_delay)
                     sleep(delay)
                     break
@@ -376,7 +384,7 @@ class ChemblClient:
                             },
                         )
                         break
-                    delay = _backoff_delay(attempt, cfg, header_delay=None)
+                    delay = _backoff_delay(attempt, cfg, header_delay=None, jitter=self._jitter)
                     _log_retry_delay(request_url, attempt, None, delay)
                     sleep(delay)
                     break
@@ -479,11 +487,20 @@ def _is_retry_after_applicable(status: int) -> bool:
 
 
 def _backoff_delay(
-    attempt: int, cfg: ApiCfg, header_delay: float | None
+    attempt: int,
+    cfg: ApiCfg,
+    header_delay: float | None,
+    *,
+    jitter: Callable[[float], float] | None = None,
 ) -> float:
     base = cfg.backoff_factor * (2 ** (attempt - 1))
-    jitter = random.uniform(0, cfg.backoff_factor)
-    delay = base + jitter
+    jitter_value = 0.0
+    if cfg.backoff_factor > 0:
+        if jitter is not None:
+            jitter_value = jitter(cfg.backoff_factor)
+        else:
+            jitter_value = random.uniform(0, cfg.backoff_factor)
+    delay = base + jitter_value
     if header_delay is not None:
         delay = max(delay, header_delay)
     return float(delay)

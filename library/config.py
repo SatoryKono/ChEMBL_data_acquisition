@@ -16,14 +16,15 @@ from __future__ import annotations
 import atexit
 import logging
 import os
+import random
 import re
-import atexit
+import threading
 from collections.abc import Iterator, Sequence
 from contextlib import ExitStack
 from importlib import resources
 from pathlib import Path
 from types import UnionType
-from typing import Any, Mapping, Union, get_args, get_origin
+from typing import Any, Callable, Mapping, Union, get_args, get_origin
 
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
@@ -899,6 +900,25 @@ class RetryCfg(_BaseModel):
     status_forcelist: list[StrictInt] = Field(
         default_factory=lambda: [429, 500, 502, 503, 504]
     )
+    jitter_seed: int | None = Field(0, ge=0)
+
+    def build_jitter(self) -> Callable[[float], float] | None:
+        """Return a deterministic jitter provider configured by ``jitter_seed``."""
+
+        if self.jitter_seed is None:
+            return None
+
+        seed = int(self.jitter_seed)
+        rng = random.Random(seed)
+        lock = threading.Lock()
+
+        def _jitter(max_value: float) -> float:
+            if max_value <= 0:
+                return 0.0
+            with lock:
+                return rng.uniform(0.0, max_value)
+
+        return _jitter
 
 
 class ActivityBoundsCfg(_BoolModel):
