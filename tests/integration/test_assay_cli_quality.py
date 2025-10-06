@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -172,15 +172,30 @@ def test_get_assay_cli__clamps_batch_size(
                 frames.append(fetch_chunk(chunk))
             return frames
 
-        def _writer(frames: list[pd.DataFrame]) -> None:
-            written_frames.extend(frames)
+        def _writer(
+            frames: Iterable[pd.DataFrame],
+            destination: Path,
+            col_order: Sequence[str] | None,
+            key_cols: Sequence[str],
+        ) -> Path:
+            del col_order, key_cols
+            chunk_list = list(frames)
+            written_frames.extend(chunk_list)
+            return Path(destination)
 
         return _fetcher, _writer
 
-    def _fake_run_pipeline(*, fetcher, writer, **kwargs) -> int:
-        del kwargs
+    def _fake_run_pipeline(
+        *,
+        definition,
+        fetcher,
+        output_path,
+        failure_path,
+        **kwargs,
+    ) -> int:
+        del failure_path, kwargs
         frames = fetcher()
-        writer(frames)
+        definition.writer(frames, output_path, None, ())
         return 0
 
     def _fake_read_ids(path: Path, *, column: str, cfg) -> Iterator[str]:

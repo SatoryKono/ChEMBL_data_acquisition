@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 import requests
 
+from library.cli.base import PipelineCLIBase
 from library.config import Config
 from library import cli_utils
 from scripts import (
@@ -80,6 +81,25 @@ def _patch_logger(monkeypatch: pytest.MonkeyPatch, module: object) -> _MemoryLog
     logger = _MemoryLogger()
     monkeypatch.setattr(module, "logger", logger)
     return logger
+
+
+@pytest.mark.parametrize(
+    "module",
+    [get_assay_data, get_activity_data, get_target_data],
+)
+def test_cli_wrappers_delegate_to_cli_instance(
+    monkeypatch: pytest.MonkeyPatch, module: object
+) -> None:
+    """Ensure module-level helpers forward to :class:`PipelineCLIBase` instances."""
+
+    assert isinstance(module._CLI, PipelineCLIBase)
+    sentinel_parser = ("parser", "log")
+    sentinel_exit = object()
+    monkeypatch.setattr(module._CLI, "build_parser", lambda: sentinel_parser)
+    monkeypatch.setattr(module._CLI, "main", lambda argv=None: sentinel_exit)
+
+    assert module.build_parser() is sentinel_parser
+    assert module.main([]) is sentinel_exit
 
 
 class _DummyChemblClient:

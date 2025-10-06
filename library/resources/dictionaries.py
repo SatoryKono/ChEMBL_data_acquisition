@@ -22,6 +22,11 @@ __all__ = [
 ]
 
 _MANIFEST_FILENAME = "manifest.yaml"
+_IGNORED_FILENAMES = {
+    "Thumbs.db",
+    "desktop.ini",
+    ".DS_Store",
+}
 
 
 class DictionaryManifestError(RuntimeError):
@@ -67,7 +72,10 @@ def _compute_sha256(path: Path) -> str:
                 continue
             if child.name == _MANIFEST_FILENAME and child.parent == path:
                 continue
-            hasher.update(str(child.relative_to(path)).encode("utf-8"))
+            if child.name in _IGNORED_FILENAMES or child.name.startswith("._"):
+                continue
+            relative = child.relative_to(path).as_posix()
+            hasher.update(relative.encode("utf-8"))
             data = _normalise_text_newlines(child.read_bytes())
             hasher.update(data)
         return hasher.hexdigest()

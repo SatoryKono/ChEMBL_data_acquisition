@@ -39,6 +39,7 @@ from collections import deque
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from fnmatch import fnmatch
+from heapq import heappop, heappush
 from pathlib import Path
 
 from typing import Any, Callable, Iterable, IO, Mapping, Sequence
@@ -217,6 +218,17 @@ def _resolve_path(base: Path, candidate: Path) -> Path:
     if expanded.is_absolute():
         return expanded.resolve()
     return (base / expanded).resolve()
+
+
+def _resolve_consumed_artifact_path(cfg: "PipelineRunConfig", artefact: str) -> Path:
+    """Return the filesystem path associated with a consumed artefact name."""
+
+    candidate = Path(artefact)
+    if candidate.is_absolute():
+        return candidate
+    if candidate.suffix:
+        return cfg.output_dir / candidate
+    return cfg.output_dir / f"output.{candidate.name}_{cfg.date_prefix}.csv"
 
 
 def _parse_overrides(
@@ -1169,6 +1181,119 @@ def _write_run_manifest(
         )
 
 
+@dataclass(frozen=True)
+class PipelineExecutionPlan:
+    """Describe the resolved execution order and artefact dependencies."""
+
+    steps: tuple[PipelineStep, ...]
+    dependencies: Mapping[str, frozenset[str]]
+    produced_by: Mapping[str, str]
+    external_artifacts: Mapping[str, tuple[str, ...]]
+
+
+def _build_execution_plan(
+    steps: Sequence[PipelineStep],
+) -> PipelineExecutionPlan:
+    """Return a deterministic execution plan for ``steps``."""
+
+    if not steps:
+        empty_mapping: dict[str, tuple[str, ...]] = {}
+        return PipelineExecutionPlan(
+            steps=(),
+            dependencies={},
+            produced_by={},
+            external_artifacts=empty_mapping,
+        )
+
+    by_name: dict[str, PipelineStep] = {}
+    for step in steps:
+        if step.name in by_name:
+            raise ValueError(f"duplicate pipeline step name: {step.name}")
+        by_name[step.name] = step
+
+    produced_by: dict[str, str] = {}
+    for step in steps:
+        produced = step.produces or (step.output_stem,)
+        for artefact in produced:
+            current = produced_by.get(artefact)
+            if current is not None and current != step.name:
+                raise ValueError(
+                    "artefact '{artefact}' declared by multiple steps".format(
+                        artefact=artefact
+                    )
+                )
+            produced_by[artefact] = step.name
+
+    dependencies: dict[str, set[str]] = {
+        step.name: set(step.depends_on) for step in steps
+    }
+    for step in steps:
+        for artefact in step.consumes:
+            producer = produced_by.get(artefact)
+            if producer is not None and producer != step.name:
+                dependencies[step.name].add(producer)
+
+    missing: list[str] = []
+    for name, deps in dependencies.items():
+        unknown = sorted(dep for dep in deps if dep not in by_name)
+        if unknown:
+            missing.append(f"{name}: {', '.join(unknown)}")
+    if missing:
+        raise ValueError(
+            "pipeline references unknown dependency: " + "; ".join(missing)
+        )
+
+    adjacency: dict[str, set[str]] = {name: set() for name in by_name}
+    indegree: dict[str, int] = {}
+    for name, deps in dependencies.items():
+        indegree[name] = len(deps)
+        for dep in deps:
+            adjacency[dep].add(name)
+
+    order_index = {step.name: index for index, step in enumerate(steps)}
+    queue: list[tuple[int, str]] = []
+    for name, degree in indegree.items():
+        if degree == 0:
+            heappush(queue, (order_index[name], name))
+
+    ordered: list[str] = []
+    while queue:
+        _, current = heappop(queue)
+        ordered.append(current)
+        neighbours = sorted(adjacency[current], key=order_index.__getitem__)
+        for neighbour in neighbours:
+            indegree[neighbour] -= 1
+            if indegree[neighbour] == 0:
+                heappush(queue, (order_index[neighbour], neighbour))
+
+    if len(ordered) != len(steps):
+        remaining = sorted(name for name, degree in indegree.items() if degree > 0)
+        raise ValueError(
+            "cyclic pipeline dependency detected: " + ", ".join(remaining)
+        )
+
+    ordered_steps = tuple(by_name[name] for name in ordered)
+    scheduled = set(ordered)
+    external: dict[str, tuple[str, ...]] = {}
+    for step in ordered_steps:
+        requirements: list[str] = []
+        for artefact in step.consumes:
+            producer = produced_by.get(artefact)
+            if producer is None or producer not in scheduled:
+                requirements.append(artefact)
+        external[step.name] = tuple(requirements)
+
+    frozen_dependencies = {
+        name: frozenset(deps) for name, deps in dependencies.items()
+    }
+    return PipelineExecutionPlan(
+        steps=ordered_steps,
+        dependencies=frozen_dependencies,
+        produced_by=dict(produced_by),
+        external_artifacts=external,
+    )
+
+
 def run_pipeline(
     cfg: PipelineRunConfig,
     *,
@@ -1178,6 +1303,13 @@ def run_pipeline(
     """Execute all configured steps and return the resulting exit status."""
 
     effective_steps = tuple(DEFAULT_PIPELINE_STEPS if steps is None else steps)
+    try:
+        plan = _build_execution_plan(effective_steps)
+    except ValueError as exc:
+        _LOGGER.error("pipeline_schedule_error", error=str(exc))
+        return 1
+    effective_steps = plan.steps
+    external_requirements = plan.external_artifacts
     base_config = load_config(cfg.config_path, base_path=cfg.base_path)
     overall_status = 0
     run_started_at = datetime.now(UTC)
@@ -1185,6 +1317,7 @@ def run_pipeline(
     manifest_entries: list[dict[str, Any]] = []
     failed_index: int | None = None
     last_executed_index = -1
+    completed_steps: set[str] = set()
     _LOGGER.info("pipeline_start", stage="pipeline")
 
     def _prepare_step(
@@ -1222,11 +1355,52 @@ def run_pipeline(
                     started_at=step_started_clock,
                 )
                 last_executed_index = index
+                completed_steps.add(step.name)
                 return StepExecutionResult(
                     exit_code=0,
                     executed=False,
                     status="skipped",
                     reason="dry_run",
+                )
+
+            missing_external: list[tuple[str, Path]] = []
+            required_external = external_requirements.get(step.name, ())
+            if required_external:
+                for artefact in required_external:
+                    candidate = _resolve_consumed_artifact_path(current_cfg, artefact)
+                    if not candidate.exists():
+                        missing_external.append((artefact, candidate))
+            if missing_external:
+                overall_status = 1
+                entry.update(
+                    {
+                        "status": "failed",
+                        "exit_code": overall_status,
+                        "executed": False,
+                        "reason": "dependency_missing",
+                    }
+                )
+                _LOGGER.error(
+                    "step_dependencies_missing",
+                    step=step.name,
+                    missing=[
+                        {"artefact": artefact, "path": str(path)}
+                        for artefact, path in missing_external
+                    ],
+                )
+                _complete_manifest_entry(
+                    entry,
+                    final_output=final_output,
+                    working_output=working_output,
+                    started_at=step_started_clock,
+                )
+                failed_index = index
+                last_executed_index = index
+                return StepExecutionResult(
+                    exit_code=1,
+                    executed=False,
+                    status="failed",
+                    reason="dependency_missing",
                 )
 
             if working_output.exists():
@@ -1397,6 +1571,8 @@ def run_pipeline(
                 started_at=step_started_clock,
             )
             _LOGGER.info("step_done", step=step.name)
+            completed_steps.add(step.name)
+            last_executed_index = index
             return result
 
         return PreparedPipelineStep(step=step, invoke=_invoke)
