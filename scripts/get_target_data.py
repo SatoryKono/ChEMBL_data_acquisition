@@ -268,6 +268,10 @@ def _normalise_target_export_name(path: Path) -> str:
     name = path.name
     lowered_name = name.lower()
 
+    while lowered_name.startswith("."):
+        name = name[1:]
+        lowered_name = name.lower()
+
     for suffix in _TEMPORARY_EXPORT_SUFFIXES:
         suffix_lower = suffix.lower()
         while lowered_name.endswith(suffix_lower):
@@ -286,7 +290,16 @@ def _normalise_target_export_name(path: Path) -> str:
             lowered_name = name.lower()
             break
 
-    return name
+    canonical = name.lower()
+
+    if canonical.startswith("output.") and not target_pp._matches_expected_input_name(
+        canonical
+    ):
+        candidate = canonical[len("output.") :]
+        if target_pp._matches_expected_input_name(candidate):
+            canonical = candidate
+
+    return canonical
 
 
 def _export_stem(name: str) -> str:

@@ -479,7 +479,20 @@ def get_assays(
             frames = _filter_variant_frames(frames)
             return frames
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    for chunk in _chunked(valid, chunk_size):
+    effective_chunk_size = min(chunk_size, _ASSAY_MAX_IDS_PER_REQUEST)
+    if effective_chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    if effective_chunk_size < chunk_size:
+        logger.debug(
+            "assay_chunk_clamped",
+            extra={
+                "requested_chunk_size": chunk_size,
+                "effective_chunk_size": effective_chunk_size,
+                "stage": "chunk_prepare",
+            },
+        )
+
+    for chunk in _chunked(valid, effective_chunk_size):
         chunk_key = ",".join(chunk)
         logger.info(
             "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
