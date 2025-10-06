@@ -392,15 +392,39 @@ def get_assays(
     def _fetch_single(identifier: str) -> list[pd.DataFrame]:
         single_url = _build_url({"assay_chembl_id": identifier, "limit": 1})
         try:
-            return _fetch_chunk(single_url)
+            frames = _fetch_chunk(single_url)
         except requests.HTTPError as exc:  # pragma: no cover - exercised via caller
             response = exc.response
             if response is not None and response.status_code == 404:
                 logger.info(
                     "assay_missing", extra={"stage": "chunk_skip", "assay_chembl_id": identifier}
                 )
-                return []
+                fallback_df = get_assay(
+                    identifier,
+                    cfg=cfg,
+                    client=client,
+                    timeout=effective_timeout,
+                )
+                if require_variant_sequence and not fallback_df.empty:
+                    sequence_series = fallback_df.get("sequence")
+                    if sequence_series is not None:
+                        fallback_df = fallback_df[sequence_series.notna()]
+                if fallback_df.empty:
+                    return []
+                return [fallback_df]
             raise
+        else:
+            if require_variant_sequence and frames:
+                filtered_frames: list[pd.DataFrame] = []
+                for frame in frames:
+                    sequence_series = frame.get("sequence")
+                    if sequence_series is None:
+                        continue
+                    filtered = frame[sequence_series.notna()]
+                    if not filtered.empty:
+                        filtered_frames.append(filtered)
+                frames = filtered_frames
+            return frames
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
         chunk_key = ",".join(chunk)
