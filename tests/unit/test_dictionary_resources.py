@@ -60,3 +60,19 @@ def test_compute_sha256__ignores_bytecode_artifacts(tmp_path: Path) -> None:
     (root / "standalone.pyc").write_bytes(b"\x04\x05")
 
     assert dictionaries._compute_sha256(root) == expected
+
+
+@pytest.mark.unit
+def test_compute_sha256__normalises_crlf_in_non_utf8_files(tmp_path: Path) -> None:
+    """CRLF handling must be deterministic for legacy encodings (e.g. Latin-1)."""
+
+    latin1_bytes_lf = b"id;name\n1;\xb1\n"
+    latin1_bytes_crlf = b"id;name\r\n1;\xb1\r\n"
+
+    lf_path = tmp_path / "latin1_lf.csv"
+    lf_path.write_bytes(latin1_bytes_lf)
+
+    crlf_path = tmp_path / "latin1_crlf.csv"
+    crlf_path.write_bytes(latin1_bytes_crlf)
+
+    assert dictionaries._compute_sha256(lf_path) == dictionaries._compute_sha256(crlf_path)
