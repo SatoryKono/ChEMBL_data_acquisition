@@ -176,7 +176,10 @@ def run_cli_command(
             use_logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
-        use_logger = cli.configure_logger(log_cfg)
+        if logger is None:
+            use_logger = cli.configure_logger(log_cfg)
+        else:
+            cli.configure_logger(log_cfg)
     except (ValueError, TypeError) as exc:
         use_logger.error(
             "config_error",

@@ -1,9 +1,28 @@
 from __future__ import annotations
 
 import ast
+import re
 import shlex
 from pathlib import Path
 from typing import Any, Iterable
+
+
+_NEW_PATTERN = re.compile(
+    r"^(?P<timestamp>.+?)\s\[(?P<level>[^\]]+)\]\s(?P<name>[^\s]+)\s::\s(?P<message>.*)$"
+)
+_LEGACY_PATTERN = re.compile(
+    r"^\[(?P<timestamp>[^\]]+)\]\s\[(?P<level>[^\]]+)\]\s\[(?P<name>[^\]]+)\]\s(?P<message>.*)$"
+)
+
+
+def _extract_parts(line: str) -> dict[str, str] | None:
+    match = _NEW_PATTERN.match(line)
+    if match:
+        return match.groupdict()
+    legacy = _LEGACY_PATTERN.match(line)
+    if legacy:
+        return legacy.groupdict()
+    return None
 
 
 def parse_log_lines(text: str) -> list[dict[str, Any]]:
@@ -14,13 +33,13 @@ def parse_log_lines(text: str) -> list[dict[str, Any]]:
         line = raw_line.strip()
         if not line:
             continue
-        parts = line.split("] ", 3)
-        if len(parts) < 4:
+        components = _extract_parts(line)
+        if not components:
             continue
-        timestamp = parts[0].lstrip("[")
-        level = parts[1].strip("[]")
-        name = parts[2].strip("[]")
-        message = parts[3]
+        timestamp = components["timestamp"].strip()
+        level = components["level"].strip()
+        name = components["name"].strip()
+        message = components["message"].strip()
         tokens = shlex.split(message)
         if not tokens:
             continue
