@@ -118,7 +118,7 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
 
         path_value = meta.get("path")
         version = meta.get("version")
-        sha256_expected = meta.get("sha256")
+        sha256_value = meta.get("sha256")
         generator = meta.get("generator")
 
         if not isinstance(path_value, str):
@@ -127,8 +127,25 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
             raise DictionaryManifestError(f"Resource {name!r} must use a relative path")
         if not isinstance(version, str):
             raise DictionaryManifestError(f"Resource {name!r} is missing a string 'version'")
-        if not isinstance(sha256_expected, str):
-            raise DictionaryManifestError(f"Resource {name!r} is missing a string 'sha256'")
+        if isinstance(sha256_value, str):
+            sha256_expected = (sha256_value,)
+        elif isinstance(sha256_value, (list, tuple)):
+            sha256_expected = []
+            for idx, candidate in enumerate(sha256_value):
+                if not isinstance(candidate, str):
+                    raise DictionaryManifestError(
+                        f"Resource {name!r} has a non-string 'sha256' entry at index {idx}"
+                    )
+                sha256_expected.append(candidate)
+            sha256_expected = tuple(sha256_expected)
+            if not sha256_expected:
+                raise DictionaryManifestError(
+                    f"Resource {name!r} declares an empty list of 'sha256' values"
+                )
+        else:
+            raise DictionaryManifestError(
+                f"Resource {name!r} is missing a string or list 'sha256'"
+            )
         if not isinstance(generator, str):
             raise DictionaryManifestError(f"Resource {name!r} is missing a string 'generator'")
 
@@ -138,10 +155,10 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
             raise DictionaryManifestError(f"Duplicate manifest entry: {name}")
 
         sha256_actual = _compute_sha256(absolute_path)
-        if sha256_actual != sha256_expected:
+        if sha256_actual not in sha256_expected:
             raise DictionaryManifestError(
                 "Checksum mismatch for resource"
-                f" {name!r}: expected {sha256_expected}, got {sha256_actual}"
+                f" {name!r}: expected one of {sha256_expected}, got {sha256_actual}"
             )
 
         parsed[name] = DictionaryResource(
@@ -149,7 +166,7 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
             relative_path=relative_path,
             path=absolute_path,
             version=version,
-            sha256=sha256_expected,
+            sha256=sha256_expected[0],
             generator=Path(generator),
         )
 

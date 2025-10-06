@@ -3,7 +3,9 @@ resources:
   dictionary_root:
     path: .
     version: "2025-10-06"
-    sha256: "28a8e29feb723c27f5d94a18f90aff0ec89d963bb23cbfd10aedb2f20d7c81d9"
+    sha256:
+      - "28a8e29feb723c27f5d94a18f90aff0ec89d963bb23cbfd10aedb2f20d7c81d9"
+      - "cc60aa1e2160724c46e701e0bb21a8f2c4176e57b61180f0c9418db878144156"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv
