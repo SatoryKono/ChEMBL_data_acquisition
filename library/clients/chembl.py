@@ -230,12 +230,17 @@ class ChemblClient:
                             raise ValueError(
                                 f"invalid JSON in response from {request_url}"
                             ) from exc
+                        elapsed = getattr(response, "elapsed", None)
+                        elapsed_seconds = (
+                            elapsed.total_seconds() if elapsed is not None else None
+                        )
                         logger.debug(
                             "request_ok",
                             extra={
                                 "url": request_url,
                                 "status": getattr(response, "status_code", None),
                                 "rps": cfg.rps,
+                                "elapsed_s": elapsed_seconds,
                             },
                         )
                         with self._cache_lock:
