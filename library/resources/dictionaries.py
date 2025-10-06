@@ -74,7 +74,8 @@ def _compute_sha256(path: Path) -> str:
                 continue
             if child.name in _IGNORED_FILENAMES or child.name.startswith("._"):
                 continue
-            hasher.update(str(child.relative_to(path)).encode("utf-8"))
+            relative = child.relative_to(path).as_posix()
+            hasher.update(relative.encode("utf-8"))
             data = _normalise_text_newlines(child.read_bytes())
             hasher.update(data)
         return hasher.hexdigest()
