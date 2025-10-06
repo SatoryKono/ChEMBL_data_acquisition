@@ -12,6 +12,7 @@ import requests
 
 from library.cli_utils import run_pipeline as cli_run_pipeline
 from library.config import Config
+from library.pipelines.assay.chembl_assay import MAX_ASSAY_CHUNK_SIZE
 from library.schemas import AssaysSchema
 from scripts import get_assay_data
 
@@ -43,6 +44,14 @@ def logger_stub(monkeypatch: pytest.MonkeyPatch) -> _MemoryLogger:
     logger = _MemoryLogger()
     monkeypatch.setattr(get_assay_data, "logger", logger)
     return logger
+
+
+@pytest.mark.unit
+def test_legacy_assay_max_ids_constant__matches_chunk_size() -> None:
+    """Ensure backwards compatible aliases match the public chunk size limit."""
+
+    assert get_assay_data._ASSAY_MAX_IDS_PER_REQUEST == MAX_ASSAY_CHUNK_SIZE
+    assert get_assay_data.ASSAY_MAX_IDS_PER_REQUEST == MAX_ASSAY_CHUNK_SIZE
 
 
 @pytest.fixture()
