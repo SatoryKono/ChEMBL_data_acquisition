@@ -9,7 +9,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from ..common.rate_limiter import configure_limiter_cache
-from .models import ApiCfg, Config, CrossRefCfg, OpenAlexCfg, RetryCfg
+from .model import ApiCfg, Config, CrossRefCfg, OpenAlexCfg, RetryCfg
 
 __all__ = [
     "configure_rate_limiters",

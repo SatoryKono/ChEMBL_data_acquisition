@@ -2,13 +2,13 @@
 
 Конфигурация загружается из трёх слоёв (по возрастанию приоритета):
 
-1. Значения по умолчанию, определённые в [`library/config/models.py`](../library/config/models.py).
+1. Значения по умолчанию, определённые в [`library/config/model.py`](../library/config/model.py).
 2. YAML-файлы (`config/config.yaml` и необязательный `config/config.local.yaml`).
 3. Переменные окружения и аргументы CLI.
 
 Переменные окружения используют схему `CHEMBL_DA__РАЗДЕЛ__КЛЮЧ`, вложенные ключи
 соединяются двойным подчёркиванием. Для распространённых параметров доступны
-короткие алиасы (см. `_ALIAS_MAP` в `library/config/models.py`).
+короткие алиасы (см. `_ALIAS_MAP` в `library/config/model.py`).
 
 ```bash
 # Пример: увеличить лимит UniProt во время smoke-теста
@@ -297,5 +297,5 @@ system:
 | `thresholds` | `{review:1, experimental:1, unknown:2}` | Пороговые значения. |
 | `limit` | `null` | Ограничение по числу строк. |
 
-Подробности и дополнительные поля см. в [`library/config/models.py`](../library/config/models.py);
+Подробности и дополнительные поля см. в [`library/config/model.py`](../library/config/model.py);
 данный документ синхронизирован с актуальными моделями.
