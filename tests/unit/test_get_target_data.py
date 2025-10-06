@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 import pandas as pd
 from types import SimpleNamespace
@@ -275,6 +275,62 @@ def test_run_uniprot__invokes_target_postprocess(
     assert isinstance(recorded["context"], get_target_data.IsoformPostprocessContext)
     assert recorded["context"].args is args
     assert recorded["ambiguous"] is None
+
+
+def test_run_uniprot__doc_quality_reports(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg.system.doc_quality.enable = True
+    cfg.system.doc_quality.sample_rows = 5
+    input_csv = tmp_path / "uniprot_ids.csv"
+    input_csv.write_text("uniprot_id\nP12345\n", encoding="utf-8")
+    output_csv = tmp_path / "output.target_20250101.csv"
+
+    monkeypatch.setattr(get_target_data.uu, "init_session", lambda *_, **__: None)
+
+    def _fake_process(**kwargs: object) -> None:
+        Path(kwargs["output_csv"]).write_text(
+            "uniprot_id\nP12345\n", encoding=cfg.io.csv_encoding
+        )
+
+    monkeypatch.setattr(get_target_data.uu, "process", _fake_process)
+
+    monkeypatch.setattr(
+        get_target_data,
+        "_postprocess_target_exports",
+        lambda *_, **__: None,
+    )
+
+    captured: dict[str, object] = {}
+
+    def _fake_analyze(
+        df: pd.DataFrame,
+        *,
+        table_name: str,
+        destination_dir: Path,
+        sample_rows: int | None,
+        include_columns: Sequence[str] | None,
+        exclude_columns: Sequence[str] | None,
+    ) -> None:
+        captured["table_name"] = table_name
+        captured["destination_dir"] = destination_dir
+        captured["sample_rows"] = sample_rows
+        captured["df"] = df.copy()
+
+    monkeypatch.setattr(get_target_data, "analyze_table_quality", _fake_analyze)
+
+    args = argparse.Namespace(input_csv=input_csv, final_out=output_csv)
+
+    exit_code = get_target_data.run_uniprot(cfg, args)
+
+    assert exit_code == 0
+    assert captured["table_name"] == output_csv.resolve().stem
+    assert captured["destination_dir"] == output_csv.resolve().parent
+    pd.testing.assert_frame_equal(
+        captured["df"], pd.DataFrame({"uniprot_id": ["P12345"]})
+    )
 
 
 def test_run__delegates_to_handler(
