@@ -82,6 +82,7 @@ def _compute_sha256(path: Path) -> str:
             path.rglob("*"),
             key=lambda candidate: candidate.relative_to(path).as_posix(),
         )
+        entries: list[tuple[str, Path]] = []
         for child in children:
 
             if child.is_dir():
