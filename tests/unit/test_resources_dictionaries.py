@@ -77,6 +77,45 @@ def test_parse_manifest__accepts_known_checksum_variants(tmp_path: Path, monkeyp
     resources = dictionaries._parse_manifest(base_dir=manifest_dir)
 
     assert resources["dictionary_root"].sha256 == "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"
+
+
+@pytest.mark.unit
+def test_parse_manifest__allowlist_file_extends_checksums(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A local allowlist file supplements manifest checksum expectations."""
+
+    manifest_dir = tmp_path / "dictionary"
+    manifest_dir.mkdir()
+    manifest_path = manifest_dir / "manifest.yaml"
+    manifest_payload = {
+        "version": 1,
+        "resources": {
+            "dictionary_root": {
+                "path": ".",
+                "version": "test",
+                "sha256": "legacy",
+                "generator": "tests/generator.py",
+            }
+        },
+    }
+    manifest_path.write_text(yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8")
+
+    allowlist_path = manifest_dir / "manifest.allowlist.yaml"
+    allowlist_payload = {"dictionary_root": ["efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"]}
+    allowlist_path.write_text(
+        yaml.safe_dump(allowlist_payload, sort_keys=False), encoding="utf-8"
+    )
+
+    monkeypatch.setattr(
+        dictionaries,
+        "_compute_sha256",
+        lambda path: "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+    )
+
+    resources = dictionaries._parse_manifest(base_dir=manifest_dir)
+
+    assert resources["dictionary_root"].sha256 == "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"
 def test_manifest_allows_latest_windows_sha256() -> None:
     """The dictionary manifest accepts the hash produced by new Git versions."""
 
