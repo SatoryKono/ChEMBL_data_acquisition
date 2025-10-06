@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections.abc import Iterable, Iterator, Sequence
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
-from requests import ReadTimeout
+import requests
 
 from library.clients import ChemblClient, _chunked
-from ...config import ApiCfg, UniprotMappingCfg
+from ...config import ApiCfg, TargetChemblBatchRetryCfg, UniprotMappingCfg
 from ...common.log import logger
 
 TARGET_FIELDS = [
@@ -379,6 +380,92 @@ def _iter_target_chunk_with_fallback(
         parsed_frame = parsed_frame.reindex(columns=TARGET_FIELDS)
     yield payloads, raw_frame, parsed_frame
 
+
+def iter_target_batches_with_retry(
+    ids: Iterable[str],
+    *,
+    cfg: ApiCfg,
+    client: ChemblClient,
+    mapping_cfg: UniprotMappingCfg,
+    chunk_size: int = 5,
+    timeout: float | None = None,
+    retry_cfg: TargetChemblBatchRetryCfg | None = None,
+    log: Any | None = None,
+    on_attempt: Callable[[], None] | None = None,
+) -> Iterator[tuple[list[dict[str, Any]], pd.DataFrame, pd.DataFrame]]:
+    """Yield payloads, raw and parsed frames with adaptive chunk sizing."""
+
+    effective_logger = log or logger
+    base_chunk_size = max(1, chunk_size)
+
+    if retry_cfg is None or not getattr(retry_cfg, "enable", False):
+        for batch in iter_target_batches(
+            ids,
+            cfg=cfg,
+            client=client,
+            mapping_cfg=mapping_cfg,
+            chunk_size=base_chunk_size,
+            timeout=timeout,
+        ):
+            if on_attempt is not None:
+                on_attempt()
+            yield batch
+        return
+
+    shrink_factor = retry_cfg.shrink_factor
+    min_size = max(1, retry_cfg.min_size)
+
+    buffer: list[str] = []
+
+    def _drain_buffer(batch: list[str]) -> Iterator[tuple[list[dict[str, Any]], pd.DataFrame, pd.DataFrame]]:
+        queue = list(batch)
+        current_size = min(len(queue), base_chunk_size)
+
+        while queue:
+            attempt_size = min(current_size, len(queue))
+            if attempt_size <= 0:
+                break
+            attempt_ids = queue[:attempt_size]
+            if on_attempt is not None:
+                on_attempt()
+            try:
+                for result in iter_target_batches(
+                    attempt_ids,
+                    cfg=cfg,
+                    client=client,
+                    mapping_cfg=mapping_cfg,
+                    chunk_size=attempt_size,
+                    timeout=timeout,
+                ):
+                    yield result
+            except (requests.RequestException, ValueError) as exc:
+                if attempt_size <= min_size:
+                    raise
+                next_size = int(math.floor(attempt_size * shrink_factor))
+                if next_size < min_size:
+                    next_size = min_size
+                if next_size >= attempt_size:
+                    next_size = max(min_size, attempt_size - 1)
+                effective_logger.warning(
+                    "chembl_chunk_retry",
+                    chunk_size=attempt_size,
+                    next_chunk_size=next_size,
+                    remaining=len(queue),
+                    error=str(exc),
+                )
+                current_size = next_size
+                continue
+            del queue[:attempt_size]
+            current_size = min(base_chunk_size, len(queue)) if queue else 0
+
+        batch.clear()
+
+    for target_id in ids:
+        buffer.append(target_id)
+        if len(buffer) >= base_chunk_size:
+            yield from _drain_buffer(buffer)
+    if buffer:
+        yield from _drain_buffer(buffer)
 
 def get_target(
     chembl_target_id: str,
