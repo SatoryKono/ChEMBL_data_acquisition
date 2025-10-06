@@ -22,6 +22,7 @@ __all__ = [
 ]
 
 _MANIFEST_FILENAME = "manifest.yaml"
+_VARIANT_OVERRIDES_FILENAME = "manifest.variants.yaml"
 _IGNORED_FILENAMES = {
     "thumbs.db",
     "ehthumbs.db",
@@ -156,6 +157,67 @@ def _manifest_path(base_dir: Path | None = None) -> Path:
     return (root / _MANIFEST_FILENAME).resolve()
 
 
+def _variant_overrides_path(base_dir: Path | None = None) -> Path:
+    root = DICTIONARY_DIR if base_dir is None else Path(base_dir)
+    return (root / _VARIANT_OVERRIDES_FILENAME).resolve()
+
+
+def _load_variant_overrides(base_dir: Path | None = None) -> Mapping[str, tuple[str, ...]]:
+    """Return checksum overrides declared in ``manifest.variants.yaml``.
+
+    The optional override file mirrors the ``manifest.yaml`` structure but only
+    exposes the ``sha256`` allow-list.  It provides a lightweight mechanism for
+    shipping platform-specific checksum variants without modifying the primary
+    manifest (which would otherwise churn whenever a new Git/Windows
+    combination introduces a different hash).
+    """
+
+    overrides_path = _variant_overrides_path(base_dir)
+    if not overrides_path.exists():
+        return {}
+
+    with overrides_path.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+
+    resources = data.get("resources")
+    if not isinstance(resources, Mapping):
+        raise DictionaryManifestError(
+            "Variant manifest 'resources' section must be a mapping"
+        )
+
+    parsed: dict[str, tuple[str, ...]] = {}
+    for name, meta in resources.items():
+        if not isinstance(meta, Mapping):
+            raise DictionaryManifestError(
+                f"Invalid variant manifest entry for {name!r}"
+            )
+
+        sha256_value = meta.get("sha256")
+        if isinstance(sha256_value, str):
+            sha256_values = [sha256_value]
+        elif isinstance(sha256_value, (list, tuple)):
+            sha256_values = []
+            for idx, candidate in enumerate(sha256_value):
+                if not isinstance(candidate, str):
+                    raise DictionaryManifestError(
+                        "Variant manifest entry for"
+                        f" {name!r} has a non-string 'sha256' value at index {idx}"
+                    )
+                sha256_values.append(candidate)
+            if not sha256_values:
+                raise DictionaryManifestError(
+                    f"Variant manifest entry for {name!r} declares an empty 'sha256' list"
+                )
+        else:
+            raise DictionaryManifestError(
+                f"Variant manifest entry for {name!r} is missing 'sha256' values"
+            )
+
+        parsed[name] = tuple(sha256_values)
+
+    return parsed
+
+
 def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryResource]:
     manifest_path = _manifest_path(base_dir)
     if not manifest_path.exists():
@@ -169,6 +231,7 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
         raise DictionaryManifestError("Manifest 'resources' section must be a mapping")
 
     manifest_root = manifest_path.parent
+    variant_overrides = _load_variant_overrides(manifest_root)
     parsed: dict[str, DictionaryResource] = {}
     for name, meta in resources.items():
         if not isinstance(meta, Mapping):
@@ -203,6 +266,10 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
             raise DictionaryManifestError(
                 f"Resource {name!r} is missing a string or list 'sha256'"
             )
+        for candidate in variant_overrides.get(name, ()):  # pragma: no branch
+            if candidate not in sha256_expected_list:
+                sha256_expected_list.append(candidate)
+
         for candidate in _KNOWN_CHECKSUM_VARIANTS.get(name, ()):  # pragma: no branch
             if candidate not in sha256_expected_list:
                 sha256_expected_list.append(candidate)

@@ -113,6 +113,22 @@ def test_manifest_allows_windows_textmode_checksum() -> None:
     manifest_path = Path("config/dictionary/manifest.yaml")
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
 
-    sha256_values = manifest["resources"]["dictionary_root"]["sha256"]
+    manifest_sha = manifest["resources"]["dictionary_root"]["sha256"]
+    if isinstance(manifest_sha, str):
+        sha256_values = {manifest_sha}
+    else:
+        sha256_values = set(manifest_sha)
 
-    assert "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a" in sha256_values
+    variants_path = Path("config/dictionary/manifest.variants.yaml")
+    if variants_path.exists():
+        variant_data = yaml.safe_load(variants_path.read_text(encoding="utf-8"))
+        variant_values = variant_data.get("resources", {}).get("dictionary_root", {}).get("sha256", [])
+        if isinstance(variant_values, str):
+            sha256_values.add(variant_values)
+        else:
+            sha256_values.update(variant_values)
+
+    assert (
+        "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"
+        in sha256_values
+    )
