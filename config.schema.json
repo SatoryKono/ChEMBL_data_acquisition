@@ -908,7 +908,7 @@
           "type": "array"
         },
         "request_limit": {
-          "default": 1000,
+          "default": 250,
           "minimum": 1,
           "maximum": 1000,
           "title": "Request Limit",
@@ -1192,7 +1192,7 @@
           "type": "number"
         },
         "timeout_read": {
-          "default": 30.0,
+          "default": 90.0,
           "minimum": 1,
           "title": "Timeout Read",
           "type": "number"
@@ -2027,7 +2027,7 @@
       "additionalProperties": false,
       "properties": {
         "enable": {
-          "default": false,
+          "default": true,
           "title": "Enable",
           "type": "boolean"
         },
@@ -2057,14 +2057,14 @@
           "type": "string"
         },
         "batch_size": {
-          "default": 1000,
+          "default": 250,
           "minimum": 1,
           "maximum": 1000,
           "title": "Batch Size",
           "type": "integer"
         },
         "timeout": {
-          "default": 30.0,
+          "default": 90.0,
           "minimum": 0,
           "title": "Timeout",
           "type": "number"

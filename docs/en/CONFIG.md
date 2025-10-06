@@ -123,14 +123,14 @@ and may be overridden via CLI or environment variables.
 | Key | Default | Notes |
 |-----|---------|-------|
 | `column` | `molecule_chembl_id` | Input column. |
-| `batch_size` | `1000` | Identifiers per request. |
-| `timeout` | `30.0` | Read timeout. |
+| `batch_size` | `250` | Identifiers per request. |
+| `timeout` | `90.0` | Read timeout. |
 | `limit` | `null` | Max records. |
 | `offset` | `0` | Start offset. |
 | `request_limit` | `1000` | Hard cap for API requests. |
 | `retries` | `5` | Batch retries. |
 | `backoff_factor` | `0.5` | Retry backoff multiplier. |
-| `batch_retry.enable` | `false` | Enable shrinking batches on repeated failures. |
+| `batch_retry.enable` | `true` | Enable shrinking batches on repeated failures. |
 | `batch_retry.shrink_factor` | `0.5` | Reduction factor per retry. |
 | `batch_retry.min_size` | `1` | Minimum batch size. |
 | `fields` | list | Fields requested from the API (see config for full list, includes `parent_molecule`, PubChem columns, etc.). |

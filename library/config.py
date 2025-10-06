@@ -1116,7 +1116,7 @@ class TissueCfg(_BaseModel):
 
 
 class TestitemBatchRetryCfg(_BoolModel):
-    enable: bool = False
+    enable: bool = True
     shrink_factor: float = Field(0.5, gt=0, lt=1)
     min_size: int = Field(1, ge=1)
 
@@ -1128,8 +1128,8 @@ class TestitemBatchRetryCfg(_BoolModel):
 
 class TestitemCfg(_BaseModel):
     column: str = "molecule_chembl_id"
-    batch_size: int = Field(1000, ge=1, le=1000)
-    timeout: float = Field(30.0, gt=0)
+    batch_size: int = Field(250, ge=1, le=1000)
+    timeout: float = Field(90.0, gt=0)
     limit: int | None = Field(default=None, ge=0)
     offset: int = Field(0, ge=0)
     fields: tuple[str, ...] = Field(default=TESTITEM_FIELD_DEFAULTS)

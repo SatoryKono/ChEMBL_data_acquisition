@@ -235,8 +235,8 @@ flags are:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--column` | `molecule_chembl_id` | Identifier column in the input CSV. |
-| `--batch-size` | `1000` | Identifiers fetched per request. |
-| `--timeout` | `30.0` | HTTP timeout per request. |
+| `--batch-size` | `250` | Identifiers fetched per request. |
+| `--timeout` | `90.0` | HTTP timeout per request. |
 | `--limit`, `--offset` | `None`, `0` | Range selection. |
 
 Retry, back-off and PubChem enrichment settings are sourced from the YAML
