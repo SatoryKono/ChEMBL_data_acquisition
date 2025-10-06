@@ -397,3 +397,33 @@ def test_ensure_extended_activity_columns__preserves_salt_ids() -> None:
     enriched = get_activity_data._ensure_extended_activity_columns(frame)
 
     assert enriched["salt_chembl_id"].tolist() == ["CHEMBL_SALT1", pd.NA]
+
+
+def test_ensure_src_assay_id__fills_from_lookup() -> None:
+    frame = pd.DataFrame(
+        {
+            "assay_chembl_id": ["ASSAY1", "ASSAY2", "ASSAY3"],
+            "src_assay_id": ["", pd.NA, "custom"],
+        }
+    )
+
+    enriched = get_activity_data._ensure_src_assay_id(
+        frame,
+        lookup={
+            "ASSAY1": "SRC-1",
+            "ASSAY2": "SRC-2",
+        },
+    )
+
+    assert enriched["src_assay_id"].tolist() == ["SRC-1", "SRC-2", "custom"]
+    assert pd.api.types.is_string_dtype(enriched["src_assay_id"])  # type: ignore[arg-type]
+
+
+def test_ensure_src_assay_id__adds_column_when_missing() -> None:
+    frame = pd.DataFrame({"assay_chembl_id": ["ASSAY1"]})
+
+    enriched = get_activity_data._ensure_src_assay_id(frame, lookup={})
+
+    assert "src_assay_id" in enriched.columns
+    assert enriched["src_assay_id"].isna().all()
+    assert pd.api.types.is_string_dtype(enriched["src_assay_id"])  # type: ignore[arg-type]
