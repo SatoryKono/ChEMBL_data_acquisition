@@ -53,6 +53,20 @@ class ETLContext:
     def _register_cleanup(self, closer: Callable[[], None]) -> None:
         self._closers.append(closer)
 
+    def register_cleanup(self, closer: Callable[[], None]) -> None:
+        """Register ``closer`` to be executed when the context closes.
+
+        The helper provides a public escape hatch for code that needs to tie
+        additional resources to the lifecycle of the :class:`ETLContext`.
+        Callers must ensure that ``closer`` is idempotent because it may be
+        invoked multiple times when the context is reused across ``with``
+        statements.
+        """
+
+        if self._closed:
+            raise RuntimeError("Cannot register cleanup on closed context")
+        self._register_cleanup(closer)
+
     def close(self) -> None:
         if self._closed:
             return
