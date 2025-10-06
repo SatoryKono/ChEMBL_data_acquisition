@@ -1,6 +1,6 @@
-generated_at: '2025-10-05T21:54:53.889425+00:00'
-git_sha: 84cba8a8089855a6dc1d1b7d08683b2375421636
-command: scripts\get_activity_data.py --input data\input\activity.csv --limit 10
+generated_at: '2025-10-05T21:57:51.906873+00:00'
+git_sha: 73ecb910d114607dbf2c332c26b4c70fe4882b56
+command: scripts\get_activity_data.py --input data\input\activity.csv --limit 1
 columns:
 - activity_chembl_id
 - saltform_id

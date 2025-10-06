@@ -1,6 +1,6 @@
-generated_at: '2025-10-05T21:54:33.522754+00:00'
+generated_at: '2025-10-05T21:57:39.403585+00:00'
 git_sha: UNKNOWN
-command: get_activity_data --input data\input\activity.csv --limit 10
+command: get_activity_data --input data\input\activity.csv --limit 1
 columns:
 - activity_id
 - molecule_chembl_id
@@ -145,7 +145,7 @@ config:
           batch_size: 50
           workers: 1
           timeout: 30.0
-          limit: 10
+          limit: 1
           offset: 0
           dry_run: false
         assay:
@@ -482,8 +482,8 @@ platform: Windows-10-10.0.19045-SP0
 inputs:
   input_csv: data\input\activity.csv
 stats:
-  rows_total: 10
-  rows_kept: 10
+  rows_total: 1
+  rows_kept: 1
   rows_dropped: 0
-  output_sha256: d1f36ffa535349c39ba17e598809f05d1c5e17a374c3bce9e0f913bd311babda
+  output_sha256: 4073a832c6ccc99ba1e03b13eea38da4b727e05eb5d3f48032e0731fdf7ac1e0
 schema: ActivitiesSchema
