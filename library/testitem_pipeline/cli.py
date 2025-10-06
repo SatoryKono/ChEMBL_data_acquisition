@@ -13,9 +13,16 @@ from itertools import chain, islice
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Sequence
 
+import numpy as np
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
+from pandas.api.types import (
+    is_extension_array_dtype,
+    is_float_dtype,
+    is_integer_dtype,
+    pandas_dtype,
+)
 
 from library import io
 from library.integration.chembl_client import ChemblClient
@@ -901,16 +908,43 @@ def finalize_output(
             return object
         return "string"
 
+    def _resolve_column_dtype(column: str) -> tuple[
+        pd.api.extensions.ExtensionDtype | str | type,
+        pd.api.extensions.ExtensionDtype | np.dtype | type,
+    ]:
+        dtype = column_dtypes.get(column)
+        if dtype is None:
+            dtype = _column_dtype(column)
+
+        try:
+            pandas_type = pandas_dtype(dtype)
+        except TypeError:
+            pandas_type = dtype
+
+        if is_integer_dtype(pandas_type) and not is_extension_array_dtype(pandas_type):
+            dtype = pd.Int64Dtype()
+            pandas_type = pandas_dtype(dtype)
+
+        column_dtypes[column] = dtype
+        return dtype, pandas_type
+
+    def _missing_value_for_dtype(pandas_type: pd.api.extensions.ExtensionDtype | np.dtype | type) -> Any:
+        if is_float_dtype(pandas_type):
+            return np.nan
+        return pd.NA
+
     def _ensure_column_alignment(frame: pd.DataFrame) -> None:
         missing = (expected_columns | columns_to_fill) - set(frame.columns)
         if not missing:
             return
         for column in sorted(missing):
-            dtype = column_dtypes.get(column)
-            if dtype is None:
-                dtype = _column_dtype(column)
-                column_dtypes[column] = dtype
-            frame[column] = pd.Series(pd.NA, index=frame.index, dtype=dtype)
+            dtype, pandas_type = _resolve_column_dtype(column)
+            fill_value = _missing_value_for_dtype(pandas_type)
+            frame[column] = pd.Series(
+                [fill_value] * len(frame),
+                index=frame.index,
+                dtype=dtype,
+            )
 
     def _process_chunk(raw: pd.DataFrame) -> pd.DataFrame:
         nonlocal rows_total, rows_written, exit_code, columns_seen, failure_count
