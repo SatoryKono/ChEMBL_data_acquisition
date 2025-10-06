@@ -215,6 +215,7 @@ def _string_like_missing(series: pd.Series) -> pd.Series:
         mask = mask | string_values.str.strip().fillna("").eq("")
     return mask
  
+ 
 def _string_blank_mask(series: pd.Series) -> pd.Series:
     """Return mask of entries that are null or contain only whitespace."""
 
@@ -392,6 +393,7 @@ def _ensure_molecule_pref_name(
         )
 
     return result
+ 
  
 
 
