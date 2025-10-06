@@ -242,6 +242,7 @@ def run_pipeline(
     strict_mode: bool = False,
     logger: Logger | None = None,
     stats_callback: Callable[[Stats], None] | None = None,
+    dictionary_resources: Sequence[str] | None = None,
 ) -> int:
     """Execute a data pipeline and write deterministic CSV output.
 
@@ -300,6 +301,10 @@ def run_pipeline(
     strict_mode:
         When ``True``, metadata hook failures abort processing instead of
         logging a warning and continuing.
+    dictionary_resources:
+        Optional sequence of dictionary manifest identifiers consumed by the
+        pipeline.  When provided, the metadata sidecar records the declared
+        version and SHA256 checksum for each resource.
 
     Returns
     -------
@@ -750,6 +755,7 @@ def run_pipeline(
         schema=schema_name,
         invocation=resolved_invocation or None,
         extra_metadata=extra_metadata or None,
+        dictionary_resources=dictionary_resources,
     )
 
     doc_quality_cfg = getattr(getattr(cfg, "system", None), "doc_quality", None)

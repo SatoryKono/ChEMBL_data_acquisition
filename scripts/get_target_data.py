@@ -12,6 +12,14 @@ Fetch ChEMBL target information for identifiers in ``targets.csv``::
 
 from __future__ import annotations
 
+if __package__ in {None, ""}:
+    from _bootstrap import bootstrap_cli
+else:  # pragma: no cover - executed when imported as a package module
+    from ._bootstrap import bootstrap_cli
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+
 # ruff: noqa: E402
 import argparse
 import sys
@@ -21,56 +29,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 import math
 from inspect import signature
-from functools import partial
 from itertools import islice
 from pathlib import Path
 from typing import IO, Any, cast
 
 from datetime import datetime, timezone
-
-try:
-    from library.utils.bootstrap import ensure_project_root
-except ModuleNotFoundError:  # pragma: no cover - fallback for direct execution
-    import sys
-    from pathlib import Path
-
-    def _is_within(path: Path, root: Path) -> bool:
-        try:
-            path.relative_to(root)
-        except ValueError:
-            return False
-        return True
-
-    def ensure_project_root() -> None:
-        """Add the repository root to ``sys.path`` when the package is missing."""
-
-        project_root = Path(__file__).resolve().parent.parent
-        project_root_str = str(project_root)
-        if project_root_str not in sys.path:
-            sys.path.insert(0, project_root_str)
-
-        existing = sys.modules.get("library")
-        if existing is None:
-            return
-
-        module_paths: list[Path] = []
-        file_attr = getattr(existing, "__file__", None)
-        if file_attr:
-            module_paths.append(Path(file_attr).resolve())
-        package_paths = getattr(existing, "__path__", None)
-        if package_paths is not None:
-            module_paths.extend(Path(p).resolve() for p in package_paths)
-
-        if any(_is_within(path, project_root) for path in module_paths):
-            return
-
-        for name in list(sys.modules):
-            if name == "library" or name.startswith("library."):
-                del sys.modules[name]
-
-
-if __package__ in {None, ""}:
-    ensure_project_root()
 
 import pandas as pd
 import requests
@@ -107,7 +70,7 @@ from library.common.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipelines.common import add_pipeline_metadata
 from library import SidecarErrors
-from library.table_quality import analyze_table_quality
+from library.qa.reporting import build_table_quality_hook, is_quality_enabled
 from library.validation import ValidationResult
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
@@ -2078,19 +2041,16 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         return 1
     doc_quality_cfg = cfg.system.doc_quality
     try:
-        if doc_quality_cfg.enable:
+        if is_quality_enabled(doc_quality_cfg):
             if export_path is None:
                 raise RuntimeError("export path not available for quality analysis")
             resolved_export_path = export_path.resolve()
-            quality_table_name = resolved_export_path.stem
-            analyze_table_quality(
-                out_df,
-                table_name=quality_table_name,
-                destination_dir=resolved_export_path.parent,
-                sample_rows=doc_quality_cfg.sample_rows,
-                include_columns=doc_quality_cfg.include_columns,
-                exclude_columns=doc_quality_cfg.exclude_columns,
+            table_quality = build_table_quality_hook(
+                doc_quality_cfg,
+                table_name=resolved_export_path.with_suffix(""),
+                destination=resolved_export_path.parent,
             )
+            table_quality(out_df)
     except Exception as exc:
         quality_log_path: Path | None = None
         if resolved_export_path is not None:
@@ -2550,18 +2510,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         f"{normalized_output.stem}_failure_cases.csv"
     )
     doc_quality_cfg = cfg.system.doc_quality
-    if doc_quality_cfg.enable:
-        table_quality = partial(
-            analyze_table_quality,
-            table_name=str(final_output.with_suffix("")),
-            destination_dir=final_output.parent,
-            sample_rows=doc_quality_cfg.sample_rows,
-            include_columns=doc_quality_cfg.include_columns,
-            exclude_columns=doc_quality_cfg.exclude_columns,
-        )
-    else:
-        def table_quality(_: Path) -> None:
-            return None
+    table_quality = build_table_quality_hook(
+        doc_quality_cfg,
+        table_name=final_output.with_suffix(""),
+        destination=final_output.parent,
+    )
 
     metadata_hooks = [add_pipeline_metadata, _prepare_chunk]
     if not normalize_at_export:
@@ -2584,6 +2537,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         table_quality=table_quality,
         cfg=cfg,
         logger=logger,
+        dictionary_resources=(
+            "target_uniprot_cache",
+            "target_iuphar_target",
+            "target_iuphar_family",
+        ),
     )
 
     try:
@@ -2729,16 +2687,13 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
         if tmp_path is not None:
             tmp_path.unlink(missing_ok=True)
     doc_quality_cfg = cfg.system.doc_quality
+    table_quality = build_table_quality_hook(
+        doc_quality_cfg,
+        table_name=output_path.with_suffix(""),
+        destination=output_path.parent,
+    )
     try:
-        if doc_quality_cfg.enable:
-            analyze_table_quality(
-                output_path,
-                table_name=str(output_path.with_suffix("")),
-                destination_dir=output_path.parent,
-                sample_rows=doc_quality_cfg.sample_rows,
-                include_columns=doc_quality_cfg.include_columns,
-                exclude_columns=doc_quality_cfg.exclude_columns,
-            )
+        table_quality(output_path)
     except Exception as exc:
         logger.exception(
             "quality_report_failed",
@@ -3785,16 +3740,13 @@ def validate_and_write(
         )
     else:
         doc_quality_cfg = cfg.system.doc_quality
+        table_quality = build_table_quality_hook(
+            doc_quality_cfg,
+            table_name=output.with_suffix(""),
+            destination=output.parent,
+        )
         try:
-            if doc_quality_cfg.enable:
-                analyze_table_quality(
-                    final_df,
-                    table_name=str(output.with_suffix("")),
-                    destination_dir=output.parent,
-                    sample_rows=doc_quality_cfg.sample_rows,
-                    include_columns=doc_quality_cfg.include_columns,
-                    exclude_columns=doc_quality_cfg.exclude_columns,
-                )
+            table_quality(final_df)
         except Exception as exc:
             logger.exception(
                 "quality_report_failed",

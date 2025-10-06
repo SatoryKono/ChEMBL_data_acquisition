@@ -7,8 +7,15 @@ applications or tests.
 
 from __future__ import annotations
 
+if __package__ in {None, ""}:
+    from _bootstrap import bootstrap_cli
+else:  # pragma: no cover - executed when imported as a package module
+    from ._bootstrap import bootstrap_cli
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+
 import argparse
-import sys
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence, Callable
 from datetime import datetime, timezone
@@ -17,46 +24,6 @@ from functools import partial
 from itertools import islice
 from pathlib import Path
 from time import sleep, perf_counter
-
-try:
-    from library.utils.bootstrap import ensure_project_root
-except ModuleNotFoundError:  # pragma: no cover - fallback for direct execution
-    def _is_within(path: Path, root: Path) -> bool:
-        try:
-            path.relative_to(root)
-        except ValueError:
-            return False
-        return True
-
-    def ensure_project_root() -> None:
-        """Add the repository root to ``sys.path`` when executed as a script."""
-
-        project_root = Path(__file__).resolve().parent.parent
-        project_root_str = str(project_root)
-        if project_root_str not in sys.path:
-            sys.path.insert(0, project_root_str)
-
-        existing = sys.modules.get("library")
-        if existing is None:
-            return
-
-        module_paths: list[Path] = []
-        file_attr = getattr(existing, "__file__", None)
-        if file_attr:
-            module_paths.append(Path(file_attr).resolve())
-        package_paths = getattr(existing, "__path__", None)
-        if package_paths is not None:
-            module_paths.extend(Path(p).resolve() for p in package_paths)
-
-        if any(_is_within(path, project_root) for path in module_paths):
-            return
-
-        for name in list(sys.modules):
-            if name == "library" or name.startswith("library."):
-                del sys.modules[name]
-
-if __package__ in {None, ""}:
-    ensure_project_root()
 
 import pandas as pd
 import requests
@@ -102,7 +69,7 @@ from library.processing.activity import (
     compute_activity_bounds,
 )
 from library.postprocessing.activity_extended import process_activity_extended
-from library.table_quality import analyze_table_quality
+from library.qa.reporting import build_table_quality_hook
 from library.validation import validate_activities
 from library.schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
@@ -997,19 +964,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
 
     doc_quality_cfg = cfg.system.doc_quality
-    if doc_quality_cfg.enable:
-        table_quality = partial(
-            analyze_table_quality,
-            table_name=str(Path(output_path).with_suffix("")),
-            destination_dir=Path(output_path).parent,
-            sample_rows=doc_quality_cfg.sample_rows,
-            include_columns=doc_quality_cfg.include_columns,
-            exclude_columns=doc_quality_cfg.exclude_columns,
-        )
-    else:
-
-        def table_quality(_: Path) -> None:
-            return None
+    table_quality = build_table_quality_hook(
+        doc_quality_cfg,
+        table_name=Path(output_path).with_suffix(""),
+        destination=Path(output_path).parent,
+    )
 
     rate_cfg = cfg.rate
     global_limiter = None
@@ -1193,6 +1152,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 stats_extra=chunk_failures.stats,
                 logger=logger,
                 stats_callback=_capture_stats,
+                dictionary_resources=(
+                    "dictionary_root",
+                    "target_types",
+                ),
             )
         except Exception:
             logger.exception("Activity pipeline execution failed during chunked processing.")

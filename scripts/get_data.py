@@ -21,11 +21,18 @@ that the pipelines can be executed programmatically from other callers as well.
 
 from __future__ import annotations
 
+if __package__ in {None, ""}:
+    from _bootstrap import bootstrap_cli
+else:  # pragma: no cover - executed when imported as a package module
+    from ._bootstrap import bootstrap_cli
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+
 import argparse
 import hashlib
 import json
 import logging
-import sys
 import time
 import uuid
 from collections import deque
@@ -36,25 +43,10 @@ from pathlib import Path
 
 from typing import Any, Callable, Iterable, IO, Mapping, Sequence
 
-
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-if __package__ in {None, ""}:
-    project_root_str = str(_PROJECT_ROOT)
-    if project_root_str not in sys.path:
-        sys.path.insert(0, project_root_str)
-
-from library.utils.bootstrap import ensure_project_root
-
-
-if __package__ in {None, ""}:
-    ensure_project_root()
-
 from library.cli.logging import setup_cli_logging
 from library.clients import ChemblClient
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
 from library.config import Config, load_config
-from library.integration.molecule_catalog import load_parent_catalog
 from library.pipelines.activity import (
     ActivityPipelineOptions,
     run_pipeline as run_activity_pipeline,
@@ -63,12 +55,21 @@ from library.pipelines.assay import (
     AssayPipelineOptions,
     run_pipeline as run_assay_pipeline,
 )
+from library.orchestration.workflow import (
+    PreparedPipelineStep,
+    StepExecutionResult,
+    execute_workflow,
+    temporary_output_path,
+)
 from library.pipelines.common import PipelineRunResult
 from library.pipelines.document import (
     DocumentPipelineOptions,
     run_pipeline as run_document_pipeline,
 )
 from library.pipelines.registry import PipelineStep, load_pipeline_registry
+
+from library.reporting.run_manifest import load_output_report, merge_run_output
+
 from library.pipelines.target import (
     TargetPipelineOptions,
     run_pipeline as run_target_pipeline,
@@ -78,6 +79,8 @@ from library.pipelines.testitem import (
     run_pipeline as run_testitem_pipeline,
 )
 from library.config.loader import DEFAULT_CONFIG_PATH
+
+from library.utils.config import DEFAULT_CONFIG_PATH
 
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
@@ -473,22 +476,6 @@ def _prepare_config(
     )
 
 
-@dataclass(frozen=True)
-class StepExecutionResult:
-    """Summarize the outcome of invoking a pipeline step."""
-
-    exit_code: int
-    executed: bool
-    status: str
-    reason: str | None = None
-
-
-def _temporary_output_path(output_path: Path) -> Path:
-    """Return the path used for intermediate artefacts of ``output_path``."""
-
-    return output_path.with_name(f".{output_path.name}.tmp")
-
-
 def _failure_sentinel_path(output_path: Path) -> Path:
     """Return the sentinel path recorded when a pipeline step fails."""
 
@@ -704,12 +691,12 @@ def _run_step(
     step: PipelineStep,
     cfg: PipelineRunConfig,
     base_config: Config,
+    input_path: Path,
     final_output: Path,
     working_output: Path,
 ) -> StepExecutionResult:
     """Execute ``step`` with ``cfg`` returning the resulting exit code."""
 
-    input_path = step.required_input(cfg)
     if not input_path.exists():
         _LOGGER.error("step_input_missing", step=step.name, path=str(input_path))
         return StepExecutionResult(
@@ -955,6 +942,8 @@ def _cleanup_failed_step(
 def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
     """Ensure the molecule parent catalogue cache exists before test item runs."""
 
+    from library.integration.molecule_catalog import load_parent_catalog
+
     start_time = time.perf_counter()
     config: Config = load_config(cfg.config_path, base_path=cfg.base_path)
     chembl_sources = config.sources.chembl
@@ -1106,13 +1095,16 @@ def _complete_manifest_entry(
     entry["duration_sec"] = round(time.perf_counter() - started_at, 6)
     entry["output"] = _describe_file(final_output)
     entry["sidecars"] = _describe_sidecars(final_output, working_output)
+    report = load_output_report(final_output)
+    if report is not None:
+        merge_run_output(entry, report)
 
 
 def _pending_manifest_entry(step: PipelineStep, cfg: PipelineRunConfig) -> dict[str, Any]:
     """Return a manifest entry for ``step`` that has not been executed."""
 
     final_output = step.expected_output(cfg)
-    working_output = _temporary_output_path(final_output)
+    working_output = temporary_output_path(final_output)
     entry: dict[str, Any] = {
         "name": step.name,
         "status": "pending",
@@ -1172,7 +1164,11 @@ def _write_run_manifest(
         )
 
 
-def run_pipeline(cfg: PipelineRunConfig) -> int:
+def run_pipeline(
+    cfg: PipelineRunConfig,
+    *,
+    steps: Sequence[PipelineStep] | None = None,
+) -> int:
 
     """Execute all configured steps and return the resulting exit status."""
 
@@ -1183,188 +1179,234 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
     run_started_clock = time.perf_counter()
     manifest_entries: list[dict[str, Any]] = []
     failed_index: int | None = None
+    last_executed_index = -1
     _LOGGER.info("pipeline_start", stage="pipeline")
 
-    for index, step in enumerate(_PIPELINE_STEPS):
-        final_output = step.expected_output(cfg)
-        working_output = _temporary_output_path(final_output)
-        sentinel_path = _failure_sentinel_path(final_output)
-        entry: dict[str, Any] = {
-            "name": step.name,
-            "status": "pending",
-            "exit_code": None,
-            "executed": False,
-            "reason": None,
-            "started_at": datetime.now(UTC).isoformat(),
-            "completed_at": None,
-            "duration_sec": None,
-            "output": _describe_file(final_output),
-            "sidecars": _describe_sidecars(final_output, working_output),
-        }
-        manifest_entries.append(entry)
+    def _prepare_step(
+        step: PipelineStep,
+        entry: dict[str, Any],
+        index: int,
+    ) -> PreparedPipelineStep:
+        def _invoke(
+            current_cfg: PipelineRunConfig,
+            input_path: Path,
+            final_output: Path,
+            working_output: Path,
+        ) -> StepExecutionResult:
+            nonlocal overall_status, failed_index, last_executed_index
 
-        _LOGGER.info("step_start", step=step.name)
-        step_started_clock = time.perf_counter()
+            sentinel_path = _failure_sentinel_path(final_output)
+            entry["started_at"] = datetime.now(UTC).isoformat()
+            step_started_clock = time.perf_counter()
+            _LOGGER.info("step_start", step=step.name)
 
-        if cfg.dry_run:
-            _LOGGER.info("step_skip_dry_run", step=step.name)
-            entry.update(
-                {
-                    "status": "skipped",
-                    "exit_code": 0,
-                    "executed": False,
-                    "reason": "dry_run",
-                }
-            )
-            _complete_manifest_entry(
-                entry,
-                final_output=final_output,
-                working_output=working_output,
-                started_at=step_started_clock,
-            )
-            continue
+            if current_cfg.dry_run:
+                _LOGGER.info("step_skip_dry_run", step=step.name)
+                entry.update(
+                    {
+                        "status": "skipped",
+                        "exit_code": 0,
+                        "executed": False,
+                        "reason": "dry_run",
+                    }
+                )
+                _complete_manifest_entry(
+                    entry,
+                    final_output=final_output,
+                    working_output=working_output,
+                    started_at=step_started_clock,
+                )
+                last_executed_index = index
+                return StepExecutionResult(
+                    exit_code=0,
+                    executed=False,
+                    status="skipped",
+                    reason="dry_run",
+                )
 
-        if working_output.exists():
-            _remove_path(working_output)
+            if working_output.exists():
+                _remove_path(working_output)
 
-        if step.name == "testitem":
+            if step.name == "testitem":
+                try:
+                    _warm_parent_catalog(current_cfg)
+                except TimeoutError as exc:
+                    overall_status = 1
+                    entry.update(
+                        {
+                            "status": "failed",
+                            "exit_code": overall_status,
+                            "executed": False,
+                            "reason": "parent_catalog_timeout",
+                        }
+                    )
+                    _LOGGER.error("parent_catalog_warm_timeout", error=str(exc))
+                    _complete_manifest_entry(
+                        entry,
+                        final_output=final_output,
+                        working_output=working_output,
+                        started_at=step_started_clock,
+                    )
+                    failed_index = index
+                    last_executed_index = index
+                    return StepExecutionResult(
+                        exit_code=1,
+                        executed=False,
+                        status="failed",
+                        reason="parent_catalog_timeout",
+                    )
+                except Exception as exc:  # pragma: no cover - defensive guard
+                    overall_status = 1
+                    entry.update(
+                        {
+                            "status": "failed",
+                            "exit_code": overall_status,
+                            "executed": False,
+                            "reason": "parent_catalog_error",
+                        }
+                    )
+                    _LOGGER.error("parent_catalog_warm_error", error=str(exc))
+                    _complete_manifest_entry(
+                        entry,
+                        final_output=final_output,
+                        working_output=working_output,
+                        started_at=step_started_clock,
+                    )
+                    failed_index = index
+                    last_executed_index = index
+                    return StepExecutionResult(
+                        exit_code=1,
+                        executed=False,
+                        status="failed",
+                        reason="parent_catalog_error",
+                    )
+
             try:
-                _warm_parent_catalog(cfg)
-            except TimeoutError as exc:
-                overall_status = 1
+                result = _run_step(
+                    step,
+                    current_cfg,
+                    base_config,
+                    input_path,
+                    final_output,
+                    working_output,
+                )
+            except SystemExit as exc:  # pragma: no cover - defensive guard
+                exit_code = _coerce_exit_code(exc.code)
                 entry.update(
                     {
                         "status": "failed",
-                        "exit_code": overall_status,
-                        "executed": False,
-                        "reason": "parent_catalog_timeout",
+                        "exit_code": exit_code,
+                        "executed": True,
+                        "reason": "system_exit",
                     }
                 )
-                _LOGGER.error("parent_catalog_warm_timeout", error=str(exc))
+                _LOGGER.error("step_system_exit", step=step.name, exit_code=exit_code)
+                _cleanup_failed_step(
+                    final_output,
+                    working_output,
+                    sentinel_path,
+                    executed=True,
+                )
                 _complete_manifest_entry(
                     entry,
                     final_output=final_output,
                     working_output=working_output,
                     started_at=step_started_clock,
                 )
+                overall_status = exit_code
                 failed_index = index
-                break
-            except Exception as exc:  # pragma: no cover - defensive guard
-                overall_status = 1
+                last_executed_index = index
+                return StepExecutionResult(
+                    exit_code=exit_code,
+                    executed=True,
+                    status="failed",
+                    reason="system_exit",
+                )
+            except BaseException as exc:  # pragma: no cover - defensive guard
                 entry.update(
                     {
                         "status": "failed",
-                        "exit_code": overall_status,
-                        "executed": False,
-                        "reason": "parent_catalog_error",
+                        "exit_code": 1,
+                        "executed": True,
+                        "reason": "exception",
                     }
                 )
-                _LOGGER.error("parent_catalog_warm_error", error=str(exc))
+                _LOGGER.exception("step_exception", step=step.name, error=str(exc))
+                _cleanup_failed_step(
+                    final_output,
+                    working_output,
+                    sentinel_path,
+                    executed=True,
+                )
                 _complete_manifest_entry(
                     entry,
                     final_output=final_output,
                     working_output=working_output,
                     started_at=step_started_clock,
                 )
+                overall_status = 1
                 failed_index = index
-                break
+                last_executed_index = index
+                return StepExecutionResult(
+                    exit_code=1,
+                    executed=True,
+                    status="failed",
+                    reason="exception",
+                )
 
-        try:
-            result = _run_step(step, cfg, base_config, final_output, working_output)
-        except SystemExit as exc:  # pragma: no cover - defensive guard
-            exit_code = _coerce_exit_code(exc.code)
             entry.update(
                 {
-                    "status": "failed",
-                    "exit_code": exit_code,
-                    "executed": True,
-                    "reason": "system_exit",
+                    "exit_code": result.exit_code,
+                    "executed": result.executed,
+                    "reason": result.reason,
                 }
             )
-            _LOGGER.error("step_system_exit", step=step.name, exit_code=exit_code)
-            _cleanup_failed_step(
-                final_output,
-                working_output,
-                sentinel_path,
-                executed=True,
-            )
-            _complete_manifest_entry(
-                entry,
-                final_output=final_output,
-                working_output=working_output,
-                started_at=step_started_clock,
-            )
-            overall_status = exit_code
-            failed_index = index
-            break
-        except BaseException as exc:  # pragma: no cover - defensive guard
-            entry.update(
-                {
-                    "status": "failed",
-                    "exit_code": 1,
-                    "executed": True,
-                    "reason": "exception",
-                }
-            )
-            _LOGGER.exception("step_exception", step=step.name, error=str(exc))
-            _cleanup_failed_step(
-                final_output,
-                working_output,
-                sentinel_path,
-                executed=True,
-            )
-            _complete_manifest_entry(
-                entry,
-                final_output=final_output,
-                working_output=working_output,
-                started_at=step_started_clock,
-            )
-            overall_status = 1
-            failed_index = index
-            break
 
-        entry.update(
-            {
-                "exit_code": result.exit_code,
-                "executed": result.executed,
-                "reason": result.reason,
-            }
-        )
+            last_executed_index = index
 
-        if result.exit_code != 0:
-            _LOGGER.error("step_failed", step=step.name, exit_code=result.exit_code)
+            if result.exit_code != 0:
+                _LOGGER.error("step_failed", step=step.name, exit_code=result.exit_code)
+                entry["status"] = result.status
+                _cleanup_failed_step(
+                    final_output,
+                    working_output,
+                    sentinel_path,
+                    executed=result.executed,
+                )
+                _complete_manifest_entry(
+                    entry,
+                    final_output=final_output,
+                    working_output=working_output,
+                    started_at=step_started_clock,
+                )
+                overall_status = result.exit_code
+                failed_index = index
+                return result
+
             entry["status"] = result.status
-            _cleanup_failed_step(
-                final_output,
-                working_output,
-                sentinel_path,
-                executed=result.executed,
-            )
+            _finalize_step_success(final_output, working_output, sentinel_path)
             _complete_manifest_entry(
                 entry,
                 final_output=final_output,
                 working_output=working_output,
                 started_at=step_started_clock,
             )
-            overall_status = result.exit_code
-            failed_index = index
-            break
+            _LOGGER.info("step_done", step=step.name)
+            return result
 
-        entry["status"] = result.status
-        _finalize_step_success(final_output, working_output, sentinel_path)
-        _complete_manifest_entry(
-            entry,
-            final_output=final_output,
-            working_output=working_output,
-            started_at=step_started_clock,
-        )
-        _LOGGER.info("step_done", step=step.name)
-    else:
+        return PreparedPipelineStep(step=step, invoke=_invoke)
+
+    prepared_steps: list[PreparedPipelineStep] = []
+    for index, step in enumerate(effective_steps):
+        entry = _pending_manifest_entry(step, cfg)
+        manifest_entries.append(entry)
+        prepared_steps.append(_prepare_step(step, entry, index))
+
+    for _ in execute_workflow(cfg, prepared_steps):
+        pass
+
+    if failed_index is None and last_executed_index + 1 == len(effective_steps):
         _LOGGER.info("workflow_complete")
-
-    if failed_index is not None and failed_index + 1 < len(_PIPELINE_STEPS):
-        for step in _PIPELINE_STEPS[failed_index + 1 :]:
-            manifest_entries.append(_pending_manifest_entry(step, cfg))
 
     run_completed_at = datetime.now(UTC)
     duration_seconds = time.perf_counter() - run_started_clock
@@ -1439,3 +1481,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
     raise SystemExit(main())
+
+def _temporary_output_path(output_path: Path) -> Path:
+    """Backward compatible alias for :func:`temporary_output_path`."""
+
+    return temporary_output_path(output_path)
+

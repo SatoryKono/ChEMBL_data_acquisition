@@ -16,7 +16,7 @@
    - **Expected effect.** Reduced duplication and a consistent CLI surface that is easier to reason about and extend.
 
 4. **Split configuration loading into a package**
-   - **Description.** (Completed) Configuration code now lives in `library/config/models.py`, `library/config/loader.py` and `library/config/runtime.py`, separating schema definitions, loading logic and runtime helpers.
+   - **Description.** (Completed) Configuration code now lives in `library/config/model.py`, `library/config/loader.py` and `library/config/runtime.py`, separating schema definitions, loading logic and runtime helpers.
    - **Problem.** The current module interleaves path normalisation, schema expansion, HTTP session factories and environment overrides in one 1k+ LOC file, reducing readability and testability.
    - **Expected effect.** Clear separation of concerns with focused units that can be unit-tested and reused independently across pipelines.
 

@@ -24,6 +24,14 @@ The input file must contain a ``PMID`` column.
 
 from __future__ import annotations
 
+if __package__ in {None, ""}:
+    from _bootstrap import bootstrap_cli
+else:  # pragma: no cover - executed when imported as a package module
+    from ._bootstrap import bootstrap_cli
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+
 import argparse
 import inspect
 import os
@@ -40,42 +48,6 @@ from typing import Any, cast
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
-
-try:
-    from library.utils.bootstrap import ensure_project_root
-except ModuleNotFoundError:  # pragma: no cover - environment bootstrap
-    project_root = Path(__file__).resolve().parents[1]
-    project_root_str = str(project_root)
-    if project_root_str not in sys.path:
-        sys.path.insert(0, project_root_str)
-
-    existing = sys.modules.get("library")
-    if existing is not None:
-        module_paths: list[Path] = []
-        file_attr = getattr(existing, "__file__", None)
-        if file_attr:
-            module_paths.append(Path(file_attr).resolve())
-        package_paths = getattr(existing, "__path__", None)
-        if package_paths is not None:
-            module_paths.extend(Path(p).resolve() for p in package_paths)
-
-        def _is_within(path: Path) -> bool:
-            try:
-                path.relative_to(project_root)
-            except ValueError:
-                return False
-            return True
-
-        if not any(_is_within(path) for path in module_paths):
-            for name in list(sys.modules):
-                if name == "library" or name.startswith("library."):
-                    del sys.modules[name]
-
-    from library.utils.bootstrap import ensure_project_root
-
-
-if __package__ in {None, ""}:
-    ensure_project_root()
 
 from library import cli
 from library import io
@@ -110,7 +82,6 @@ from library.pipelines.document.pipeline import (
     merge_metadata,
     merge_with_chembl,
     normalise_doi,
-    save_quality_report,
 )
 from library.pipelines.document.service import (
     DocumentPipeline,
@@ -118,12 +89,17 @@ from library.pipelines.document.service import (
     FallbackDoiState,
 )
 from library.common.log import logger
-from library.common.metadata import Stats, file_sha256, write_meta_yaml
+from library.reporting.run_manifest import (
+    QualityAnalysisError,
+    QualityReportError,
+    finalise_csv_output,
+)
 from library.postprocessing.document import preprocess_documents_csv
 from library.pipelines.common import add_pipeline_metadata
 from library.common.rate_limiter import get_global_limiter
 from library.common.sidecar import SidecarErrors
-from library.qa.table_quality import TableQualityProfiler, analyze_table_quality
+from library.qa.reporting import build_table_quality_hook
+from library.qa.table_quality import TableQualityProfiler
 from library.schemas import DocumentsSchema, normalize_documents
 from library.schemas.document_spec import DOCUMENT_EXPORT_COLUMNS
 
@@ -661,45 +637,36 @@ def _finalise_export(
         if csv_path.name.startswith("output.document_"):
             _maybe_run_document_postprocessing(csv_path)
 
-    stats: Stats = {
-        "rows_total": rows_total,
-        "rows_kept": rows_kept,
-        "rows_dropped": rows_dropped,
-        "output_sha256": file_sha256(csv_path),
-    }
-    write_meta_yaml(
-        csv_path=csv_path,
-        command=" ".join(sys.argv),
-        config_subset=_serialize_paths(cfg.to_dict()),
-        inputs={"input_csv": str(input_csv)},
-        stats=stats,
-        schema="DocumentsSchema",
+    doc_quality_cfg = getattr(cfg.system, "doc_quality", None)
+    quality_hook = build_table_quality_hook(
+        doc_quality_cfg,
+        table_name=csv_path.with_suffix(""),
+        destination=csv_path.parent,
     )
-
-    quality_path = csv_path.with_suffix(".quality.json")
     try:
-        report = build_quality_report(quality_summary)
-        save_quality_report(report, quality_path)
-    except (OSError, TypeError, ValueError) as exc:
+        finalise_csv_output(
+            csv_path=csv_path,
+            rows_total=rows_total,
+            rows_kept=rows_kept,
+            command=" ".join(sys.argv),
+            config_subset=_serialize_paths(cfg.to_dict()),
+            inputs={"input_csv": str(input_csv)},
+            schema="DocumentsSchema",
+            quality_summary=quality_summary,
+            quality_builder=build_quality_report,
+            quality_path=csv_path.with_suffix(".quality.json"),
+            quality_profiler=quality_profiler,
+            quality_hook=quality_hook,
+        )
+    except QualityReportError as exc:
+        destination = exc.path or csv_path.with_suffix(".quality.json")
         logger.error(
             "quality_report_write_failed",
             error=str(exc),
-            path=str(quality_path),
+            path=str(destination),
         )
         return 1
-
-    doc_quality_cfg = cfg.system.doc_quality
-    try:
-        if doc_quality_cfg.enable:
-            analyze_table_quality(
-                quality_profiler,
-                table_name=csv_path.with_suffix("").name,
-                destination_dir=csv_path.parent,
-                sample_rows=doc_quality_cfg.sample_rows,
-                include_columns=doc_quality_cfg.include_columns,
-                exclude_columns=doc_quality_cfg.exclude_columns,
-            )
-    except Exception as exc:
+    except QualityAnalysisError as exc:
         logger.exception(
             "quality_report_generation_failed",
             error=str(exc),

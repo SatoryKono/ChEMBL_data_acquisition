@@ -1,0 +1,41 @@
+"""Unit tests for :mod:`library.resources.dictionaries`."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from library.resources import dictionaries
+
+
+@pytest.mark.unit
+def test_compute_sha256__ignores_crlf_in_files(tmp_path: Path) -> None:
+    """CRLF newlines should not affect the checksum of individual files."""
+
+    lf_path = tmp_path / "lf.csv"
+    lf_path.write_text("id,name\n1,example\n", encoding="utf-8")
+
+    crlf_path = tmp_path / "crlf.csv"
+    crlf_path.write_bytes("id,name\r\n1,example\r\n".encode("utf-8"))
+
+    assert dictionaries._compute_sha256(lf_path) == dictionaries._compute_sha256(crlf_path)
+
+
+@pytest.mark.unit
+def test_compute_sha256__ignores_crlf_in_directories(tmp_path: Path) -> None:
+    """Directory checksums should be stable across newline conventions."""
+
+    lf_dir = tmp_path / "lf"
+    lf_dir.mkdir()
+    (lf_dir / "data.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+    (lf_dir / "nested").mkdir()
+    (lf_dir / "nested" / "more.csv").write_text("x\ny\n", encoding="utf-8")
+
+    crlf_dir = tmp_path / "crlf"
+    crlf_dir.mkdir()
+    (crlf_dir / "data.csv").write_bytes("a,b\r\n1,2\r\n".encode("utf-8"))
+    (crlf_dir / "nested").mkdir()
+    (crlf_dir / "nested" / "more.csv").write_bytes("x\r\ny\r\n".encode("utf-8"))
+
+    assert dictionaries._compute_sha256(lf_dir) == dictionaries._compute_sha256(crlf_dir)

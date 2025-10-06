@@ -3,6 +3,14 @@
 
 from __future__ import annotations
 
+if __package__ in {None, ""}:
+    from _bootstrap import bootstrap_cli, ensure_project_root
+else:  # pragma: no cover - executed when imported as a package module
+    from ._bootstrap import bootstrap_cli, ensure_project_root
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+
 import argparse
 import hashlib
 import os
@@ -11,16 +19,6 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-
-
-def _ensure_project_root() -> Path:
-    """Return repository root, adding it to ``sys.path`` when required."""
-
-    repo_root = Path(__file__).resolve().parents[1]
-    repo_str = str(repo_root)
-    if repo_str not in sys.path:
-        sys.path.insert(0, repo_str)
-    return repo_root
 
 
 def _hash_file(path: Path) -> str:
@@ -52,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    _ensure_project_root()
+    ensure_project_root(__file__)
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="determinism_check_"))
     try:

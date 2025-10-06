@@ -7,7 +7,14 @@ instead of terminating the interpreter to make orchestration easier.
 
 from __future__ import annotations
 
-import sys
+if __package__ in {None, ""}:
+    from _bootstrap import bootstrap_cli
+else:  # pragma: no cover - executed when imported as a package module
+    from ._bootstrap import bootstrap_cli
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+
 from pathlib import Path
 from time import sleep
 
@@ -19,16 +26,6 @@ from itertools import islice
 
 import pandas as pd
 import requests
-
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
-
-from library.utils.bootstrap import ensure_project_root
-
-
-if __package__ in {None, ""}:
-    ensure_project_root()
 
 from library.integration import chembl_library as cl
 from library.pipelines.assay import postprocessing as ap
@@ -51,7 +48,7 @@ from library.cli.metadata import prepare_option
 from library.config import Config, _serialize_paths
 from library.common.log import logger
 from library.pipelines.common import add_pipeline_metadata
-from library.table_quality import analyze_table_quality
+from library.qa.reporting import build_table_quality_hook
 from library.validation import validate_assays
 from library.schemas import AssaysSchema, normalize_assays
 from library.pipelines.common import (
@@ -287,18 +284,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     validators = [partial(validate_assays, return_result=True)]
 
     doc_quality_cfg = cfg.system.doc_quality
-    if doc_quality_cfg.enable:
-        table_quality = partial(
-            analyze_table_quality,
-            table_name=str(output_path.with_suffix("")),
-            destination_dir=output_path.parent,
-            sample_rows=doc_quality_cfg.sample_rows,
-            include_columns=doc_quality_cfg.include_columns,
-            exclude_columns=doc_quality_cfg.exclude_columns,
-        )
-    else:
-        def table_quality(_: Path) -> None:
-            return None
+    table_quality = build_table_quality_hook(
+        doc_quality_cfg,
+        table_name=output_path.with_suffix(""),
+        destination=output_path.parent,
+    )
 
     rate_cfg = cfg.rate
     global_limiter = None
@@ -437,6 +427,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 stats_extra=chunk_failures.stats,
                 logger=logger,
                 stats_callback=_capture_stats,
+                dictionary_resources=("dictionary_root",),
             )
         finally:
             chunk_failures.save(fetch_failure_path, cfg=cfg)
