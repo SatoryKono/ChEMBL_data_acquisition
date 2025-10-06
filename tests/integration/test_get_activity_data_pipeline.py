@@ -11,10 +11,12 @@ from typing import Iterable
 
 import pandas as pd
 import pytest
+import yaml
 
 from dataclasses import dataclass
 
 from scripts import get_activity_data
+from config.paths import DICTIONARY_DIR
 
 
 class _DummyChemblClient:
@@ -328,6 +330,26 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
     summary_message = completion_messages[-1]
     assert "mode=run" in summary_message
     assert "rows=3" in summary_message
+
+    meta_path = output_csv.with_name(output_csv.name + ".meta.yaml")
+    assert meta_path.exists()
+    meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    dictionaries = meta.get("dictionaries")
+    assert isinstance(dictionaries, dict)
+
+    manifest = yaml.safe_load((DICTIONARY_DIR / "manifest.yaml").read_text(encoding="utf-8"))
+    resources = manifest.get("resources", {}) if isinstance(manifest, dict) else {}
+    root_entry = resources.get("dictionary_root", {}) if isinstance(resources, dict) else {}
+    target_entry = resources.get("target_types", {}) if isinstance(resources, dict) else {}
+
+    assert dictionaries.get("dictionary_root") == {
+        "version": root_entry.get("version"),
+        "sha256": root_entry.get("sha256"),
+    }
+    assert dictionaries.get("target_types") == {
+        "version": target_entry.get("version"),
+        "sha256": target_entry.get("sha256"),
+    }
 
 
 @pytest.mark.integration

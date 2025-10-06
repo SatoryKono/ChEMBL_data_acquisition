@@ -434,6 +434,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 stats_extra=chunk_failures.stats,
                 logger=logger,
                 stats_callback=_capture_stats,
+                dictionary_resources=("dictionary_root",),
             )
         finally:
             chunk_failures.save(fetch_failure_path, cfg=cfg)

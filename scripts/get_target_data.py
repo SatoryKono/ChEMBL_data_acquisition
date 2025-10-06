@@ -2548,6 +2548,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         table_quality=table_quality,
         cfg=cfg,
         logger=logger,
+        dictionary_resources=(
+            "target_uniprot_cache",
+            "target_iuphar_target",
+            "target_iuphar_family",
+        ),
     )
 
     try:

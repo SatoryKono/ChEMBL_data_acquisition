@@ -1160,6 +1160,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 stats_extra=chunk_failures.stats,
                 logger=logger,
                 stats_callback=_capture_stats,
+                dictionary_resources=(
+                    "dictionary_root",
+                    "target_types",
+                ),
             )
         except Exception:
             logger.exception("Activity pipeline execution failed during chunked processing.")
