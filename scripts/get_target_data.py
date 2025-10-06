@@ -4,21 +4,13 @@ Example
 -------
 Fetch ChEMBL target information for identifiers in ``targets.csv``::
 
-    python scripts/get_target_data.py chembl --config config/config.yaml --input targets.csv
+    get-target-data chembl --config config/config.yaml --input targets.csv
 """
 
 # Changelog:
 # - Batch column assignments in merge logic to avoid pandas fragmentation warnings.
 
 from __future__ import annotations
-
-if __package__ in {None, ""}:
-    from _bootstrap import bootstrap_cli
-else:  # pragma: no cover - executed when imported as a package module
-    from ._bootstrap import bootstrap_cli
-
-bootstrap_cli(__package__, __file__)
-del bootstrap_cli
 
 # ruff: noqa: E402
 import argparse

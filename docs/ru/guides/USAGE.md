@@ -63,9 +63,9 @@ get-data --base-path /data/chembl \
 выгрузки создаются в целевых каталогах без устаревших алиасов. Значение
 `--limit 0` пропускает выполнение, а `--dry-run` выводит план без записи файлов.
 
-## Пайплайн документов (`python scripts/get_document_data.py`)
+## Пайплайн документов (`get-document-data`)
 
-Конвейер документов запускается единым скриптом `python scripts/get_document_data.py --mode <chembl|pubmed|all>`. Флаг `--mode`
+Конвейер документов запускается единым скриптом `get-document-data --mode <chembl|pubmed|all>`. Флаг `--mode`
 заменяет прежние позиционные подкоманды, сохраняя общие аргументы CLI в духе остальных пайплайнов.
 
 ### Краткая шпаргалка
@@ -79,7 +79,7 @@ get-data --base-path /data/chembl \
 ### Фрагмент справки
 
 ```
-$ python scripts/get_document_data.py --mode all --help
+$ get-document-data --mode all --help
 ...
   --chembl-chunk-size CHEMBL_CHUNK_SIZE, --chunk-size CHEMBL_CHUNK_SIZE
                         Максимум идентификаторов в одном запросе ChEMBL
@@ -129,20 +129,20 @@ Fallback DOI overrides:
 
 ```bash
 # Только ChEMBL
-python scripts/get_document_data.py --mode chembl \
+get-document-data --mode chembl \
     --input data/input/document.csv \
     --final-out output/documents_chembl.csv \
     --config config/config.yaml
 
 # PubMed и партнёры с ограничением RPS
-python scripts/get_document_data.py --mode pubmed \
+get-document-data --mode pubmed \
     --input data/input/document.csv \
     --final-out output/documents_pubmed.csv \
     --config config/config.yaml \
     --openalex-rps 3 --crossref-rps 3
 
 # Полный прогон с ручными DOI
-python scripts/get_document_data.py --mode all \
+get-document-data --mode all \
     --input data/input/document.csv \
     --final-out output/documents_full.csv \
     --config config/config.yaml \

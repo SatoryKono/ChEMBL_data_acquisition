@@ -10,7 +10,7 @@ corresponding remediation steps. The Russian counterpart lives at
 refuses to run without it. The parser eventually calls
 [`prepare_io_paths`](../../library/cli/parser.py) which expects the mode to be set
 when building log messages. Supply `--mode` explicitly or use the positional
-alias (`python scripts/get_document_data.py all ...`).
+alias (`get-document-data all ...`).
 
 ## I passed `--limit 0` and nothing happened. Is that expected?
 

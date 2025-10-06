@@ -33,7 +33,7 @@ return strings, not bytes`.
 ## 4. Отсутствующие словари
 
 - Таргеты используют CSV из `config/dictionary/_target`. Запустите
-  `python scripts/get_target_data.py all --print-config`, чтобы проверить пути.
+  `get-target-data all --print-config`, чтобы проверить пути.
 - Для тестовых объектов убедитесь, что есть файл `molecule_hierarchy.csv`. При
   необходимости пересоберите кэш: `python -m library.integration.molecule_catalog --help`.
 

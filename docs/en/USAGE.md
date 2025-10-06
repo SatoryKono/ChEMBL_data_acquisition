@@ -1,8 +1,9 @@
 # Usage and CLI reference
 
-All command line entry points are available through `python scripts/<name>.py`
-or via the console scripts installed from `pyproject.toml` (`get-data`,
-`get-document-data`, `get-target-data`, etc.).
+All command line entry points are installed as console scripts
+(`get-data`, `get-document-data`, `get-target-data`, etc.). They can also be
+invoked with ``python -m scripts.<name>`` when the package is installed in
+editable mode.
 
 ## Common conventions
 
@@ -34,7 +35,7 @@ Every pipeline writes the following artefacts alongside the final CSV:
 Run the full sequence of pipelines with shared configuration:
 
 ```bash
-python scripts/get_data.py \
+get-data \
   --base-path /data/chembl \
   --input-dir inbound \
   --output-dir outbound \
@@ -101,7 +102,7 @@ Fallback DOI handling (`--mode all` or `pubmed`):
 Example: fetch PubMed enrichments with fallback DOIs and partner rate limits.
 
 ```bash
-python scripts/get_document_data.py --mode pubmed \
+get-document-data --mode pubmed \
   --input data/input/document.csv \
   --final-out output/documents_pubmed.csv \
   --config config/config.yaml \
@@ -171,7 +172,7 @@ prefixed overrides:
 Example:
 
 ```bash
-python scripts/get_target_data.py all \
+get-target-data all \
   --input data/input/target.csv \
   --final-out output/targets_20250228.csv \
   --config config/config.yaml \
@@ -212,7 +213,7 @@ Options include:
 Example smoke run limiting to 100 assays:
 
 ```bash
-python scripts/get_assay_data.py \
+get-assay-data \
   --input data/input/assay.csv \
   --final-out output/assays_sample.csv \
   --limit 100
@@ -265,7 +266,7 @@ supports:
 Example run writing the harmonised table and restricting the identifier window:
 
 ```bash
-python scripts/get_tissue_data.py \
+get-tissue-data \
   --input data/input/tissue.csv \
   --final-out output/tissues.csv \
   --config config/config.yaml \
@@ -291,7 +292,7 @@ Example: write the output to a dedicated directory while restricting the run to
 the first 25 rows of the input file.
 
 ```bash
-python scripts/get_cellline_data.py \
+get-cellline-data \
   --input data/input/cellline.csv \
   --final-out output/cellline.csv \
   --batch-size 10 \

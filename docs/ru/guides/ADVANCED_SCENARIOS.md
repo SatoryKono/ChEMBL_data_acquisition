@@ -8,7 +8,7 @@
 
 ```bash
 BASE=/data/releases/chembl-35
-python scripts/get_data.py \
+get-data \
   --base-path "$BASE" \
   --input-dir inbound/2025-02-01 \
   --output-dir outbound/2025-02-01 \
@@ -24,7 +24,7 @@ python scripts/get_data.py \
 Перезапуск только тестовых объектов:
 
 ```bash
-python scripts/get_testitem_data.py \
+get-testitem-data \
   --input /data/inbound/testitem.csv \
   --final-out /data/outbound/testitems.csv \
   --config config/config.yaml \
@@ -45,7 +45,7 @@ rm -rf "$CHEMBL_DA_BASE_PATH"/cache/molecule_*
 ```bash
 export CHEMBL_DA__SOURCES__CHEMBL__API__RPS=5
 export CHEMBL_DA__SOURCES__CHEMBL__API__BURST=5
-python scripts/get_activity_data.py --limit 200
+get-activity-data --limit 200
 ```
 
 Аналогично можно настраивать партнёрские API (`CHEMBL_DA_OPENALEX_RPS`,
@@ -56,7 +56,7 @@ python scripts/get_activity_data.py --limit 200
 `get_target_data` умеет сохранять сырые наборы данных:
 
 ```bash
-python scripts/get_target_data.py all \
+get-target-data all \
   --input data/input/target.csv \
   --final-out output/targets.csv \
   --raw-out output/targets_raw.parquet \

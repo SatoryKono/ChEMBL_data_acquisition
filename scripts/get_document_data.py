@@ -16,21 +16,13 @@ Example
 -------
 Fetch PubMed metadata for identifiers listed in ``pmids.csv``::
 
-    python scripts/get_document_data.py --mode pubmed --config config/config.yaml --input pmids.csv --final-out output.csv
+    get-document-data --mode pubmed --config config/config.yaml --input pmids.csv --final-out output.csv
 
 The input file must contain a ``PMID`` column.
 
 """
 
 from __future__ import annotations
-
-if __package__ in {None, ""}:
-    from _bootstrap import bootstrap_cli
-else:  # pragma: no cover - executed when imported as a package module
-    from ._bootstrap import bootstrap_cli
-
-bootstrap_cli(__package__, __file__)
-del bootstrap_cli
 
 import argparse
 import inspect
@@ -310,7 +302,7 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
         if column not in frame.columns:
             frame[column] = ""
 
-    return frame[_EXPORT_COLUMNS]
+    return frame.loc[:, list(_EXPORT_COLUMNS)]
 
 
 def _iter_export_chunks(

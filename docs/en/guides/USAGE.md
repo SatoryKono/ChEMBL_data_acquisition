@@ -66,9 +66,9 @@ write to the canonical destination without relying on deprecated aliases.
 `--limit 0` skips execution, `--dry-run` prints scheduled steps without touching
 the filesystem.
 
-## Document pipeline (`python scripts/get_document_data.py`)
+## Document pipeline (`get-document-data`)
 
-Run the document workflow via the single entry point `python scripts/get_document_data.py --mode <chembl|pubmed|all>`. The `--mode`
+Run the document workflow via the single entry point `get-document-data --mode <chembl|pubmed|all>`. The `--mode`
 flag replaces the legacy positional sub-commands while keeping the common CLI
 arguments consistent with the other pipelines.
 
@@ -83,7 +83,7 @@ arguments consistent with the other pipelines.
 ### Help excerpt
 
 ```
-$ python scripts/get_document_data.py --mode all --help
+$ get-document-data --mode all --help
 ...
   --chembl-chunk-size CHEMBL_CHUNK_SIZE, --chunk-size CHEMBL_CHUNK_SIZE
                         Maximum identifiers per ChEMBL request
@@ -133,20 +133,20 @@ Fallback DOI overrides:
 
 ```bash
 # ChEMBL-only export
-python scripts/get_document_data.py --mode chembl \
+get-document-data --mode chembl \
     --input data/input/document.csv \
     --final-out output/documents_chembl.csv \
     --config config/config.yaml
 
 # PubMed enrichment with throttled partner APIs
-python scripts/get_document_data.py --mode pubmed \
+get-document-data --mode pubmed \
     --input data/input/document.csv \
     --final-out output/documents_pubmed.csv \
     --config config/config.yaml \
     --openalex-rps 3 --crossref-rps 3
 
 # Full merge with manual DOI corrections
-python scripts/get_document_data.py --mode all \
+get-document-data --mode all \
     --input data/input/document.csv \
     --final-out output/documents_full.csv \
     --config config/config.yaml \

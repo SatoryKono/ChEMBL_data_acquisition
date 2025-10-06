@@ -3,9 +3,31 @@ from __future__ import annotations
 from pathlib import Path
 import shutil
 
+import importlib
+import importlib.metadata as metadata
+
 import pytest
 
-from scripts import get_activity_data
+
+def _load_cli_module(entry_point: str):
+    entries = metadata.entry_points(group="console_scripts", name=entry_point)
+    if not entries:
+        msg = f"console script '{entry_point}' is not registered"
+        raise LookupError(msg)
+    module_path, _, attribute = entries[0].value.partition(":")
+    if module_path.startswith("library.cli.commands."):
+        from library.cli.commands import _resolve_module
+
+        module = _resolve_module(module_path.rsplit(".", 1)[-1])
+    else:
+        module = importlib.import_module(module_path)
+    if attribute and not hasattr(module, attribute):  # pragma: no cover - guard rail
+        msg = f"entry point '{entry_point}' refers to missing attribute '{attribute}'"
+        raise AttributeError(msg)
+    return module
+
+
+get_activity_data = _load_cli_module("get-activity-data")
 
 
 @pytest.mark.e2e
@@ -50,7 +72,7 @@ def test_activity_logging__relative_env_base_anchored_to_repo_root(
         )
         return 0
 
-    monkeypatch.setattr(get_activity_data, "run_cli_command", _stub_run_cli_command)
+    monkeypatch.setattr("library.cli_utils.run_cli_command", _stub_run_cli_command)
 
     exit_code = get_activity_data.main(
         [

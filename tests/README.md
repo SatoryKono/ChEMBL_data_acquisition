@@ -39,7 +39,7 @@ Shared fixtures live in `tests/conftest.py`. They configure a deterministic envi
 
 ## CLI pipeline orchestration
 
-End-to-end smoke tests now cover every `scripts/get_*` entrypoint via `tests/e2e/test_get_cli_pipelines.py`. Each scenario patches the network-heavy stages with deterministic stubs and asserts that the orchestrator:
+End-to-end smoke tests now cover every console entry point (`get-activity-data`, `get-target-data`, etc.) via `tests/e2e/test_get_cli_pipelines.py`. Each scenario patches the network-heavy stages with deterministic stubs and asserts that the orchestrator:
 
 - loads miniature CSV fixtures and normalises core columns,
 - emits structured WARN/ERROR events for missing or duplicated records,
@@ -67,7 +67,7 @@ When developing additional scenarios, keep the guardrails documented in `tests/c
 
 ## End-to-end scenario checklist
 
-`tests/e2e/test_get_data_end_to_end.py` drives the `scripts.get_data` orchestrator against the miniature fixtures in `tests/data`. The stubbed pipelines validate inputs, perform deterministic normalisation/post-processing and emit the canonical filenames in a temporary directory. The scenario also re-runs the workflow after intentionally corrupting `document.csv` (column removed) to verify schema validation, error logging and cleanup behaviour. The assertions cover the full QA checklist:
+`tests/e2e/test_get_data_end_to_end.py` drives the `get-data` orchestrator (resolved via `importlib.metadata` or `python -m scripts.get_data`) against the miniature fixtures in `tests/data`. The stubbed pipelines validate inputs, perform deterministic normalisation/post-processing and emit the canonical filenames in a temporary directory. The scenario also re-runs the workflow after intentionally corrupting `document.csv` (column removed) to verify schema validation, error logging and cleanup behaviour. The assertions cover the full QA checklist:
 
 - [x] Загрузка входных CSV и валидация схемы/типов/обязательных колонок
 - [x] Нормализация и предобработка (включая кодировки, разделители)
