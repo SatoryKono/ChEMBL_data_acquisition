@@ -31,6 +31,7 @@ if __package__ in {None, ""}:
 
 from library.integration import chembl_library as cl
 from library.pipelines.assay import postprocessing as ap
+from library.postprocessing import enrich_assay_metadata
 from library import cli
 from library import io
 from library.common.csv_utils import write_csv_chunks_deterministic
@@ -214,7 +215,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         f"{output_path.stem}_fetch_failures.csv"
     )
 
+    def _enrich_with_dictionaries(frame: pd.DataFrame) -> pd.DataFrame:
+        return enrich_assay_metadata(frame, dictionary_dir=cfg.resources.dictionary_dir)
+
     metadata_hooks = [
+        _enrich_with_dictionaries,
         ap.postprocess_assays,
         normalize_assays,
         add_pipeline_metadata,
