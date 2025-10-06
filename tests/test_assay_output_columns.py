@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+
 import pandas as pd
 import pytest
 
-from scripts.get_assay_data import ASSAY_OUTPUT_DROP_COLUMNS, remove_assay_output_columns
+from scripts.get_assay_data import (
+    ASSAY_OUTPUT_DROP_COLUMNS,
+    _drop_assay_output_columns,
+    remove_assay_output_columns,
+)
 
 
 @pytest.mark.unit
@@ -56,20 +62,12 @@ def test_remove_assay_output_columns__handles_missing_fields() -> None:
 
     assert list(result.columns) == ["assay_chembl_id", "assay_type", "custom_field"]
     pd.testing.assert_frame_equal(result, frame, check_like=True)
-"""Smoke tests for assay output column filtering."""
-
-from __future__ import annotations
-
-import logging
-
-import pandas as pd
-import pytest
-
-from scripts.get_assay_data import _drop_assay_output_columns
 
 
 @pytest.mark.unit
-def test_drop_assay_output_columns__removes_and_preserves_order(caplog: pytest.LogCaptureFixture) -> None:
+def test_drop_assay_output_columns__removes_and_preserves_order(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """The whitelist keeps column order while dropping the disallowed set."""
 
     source_columns = [
@@ -81,10 +79,13 @@ def test_drop_assay_output_columns__removes_and_preserves_order(caplog: pytest.L
         "substrate_name",
         "custom_field",
     ]
-    frame = pd.DataFrame([
-        ["A", "legacy-1", "type-1", "primary", "1.0", "substrate", "value"],
-        ["B", "legacy-2", "type-2", "backup", "2.0", "substrate", "other"],
-    ], columns=source_columns)
+    frame = pd.DataFrame(
+        [
+            ["A", "legacy-1", "type-1", "primary", "1.0", "substrate", "value"],
+            ["B", "legacy-2", "type-2", "backup", "2.0", "substrate", "other"],
+        ],
+        columns=source_columns,
+    )
 
     caplog.set_level(logging.INFO)
 

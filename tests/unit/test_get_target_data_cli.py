@@ -77,6 +77,29 @@ def test_resolve_target_parameters__all_global_fallback():
 
 
 @pytest.mark.unit
+def test_prepare_io_paths__output_alias_sets_final_out(tmp_path):
+    parser, _ = get_target_data.build_parser()
+    args = parser.parse_args([
+        "all",
+        "--base-path",
+        str(tmp_path),
+        "--output",
+        "custom.csv",
+    ])
+
+    get_target_data.prepare_io_paths(
+        args,
+        input_default=get_target_data.DEFAULT_INPUT_NAME,
+        output_stem=get_target_data.DEFAULT_OUTPUT_STEM,
+    )
+
+    expected = (tmp_path / "custom.csv").resolve()
+    assert args.final_out == expected
+    assert args.output_csv == expected
+    assert args.output_dir is None
+
+
+@pytest.mark.unit
 def test_target_iuphar_defaults__align_with_cli() -> None:
     cfg = Config()
     defaults = TARGET_MODE_DEFAULTS["iuphar"]

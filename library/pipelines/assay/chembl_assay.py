@@ -567,19 +567,19 @@ def get_activities(
         return pd.DataFrame(columns=ACTIVITY_COLUMNS)
 
     records: list[pd.DataFrame] = []
+    base_root = cfg.chembl_base.rstrip("/")
+    base_url = f"{base_root}/activity.json"
     base_params: list[tuple[str, str]] = [("format", "json")]
     if ACTIVITY_QUERY_FIELDS:
         base_params.append(("fields", ",".join(ACTIVITY_QUERY_FIELDS)))
-    base_query = urlencode(base_params)
-    base = f"{cfg.chembl_base.rstrip('/')}/activity.json?{base_query}"
-    effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    for chunk in _chunked(valid, chunk_size):
-        chunk_key = ",".join(chunk)
-        logger.info(
-            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
-        )
-        url = f"{base}&activity_id__in={chunk_key}&limit={len(chunk)}"
-        chunk_frames: list[pd.DataFrame] = []
+    join_base = f"{base_root}/"
+
+    def _build_url(extra: dict[str, object]) -> str:
+        params = base_params + [(key, str(value)) for key, value in extra.items()]
+        return f"{base_url}?{urlencode(params)}"
+
+    def _fetch_paginated(url: str) -> list[pd.DataFrame]:
+        frames: list[pd.DataFrame] = []
         next_url: str | None = url
         while next_url:
             data = client.request_json(next_url, cfg=cfg, timeout=effective_timeout)
@@ -587,10 +587,74 @@ def get_activities(
             if items:
                 df_chunk = json_normalize_pyarrow(items)
                 if not df_chunk.empty:
-                    chunk_frames.append(df_chunk)
+                    frames.append(df_chunk)
             page_meta = data.get("page_meta") or {}
             next_token = page_meta.get("next")
-            next_url = urljoin(cfg.chembl_base, next_token) if next_token else None
+            next_url = urljoin(join_base, next_token) if next_token else None
+        return frames
+
+    def _fetch_single(identifier: str) -> list[pd.DataFrame]:
+        if identifier in {"", "#N/A"}:
+            return []
+        try:
+            frames = _fetch_paginated(_build_url({"activity_id": identifier, "limit": 1}))
+        except requests.HTTPError as exc:
+            response = exc.response
+            status = getattr(response, "status_code", None)
+            if status == 404:
+                logger.info(
+                    "activity_missing",
+                    extra={"stage": "chunk_skip", "activity_id": identifier},
+                )
+                return []
+            raise
+        return frames
+
+    effective_timeout = timeout if timeout is not None else cfg.timeout_read
+    for chunk in _chunked(valid, chunk_size):
+        chunk_key = ",".join(chunk)
+        logger.info(
+            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+        )
+        url = _build_url({"activity_id__in": chunk_key, "limit": len(chunk)})
+        try:
+            chunk_frames = _fetch_paginated(url)
+        except requests.HTTPError as exc:
+            response = exc.response
+            status = getattr(response, "status_code", None)
+            if status == 404:
+                logger.warning(
+                    "chunk_split_retry",
+                    extra={
+                        "stage": "chunk_retry",
+                        "chunk_key": chunk_key,
+                        "chunk_size": len(chunk),
+                        "status": status,
+                    },
+                )
+                chunk_frames = []
+                for identifier in chunk:
+                    chunk_frames.extend(_fetch_single(identifier))
+            else:
+                raise
+        except requests.RequestException as exc:
+            if not _is_retryable_chunk_error(exc):
+                raise
+            logger.warning(
+                "chunk_network_retry",
+                extra={
+                    "stage": "chunk_retry",
+                    "chunk_key": chunk_key,
+                    "chunk_size": len(chunk),
+                    "error": exc.__class__.__name__,
+                },
+            )
+            chunk_frames = []
+            for identifier in chunk:
+                try:
+                    chunk_frames.extend(_fetch_single(identifier))
+                except requests.RequestException:
+                    raise
         if chunk_frames:
             records.append(pd.concat(chunk_frames, ignore_index=True))
             logger.info(

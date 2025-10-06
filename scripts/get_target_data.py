@@ -1447,9 +1447,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         no_reindex_default: object = False if defaults else argparse.SUPPRESS
         normalize_default: object = False if defaults else argparse.SUPPRESS
         option_actions = parser_obj._option_string_actions
-        if "--final-out" not in option_actions:
+        if not any(alias in option_actions for alias in ("--final-out", "--out", "--output")):
             parser_obj.add_argument(
                 "--final-out",
+                "--out",
+                "--output",
                 dest="final_out",
                 type=path_argument,
                 default=final_default,
@@ -2189,15 +2191,22 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     cfg.chembl,
                     global_limiter=global_limiter,
                 ) as client:
-                    for _, raw_chunk, parsed_chunk in cl.iter_target_batches(
+                    def _count_attempt() -> None:
+                        nonlocal chembl_http_requests
+                        chembl_http_requests += 1
+
+                    batch_iter = cl.iter_target_batches_with_retry(
                         counted_ids_iter,
                         cfg=cfg.api,
                         client=client,
                         mapping_cfg=cfg.uniprot_mapping,
                         chunk_size=cfg.target.chembl.chunk_size,
                         timeout=cfg.target.chembl.timeout,
-                    ):
-                        chembl_http_requests += 1
+                        retry_cfg=cfg.target.chembl.batch_retry,
+                        log=logger,
+                        on_attempt=_count_attempt,
+                    )
+                    for _, raw_chunk, parsed_chunk in batch_iter:
                         raw_dump_rows_total += len(raw_chunk)
                         fetched_rows_total += len(parsed_chunk)
                         if raw_chunk.empty:
@@ -2360,15 +2369,22 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 cfg.chembl,
                 global_limiter=global_limiter,
             ) as client:
-                for _, raw_chunk, parsed_chunk in cl.iter_target_batches(
+                def _count_attempt() -> None:
+                    nonlocal chembl_http_requests
+                    chembl_http_requests += 1
+
+                batch_iter = cl.iter_target_batches_with_retry(
                     counted_ids_iter,
                     cfg=cfg.api,
                     client=client,
                     mapping_cfg=cfg.uniprot_mapping,
                     chunk_size=cfg.target.chembl.chunk_size,
                     timeout=cfg.target.chembl.timeout,
-                ):
-                    chembl_http_requests += 1
+                    retry_cfg=cfg.target.chembl.batch_retry,
+                    log=logger,
+                    on_attempt=_count_attempt,
+                )
+                for _, raw_chunk, parsed_chunk in batch_iter:
                     raw_dump_rows_total += len(raw_chunk)
                     try:
                         raw_dump_writer.write(raw_chunk)
@@ -2867,6 +2883,34 @@ def fetch_uniprot(
     finally:
         cfg.target.uniprot.data_dir = orig_dir
         tmp_path.unlink(missing_ok=True)
+
+    if not output_csv.exists():
+        logger.warning(
+            "fetch_uniprot_output_missing",
+            path=str(output_csv),
+        )
+        placeholder = pd.DataFrame(
+            {
+                "uniprot_id": pd.Series(dtype=object),
+                "original_id": pd.Series(dtype=object),
+                "source_column": pd.Series(dtype=object),
+                "mapping_uniprot_id": pd.Series(dtype=object),
+            }
+        )
+        write_csv_deterministic(
+            placeholder,
+            output_csv,
+            col_order=[
+                "uniprot_id",
+                "original_id",
+                "source_column",
+                "mapping_uniprot_id",
+            ],
+            key_cols=["uniprot_id"],
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            cfg=cfg,
+        )
 
     fetched_df = pd.read_csv(
         output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
