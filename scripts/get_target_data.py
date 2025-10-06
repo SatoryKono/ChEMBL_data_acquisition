@@ -2854,7 +2854,11 @@ def fetch_uniprot(
         encoding=cfg.io.csv_encoding,
     )
 
-    uniprot_args = argparse.Namespace(input_csv=tmp_path, output_csv=output_csv)
+    uniprot_args = argparse.Namespace(
+        input_csv=tmp_path,
+        final_out=output_csv,
+        output_csv=output_csv,
+    )
     orig_dir = cfg.target.uniprot.data_dir
     cfg.target.uniprot.data_dir = cfg.target.all.data_dir
     try:
