@@ -5,8 +5,10 @@ from pathlib import Path
 import yaml
 
 import pytest
+import yaml
 
 from library.resources import dictionaries
+from config.paths import DICTIONARY_DIR
 
 
 @pytest.mark.unit
@@ -75,3 +77,18 @@ def test_parse_manifest__accepts_known_checksum_variants(tmp_path: Path, monkeyp
     resources = dictionaries._parse_manifest(base_dir=manifest_dir)
 
     assert resources["dictionary_root"].sha256 == "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"
+def test_manifest_allows_latest_windows_sha256() -> None:
+    """The dictionary manifest accepts the hash produced by new Git versions."""
+
+    manifest_path = DICTIONARY_DIR / "manifest.yaml"
+    manifest_data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    resources = manifest_data.get("resources", {})
+    entry = resources.get("dictionary_root", {})
+    sha_values = entry.get("sha256", [])
+    if isinstance(sha_values, str):
+        sha_values = [sha_values]
+
+    assert (
+        "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"
+        in sha_values
+    )
