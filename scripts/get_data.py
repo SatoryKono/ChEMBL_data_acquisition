@@ -27,11 +27,11 @@ import sys
 import time
 import uuid
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Callable, Iterable, IO, Sequence
+from typing import Iterable, IO, Mapping, Sequence
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -46,39 +46,29 @@ from library.utils.bootstrap import ensure_project_root
 if __package__ in {None, ""}:
     ensure_project_root()
 
-from scripts import (
-    get_activity_data,
-    get_assay_data,
-    get_document_data,
-    get_target_data,
-    get_testitem_data,
-)
-
 from library.cli.logging import setup_cli_logging
 from library.clients import ChemblClient
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
 from library.config import Config, load_config
 from library.integration.molecule_catalog import load_parent_catalog
+from library.pipelines.registry import PipelineStep, load_pipeline_registry
 from library.utils.config import DEFAULT_CONFIG_PATH
 
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
 
-_DEFAULT_INPUT_FILES = {
-    "document": "document.csv",
-    "target": "target.csv",
-    "assay": "assay.csv",
-    "testitem": "testitem.csv",
-    "activity": "activity.csv",
+DEFAULT_PIPELINE_STEPS: tuple[PipelineStep, ...] = load_pipeline_registry()
+DEFAULT_INPUT_FILES: Mapping[str, str] = {
+    step.name: step.input_filename for step in DEFAULT_PIPELINE_STEPS
+}
+DEFAULT_OUTPUT_STEMS: Mapping[str, str] = {
+    step.name: step.output_stem for step in DEFAULT_PIPELINE_STEPS
 }
 
-_DEFAULT_OUTPUT_STEMS = {
-    "document": "documents",
-    "target": "targets",
-    "assay": "assays",
-    "testitem": "testitems",
-    "activity": "activities",
-}
+# Backwards compatibility for existing callers/tests that patch the legacy names.
+_PIPELINE_STEPS = DEFAULT_PIPELINE_STEPS
+_DEFAULT_INPUT_FILES = DEFAULT_INPUT_FILES
+_DEFAULT_OUTPUT_STEMS = DEFAULT_OUTPUT_STEMS
 
 
 _UNLINK_MAX_ATTEMPTS = 5
@@ -100,86 +90,21 @@ class PipelineRunConfig:
     force: bool
     skip_existing: bool
     dry_run: bool
+    input_files: Mapping[str, str]
+    output_stems: Mapping[str, str]
 
     def input_path(self, name: str) -> Path:
         """Return the fully resolved path for ``name`` in the input directory."""
 
-        filename = _DEFAULT_INPUT_FILES[name]
+        filename = self.input_files[name]
         return self.input_dir / filename
 
     def output_path(self, name: str) -> Path:
         """Return the fully resolved path for ``name`` in the output directory."""
 
-        stem = _DEFAULT_OUTPUT_STEMS[name]
+        stem = self.output_stems[name]
         filename = f"output.{stem}_{self.date_prefix}.csv"
         return self.output_dir / filename
-
-
-@dataclass(frozen=True)
-class PipelineStep:
-    """Describe a single pipeline invocation."""
-
-    name: str
-    main: Callable[[Sequence[str] | None], int]
-    subcommand: str | None
-    extra_args: tuple[str, ...] = ()
-    output_flag: str = "--final-out"
-    supports_dry_run: bool = False
-
-    def build_arguments(
-        self, cfg: PipelineRunConfig, output_path: Path | None = None
-    ) -> list[str]:
-        """Return CLI arguments forwarded to the wrapped ``main`` function."""
-
-        input_csv = cfg.input_path(self.name)
-        output_csv = (
-            output_path if output_path is not None else cfg.output_path(self.name)
-        )
-        args = ["--config", str(cfg.config_path), "--input", str(input_csv)]
-        args.extend([self.output_flag, str(output_csv)])
-        args.extend(["--log-level", cfg.log_level])
-        if cfg.limit is not None:
-            args.extend(["--limit", str(cfg.limit)])
-        if cfg.force:
-            args.append("--force")
-        if cfg.skip_existing:
-            args.append("--skip-existing")
-        if cfg.dry_run and self.supports_dry_run:
-            args.append("--dry-run")
-        if self.extra_args:
-            args = [*self.extra_args, *args]
-        if self.subcommand is not None:
-            return [self.subcommand, *args]
-        return args
-
-    def expected_output(self, cfg: PipelineRunConfig) -> Path:
-        """Return the path where the pipeline will create its CSV artefact."""
-
-        return cfg.output_path(self.name)
-
-    def required_input(self, cfg: PipelineRunConfig) -> Path:
-        """Return the CSV that the pipeline expects as input."""
-
-        return cfg.input_path(self.name)
-
-
-_PIPELINE_STEPS: tuple[PipelineStep, ...] = (
-    PipelineStep(
-        "document",
-        get_document_data.main,
-        None,
-        extra_args=("--mode", "all"),
-    ),
-    PipelineStep(
-        "target",
-        get_target_data.main,
-        "all",
-        output_flag="--final-out",
-    ),
-    PipelineStep("assay", get_assay_data.main, None),
-    PipelineStep("testitem", get_testitem_data.main, None),
-    PipelineStep("activity", get_activity_data.main, None, supports_dry_run=True),
-)
 
 
 def _resolve_path(base: Path, candidate: Path) -> Path:
@@ -189,6 +114,84 @@ def _resolve_path(base: Path, candidate: Path) -> Path:
     if expanded.is_absolute():
         return expanded.resolve()
     return (base / expanded).resolve()
+
+
+def _parse_overrides(
+    values: Sequence[str] | None,
+    *,
+    allow_empty_value: bool = False,
+) -> dict[str, str]:
+    """Parse ``STEP=value`` pairs from the CLI into a dictionary."""
+
+    overrides: dict[str, str] = {}
+    if not values:
+        return overrides
+    for raw in values:
+        if "=" not in raw:
+            raise ValueError(f"invalid override format: {raw!r}")
+        name, value = raw.split("=", 1)
+        key = name.strip()
+        if not key:
+            raise ValueError(f"override missing step name: {raw!r}")
+        if not value and not allow_empty_value:
+            raise ValueError(f"override missing value for step {key!r}")
+        overrides[key] = value
+    return overrides
+
+
+def _resolve_pipeline_steps(args: argparse.Namespace | None = None) -> tuple[PipelineStep, ...]:
+    """Load pipeline definitions applying CLI overrides when provided."""
+
+    registry_source = getattr(args, "pipeline_registry", None)
+    steps = (
+        load_pipeline_registry(registry_source)
+        if registry_source is not None
+        else DEFAULT_PIPELINE_STEPS
+    )
+    steps = tuple(steps)
+
+    input_overrides = _parse_overrides(getattr(args, "override_input", None))
+    output_overrides = _parse_overrides(
+        getattr(args, "override_output_stem", None)
+    )
+    subcommand_overrides = _parse_overrides(
+        getattr(args, "override_subcommand", None), allow_empty_value=True
+    )
+
+    if not input_overrides and not output_overrides and not subcommand_overrides:
+        return steps
+
+    known_steps = {step.name for step in steps}
+    _validate_override_keys(input_overrides, known_steps, "input")
+    _validate_override_keys(output_overrides, known_steps, "output")
+    _validate_override_keys(subcommand_overrides, known_steps, "subcommand")
+
+    mutated: list[PipelineStep] = []
+    for step in steps:
+        updated = step
+        if step.name in input_overrides:
+            updated = replace(updated, input_filename=input_overrides[step.name])
+        if step.name in output_overrides:
+            updated = replace(updated, output_stem=output_overrides[step.name])
+        if step.name in subcommand_overrides:
+            raw_value = subcommand_overrides[step.name]
+            new_subcommand = raw_value if raw_value else None
+            updated = replace(updated, subcommand=new_subcommand)
+        mutated.append(updated)
+    return tuple(mutated)
+
+
+def _validate_override_keys(
+    overrides: Mapping[str, str],
+    known: set[str],
+    kind: str,
+) -> None:
+    """Ensure override keys reference known steps."""
+
+    unknown = sorted(set(overrides) - known)
+    if unknown:
+        joined = ", ".join(unknown)
+        raise ValueError(f"unknown {kind} override for step(s): {joined}")
 
 
 def _configure_logging(
@@ -295,11 +298,44 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "including output directory creation"
         ),
     )
+    parser.add_argument(
+        "--pipeline-registry",
+        type=Path,
+        default=None,
+        help="Optional YAML file describing pipeline step definitions",
+    )
+    parser.add_argument(
+        "--override-input",
+        action="append",
+        metavar="STEP=FILENAME",
+        default=[],
+        help="Override the input CSV filename for a pipeline step",
+    )
+    parser.add_argument(
+        "--override-output-stem",
+        action="append",
+        metavar="STEP=STEM",
+        default=[],
+        help="Override the output filename stem for a pipeline step",
+    )
+    parser.add_argument(
+        "--override-subcommand",
+        action="append",
+        metavar="STEP=SUBCOMMAND",
+        default=[],
+        help="Override the CLI subcommand used to invoke a pipeline step",
+    )
     return parser.parse_args(argv)
 
 
-def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
+def _prepare_config(
+    args: argparse.Namespace, steps: Sequence[PipelineStep] | None = None
+) -> PipelineRunConfig:
     """Validate CLI inputs and construct :class:`PipelineRunConfig`."""
+
+    effective_steps = tuple(DEFAULT_PIPELINE_STEPS if steps is None else steps)
+    input_files = {step.name: step.input_filename for step in effective_steps}
+    output_stems = {step.name: step.output_stem for step in effective_steps}
 
     base_path = args.base_path.expanduser().resolve()
     input_dir = _resolve_path(base_path, args.input_dir)
@@ -333,6 +369,8 @@ def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
         force=args.force,
         skip_existing=args.skip_existing,
         dry_run=dry_run,
+        input_files=input_files,
+        output_stems=output_stems,
     )
 
 
@@ -821,12 +859,15 @@ def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
     _LOGGER.info("parent_catalog_warm_done", elapsed=elapsed, **log_kwargs)
 
 
-def run_pipeline(cfg: PipelineRunConfig) -> int:
+def run_pipeline(
+    cfg: PipelineRunConfig, steps: Sequence[PipelineStep] | None = None
+) -> int:
     """Execute all configured steps and return the resulting exit status."""
 
+    effective_steps = tuple(DEFAULT_PIPELINE_STEPS if steps is None else steps)
     overall_status = 0
     _LOGGER.info("pipeline_start", stage="pipeline")
-    for step in _PIPELINE_STEPS:
+    for step in effective_steps:
         _LOGGER.info("step_start", step=step.name)
         if cfg.dry_run:
             _LOGGER.info("step_skip_dry_run", step=step.name)
@@ -924,16 +965,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         _LOGGER = logger
 
         try:
-            cfg = _prepare_config(args)
-        except (FileNotFoundError, OSError, ValueError) as exc:
-            _LOGGER.error("configuration_error", error=str(exc))
+            steps = _resolve_pipeline_steps(args)
+        except (FileNotFoundError, OSError, TypeError, ValueError) as exc:
+            _LOGGER.error("registry_error", error=str(exc))
             status = 1
         else:
-            status = run_pipeline(cfg)
-            if status != 0:
-                _LOGGER.error("workflow_failed", exit_code=status)
+            try:
+                cfg = _prepare_config(args, steps)
+            except (FileNotFoundError, OSError, ValueError) as exc:
+                _LOGGER.error("configuration_error", error=str(exc))
+                status = 1
             else:
-                _LOGGER.info("workflow_succeeded")
+                status = run_pipeline(cfg, steps=steps)
+                if status != 0:
+                    _LOGGER.error("workflow_failed", exit_code=status)
+                else:
+                    _LOGGER.info("workflow_succeeded")
 
     return status
 
