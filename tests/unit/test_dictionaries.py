@@ -30,3 +30,18 @@ def test_compute_sha256__stable_across_path_separators(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "relative_to", _relative_to_windows)
 
     assert dictionaries._compute_sha256(base) == expected
+
+
+@pytest.mark.unit
+def test_compute_sha256__independent_of_rglob_order(tmp_path, monkeypatch):
+    base = _create_sample_dictionary(tmp_path)
+    expected = dictionaries._compute_sha256(base)
+
+    original_rglob = Path.rglob
+
+    def _reversed_rglob(self: Path, pattern: str):  # pragma: no cover - behaviour asserted below
+        return iter(list(original_rglob(self, pattern))[::-1])
+
+    monkeypatch.setattr(Path, "rglob", _reversed_rglob)
+
+    assert dictionaries._compute_sha256(base) == expected
