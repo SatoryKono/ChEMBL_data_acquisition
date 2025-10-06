@@ -36,7 +36,7 @@ from library.postprocessing import enrich_assay_metadata
 from library import cli
 from library import io
 from library.common.csv_utils import write_csv_chunks_deterministic
-from library.pipelines.assay.chembl_assay import ASSAY_COLUMNS
+from library.pipelines.assay.chembl_assay import ASSAY_COLUMNS, MAX_ASSAY_CHUNK_SIZE
 from library.clients import ChemblClient
 from library.common.rate_limiter import get_global_limiter
 from library.cli import (
@@ -69,6 +69,14 @@ DEFAULT_INPUT_NAME = "assay.csv"
 DEFAULT_OUTPUT_STEM = "assays"
 
 _OPTION_UNSET = object()
+
+# Backwards compatibility: legacy configs referenced the private
+# ``_ASSAY_MAX_IDS_PER_REQUEST`` constant before it was renamed to
+# :data:`MAX_ASSAY_CHUNK_SIZE`.  Re-expose the alias so that pipelines relying on
+# the old setting fail gracefully instead of raising ``NameError`` during chunk
+# processing.
+ASSAY_MAX_IDS_PER_REQUEST = MAX_ASSAY_CHUNK_SIZE
+_ASSAY_MAX_IDS_PER_REQUEST = MAX_ASSAY_CHUNK_SIZE
 
 _ASSAY_OUTPUT_DROP_COLUMNS = [
     "ASSAY_ID",
