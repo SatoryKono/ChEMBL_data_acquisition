@@ -553,7 +553,12 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
                     if candidate is not None:
                         aligned = candidate.reindex(result.index)
                         filled = _coerce_series_dtype(aligned, dtype)
-                        result.loc[missing_mask, column] = filled.loc[missing_mask]
+                        current = result[column]
+                        # ``Series.mask`` preserves the extension dtype and avoids
+                        # implicit "object" upcasts that would otherwise trigger
+                        # ``FutureWarning`` about incompatible assignments (see
+                        # pandas GH-53964).
+                        result[column] = current.mask(missing_mask, filled)
             continue
         if fallback is not None:
             candidate = fallback(result)
