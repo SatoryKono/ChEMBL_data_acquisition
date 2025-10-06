@@ -69,6 +69,48 @@ DEFAULT_OUTPUT_STEM = "assays"
 
 _OPTION_UNSET = object()
 
+_ASSAY_OUTPUT_DROP_COLUMNS = [
+    "ASSAY_ID",
+    "Target TYPE",
+    "acts_per_assay_step5",
+    "cited_assay_corr",
+    "error_assay_corr",
+    "higly_correlated_cit",
+    "month",
+    "shuffled_cit",
+    "shuffled_target_assay",
+    "substrate_name",
+    "target_name",
+    "version",
+    "assay_category",
+    "src_assay_id",
+]
+
+
+def _drop_assay_output_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Remove disallowed columns from the final assay output."""
+
+    allowed_cols = [
+        column for column in frame.columns if column not in _ASSAY_OUTPUT_DROP_COLUMNS
+    ]
+    dropped_present = [
+        column for column in _ASSAY_OUTPUT_DROP_COLUMNS if column in frame.columns
+    ]
+
+    # ``errors='ignore'`` guarantees the pipeline remains stable if a column is absent.
+    trimmed = frame.drop(columns=_ASSAY_OUTPUT_DROP_COLUMNS, errors="ignore")
+    trimmed = trimmed.loc[:, allowed_cols]
+
+    dropped_display = ", ".join(dropped_present) if dropped_present else "<none>"
+    logger.log(
+        "INFO",
+        "get_assay_data",
+        msg=f"Dropped columns from output.assay_*: {dropped_display}",
+        dropped_columns=dropped_present,
+    )
+
+    return trimmed
+
 
 ASSAY_OUTPUT_DROP_COLUMNS: list[str] = [
     "ASSAY_ID",
@@ -260,6 +302,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         normalize_assays,
         add_pipeline_metadata,
         _drop_output_columns,
+        _drop_assay_output_columns,
     ]
 
     validators = [partial(validate_assays, return_result=True)]
