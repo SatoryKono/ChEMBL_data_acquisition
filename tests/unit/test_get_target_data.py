@@ -80,6 +80,7 @@ def test_keyboard_aliases__cases(command: str) -> None:
         ("targets_20251005_normalized.csv", True),
         ("output.targets_20251005.csv.tmp", True),
         (".output.targets_20251005.csv_normalized.tmp", True),
+        ("targets.csv", True),
         ("out.csv", False),
         ("out_chembl.csv", False),
         ("out_uniprot.csv", False),
@@ -576,7 +577,7 @@ def test_postprocess_organism_export__failure(
     ) in logger_stub.events
 
 
-def test_postprocess_isoform_export__skips_for_custom_name(
+def test_postprocess_isoform_export__runs_for_custom_name(
     cfg: Config,
     tmp_path: Path,
     logger_stub: _MemoryLogger,
@@ -585,27 +586,36 @@ def test_postprocess_isoform_export__skips_for_custom_name(
     source = tmp_path / "custom_export.csv"
     source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
 
-    def _unexpected(*_: object, **__: object) -> None:  # pragma: no cover - defensive
-        raise AssertionError("isoform post-processing should be skipped")
+    called: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
-    monkeypatch.setattr(get_target_data.target_pp, "process_targets", _unexpected)
+    def _record(*args: object, **kwargs: object) -> str:
+        called.append((args, dict(kwargs)))
+        return str(source)
+
+    monkeypatch.setattr(get_target_data.target_pp, "process_targets", _record)
 
     result = get_target_data._postprocess_isoform_export(source, cfg=cfg)
 
-    assert result is None
+    assert result == source
+    assert called == [((str(source),), {"verbose": True})]
     assert (
         "info",
-        "target_isoform_postprocess_skipped",
-        {"path": str(source), "reason": "unsupported_export_name"},
+        "target_isoform_postprocess_done",
+        {"path": str(source), "source": str(source)},
     ) in logger_stub.events
 
 
+@pytest.mark.parametrize(
+    "filename",
+    ["output.target_20250101.csv", "targets.csv"],
+)
 def test_postprocess_target_exports__chains_helpers(
     cfg: Config,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    filename: str,
 ) -> None:
-    source = tmp_path / "output.target_20250101.csv"
+    source = tmp_path / filename
     source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
 
     call_order: list[str] = []

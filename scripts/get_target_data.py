@@ -331,8 +331,10 @@ def _is_supported_target_export(path: Path) -> bool:
     if target_pp._matches_expected_input_name(export_name):
         return True
 
+    export_lower = export_name.lower()
+
     if path.suffix.lower() != ".csv":
-        if not export_name.lower().endswith(".csv"):
+        if not export_lower.endswith(".csv"):
             return False
         logger.info(
             "target_postprocess_noncanonical_name",
@@ -346,8 +348,9 @@ def _is_supported_target_export(path: Path) -> bool:
         "target_postprocess_noncanonical_name",
         path=str(path),
         reason="noncanonical_filename",
+        canonical=export_name,
     )
-    return False
+    return True
 
 
 def _postprocess_isoform_export(

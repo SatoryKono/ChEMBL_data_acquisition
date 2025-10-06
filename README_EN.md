@@ -98,6 +98,10 @@ emits helper lookups named `organism.output.target_<stamp>.csv`,
 [`docs/OUTPUT_TARGETS_RU.md`](./docs/OUTPUT_TARGETS_RU.md). Refer to the
 [output reference](./docs/en/OUTPUT.md) for the complete specification.
 
+Custom file names such as `targets.csv` still trigger the post-processing
+chain, so helper lookups are emitted even when the export deviates from the
+canonical `output.target_<stamp>.csv` pattern.
+
 ## Documentation
 
 All guides are provided in English and Russian. The structure is mirrored across
