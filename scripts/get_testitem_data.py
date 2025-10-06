@@ -23,39 +23,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT_NAME = "testitem.csv"
 DEFAULT_OUTPUT_STEM = "testitems"
 
-_OPTION_UNSET = object()
-
-
-def _option(
-    metadata: ConfigMetadata | None,
-    *,
-    argument: str | None = None,
-    path: str | None = None,
-    value: object = _OPTION_UNSET,
-    default_source: str = "unknown",
-    default_detail: str | None = None,
-) -> dict[str, object]:
-    if metadata is not None:
-        if value is _OPTION_UNSET:
-            return metadata.option(
-                argument=argument,
-                path=path,
-                default_source=default_source,
-                default_detail=default_detail,
-            )
-        return metadata.option(
-            argument=argument,
-            path=path,
-            value=value,
-            default_source=default_source,
-            default_detail=default_detail,
-        )
-    actual = None if value is _OPTION_UNSET else value
-    entry: dict[str, object] = {"value": actual, "source": default_source}
-    if default_detail is not None:
-        entry["detail"] = default_detail
-    return entry
-
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -74,6 +41,7 @@ from library.cli import LoggerConfig, ConfigMetadata
 from library.cli import build_parser as base_parser
 from library.cli_utils import run_cli_command
 from library.cli.logging import setup_cli_logging
+from library.cli.metadata import prepare_option
 from library.config import (
     ApiCfg,
     Config,
@@ -636,37 +604,37 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     offset_value = getattr(args, "offset", getattr(cfg.testitem, "offset", None))
     logger.info(
         "testitem_pipeline_start",
-        input=_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
-        output=_option(
+        input=prepare_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
+        output=prepare_option(
             metadata_obj,
             value=str(output_path),
             default_source=output_source,
         ),
-        limit=_option(
+        limit=prepare_option(
             metadata_obj,
             argument="limit",
             path="sources.chembl.pipelines.testitem.limit",
             value=limit_value,
         ),
-        offset=_option(
+        offset=prepare_option(
             metadata_obj,
             argument="offset",
             path="sources.chembl.pipelines.testitem.offset",
             value=offset_value,
         ),
-        batch_size=_option(
+        batch_size=prepare_option(
             metadata_obj,
             argument="batch_size",
             path="sources.chembl.pipelines.testitem.batch_size",
             value=getattr(cfg.testitem, "batch_size", None),
         ),
-        timeout=_option(
+        timeout=prepare_option(
             metadata_obj,
             argument="timeout",
             path="sources.chembl.pipelines.testitem.timeout",
             value=getattr(cfg.testitem, "timeout", None),
         ),
-        column=_option(
+        column=prepare_option(
             metadata_obj,
             argument="column",
             path="sources.chembl.pipelines.testitem.column",

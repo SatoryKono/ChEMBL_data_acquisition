@@ -95,6 +95,7 @@ from library.cli import (
     prepare_io_paths,
 )
 from library.cli.logging import setup_cli_logging
+from library.cli.metadata import prepare_option
 from library.cli.utils import run_cli_command
 from library.config import (
     Config,
@@ -129,8 +130,6 @@ from library.schemas import DocumentsSchema, normalize_documents
 DEFAULT_INPUT_NAME = "document.csv"
 DEFAULT_OUTPUT_STEM = "documents"
 
-_OPTION_UNSET = object()
-
 
 class _FallbackPathAction(argparse.Action):
     """Store fallback DOI CSV path under both legacy and new attribute names."""
@@ -146,35 +145,6 @@ class _FallbackPathAction(argparse.Action):
         setattr(namespace, "fallback_doi_csv", values)
 
 
-def _option(
-    metadata: ConfigMetadata | None,
-    *,
-    argument: str | None = None,
-    path: str | None = None,
-    value: object = _OPTION_UNSET,
-    default_source: str = "unknown",
-    default_detail: str | None = None,
-) -> dict[str, object]:
-    if metadata is not None:
-        if value is _OPTION_UNSET:
-            return metadata.option(
-                argument=argument,
-                path=path,
-                default_source=default_source,
-                default_detail=default_detail,
-            )
-        return metadata.option(
-            argument=argument,
-            path=path,
-            value=value,
-            default_source=default_source,
-            default_detail=default_detail,
-        )
-    actual = None if value is _OPTION_UNSET else value
-    entry: dict[str, object] = {"value": actual, "source": default_source}
-    if default_detail is not None:
-        entry["detail"] = default_detail
-    return entry
 _EXPORT_COLUMNS = [
     "PubMed.PMID",
     "PubMed.DOI",
@@ -873,21 +843,21 @@ def run_pubmed(
         fallback_doi_enabled=fallback_enabled,
         fallback_doi_overwrite=fallback_overwrite,
         fallback_doi_path=fallback_path_text,
-        fallback_doi=_option(
+        fallback_doi=prepare_option(
             metadata_obj,
             argument="fallback_doi_enabled",
             path="document.pubmed.fallback_doi_enabled",
             value=fallback_enabled,
             default_source="cli",
         ),
-        fallback_doi_overwrite_meta=_option(
+        fallback_doi_overwrite_meta=prepare_option(
             metadata_obj,
             argument="fallback_doi_overwrite",
             path="document.pubmed.fallback_doi_overwrite",
             value=fallback_overwrite,
             default_source="cli",
         ),
-        fallback_doi_path_meta=_option(
+        fallback_doi_path_meta=prepare_option(
             metadata_obj,
             argument="fallback_doi_path",
             path="document.pubmed.fallback_doi_path",
@@ -1098,32 +1068,32 @@ def run_chembl(
     service = pipeline or DocumentPipeline(cfg)
     logger.info(
         "document_chembl_start",
-        input=_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
-        output=_option(
+        input=prepare_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
+        output=prepare_option(
             metadata_obj,
             value=str(output_path),
             default_source=output_source,
         ),
-        limit=_option(
+        limit=prepare_option(
             metadata_obj,
             argument="limit",
             path="sources.chembl.pipelines.document.chembl.limit",
             value=limit,
         ),
-        offset=_option(
+        offset=prepare_option(
             metadata_obj,
             argument="offset",
             path="sources.chembl.pipelines.document.chembl.offset",
             value=offset,
             default_source="cli",
         ),
-        chunk_size=_option(
+        chunk_size=prepare_option(
             metadata_obj,
             argument="chunk_size",
             path="sources.chembl.pipelines.document.chembl.chunk_size",
             value=chunk_size,
         ),
-        timeout=_option(
+        timeout=prepare_option(
             metadata_obj,
             argument="timeout",
             path="sources.chembl.pipelines.document.chembl.timeout",
