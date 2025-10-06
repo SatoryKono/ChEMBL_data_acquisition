@@ -77,7 +77,7 @@ from library.pipelines.testitem import (
     TestitemPipelineOptions,
     run_pipeline as run_testitem_pipeline,
 )
-from library.utils.config import DEFAULT_CONFIG_PATH
+from library.config.loader import DEFAULT_CONFIG_PATH
 
 
 _LOGGER: Logger = configure_logger(LoggerConfig())

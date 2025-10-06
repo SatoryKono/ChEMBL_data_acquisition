@@ -14,7 +14,8 @@ from typing import Any, cast
 import requests
 from requests import Session
 
-from ..config import ApiCfg, RetryCfg, UniprotCfg, session_with_retry
+from ..config.models import ApiCfg, RetryCfg, UniprotCfg
+from ..config.runtime import session_with_retry
 from ..common.rate_limiter import get_limiter, sleep
 
 __all__ = [

@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 import requests
 
-from ..config import OpenAlexCfg
+from ..config.models import OpenAlexCfg
 from ..common.log import logger
 from ..common.rate_limiter import RateLimiter, get_limiter
 from .pubmed import _do_request

@@ -13,7 +13,9 @@ from pydantic import BaseModel, ValidationError
 from pydantic_core import ErrorDetails
 
 from ..common.log import logger
-from ..utils.config import ConfigLoaderError, load_yaml_config
+from config.paths import CONFIG_DIR as _CONFIG_DIR
+from config.paths import DEFAULT_CONFIG_PATH as _DEFAULT_CONFIG_PATH
+from .runtime import configure_rate_limiters
 from .models import (
     Config,
     ConfigMetadata,
@@ -22,19 +24,76 @@ from .models import (
     _CONFIG_PATH_FIELDS,
     _ALIAS_MAP,
 )
-from .runtime import configure_rate_limiters
 
 __all__ = [
+    "CONFIG_DIR",
+    "DEFAULT_CONFIG_PATH",
+    "DEFAULT_CONFIG_RELATIVE",
+    "ConfigLoaderError",
     "ConfigMetadata",
     "ConfigSource",
     "ConfigError",
     "load_config",
+    "load_yaml_config",
     "ensure_dirs",
     "print_config",
+    "resolve_config_path",
     "_absolutise_path_value",
     "_serialize_paths",
     "_mask_secrets",
 ]
+
+
+CONFIG_DIR = _CONFIG_DIR
+DEFAULT_CONFIG_PATH = _DEFAULT_CONFIG_PATH
+_DEFAULT_CONFIG_NAME = DEFAULT_CONFIG_PATH.name
+DEFAULT_CONFIG_RELATIVE = Path("config") / _DEFAULT_CONFIG_NAME
+
+
+class ConfigLoaderError(RuntimeError):
+    """Raised when configuration parsing fails."""
+
+
+def resolve_config_path(path: str | Path | None = None) -> Path:
+    """Return an absolute path to the configuration file."""
+
+    if path is None:
+        return DEFAULT_CONFIG_PATH
+
+    candidate = Path(path).expanduser()
+    if candidate.is_absolute():
+        return candidate
+
+    for base in (Path.cwd(), CONFIG_DIR.parent):
+        base_candidate = (base / candidate).resolve()
+        if base_candidate.exists():
+            return base_candidate
+
+    if candidate.parent == Path(".") and candidate.name == _DEFAULT_CONFIG_NAME:
+        default_candidate = (CONFIG_DIR / candidate.name).resolve()
+        if default_candidate.exists():
+            return default_candidate
+
+    return (Path.cwd() / candidate).resolve()
+
+
+def load_yaml_config(path: str | Path | None = None) -> tuple[dict[str, Any], Path]:
+    """Return raw configuration data loaded from YAML."""
+
+    cfg_path = resolve_config_path(path)
+    try:
+        with cfg_path.open("r", encoding="utf8") as handle:
+            data = yaml.safe_load(handle) or {}
+    except FileNotFoundError as exc:  # pragma: no cover - defensive
+        raise ConfigLoaderError(f"configuration file not found: {cfg_path}") from exc
+    except yaml.YAMLError as exc:  # pragma: no cover - defensive
+        raise ConfigLoaderError(
+            f"failed to parse YAML configuration at {cfg_path}: {exc}"
+        ) from exc
+
+    if not isinstance(data, dict):
+        raise ConfigLoaderError("top-level structure in config file must be a mapping")
+    return data, cfg_path
 
 
 def _absolutise_path_value(value: Any, base_dir: Path) -> Any:

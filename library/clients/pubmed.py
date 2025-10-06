@@ -14,7 +14,7 @@ from typing import Any
 import requests
 
 from ..common.fetch_retry import compute_backoff_delay
-from ..config import PubMedCfg, RetryCfg
+from ..config.models import PubMedCfg, RetryCfg
 from ..common.log import logger
 from ..common.rate_limiter import sleep
 

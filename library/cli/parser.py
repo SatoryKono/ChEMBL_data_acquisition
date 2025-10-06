@@ -21,7 +21,7 @@ from ..config import Config, ConfigError, ConfigMetadata, load_config
 from ..common.logging_setup import Logger, LoggerConfig
 from ..common.logging_setup import configure_logger as _configure_logger
 from ..version import require_python_version
-from ..utils.config import DEFAULT_CONFIG_PATH
+from ..config.loader import DEFAULT_CONFIG_PATH
 
 require_python_version()
 

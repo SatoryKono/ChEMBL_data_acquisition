@@ -9,6 +9,35 @@ from library.config import Config, load_config
 
 
 @pytest.mark.unit
+def test_resolve_config_path__relative_name_uses_config_dir(tmp_path, monkeypatch):
+    cfg_dir = tmp_path / "config"
+    cfg_dir.mkdir()
+    config_path = cfg_dir / "config.yaml"
+    config_path.write_text("foo: bar\n", encoding="utf-8")
+
+    monkeypatch.setattr(loader, "CONFIG_DIR", cfg_dir)
+    monkeypatch.setattr(loader, "DEFAULT_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader, "_DEFAULT_CONFIG_NAME", config_path.name)
+
+    resolved = loader.resolve_config_path(config_path.name)
+
+    assert resolved == config_path.resolve()
+
+
+@pytest.mark.unit
+def test_load_yaml_config__rejects_non_mapping(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text("- value\n- another\n", encoding="utf-8")
+
+    monkeypatch.setattr(loader, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(loader, "DEFAULT_CONFIG_PATH", cfg_path)
+    monkeypatch.setattr(loader, "_DEFAULT_CONFIG_NAME", cfg_path.name)
+
+    with pytest.raises(loader.ConfigLoaderError):
+        loader.load_yaml_config(cfg_path)
+
+
+@pytest.mark.unit
 def test_load_config__resolves_relative_paths_and_calls_runtime(tmp_path, monkeypatch):
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(

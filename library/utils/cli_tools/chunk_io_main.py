@@ -16,7 +16,7 @@ from library.cli import (
     path_argument,
 )
 from library.config import Config, ConfigError, ensure_dirs, print_config
-from library.utils.config import DEFAULT_CONFIG_RELATIVE
+from library.config.loader import DEFAULT_CONFIG_RELATIVE
 from library.io.paths import default_output_path
 from library.common.log import logger
 

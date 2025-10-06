@@ -36,7 +36,7 @@ from .config import Config, ConfigError, ensure_dirs, print_config
 from .common.log import logger as default_logger
 from .metadata import Stats, file_sha256, write_meta_yaml, record_quality_failure
 from .sidecar import SidecarErrors
-from .utils.config import DEFAULT_CONFIG_PATH
+from .config.loader import DEFAULT_CONFIG_PATH
 
 SchemaT = TypeVar("SchemaT")
 

@@ -22,7 +22,8 @@ from ..clients.semantic_scholar import (
 )
 from ..cli import LoggerConfig, configure_logger, path_argument
 from ..cli import build_parser as base_parser
-from ..config import (
+from ..config.loader import ensure_dirs, print_config, _serialize_paths
+from ..config.models import (
     ApiCfg,
     Config,
     ConfigError,
@@ -30,11 +31,8 @@ from ..config import (
     OpenAlexCfg,
     RetryCfg,
     SemanticScholarCfg,
-    ensure_dirs,
-    print_config,
-    session_with_retry,
-    _serialize_paths,
 )
+from ..config.runtime import session_with_retry
 from ..common.csv_utils import write_csv_chunks_deterministic
 from ..metadata import Stats, file_sha256, write_meta_yaml
 from ..clients.pubmed import PubMedClient

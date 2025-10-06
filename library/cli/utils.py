@@ -41,7 +41,7 @@ from ..common.metadata import (
 )
 from ..common.sidecar import SidecarErrors
 from ..config import Config, ConfigError, ensure_dirs, print_config
-from ..utils.config import DEFAULT_CONFIG_PATH
+from ..config.loader import DEFAULT_CONFIG_PATH
 
 SchemaT = TypeVar("SchemaT")
 
