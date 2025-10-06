@@ -1,8 +1,8 @@
 # Использование и справочник по CLI
 
-Все точки входа доступны через `python scripts/<имя>.py` или как консольные
-скрипты, устанавливаемые из `pyproject.toml` (`get-data`, `get-document-data`,
-`get-target-data` и др.).
+Все точки входа устанавливаются как консольные скрипты (`get-data`,
+`get-document-data`, `get-target-data` и др.). Дополнительно их можно запускать
+через ``python -m scripts.<имя>`` при установке пакета в editable-режиме.
 
 ## Общие соглашения
 
@@ -34,7 +34,7 @@
 Запуск всей цепочки с общими настройками:
 
 ```bash
-python scripts/get_data.py \
+get-data \
   --base-path /data/chembl \
   --input-dir inbound \
   --output-dir outbound \
@@ -99,7 +99,7 @@ python scripts/get_data.py \
 Пример обогащения PubMed с резервными DOI:
 
 ```bash
-python scripts/get_document_data.py --mode pubmed \
+get-document-data --mode pubmed \
   --input data/input/document.csv \
   --final-out output/documents_pubmed.csv \
   --config config/config.yaml \
@@ -166,7 +166,7 @@ python scripts/get_document_data.py --mode pubmed \
 Пример:
 
 ```bash
-python scripts/get_target_data.py all \
+get-target-data all \
   --input data/input/target.csv \
   --final-out output/targets_20250228.csv \
   --config config/config.yaml \
@@ -205,7 +205,7 @@ py -3 scripts\get_target_data.py all ^
 Пример запуска с ограничением в 100 записей:
 
 ```bash
-python scripts/get_assay_data.py \
+get-assay-data \
   --input data/input/assay.csv \
   --final-out output/assays_sample.csv \
   --limit 100
@@ -260,7 +260,7 @@ python scripts/get_assay_data.py \
 Пример, сохраняющий унифицированную таблицу и ограничивающий диапазон идентификаторов:
 
 ```bash
-python scripts/get_tissue_data.py \
+get-tissue-data \
   --input data/input/tissue.csv \
   --final-out output/tissues.csv \
   --config config/config.yaml \
@@ -286,7 +286,7 @@ python scripts/get_tissue_data.py \
 строк входного CSV.
 
 ```bash
-python scripts/get_cellline_data.py \
+get-cellline-data \
   --input data/input/cellline.csv \
   --final-out output/cellline.csv \
   --batch-size 10 \

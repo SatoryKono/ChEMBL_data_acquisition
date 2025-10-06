@@ -6,15 +6,35 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import importlib
+import importlib.metadata as metadata
+
 import pytest
 
-from scripts import (
-    get_activity_data,
-    get_assay_data,
-    get_document_data,
-    get_target_data,
-    get_testitem_data,
-)
+
+def _load_cli_module(entry_point: str):
+    entries = metadata.entry_points(group="console_scripts", name=entry_point)
+    if not entries:
+        msg = f"console script '{entry_point}' is not registered"
+        raise LookupError(msg)
+    module_path, _, attribute = entries[0].value.partition(":")
+    if module_path.startswith("library.cli.commands."):
+        from library.cli.commands import _resolve_module
+
+        module = _resolve_module(module_path.rsplit(".", 1)[-1])
+    else:
+        module = importlib.import_module(module_path)
+    if attribute and not hasattr(module, attribute):  # pragma: no cover - guard rail
+        msg = f"entry point '{entry_point}' refers to missing attribute '{attribute}'"
+        raise AttributeError(msg)
+    return module
+
+
+get_activity_data = _load_cli_module("get-activity-data")
+get_assay_data = _load_cli_module("get-assay-data")
+get_document_data = _load_cli_module("get-document-data")
+get_target_data = _load_cli_module("get-target-data")
+get_testitem_data = _load_cli_module("get-testitem-data")
 from tests.helpers.logs import parse_log_file
 
 _SCRIPT_CASES = (
@@ -135,6 +155,7 @@ def test_cli_logging__creates_log_file(
         return int(exit_code)
 
     monkeypatch.setattr(module, "run_cli_command", _run_cli_command_stub)
+    monkeypatch.setattr("library.cli_utils.run_cli_command", _run_cli_command_stub)
 
     def _stub_run(_cfg: Any, args: Any) -> int:
         module.logger.info(

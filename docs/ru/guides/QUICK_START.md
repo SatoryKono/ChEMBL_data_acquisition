@@ -31,7 +31,7 @@ sources:
 Проверить итоговые значения можно командой:
 
 ```bash
-python scripts/get_document_data.py --mode chembl --print-config | less
+get-document-data --mode chembl --print-config | less
 ```
 
 ## 3. Smoke-запуск
@@ -41,12 +41,12 @@ python scripts/get_document_data.py --mode chembl --print-config | less
 
 ```bash
 # Отдельный конвейер
-python scripts/get_document_data.py --mode all \
+get-document-data --mode all \
   --input data/input/document.csv \
   --final-out output/documents.csv
 
 # Полная цепочка
-python scripts/get_data.py \
+get-data \
   --base-path . \
   --input-dir data/input \
   --output-dir output \
@@ -71,8 +71,8 @@ python tools/make_md_summary.py reports/test_report.json reports/test_summary.md
 ## 5. Проверка детерминизма (опционально)
 
 ```bash
-python scripts/get_data.py --output-dir output/run1
-python scripts/get_data.py --output-dir output/run2
+get-data --output-dir output/run1
+get-data --output-dir output/run2
 check-determinism --baseline output/run1 --candidate output/run2
 ```
 

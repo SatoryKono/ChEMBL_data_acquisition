@@ -21,14 +21,6 @@ that the pipelines can be executed programmatically from other callers as well.
 
 from __future__ import annotations
 
-if __package__ in {None, ""}:
-    from _bootstrap import bootstrap_cli
-else:  # pragma: no cover - executed when imported as a package module
-    from ._bootstrap import bootstrap_cli
-
-bootstrap_cli(__package__, __file__)
-del bootstrap_cli
-
 import argparse
 import hashlib
 import json
@@ -81,8 +73,6 @@ from library.pipelines.testitem import (
     run_pipeline as run_testitem_pipeline,
 )
 from library.config.loader import DEFAULT_CONFIG_PATH
-
-from library.utils.config import DEFAULT_CONFIG_PATH
 
 
 _LOGGER: Logger = configure_logger(LoggerConfig())

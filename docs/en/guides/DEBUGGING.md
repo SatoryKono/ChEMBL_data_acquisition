@@ -33,7 +33,7 @@ return strings, not bytes`.
 ## 4. Missing dictionary data
 
 - Targets rely on `config/dictionary/_target` files. Run
-  `python scripts/get_target_data.py all --print-config` to confirm the paths.
+  `get-target-data all --print-config` to confirm the paths.
 - For test items check the molecule hierarchy CSV. Use
   `python -m library.integration.molecule_catalog --help` to rebuild the cache if
   necessary.

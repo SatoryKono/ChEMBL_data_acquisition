@@ -32,7 +32,7 @@ sources:
 Confirm the final configuration:
 
 ```bash
-python scripts/get_document_data.py --mode chembl --print-config | less
+get-document-data --mode chembl --print-config | less
 ```
 
 ## 3. Run smoke pipelines
@@ -42,12 +42,12 @@ pipelines individually or via the orchestrator:
 
 ```bash
 # Run a single pipeline
-python scripts/get_document_data.py --mode all \
+get-document-data --mode all \
   --input data/input/document.csv \
   --final-out output/documents.csv
 
 # Run the full chain
-python scripts/get_data.py \
+get-data \
   --base-path . \
   --input-dir data/input \
   --output-dir output \
@@ -74,8 +74,8 @@ Markdown artefacts to CI when filing issues.
 To confirm reproducibility, run the full pipeline twice and compare artefacts:
 
 ```bash
-python scripts/get_data.py --output-dir output/run1
-python scripts/get_data.py --output-dir output/run2
+get-data --output-dir output/run1
+get-data --output-dir output/run2
 check-determinism --baseline output/run1 --candidate output/run2
 ```
 

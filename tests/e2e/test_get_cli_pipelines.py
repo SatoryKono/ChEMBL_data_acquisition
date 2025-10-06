@@ -1,8 +1,10 @@
-"""Integration tests for the CLI entrypoints in ``scripts/get_*`` modules."""
+"""Integration tests for the console entry points declared in ``pyproject.toml``."""
 
 from __future__ import annotations
 
 import argparse
+import importlib
+import importlib.metadata as metadata
 from collections import Counter
 from contextlib import contextmanager
 from pathlib import Path
@@ -16,13 +18,32 @@ import requests
 from library.cli.base import PipelineCLIBase
 from library.config import Config
 from library import cli_utils
-from scripts import (
-    get_activity_data,
-    get_assay_data,
-    get_document_data,
-    get_target_data,
-    get_testitem_data,
-)
+
+
+def _load_cli_module(entry_point: str):
+    entries = metadata.entry_points(group="console_scripts", name=entry_point)
+    if not entries:
+        msg = f"console script '{entry_point}' is not registered"
+        raise LookupError(msg)
+    entry = entries[0]
+    module_path, _, attribute = entry.value.partition(":")
+    if module_path.startswith("library.cli.commands."):
+        from library.cli.commands import _resolve_module
+
+        module = _resolve_module(module_path.rsplit(".", 1)[-1])
+    else:
+        module = importlib.import_module(module_path)
+    if attribute and not hasattr(module, attribute):  # pragma: no cover - guard rail
+        msg = f"entry point '{entry_point}' refers to missing attribute '{attribute}'"
+        raise AttributeError(msg)
+    return module
+
+
+get_activity_data = _load_cli_module("get-activity-data")
+get_assay_data = _load_cli_module("get-assay-data")
+get_document_data = _load_cli_module("get-document-data")
+get_target_data = _load_cli_module("get-target-data")
+get_testitem_data = _load_cli_module("get-testitem-data")
 
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 

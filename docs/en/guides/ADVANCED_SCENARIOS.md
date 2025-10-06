@@ -9,7 +9,7 @@ Use `--base-path` with date-stamped subdirectories to isolate runs:
 
 ```bash
 BASE=/data/releases/chembl-35
-python scripts/get_data.py \
+get-data \
   --base-path "$BASE" \
   --input-dir inbound/2025-02-01 \
   --output-dir outbound/2025-02-01 \
@@ -25,7 +25,7 @@ Store the metadata sidecars in version control to track provenance.
 To reprocess only test items:
 
 ```bash
-python scripts/get_testitem_data.py \
+get-testitem-data \
   --input /data/inbound/testitem.csv \
   --final-out /data/outbound/testitems.csv \
   --config config/config.yaml \
@@ -46,7 +46,7 @@ Override limits temporarily via environment variables:
 ```bash
 export CHEMBL_DA__SOURCES__CHEMBL__API__RPS=5
 export CHEMBL_DA__SOURCES__CHEMBL__API__BURST=5
-python scripts/get_activity_data.py --limit 200
+get-activity-data --limit 200
 ```
 
 Similarly adjust partner APIs (`CHEMBL_DA_OPENALEX_RPS`, `CHEMBL_DA_PUBMED_TIMEOUT_READ`, …).
@@ -56,7 +56,7 @@ Similarly adjust partner APIs (`CHEMBL_DA_OPENALEX_RPS`, `CHEMBL_DA_PUBMED_TIMEO
 `get_target_data` supports writing raw intermediate datasets:
 
 ```bash
-python scripts/get_target_data.py all \
+get-target-data all \
   --input data/input/target.csv \
   --final-out output/targets.csv \
   --raw-out output/targets_raw.parquet \
