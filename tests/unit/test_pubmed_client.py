@@ -8,14 +8,40 @@ from library.config import ApiCfg, RetryCfg, session_with_retry
 
 
 @pytest.mark.unit
-def test_retry_delay__respects_backoff_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_retry_delay__respects_backoff_cap() -> None:
     retry_cfg = RetryCfg(max_attempts=4, backoff_factor=2.0, backoff_cap=3.0)
 
-    monkeypatch.setattr(pubmed.random, "uniform", lambda *args, **kwargs: 0.5)
-
-    delay = pubmed._retry_delay(2, 0.25, retry_cfg, timeout=None)
+    delay = pubmed._retry_delay(
+        2,
+        0.25,
+        retry_cfg,
+        timeout=None,
+        jitter=lambda _: 0.5,
+    )
 
     assert delay == pytest.approx(3.0)
+
+
+@pytest.mark.unit
+def test_retry_delay__deterministic_jitter() -> None:
+    retry_cfg = RetryCfg(max_attempts=4, backoff_factor=1.0, backoff_cap=None, jitter_seed=7)
+    jitter_one = retry_cfg.build_jitter()
+    jitter_two = RetryCfg(max_attempts=4, backoff_factor=1.0, backoff_cap=None, jitter_seed=7).build_jitter()
+
+    assert jitter_one is not None
+    assert jitter_two is not None
+
+    base_delay = 0.25
+    delays_one = [
+        pubmed._retry_delay(attempt, base_delay, retry_cfg, timeout=None, jitter=jitter_one)
+        for attempt in range(1, 4)
+    ]
+    delays_two = [
+        pubmed._retry_delay(attempt, base_delay, retry_cfg, timeout=None, jitter=jitter_two)
+        for attempt in range(1, 4)
+    ]
+
+    assert delays_one == delays_two
 
 
 @pytest.mark.unit

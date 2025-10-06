@@ -152,6 +152,8 @@ def _retry_delay(
     base_delay: float,
     retry_cfg: RetryCfg | None,
     timeout: float | tuple[float, float] | None,
+    *,
+    jitter: Callable[[float], float] | None = None,
 ) -> float:
     """Calculate the delay before the next retry attempt."""
 
@@ -163,8 +165,11 @@ def _retry_delay(
 
     if retry_cfg is not None and retry_cfg.backoff_factor > 0:
         backoff = compute_backoff_delay(attempt, retry_cfg)
-        jitter = random.uniform(0.0, retry_cfg.backoff_factor)
-        candidate = backoff + jitter
+        if jitter is not None:
+            jitter_value = jitter(retry_cfg.backoff_factor)
+        else:
+            jitter_value = random.uniform(0.0, retry_cfg.backoff_factor)
+        candidate = backoff + jitter_value
         if retry_cfg.backoff_cap is not None:
             candidate = min(candidate, retry_cfg.backoff_cap)
         delay = max(delay, candidate)
@@ -185,6 +190,7 @@ def _do_request(
     method: str = "GET",
     timeout: float | tuple[float, float] = 10,
     retry_cfg: RetryCfg | None = None,
+    jitter: Callable[[float], float] | None = None,
     **kwargs: Any,
 ) -> tuple[dict[str, Any] | str | None, str]:
     """Perform an HTTP request with retry logic."""
@@ -201,7 +207,13 @@ def _do_request(
             retry_delay = (
                 header_delay
                 if header_delay is not None
-                else _retry_delay(attempt, delay, active_retry_cfg, timeout)
+                else _retry_delay(
+                    attempt,
+                    delay,
+                    active_retry_cfg,
+                    timeout,
+                    jitter=jitter,
+                )
             )
             extra["delay"] = retry_delay
             logger.info(event, extra=extra)
@@ -257,6 +269,7 @@ def fetch_pubmed_batch(
     cfg: PubMedCfg | None = None,
     *,
     retry_cfg: RetryCfg | None = None,
+    jitter: Callable[[float], float] | None = None,
 ) -> tuple[str | None, str]:
     """Fetch raw PubMed XML for ``pmids`` using a single request."""
 
@@ -265,6 +278,10 @@ def fetch_pubmed_batch(
     base = cfg.base.rstrip("/")
     url = f"{base}/efetch.fcgi?db=pubmed&id={ids}&retmode=xml"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
+    effective_jitter = jitter
+    if effective_jitter is None and retry_cfg is not None:
+        effective_jitter = retry_cfg.build_jitter()
+
     text, error = _do_request(
         session,
         url,
@@ -273,6 +290,7 @@ def fetch_pubmed_batch(
         retries=cfg.retries,
         timeout=timeout,
         retry_cfg=retry_cfg,
+        jitter=effective_jitter,
     )
     if error:
         return None, error
@@ -288,11 +306,17 @@ def fetch_pubmed(
     cfg: PubMedCfg | None = None,
     *,
     retry_cfg: RetryCfg | None = None,
+    jitter: Callable[[float], float] | None = None,
 ) -> tuple[str | None, str]:
     """Fetch raw PubMed XML for a single PMID."""
 
     text, error = fetch_pubmed_batch(
-        session, [pmid], sleep, cfg=cfg, retry_cfg=retry_cfg
+        session,
+        [pmid],
+        sleep,
+        cfg=cfg,
+        retry_cfg=retry_cfg,
+        jitter=jitter,
     )
     if error:
         return None, error
@@ -302,8 +326,14 @@ def fetch_pubmed(
 class PubMedClient:
     """Thin wrapper around the PubMed HTTP helpers."""
 
-    def __init__(self, cfg: PubMedCfg | None = None) -> None:
+    def __init__(
+        self,
+        cfg: PubMedCfg | None = None,
+        *,
+        jitter: Callable[[float], float] | None = None,
+    ) -> None:
         self.cfg = cfg or PubMedCfg()
+        self._jitter = jitter
 
     def fetch_pubmed_batch(
         self,
@@ -315,8 +345,17 @@ class PubMedClient:
     ) -> tuple[str | None, str]:
         """Retrieve raw XML for ``pmids`` using configured settings."""
 
+        effective_jitter = self._jitter
+        if effective_jitter is None and retry_cfg is not None:
+            effective_jitter = retry_cfg.build_jitter()
+
         return fetch_pubmed_batch(
-            session, pmids, sleep, cfg=self.cfg, retry_cfg=retry_cfg
+            session,
+            pmids,
+            sleep,
+            cfg=self.cfg,
+            retry_cfg=retry_cfg,
+            jitter=effective_jitter,
         )
 
     def fetch_pubmed(
@@ -329,6 +368,15 @@ class PubMedClient:
     ) -> tuple[str | None, str]:
         """Retrieve raw XML for a single PMID."""
 
+        effective_jitter = self._jitter
+        if effective_jitter is None and retry_cfg is not None:
+            effective_jitter = retry_cfg.build_jitter()
+
         return fetch_pubmed(
-            session, pmid, sleep, cfg=self.cfg, retry_cfg=retry_cfg
+            session,
+            pmid,
+            sleep,
+            cfg=self.cfg,
+            retry_cfg=retry_cfg,
+            jitter=effective_jitter,
         )

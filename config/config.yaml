@@ -343,6 +343,7 @@ system:
     max_attempts: 4  # HTTP retry attempts (env: CHEMBL_DA_RETRY_MAX_ATTEMPTS)
     backoff_factor: 0.5  # Base delay multiplier (env: CHEMBL_DA_RETRY_BACKOFF_FACTOR)
     backoff_cap: null  # Maximum backoff delay in seconds (env: CHEMBL_DA_RETRY_BACKOFF_CAP)
+    jitter_seed: 0  # Seed for deterministic retry jitter (env: CHEMBL_DA_RETRY_JITTER_SEED)
     status_forcelist:
       - 429  # Too Many Requests
       - 500

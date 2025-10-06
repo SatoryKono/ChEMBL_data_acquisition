@@ -8,7 +8,8 @@ import pytest
 import requests
 
 from library.clients import ChemblClient
-from library.config import ApiCfg
+from library.clients.chembl import _backoff_delay
+from library.config import ApiCfg, RetryCfg
 
 
 @dataclass
@@ -88,3 +89,24 @@ def test_request_json__falls_back_to_extensionless_endpoint() -> None:
     cached = client.request_json(primary_url, cfg=cfg)
     assert cached == payload
     assert session.calls == [primary_url, fallback_url]
+
+
+@pytest.mark.unit
+def test_backoff_delay__deterministic_jitter() -> None:
+    api_cfg = ApiCfg(backoff_factor=0.5)
+    jitter_one = RetryCfg(jitter_seed=11).build_jitter()
+    jitter_two = RetryCfg(jitter_seed=11).build_jitter()
+
+    assert jitter_one is not None
+    assert jitter_two is not None
+
+    delays_one = [
+        _backoff_delay(attempt, api_cfg, None, jitter=jitter_one)
+        for attempt in range(1, 4)
+    ]
+    delays_two = [
+        _backoff_delay(attempt, api_cfg, None, jitter=jitter_two)
+        for attempt in range(1, 4)
+    ]
+
+    assert delays_one == delays_two
