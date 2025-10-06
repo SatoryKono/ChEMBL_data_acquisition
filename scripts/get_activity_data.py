@@ -77,7 +77,6 @@ from library.pipelines.common import (
 from library.cli import (
     LoggerConfig,
     positive_int,
-    ConfigMetadata,
 )
 from library.cli import (
     build_parser as base_parser,
@@ -110,42 +109,6 @@ from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_dela
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
-
-_OPTION_UNSET = object()
-
-
-def _option(
-    metadata: ConfigMetadata | None,
-    *,
-    argument: str | None = None,
-    path: str | None = None,
-    value: object = _OPTION_UNSET,
-    default_source: str = "unknown",
-    default_detail: str | None = None,
-) -> dict[str, object]:
-    """Return structured option metadata for pipeline logging."""
-
-    if metadata is not None:
-        if value is _OPTION_UNSET:
-            return metadata.option(
-                argument=argument,
-                path=path,
-                default_source=default_source,
-                default_detail=default_detail,
-            )
-        return metadata.option(
-            argument=argument,
-            path=path,
-            value=value,
-            default_source=default_source,
-            default_detail=default_detail,
-        )
-    actual = None if value is _OPTION_UNSET else value
-    entry: dict[str, object] = {"value": actual, "source": default_source}
-    if default_detail is not None:
-        entry["detail"] = default_detail
-    return entry
-
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
     invocation = getattr(args, "invocation", None)
@@ -260,9 +223,7 @@ def _compute_output_statistics(output_path: Path, cfg: Config) -> tuple[int | No
         return None, None
     except Exception as exc:  # pragma: no cover - defensive for malformed CSVs
         logger.warning(
-            "activity_summary_read_failed",
-            path=str(output_path),
-            error=str(exc),
+            f"Could not compute summary statistics for '{output_path}': {exc}"
         )
         return None, None
 
@@ -400,20 +361,24 @@ def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
             dtype="string",
         )
     except FileNotFoundError:
-        logger.warning("assay_lookup_missing", path=str(candidate))
+        logger.warning(
+            f"Assay lookup file '{candidate}' was not found; src_assay_id enrichment will be skipped."
+        )
         return {}
     except pd.errors.EmptyDataError:
-        logger.warning("assay_lookup_empty", path=str(candidate))
+        logger.warning(
+            f"Assay lookup file '{candidate}' is empty; src_assay_id enrichment will be skipped."
+        )
         return {}
     except ValueError as exc:
         logger.warning(
-            "assay_lookup_invalid_columns",
-            path=str(candidate),
-            error=str(exc),
+            f"Assay lookup file '{candidate}' has invalid columns and cannot be read: {exc}"
         )
         return {}
     except OSError as exc:
-        logger.warning("assay_lookup_read_failed", path=str(candidate), error=str(exc))
+        logger.warning(
+            f"Reading assay lookup file '{candidate}' failed due to an OS error: {exc}"
+        )
         return {}
 
     if frame.empty:
@@ -535,10 +500,7 @@ def _ensure_molecule_pref_name(
             )
         except (requests.RequestException, ValueError, AttributeError) as exc:
             logger.warning(
-                "testitem_pref_name_lookup_failed",
-                error=str(exc),
-                error_type=exc.__class__.__name__,
-                pending_ids=list(pending),
+                f"Failed to fetch molecule preferred names for {len(pending)} identifiers: {exc}"
             )
             lookup = pd.DataFrame(columns=["molecule_chembl_id", "pref_name"])
         if not lookup.empty and {"molecule_chembl_id", "pref_name"}.issubset(lookup.columns):
@@ -620,11 +582,7 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
                         failure_subset = fallback_failures & missing_mask
                         if failure_subset.any():
                             logger.debug(
-                                "activity_extended_fallback_conversion_failed",
-                                column=column,
-                                dtype=dtype,
-                                rows=int(failure_subset.sum()),
-                                context="existing",
+                                f"Fallback conversion failed for column '{column}' with dtype '{dtype}' on {int(failure_subset.sum())} existing rows."
                             )
                         result.loc[missing_mask, column] = coerced_fallback.loc[missing_mask]
             continue
@@ -637,11 +595,7 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
                 )
                 if fallback_failures.any():
                     logger.debug(
-                        "activity_extended_fallback_conversion_failed",
-                        column=column,
-                        dtype=dtype,
-                        rows=int(fallback_failures.sum()),
-                        context="missing_column",
+                        f"Fallback conversion failed for column '{column}' with dtype '{dtype}' while creating missing column values on {int(fallback_failures.sum())} rows."
                     )
                 result[column] = coerced_fallback
                 continue
@@ -683,7 +637,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """
     limit = cfg.activity.limit
     if limit is not None and limit < 0:
-        logger.error("invalid_limit", section="activity.limit", limit=limit)
+        logger.error(
+            f"Configuration error: activity.limit must be non-negative but was set to {limit}."
+        )
         return 1
 
     offset = getattr(args, "offset", 0)
@@ -713,61 +669,19 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     start_time = perf_counter()
 
-    metadata_obj = getattr(args, "_config_metadata", None)
-    if not isinstance(metadata_obj, ConfigMetadata):
-        metadata_obj = None
-
-    output_source = "cli" if getattr(args, "final_out", None) else "derived"
     logger.info(
-        "activity_pipeline_start",
-        input=_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
-        output=_option(
-            metadata_obj,
-            value=str(output_path),
-            default_source=output_source,
-        ),
-        limit=_option(
-            metadata_obj,
-            argument="limit",
-            path="sources.chembl.pipelines.activity.limit",
-            value=limit,
-        ),
-        offset=_option(
-            metadata_obj,
-            argument="offset",
-            path="sources.chembl.pipelines.activity.offset",
-            value=offset,
-        ),
-        batch_size=_option(
-            metadata_obj,
-            argument="batch_size",
-            path="sources.chembl.pipelines.activity.batch_size",
-            value=cfg.activity.batch_size,
-        ),
-        timeout=_option(
-            metadata_obj,
-            argument="timeout",
-            path="sources.chembl.pipelines.activity.timeout",
-            value=cfg.activity.timeout,
-        ),
-        dry_run=_option(
-            metadata_obj,
-            argument="dry_run",
-            path="sources.chembl.pipelines.activity.dry_run",
-            value=cfg.activity.dry_run,
-            default_source="cli",
-        ),
-        workers=_option(
-            metadata_obj,
-            argument="workers",
-            path="sources.chembl.pipelines.activity.workers",
-            value=configured_workers,
-        ),
+        f"Starting activity pipeline with input '{args.input_csv}' and output '{output_path}'."
+    )
+    logger.info(
+        f"Loaded config: limit={limit}, offset={offset}, batch_size={cfg.activity.batch_size}, "
+        f"timeout={cfg.activity.timeout}, dry_run={cfg.activity.dry_run}, workers={configured_workers}."
     )
 
     if cfg.activity.dry_run:
         expected = limit if limit is not None else 0
-        logger.info("dry_run", limit=expected)
+        logger.info(
+            f"Dry-run mode enabled; pipeline would process up to {expected} identifiers before exiting."
+        )
         _emit_completion_message(
             cfg=cfg,
             output_path=output_path,
@@ -777,19 +691,20 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 0
 
+    logger.info(f"Reading input identifiers from '{args.input_csv}'.")
     try:
         ids_iter = io.read_ids(args.input_csv, column=cfg.activity.column, cfg=cfg.io)
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
-            "read_fail",
-            error=str(exc),
-            path=str(args.input_csv),
+            f"Failed to read identifiers from '{args.input_csv}': {exc}"
         )
         return 1
 
     if offset:
         ids_iter = islice(ids_iter, offset, None)
-        logger.info("process_offset", offset=offset)
+        logger.info(
+            f"Reading input checkpoint: skipping the first {offset} identifiers before processing."
+        )
 
     processed_ids = 0
     extended_output_path: Path | None = None
@@ -840,6 +755,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         ]
         if not missing:
             return frame
+        logger.warning(
+            f"Missing required activity columns detected: {', '.join(missing)}. Placeholder values will be inserted before validation."
+        )
         fillers: dict[str, pd.Series] = {}
         for column in missing:
             dtype_info = _ACTIVITY_REQUIRED_DTYPES.get(column)
@@ -912,7 +830,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     encoding=cfg.io.csv_encoding,
                 )
             except Exception:  # pragma: no cover - defensive for patched writers
-                logger.debug("io_write_csv_stub_failed")
+                logger.debug(
+                    "Fallback CSV writer stub raised an exception; deterministic export succeeded and execution will continue."
+                )
         return path_obj
 
 
@@ -983,19 +903,15 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     last_error_context = dict(log_context)
                     if attempt >= attempts:
                         logger.error(
-                            "activity_fetch_failed",
-                            extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
-                            error=error_message,
-                            **log_context,
+                            f"Failed to fetch activities for chunk of {len(chunk_ids)} identifiers "
+                            f"after {attempts} attempts: {error_message}"
                         )
                         chunk_failures.add_failure(chunk_ids, error_message)
                         raise PipelineError("chunk_fetch_failed")
                     delay = compute_backoff_delay(attempt, retry_cfg)
                     logger.warning(
-                        "activity_fetch_retry",
-                        extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
-                        delay=delay,
-                        **log_context,
+                        f"Retrying chunk of {len(chunk_ids)} identifiers (attempt {attempt} of {attempts}) "
+                        f"after error: {error_message}. Waiting {delay:.2f}s before next attempt."
                     )
                     if delay > 0:
                         sleep(delay)
@@ -1054,12 +970,15 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 stats_callback=_capture_stats,
             )
         except Exception:
-            logger.exception("Activity pipeline execution failed")
+            logger.exception("Activity pipeline execution failed during chunked processing.")
             raise
         finally:
             chunk_failures.save(fetch_failure_path, cfg=cfg)
 
     if exit_code == 0:
+        logger.info(
+            f"Merged data checkpoint: wrote merged activity records to '{output_path}'."
+        )
         try:
             extended_output_path = process_activity_extended(
                 input_path=output_path,
@@ -1068,29 +987,33 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 targets_csv=cfg.resources.targets_type_csv,
             )
         except Exception:
-            logger.exception("Activity extended post-processing failed")
+            logger.exception(
+                "Activity extended post-processing failed while enriching merged activity data."
+            )
             raise
 
     if limit is not None:
-        logger.info("process_limit", limit=processed_ids)
+        logger.info(
+            f"Processed {processed_ids} identifiers before reaching the configured limit of {limit}."
+        )
 
     if pipeline_stats is not None:
+        rows_total = int(pipeline_stats.get("rows_total", processed_ids))
+        rows_kept = int(pipeline_stats.get("rows_kept", 0))
+        rows_dropped = int(pipeline_stats.get("rows_dropped", 0))
         logger.info(
-            "records_dropped",
-            rows_total=int(pipeline_stats.get("rows_total", processed_ids)),
-            rows_kept=int(pipeline_stats.get("rows_kept", 0)),
-            rows_dropped=int(pipeline_stats.get("rows_dropped", 0)),
+            f"Filtered records checkpoint: kept {rows_kept} of {rows_total} rows and dropped {rows_dropped}."
         )
 
     if exit_code == 0:
-        log_payload = {
-            "output": str(output_path),
-            "processed": processed_ids,
-            "dry_run": False,
-        }
         if extended_output_path is not None:
-            log_payload["extended_output"] = str(extended_output_path)
-        logger.info("activity_pipeline_done", **log_payload)
+            logger.info(
+                f"Successful export checkpoint: primary data at '{output_path}', extended data at '{extended_output_path}'."
+            )
+        else:
+            logger.info(
+                f"Successful export checkpoint: activity data written to '{output_path}'."
+            )
         completion_rows = processed_ids
         if pipeline_stats is not None:
             completion_rows = int(
@@ -1109,13 +1032,22 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     else:
         extra_payload = last_error_extra
         context_payload = dict(last_error_context) if last_error_context else {}
+        error_message = None
+        chunk_ids: Sequence[str] | None = None
+        if extra_payload:
+            error_message = extra_payload.get("msg")
+            chunk_ids = extra_payload.get("chunk_ids")  # type: ignore[assignment]
+        details = []
+        if error_message:
+            details.append(f"last error: {error_message}")
+        if chunk_ids:
+            details.append(f"chunk_ids={list(chunk_ids)}")
+        if context_payload:
+            attempt_info = ", ".join(f"{key}={value}" for key, value in context_payload.items())
+            details.append(attempt_info)
+        detail_text = "; ".join(details)
         logger.error(
-            "activity_pipeline_failed",
-            extra=extra_payload,
-            output=str(output_path),
-            processed=processed_ids,
-            exit_code=exit_code,
-            **context_payload,
+            f"Activity pipeline failed with exit code {exit_code} after processing {processed_ids} identifiers destined for '{output_path}'. {detail_text}"
         )
 
     return exit_code
@@ -1144,7 +1076,9 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             args.final_out = output_path
         setattr(args, "output_csv", output_path)
     if args.skip_existing and output_path.exists() and not args.force:
-        logger.info("pipeline_skip_existing", output=str(output_path))
+        logger.info(
+            f"Skipping execution because '{output_path}' already exists and --force was not provided."
+        )
         _emit_completion_message(
             cfg=cfg,
             output_path=output_path,
@@ -1252,7 +1186,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_stem=DEFAULT_OUTPUT_STEM,
     )
     if args.limit == 0:
-        logger.info("pipeline_skip_limit", limit=args.limit)
+        logger.info("Limit set to 0; exiting before starting the activity pipeline.")
         return 0
     if args.limit is not None and args.limit < 0:
         # Reject negative limits early to provide clear CLI feedback.
