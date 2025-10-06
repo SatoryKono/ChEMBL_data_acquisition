@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import uuid
 import os
-import warnings
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any, cast
@@ -25,32 +24,6 @@ from ..version import require_python_version
 from ..utils.config import DEFAULT_CONFIG_PATH
 
 require_python_version()
-
-
-_DEPRECATED_OUTPUT_OPTION = "--output"
-_DEPRECATED_OUTPUT_REPLACEMENT = "--final-out"
-_DEPRECATED_OUTPUT_MESSAGE = (
-    f"{_DEPRECATED_OUTPUT_OPTION} is deprecated; use {_DEPRECATED_OUTPUT_REPLACEMENT}"
-)
-
-
-def _emit_deprecated_output_warning() -> None:
-    """Log a deprecation warning without failing when the logger stream is closed."""
-
-    try:
-        logger.warning(
-            "cli_option_deprecated",
-            option=_DEPRECATED_OUTPUT_OPTION,
-            replacement=_DEPRECATED_OUTPUT_REPLACEMENT,
-        )
-    except ValueError as exc:
-        if "closed file" not in str(exc).lower():
-            raise
-        warnings.warn(
-            _DEPRECATED_OUTPUT_MESSAGE,
-            DeprecationWarning,
-            stacklevel=3,
-        )
 
 
 def create_logger_config(level: str) -> LoggerConfig:
@@ -157,7 +130,6 @@ def add_common_arguments(
 
     log_level = "INFO" if defaults else argparse.SUPPRESS
     input_default: Path | object = Path("input.csv") if defaults else argparse.SUPPRESS
-    output_default: Path | None | object = None if defaults else argparse.SUPPRESS
     final_default: Path | None | object = None if defaults else argparse.SUPPRESS
     sep_default: str | object = "," if defaults else argparse.SUPPRESS
     enc_default: str | object = "utf8" if defaults else argparse.SUPPRESS
@@ -184,24 +156,11 @@ def add_common_arguments(
     )
     parser.add_argument(
         "--final-out",
+        "--out",
         dest="final_out",
         type=path_argument,
         default=final_default,
         help="Destination CSV file (default: output.<stem>_<YYYYMMDD>.csv)",
-    )
-    parser.add_argument(
-        "--output",
-        dest="output_csv",
-        type=path_argument,
-        default=output_default,
-        help="Destination CSV file (default: output.<stem>_<YYYYMMDD>.csv)",
-    )
-    parser.add_argument(
-        "--out",
-        dest="_deprecated_out",
-        type=path_argument,
-        default=argparse.SUPPRESS,
-        help=argparse.SUPPRESS,
     )
     parser.add_argument("--sep", default=sep_default, help="CSV delimiter")
     parser.add_argument("--encoding", default=enc_default, help="File encoding")
@@ -729,13 +688,6 @@ def prepare_io_paths(
     cache_dir = _resolve_directory(getattr(args, "cache_dir", None), base=base_path)
     setattr(args, "cache_dir", cache_dir)
 
-    deprecated_out = getattr(args, "_deprecated_out", argparse.SUPPRESS)
-    if deprecated_out is not argparse.SUPPRESS:
-        current_output = getattr(args, "output_csv", None)
-        if current_output in (None, argparse.SUPPRESS):
-            setattr(args, "output_csv", deprecated_out)
-        setattr(args, "_out_alias_used", True)
-
     current_input = getattr(args, "input_csv", None)
     if current_input in (None, argparse.SUPPRESS) and input_default is not None:
         current_input = Path(input_default)
@@ -744,13 +696,12 @@ def prepare_io_paths(
         setattr(args, "input_csv", resolved_input)
 
     final_candidate = getattr(args, "final_out", None)
-    output_candidate = getattr(args, "output_csv", None)
+    if final_candidate in (None, argparse.SUPPRESS):
+        final_candidate = None
 
-    if output_candidate not in (None, argparse.SUPPRESS):
-        if final_candidate in (None, argparse.SUPPRESS):
-            final_candidate = output_candidate
-            setattr(args, "final_out", final_candidate)
-        _emit_deprecated_output_warning()
+    output_candidate = getattr(args, "output_csv", None)
+    if final_candidate is None and output_candidate not in (None, argparse.SUPPRESS):
+        final_candidate = output_candidate
 
     raw_format_value = getattr(args, "raw_format", None)
     if raw_format_value in (None, argparse.SUPPRESS):
@@ -759,12 +710,8 @@ def prepare_io_paths(
         raw_format_str = str(raw_format_value).lower()
     setattr(args, "raw_format", raw_format_str)
 
-    final_value = getattr(args, "final_out", None)
-    if final_value in (None, argparse.SUPPRESS):
-        final_value = None
-
     resolved_output = _resolve_file(
-        final_value,
+        final_candidate,
         directory=output_dir,
         base=base_path,
     )
@@ -786,17 +733,20 @@ def prepare_io_paths(
             date_str = effective_date
 
     if resolved_output is not None:
-        resolved_output = _resolve_file(
-            resolved_output,
-            directory=output_dir,
-            base=base_path,
+        resolved_output = cast(
+            Path,
+            _resolve_file(
+                resolved_output,
+                directory=output_dir,
+                base=base_path,
+            ),
         )
-        setattr(args, "output_csv", resolved_output)
         setattr(args, "final_out", resolved_output)
-    elif isinstance(final_value, (str, Path)):
-        candidate_path = Path(final_value)
-        setattr(args, "output_csv", candidate_path)
+        setattr(args, "output_csv", resolved_output)
+    elif isinstance(final_candidate, (str, Path)):
+        candidate_path = Path(final_candidate)
         setattr(args, "final_out", candidate_path)
+        setattr(args, "output_csv", candidate_path)
 
     raw_value = getattr(args, "raw_out", None)
     if raw_value in (None, argparse.SUPPRESS):

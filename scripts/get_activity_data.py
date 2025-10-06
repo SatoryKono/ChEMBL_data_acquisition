@@ -277,15 +277,29 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if workers_override is not None
         else getattr(cfg.activity, "workers", 1)
     )
-    output_path = Path(
-        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    )
+    final_out_attr = getattr(args, "final_out", None)
+    if final_out_attr in (None, argparse.SUPPRESS):
+        legacy_output = getattr(args, "output_csv", None)
+        if legacy_output not in (None, argparse.SUPPRESS):
+            output_path = Path(legacy_output)
+            if not isinstance(legacy_output, Path):
+                args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+        else:
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+    else:
+        output_path = Path(final_out_attr)
+        if not isinstance(final_out_attr, Path):
+            args.final_out = output_path
+        setattr(args, "output_csv", output_path)
 
     metadata_obj = getattr(args, "_config_metadata", None)
     if not isinstance(metadata_obj, ConfigMetadata):
         metadata_obj = None
 
-    output_source = "cli" if getattr(args, "output_csv", None) else "derived"
+    output_source = "cli" if getattr(args, "final_out", None) else "derived"
     logger.info(
         "activity_pipeline_start",
         input=_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
@@ -657,10 +671,23 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the activity pipeline handling ``--skip-existing`` semantics."""
 
-    output_path = Path(
-        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    )
-    args.output_csv = output_path
+    final_out_attr = getattr(args, "final_out", None)
+    if final_out_attr in (None, argparse.SUPPRESS):
+        legacy_output = getattr(args, "output_csv", None)
+        if legacy_output not in (None, argparse.SUPPRESS):
+            output_path = Path(legacy_output)
+            if not isinstance(legacy_output, Path):
+                args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+        else:
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+    else:
+        output_path = Path(final_out_attr)
+        if not isinstance(final_out_attr, Path):
+            args.final_out = output_path
+        setattr(args, "output_csv", output_path)
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0

@@ -325,7 +325,7 @@ def test_get_activity_cli__retry_and_idempotent(
     logger_stub = _patch_logger(monkeypatch, get_activity_data)
     _patch_activity_cli(monkeypatch, cfg)
 
-    args = ["--input", str(input_csv), "--output", str(output_csv)]
+    args = ["--input", str(input_csv), "--final-out", str(output_csv)]
 
     first_exit = get_activity_data.main(args)
     assert first_exit == 0
@@ -408,7 +408,7 @@ def test_get_activity_cli__workers_and_offset(
     args = [
         "--input",
         str(input_csv),
-        "--output",
+        "--final-out",
         str(output_csv),
         "--workers",
         "2",
@@ -461,7 +461,7 @@ def test_get_activity_cli__non_csv_output_path(
     _patch_activity_cli(monkeypatch, cfg)
 
     exit_code = get_activity_data.main(
-        ["--input", str(input_csv), "--output", str(output_csv)]
+        ["--input", str(input_csv), "--final-out", str(output_csv)]
     )
 
     assert exit_code == 0

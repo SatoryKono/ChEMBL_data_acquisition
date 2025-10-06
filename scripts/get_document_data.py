@@ -1845,9 +1845,23 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 1
     offset = getattr(args, "offset", 0)
-    output_path = Path(
-        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    )
+    final_out_attr = getattr(args, "final_out", None)
+    if final_out_attr in (None, argparse.SUPPRESS):
+        legacy_output = getattr(args, "output_csv", None)
+        if legacy_output not in (None, argparse.SUPPRESS):
+            output_path = Path(legacy_output)
+            if not isinstance(legacy_output, Path):
+                args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+        else:
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+    else:
+        output_path = Path(final_out_attr)
+        if not isinstance(final_out_attr, Path):
+            args.final_out = output_path
+        setattr(args, "output_csv", output_path)
     fallback_enabled = getattr(args, "fallback_doi_enabled", False)
     fallback_path_arg = getattr(args, "fallback_doi_path", None)
     metadata_obj = getattr(args, "_config_metadata", None)
@@ -2061,15 +2075,29 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.error("invalid_limit", section="document.chembl", limit=limit)
         return 1
     offset = getattr(args, "offset", 0)
-    output_path = Path(
-        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    )
+    final_out_attr = getattr(args, "final_out", None)
+    if final_out_attr in (None, argparse.SUPPRESS):
+        legacy_output = getattr(args, "output_csv", None)
+        if legacy_output not in (None, argparse.SUPPRESS):
+            output_path = Path(legacy_output)
+            if not isinstance(legacy_output, Path):
+                args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+        else:
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+    else:
+        output_path = Path(final_out_attr)
+        if not isinstance(final_out_attr, Path):
+            args.final_out = output_path
+        setattr(args, "output_csv", output_path)
     chunk_size = getattr(args, "chunk_size", chembl_defaults.chunk_size)
     timeout = getattr(args, "timeout", chembl_defaults.timeout)
     metadata_obj = getattr(args, "_config_metadata", None)
     if not isinstance(metadata_obj, ConfigMetadata):
         metadata_obj = None
-    output_source = "cli" if getattr(args, "output_csv", None) else "derived"
+    output_source = "cli" if getattr(args, "final_out", None) else "derived"
     logger.info(
         "document_chembl_start",
         input=_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
@@ -2244,9 +2272,23 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     sample_size = getattr(args, "chembl_chunk_size", all_defaults.chunk_size)
     sample_ids = list(islice(iterator, sample_size))
     ids_for_fetch = chain(sample_ids, iterator)
-    output_path = Path(
-        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    )
+    final_out_attr = getattr(args, "final_out", None)
+    if final_out_attr in (None, argparse.SUPPRESS):
+        legacy_output = getattr(args, "output_csv", None)
+        if legacy_output not in (None, argparse.SUPPRESS):
+            output_path = Path(legacy_output)
+            if not isinstance(legacy_output, Path):
+                args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+        else:
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+            setattr(args, "output_csv", output_path)
+    else:
+        output_path = Path(final_out_attr)
+        if not isinstance(final_out_attr, Path):
+            args.final_out = output_path
+        setattr(args, "output_csv", output_path)
     fallback_enabled = getattr(args, "fallback_doi_enabled", False)
     fallback_path_arg = getattr(args, "fallback_doi_path", None)
     logger.info(
@@ -2511,10 +2553,21 @@ MODE_HANDLERS: Mapping[str, Callable[[Config, argparse.Namespace], int]] = {
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the selected document pipeline with CLI-specific hooks."""
 
-    output_path = Path(
-        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    )
-    args.output_csv = output_path
+    final_out_attr = getattr(args, "final_out", None)
+    if final_out_attr in (None, argparse.SUPPRESS):
+        legacy_output = getattr(args, "output_csv", None)
+        if legacy_output not in (None, argparse.SUPPRESS):
+            output_path = Path(legacy_output)
+            if not isinstance(legacy_output, Path):
+                args.final_out = output_path
+        else:
+            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            args.final_out = output_path
+    else:
+        output_path = Path(final_out_attr)
+        if not isinstance(final_out_attr, Path):
+            args.final_out = output_path
+    setattr(args, "output_csv", output_path)
     mode = getattr(args, "mode", None)
     if mode in (None, ""):
         mode = getattr(args, "command", None)
