@@ -15,8 +15,6 @@ from ..common.log import logger
 from config.paths import CONFIG_DIR as _CONFIG_DIR
 from config.paths import DEFAULT_CONFIG_PATH as _DEFAULT_CONFIG_PATH
 from .runtime import configure_rate_limiters
-from .models import (
-from ..utils.config import ConfigLoaderError, load_yaml_config
 from .env import (
     _apply_env_overrides,
     _expand_config_placeholders,
@@ -24,13 +22,7 @@ from .env import (
     _resolve_placeholder_base_path,
     _set_by_path,
 )
-from .models import (
-    Config,
-    ConfigMetadata,
-    ConfigSource,
-    ConfigError,
-    _CONFIG_PATH_FIELDS,
-)
+from .models import Config, ConfigError, ConfigMetadata, ConfigSource, _CONFIG_PATH_FIELDS
 
 __all__ = [
     "CONFIG_DIR",
