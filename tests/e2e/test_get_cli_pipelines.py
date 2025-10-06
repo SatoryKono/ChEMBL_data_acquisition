@@ -139,8 +139,13 @@ def _patch_activity_cli(monkeypatch: pytest.MonkeyPatch, cfg: Config) -> None:
         base_parser=None,
     ) -> Config:
         args._config_metadata = None
+        final_candidate = getattr(args, "final_out", None)
+        if final_candidate is not None:
+            args.final_out = Path(final_candidate)
         if hasattr(args, "output_csv") and args.output_csv is not None:
             args.output_csv = Path(args.output_csv)
+        if getattr(args, "output_csv", None) is None and getattr(args, "final_out", None) is not None:
+            args.output_csv = args.final_out
         cfg.activity.batch_size = getattr(args, "batch_size", cfg.activity.batch_size)
         cfg.activity.limit = getattr(args, "limit", cfg.activity.limit)
         cfg.activity.offset = getattr(args, "offset", cfg.activity.offset)
@@ -325,7 +330,7 @@ def test_get_activity_cli__retry_and_idempotent(
     logger_stub = _patch_logger(monkeypatch, get_activity_data)
     _patch_activity_cli(monkeypatch, cfg)
 
-    args = ["--input", str(input_csv), "--output", str(output_csv)]
+    args = ["--input", str(input_csv), "--final-out", str(output_csv)]
 
     first_exit = get_activity_data.main(args)
     assert first_exit == 0
@@ -408,7 +413,7 @@ def test_get_activity_cli__workers_and_offset(
     args = [
         "--input",
         str(input_csv),
-        "--output",
+        "--final-out",
         str(output_csv),
         "--workers",
         "2",
@@ -461,7 +466,7 @@ def test_get_activity_cli__non_csv_output_path(
     _patch_activity_cli(monkeypatch, cfg)
 
     exit_code = get_activity_data.main(
-        ["--input", str(input_csv), "--output", str(output_csv)]
+        ["--input", str(input_csv), "--final-out", str(output_csv)]
     )
 
     assert exit_code == 0

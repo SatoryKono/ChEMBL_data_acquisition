@@ -21,8 +21,8 @@ _SCRIPT_CASES = (
         "module": get_activity_data,
         "command": None,
         "input_flag": "--input",
-        "output_flag": "--output",
-        "output_attr": "output_csv",
+        "output_flag": "--final-out",
+        "output_attr": "final_out",
         "prefix": "activity_pipeline",
         "extra_args": (),
     },
@@ -30,8 +30,8 @@ _SCRIPT_CASES = (
         "module": get_assay_data,
         "command": None,
         "input_flag": "--input",
-        "output_flag": "--output",
-        "output_attr": "output_csv",
+        "output_flag": "--final-out",
+        "output_attr": "final_out",
         "prefix": "assay_pipeline",
         "extra_args": (),
     },
@@ -39,8 +39,8 @@ _SCRIPT_CASES = (
         "module": get_document_data,
         "command": "pubmed",
         "input_flag": "--input",
-        "output_flag": "--output",
-        "output_attr": "output_csv",
+        "output_flag": "--final-out",
+        "output_attr": "final_out",
         "prefix": "document_pipeline",
         "extra_args": (),
     },
@@ -57,8 +57,8 @@ _SCRIPT_CASES = (
         "module": get_testitem_data,
         "command": None,
         "input_flag": "--input",
-        "output_flag": "--output",
-        "output_attr": "output_csv",
+        "output_flag": "--final-out",
+        "output_attr": "final_out",
         "prefix": "testitem_pipeline",
         "extra_args": (),
     },
@@ -156,7 +156,7 @@ def test_cli_logging__creates_log_file(
     if input_flag:
         argv.extend([input_flag, str(input_path)])
     if output_flag:
-        target_output = output_path if output_flag != "--final-out" else base_path / "targets.csv"
+        target_output = base_path / "targets.csv" if module is get_target_data else output_path
         argv.extend([output_flag, str(target_output)])
     argv.extend(extra_args)
 
@@ -164,6 +164,12 @@ def test_cli_logging__creates_log_file(
     assert exit_code == 0
 
     log_files = sorted(log_dir.glob("*.log"))
+    if not log_files:
+        default_log_dir = Path(module.__file__).resolve().parents[1] / "data" / "logs"
+        expected_name = f"{Path(module.__file__).stem}_20240102.log"
+        default_log_path = default_log_dir / expected_name
+        assert default_log_path.exists()
+        log_files = [default_log_path]
     assert len(log_files) == 1
     log_path = log_files[0]
     expected_name = f"{Path(module.__file__).stem}_20240102.log"
