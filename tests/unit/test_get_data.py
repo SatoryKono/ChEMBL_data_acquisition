@@ -5,12 +5,14 @@ import io
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Sequence
 
 import pytest
 
 from scripts import get_data
 from tests.helpers.logs import iter_events, parse_log_lines
+from library.pipelines.common import PipelineRunResult
 
 
 def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
@@ -204,36 +206,47 @@ def test_run_pipeline__propagates_step_failure(tmp_path: Path, monkeypatch: pyte
     cfg = _make_config(tmp_path)
     failure_calls: list[Sequence[str]] = []
 
-    def _success(argv: Sequence[str]) -> int:
-        final_out = Path(argv[argv.index("--final-out") + 1])
-        final_out.parent.mkdir(parents=True, exist_ok=True)
-        final_out.write_text("id\n1\n", encoding="utf-8")
-        return 0
+    def _success_runner(_: get_data.Config, options: SimpleNamespace) -> PipelineRunResult:
+        path = Path(options.output_csv)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("id\n1\n", encoding="utf-8")
+        return PipelineRunResult(exit_code=0, output_path=path, executed=True, written=True)
 
-    def _failure(argv: Sequence[str]) -> int:
-        failure_calls.append(tuple(argv))
-        return 2
+    def _failure_runner(_: get_data.Config, options: SimpleNamespace) -> PipelineRunResult:
+        failure_calls.append((str(options.input_csv), str(options.output_csv)))
+        return PipelineRunResult(exit_code=2, output_path=Path(options.output_csv), executed=True)
+
+    def _build_options(
+        cfg: get_data.PipelineRunConfig, input_path: Path, output_path: Path
+    ) -> SimpleNamespace:
+        return SimpleNamespace(input_csv=input_path, output_csv=output_path)
 
     steps = (
         get_data.PipelineStep(
             name="document",
-            main=_success,
+            main=lambda _: 0,
             input_filename="document.csv",
             output_stem="documents",
         ),
         get_data.PipelineStep(
             name="target",
-            main=_failure,
+            main=lambda _: 0,
             input_filename="target.csv",
             output_stem="targets",
         ),
         get_data.PipelineStep(
             name="assay",
-            main=_success,
+            main=lambda _: 0,
             input_filename="assay.csv",
             output_stem="assays",
         ),
     )
+
+    apis = {
+        "document": get_data.PipelineApi(_build_options, _success_runner),
+        "target": get_data.PipelineApi(_build_options, _failure_runner),
+        "assay": get_data.PipelineApi(_build_options, _success_runner),
+    }
 
     stream = io.StringIO()
     logger = get_data.configure_logger(
@@ -241,6 +254,7 @@ def test_run_pipeline__propagates_step_failure(tmp_path: Path, monkeypatch: pyte
     )
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
+    monkeypatch.setattr(get_data, "_PIPELINE_APIS", apis, raising=False)
     status = get_data.run_pipeline(cfg, steps=steps)
     assert status == 2
     assert failure_calls, "expected failing step to execute"
@@ -270,23 +284,30 @@ def test_run_pipeline__propagates_step_failure(tmp_path: Path, monkeypatch: pyte
 def test_run_pipeline__handles_step_exception(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = _make_config(tmp_path)
 
-    def _raising(argv: Sequence[str]) -> int:  # pragma: no cover - executed via pipeline
+    def _raising_runner(_: get_data.Config, options: SimpleNamespace) -> PipelineRunResult:
         raise RuntimeError("malformed output")
+
+    def _build_options(
+        cfg: get_data.PipelineRunConfig, input_path: Path, output_path: Path
+    ) -> SimpleNamespace:
+        return SimpleNamespace(input_csv=input_path, output_csv=output_path)
 
     steps = (
         get_data.PipelineStep(
             name="document",
-            main=_raising,
+            main=lambda _: 0,
             input_filename="document.csv",
             output_stem="documents",
         ),
     )
+    apis = {"document": get_data.PipelineApi(_build_options, _raising_runner)}
     stream = io.StringIO()
     logger = get_data.configure_logger(
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="unit")
     )
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
+    monkeypatch.setattr(get_data, "_PIPELINE_APIS", apis, raising=False)
     status = get_data.run_pipeline(cfg, steps=steps)
     assert status == 1
     manifest = _load_manifest(cfg)
