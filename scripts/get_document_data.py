@@ -242,6 +242,23 @@ _EXPORT_COLUMNS = [
     "ChEMBL.source",
 ]
 
+
+def _resolve_numeric_export_columns() -> tuple[str, ...]:
+    """Return schema columns that should retain their numeric dtype."""
+
+    numeric_columns: list[str] = []
+    for name, column in DocumentsSchema.columns.items():
+        dtype = getattr(column, "dtype", None)
+        if dtype is None:
+            continue
+        dtype_name = str(dtype).lower()
+        if dtype_name.startswith(("int", "float")):
+            numeric_columns.append(name)
+    return tuple(numeric_columns)
+
+
+_NUMERIC_EXPORT_COLUMNS: tuple[str, ...] = _resolve_numeric_export_columns()
+
 _EXPORT_COLUMN_RENAMES = {
     "document_chembl_id": "ChEMBL.document_chembl_id",
     "title": "ChEMBL.title",
