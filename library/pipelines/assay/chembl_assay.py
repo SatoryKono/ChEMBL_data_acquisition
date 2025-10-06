@@ -7,6 +7,7 @@ from urllib.parse import urlencode, urljoin
 
 import pandas as pd
 import requests
+from urllib3.exceptions import ReadTimeoutError
 
 from library.clients import ChemblClient, _chunked
 from ...config import ApiCfg, TESTITEM_FIELD_DEFAULTS
@@ -253,6 +254,23 @@ def _fetch_testitem_chunk(
         except requests.RequestException as exc:
             response = getattr(exc, "response", None)
             status_code = response.status_code if response is not None else None
+            if _is_timeout_exception(exc) and len(current) > 1:
+                midpoint = max(1, len(current) // 2)
+                first = current[:midpoint]
+                second = current[midpoint:]
+                logger.warning(
+                    "chunk_timeout_split",
+                    extra={
+                        "stage": "chunk_split",
+                        "chunk_key": chunk_key,
+                        "size": len(current),
+                    },
+                )
+                if second:
+                    pending.append(second)
+                if first:
+                    pending.append(first)
+                continue
             if status_code == 400 and len(current) > 1:
                 midpoint = max(1, len(current) // 2)
                 first = current[:midpoint]
@@ -282,6 +300,25 @@ def _fetch_testitem_chunk(
                 "chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key}
             )
     return frames
+
+
+def _is_timeout_exception(error: BaseException | None) -> bool:
+    """Return ``True`` if *error* or its chain indicates a timeout."""
+
+    if error is None:
+        return False
+    if isinstance(error, (requests.Timeout, TimeoutError, ReadTimeoutError)):
+        return True
+    for arg in getattr(error, "args", ()):
+        if isinstance(arg, (requests.Timeout, TimeoutError, ReadTimeoutError)):
+            return True
+    cause = getattr(error, "__cause__", None)
+    if cause is not None and _is_timeout_exception(cause):
+        return True
+    context = getattr(error, "__context__", None)
+    if context is not None and _is_timeout_exception(context):
+        return True
+    return False
 
 
 def get_assay(
