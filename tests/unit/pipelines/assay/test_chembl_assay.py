@@ -9,7 +9,7 @@ from requests import ConnectionError, HTTPError, ReadTimeout, Response
 from urllib.parse import parse_qs, urlparse
 
 from library.config import ApiCfg
-from library.pipelines.assay.chembl_assay import get_assays, get_testitem
+from library.pipelines.assay.chembl_assay import get_activities, get_assays, get_testitem
 
 
 class _StubClient:
@@ -186,6 +186,49 @@ def test_get_testitem__splits_chunk_on_timeout() -> None:
     assert any(
         "molecule_chembl_id__in=CHEMBL2,CHEMBL3" in call for call in client.calls
     )
+
+
+@pytest.mark.unit
+def test_get_activities__chunk_timeout_falls_back_to_single_requests() -> None:
+    """Chunk-level timeouts trigger per-identifier activity fetches."""
+
+    responders = [
+        ReadTimeout("timeout"),
+        {"activities": [{"activity_id": "ACT1"}], "page_meta": {}},
+        {"activities": [{"activity_id": "ACT2"}], "page_meta": {}},
+    ]
+    client = _StubClient(responders)
+    cfg = ApiCfg()
+
+    df = get_activities(["ACT1", "ACT2"], cfg=cfg, client=client, chunk_size=2)
+
+    assert sorted(df["activity_id"]) == ["ACT1", "ACT2"]
+    assert any("activity_id__in" in call for call in client.calls)
+    assert any("activity_id=ACT1" in call for call in client.calls)
+    assert any("activity_id=ACT2" in call for call in client.calls)
+
+
+@pytest.mark.unit
+def test_get_activities__chunk_404_falls_back_to_single_requests() -> None:
+    """404 responses from chunk queries fall back to single fetches."""
+
+    responders = [
+        "HTTP404",
+        {"activities": [{"activity_id": "ACT1"}], "page_meta": {}},
+        {"activities": [], "page_meta": {}},
+    ]
+    client = _StubClient(responders)
+    cfg = ApiCfg()
+
+    df = get_activities(["ACT1", "ACT2"], cfg=cfg, client=client, chunk_size=2)
+
+    assert list(df["activity_id"]) == ["ACT1"]
+    assert any("activity_id__in" in call for call in client.calls)
+    assert sum("activity_id=ACT1" in call for call in client.calls) == 1
+    assert sum("activity_id=ACT2" in call for call in client.calls) == 1
+
+
+@pytest.mark.unit
 def test_get_assays__single_timeout_falls_back_to_detail_endpoint() -> None:
     """Single-item timeouts fall back to the detail endpoint."""
 
