@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from itertools import islice
 from dataclasses import dataclass, field
-from time import perf_counter
+from time import monotonic, perf_counter
 from types import TracebackType
 from typing import Any, Callable, TypeVar, cast
 from urllib.parse import urlsplit, urlunsplit
