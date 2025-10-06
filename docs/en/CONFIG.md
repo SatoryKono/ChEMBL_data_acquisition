@@ -2,14 +2,14 @@
 
 The pipelines load configuration from three layers (lowest precedence first):
 
-1. Built-in defaults defined in [`library/config/model.py`](../library/config/model.py).
+1. Built-in defaults defined in [`library/config/models.py`](../library/config/models.py).
 2. YAML files (`config/config.yaml` plus optional overrides such as
    `config/config.local.yaml`).
 3. Environment variables and CLI arguments.
 
 Environment variables use the `CHEMBL_DA__SECTION__KEY` pattern, where nested
 keys are joined with double underscores. Short aliases exist for frequently used
-fields (see `_ALIAS_MAP` in `library/config/model.py`).
+fields (see `_ALIAS_MAP` in `library/config/models.py`).
 
 ```bash
 # Example: increase the UniProt rate limit during a smoke run
@@ -39,7 +39,7 @@ system:
     level: INFO
 ```
 
-Fields not listed inherit the defaults from `library/config/model.py`. Create a
+Fields not listed inherit the defaults from `library/config/models.py`. Create a
 `config/config.local.yaml` file to keep environment-specific overrides outside
 version control.
 
@@ -95,7 +95,7 @@ whether user input is required (`Yes` = must be provided explicitly).
 
 ### `sources.chembl.pipelines`
 
-Each pipeline inherits defaults from `library/config/model.py`. All keys are optional
+Each pipeline inherits defaults from `library/config/models.py`. All keys are optional
 and may be overridden via CLI or environment variables.
 
 #### `activity`
@@ -308,5 +308,5 @@ Controls post-processing of activity tables.
 | `limit` | `null` | Optional cap on processed rows. |
 
 For further customisation consult the Pydantic models in
-[`library/config/model.py`](../library/config/model.py); the documentation above mirrors the
+[`library/config/models.py`](../library/config/models.py); the documentation above mirrors the
 available fields and their default values.
