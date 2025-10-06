@@ -157,6 +157,7 @@ def add_common_arguments(
     parser.add_argument(
         "--final-out",
         "--out",
+        "--output",
         dest="final_out",
         type=path_argument,
         default=final_default,
