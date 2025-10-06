@@ -220,8 +220,8 @@ addition to the shared flags the command accepts:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--column` | `activity_chembl_id` | Column containing activity identifiers. |
-| `--batch-size` | `50` | Number of identifiers per request. |
-| `--timeout` | `30.0` | HTTP timeout per request. |
+| `--batch-size` | `20` | Number of identifiers per request. |
+| `--timeout` | `90.0` | HTTP timeout per request. |
 | `--limit`, `--offset` | `None`, `0` | Range selection; negative values are rejected. |
 | `--workers` | `1` | Worker threads fetching activities. |
 | `--dry-run` | `False` | Validate inputs without contacting ChEMBL or writing files. |

@@ -219,7 +219,7 @@ validates the table, then emits the standard CSV + sidecar + quality reports.
 ```
 get-activity-data --input data/input/activity.csv \
     --final-out output/activities_$(date +%Y%m%d).csv \
-    --batch-size 50 --workers 4 --timeout 60 --limit 500
+    --batch-size 20 --workers 4 --timeout 90 --limit 500
 ```
 
 `--dry-run` is unique to this pipeline: it validates CLI arguments and input

@@ -211,7 +211,7 @@ get-assay-data --input data/input/assay.csv \
 ```
 get-activity-data --input data/input/activity.csv \
     --final-out output/activities_$(date +%Y%m%d).csv \
-    --batch-size 50 --workers 4 --timeout 60 --limit 500
+    --batch-size 20 --workers 4 --timeout 90 --limit 500
 ```
 
 Флаг `--dry-run` уникален для данного пайплайна: он проверяет аргументы и входной

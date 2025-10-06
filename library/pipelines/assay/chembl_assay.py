@@ -13,6 +13,8 @@ from ...config import ApiCfg, TESTITEM_FIELD_DEFAULTS
 from ...common.log import logger
 from ...common.pandas_utils import json_normalize_pyarrow
 
+MAX_ACTIVITY_CHUNK_SIZE = 20
+
 ASSAY_VARIANT_COLUMN_ALIASES = {
     "variant_sequence.isoform": "isoform",
     "variant_sequence.mutation": "mutation",
@@ -567,6 +569,16 @@ def get_activities(
         return pd.DataFrame(columns=ACTIVITY_COLUMNS)
 
     records: list[pd.DataFrame] = []
+    effective_chunk_size = max(1, min(int(chunk_size), MAX_ACTIVITY_CHUNK_SIZE))
+    if effective_chunk_size != chunk_size:
+        logger.debug(
+            "activity_chunk_size_clamped",
+            extra={
+                "requested": int(chunk_size),
+                "effective": effective_chunk_size,
+                "limit": MAX_ACTIVITY_CHUNK_SIZE,
+            },
+        )
     base_root = cfg.chembl_base.rstrip("/")
     base_url = f"{base_root}/activity.json"
     base_params: list[tuple[str, str]] = [("format", "json")]
@@ -621,10 +633,15 @@ def get_activities(
         return frames
 
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    for chunk in _chunked(valid, chunk_size):
+    for chunk in _chunked(valid, effective_chunk_size):
         chunk_key = ",".join(chunk)
         logger.info(
-            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+            "chunk_start",
+            extra={
+                "stage": "chunk_start",
+                "chunk_key": chunk_key,
+                "chunk_size": len(chunk),
+            },
         )
         url = _build_url({"activity_id__in": chunk_key, "limit": len(chunk)})
         try:

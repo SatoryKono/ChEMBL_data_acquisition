@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from itertools import islice
 from dataclasses import dataclass, field
+from time import perf_counter
 from types import TracebackType
 from typing import Any, Callable, TypeVar, cast
 from urllib.parse import urlsplit, urlunsplit
@@ -219,6 +220,7 @@ class ChemblClient:
                 )
                 try:
                     session = self._get_session()
+                    start_time = perf_counter()
                     with session.get(
                         request_url, timeout=(cfg.timeout_connect, read_timeout)
                     ) as response:
@@ -230,12 +232,18 @@ class ChemblClient:
                             raise ValueError(
                                 f"invalid JSON in response from {request_url}"
                             ) from exc
+                        elapsed = getattr(response, "elapsed", None)
+                        if elapsed is not None and hasattr(elapsed, "total_seconds"):
+                            duration = elapsed.total_seconds()
+                        else:
+                            duration = perf_counter() - start_time
                         logger.debug(
                             "request_ok",
                             extra={
                                 "url": request_url,
                                 "status": getattr(response, "status_code", None),
                                 "rps": cfg.rps,
+                                "elapsed": duration,
                             },
                         )
                         with self._cache_lock:
