@@ -101,7 +101,7 @@ def _compute_sha256(path: Path) -> str:
             relative = child.relative_to(path).as_posix()
             entries.append((relative, child))
 
-        for relative, child in sorted(entries, key=lambda item: item[0]):
+        for relative, child in entries:
             hasher.update(relative.encode("utf-8"))
             data = _normalise_text_newlines(child.read_bytes())
             hasher.update(data)
