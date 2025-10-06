@@ -1,0 +1,385 @@
+diff --git a/REPORT_activity_log_missing.md b/REPORT_activity_log_missing.md
+new file mode 100644
+index 0000000..3e35910
+--- /dev/null
++++ b/REPORT_activity_log_missing.md
+@@ -0,0 +1,8 @@
++# Отчёт по диагностике отсутствующего лога для `get_activity_data`
++
++| Потенциальная причина | Подтверждена | Комментарий | Исправление |
++|-----------------------|--------------|-------------|-------------|
++| Скрипт использует устаревший каталог `logs/` и не учитывает перенос в `data/logs/` | Да | В `scripts/get_activity_data.py` путь к лог-файлу формировался вручную через `Path("logs")`, поэтому файл создавался вне нового каталога и терялся в окружениях CI. | Логирование переведено на `setup_cli_logging`, а путь берётся из общего helper'а с автоматическим созданием `data/logs`. |
++| Отсутствие меток о запуске и завершении пайплайна в общем логе | Да | До исправления файл содержал только сообщения побочных компонентов, что затрудняло проверку успешного завершения. | Добавлены явные события `Starting pipeline` и `Export complete` в `main()`. |
++| Неконсистентная дата в имени файла (только YYYYMMDD) | Да | Старый формат порождал коллизии при нескольких запусках за сутки. | Новый суффикс `YYYYMMDD_HHMM` реализован в `setup_cli_logging` и используется CLI. |
++| Невозможность воспроизвести проблему автоматически | Да | Не хватало end-to-end теста, контролирующего создание лог-файла. | Добавлен smoke-тест `tests/test_activity_logging.py`, который проверяет наличие файла и ключевых сообщений. |
+diff --git a/library/cli/logging.py b/library/cli/logging.py
+index dc1d994..04494c9 100644
+--- a/library/cli/logging.py
++++ b/library/cli/logging.py
+@@ -26,9 +26,9 @@ def _default_log_dir() -> Path:
+ 
+ 
+ def _current_date_str() -> str:
+-    """Return the current UTC date formatted as ``YYYYMMDD``."""
++    """Return the current UTC timestamp formatted as ``YYYYMMDD_HHMM``."""
+ 
+-    return datetime.now(timezone.utc).strftime("%Y%m%d")
++    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
+ 
+ 
+ @dataclass(slots=True)
+@@ -40,6 +40,14 @@ class CLILoggingContext:
+     console_stream: IO[str]
+ 
+ 
++def _normalise_suffix(date_str: str | None) -> str:
++    if date_str:
++        if "_" in date_str:
++            return date_str
++        return f"{date_str}_{datetime.now(timezone.utc).strftime('%H%M')}"
++    return _current_date_str()
++
++
+ @contextmanager
+ def setup_cli_logging(
+     script_name: str,
+@@ -53,10 +61,7 @@ def setup_cli_logging(
+     resolved_dir = Path(log_dir) if log_dir is not None else _default_log_dir()
+     resolved_dir.mkdir(parents=True, exist_ok=True)
+ 
+-    if date_str:
+-        suffix = date_str
+-    else:
+-        suffix = _current_date_str()
++    suffix = _normalise_suffix(date_str)
+ 
+     log_path = resolved_dir / f"{script_name}_{suffix}.log"
+ 
+diff --git a/library/utils/logger.py b/library/utils/logger.py
+index 3a0a11d..181ddd9 100644
+--- a/library/utils/logger.py
++++ b/library/utils/logger.py
+@@ -1,16 +1,29 @@
+ from __future__ import annotations
+ 
+ import logging
++import os
+ import sys
+ import time
+ from pathlib import Path
+ from typing import Any, Iterable
+ 
+-__all__ = ["get_logger", "StructuredLogger"]
++__all__ = ["StructuredLogger", "default_log_dir", "get_logger"]
+ 
+ 
+ _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s :: %(message)s"
+-_LOG_DIR = Path("logs")
++
++
++def _repository_root() -> Path:
++    return Path(__file__).resolve().parents[2]
++
++
++def default_log_dir() -> Path:
++    """Return the directory used for storing log files."""
++
++    env_base = os.environ.get("CHEMBL_DA_BASE_PATH")
++    if env_base:
++        return Path(env_base).expanduser() / "logs"
++    return _repository_root() / "data" / "logs"
+ 
+ 
+ def _format_value(value: Any) -> str:
+@@ -127,7 +140,7 @@ def get_logger(name: str, *, log_file: str | Path | None = None, level: int = lo
+     logger = _ensure_logger(name)
+ 
+     if log_file is None:
+-        log_path = _LOG_DIR / f"{name.replace('.', '_')}.log"
++        log_path = default_log_dir() / f"{name.replace('.', '_')}.log"
+     else:
+         log_path = Path(log_file)
+         if log_path.is_dir():
+diff --git a/scripts/get_activity_data.py b/scripts/get_activity_data.py
+index d965c60..54e69c3 100644
+--- a/scripts/get_activity_data.py
++++ b/scripts/get_activity_data.py
+@@ -77,6 +77,7 @@ from library.pipelines.common import (
+ from library.cli import (
+     LoggerConfig,
+     positive_int,
++    setup_cli_logging,
+ )
+ from library.cli import (
+     build_parser as base_parser,
+@@ -1235,48 +1236,61 @@ def main(argv: Sequence[str] | None = None) -> int:
+     args.invocation = resolve_invocation(parser.prog, argv)
+ 
+     date_override = getattr(args, "date", None)
+-    if date_override:
+-        date_str = str(date_override)
+-    else:
+-        date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+-    log_file = Path("logs") / f"{PROGRAM_NAME}_{date_str}.log"
+-
+-    structured_logger = get_logger(__name__, log_file=log_file)
+-
+-    global logger
+-    if isinstance(logger, StructuredLogger):
+-        logger = structured_logger
+-    print(f"[INFO] Structured logs are mirrored to '{log_file}'.")
+-    cli.prepare_io_paths(
+-        args,
+-        input_default=DEFAULT_INPUT_NAME,
+-        output_stem=DEFAULT_OUTPUT_STEM,
+-    )
+-    if args.limit == 0:
+-        logger.info("Limit set to 0; exiting before starting the activity pipeline.")
+-        return 0
+-    if args.limit is not None and args.limit < 0:
+-        # Reject negative limits early to provide clear CLI feedback.
+-        parser.error("--limit must be zero or a positive integer")
+-    if args.offset < 0:
+-        parser.error("--offset must be zero or a positive integer")
+-
+-    exit_code = run_cli_command(
+-        args=args,
+-        parser=parser,
+-        log_cfg=log_cfg,
+-        mapping={
+-            "timeout": "activity.timeout",
+-            "column": "activity.column",
+-            "batch_size": "activity.batch_size",
+-            "limit": "activity.limit",
+-            "offset": "activity.offset",
+-            "dry_run": "activity.dry_run",
+-            "workers": "activity.workers",
+-        },
+-        run=run,
+-        logger=logger,
+-    )
++    exit_code = 0
++    with setup_cli_logging(PROGRAM_NAME, log_cfg, date_override) as logging_ctx:
++        log_file = logging_ctx.log_path
++        structured_logger = get_logger(__name__, log_file=log_file)
++
++        global logger
++        if isinstance(logger, StructuredLogger):
++            logger = structured_logger
++
++        print(f"[INFO] Structured logs are mirrored to '{log_file}'.")
++
++        cli.prepare_io_paths(
++            args,
++            input_default=DEFAULT_INPUT_NAME,
++            output_stem=DEFAULT_OUTPUT_STEM,
++        )
++        logger.info(
++            "Starting pipeline",
++            input=str(getattr(args, "input_csv", "")),
++            output=str(getattr(args, "final_out", "")),
++        )
++        if args.limit == 0:
++            logger.info(
++                "Limit set to 0; exiting before starting the activity pipeline."
++            )
++            exit_code = 0
++        else:
++            if args.limit is not None and args.limit < 0:
++                # Reject negative limits early to provide clear CLI feedback.
++                parser.error("--limit must be zero or a positive integer")
++            if args.offset < 0:
++                parser.error("--offset must be zero or a positive integer")
++
++            exit_code = run_cli_command(
++                args=args,
++                parser=parser,
++                log_cfg=logging_ctx.log_cfg,
++                mapping={
++                    "timeout": "activity.timeout",
++                    "column": "activity.column",
++                    "batch_size": "activity.batch_size",
++                    "limit": "activity.limit",
++                    "offset": "activity.offset",
++                    "dry_run": "activity.dry_run",
++                    "workers": "activity.workers",
++                },
++                run=run,
++                logger=logger,
++            )
++            if exit_code == 0:
++                logger.info(
++                    "Export complete",
++                    output=str(getattr(args, "final_out", "")),
++                )
++    configure_logger(log_cfg)
+     return exit_code
+ 
+ 
+diff --git a/tests/e2e/test_cli_logging_setup.py b/tests/e2e/test_cli_logging_setup.py
+index 7aba92c..bd3b63c 100644
+--- a/tests/e2e/test_cli_logging_setup.py
++++ b/tests/e2e/test_cli_logging_setup.py
+@@ -86,7 +86,9 @@ def test_cli_logging__creates_log_file(
+ 
+     monkeypatch.chdir(base_path)
+     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
+-    monkeypatch.setattr("library.cli.logging._current_date_str", lambda: "20240102")
++    monkeypatch.setattr(
++        "library.cli.logging._current_date_str", lambda: "20240102_0000"
++    )
+ 
+     class _FixedDateTime(datetime):
+         @classmethod
+@@ -95,6 +97,7 @@ def test_cli_logging__creates_log_file(
+             return datetime(2024, 1, 2, 0, 0, tzinfo=tzinfo)
+ 
+     monkeypatch.setattr(get_activity_data, "datetime", _FixedDateTime)
++    monkeypatch.setattr("library.cli.logging.datetime", _FixedDateTime)
+ 
+     module = case["module"]
+     prefix = case["prefix"]
+@@ -181,7 +184,7 @@ def test_cli_logging__creates_log_file(
+         )
+     assert len(log_files) == 1
+     log_path = log_files[0]
+-    expected_name = f"{Path(module.__file__).stem}_20240102.log"
++    expected_name = f"{Path(module.__file__).stem}_20240102_0000.log"
+     assert log_path.name == expected_name
+ 
+     events = parse_log_file(log_path)
+diff --git a/tests/test_activity_logging.py b/tests/test_activity_logging.py
+new file mode 100644
+index 0000000..a2752d9
+--- /dev/null
++++ b/tests/test_activity_logging.py
+@@ -0,0 +1,73 @@
++from __future__ import annotations
++
++from datetime import timezone
++from pathlib import Path
++
++import pytest
++
++from scripts import get_activity_data
++
++
++@pytest.mark.e2e
++def test_get_activity_data__creates_log_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
++    workspace = tmp_path / "workspace"
++    workspace.mkdir()
++
++    input_path = workspace / "input.csv"
++    input_path.write_text("activity_id\nCHEMBL1\n", encoding="utf-8")
++    output_path = workspace / "output.csv"
++
++    config_path = Path(__file__).resolve().parents[1] / "config" / "config.yaml"
++
++    monkeypatch.chdir(workspace)
++    monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(workspace))
++    monkeypatch.setattr(
++        "library.cli.logging._current_date_str", lambda: "20240102_0000"
++    )
++
++    original_datetime = get_activity_data.datetime
++
++    class _FixedDateTime(original_datetime):
++        @classmethod
++        def now(cls, tz=None):  # type: ignore[override]
++            tzinfo = tz or timezone.utc
++            return original_datetime(2024, 1, 2, 0, 0, tzinfo=tzinfo)
++
++    monkeypatch.setattr(get_activity_data, "datetime", _FixedDateTime)
++    monkeypatch.setattr("library.cli.logging.datetime", _FixedDateTime)
++
++    def _stub_run_cli_command(
++        *,
++        args: object,
++        parser: object,
++        log_cfg: object,
++        mapping: object,
++        run: object,
++        logger: object,
++        base_parser: object | None = None,
++    ) -> int:
++        return 0
++
++    monkeypatch.setattr(get_activity_data, "run_cli_command", _stub_run_cli_command)
++
++    exit_code = get_activity_data.main(
++        [
++            "--config",
++            str(config_path),
++            "--input",
++            str(input_path),
++            "--final-out",
++            str(output_path),
++        ]
++    )
++    assert exit_code == 0
++
++    log_dir = workspace / "logs"
++    assert log_dir.is_dir()
++
++    log_path = log_dir / "get_activity_data_20240102_0000.log"
++    assert log_path.is_file()
++
++    content = log_path.read_text(encoding="utf-8")
++    assert "Starting pipeline" in content
++    assert "Export complete" in content
+diff --git a/tests/test_logging_get_activity_data.py b/tests/test_logging_get_activity_data.py
+index 6d3ec66..f4c1ce0 100644
+--- a/tests/test_logging_get_activity_data.py
++++ b/tests/test_logging_get_activity_data.py
+@@ -28,7 +28,7 @@ def test_logging_get_activity_data__writes_expected_messages(
+ 
+     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_dir))
+     monkeypatch.setattr(
+-        "library.cli.logging._current_date_str", lambda: "20240102"
++        "library.cli.logging._current_date_str", lambda: "20240102_0000"
+     )
+ 
+     class _FixedUUID:
+@@ -83,7 +83,7 @@ def test_logging_get_activity_data__writes_expected_messages(
+     assert len(log_files) == 1
+ 
+     log_path = log_files[0]
+-    assert log_path.name == "get_activity_data_20240102.log"
++    assert log_path.name == "get_activity_data_20240102_0000.log"
+ 
+     content = log_path.read_text(encoding="utf-8")
+ 
+@@ -93,19 +93,24 @@ def test_logging_get_activity_data__writes_expected_messages(
+ 
+     expected_lines = [
+         (
+-            "[2020-01-01 00:00:00,000] [INFO] [chembl] "
+-            f"Starting get_activity_data run input='{input_path}' output='{output_path}' "
+-            "rps=None run_id='run-id-0001' status=None"
++            "2020-01-01 00:00:00,000 [INFO] scripts.get_activity_data :: "
++            f"Starting pipeline input='{input_path}' output='{output_path}'"
+         ),
+         (
+-            "[2020-01-01 00:00:00,000] [INFO] [chembl] "
+-            f"Exported activities output='{output_path}' rows=2 "
+-            "rps=None run_id='run-id-0001' status=None"
++            "2020-01-01 00:00:00,000 [INFO] scripts.get_activity_data :: "
++            f"Starting get_activity_data run input='{input_path}' output='{output_path}'"
+         ),
+         (
+-            "[2020-01-01 00:00:00,000] [INFO] [chembl] "
+-            f"Completed get_activity_data run output='{output_path}' "
+-            "rps=None run_id='run-id-0001' status=None"
++            "2020-01-01 00:00:00,000 [INFO] scripts.get_activity_data :: "
++            f"Exported activities output='{output_path}' rows=2"
++        ),
++        (
++            "2020-01-01 00:00:00,000 [INFO] scripts.get_activity_data :: "
++            f"Completed get_activity_data run output='{output_path}'"
++        ),
++        (
++            "2020-01-01 00:00:00,000 [INFO] scripts.get_activity_data :: "
++            f"Export complete output='{output_path}'"
+         ),
+     ]
+ 

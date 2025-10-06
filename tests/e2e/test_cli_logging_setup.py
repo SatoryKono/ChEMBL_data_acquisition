@@ -86,7 +86,9 @@ def test_cli_logging__creates_log_file(
 
     monkeypatch.chdir(base_path)
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
-    monkeypatch.setattr("library.cli.logging._current_date_str", lambda: "20240102")
+    monkeypatch.setattr(
+        "library.cli.logging._current_date_str", lambda: "20240102_0000"
+    )
 
     class _FixedDateTime(datetime):
         @classmethod
@@ -95,6 +97,7 @@ def test_cli_logging__creates_log_file(
             return datetime(2024, 1, 2, 0, 0, tzinfo=tzinfo)
 
     monkeypatch.setattr(get_activity_data, "datetime", _FixedDateTime)
+    monkeypatch.setattr("library.cli.logging.datetime", _FixedDateTime)
 
     module = case["module"]
     prefix = case["prefix"]
@@ -181,7 +184,7 @@ def test_cli_logging__creates_log_file(
         )
     assert len(log_files) == 1
     log_path = log_files[0]
-    expected_name = f"{Path(module.__file__).stem}_20240102.log"
+    expected_name = f"{Path(module.__file__).stem}_20240102_0000.log"
     assert log_path.name == expected_name
 
     events = parse_log_file(log_path)

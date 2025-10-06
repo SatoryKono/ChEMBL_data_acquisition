@@ -26,9 +26,9 @@ def _default_log_dir() -> Path:
 
 
 def _current_date_str() -> str:
-    """Return the current UTC date formatted as ``YYYYMMDD``."""
+    """Return the current UTC timestamp formatted as ``YYYYMMDD_HHMM``."""
 
-    return datetime.now(timezone.utc).strftime("%Y%m%d")
+    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
 
 
 @dataclass(slots=True)
@@ -38,6 +38,14 @@ class CLILoggingContext:
     log_path: Path
     log_cfg: LoggerConfig
     console_stream: IO[str]
+
+
+def _normalise_suffix(date_str: str | None) -> str:
+    if date_str:
+        if "_" in date_str:
+            return date_str
+        return f"{date_str}_{datetime.now(timezone.utc).strftime('%H%M')}"
+    return _current_date_str()
 
 
 @contextmanager
@@ -53,10 +61,7 @@ def setup_cli_logging(
     resolved_dir = Path(log_dir) if log_dir is not None else _default_log_dir()
     resolved_dir.mkdir(parents=True, exist_ok=True)
 
-    if date_str:
-        suffix = date_str
-    else:
-        suffix = _current_date_str()
+    suffix = _normalise_suffix(date_str)
 
     log_path = resolved_dir / f"{script_name}_{suffix}.log"
 

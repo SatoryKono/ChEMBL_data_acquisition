@@ -28,7 +28,7 @@ def test_logging_get_activity_data__writes_expected_messages(
 
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_dir))
     monkeypatch.setattr(
-        "library.cli.logging._current_date_str", lambda: "20240102"
+        "library.cli.logging._current_date_str", lambda: "20240102_0000"
     )
 
     class _FixedUUID:
@@ -83,7 +83,7 @@ def test_logging_get_activity_data__writes_expected_messages(
     assert len(log_files) == 1
 
     log_path = log_files[0]
-    assert log_path.name == "get_activity_data_20240102.log"
+    assert log_path.name == "get_activity_data_20240102_0000.log"
 
     content = log_path.read_text(encoding="utf-8")
 
@@ -93,19 +93,24 @@ def test_logging_get_activity_data__writes_expected_messages(
 
     expected_lines = [
         (
-            "[2020-01-01 00:00:00,000] [INFO] [chembl] "
-            f"Starting get_activity_data run input='{input_path}' output='{output_path}' "
-            "rps=None run_id='run-id-0001' status=None"
+            "2020-01-01 00:00:00,000 [INFO] scripts.get_activity_data :: "
+            f"Starting pipeline input='{input_path}' output='{output_path}'"
         ),
         (
-            "[2020-01-01 00:00:00,000] [INFO] [chembl] "
-            f"Exported activities output='{output_path}' rows=2 "
-            "rps=None run_id='run-id-0001' status=None"
+            "2020-01-01 00:00:00,000 [INFO] scripts.get_activity_data :: "
+            f"Starting get_activity_data run input='{input_path}' output='{output_path}'"
         ),
         (
-            "[2020-01-01 00:00:00,000] [INFO] [chembl] "
-            f"Completed get_activity_data run output='{output_path}' "
-            "rps=None run_id='run-id-0001' status=None"
+            "2020-01-01 00:00:00,000 [INFO] scripts.get_activity_data :: "
+            f"Exported activities output='{output_path}' rows=2"
+        ),
+        (
+            "2020-01-01 00:00:00,000 [INFO] scripts.get_activity_data :: "
+            f"Completed get_activity_data run output='{output_path}'"
+        ),
+        (
+            "2020-01-01 00:00:00,000 [INFO] scripts.get_activity_data :: "
+            f"Export complete output='{output_path}'"
         ),
     ]
 

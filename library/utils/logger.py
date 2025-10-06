@@ -1,16 +1,29 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 from pathlib import Path
 from typing import Any, Iterable
 
-__all__ = ["get_logger", "StructuredLogger"]
+__all__ = ["StructuredLogger", "default_log_dir", "get_logger"]
 
 
 _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s :: %(message)s"
-_LOG_DIR = Path("logs")
+
+
+def _repository_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def default_log_dir() -> Path:
+    """Return the directory used for storing log files."""
+
+    env_base = os.environ.get("CHEMBL_DA_BASE_PATH")
+    if env_base:
+        return Path(env_base).expanduser() / "logs"
+    return _repository_root() / "data" / "logs"
 
 
 def _format_value(value: Any) -> str:
@@ -127,7 +140,7 @@ def get_logger(name: str, *, log_file: str | Path | None = None, level: int = lo
     logger = _ensure_logger(name)
 
     if log_file is None:
-        log_path = _LOG_DIR / f"{name.replace('.', '_')}.log"
+        log_path = default_log_dir() / f"{name.replace('.', '_')}.log"
     else:
         log_path = Path(log_file)
         if log_path.is_dir():

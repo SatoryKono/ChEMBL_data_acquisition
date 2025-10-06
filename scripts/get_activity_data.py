@@ -77,6 +77,7 @@ from library.pipelines.common import (
 from library.cli import (
     LoggerConfig,
     positive_int,
+    setup_cli_logging,
 )
 from library.cli import (
     build_parser as base_parser,
@@ -1235,48 +1236,61 @@ def main(argv: Sequence[str] | None = None) -> int:
     args.invocation = resolve_invocation(parser.prog, argv)
 
     date_override = getattr(args, "date", None)
-    if date_override:
-        date_str = str(date_override)
-    else:
-        date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
-    log_file = Path("logs") / f"{PROGRAM_NAME}_{date_str}.log"
+    exit_code = 0
+    with setup_cli_logging(PROGRAM_NAME, log_cfg, date_override) as logging_ctx:
+        log_file = logging_ctx.log_path
+        structured_logger = get_logger(__name__, log_file=log_file)
 
-    structured_logger = get_logger(__name__, log_file=log_file)
+        global logger
+        if isinstance(logger, StructuredLogger):
+            logger = structured_logger
 
-    global logger
-    if isinstance(logger, StructuredLogger):
-        logger = structured_logger
-    print(f"[INFO] Structured logs are mirrored to '{log_file}'.")
-    cli.prepare_io_paths(
-        args,
-        input_default=DEFAULT_INPUT_NAME,
-        output_stem=DEFAULT_OUTPUT_STEM,
-    )
-    if args.limit == 0:
-        logger.info("Limit set to 0; exiting before starting the activity pipeline.")
-        return 0
-    if args.limit is not None and args.limit < 0:
-        # Reject negative limits early to provide clear CLI feedback.
-        parser.error("--limit must be zero or a positive integer")
-    if args.offset < 0:
-        parser.error("--offset must be zero or a positive integer")
+        print(f"[INFO] Structured logs are mirrored to '{log_file}'.")
 
-    exit_code = run_cli_command(
-        args=args,
-        parser=parser,
-        log_cfg=log_cfg,
-        mapping={
-            "timeout": "activity.timeout",
-            "column": "activity.column",
-            "batch_size": "activity.batch_size",
-            "limit": "activity.limit",
-            "offset": "activity.offset",
-            "dry_run": "activity.dry_run",
-            "workers": "activity.workers",
-        },
-        run=run,
-        logger=logger,
-    )
+        cli.prepare_io_paths(
+            args,
+            input_default=DEFAULT_INPUT_NAME,
+            output_stem=DEFAULT_OUTPUT_STEM,
+        )
+        logger.info(
+            "Starting pipeline",
+            input=str(getattr(args, "input_csv", "")),
+            output=str(getattr(args, "final_out", "")),
+        )
+        if args.limit == 0:
+            logger.info(
+                "Limit set to 0; exiting before starting the activity pipeline."
+            )
+            exit_code = 0
+        else:
+            if args.limit is not None and args.limit < 0:
+                # Reject negative limits early to provide clear CLI feedback.
+                parser.error("--limit must be zero or a positive integer")
+            if args.offset < 0:
+                parser.error("--offset must be zero or a positive integer")
+
+            exit_code = run_cli_command(
+                args=args,
+                parser=parser,
+                log_cfg=logging_ctx.log_cfg,
+                mapping={
+                    "timeout": "activity.timeout",
+                    "column": "activity.column",
+                    "batch_size": "activity.batch_size",
+                    "limit": "activity.limit",
+                    "offset": "activity.offset",
+                    "dry_run": "activity.dry_run",
+                    "workers": "activity.workers",
+                },
+                run=run,
+                logger=logger,
+            )
+            if exit_code == 0:
+                logger.info(
+                    "Export complete",
+                    output=str(getattr(args, "final_out", "")),
+                )
+    configure_logger(log_cfg)
     return exit_code
 
 
