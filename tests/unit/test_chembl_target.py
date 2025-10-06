@@ -108,19 +108,8 @@ def test_iter_target_batches__propagates_timeout_without_split() -> None:
     mapping_cfg = UniprotMappingCfg()
     timeout = 6.0
 
-    base = cfg.chembl_base.rstrip("/")
-
-    def _chunk_url(ids: Sequence[str]) -> str:
-        return (
-            f"{base}/target.json?format=json"
-            f"&include=protein_classifications,cross_references"
-            f"&target_chembl_id__in={','.join(ids)}"
-        )
-
-    combined_url = _chunk_url(["CHEMBL10", "CHEMBL11"])
-    responses = {
-        _chunk_url(cfg, ["CHEMBL10", "CHEMBL11"]): requests.ReadTimeout("simulated timeout"),
-    }
+    combined_url = _chunk_url(cfg, ["CHEMBL10", "CHEMBL11"])
+    responses = {combined_url: requests.ReadTimeout("simulated timeout")}
     client = _StubChemblClient(responses)
 
     with pytest.raises(requests.ReadTimeout):
@@ -136,11 +125,6 @@ def test_iter_target_batches__propagates_timeout_without_split() -> None:
             )
         )
 
-    assert client.calls == [(_chunk_url(cfg, ["CHEMBL10", "CHEMBL11"]), timeout)]
-
-
-@pytest.mark.unit
-def test_iter_target_batches__splits_chunk_on_connection_error(caplog: pytest.LogCaptureFixture) -> None:
     assert client.calls == [(combined_url, timeout)]
 
 
@@ -155,16 +139,6 @@ def test_iter_target_batches__splits_chunk_on_connection_error(
     timeout = 5.0
 
     combined_url = _chunk_url(cfg, ["CHEMBL1", "CHEMBL2"])
-    base = cfg.chembl_base.rstrip("/")
-
-    def _chunk_url(ids: Sequence[str]) -> str:
-        return (
-            f"{base}/target.json?format=json"
-            f"&include=protein_classifications,cross_references"
-            f"&target_chembl_id__in={','.join(ids)}"
-        )
-
-    combined_url = _chunk_url(["CHEMBL1", "CHEMBL2"])
     responses = {
         combined_url: requests.ConnectionError("simulated connection reset"),
         _chunk_url(cfg, ["CHEMBL1"]): _build_response("CHEMBL1", "Alpha"),
