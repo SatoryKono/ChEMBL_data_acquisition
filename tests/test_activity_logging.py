@@ -36,10 +36,13 @@ def test_activity_logging__relative_env_base_anchored_to_repo_root(
         *,
         args: object,
         parser: object,
+        log_path: Path | None = None,
         log_cfg: object,
         **_: object,
     ) -> int:
         get_activity_data.configure_logger(log_cfg)
+        if log_path is not None:
+            get_activity_data.logger.info("log_destination", path=str(log_path))
         get_activity_data.logger.info(
             "activity_pipeline_start",
             input=str(getattr(args, "input_csv", "")),

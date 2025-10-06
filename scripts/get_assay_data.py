@@ -619,6 +619,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         exit_code = run_cli_command(
             args=args,
             parser=parser,
+            log_path=logging_ctx.log_path,
             log_cfg=logging_ctx.log_cfg,
             mapping={
                 "timeout": "assay.timeout",

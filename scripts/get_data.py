@@ -900,15 +900,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     script_name = Path(__file__).with_suffix("").name
     base_cfg = LoggerConfig(level=desired_level, run_id=uuid.uuid4().hex)
-    resolved_base_path = Path(args.base_path).expanduser().resolve()
-    log_directory = resolved_base_path / "data" / "logs"
     status = 1
 
     with setup_cli_logging(
         script_name,
         base_cfg,
         getattr(args, "date_prefix", None),
-        log_dir=log_directory,
     ) as logging_ctx:
         try:
             logger = _configure_logging(
@@ -922,11 +919,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         global _LOGGER
         _LOGGER = logger
+        _LOGGER.info("log_destination", path=str(logging_ctx.log_path))
 
         try:
             cfg = _prepare_config(args)
         except (FileNotFoundError, OSError, ValueError) as exc:
-            _LOGGER.error("configuration_error", error=str(exc))
+            _LOGGER.error("configuration_error", error=str(exc), exc_info=exc)
             status = 1
         else:
             status = run_pipeline(cfg)

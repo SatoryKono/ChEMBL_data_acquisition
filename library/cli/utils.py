@@ -116,6 +116,7 @@ def run_cli_command(
     parser: argparse.ArgumentParser,
     base_parser: argparse.ArgumentParser | None = None,
     log_cfg: LoggerConfig,
+    log_path: Path | None = None,
     mapping: Mapping[str, str],
     run: Callable[[Config, argparse.Namespace], int],
     logger: Logger | None = None,
@@ -125,6 +126,8 @@ def run_cli_command(
     log_cfg.level = getattr(args, "log_level", log_cfg.level)
     configured_logger = configure_logger(log_cfg)
     use_logger = logger or configured_logger
+    if log_path is not None:
+        use_logger.info("log_destination", path=str(log_path))
     use_logger.info("pipeline_start", run_id=log_cfg.run_id)
 
     try:
@@ -142,6 +145,7 @@ def run_cli_command(
             "config_error",
             error=str(exc),
             config=str(getattr(args, "config", "")),
+            exc_info=exc,
         )
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
@@ -162,6 +166,7 @@ def run_cli_command(
             "config_error",
             error=str(exc),
             config=str(config_path),
+            exc_info=exc,
         )
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
@@ -182,6 +187,7 @@ def run_cli_command(
             "config_error",
             error=str(exc),
             config=str(config_path),
+            exc_info=exc,
         )
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
@@ -189,6 +195,7 @@ def run_cli_command(
         use_logger.error(
             "directory_setup_failed",
             error=str(exc),
+            exc_info=exc,
         )
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1

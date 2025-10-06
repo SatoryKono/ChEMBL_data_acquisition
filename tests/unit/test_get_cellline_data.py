@@ -147,7 +147,9 @@ def test_main__limit_zero_short_circuits(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     @contextmanager
     def fake_setup_cli_logging(*_: object, **__: object):
-        yield SimpleNamespace(log_cfg=None)
+        log_file = tmp_path / "logs" / "cellline.log"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        yield SimpleNamespace(log_cfg=None, log_path=log_file)
 
     input_csv = tmp_path / "cellline.csv"
     input_csv.write_text("cell_chembl_id\nCHEMBL1\n", encoding="utf-8")
@@ -165,7 +167,9 @@ def test_main__limit_zero_short_circuits(monkeypatch: pytest.MonkeyPatch, tmp_pa
 def test_main__rejects_negative_offset(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     @contextmanager
     def fake_setup_cli_logging(*_: object, **__: object):
-        yield SimpleNamespace(log_cfg=None)
+        log_file = tmp_path / "logs" / "cellline.log"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        yield SimpleNamespace(log_cfg=None, log_path=log_file)
 
     input_csv = tmp_path / "cellline.csv"
     input_csv.write_text("cell_chembl_id\nCHEMBL1\n", encoding="utf-8")

@@ -108,7 +108,17 @@ def test_get_cellline_data_main_success(
 
     monkeypatch.setattr(get_cellline_data, "run_cellline_pipeline", fake_run_pipeline)
 
-    def fake_run_cli_command(*, args, parser, log_cfg, mapping, run, logger, base_parser=None):
+    def fake_run_cli_command(
+        *,
+        args,
+        parser,
+        log_cfg,
+        mapping,
+        run,
+        logger,
+        base_parser=None,
+        log_path=None,
+    ):
         args._config_metadata = None
         if isinstance(args.input_csv, (str, Path)):
             args.input_csv = Path(args.input_csv)
@@ -121,7 +131,13 @@ def test_get_cellline_data_main_success(
 
     @contextmanager
     def fake_setup_cli_logging(*args, **kwargs):
-        yield SimpleNamespace(log_cfg=SimpleNamespace(level="INFO", run_id="test"))
+        log_file = tmp_path / "logs" / "cellline.log"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        yield SimpleNamespace(
+            log_cfg=SimpleNamespace(level="INFO", run_id="test", handlers=[], stream=None),
+            log_path=log_file,
+            console_stream=None,
+        )
 
     monkeypatch.setattr(get_cellline_data, "setup_cli_logging", fake_setup_cli_logging)
 

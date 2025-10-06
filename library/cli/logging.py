@@ -14,7 +14,7 @@ from typing import IO, Iterator
 from ..common.logging_setup import LoggerConfig
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_DEFAULT_LOG_DIR = _PROJECT_ROOT / "data" / "logs"
+_DEFAULT_LOG_DIR = _PROJECT_ROOT / "logs"
 
 
 def _normalize_log_dir(path: Path | str) -> Path:
@@ -86,12 +86,6 @@ def setup_cli_logging(
         stream=console_stream,
         handlers=handlers,
         logger_name=log_cfg.logger_name,
-    )
-
-    print(
-        f"[INFO] Logs are written to '{log_path}'.",
-        file=console_stream,
-        flush=True,
     )
 
     try:

@@ -72,7 +72,7 @@ def test_cli_logging__creates_log_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: dict[str, Any]
 ) -> None:
     base_path = tmp_path
-    log_dir = base_path / "data" / "logs"
+    log_dir = base_path / "logs"
     log_dir.mkdir(parents=True)
     monkeypatch.setattr("library.cli.logging._DEFAULT_LOG_DIR", log_dir)
 
@@ -108,6 +108,7 @@ def test_cli_logging__creates_log_file(
         *,
         args: Any,
         parser: Any,
+        log_path: Path | None = None,
         log_cfg: Any,
         mapping: Any,
         run: Any,
@@ -115,6 +116,8 @@ def test_cli_logging__creates_log_file(
         base_parser: Any | None = None,
     ) -> int:
         module.configure_logger(log_cfg)
+        if log_path is not None:
+            module.logger.info("log_destination", path=str(log_path))
         logger.info(
             "pipeline_start",
             run_id=log_cfg.run_id,
@@ -174,11 +177,6 @@ def test_cli_logging__creates_log_file(
     log_files = sorted(
         path for path in log_dir.glob("*.log") if path.name.startswith(expected_prefix)
     )
-    if not log_files:
-        fallback_dir = base_path / "logs"
-        log_files = sorted(
-            path for path in fallback_dir.glob("*.log") if path.name.startswith(expected_prefix)
-        )
     assert len(log_files) == 1
     log_path = log_files[0]
     expected_name = f"{Path(module.__file__).stem}_20240102.log"

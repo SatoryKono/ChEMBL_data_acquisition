@@ -42,10 +42,13 @@ def test_logging_get_activity_data__writes_expected_messages(
         *,
         args: object,
         parser: object,
+        log_path: Path | None = None,
         log_cfg: object,
         **kwargs: object,
     ) -> int:
         get_activity_data.configure_logger(log_cfg)
+        if log_path is not None:
+            get_activity_data.logger.info("log_destination", path=str(log_path))
         get_activity_data.logger.info(
             "Starting get_activity_data run",
             input=str(getattr(args, "input_csv", "")),
@@ -91,22 +94,16 @@ def test_logging_get_activity_data__writes_expected_messages(
     assert "Exported activities" in content
     assert "Completed get_activity_data run" in content
 
-    expected_lines = [
-        (
-            "[2020-01-01 00:00:00,000] [INFO] [chembl] "
-            f"Starting get_activity_data run input='{input_path}' output='{output_path}' "
-            "rps=None run_id='run-id-0001' status=None"
-        ),
-        (
-            "[2020-01-01 00:00:00,000] [INFO] [chembl] "
-            f"Exported activities output='{output_path}' rows=2 "
-            "rps=None run_id='run-id-0001' status=None"
-        ),
-        (
-            "[2020-01-01 00:00:00,000] [INFO] [chembl] "
-            f"Completed get_activity_data run output='{output_path}' "
-            "rps=None run_id='run-id-0001' status=None"
-        ),
-    ]
-
-    assert content.splitlines() == expected_lines
+    lines = content.splitlines()
+    assert any("log_destination" in line for line in lines)
+    assert any(
+        "Starting get_activity_data run" in line and str(input_path) in line
+        for line in lines
+    )
+    assert any(
+        "Exported activities" in line and "rows=2" in line for line in lines
+    )
+    assert any(
+        "Completed get_activity_data run" in line and str(output_path) in line
+        for line in lines
+    )

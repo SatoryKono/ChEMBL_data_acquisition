@@ -181,7 +181,9 @@ def test_get_tissue_data_cli__end_to_end(
     @contextmanager
     def fake_setup_cli_logging(script_name: str, log_cfg: Any, date_str: str | None = None):
         del script_name, date_str
-        yield SimpleNamespace(log_cfg=log_cfg, console_stream=None)
+        log_file = tmp_path / "logs" / "tissue.log"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        yield SimpleNamespace(log_cfg=log_cfg, console_stream=None, log_path=log_file)
 
     monkeypatch.setattr(get_tissue_data, "setup_cli_logging", fake_setup_cli_logging)
 

@@ -4074,6 +4074,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args=args_namespace,
                     parser=subparser,
                     base_parser=parser,
+                    log_path=logging_ctx.log_path,
                     log_cfg=logging_ctx.log_cfg,
                     mapping=mapping,
                     run=run,
@@ -4081,7 +4082,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
         except PipelineError as exc:
             exit_code = 2
-            logger.error("pipeline_error", error=str(exc))
+            logger.error("pipeline_error", error=str(exc), exc_info=exc)
             print(f"[ERROR] {exc}", file=console_stream, flush=True)
     configure_logger(log_cfg)
 
