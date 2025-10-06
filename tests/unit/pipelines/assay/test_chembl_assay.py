@@ -186,3 +186,26 @@ def test_get_testitem__splits_chunk_on_timeout() -> None:
     assert any(
         "molecule_chembl_id__in=CHEMBL2,CHEMBL3" in call for call in client.calls
     )
+def test_get_assays__single_timeout_falls_back_to_detail_endpoint() -> None:
+    """Single-item timeouts fall back to the detail endpoint."""
+
+    responders = [
+        ReadTimeout("timeout"),
+        ReadTimeout("timeout"),
+        {"assay": {"assay_chembl_id": "CHEMBL1", "sequence": "AA"}},
+        {"assays": [{"assay_chembl_id": "CHEMBL2", "sequence": "BB"}], "page_meta": {}},
+    ]
+    client = _StubClient(responders)
+    cfg = ApiCfg()
+
+    df = get_assays(
+        ["CHEMBL1", "CHEMBL2"],
+        cfg=cfg,
+        client=client,
+        chunk_size=2,
+        require_variant_sequence=True,
+    )
+
+    assert sorted(df["assay_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
+    assert any("assay_chembl_id__in" in call for call in client.calls)
+    assert any("/assay/CHEMBL1" in call for call in client.calls)
