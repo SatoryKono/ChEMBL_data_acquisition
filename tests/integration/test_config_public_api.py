@@ -8,7 +8,7 @@ import pytest
 @pytest.mark.integration
 def test_config_public_api__reexports():
     package = importlib.import_module("library.config")
-    model = importlib.import_module("library.config.model")
+    model = importlib.import_module("library.config.models")
     loader = importlib.import_module("library.config.loader")
     runtime = importlib.import_module("library.config.runtime")
 

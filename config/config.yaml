@@ -2,7 +2,7 @@
 # Values can be overridden via CLI arguments or environment variables.
 # Environment variables follow the ``CHEMBL_DA__SECTION__KEY`` pattern and
 # many keys also provide short aliases such as ``CHEMBL_DA_RPS``.
-# For the complete alias table see ``library/config/model.py``.
+# For the complete alias table see ``library/config/models.py``.
 # Example:
 #   export CHEMBL_DA__SOURCES__CHEMBL__API__CHEMBL_BASE=https://dev.example/chembl
 #   export CHEMBL_DA_BASE=https://dev.example/chembl  # short alias

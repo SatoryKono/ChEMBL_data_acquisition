@@ -14,7 +14,7 @@ from pydantic_core import ErrorDetails
 from ..common.log import logger
 
 if TYPE_CHECKING:  # pragma: no cover - imported only for typing
-    from .model import Config
+    from .models import Config
 
 __all__ = [
     "_normalize_base_path",
@@ -33,13 +33,13 @@ __all__ = [
 
 
 def _config_model() -> type["Config"]:
-    from .model import Config
+    from .models import Config
 
     return Config
 
 
 def _alias_map() -> dict[str, tuple[str, ...]]:
-    from .model import _ALIAS_MAP
+    from .models import _ALIAS_MAP
 
     return _ALIAS_MAP
 

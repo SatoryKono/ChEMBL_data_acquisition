@@ -20,7 +20,7 @@ from .env import (
     _resolve_placeholder_base_path,
     _set_by_path,
 )
-from .model import (
+from .models import (
     Config,
     ConfigMetadata,
     ConfigSource,
