@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 from library.config import ApiCfg
 from library.pipelines.assay.chembl_assay import (
     MAX_ASSAY_CHUNK_SIZE,
+    _ASSAY_MAX_IDS_PER_REQUEST,
     get_activities,
     get_assays,
     get_testitem,
@@ -37,6 +38,13 @@ class _StubClient:
         if isinstance(next_response, Exception):
             raise next_response
         raise AssertionError(f"Unexpected responder type: {type(next_response)!r}")
+
+
+@pytest.mark.unit
+def test_assay_chunk_size_alias__matches_limit() -> None:
+    """Compatibility alias keeps the legacy constant available."""
+
+    assert _ASSAY_MAX_IDS_PER_REQUEST == MAX_ASSAY_CHUNK_SIZE
 
 
 @pytest.mark.unit
