@@ -58,5 +58,5 @@ return strings, not bytes`.
 - Publish `reports/test_report.json` and `reports/test_summary.md` as artefacts
   for auditability.
 
-If issues persist, gather logs (`data/logs/*.log`), the metadata sidecar and failing
+If issues persist, gather logs (`logs/*.log`), the metadata sidecar and failing
 rows, then raise an issue referencing the troubleshooting steps already taken.

@@ -901,7 +901,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     script_name = Path(__file__).with_suffix("").name
     base_cfg = LoggerConfig(level=desired_level, run_id=uuid.uuid4().hex)
     resolved_base_path = Path(args.base_path).expanduser().resolve()
-    log_directory = resolved_base_path / "data" / "logs"
+    log_directory = resolved_base_path / "logs"
     status = 1
 
     with setup_cli_logging(
