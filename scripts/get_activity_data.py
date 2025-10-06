@@ -858,16 +858,23 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 logger=logger,
                 stats_callback=_capture_stats,
             )
+        except Exception:
+            logger.exception("Activity pipeline execution failed")
+            raise
         finally:
             chunk_failures.save(fetch_failure_path, cfg=cfg)
 
     if exit_code == 0:
-        extended_output_path = process_activity_extended(
-            input_path=output_path,
-            search_dir=output_path.parent,
-            dictionary_dir=cfg.resources.dictionary_dir,
-            targets_csv=cfg.resources.targets_type_csv,
-        )
+        try:
+            extended_output_path = process_activity_extended(
+                input_path=output_path,
+                search_dir=output_path.parent,
+                dictionary_dir=cfg.resources.dictionary_dir,
+                targets_csv=cfg.resources.targets_type_csv,
+            )
+        except Exception:
+            logger.exception("Activity extended post-processing failed")
+            raise
 
     if limit is not None:
         logger.info("process_limit", limit=processed_ids)
