@@ -12,7 +12,11 @@ from __future__ import annotations
 # ===== Modules =====
 from importlib import import_module
 from importlib.util import find_spec
+from pathlib import Path
 
+from library.config import Config
+
+from library.pipelines.common import PipelineRunResult
 from . import enrichment as testitem_enrichment
 from .enrichment import enrich
 from library.pipelines.assay.chembl_assay import TESTITEM_PUBCHEM_COLUMNS
@@ -111,9 +115,42 @@ __all__ = [
     "query_parent_catalog",
     "read_input_ids",
     "run_testitem_pipeline",
+    "run_pipeline",
     "update_parent_catalog_cache",
     "write_meta_yaml",
     "write_parent_catalog_cache",
 ]
 
 __all__.append("testitem_enrichment")
+
+
+def run_pipeline(config: Config, options: TestitemPipelineOptions) -> PipelineRunResult:
+    """Execute the test item pipeline and return a common result structure."""
+
+    cfg = config.model_copy(deep=True)
+    pipelines = cfg.sources.chembl.pipelines
+    section = pipelines.testitem
+    updates: dict[str, object] = {}
+    if getattr(options, "limit", None) is not None:
+        updates["limit"] = options.limit
+    if getattr(options, "offset", None) is not None:
+        updates["offset"] = options.offset
+    if updates:
+        pipelines.testitem = section.model_copy(update=updates)
+
+    output_candidate = getattr(options, "output_csv", None)
+    if output_candidate is not None:
+        output_path = Path(output_candidate)
+    else:
+        output_path = Path(options.input_csv)
+
+    exit_code = run_testitem_pipeline(cfg, options)
+    reason = None if exit_code == 0 else "pipeline_failed"
+    written = None if exit_code != 0 else True
+    return PipelineRunResult(
+        exit_code=exit_code,
+        output_path=output_path,
+        executed=True,
+        reason=reason,
+        written=written,
+    )

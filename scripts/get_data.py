@@ -55,7 +55,28 @@ from library.clients import ChemblClient
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
 from library.config import Config, load_config
 from library.integration.molecule_catalog import load_parent_catalog
+from library.pipelines.activity import (
+    ActivityPipelineOptions,
+    run_pipeline as run_activity_pipeline,
+)
+from library.pipelines.assay import (
+    AssayPipelineOptions,
+    run_pipeline as run_assay_pipeline,
+)
+from library.pipelines.common import PipelineRunResult
+from library.pipelines.document import (
+    DocumentPipelineOptions,
+    run_pipeline as run_document_pipeline,
+)
 from library.pipelines.registry import PipelineStep, load_pipeline_registry
+from library.pipelines.target import (
+    TargetPipelineOptions,
+    run_pipeline as run_target_pipeline,
+)
+from library.pipelines.testitem import (
+    TestitemPipelineOptions,
+    run_pipeline as run_testitem_pipeline,
+)
 from library.utils.config import DEFAULT_CONFIG_PATH
 
 
@@ -78,6 +99,80 @@ _DEFAULT_OUTPUT_STEMS = DEFAULT_OUTPUT_STEMS
 _UNLINK_MAX_ATTEMPTS = 5
 _UNLINK_RETRY_SLEEP_SECONDS = 0.1
 _WINDOWS_SHARING_VIOLATION = 32
+
+
+@dataclass(frozen=True)
+class PipelineApi:
+    """Describe how to build options and execute a pipeline programmatically."""
+
+    build_options: Callable[["PipelineRunConfig", Path, Path], object]
+    runner: Callable[[Config, object], PipelineRunResult]
+
+
+def _build_document_options(
+    cfg: "PipelineRunConfig", input_path: Path, output_path: Path
+) -> DocumentPipelineOptions:
+    return DocumentPipelineOptions(
+        input_csv=input_path,
+        output_csv=output_path,
+        mode="all",
+        limit=cfg.limit,
+        force=cfg.force,
+    )
+
+
+def _build_target_options(
+    cfg: "PipelineRunConfig", input_path: Path, output_path: Path
+) -> TargetPipelineOptions:
+    return TargetPipelineOptions(
+        input_csv=input_path,
+        output_csv=output_path,
+        command="all",
+        limit=cfg.limit,
+        force=cfg.force,
+    )
+
+
+def _build_assay_options(
+    cfg: "PipelineRunConfig", input_path: Path, output_path: Path
+) -> AssayPipelineOptions:
+    return AssayPipelineOptions(
+        input_csv=input_path,
+        output_csv=output_path,
+        limit=cfg.limit,
+        force=cfg.force,
+    )
+
+
+def _build_testitem_options(
+    cfg: "PipelineRunConfig", input_path: Path, output_path: Path
+) -> TestitemPipelineOptions:
+    return TestitemPipelineOptions(
+        input_csv=input_path,
+        output_csv=output_path,
+        limit=cfg.limit,
+        offset=0,
+    )
+
+
+def _build_activity_options(
+    cfg: "PipelineRunConfig", input_path: Path, output_path: Path
+) -> ActivityPipelineOptions:
+    return ActivityPipelineOptions(
+        input_csv=input_path,
+        output_csv=output_path,
+        limit=cfg.limit,
+        force=cfg.force,
+    )
+
+
+_PIPELINE_APIS: Mapping[str, PipelineApi] = {
+    "document": PipelineApi(_build_document_options, run_document_pipeline),
+    "target": PipelineApi(_build_target_options, run_target_pipeline),
+    "assay": PipelineApi(_build_assay_options, run_assay_pipeline),
+    "testitem": PipelineApi(_build_testitem_options, run_testitem_pipeline),
+    "activity": PipelineApi(_build_activity_options, run_activity_pipeline),
+}
 
 
 @dataclass(frozen=True)
@@ -608,6 +703,7 @@ def _cleanup_empty_directories(path: Path, *, root: Path) -> None:
 def _run_step(
     step: PipelineStep,
     cfg: PipelineRunConfig,
+    base_config: Config,
     final_output: Path,
     working_output: Path,
 ) -> StepExecutionResult:
@@ -631,27 +727,55 @@ def _run_step(
             reason="skip_existing",
         )
 
-    arguments = step.build_arguments(cfg, output_path=working_output)
-    _LOGGER.debug("step_arguments", step=step.name, arguments=arguments)
-    try:
-        exit_code = step.main(arguments)
-    except SystemExit as exc:
-        exit_code = _coerce_exit_code(exc.code)
+    if cfg.limit == 0:
+        _LOGGER.info("step_skip_limit", step=step.name, limit=cfg.limit)
+        return StepExecutionResult(
+            exit_code=0,
+            executed=False,
+            status="skipped",
+            reason="limit",
+        )
+
+    api = _PIPELINE_APIS.get(step.name)
+    if api is None:
+        arguments = step.build_arguments(cfg, output_path=working_output)
+        _LOGGER.debug("step_arguments", step=step.name, arguments=arguments)
+        try:
+            exit_code = step.main(arguments)
+        except SystemExit as exc:
+            exit_code = _coerce_exit_code(exc.code)
+            status = "success" if exit_code == 0 else "failed"
+            return StepExecutionResult(
+                exit_code=exit_code,
+                executed=True,
+                status=status,
+                reason="system_exit",
+            )
+        except BaseException:
+            raise
         status = "success" if exit_code == 0 else "failed"
         return StepExecutionResult(
             exit_code=exit_code,
             executed=True,
             status=status,
-            reason="system_exit",
+            reason=None if status == "success" else "non_zero_exit",
         )
-    except BaseException:
-        raise
-    status = "success" if exit_code == 0 else "failed"
+
+    options = api.build_options(cfg, input_path, working_output)
+    result = api.runner(base_config, options)
+    executed = bool(result.executed)
+    if not executed and result.exit_code == 0:
+        status = "skipped"
+    else:
+        status = "success" if result.exit_code == 0 else "failed"
+    reason = result.reason
+    if reason is None and status == "failed":
+        reason = "non_zero_exit"
     return StepExecutionResult(
-        exit_code=exit_code,
-        executed=True,
+        exit_code=result.exit_code,
+        executed=executed,
         status=status,
-        reason=None if status == "success" else "non_zero_exit",
+        reason=reason,
     )
 
 
@@ -1053,6 +1177,7 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
     """Execute all configured steps and return the resulting exit status."""
 
     effective_steps = tuple(DEFAULT_PIPELINE_STEPS if steps is None else steps)
+    base_config = load_config(cfg.config_path, base_path=cfg.base_path)
     overall_status = 0
     run_started_at = datetime.now(UTC)
     run_started_clock = time.perf_counter()
@@ -1145,7 +1270,7 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
                 break
 
         try:
-            result = _run_step(step, cfg, final_output, working_output)
+            result = _run_step(step, cfg, base_config, final_output, working_output)
         except SystemExit as exc:  # pragma: no cover - defensive guard
             exit_code = _coerce_exit_code(exc.code)
             entry.update(
