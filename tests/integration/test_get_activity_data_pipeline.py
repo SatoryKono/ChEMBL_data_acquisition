@@ -159,6 +159,16 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
     output_csv = tmp_path / "activities.csv"
     chunk_df = pd.read_csv(activity_resource_dir / "chunk_happy.csv")
 
+    monkeypatch.setattr(
+        get_activity_data,
+        "_load_assay_src_lookup",
+        lambda *_: {
+            "ASSAY1": "SRC-ASSAY1",
+            "ASSAY2": "SRC-ASSAY2",
+            "ASSAY3": "SRC-ASSAY3",
+        },
+    )
+
     captured = _install_fetch_stubs(monkeypatch, chunk_df)
     written = _install_writer_stub(monkeypatch)
     logger_stub = _RecordingLogger()
@@ -189,6 +199,10 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
     assert list(written_df["activity_id"]) == ["ACT1", "ACT2", "ACT3"]
     assert pd.api.types.is_float_dtype(written_df["standard_value"])  # type: ignore[arg-type]
     assert written_df["standard_value"].tolist() == [5.5, 7.25, 9.0]
+    assert "src_assay_id" in written_df.columns
+    src_assay_series = written_df["src_assay_id"].astype("string")
+    assert src_assay_series.tolist() == ["SRC-ASSAY1", "SRC-ASSAY2", "SRC-ASSAY3"]
+    assert src_assay_series.str.strip().ne("").all()
 
 
 @pytest.mark.integration
@@ -201,6 +215,7 @@ def test_activity_pipeline__missing_column_input(activity_resource_dir: Path, cf
     # Ensure we never reach the fetch stage when validation of inputs fails.
     monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
     monkeypatch.setattr(get_activity_data.cl, "get_activities", lambda *_, **__: pd.DataFrame())
+    monkeypatch.setattr(get_activity_data, "_load_assay_src_lookup", lambda *_: {})
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
     monkeypatch.setattr("library.validation.logger", logger_stub)
@@ -224,6 +239,7 @@ def test_activity_pipeline__malformed_values(activity_resource_dir: Path, cfg, t
     output_csv = tmp_path / "activities.csv"
     chunk_df = pd.read_csv(activity_resource_dir / "chunk_malformed.csv")
 
+    monkeypatch.setattr(get_activity_data, "_load_assay_src_lookup", lambda *_: {})
     _install_fetch_stubs(monkeypatch, chunk_df)
     written = _install_writer_stub(monkeypatch)
     logger_stub = _RecordingLogger()
@@ -259,6 +275,7 @@ def test_activity_pipeline__deduplicates_identifiers(activity_resource_dir: Path
     output_csv = tmp_path / "activities.csv"
     chunk_df = pd.read_csv(activity_resource_dir / "chunk_happy.csv")
 
+    monkeypatch.setattr(get_activity_data, "_load_assay_src_lookup", lambda *_: {})
     captured = _install_fetch_stubs(monkeypatch, chunk_df)
     written = _install_writer_stub(monkeypatch)
     logger_stub = _RecordingLogger()
@@ -320,6 +337,7 @@ def test_activity_pipeline__fills_compound_name_from_pref_name(cfg, tmp_path, mo
         )
     testitem_df = pd.DataFrame.from_records(pref_name_records)
 
+    monkeypatch.setattr(get_activity_data, "_load_assay_src_lookup", lambda *_: {})
     capture = _install_fetch_stubs(monkeypatch, chunk_df, testitem_frame=testitem_df)
     written = _install_writer_stub(monkeypatch)
     logger_stub = _RecordingLogger()

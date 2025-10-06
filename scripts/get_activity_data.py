@@ -223,6 +223,101 @@ def _string_blank_mask(series: pd.Series) -> pd.Series:
     return values.isna() | stripped.fillna("").eq("")
 
 
+def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
+    """Return mapping of assay identifiers to ``src_assay_id`` values."""
+
+    if dictionary_dir is None:
+        return {}
+
+    candidate = Path(dictionary_dir) / "_assay" / "assay.csv"
+    try:
+        frame = pd.read_csv(
+            candidate,
+            usecols=["assay_chembl_id", "src_assay_id"],
+            dtype="string",
+        )
+    except FileNotFoundError:
+        logger.warning("assay_lookup_missing", path=str(candidate))
+        return {}
+    except pd.errors.EmptyDataError:
+        logger.warning("assay_lookup_empty", path=str(candidate))
+        return {}
+    except ValueError as exc:
+        logger.warning(
+            "assay_lookup_invalid_columns",
+            path=str(candidate),
+            error=str(exc),
+        )
+        return {}
+    except OSError as exc:
+        logger.warning("assay_lookup_read_failed", path=str(candidate), error=str(exc))
+        return {}
+
+    if frame.empty:
+        return {}
+
+    cleaned = frame.dropna(subset=["assay_chembl_id", "src_assay_id"])
+    if cleaned.empty:
+        return {}
+
+    cleaned = cleaned.assign(
+        assay_chembl_id=cleaned["assay_chembl_id"].str.strip(),
+        src_assay_id=cleaned["src_assay_id"].str.strip(),
+    )
+
+    cleaned = cleaned[cleaned["assay_chembl_id"].ne("") & cleaned["src_assay_id"].ne("")]
+    if cleaned.empty:
+        return {}
+
+    return {
+        str(assay_id): str(src_id)
+        for assay_id, src_id in cleaned[["assay_chembl_id", "src_assay_id"]]
+        .itertuples(index=False, name=None)
+    }
+
+
+def _ensure_src_assay_id(
+    frame: pd.DataFrame, *, lookup: Mapping[str, str]
+) -> pd.DataFrame:
+    """Populate ``src_assay_id`` using ``lookup`` when missing."""
+
+    if "src_assay_id" not in frame.columns and "assay_chembl_id" not in frame.columns:
+        return frame
+
+    result = frame.copy()
+
+    if "src_assay_id" in result.columns:
+        try:
+            result["src_assay_id"] = result["src_assay_id"].astype("string")
+        except TypeError:
+            result["src_assay_id"] = result["src_assay_id"].astype("string")
+    else:
+        result["src_assay_id"] = pd.Series(pd.NA, index=result.index, dtype="string")
+
+    if not lookup or result.empty or "assay_chembl_id" not in result.columns:
+        return result
+
+    assay_ids = result["assay_chembl_id"].astype("string")
+    missing_mask = _string_like_missing(result["src_assay_id"])
+    if not missing_mask.any():
+        return result
+
+    normalized_ids = assay_ids.where(~assay_ids.isna(), None).astype(object)
+
+    def _resolve(value: object) -> str | None:
+        if value is None:
+            return None
+        return lookup.get(str(value))
+
+    mapped = normalized_ids.map(_resolve)
+    available = missing_mask & mapped.notna()
+    if not available.any():
+        return result
+
+    result.loc[available, "src_assay_id"] = mapped[available].astype("string")
+    return result
+
+
 def _ensure_molecule_pref_name(
     frame: pd.DataFrame,
     *,
@@ -554,6 +649,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return frame.assign(**fillers)
 
     available_columns: set[str] = set()
+    assay_src_lookup = _load_assay_src_lookup(cfg.resources.dictionary_dir)
 
     def _record_columns(frame: pd.DataFrame) -> pd.DataFrame:
         available_columns.update(frame.columns)
@@ -561,6 +657,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     metadata_hooks = [
         _ensure_required_activity_columns,
+        partial(_ensure_src_assay_id, lookup=assay_src_lookup),
         _ensure_extended_activity_columns,
         normalize_activities,
         add_pipeline_metadata,
