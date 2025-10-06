@@ -38,7 +38,11 @@ class ChemblClient:
         Optional ChEMBL-specific configuration controlling cache TTL and size.
     session:
         Optional pre-configured :class:`requests.Session` instance; primarily
-        intended for tests.
+        intended for tests. Mutually exclusive with ``session_factory``.
+    session_factory:
+        Optional callable returning :class:`requests.Session` objects. When provided,
+        a fresh session is created for each thread-local context and can be used to
+        inject specialised behaviour in tests. Mutually exclusive with ``session``.
     global_limiter:
         Optional system-wide :class:`RateLimiter` enforcing ``Config.rate``
         across all HTTP clients.
@@ -63,13 +67,22 @@ class ChemblClient:
         chembl: ChemblCacheCfg | None = None,
         *,
         session: Session | None = None,
+        session_factory: Callable[[], Session] | None = None,
         global_limiter: RateLimiter | None = None,
         jitter: Callable[[float], float] | None = None,
     ) -> None:
         api = api or ApiCfg()
         retry = retry or RetryCfg()
         self._jitter = jitter if jitter is not None else retry.build_jitter()
-        if session is not None:
+        if session is not None and session_factory is not None:
+            raise ValueError("Pass either session or session_factory, not both")
+        if session_factory is not None:
+
+            def _session_from_factory(factory: Callable[[], Session] = session_factory) -> Session:
+                return factory()
+
+            self._session_factory = _session_from_factory
+        elif session is not None:
             def _session_from_argument(provided: Session = session) -> Session:
                 return provided
 
@@ -139,6 +152,20 @@ class ChemblClient:
     def _register_session(self, session: Session) -> None:
         with self._sessions_lock:
             self._sessions.add(session)
+
+    def _invalidate_session(self, session: Session | None) -> None:
+        if session is None:
+            return
+        with self._sessions_lock:
+            if session in self._sessions:
+                self._sessions.remove(session)
+        close = getattr(session, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:  # pragma: no cover - defensive
+                logger.exception("session_close_failed", extra={"session": repr(session)})
+        setattr(self._session_local, "session", None)
 
     def _get_session(self) -> Session:
         session_attr = getattr(self._session_local, "session", None)
@@ -372,6 +399,8 @@ class ChemblClient:
                 except requests.RequestException as exc:
                     elapsed = monotonic() - start_time
                     last_exc = exc
+                    if isinstance(exc, (requests.Timeout, requests.ConnectionError)):
+                        self._invalidate_session(session)
                     if attempt >= total_attempts:
                         logger.exception(
                             "request_fail",
