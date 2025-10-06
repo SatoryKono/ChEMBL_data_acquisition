@@ -1519,16 +1519,20 @@ def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
     """
 
     session = Session()
-    retry_cfg = Retry(
-        total=max(0, retry.max_attempts - 1),
-        backoff_factor=retry.backoff_factor,
-        status_forcelist=retry.status_forcelist,
+    retry_kwargs: dict[str, Any] = {
+        "total": max(0, retry.max_attempts - 1),
+        "backoff_factor": retry.backoff_factor,
+        "status_forcelist": retry.status_forcelist,
         # ``None`` disables method filtering and retries all HTTP methods.
         # Using ``None`` directly avoids ``Collection`` union type evaluation
         # issues under Python 3.12.
-        allowed_methods=None,
-        raise_on_status=False,
-    )
+        "allowed_methods": None,
+        "raise_on_status": False,
+    }
+    if retry.backoff_cap is not None:
+        retry_kwargs["backoff_max"] = retry.backoff_cap
+
+    retry_cfg = Retry(**retry_kwargs)
     adapter = HTTPAdapter(max_retries=retry_cfg)
     session.mount("http://", adapter)
     session.mount("https://", adapter)
