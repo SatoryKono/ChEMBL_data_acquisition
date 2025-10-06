@@ -38,7 +38,6 @@ from ..common.sidecar import SidecarErrors
 from ..config import Config, ConfigError, ensure_dirs, print_config
 from ..config.loader import DEFAULT_CONFIG_PATH
 from ..reporting.run_manifest import finalise_csv_output
-from ..utils.config import DEFAULT_CONFIG_PATH
 
 SchemaT = TypeVar("SchemaT")
 
