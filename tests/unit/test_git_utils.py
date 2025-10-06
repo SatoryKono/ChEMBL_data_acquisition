@@ -7,6 +7,24 @@ from pathlib import Path
 import pytest
 
 
+def _expected_repo_root() -> Path:
+    current = Path(__file__).resolve().parent
+    for candidate in (current, *current.parents):
+        if (candidate / ".git").exists() or (candidate / "pyproject.toml").is_file():
+            return candidate
+    raise AssertionError("Unable to determine repository root for tests")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("module_name", ["library.git_utils", "library.common.git"])
+def test_repo_root__detects_project_root(module_name: str) -> None:
+    """``_repo_root`` should resolve to the actual repository root."""
+
+    module = importlib.import_module(module_name)
+
+    assert module._repo_root() == _expected_repo_root()
+
+
 @pytest.mark.unit
 @pytest.mark.parametrize("module_name", ["library.git_utils", "library.common.git"])
 def test_git_sha__missing_git_directory_logged_as_info(

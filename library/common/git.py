@@ -19,9 +19,20 @@ from .log import logger
 
 
 def _repo_root() -> Path:
-    """Return the repository root used for Git metadata."""
+    """Return the repository root used for Git metadata.
 
-    return Path(__file__).resolve().parent.parent
+    The helper walks up from the current module location until it finds a
+    directory that looks like the project root (containing either a ``.git``
+    directory or a ``pyproject.toml`` file).  This makes the lookup robust to
+    the package being imported from different working directories or when the
+    module resides deeper in the source tree than expected.
+    """
+
+    current = Path(__file__).resolve().parent
+    for candidate in (current, *current.parents):
+        if (candidate / ".git").exists() or (candidate / "pyproject.toml").is_file():
+            return candidate
+    return current
 
 
 def _resolve_git_dir(repo_root: Path) -> Path | None:
