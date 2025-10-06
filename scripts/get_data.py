@@ -21,11 +21,18 @@ that the pipelines can be executed programmatically from other callers as well.
 
 from __future__ import annotations
 
+if __package__ in {None, ""}:
+    from _bootstrap import bootstrap_cli
+else:  # pragma: no cover - executed when imported as a package module
+    from ._bootstrap import bootstrap_cli
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+
 import argparse
 import hashlib
 import json
 import logging
-import sys
 import time
 import uuid
 from collections import deque
@@ -35,20 +42,6 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from typing import Any, Callable, Iterable, IO, Mapping, Sequence
-
-
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-if __package__ in {None, ""}:
-    project_root_str = str(_PROJECT_ROOT)
-    if project_root_str not in sys.path:
-        sys.path.insert(0, project_root_str)
-
-from library.utils.bootstrap import ensure_project_root
-
-
-if __package__ in {None, ""}:
-    ensure_project_root()
 
 from library.cli.logging import setup_cli_logging
 from library.clients import ChemblClient

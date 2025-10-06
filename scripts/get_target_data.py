@@ -12,6 +12,14 @@ Fetch ChEMBL target information for identifiers in ``targets.csv``::
 
 from __future__ import annotations
 
+if __package__ in {None, ""}:
+    from _bootstrap import bootstrap_cli
+else:  # pragma: no cover - executed when imported as a package module
+    from ._bootstrap import bootstrap_cli
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+
 # ruff: noqa: E402
 import argparse
 import sys
@@ -27,50 +35,6 @@ from pathlib import Path
 from typing import IO, Any, cast
 
 from datetime import datetime, timezone
-
-try:
-    from library.utils.bootstrap import ensure_project_root
-except ModuleNotFoundError:  # pragma: no cover - fallback for direct execution
-    import sys
-    from pathlib import Path
-
-    def _is_within(path: Path, root: Path) -> bool:
-        try:
-            path.relative_to(root)
-        except ValueError:
-            return False
-        return True
-
-    def ensure_project_root() -> None:
-        """Add the repository root to ``sys.path`` when the package is missing."""
-
-        project_root = Path(__file__).resolve().parent.parent
-        project_root_str = str(project_root)
-        if project_root_str not in sys.path:
-            sys.path.insert(0, project_root_str)
-
-        existing = sys.modules.get("library")
-        if existing is None:
-            return
-
-        module_paths: list[Path] = []
-        file_attr = getattr(existing, "__file__", None)
-        if file_attr:
-            module_paths.append(Path(file_attr).resolve())
-        package_paths = getattr(existing, "__path__", None)
-        if package_paths is not None:
-            module_paths.extend(Path(p).resolve() for p in package_paths)
-
-        if any(_is_within(path, project_root) for path in module_paths):
-            return
-
-        for name in list(sys.modules):
-            if name == "library" or name.startswith("library."):
-                del sys.modules[name]
-
-
-if __package__ in {None, ""}:
-    ensure_project_root()
 
 import pandas as pd
 import requests

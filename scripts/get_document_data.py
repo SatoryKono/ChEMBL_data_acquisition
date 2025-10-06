@@ -24,6 +24,14 @@ The input file must contain a ``PMID`` column.
 
 from __future__ import annotations
 
+if __package__ in {None, ""}:
+    from _bootstrap import bootstrap_cli
+else:  # pragma: no cover - executed when imported as a package module
+    from ._bootstrap import bootstrap_cli
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+
 import argparse
 import inspect
 import os
@@ -40,42 +48,6 @@ from typing import Any, cast
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
-
-try:
-    from library.utils.bootstrap import ensure_project_root
-except ModuleNotFoundError:  # pragma: no cover - environment bootstrap
-    project_root = Path(__file__).resolve().parents[1]
-    project_root_str = str(project_root)
-    if project_root_str not in sys.path:
-        sys.path.insert(0, project_root_str)
-
-    existing = sys.modules.get("library")
-    if existing is not None:
-        module_paths: list[Path] = []
-        file_attr = getattr(existing, "__file__", None)
-        if file_attr:
-            module_paths.append(Path(file_attr).resolve())
-        package_paths = getattr(existing, "__path__", None)
-        if package_paths is not None:
-            module_paths.extend(Path(p).resolve() for p in package_paths)
-
-        def _is_within(path: Path) -> bool:
-            try:
-                path.relative_to(project_root)
-            except ValueError:
-                return False
-            return True
-
-        if not any(_is_within(path) for path in module_paths):
-            for name in list(sys.modules):
-                if name == "library" or name.startswith("library."):
-                    del sys.modules[name]
-
-    from library.utils.bootstrap import ensure_project_root
-
-
-if __package__ in {None, ""}:
-    ensure_project_root()
 
 from library import cli
 from library import io
