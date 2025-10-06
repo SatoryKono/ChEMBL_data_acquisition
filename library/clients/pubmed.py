@@ -13,6 +13,7 @@ from typing import Any
 
 import requests
 
+from ..common.fetch_retry import compute_backoff_delay
 from ..config import PubMedCfg, RetryCfg
 from ..common.log import logger
 from ..common.rate_limiter import sleep
@@ -161,9 +162,12 @@ def _retry_delay(
     delay = min_delay
 
     if retry_cfg is not None and retry_cfg.backoff_factor > 0:
-        backoff = retry_cfg.backoff_factor * (2 ** (attempt - 1))
+        backoff = compute_backoff_delay(attempt, retry_cfg)
         jitter = random.uniform(0.0, retry_cfg.backoff_factor)
-        delay = max(delay, backoff + jitter)
+        candidate = backoff + jitter
+        if retry_cfg.backoff_cap is not None:
+            candidate = min(candidate, retry_cfg.backoff_cap)
+        delay = max(delay, candidate)
 
     timeout_cap = _max_timeout(timeout)
     if timeout_cap is not None:
