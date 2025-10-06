@@ -34,17 +34,29 @@ class _RecordingLogger:
     def __init__(self) -> None:
         self.events: list[tuple[str, str, dict[str, object]]] = []
 
-    def debug(self, event: str, **kwargs: object) -> None:
-        self.events.append(("debug", event, dict(kwargs)))
+    def _record(
+        self,
+        level: str,
+        event: str,
+        args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> None:
+        payload = dict(kwargs)
+        if args:
+            payload["args"] = args
+        self.events.append((level, event, payload))
 
-    def info(self, event: str, **kwargs: object) -> None:
-        self.events.append(("info", event, dict(kwargs)))
+    def debug(self, event: str, *args: object, **kwargs: object) -> None:
+        self._record("debug", event, args, dict(kwargs))
 
-    def warning(self, event: str, **kwargs: object) -> None:
-        self.events.append(("warning", event, dict(kwargs)))
+    def info(self, event: str, *args: object, **kwargs: object) -> None:
+        self._record("info", event, args, dict(kwargs))
 
-    def error(self, event: str, **kwargs: object) -> None:
-        self.events.append(("error", event, dict(kwargs)))
+    def warning(self, event: str, *args: object, **kwargs: object) -> None:
+        self._record("warning", event, args, dict(kwargs))
+
+    def error(self, event: str, *args: object, **kwargs: object) -> None:
+        self._record("error", event, args, dict(kwargs))
 
 
 @pytest.fixture()
