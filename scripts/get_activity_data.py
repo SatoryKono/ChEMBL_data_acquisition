@@ -206,6 +206,16 @@ _EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series | Non
 }
 
 
+def _string_like_missing(series: pd.Series) -> pd.Series:
+    """Return a boolean mask for ``series`` treating blanks as missing."""
+
+    mask = series.isna()
+    if pd.api.types.is_string_dtype(series) or series.dtype == "object":
+        string_values = series.astype("string")
+        mask = mask | string_values.str.strip().fillna("").eq("")
+    return mask
+
+
 def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
     """Guarantee columns expected by the post-processing stage."""
 
@@ -216,10 +226,40 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
                 result[column] = pd.Series([], dtype=dtype)
         return result
 
+    if "activity_id" in result.columns:
+        if "activity_chembl_id" in result.columns:
+            missing_id = _string_like_missing(result["activity_id"])
+            if missing_id.any():
+                result.loc[missing_id, "activity_id"] = result.loc[
+                    missing_id, "activity_chembl_id"
+                ]
+        else:
+            missing_id = _string_like_missing(result["activity_id"])
+            if missing_id.any():
+                # Preserve dtype by assigning NA values without coercing existing entries.
+                result.loc[missing_id, "activity_id"] = pd.NA
+    elif "activity_chembl_id" in result.columns:
+        result["activity_id"] = result["activity_chembl_id"].copy()
+
     for column, dtype in _EXTENDED_ACTIVITY_DTYPES.items():
-        if column in result.columns:
-            continue
         fallback = _EXTENDED_ACTIVITY_FALLBACKS.get(column)
+        if column in result.columns:
+            if fallback is not None:
+                existing = result[column]
+                if dtype in {"Float64", "Int64"}:
+                    missing_mask = existing.isna()
+                else:
+                    missing_mask = _string_like_missing(existing)
+                if missing_mask.any():
+                    candidate = fallback(result)
+                    if candidate is not None:
+                        aligned = candidate.reindex(result.index)
+                        try:
+                            filled = aligned.astype(dtype)
+                        except (TypeError, ValueError):
+                            filled = aligned.astype("string")
+                        result.loc[missing_mask, column] = filled.loc[missing_mask]
+            continue
         if fallback is not None:
             candidate = fallback(result)
             if candidate is not None:
