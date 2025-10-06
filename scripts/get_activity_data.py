@@ -610,6 +610,12 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
                         filled = _coerce_series_dtype(aligned, dtype)
                         combined = existing.mask(missing_mask, filled)
                         result[column] = _coerce_series_dtype(combined, dtype)
+                        current = result[column]
+                        # ``Series.mask`` preserves the extension dtype and avoids
+                        # implicit "object" upcasts that would otherwise trigger
+                        # ``FutureWarning`` about incompatible assignments (see
+                        # pandas GH-53964).
+                        result[column] = current.mask(missing_mask, filled)
                         coerced_fallback, fallback_failures = _coerce_extended_series(
                             aligned, dtype, column
                         )
