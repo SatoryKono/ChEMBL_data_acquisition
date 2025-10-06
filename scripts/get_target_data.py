@@ -1923,6 +1923,10 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 1
 
+    output_path: Path | None = None
+    export_path: Path | None = None
+    resolved_export_path: Path | None = None
+
     try:
         df = pd.read_csv(
             args.input_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
@@ -2029,26 +2033,36 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             "uniprot_processing_failed",
             error=str(exc),
             input=str(args.input_csv),
-            output=str(output),
+            output=str(output_path) if output_path is not None else None,
         )
         return 1
     doc_quality_cfg = cfg.system.doc_quality
     try:
         if doc_quality_cfg.enable:
-            quality_table_name = output.stem
+            if export_path is None:
+                raise RuntimeError("export path not available for quality analysis")
+            resolved_export_path = export_path.resolve()
+            quality_table_name = resolved_export_path.stem
             analyze_table_quality(
                 out_df,
                 table_name=quality_table_name,
-                destination_dir=output.parent,
+                destination_dir=resolved_export_path.parent,
                 sample_rows=doc_quality_cfg.sample_rows,
                 include_columns=doc_quality_cfg.include_columns,
                 exclude_columns=doc_quality_cfg.exclude_columns,
             )
     except Exception as exc:
+        quality_log_path: Path | None = None
+        if resolved_export_path is not None:
+            quality_log_path = resolved_export_path
+        elif export_path is not None:
+            quality_log_path = export_path.resolve()
+        elif output_path is not None:
+            quality_log_path = output_path.resolve()
         logger.exception(
             "quality_report_failed",
             error=str(exc),
-            path=str(output),
+            path=str(quality_log_path) if quality_log_path is not None else None,
             exc=exc,
         )
         return 1
