@@ -21,7 +21,7 @@ def _make_args(tmp_path: Path) -> argparse.Namespace:
     input_csv.write_text("activity_id\nA1\n", encoding="utf-8")
     return argparse.Namespace(
         input_csv=input_csv,
-        output_csv=tmp_path / "output.csv",
+        final_out=tmp_path / "output.csv",
         offset=0,
         workers=None,
         skip_existing=False,
@@ -130,9 +130,9 @@ def test_run__skip_existing_matrix(
 
     if explicit_output:
         output_path = tmp_path / "explicit.csv"
-        args.output_csv = output_path
+        args.final_out = output_path
     else:
-        args.output_csv = None
+        args.final_out = None
         output_path = tmp_path / "default.csv"
 
         def fake_default_output_path(input_path: Path, _io_cfg) -> Path:

@@ -166,7 +166,7 @@ def test_run__skip_existing(cfg: Config, tmp_path: Path, logger_stub: _MemoryLog
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=True,
         force=False,
         command="all",
@@ -188,7 +188,7 @@ def test_run__missing_handler_logs_error(cfg: Config, tmp_path: Path, logger_stu
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
         command="all",
@@ -221,7 +221,7 @@ def test_run__propagates_timeout(cfg: Config, tmp_path: Path, monkeypatch: pytes
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
         command="all",

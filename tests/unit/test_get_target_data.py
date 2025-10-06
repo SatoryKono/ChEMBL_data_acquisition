@@ -266,7 +266,7 @@ def test_run_uniprot__invokes_target_postprocess(
         _fake_postprocess,
     )
 
-    args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
+    args = argparse.Namespace(input_csv=input_csv, final_out=output_csv)
 
     exit_code = get_target_data.run_uniprot(cfg, args)
 

@@ -142,7 +142,7 @@ def test_run_chembl__passes_options(cfg: Config, tmp_path: Path, monkeypatch: py
 
     monkeypatch.setattr(get_testitem_data, "run_testitem_pipeline", fake_run_pipeline)
 
-    args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
+    args = argparse.Namespace(input_csv=input_csv, final_out=output_csv)
 
     exit_code = get_testitem_data.run_chembl(cfg, args)
 
@@ -175,7 +175,7 @@ def test_run__skip_existing_without_force(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=True,
         force=False,
     )
@@ -207,7 +207,7 @@ def test_run__force_overrides_skip(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=True,
         force=True,
     )
@@ -232,7 +232,7 @@ def test_run__non_zero_exit_logs_error(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
@@ -261,7 +261,7 @@ def test_run__success_logs_completion(
 
     args = argparse.Namespace(
         input_csv=input_csv,
-        output_csv=output_csv,
+        final_out=output_csv,
         skip_existing=False,
         force=False,
     )
