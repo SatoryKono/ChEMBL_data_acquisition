@@ -96,6 +96,12 @@ def test_iter_target_batches__splits_chunk_on_timeout(caplog: pytest.LogCaptureF
 
 
 @pytest.mark.unit
+def test_iter_target_batches__propagates_timeout_without_split() -> None:
+    """Disable fallback splitting so that higher level retry logic can react."""
+
+    cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=8.0)
+    mapping_cfg = UniprotMappingCfg()
+    timeout = 6.0
 def test_iter_target_batches__splits_chunk_on_connection_error(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -113,6 +119,18 @@ def test_iter_target_batches__splits_chunk_on_connection_error(
             f"&target_chembl_id__in={','.join(ids)}"
         )
 
+    combined_url = _chunk_url(["CHEMBL10", "CHEMBL11"])
+    responses = {
+        combined_url: requests.ReadTimeout("simulated timeout"),
+        _chunk_url(["CHEMBL10"]): _build_response("CHEMBL10", "Gamma"),
+        _chunk_url(["CHEMBL11"]): _build_response("CHEMBL11", "Delta"),
+    }
+    client = _StubChemblClient(responses)
+
+    with pytest.raises(requests.ReadTimeout):
+        list(
+            iter_target_batches(
+                ["CHEMBL10", "CHEMBL11"],
     combined_url = _chunk_url(["CHEMBL1", "CHEMBL2"])
     responses = {
         combined_url: requests.ConnectionError("simulated connection reset"),
@@ -130,6 +148,11 @@ def test_iter_target_batches__splits_chunk_on_connection_error(
                 mapping_cfg=mapping_cfg,
                 chunk_size=2,
                 timeout=timeout,
+                enable_split_fallback=False,
+            )
+        )
+
+    assert client.calls == [(combined_url, timeout)]
             )
         )
 

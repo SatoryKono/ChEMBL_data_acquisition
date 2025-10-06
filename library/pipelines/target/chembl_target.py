@@ -301,8 +301,19 @@ def iter_target_batches(
     mapping_cfg: UniprotMappingCfg,
     chunk_size: int = 5,
     timeout: float | None = None,
+    enable_split_fallback: bool = True,
 ) -> Iterator[tuple[list[dict[str, Any]], pd.DataFrame, pd.DataFrame]]:
-    """Yield payloads, raw and parsed target data frames for ``ids``."""
+    """Yield payloads, raw and parsed target data frames for ``ids``.
+
+    Parameters
+    ----------
+    enable_split_fallback:
+        When ``True`` (default), a :class:`requests.ReadTimeout` for a chunk
+        results in recursive splitting down to single identifiers. When
+        ``False``, the exception is propagated to the caller so that higher
+        level retry strategies can react, for example by shrinking the chunk
+        size.
+    """
 
     if not ids:
         return
@@ -321,6 +332,7 @@ def iter_target_batches(
             client=client,
             mapping_cfg=mapping_cfg,
             timeout=effective_timeout,
+            enable_split_fallback=enable_split_fallback,
         )
 
 
@@ -332,6 +344,7 @@ def _iter_target_chunk_with_fallback(
     client: ChemblClient,
     mapping_cfg: UniprotMappingCfg,
     timeout: float,
+    enable_split_fallback: bool,
 ) -> Iterator[tuple[list[dict[str, Any]], pd.DataFrame, pd.DataFrame]]:
     """Yield processed records for ``chunk`` with timeout-aware retries."""
 
@@ -343,6 +356,8 @@ def _iter_target_chunk_with_fallback(
     try:
         data = client.request_json(url, cfg=cfg, timeout=timeout)
     except requests.ReadTimeout as exc:
+        if len(chunk) <= 1 or not enable_split_fallback:
+            raise exc
         event = "chembl_timeout_split"
         handled_exc = exc
     except requests.RequestException as exc:
@@ -372,6 +387,7 @@ def _iter_target_chunk_with_fallback(
                 client=client,
                 mapping_cfg=mapping_cfg,
                 timeout=timeout,
+                enable_split_fallback=enable_split_fallback,
             )
         return
 
@@ -419,6 +435,7 @@ def iter_target_batches_with_retry(
             mapping_cfg=mapping_cfg,
             chunk_size=base_chunk_size,
             timeout=timeout,
+            enable_split_fallback=True,
         ):
             if on_attempt is not None:
                 on_attempt()
@@ -449,6 +466,7 @@ def iter_target_batches_with_retry(
                     mapping_cfg=mapping_cfg,
                     chunk_size=attempt_size,
                     timeout=timeout,
+                    enable_split_fallback=False,
                 ):
                     yield result
             except (requests.RequestException, ValueError) as exc:
