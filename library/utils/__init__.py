@@ -2,6 +2,22 @@
 
 from __future__ import annotations
 
+from importlib import import_module
+
 from . import atomic, bootstrap
 
-__all__ = ["atomic", "bootstrap"]
+__all__ = ["atomic", "bootstrap", "config"]
+
+
+def __getattr__(name: str):
+    """Lazily import heavy utility submodules."""
+
+    if name == "config":
+        module = import_module(f"{__name__}.config")
+        globals()[name] = module
+        return module
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+def __dir__() -> list[str]:
+    return sorted({*globals(), *__all__})
