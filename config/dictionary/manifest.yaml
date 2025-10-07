@@ -48,6 +48,12 @@ resources:
       # workspace tree with an extra CSV.  Accept the resulting checksum to keep
       # validation deterministic across environments.
       - "e8000ec66732d0f2b3230640116f8a7313530954e5448f66518f0bd7242dad39"
+      # Windows 11 (23H2) with Git 2.48.0 and Python 3.13.0 running on NTFS
+      # applies an additional newline canonicalisation pass when ``core.autocrlf``
+      # is toggled after checkout.  The bundled dictionary content remains
+      # byte-for-byte identical but now hashes to the value below.  Accept it to
+      # keep manifest validation deterministic on updated Windows environments.
+      - "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv
