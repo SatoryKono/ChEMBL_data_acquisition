@@ -1,0 +1,11 @@
+assay_tax_id,assay_group,assay_strain
+562,Bacteria,Escherichia coli K-12
+6239,Nematode,Caenorhabditis elegans (N2)
+7227,Insect,Drosophila melanogaster (Oregon R)
+7955,Fish,Danio rerio (AB)
+9031,Avian,Gallus gallus
+9606,Human,
+10090,Rodent,Mus musculus (C57BL/6)
+10116,Rodent,Rattus norvegicus (Sprague-Dawley)
+3702,Plant,Arabidopsis thaliana (Col-0)
+4932,Yeast,Saccharomyces cerevisiae (S288C)
