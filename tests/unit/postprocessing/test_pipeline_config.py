@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import importlib
+from textwrap import dedent
 
 import pytest
 
 from library.postprocess.common.config import (
+    PipelineConfigError,
     load_pipeline_config,
     normalize_pipeline_version,
 )
@@ -196,6 +198,29 @@ def test_pipeline_configs__resolve_steps_and_defaults(
     assert cfg.params["io"]["csv_sep"] == ","
     for section in ("defaults", "io", *extra_sections):
         assert section in cfg.params
+
+
+def test_load_pipeline_config__errors_on_unsupported_step_parameters(tmp_path):
+    """A clear error is raised when a step lists unsupported parameters."""
+
+    config_text = dedent(
+        """
+        pipeline_version: "auto"
+        enabled_steps:
+          - name: normalize_document_fields
+            callable: "library.postprocess.documents.steps:normalize_document_fields"
+            params:
+              unexpected: true
+        """
+    )
+    config_path = tmp_path / "documents_invalid.yaml"
+    config_path.write_text(config_text, encoding="utf-8")
+
+    with pytest.raises(
+        PipelineConfigError,
+        match="step 'normalize_document_fields' defines unsupported parameters: unexpected",
+    ):
+        load_pipeline_config("documents", path=config_path)
 
 
 @pytest.mark.parametrize(
