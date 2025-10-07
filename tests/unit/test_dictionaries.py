@@ -55,20 +55,32 @@ def _write_manifest(tmp_path, body: str) -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    "checksum",
+    ("resource_name", "checksum"),
     (
-        "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
-        "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
+        (
+            "dictionary_root",
+            "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        ),
+        (
+            "dictionary_root",
+            "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
+        ),
+        (
+            "target_uniprot_cache",
+            "c86b314b5d8a0906f1174c8e9f494cf9dde6841be2cb1e8b66c5772976afb5ca",
+        ),
     ),
 )
-def test_parse_manifest__accepts_known_checksum_variants(tmp_path, monkeypatch, checksum):
+def test_parse_manifest__accepts_known_checksum_variants(
+    tmp_path, monkeypatch, resource_name, checksum
+):
     # Arrange
     _write_manifest(
         tmp_path,
-        """
+        f"""
         version: 1
         resources:
-          dictionary_root:
+          {resource_name}:
             path: .
             version: "test"
             sha256:
@@ -85,7 +97,7 @@ def test_parse_manifest__accepts_known_checksum_variants(tmp_path, monkeypatch, 
 
     # Assert
     try:
-        assert resources["dictionary_root"].sha256 == checksum
+        assert resources[resource_name].sha256 == checksum
     finally:
         dictionaries._env_checksum_allowlist.cache_clear()
 
