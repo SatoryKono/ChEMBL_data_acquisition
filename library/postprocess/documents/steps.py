@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from library.postprocess.common import StepDefinition, run_steps
+from library.postprocess.common import RunnerResult, StepDefinition, run_steps
 
 from .schema import DOCUMENT_SCHEMA, validate_documents
 
@@ -56,13 +56,13 @@ PIPELINE_STEPS = [
 
 def run_document_pipeline(
     df: pd.DataFrame, *, pipeline_version: str | None = None, logger=None
-) -> pd.DataFrame:
+) -> RunnerResult:
     """Run the document postprocessing pipeline."""
 
     return run_steps(
         df,
         PIPELINE_STEPS,
-        schema=DOCUMENT_SCHEMA,
+        post_schema=DOCUMENT_SCHEMA,
         pipeline_version=pipeline_version,
         logger=logger,
     )

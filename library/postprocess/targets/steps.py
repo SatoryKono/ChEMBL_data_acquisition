@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from library.postprocess.common import StepDefinition, run_steps
+from library.postprocess.common import RunnerResult, StepDefinition, run_steps
 
 from .schema import TARGET_SCHEMA, validate_targets
 
@@ -58,13 +58,13 @@ PIPELINE_STEPS = [
 
 def run_target_pipeline(
     df: pd.DataFrame, *, pipeline_version: str | None = None, logger=None
-) -> pd.DataFrame:
+) -> RunnerResult:
     """Run the target postprocessing pipeline."""
 
     return run_steps(
         df,
         PIPELINE_STEPS,
-        schema=TARGET_SCHEMA,
+        post_schema=TARGET_SCHEMA,
         pipeline_version=pipeline_version,
         logger=logger,
     )

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from library.postprocess.common import StepDefinition, run_steps
+from library.postprocess.common import RunnerResult, StepDefinition, run_steps
 
 from .schema import ACTIVITY_SCHEMA, validate_activities
 
@@ -65,13 +65,13 @@ PIPELINE_STEPS = [
 
 def run_activity_pipeline(
     df: pd.DataFrame, *, pipeline_version: str | None = None, logger=None
-) -> pd.DataFrame:
-    """Execute the activity postprocessing steps."""
+) -> RunnerResult:
+    """Execute the activity postprocessing steps and return the result."""
 
     return run_steps(
         df,
         PIPELINE_STEPS,
-        schema=ACTIVITY_SCHEMA,
+        post_schema=ACTIVITY_SCHEMA,
         pipeline_version=pipeline_version,
         logger=logger,
     )
