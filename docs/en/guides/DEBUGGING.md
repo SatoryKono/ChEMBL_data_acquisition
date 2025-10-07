@@ -58,6 +58,6 @@ return strings, not bytes`.
 - Publish `reports/test_report.json` and `reports/test_summary.md` as artefacts
   for auditability.
 
-If issues persist, gather logs (`<base>/logs/*.log`, with `<base>` defaulting to
-`data`), the metadata sidecar and failing rows, then raise an issue referencing
-the troubleshooting steps already taken.
+If issues persist, gather logs (`logs/*.log` by default or `<base>/logs` when
+`CHEMBL_DA_BASE_PATH` is set), the metadata sidecar and failing rows, then raise
+an issue referencing the troubleshooting steps already taken.
