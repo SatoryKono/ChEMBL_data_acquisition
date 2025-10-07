@@ -76,6 +76,9 @@ below to navigate the canonical English sources:
 | Dictionaries & glossary | [`reference/DICTIONARIES.md`](./reference/DICTIONARIES.md) | [`../ru/reference/DICTIONARIES.md`](../ru/reference/DICTIONARIES.md) |
 | Post-processing runbook | [`guides/POSTPROCESSING_RUNBOOK.md`](./guides/POSTPROCESSING_RUNBOOK.md) | [`../ru/guides/POSTPROCESSING_RUNBOOK.md`](../ru/guides/POSTPROCESSING_RUNBOOK.md) |
 
+For a description of the current Variant 1 modular post-processing pipeline,
+refer to [`../postprocessing_variant1_tasks.md`](../postprocessing_variant1_tasks.md).
+
 All English files have a one-to-one Russian counterpart with identical structure
 and headings to simplify cross-referencing.
 

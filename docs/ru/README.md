@@ -76,6 +76,9 @@ flowchart TD
 | Справочники и глоссарий | [`../en/reference/DICTIONARIES.md`](../en/reference/DICTIONARIES.md) | [`reference/DICTIONARIES.md`](./reference/DICTIONARIES.md) |
 | Руководство по постобработке | [`../en/guides/POSTPROCESSING_RUNBOOK.md`](../en/guides/POSTPROCESSING_RUNBOOK.md) | [`guides/POSTPROCESSING_RUNBOOK.md`](./guides/POSTPROCESSING_RUNBOOK.md) |
 
+Текущее описание модульной постобработки (вариант 1) доступно в
+[`../postprocessing_variant1_tasks.md`](../postprocessing_variant1_tasks.md).
+
 У английских и русских файлов совпадают структура и заголовки, что облегчает
 сопоставление версий.
 
