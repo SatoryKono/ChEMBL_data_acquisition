@@ -276,7 +276,16 @@ def fetch_pubmed_batch(
     cfg = cfg or PubMedCfg()
     ids = ",".join(pmids)
     base = cfg.base.rstrip("/")
-    url = f"{base}/efetch.fcgi?db=pubmed&id={ids}&retmode=xml"
+    params: dict[str, str] = {
+        "db": "pubmed",
+        "id": ids,
+        "retmode": "xml",
+    }
+    if cfg.tool:
+        params["tool"] = cfg.tool
+    if cfg.email:
+        params["email"] = cfg.email
+    url = f"{base}/efetch.fcgi"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
     effective_jitter = jitter
     if effective_jitter is None and retry_cfg is not None:
@@ -291,6 +300,7 @@ def fetch_pubmed_batch(
         timeout=timeout,
         retry_cfg=retry_cfg,
         jitter=effective_jitter,
+        params=params,
     )
     if error:
         return None, error

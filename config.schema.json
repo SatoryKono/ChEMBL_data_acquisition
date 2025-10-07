@@ -1504,6 +1504,18 @@
           ],
           "default": null,
           "title": "Burst"
+        },
+        "tool": {
+          "default": "chembl-da",
+          "minLength": 1,
+          "title": "Tool",
+          "type": "string"
+        },
+        "email": {
+          "default": "chembl-data@ebi.ac.uk",
+          "pattern": "[^@\\s]+@[^@\\s]+\\.[^@\\s]+",
+          "title": "Email",
+          "type": "string"
         }
       },
       "title": "PubMedCfg",
