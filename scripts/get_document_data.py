@@ -441,7 +441,7 @@ def _write_export_chunks(
     )
 
 
-def _maybe_run_document_postprocessing(csv_path: Path) -> None:
+def _maybe_run_document_postprocessing(csv_path: Path, *, skip_qa: bool = False) -> None:
     if not csv_path.name.startswith("output.document_"):
         return
 
@@ -470,7 +470,14 @@ def _maybe_run_document_postprocessing(csv_path: Path) -> None:
         base_path=str(data_dir),
         ref_document_rel=ref_rel_windows,
         out_document_rel=out_rel_windows,
+        run_qa=not skip_qa,
     )
+    if skip_qa:
+        logger.info(
+            "document_postprocess_qa_skipped_partial",
+            output=str(csv_path),
+            reason="partial_run",
+        )
 
 
 def _finalise_export(
@@ -481,6 +488,7 @@ def _finalise_export(
     input_csv: Path,
     key_columns: Sequence[str] | None = None,
     chunk_size: int | None = None,
+    partial_run: bool = False,
 ) -> int:
     """Validate input frames and write CSV/metadata artefacts."""
 
@@ -643,7 +651,10 @@ def _finalise_export(
         logger.info("write_done", rows=rows_kept, path=str(csv_path))
         if csv_path.name.startswith("output.document_"):
             try:
-                _maybe_run_document_postprocessing(csv_path)
+                _maybe_run_document_postprocessing(
+                    csv_path,
+                    skip_qa=partial_run,
+                )
             except RuntimeError as exc:
                 logger.error(
                     "document_postprocess_qa_mismatch",
@@ -816,6 +827,8 @@ def run_pubmed(
         pmids = pmids_limited
         limit_counter = get_limit_count
 
+    partial_run = (limit is not None) or (offset > 0)
+
     fallback_state: FallbackDoiState | None = None
     if fallback_enabled:
         fallback_path = fallback_path_arg
@@ -910,6 +923,7 @@ def run_pubmed(
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
             chunk_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
+            partial_run=partial_run,
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error(
@@ -1057,6 +1071,7 @@ def run_chembl(
             ids = limited_ids
             limit_counter = get_limit_count
 
+        partial_run = (limit is not None) or (offset > 0)
         try:
             df = cl.get_documents(
                 ids,
@@ -1083,6 +1098,7 @@ def run_chembl(
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
             chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
+            partial_run=partial_run,
         )
         if exit_code == 0:
             logger.info("document_chembl_done", output=str(output_path))
@@ -1160,6 +1176,7 @@ def run_all(
         ids_source = ids_limited
         limit_counter = get_limit_count
 
+    partial_run = (limit is not None) or (offset > 0)
     iterator = iter(ids_source)
     sample_size = getattr(args, "chembl_chunk_size", all_defaults.chunk_size)
     sample_ids = list(islice(iterator, sample_size))
@@ -1308,6 +1325,7 @@ def run_all(
             chunk_size=getattr(
                 args, "chembl_chunk_size", all_defaults.chunk_size
             ),
+            partial_run=partial_run,
         )
         if fallback_state is not None:
             logger.info(
@@ -1414,6 +1432,7 @@ def run_all(
         input_csv=Path(args.input_csv),
         key_columns=["document_chembl_id"],
         chunk_size=getattr(args, "chembl_chunk_size", all_defaults.chunk_size),
+        partial_run=partial_run,
     )
     if fallback_state is not None:
         logger.info(

@@ -1195,6 +1195,8 @@ def preprocess_documents_csv(
     ref_document_rel: str = DEFAULT_REF_RELATIVE,
     out_document_rel: str = DEFAULT_OUTPUT_RELATIVE,
     qa_reference_rel: str | None = DEFAULT_QA_REFERENCE_RELATIVE,
+    *,
+    run_qa: bool = True,
 ) -> str:
     base_dir = Path(base_path)
     ref_path = _resolve_relative(base_dir, ref_document_rel)
@@ -1254,7 +1256,7 @@ def preprocess_documents_csv(
                 invalid=invalid_counts["invalid"],
             )
 
-    if qa_reference_rel:
+    if run_qa and qa_reference_rel:
         qa_reference_path = _resolve_relative(base_dir, qa_reference_rel)
         if qa_reference_path.exists():
             qa_module = None
