@@ -93,6 +93,12 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         output_path = Path(output_candidate)
 
     written_path = _write_output(frame, output_path, cfg=cfg)
+    logger.info("generated", count=int(frame.shape[0]))
+    logger.info(
+        "activity_generated",
+        count=int(frame.shape[0]),
+        output=str(written_path),
+    )
     logger.info(
         "generated",
         output=str(written_path),
@@ -112,6 +118,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser, args, log_cfg = parse_args(argv)
     log_cfg.level = args.log_level
     structured_logger = cli.configure_logger(log_cfg)
+    if structured_logger is None:  # pragma: no cover - exercised via CLI tests
+        structured_logger = logger
     structured_logger.info("pipeline_start", run_id=log_cfg.run_id)
 
     try:
