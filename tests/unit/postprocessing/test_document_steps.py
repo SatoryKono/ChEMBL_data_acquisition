@@ -3,7 +3,10 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from library.postprocess.documents.steps import normalize_document_fields
+from library.postprocess.documents.steps import (
+    enrich_document_publication_year,
+    normalize_document_fields,
+)
 
 
 @pytest.mark.unit
@@ -36,3 +39,36 @@ def test_normalize_document_fields__skips_whitespace_when_disabled() -> None:
     result = normalize_document_fields(frame, trim_whitespace=False)
 
     assert result.loc[0, "title"] == "  Example  "
+
+
+@pytest.mark.unit
+def test_enrich_document_publication_year__uses_year_and_fallback() -> None:
+    frame = pd.DataFrame({"year": ["2010", pd.NA, ""]})
+
+    result = enrich_document_publication_year(frame, fallback_year=1999)
+
+    expected = pd.Series([2010, 1999, 1999], dtype="Int64")
+    pd.testing.assert_series_equal(result["publication_year"], expected, check_names=False)
+
+
+@pytest.mark.unit
+def test_enrich_document_publication_year__prefers_external_sources_when_requested() -> None:
+    frame = pd.DataFrame(
+        {
+            "year": ["2001", "2002"],
+            "pubmed.yearcompleted": ["2005", pd.NA],
+        }
+    )
+
+    result = enrich_document_publication_year(frame, prefer_doi_year=True)
+
+    expected = pd.Series([2005, 2002], dtype="Int64")
+    pd.testing.assert_series_equal(result["publication_year"], expected, check_names=False)
+
+
+@pytest.mark.unit
+def test_enrich_document_publication_year__validates_fallback_range() -> None:
+    frame = pd.DataFrame({"year": [pd.NA]})
+
+    with pytest.raises(ValueError, match="supported range"):
+        enrich_document_publication_year(frame, fallback_year=1400)
