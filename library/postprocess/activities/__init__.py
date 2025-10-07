@@ -2,6 +2,7 @@
 from .schema import ACTIVITY_SCHEMA, validate_activities
 from .steps import (
     PIPELINE_STEPS,
+    PIPELINE_VERSION,
     enrich_activity_quality,
     finalize_activity_records,
     normalize_activity_records,
@@ -11,6 +12,7 @@ from .steps import (
 __all__ = [
     "ACTIVITY_SCHEMA",
     "PIPELINE_STEPS",
+    "PIPELINE_VERSION",
     "enrich_activity_quality",
     "finalize_activity_records",
     "normalize_activity_records",

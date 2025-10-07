@@ -1,0 +1,40 @@
+# Post-processing pipeline for ChEMBL activity exports.
+# The pipeline_version falls back to "dev" when CHEMBL_DA_POSTPROCESS_VERSION is not set.
+pipeline_version: ${CHEMBL_DA_POSTPROCESS_VERSION:-dev}
+steps:
+  - name: normalize_activity_records
+    enabled: true
+    callable: library.postprocess.activities.steps:normalize_activity_records
+    params:
+      strip_columns:
+        - molecule_chembl_id
+        - assay_chembl_id
+      uppercase_columns:
+        - standard_type
+        - standard_relation
+        - standard_units
+  - name: enrich_activity_quality
+    enabled: true
+    callable: library.postprocess.activities.steps:enrich_activity_quality
+    params:
+      comment_column: data_validity_comment
+      flag_column: quality_flag
+      positive_indicators:
+        - valid
+        - curated
+        - review
+  - name: finalize_activity_records
+    enabled: true
+    callable: library.postprocess.activities.steps:finalize_activity_records
+    params:
+      id_column: activity_id
+      string_columns:
+        - molecule_chembl_id
+        - assay_chembl_id
+        - standard_type
+        - standard_relation
+        - standard_units
+      order_columns:
+        - activity_id
+        - molecule_chembl_id
+        - assay_chembl_id

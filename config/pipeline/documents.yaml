@@ -1,0 +1,29 @@
+# Post-processing pipeline for ChEMBL document exports.
+# The pipeline_version falls back to "dev" when CHEMBL_DA_POSTPROCESS_VERSION is not set.
+pipeline_version: ${CHEMBL_DA_POSTPROCESS_VERSION:-dev}
+steps:
+  - name: normalize_document_fields
+    enabled: true
+    callable: library.postprocess.documents.steps:normalize_document_fields
+    params:
+      lowercase_columns: true
+      strip_columns:
+        - title
+        - journal
+        - doc_type
+  - name: enrich_document_publication_year
+    enabled: true
+    callable: library.postprocess.documents.steps:enrich_document_publication_year
+    params:
+      source_column: year
+      target_column: publication_year
+  - name: finalize_document_records
+    enabled: true
+    callable: library.postprocess.documents.steps:finalize_document_records
+    params:
+      string_columns:
+        - document_chembl_id
+        - title
+        - doc_type
+      sort_columns:
+        - document_chembl_id

@@ -23,6 +23,27 @@ Keep these boundaries in mind when extending the stack: orchestration manages ho
 
 When contributing new steps, prefer pure functions or dataclasses over implicit globals so that the orchestrator can execute them both via CLI and programmatic workflows. Consult the [Architecture overview](docs/en/ARCHITECTURE.md) for the surrounding pipeline boundaries.
 
+## Pipeline configuration files
+
+Declarative YAML files under `config/pipeline/` list the default post-processing steps for each domain (`activities`, `assays`, `documents`, `targets`). Every file follows the schema below:
+
+```yaml
+pipeline_version: ${CHEMBL_DA_POSTPROCESS_VERSION:-dev}
+steps:
+  - name: normalize_activity_records
+    enabled: true
+    callable: library.postprocess.activities.steps:normalize_activity_records
+    params:
+      strip_columns:
+        - molecule_chembl_id
+```
+
+- `pipeline_version` supports `${VAR}` placeholders with optional `:-default` segments. When `CHEMBL_DA_POSTPROCESS_VERSION` is not defined, the loader falls back to `dev`.
+- Each `steps` entry resolves the `callable` using `library.postprocess.common.import_utils.resolve_dotted_path` and applies the supplied `params` as keyword arguments.
+- Disabled steps (`enabled: false`) remain in the YAML for auditability but are skipped at runtime.
+
+`library.postprocess.config.load_pipeline_config` reads the YAML using a UTF-8 safe loader and exposes both the resolved `StepDefinition` instances and the configured `pipeline_version`. Scripts and notebooks import `PIPELINE_STEPS`/`PIPELINE_VERSION` from the respective `library.postprocess.<domain>.steps` module to stay in sync with the declarative configuration.
+
 ## Schema validation strategy
 
 Schema definitions live under `library/schemas` and expose both dataclasses (`TargetsSchema`, `TestitemsSchema`, …) and `normalize_*` helpers. Downstream stages import these to coerce pandas frames into the canonical dtype mix, enforce required columns and reorder outputs before they hit disk. 【F:library/schemas/__init__.py†L1-L34】

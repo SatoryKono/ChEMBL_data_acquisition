@@ -2,6 +2,7 @@
 from .schema import DOCUMENT_SCHEMA, validate_documents
 from .steps import (
     PIPELINE_STEPS,
+    PIPELINE_VERSION,
     enrich_document_publication_year,
     finalize_document_records,
     normalize_document_fields,
@@ -11,6 +12,7 @@ from .steps import (
 __all__ = [
     "DOCUMENT_SCHEMA",
     "PIPELINE_STEPS",
+    "PIPELINE_VERSION",
     "enrich_document_publication_year",
     "finalize_document_records",
     "normalize_document_fields",

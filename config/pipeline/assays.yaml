@@ -1,0 +1,32 @@
+# Post-processing pipeline for ChEMBL assay exports.
+# The pipeline_version falls back to "dev" when CHEMBL_DA_POSTPROCESS_VERSION is not set.
+pipeline_version: ${CHEMBL_DA_POSTPROCESS_VERSION:-dev}
+steps:
+  - name: normalize_assay_metadata
+    enabled: true
+    callable: library.postprocess.assays.steps:normalize_assay_metadata
+    params:
+      categorical_columns:
+        - assay_type
+        - assay_test_type
+        - assay_format
+  - name: enrich_assay_flags
+    enabled: true
+    callable: library.postprocess.assays.steps:enrich_assay_flags
+    params:
+      type_column: assay_type
+      flag_column: is_confirmatory
+      positive_indicators:
+        - confirm
+        - screening
+  - name: finalize_assay_records
+    enabled: true
+    callable: library.postprocess.assays.steps:finalize_assay_records
+    params:
+      string_columns:
+        - assay_chembl_id
+        - assay_type
+        - assay_test_type
+        - description
+      sort_columns:
+        - assay_chembl_id

@@ -1,0 +1,28 @@
+# Post-processing pipeline for ChEMBL target exports.
+# The pipeline_version falls back to "dev" when CHEMBL_DA_POSTPROCESS_VERSION is not set.
+pipeline_version: ${CHEMBL_DA_POSTPROCESS_VERSION:-dev}
+steps:
+  - name: normalize_target_fields
+    enabled: true
+    callable: library.postprocess.targets.steps:normalize_target_fields
+    params:
+      id_column: target_chembl_id
+      strip_columns:
+        - pref_name
+        - organism
+  - name: enrich_target_synonyms
+    enabled: true
+    callable: library.postprocess.targets.steps:enrich_target_synonyms
+    params:
+      synonyms_column: synonyms
+      separator: ","
+  - name: finalize_target_records
+    enabled: true
+    callable: library.postprocess.targets.steps:finalize_target_records
+    params:
+      string_columns:
+        - target_chembl_id
+        - pref_name
+        - target_type
+      sort_columns:
+        - target_chembl_id

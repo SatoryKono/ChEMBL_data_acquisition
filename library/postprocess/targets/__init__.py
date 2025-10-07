@@ -2,6 +2,7 @@
 from .schema import TARGET_SCHEMA, validate_targets
 from .steps import (
     PIPELINE_STEPS,
+    PIPELINE_VERSION,
     enrich_target_synonyms,
     finalize_target_records,
     normalize_target_fields,
@@ -10,6 +11,7 @@ from .steps import (
 
 __all__ = [
     "PIPELINE_STEPS",
+    "PIPELINE_VERSION",
     "TARGET_SCHEMA",
     "enrich_target_synonyms",
     "finalize_target_records",
