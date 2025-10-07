@@ -81,4 +81,12 @@ def _format_expected_type(expected: type | tuple[type, ...]) -> str:
     return repr(expected)
 
 
-__all__ = ["ImportResolutionError", "import_by_path"]
+
+
+def resolve_dotted_path(path: str) -> Any:
+    """Backward compatible alias for :func:`import_by_path`."""
+
+    return import_by_path(path)
+
+
+__all__ = ["ImportResolutionError", "import_by_path", "resolve_dotted_path"]
