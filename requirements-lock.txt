@@ -54,6 +54,7 @@ Pygments==2.19.2
 pyproject_hooks==1.2.0
 pytest==8.4.2
 pytest-cov==6.3.0
+pytest-json-report==1.5.0
 python-dateutil==2.9.0.post0
 pytokens==0.1.10
 pytz==2025.2
