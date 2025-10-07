@@ -110,7 +110,7 @@ def run_pipeline(config: Config, options: DocumentPipelineOptions) -> PipelineRu
         output_path=output_path,
         executed=True,
         reason=reason,
-        written=None,
+        written=exit_code == 0,
     )
 
 
