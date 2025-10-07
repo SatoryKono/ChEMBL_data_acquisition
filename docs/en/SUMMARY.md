@@ -9,7 +9,7 @@ same filenames inside `../ru/`.
 - [Usage and CLI reference](./USAGE.md)
 - [Configuration reference](./CONFIG.md)
 - [Output specification](./OUTPUT.md)
-- [Target organism and isoform post-processing](../OUTPUT_TARGETS_EN.md)
+- [Target organism and isoform post-processing](./OUTPUT_TARGETS.md)
 - [Quality assurance process](./QA_PROCESS.md)
 
 ## Architecture
@@ -23,6 +23,7 @@ same filenames inside `../ru/`.
 - [Debugging playbook](./guides/DEBUGGING.md)
 - [Advanced scenarios](./guides/ADVANCED_SCENARIOS.md)
 - [FAQ and diagnostics](./guides/FAQ.md)
+- [Target post-processing runbook](./guides/POSTPROCESSING_RUNBOOK.md)
 
 ## Reference
 - [Configuration tables](./CONFIG.md)
