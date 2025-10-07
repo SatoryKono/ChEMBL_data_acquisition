@@ -131,3 +131,20 @@ def test_known_checksum_variants__includes_sparse_index_checksum(tmp_path: Path)
     variants = dictionaries._iter_additional_checksums("dictionary_root", base_dir=tmp_path)
 
     assert dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM in variants
+
+
+@pytest.mark.unit
+def test_iter_additional_checksums__merges_manifest_allowlist(tmp_path: Path) -> None:
+    """Allow-list entries declared on disk should extend the runtime variants."""
+
+    allowlist_path = tmp_path / "manifest.allowlist.yaml"
+    custom_checksum = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    allowlist_path.write_text(
+        f"dictionary_root:\n  - \"{custom_checksum}\"\n",
+        encoding="utf-8",
+    )
+
+    variants = dictionaries._iter_additional_checksums("dictionary_root", base_dir=tmp_path)
+
+    assert dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM in variants
+    assert custom_checksum in variants

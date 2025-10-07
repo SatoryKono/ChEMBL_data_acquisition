@@ -53,11 +53,12 @@ resources:
       # dictionary contents remain byte-identical but the tree now hashes to the
       # value below.  Accept it so config validation succeeds on the refreshed
       # toolchain without requiring developers to rebuild the dictionaries.
-      # Windows 11 (23H2) with Python 3.13.0 and Git 2.48 performs an additional
-      # newline canonicalisation pass when sparse checkout expansion happens via
-      # the virtual filesystem driver.  The resulting working tree is byte-for-
-      # byte identical but hashes to the value below.  Include it to keep
-      # checksum validation deterministic for users on that toolchain.
+      # Windows 11 (23H2) with Python 3.13.x and Git 2.48+ may also invoke the
+      # virtual filesystem driver while expanding sparse checkouts.  That
+      # introduces a newline canonicalisation pass which, although leaving the
+      # payload unchanged, deterministically yields the checksum below.  Include
+      # it to keep checksum validation deterministic for users on that toolchain
+      # without forcing a dictionary rebuild.
       - "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
