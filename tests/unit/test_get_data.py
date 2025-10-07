@@ -23,6 +23,7 @@ def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
     output_dir.mkdir()
     input_files = dict(get_data.DEFAULT_INPUT_FILES)
     output_stems = dict(get_data.DEFAULT_OUTPUT_STEMS)
+    subcommands = {step.name: step.subcommand for step in get_data.DEFAULT_PIPELINE_STEPS}
     for name, filename in input_files.items():
         target = input_dir / filename
         target.write_text("id\nplaceholder\n", encoding="utf-8")
@@ -41,6 +42,7 @@ def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
         dry_run=False,
         input_files=input_files,
         output_stems=output_stems,
+        subcommands=subcommands,
     )
 
 
@@ -199,6 +201,83 @@ def test_resolve_pipeline_steps__applies_overrides() -> None:
     assert mapping["document"].input_filename == "doc.csv"
     assert mapping["activity"].output_stem == "custom"
     assert mapping["target"].subcommand is None
+
+
+@pytest.mark.unit
+def test_override_subcommand__target_pipeline_uses_selected_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("{}", encoding="utf-8")
+    (input_dir / "target.csv").write_text("target_chembl_id\nT1\n", encoding="utf-8")
+
+    args = argparse.Namespace(
+        base_path=base_path,
+        input_dir=Path("input"),
+        output_dir=Path("output"),
+        config=config_path,
+        date_prefix="20240214",
+        log_level="INFO",
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        verbose=False,
+        pipeline_registry=None,
+        override_input=[],
+        override_output_stem=[],
+        override_subcommand=["target=chembl"],
+    )
+
+    resolved_steps = get_data._resolve_pipeline_steps(args)
+    target_only = tuple(step for step in resolved_steps if step.name == "target")
+    cfg = get_data._prepare_config(args, target_only)
+    assert cfg.subcommand_for("target") == "chembl"
+
+    captured: list[str] = []
+
+    def _build_options(
+        run_cfg: get_data.PipelineRunConfig, input_path: Path, output_path: Path
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            input_csv=input_path,
+            output_csv=output_path,
+            command=run_cfg.subcommand_for("target") or "all",
+        )
+
+    def _runner(_: get_data.Config, options: SimpleNamespace) -> PipelineRunResult:
+        captured.append(options.command)
+        destination = Path(options.output_csv)
+        destination.write_text("target_chembl_id\nT1\n", encoding="utf-8")
+        return PipelineRunResult(
+            exit_code=0,
+            output_path=destination,
+            executed=True,
+            reason=None,
+            written=True,
+        )
+
+    stream = io.StringIO()
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="unit_override")
+    )
+    monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+    monkeypatch.setattr(
+        get_data,
+        "_PIPELINE_APIS",
+        {"target": get_data.PipelineApi(_build_options, _runner)},
+        raising=False,
+    )
+    monkeypatch.setattr(get_data, "load_config", lambda *args, **kwargs: SimpleNamespace(), raising=False)
+
+    status = get_data.run_pipeline(cfg, steps=target_only)
+    assert status == 0
+    assert captured == ["chembl"]
 
 
 @pytest.mark.unit
