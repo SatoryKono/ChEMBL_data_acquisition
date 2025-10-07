@@ -46,6 +46,11 @@ _SHA256_WILDCARD = "*"
 _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
     "dictionary_root": (
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        # Windows 11 + Python 3.13 + Git 2.47 started emitting the checksum
+        # below after CRLF normalisation changes in October 2025.  Accept it so
+        # that developers on the latest toolchain can validate the dictionaries
+        # without rebuilding the bundle locally.
+        "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
     ),
 }
 
