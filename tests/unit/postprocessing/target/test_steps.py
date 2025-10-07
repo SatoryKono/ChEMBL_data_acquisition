@@ -3,10 +3,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from library.postprocess.targets.steps import (
-    finalize_target_records,
-    normalize_target_fields,
-)
+from library.postprocess.targets import steps
+from library.postprocess.targets.steps import finalize_target_records, normalize_target_fields
 
 
 @pytest.mark.unit
@@ -92,3 +90,46 @@ def test_finalize_target_records__handles_empty_input_frame() -> None:
     assert str(result["target_chembl_id"].dtype) == "string"
     assert str(result["pref_name"].dtype) == "string"
     assert str(result["target_type"].dtype) == "string"
+
+
+@pytest.mark.unit
+def test_finalize_target_records__supports_sort_override() -> None:
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL2", "CHEMBL1"],
+            "pref_name": ["Beta", "Alpha"],
+            "target_type": ["type-b", "type-a"],
+        }
+    )
+
+    result = finalize_target_records(frame, enforce_schema=False, sort_by=["pref_name"])
+
+    assert result.loc[0, "pref_name"] == "Alpha"
+    assert result.loc[1, "pref_name"] == "Beta"
+    assert list(result.columns[:3]) == [
+        "target_chembl_id",
+        "pref_name",
+        "target_type",
+    ]
+
+
+@pytest.mark.unit
+def test_finalize_target_records__skips_schema_validation_when_disabled(monkeypatch) -> None:
+    calls: list[pd.DataFrame] = []
+
+    def _fake_validate(df: pd.DataFrame, *, context: str):  # pragma: no cover - sanity
+        calls.append(df)
+        return df
+
+    monkeypatch.setattr(steps, "validate_targets", _fake_validate)
+
+    frame = pd.DataFrame({"target_chembl_id": ["CHEMBL1"], "pref_name": ["Alpha"]})
+
+    result = finalize_target_records(frame, enforce_schema=False)
+
+    assert not calls
+    assert list(result.columns)[:3] == [
+        "target_chembl_id",
+        "pref_name",
+        "target_type",
+    ]
