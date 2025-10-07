@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from library.postprocess.common import StepDefinition, run_steps
+from library.postprocess.common.types import StepError
 from library.postprocess.common.schema import DataFrameSchema
 from library.postprocess.common.types import SchemaValidationError
 
@@ -121,3 +122,57 @@ def test_run_steps__ignores_unsupported_parameters(caplog: pytest.LogCaptureFixt
         "ignoring unsupported parameters" in record.message for record in caplog.records
     )
     assert metadata.steps[0].parameters["unexpected"] == "ignored"
+
+
+def test_run_steps__retries_after_callable_rejects_parameters(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    frame = pd.DataFrame({"seed": [9]}, dtype="int64")
+
+    steps = (
+        StepDefinition(
+            name="with_constant",
+            func=_with_constant,
+            params={"column": "value", "value": 4, "unexpected": "ignored"},
+        ),
+    )
+
+    from library.postprocess.common import runner
+
+    original_signature = runner.inspect.signature
+
+    def failing_signature(func):
+        if func is _with_constant:
+            raise ValueError("no signature available")
+        return original_signature(func)
+
+    monkeypatch.setattr(runner.inspect, "signature", failing_signature)
+
+    test_logger = logging.getLogger("tests.postprocess.runner")
+    test_logger.handlers.clear()
+    test_logger.propagate = True
+
+    with caplog.at_level("WARNING", logger="tests.postprocess.runner"):
+        result, metadata = run_steps(frame, steps, logger=test_logger)
+
+    assert result["value"].tolist() == [4]
+    assert any("rejected parameters" in record.message for record in caplog.records)
+    assert metadata.steps[0].parameters["unexpected"] == "ignored"
+
+
+def test_run_steps__propagates_unrelated_type_errors() -> None:
+    frame = pd.DataFrame({"seed": [1]}, dtype="int64")
+
+    def _boom(df: pd.DataFrame, *, column: str) -> pd.DataFrame:
+        raise TypeError("boom")
+
+    steps = (
+        StepDefinition(
+            name="boom",
+            func=_boom,
+            params={"column": "value"},
+        ),
+    )
+
+    with pytest.raises(StepError, match="boom"):
+        run_steps(frame, steps)
