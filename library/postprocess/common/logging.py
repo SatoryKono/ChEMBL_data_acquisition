@@ -56,6 +56,17 @@ class SchemaDiff:
 
 
 @dataclass(slots=True)
+class StepErrorInfo:
+    """Structured representation of a step failure."""
+
+    type: str
+    message: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": self.type, "message": self.message}
+
+
+@dataclass(slots=True)
 class StepMetrics:
     """Metrics captured for a single transformation step."""
 
@@ -68,6 +79,8 @@ class StepMetrics:
     output_rows: int
     output_columns: int
     schema_diff: SchemaDiff = field(default_factory=SchemaDiff)
+    parameters: dict[str, Any] = field(default_factory=dict)
+    error: StepErrorInfo | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a dictionary representation suitable for JSON output."""
@@ -80,6 +93,8 @@ class StepMetrics:
             "input": {"rows": self.input_rows, "columns": self.input_columns},
             "output": {"rows": self.output_rows, "columns": self.output_columns},
             "schema_diff": self.schema_diff.to_dict(),
+            "parameters": dict(self.parameters),
+            "error": self.error.to_dict() if self.error else None,
         }
 
 
@@ -204,6 +219,7 @@ def execute_step(
     frame: pd.DataFrame,
     *,
     logger: logging.Logger,
+    params: Mapping[str, Any] | None = None,
 ) -> tuple[pd.DataFrame, StepMetrics]:
     """Execute ``func`` capturing timing and schema mutations."""
 
@@ -213,8 +229,9 @@ def execute_step(
     before_dtypes = _describe_dtypes(frame)
     input_rows, input_columns = frame.shape
 
+    parameters = dict(params or {})
     logger.info("Starting step %s", step_name)
-    result = func(frame)
+    result = func(frame, **parameters)
 
     completed_at = _now_iso()
     duration_s = _duration_seconds(start_clock)
@@ -253,6 +270,7 @@ def execute_step(
         output_rows=output_rows,
         output_columns=output_columns,
         schema_diff=diff,
+        parameters=parameters,
     )
     return result, metrics
 
@@ -292,6 +310,7 @@ def dump_report(
 __all__ = [
     "PipelineRunMetrics",
     "SchemaDiff",
+    "StepErrorInfo",
     "StepMetrics",
     "ValidationMetrics",
     "build_report_payload",

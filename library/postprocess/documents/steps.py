@@ -69,7 +69,7 @@ def run_document_pipeline(
     return run_steps(
         df,
         PIPELINE_STEPS,
-        schema=DOCUMENT_SCHEMA,
+        post_schema=DOCUMENT_SCHEMA,
         pipeline_version=resolved_version,
         logger=logger,
     )

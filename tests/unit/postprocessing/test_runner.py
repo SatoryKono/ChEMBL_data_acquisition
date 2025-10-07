@@ -1,0 +1,96 @@
+from __future__ import annotations
+
+import pandas as pd
+import pytest
+
+from library.postprocess.common import StepDefinition, run_steps
+from library.postprocess.common.schema import DataFrameSchema
+from library.postprocess.common.types import SchemaValidationError
+
+
+def _with_constant(
+    df: pd.DataFrame, *, column: str, value: int
+) -> pd.DataFrame:  # pragma: no cover - exercised via tests
+    result = df.copy(deep=True)
+    result[column] = value
+    return result
+
+
+def _add_columns(
+    df: pd.DataFrame, *, target: str, left: str, right: str
+) -> pd.DataFrame:  # pragma: no cover - exercised via tests
+    result = df.copy(deep=True)
+    result[target] = result[left] + result[right]
+    return result
+
+
+def test_run_steps__applies_parameters_and_records_metadata() -> None:
+    source = pd.DataFrame({"seed": [1, 2]}, dtype="int64")
+
+    steps = (
+        StepDefinition(
+            name="with_constant",
+            func=_with_constant,
+            params={"column": "value", "value": 3},
+        ),
+        StepDefinition(
+            name="combine_columns",
+            func=_add_columns,
+            params={"target": "total", "left": "seed", "right": "value"},
+        ),
+    )
+
+    schema = DataFrameSchema(
+        required_columns=("seed", "value", "total"),
+        dtypes={"seed": "int64", "value": "int64", "total": "int64"},
+    )
+
+    frame, metadata = run_steps(
+        source,
+        steps,
+        pipeline_version="2024.1",
+        post_schema=schema,
+    )
+
+    assert list(frame.columns) == ["seed", "value", "total"]
+    assert frame["value"].tolist() == [3, 3]
+    assert frame["total"].tolist() == [4, 5]
+
+    assert "value" not in source.columns  # original frame remains untouched
+    assert "pipeline_version" not in source.attrs
+
+    assert frame.attrs["pipeline_version"] == "2024.1"
+    assert metadata.pipeline_version == "2024.1"
+
+    assert len(metadata.steps) == 2
+    assert metadata.steps[0].parameters == {"column": "value", "value": 3}
+    assert metadata.steps[0].error is None
+    assert metadata.steps[1].parameters["target"] == "total"
+
+
+def test_run_steps__validates_input_schema_before_steps() -> None:
+    frame = pd.DataFrame({"unexpected": [1]}, dtype="int64")
+    pre_schema = DataFrameSchema(required_columns=("seed",))
+
+    with pytest.raises(SchemaValidationError):
+        run_steps(
+            frame,
+            (),
+            pipeline_version="2024.1",
+            pre_schema=pre_schema,
+        )
+
+
+def test_run_steps__accepts_tuple_step_specification() -> None:
+    frame = pd.DataFrame({"seed": [0, 1]}, dtype="int64")
+
+    final, metadata = run_steps(
+        frame,
+        ((_with_constant, {"column": "value", "value": 10}),),
+        pipeline_version="2024.2",
+        post_schema=DataFrameSchema(required_columns=("seed", "value")),
+    )
+
+    assert final["value"].tolist() == [10, 10]
+    assert metadata.steps[0].name == "_with_constant"
+    assert metadata.steps[0].parameters == {"column": "value", "value": 10}

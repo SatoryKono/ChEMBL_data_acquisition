@@ -1,8 +1,9 @@
 """Shared type hints and dataclasses for postprocessing steps."""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Iterable, Optional, Protocol
+from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import Any, Iterable, Mapping, Optional, Protocol
 
 import pandas as pd
 
@@ -21,10 +22,13 @@ class StepDefinition:
     name: str
     func: StepFn
     description: Optional[str] = None
+    params: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:  # pragma: no cover - dataclass validation
         if not callable(self.func):
             raise TypeError("StepDefinition.func must be callable")
+        params = dict(self.params)
+        object.__setattr__(self, "params", MappingProxyType(params))
 
 
 class StepError(RuntimeError):

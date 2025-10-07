@@ -71,7 +71,7 @@ def run_target_pipeline(
     return run_steps(
         df,
         PIPELINE_STEPS,
-        schema=TARGET_SCHEMA,
+        post_schema=TARGET_SCHEMA,
         pipeline_version=resolved_version,
         logger=logger,
     )
