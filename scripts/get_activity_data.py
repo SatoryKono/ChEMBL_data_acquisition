@@ -74,6 +74,7 @@ from library.processing.activity import (
     apply_activity_annotations,
     compute_activity_bounds,
 )
+from library.postprocess.config import PipelineConfigError, load_pipeline_config
 from library.postprocessing.activity_extended import process_activity_extended
 from library.postprocessing import helpers as postprocessing_helpers
 from library.qa.reporting import build_table_quality_hook
@@ -772,6 +773,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         limit=limit,
         offset=offset,
     )
+    _log_activity_postprocess_pipeline()
     logger.info(
         f"Starting activity pipeline with input '{args.input_csv}' and output '{output_path}'."
     )
@@ -1376,6 +1378,25 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 0
     return run_chembl(cfg, args)
+
+
+def _log_activity_postprocess_pipeline() -> None:
+    """Emit debug logging describing the declarative post-processing pipeline."""
+
+    try:
+        pipeline_cfg = load_pipeline_config("activities")
+    except PipelineConfigError as exc:
+        logger.debug(
+            "activity_postprocess_config_unavailable",
+            error=str(exc),
+        )
+        return
+
+    logger.debug(
+        "activity_postprocess_pipeline_config",
+        version=pipeline_cfg.pipeline_version,
+        steps=[step.callable_path for step in pipeline_cfg.steps],
+    )
 
 
 def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:

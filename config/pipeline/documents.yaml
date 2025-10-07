@@ -1,0 +1,25 @@
+pipeline_version: "2024-05-01"
+steps:
+  - name: normalize_documents
+    enabled: true
+    callable: "library.postprocess.documents.steps:normalize_documents"
+    params:
+      input_csv: "$CHEMBL_DA_BASE_PATH/output/documents/output.documents.csv"
+      text_columns:
+        - "title"
+        - "abstract"
+      strip_html: true
+  - name: classify_types
+    enabled: true
+    callable: "library.postprocess.documents.steps:classify_types"
+    params:
+      classifier_model: "config/schema/document.yaml"
+      review_threshold: 0.75
+      experimental_threshold: 0.6
+  - name: export_quality_report
+    enabled: true
+    callable: "library.postprocess.documents.steps:export_quality_report"
+    params:
+      output_dir: "$CHEMBL_DA_BASE_PATH/output/documents"
+      filename: "document.quality.csv"
+      include_logs: true

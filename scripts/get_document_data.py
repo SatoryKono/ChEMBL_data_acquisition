@@ -55,6 +55,7 @@ from library.common.csv_utils import write_csv_chunks_deterministic
 from library.integration import chembl_library as cl
 from library.document_defaults import ALL_DEFAULTS, CHEMBL_DEFAULTS, PUBMED_DEFAULTS
 from library.pipelines.document import postprocessing as dp
+from library.postprocess.config import PipelineConfigError, load_pipeline_config
 from library.postprocessing import document as document_export_postprocessing
 from library.orchestration import ETLContext
 from library.cli import (
@@ -450,6 +451,7 @@ def _write_export_chunks(
 
 
 def _maybe_run_document_postprocessing(csv_path: Path, *, skip_qa: bool = False) -> None:
+    _log_document_postprocess_pipeline()
     if not csv_path.name.startswith("output.document_"):
         return
 
@@ -486,6 +488,25 @@ def _maybe_run_document_postprocessing(csv_path: Path, *, skip_qa: bool = False)
             output=str(csv_path),
             reason="partial_run",
         )
+
+
+def _log_document_postprocess_pipeline() -> None:
+    """Emit debug information about the document post-processing pipeline."""
+
+    try:
+        pipeline_cfg = load_pipeline_config("documents")
+    except PipelineConfigError as exc:
+        logger.debug(
+            "document_postprocess_config_unavailable",
+            error=str(exc),
+        )
+        return
+
+    logger.debug(
+        "document_postprocess_pipeline_config",
+        version=pipeline_cfg.pipeline_version,
+        steps=[step.callable_path for step in pipeline_cfg.steps],
+    )
 
 
 def _finalise_export(

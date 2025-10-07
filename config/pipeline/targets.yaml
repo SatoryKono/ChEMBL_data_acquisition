@@ -1,0 +1,27 @@
+pipeline_version: "2024-05-01"
+steps:
+  - name: merge_taxonomy
+    enabled: true
+    callable: "library.postprocess.targets.steps:merge_taxonomy"
+    params:
+      taxonomy_source: "$CHEMBL_DA_BASE_PATH/output/targets/organism.output.targets.csv"
+      lineage_columns:
+        - "lineage_superkingdom"
+        - "lineage_phylum"
+        - "lineage_class"
+  - name: prepare_isoforms
+    enabled: true
+    callable: "library.postprocess.targets.steps:prepare_isoforms"
+    params:
+      isoform_export: "$CHEMBL_DA_BASE_PATH/output/targets/isoform.output.targets.csv"
+      dedupe: true
+      sort_key: "target_chembl_id"
+  - name: emit_helper_exports
+    enabled: true
+    callable: "library.postprocess.targets.steps:emit_helper_exports"
+    params:
+      output_dir: "$CHEMBL_DA_BASE_PATH/output/targets"
+      include_files:
+        - "names.output.targets.csv"
+        - "IUPHAR.output.targets.csv"
+      timestamp_column: "timestamp_utc"

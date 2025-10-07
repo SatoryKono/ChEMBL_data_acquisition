@@ -1,0 +1,24 @@
+pipeline_version: "2024-05-01"
+steps:
+  - name: compute_bounds
+    enabled: true
+    callable: "library.postprocess.activities.steps:compute_bounds"
+    params:
+      input_csv: "$CHEMBL_DA_BASE_PATH/output/activities/output.activity.csv"
+      rounding_digits: 3
+      clamp_nonnegative: true
+  - name: annotate_targets
+    enabled: true
+    callable: "library.postprocess.activities.steps:annotate_targets"
+    params:
+      dictionary_csv: "$CHEMBL_DA_BASE_PATH/output/targets/targets.csv"
+      fallback_label: "unknown"
+      minimum_confidence: 0.7
+  - name: export_extended
+    enabled: true
+    callable: "library.postprocess.activities.steps:export_extended"
+    params:
+      search_dir: "$CHEMBL_DA_BASE_PATH/output"
+      output_dir: "$CHEMBL_DA_BASE_PATH/output/activities"
+      dictionary_dir: "config/dictionary"
+      timestamp_column: "timestamp_utc"

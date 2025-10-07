@@ -1,0 +1,25 @@
+pipeline_version: "2024-05-01"
+steps:
+  - name: enrich_metadata
+    enabled: true
+    callable: "library.postprocess.assays.steps:enrich_metadata"
+    params:
+      assay_lookup: "$CHEMBL_DA_BASE_PATH/output/assays/assay.lookup.csv"
+      fallback_relationship: "unknown"
+      include_columns:
+        - "assay_chembl_id"
+        - "relationship_type"
+  - name: compute_quality_flags
+    enabled: true
+    callable: "library.postprocess.assays.steps:compute_quality_flags"
+    params:
+      quality_ruleset: "config/schema/document.yaml"
+      strict: false
+      warn_only: true
+  - name: export_summary
+    enabled: true
+    callable: "library.postprocess.assays.steps:export_summary"
+    params:
+      output_dir: "$CHEMBL_DA_BASE_PATH/output/assays"
+      filename: "assay.summary.csv"
+      include_stats: true

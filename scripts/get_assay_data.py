@@ -30,6 +30,7 @@ import requests
 
 from library.integration import chembl_library as cl
 from library.pipelines.assay import postprocessing as ap
+from library.postprocess.config import PipelineConfigError, load_pipeline_config
 from library.postprocessing import enrich_assay_metadata
 from library import cli
 from library import io
@@ -245,6 +246,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             value=cfg.assay.timeout,
         ),
     )
+    _log_assay_postprocess_pipeline()
     if offset:
         ids_iter = islice(ids_iter, offset, None)
         logger.info("process_offset", offset=offset)
@@ -497,6 +499,25 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0
     return run_chembl(cfg, args)
+
+
+def _log_assay_postprocess_pipeline() -> None:
+    """Emit debug information about the assay post-processing pipeline."""
+
+    try:
+        pipeline_cfg = load_pipeline_config("assays")
+    except PipelineConfigError as exc:
+        logger.debug(
+            "assay_postprocess_config_unavailable",
+            error=str(exc),
+        )
+        return
+
+    logger.debug(
+        "assay_postprocess_pipeline_config",
+        version=pipeline_cfg.pipeline_version,
+        steps=[step.callable_path for step in pipeline_cfg.steps],
+    )
 
 
 def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:

@@ -307,6 +307,41 @@ Controls post-processing of activity tables.
 | `thresholds` | `{review:1, experimental:1, unknown:2}` | Score thresholds for classifications. |
 | `limit` | `null` | Optional cap on processed rows. |
 
+## Post-processing pipeline definitions
+
+Declarative post-processing pipelines are stored under `config/pipeline`. Each YAML
+file corresponds to a domain (`activities.yaml`, `assays.yaml`, `documents.yaml`,
+`targets.yaml`) and contains a `pipeline_version` together with a `steps` array. A
+step entry must declare a `name`, enable flag, and the dotted callable reference in
+`library.postprocess.<domain>.steps`. Optional keyword arguments are provided via
+`params` and are exposed to the callable untouched.
+
+Use :func:`library.postprocess.config.load_pipeline_config` to read these files. The
+loader expands `$CHEMBL_DA_BASE_PATH` placeholders using
+`library.config.env._resolve_placeholder_base_path`, which defaults to
+`~/.local/share/chembl-da` when the environment variable is unset. Additional
+environment variables in string values are resolved via `os.path.expandvars`, and
+all files are read with UTF-8 encoding.
+
+Example fragment:
+
+```yaml
+pipeline_version: "2024-05-01"
+steps:
+  - name: export_extended
+    enabled: true
+    callable: "library.postprocess.activities.steps:export_extended"
+    params:
+      search_dir: "$CHEMBL_DA_BASE_PATH/output"
+      output_dir: "$CHEMBL_DA_BASE_PATH/output/activities"
+      dictionary_dir: "config/dictionary"
+```
+
+At runtime the loader returns :class:`~library.postprocess.config.PipelineConfig`
+with the enabled :class:`~library.postprocess.config.PipelineStep` entries. Each
+step exposes `resolve()` for dynamic imports, allowing orchestrators to execute the
+configured callables or inspect their parameters.
+
 For further customisation consult the Pydantic models in
 [`library/config/models.py`](../../library/config/models.py); the documentation above mirrors the
 available fields and their default values.

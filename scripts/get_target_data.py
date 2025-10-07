@@ -45,6 +45,7 @@ from library import io
 from library.integration import chembl_library as cl
 from library.integration import iuphar_library as ii
 from library.integration import uniprot_library as uu
+from library.postprocess.config import PipelineConfigError, load_pipeline_config
 from library.pipelines.target import protein_classification as pc
 from library.pipelines.target import postprocessing as tp
 from library.pipelines.target.defaults import ModeDefaults, TARGET_MODE_DEFAULTS
@@ -741,6 +742,7 @@ def _postprocess_target_exports(
 ) -> None:
     """Run all target post-processing helpers for ``source`` export."""
 
+    _log_target_postprocess_pipeline()
     if not _is_supported_target_export(source):
         logger.info(
             "target_postprocess_skipped",
@@ -758,6 +760,25 @@ def _postprocess_target_exports(
     )
     _postprocess_names_export(source, cfg=cfg)
     _postprocess_iuphar_export(source, verbose=verbose)
+
+
+def _log_target_postprocess_pipeline() -> None:
+    """Emit debug information about the target post-processing pipeline."""
+
+    try:
+        pipeline_cfg = load_pipeline_config("targets")
+    except PipelineConfigError as exc:
+        logger.debug(
+            "target_postprocess_config_unavailable",
+            error=str(exc),
+        )
+        return
+
+    logger.debug(
+        "target_postprocess_pipeline_config",
+        version=pipeline_cfg.pipeline_version,
+        steps=[step.callable_path for step in pipeline_cfg.steps],
+    )
 
 
 def _resolve_parameter(
