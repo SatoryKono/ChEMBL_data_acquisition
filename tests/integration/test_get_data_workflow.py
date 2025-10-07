@@ -74,6 +74,7 @@ def _prepare_environment(tmp_path: Path) -> get_data.PipelineRunConfig:
     config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
     input_files = dict(get_data.DEFAULT_INPUT_FILES)
     output_stems = dict(get_data.DEFAULT_OUTPUT_STEMS)
+    subcommands = {step.name: step.subcommand for step in get_data.DEFAULT_PIPELINE_STEPS}
     return get_data.PipelineRunConfig(
         base_path=base_path,
         input_dir=input_dir,
@@ -87,6 +88,7 @@ def _prepare_environment(tmp_path: Path) -> get_data.PipelineRunConfig:
         dry_run=False,
         input_files=input_files,
         output_stems=output_stems,
+        subcommands=subcommands,
     )
 
 

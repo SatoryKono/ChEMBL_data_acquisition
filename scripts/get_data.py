@@ -127,10 +127,11 @@ def _build_document_options(
 def _build_target_options(
     cfg: "PipelineRunConfig", input_path: Path, output_path: Path
 ) -> TargetPipelineOptions:
+    command = cfg.subcommand_for("target") or "all"
     return TargetPipelineOptions(
         input_csv=input_path,
         output_csv=output_path,
-        command="all",
+        command=command,
         limit=cfg.limit,
         force=cfg.force,
     )
@@ -194,6 +195,7 @@ class PipelineRunConfig:
     dry_run: bool
     input_files: Mapping[str, str]
     output_stems: Mapping[str, str]
+    subcommands: Mapping[str, str | None]
 
     def input_path(self, name: str) -> Path:
         """Return the fully resolved path for ``name`` in the input directory."""
@@ -207,6 +209,11 @@ class PipelineRunConfig:
         stem = self.output_stems[name]
         filename = f"output.{stem}_{self.date_prefix}.csv"
         return self.output_dir / filename
+
+    def subcommand_for(self, name: str) -> str | None:
+        """Return the configured subcommand for ``name`` if available."""
+
+        return self.subcommands.get(name)
 
 
 def _resolve_path(base: Path, candidate: Path) -> Path:
@@ -449,6 +456,7 @@ def _prepare_config(
     effective_steps = tuple(DEFAULT_PIPELINE_STEPS if steps is None else steps)
     input_files = {step.name: step.input_filename for step in effective_steps}
     output_stems = {step.name: step.output_stem for step in effective_steps}
+    subcommands = {step.name: step.subcommand for step in effective_steps}
 
     base_path = args.base_path.expanduser().resolve()
     input_dir = _resolve_path(base_path, args.input_dir)
@@ -484,6 +492,7 @@ def _prepare_config(
         dry_run=dry_run,
         input_files=input_files,
         output_stems=output_stems,
+        subcommands=subcommands,
     )
 
 
