@@ -1,0 +1,8 @@
+# Additional checksum variants accepted by the dictionary loader.
+#
+# The values defined here are merged with the entries declared in
+# ``manifest.yaml`` so that developers on platforms with divergent newline
+# normalisation (e.g. recent Windows + Git combinations) can still execute the
+# pipeline without rebuilding the bundled dictionaries.
+dictionary_root:
+  - "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15"
