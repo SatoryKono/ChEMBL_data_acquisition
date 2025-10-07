@@ -18,6 +18,11 @@ import requests
 from cachetools import TTLCache
 from requests import Session
 
+try:  # pragma: no cover - urllib3 is always available with requests
+    from urllib3.exceptions import ReadTimeoutError as _Urllib3ReadTimeoutError
+except Exception:  # pragma: no cover - defensive fallback
+    _Urllib3ReadTimeoutError = None  # type: ignore[assignment]
+
 from ..config.models import ApiCfg, ChemblCacheCfg, RetryCfg
 from ..config.runtime import session_with_retry
 from ..common.log import logger
@@ -218,7 +223,8 @@ class ChemblClient:
                 },
             )
 
-        last_exc: requests.RequestException | ValueError | None = None
+        last_exc: BaseException | None = None
+        last_exc_cause: BaseException | None = None
         total_attempts = cfg.retries + 1
         fallback_url = _strip_json_suffix(url)
 
@@ -308,6 +314,7 @@ class ChemblClient:
                 except ValueError as exc:
                     elapsed = monotonic() - start_time
                     last_exc = exc
+                    last_exc_cause = None
                     if attempt >= total_attempts:
                         logger.exception(
                             "request_fail",
@@ -328,6 +335,7 @@ class ChemblClient:
                 except requests.HTTPError as exc:
                     elapsed = monotonic() - start_time
                     last_exc = exc
+                    last_exc_cause = None
                     response = exc.response
                     status = getattr(response, "status_code", None)
                     if (
@@ -371,12 +379,14 @@ class ChemblClient:
                     break
                 except requests.RequestException as exc:
                     elapsed = monotonic() - start_time
-                    last_exc = exc
+                    normalized_exc = _normalise_request_exception(exc)
+                    last_exc = normalized_exc
+                    last_exc_cause = exc if normalized_exc is not exc else None
                     if (
                         not used_fallback
                         and fallback_url is not None
                         and fallback_url != request_url
-                        and _should_switch_to_fallback(exc)
+                        and _should_switch_to_fallback(normalized_exc)
                     ):
                         used_fallback = True
                         request_url = fallback_url
@@ -404,12 +414,16 @@ class ChemblClient:
                             },
                         )
                         break
-                    delay = _backoff_delay(attempt, cfg, header_delay=None, jitter=self._jitter)
+                    delay = _backoff_delay(
+                        attempt, cfg, header_delay=None, jitter=self._jitter
+                    )
                     _log_retry_delay(request_url, attempt, None, delay)
                     sleep(delay)
                     break
 
         if last_exc is not None:
+            if last_exc_cause is not None and last_exc is not last_exc_cause:
+                raise last_exc from last_exc_cause
             raise last_exc
         raise RuntimeError(f"Request loop exited unexpectedly for {url}")
 
@@ -555,6 +569,63 @@ def _should_switch_to_fallback(exception: requests.RequestException) -> bool:
             requests.ConnectionError,
         ),
     )
+
+
+def _normalise_request_exception(
+    exc: requests.RequestException,
+) -> requests.RequestException:
+    """Return a timeout-aware variant of ``exc`` when possible."""
+
+    if isinstance(exc, requests.ReadTimeout):
+        return exc
+
+    timeout_error = _find_read_timeout_error(exc)
+    if timeout_error is None:
+        return exc
+
+    message = str(timeout_error) or "Read timed out."
+    return requests.ReadTimeout(
+        message,
+        request=getattr(exc, "request", None),
+        response=getattr(exc, "response", None),
+    )
+
+
+def _find_read_timeout_error(exc: BaseException) -> BaseException | None:
+    """Return the first read-timeout error found in ``exc``'s chain."""
+
+    seen_ids: set[int] = set()
+    current: BaseException | None = exc
+    timeout_types: tuple[type[BaseException], ...]
+    if _Urllib3ReadTimeoutError is None:  # pragma: no cover - defensive
+        timeout_types = (requests.ReadTimeout,)
+    else:
+        timeout_types = (requests.ReadTimeout, _Urllib3ReadTimeoutError)
+
+    while current is not None:
+        current_id = id(current)
+        if current_id in seen_ids:
+            return None
+        seen_ids.add(current_id)
+        if isinstance(current, timeout_types):
+            return current
+        for arg in getattr(current, "args", ()):
+            if isinstance(arg, BaseException) and id(arg) not in seen_ids:
+                nested = _find_read_timeout_error(arg)
+                if nested is not None:
+                    return nested
+        reason = getattr(current, "reason", None)
+        if isinstance(reason, BaseException) and id(reason) not in seen_ids:
+            nested_reason = _find_read_timeout_error(reason)
+            if nested_reason is not None:
+                return nested_reason
+        cause = current.__cause__
+        if isinstance(cause, BaseException):
+            current = cause
+            continue
+        context = current.__context__
+        current = context if isinstance(context, BaseException) else None
+    return None
 
 
 __all__ = ["ChemblClient", "_chunked"]
