@@ -23,6 +23,14 @@ _SECRET_SUFFIXES: tuple[str, ...] = ("token", "key", "secret", "password")
 _FORMAT = "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
 
 
+def _close_handlers(handlers: list[logging.Handler]) -> None:
+    for handler in handlers:
+        try:
+            handler.close()
+        except Exception:  # pragma: no cover - defensive
+            pass
+
+
 def _level_no(name: str) -> int:
     """Return numeric logging level for ``name``.
 
@@ -212,12 +220,14 @@ def configure_logger(cfg: LoggerConfig, replace_root: bool = True) -> Logger:
 
     if replace_root:
         root_logger = logging.getLogger()
+        _close_handlers(list(root_logger.handlers))
         root_logger.handlers = []
         for handler in handlers:
             root_logger.addHandler(handler)
         root_logger.setLevel(level_no)
         logging.captureWarnings(True)
         warnings_logger = logging.getLogger("py.warnings")
+        _close_handlers(list(warnings_logger.handlers))
         warnings_logger.handlers = []
         for handler in handlers:
             warnings_logger.addHandler(handler)
@@ -225,6 +235,7 @@ def configure_logger(cfg: LoggerConfig, replace_root: bool = True) -> Logger:
         warnings_logger.propagate = False
     else:
         target = logging.getLogger(cfg.logger_name)
+        _close_handlers(list(target.handlers))
         target.handlers = []
         for handler in handlers:
             target.addHandler(handler)

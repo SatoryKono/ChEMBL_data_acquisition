@@ -57,7 +57,7 @@ def _default_input_csv(tmp_dir: Path) -> Path:
     fallback = tmp_dir / "activity.csv"
     with fallback.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["activity_id"])
+        writer.writerow(["activity_chembl_id"])
         writer.writerow(["ACT1"])
         writer.writerow(["ACT2"])
     return fallback

@@ -229,7 +229,7 @@ def _make_report_writer(step_count: int) -> Callable[[Path], None]:
             "- Branch: test\n"
             f"- Timestamp (UTC): {timestamp}\n"
             "- Duration: 0.0 s\n"
-            "- Success rate: 100.0%\n\n"
+            "- Success rate: 100.00%\n\n"
             "| total | passed | failed | skipped | xfailed | xpassed | error |\n"
             "|------:|-------:|-------:|--------:|--------:|--------:|------:|\n"
             f"|{step_count:6d}|{step_count:7d}|{0:7d}|{0:8d}|{0:8d}|{0:8d}|{0:6d}|\n"
@@ -466,7 +466,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert report_payload["summary"]["total"] == 5
     assert report_payload["summary"]["passed"] == 5
     summary_md = summary_md_path.read_text(encoding="utf-8")
-    assert "Success rate: 100.0%" in summary_md
+    assert "Success rate: 100.00%" in summary_md
     assert "|     5|      5|" in summary_md
 
     new_date_prefix = "20240103"
