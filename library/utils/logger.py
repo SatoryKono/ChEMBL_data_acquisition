@@ -9,7 +9,7 @@ from typing import Any, Iterable
 __all__ = ["get_logger", "StructuredLogger"]
 
 
-_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s :: %(message)s"
+_LOG_FORMAT = "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
 _LOG_DIR = Path("logs")
 
 
