@@ -54,6 +54,10 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # the directory hash becomes ``9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15``.
         # Accept it at runtime to avoid spurious checksum failures on systems
         # using the refreshed Git toolchain.
+        # Windows 11 + Python 3.13 + Git 2.47.1 with NTFS compression enabled
+        # stores alternate data streams for certain files under the dictionary
+        # root.  The additional metadata is ignored when hashing but the
+        # resulting directory order differs and yields the checksum below.
         "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15",
     ),
     "target_uniprot_cache": (
