@@ -30,7 +30,7 @@ def normalize_activity_records(df: pd.DataFrame) -> pd.DataFrame:
                 normalised[column]
                 .astype("string")
                 .str.strip()
-                .str.replace("\s+", " ", regex=True)
+                .str.replace(r"\s+", " ", regex=True)
                 .str.upper()
             )
 
