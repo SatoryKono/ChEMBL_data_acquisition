@@ -233,3 +233,86 @@ def test_run__propagates_timeout(cfg: Config, tmp_path: Path, monkeypatch: pytes
 
     assert exit_code == 0
     assert called == [42.5]
+
+
+def test_finalise_export__qa_mismatch_sets_exit_code(
+    cfg: Config,
+    tmp_path: Path,
+    logger_stub: _MemoryLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_csv = tmp_path / "output.document_20250101.csv"
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("document_chembl_id\n", encoding="utf-8")
+
+    frame = get_document_data.build_dataframe(
+        [],
+        columns=get_document_data.DOCUMENT_SCHEMA_COLUMNS,
+        fill_missing=False,
+    )
+
+    def fake_write_csv_chunks(
+        chunks: Iterable[pd.DataFrame],
+        path: Path,
+        **kwargs: Any,
+    ) -> Path:
+        frames = list(chunks)
+        if frames:
+            combined = pd.concat(frames, ignore_index=True)
+        else:
+            combined = pd.DataFrame(columns=kwargs.get("col_order", []))
+        resolved = Path(path)
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        combined.to_csv(resolved, index=False)
+        return resolved
+
+    monkeypatch.setattr(
+        get_document_data,
+        "write_csv_chunks_deterministic",
+        fake_write_csv_chunks,
+    )
+
+    def fake_postprocess_export(path: Path, *, cfg: Any) -> Path:  # noqa: ARG001
+        return Path(path)
+
+    monkeypatch.setattr(
+        get_document_data.document_export_postprocessing,
+        "postprocess_export_file",
+        fake_postprocess_export,
+    )
+
+    finalise_calls: list[dict[str, Any]] = []
+
+    def fake_finalise_csv_output(**kwargs: Any) -> None:
+        finalise_calls.append(kwargs)
+
+    monkeypatch.setattr(
+        get_document_data,
+        "finalise_csv_output",
+        fake_finalise_csv_output,
+    )
+
+    def fail_postprocessing(path: Path) -> None:  # noqa: ARG001
+        raise RuntimeError("QA mismatches")
+
+    monkeypatch.setattr(
+        get_document_data,
+        "_maybe_run_document_postprocessing",
+        fail_postprocessing,
+    )
+
+    exit_code = get_document_data._finalise_export(
+        frame,
+        output_csv,
+        cfg,
+        input_csv=input_csv,
+    )
+
+    assert exit_code == 1
+    assert (
+        "error",
+        "document_postprocess_qa_mismatch",
+        {"error": "QA mismatches", "path": str(output_csv)},
+    ) in logger_stub.events
+    assert finalise_calls, "finalise_csv_output should still be invoked"
