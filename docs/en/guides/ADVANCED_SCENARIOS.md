@@ -66,6 +66,41 @@ python scripts/get_target_data.py all \
 
 You can inspect the parquet file to debug merges before the final normalisation.
 
+## Loading a custom pipeline registry
+
+When orchestrating alternative workflows (e.g. skipping document enrichment or
+adding bespoke QA steps) create a registry YAML and pass it via
+`--pipeline-registry`:
+
+```yaml
+pipelines:
+  - name: document
+    callable: scripts.get_document_data:main
+    input: document_subset.csv
+    output: documents_subset
+  - name: target
+    callable: scripts.get_target_data:main
+    subcommand: chembl
+    output: targets_chembl_only
+  - name: audit
+    callable: tools.audit_pipeline:main
+    input: targets_chembl_only.csv
+    output: audit_report
+```
+
+Invoke the orchestrator with targeted overrides:
+
+```bash
+python scripts/get_data.py \
+  --base-path /data/chembl \
+  --pipeline-registry config/custom_registry.yaml \
+  --override-input document=document_snapshot.csv \
+  --override-subcommand target=all
+```
+
+`--override-output-stem` is useful when reusing the default registry but routing
+results to temporary filenames without editing YAML.
+
 ## Integrating with Makefile targets
 
 The repository ships with handy targets (see `Makefile`):

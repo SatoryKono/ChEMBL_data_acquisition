@@ -67,6 +67,12 @@ The orchestrator runs the document → target → assay → test item → activi
 modules sequentially unless specific stages are skipped via CLI flags. Tissue is
 invoked separately.
 
+Alternative workflows can be described in YAML and supplied via
+`--pipeline-registry`. The loader in
+[`library/pipelines/registry.py`](../../library/pipelines/registry.py) validates
+the structure and allows callers to swap in bespoke callables, change execution
+order or skip steps without modifying code.
+
 External services are accessed via token-bucket rate limiters configured by
 `sources.*` blocks. All network calls are wrapped with retry logic defined in
 `system.retry`.
