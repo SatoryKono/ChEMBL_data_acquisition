@@ -513,6 +513,7 @@ def _ensure_molecule_pref_name(
     cfg: Config,
     client: ChemblClient,
     cache: dict[str, str | None],
+    chunk_failures: ChunkFailureTracker | None = None,
 ) -> pd.DataFrame:
     """Populate ``molecule_pref_name`` via the test item API when missing."""
 
@@ -560,9 +561,14 @@ def _ensure_molecule_pref_name(
                 page_limit=cfg.testitem.request_limit,
             )
         except (requests.RequestException, ValueError, AttributeError) as exc:
+            error_message = str(exc)
             logger.warning(
-                f"Failed to fetch molecule preferred names for {len(pending)} identifiers: {exc}"
+                "pref_name_fetch_failed",
+                pending=list(pending),
+                error=error_message,
             )
+            if chunk_failures is not None:
+                chunk_failures.add_failure(tuple(pending), error_message)
             lookup = pd.DataFrame(columns=["molecule_chembl_id", "pref_name"])
         if not lookup.empty and {"molecule_chembl_id", "pref_name"}.issubset(lookup.columns):
             mapped = (
@@ -1111,7 +1117,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         last_error_extra = None
                         last_error_context = {}
                         return _ensure_molecule_pref_name(
-                            result, cfg=cfg, client=client, cache=pref_name_cache
+                            result,
+                            cfg=cfg,
+                            client=client,
+                            cache=pref_name_cache,
+                            chunk_failures=chunk_failures,
                         )
                 return pd.DataFrame(columns=ACTIVITY_COLUMNS)
 
