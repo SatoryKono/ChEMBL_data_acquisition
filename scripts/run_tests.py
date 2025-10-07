@@ -1,21 +1,26 @@
 """Run the test suite and produce structured JSON and Markdown reports."""
 from __future__ import annotations
 
+import argparse
 import json
+import logging
 import platform
+import shlex
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
 import pytest
+
+from library.cli import configure_logger, create_logger_config
+from library.cli.logging import setup_cli_logging
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 REPORTS_DIR = ROOT_DIR / "reports"
 RAW_REPORT_FILE = REPORTS_DIR / "pytest_raw_report.json"
 REPORT_FILE = REPORTS_DIR / "test_report.json"
-LOG_FILE = REPORTS_DIR / "test_run.log"
 SUMMARY_FILE = REPORTS_DIR / "test_summary.md"
 COVERAGE_DIR = REPORTS_DIR / "coverage"
 COVERAGE_XML = COVERAGE_DIR / "coverage.xml"
@@ -45,7 +50,16 @@ _BASE_PYTEST_COMMAND: list[str] = [
 _DEFAULT_TEST_TARGETS: tuple[str, ...] = tuple(
     str(path) for path in TEST_DIRECTORIES if path.exists()
 )
-PYTEST_COMMAND: tuple[str, ...] = tuple(_BASE_PYTEST_COMMAND + list(_DEFAULT_TEST_TARGETS))
+
+
+logger = logging.getLogger("run_tests")
+
+
+def _relative_to_root(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT_DIR))
+    except ValueError:
+        return str(path)
 
 
 def ensure_reports_directory() -> None:
@@ -55,17 +69,34 @@ def ensure_reports_directory() -> None:
     COVERAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def run_pytest() -> int:
-    """Execute pytest and capture combined output in the log file."""
+def run_pytest(command: Sequence[str]) -> int:
+    """Execute ``command`` and stream output through the configured logger."""
 
-    with LOG_FILE.open("w", encoding="utf-8") as log_file:
-        result = subprocess.run(
-            PYTEST_COMMAND,
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
-    return result.returncode
+    logger.debug("Executing pytest command: %s", " ".join(shlex.quote(part) for part in command))
+
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+    assert process.stdout is not None  # for mypy; Popen(..., stdout=PIPE)
+    with process.stdout:
+        for raw_line in process.stdout:
+            line = raw_line.rstrip()
+            if line:
+                logger.info(line)
+            else:
+                logger.info("")
+
+    return_code = process.wait()
+    if return_code != 0:
+        logger.error("Pytest exited with non-zero status: %s", return_code)
+    else:
+        logger.debug("Pytest exited successfully")
+    return return_code
 
 
 def _load_raw_report() -> dict[str, Any]:
@@ -273,7 +304,7 @@ def build_summary_markdown(report: dict[str, Any]) -> str:
     ]
 
     failure_rows = [
-        (test["nodeid"], (test.get("error") or "See reports/test_run.log"))
+        (test["nodeid"], (test.get("error") or "See logs/run_tests_<date>.log"))
         for test in tests
         if test.get("status") in {"failed", "error"}
     ]
@@ -293,20 +324,90 @@ def write_summary(report: dict[str, Any]) -> None:
     SUMMARY_FILE.write_text(build_summary_markdown(report), encoding="utf-8")
 
 
-def main() -> int:
-    ensure_reports_directory()
-    exit_code = run_pytest()
-    raw_report = _load_raw_report()
-    structured = build_structured_report(raw_report, exit_code)
-    write_json_report(structured)
-    write_summary(structured)
+def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run the test suite and emit structured reports."
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        help="Base logging level (default: INFO)",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Shortcut for --log-level=DEBUG",
+    )
+    parser.add_argument(
+        "--date",
+        default=None,
+        help="Date token forwarded to the log file suffix (format: YYYYMMDD)",
+    )
+    parser.add_argument(
+        "pytest_args",
+        nargs=argparse.REMAINDER,
+        help="Arguments forwarded to pytest (use '--' before them)",
+    )
+    return parser.parse_args(argv)
 
-    print(f"Pytest finished with exit code {exit_code}.")
-    print(f"Log saved to {LOG_FILE.relative_to(ROOT_DIR)}.")
-    if RAW_REPORT_FILE.exists():
-        print(f"Raw report available at {RAW_REPORT_FILE.relative_to(ROOT_DIR)}.")
-    print(f"Structured report written to {REPORT_FILE.relative_to(ROOT_DIR)}.")
-    print(f"Summary written to {SUMMARY_FILE.relative_to(ROOT_DIR)}.")
+
+def _extract_pytest_args(args: Sequence[str] | None) -> list[str]:
+    if not args:
+        return []
+    if args and args[0] == "--":
+        return list(args[1:])
+    return list(args)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parse_args(argv)
+    level = str(args.log_level or "INFO").upper()
+    if args.verbose:
+        level = "DEBUG"
+
+    log_cfg = create_logger_config(level)
+
+    with setup_cli_logging("run_tests", log_cfg, args.date) as logging_ctx:
+        configure_logger(logging_ctx.log_cfg)
+
+        ensure_reports_directory()
+
+        pytest_command = list(_BASE_PYTEST_COMMAND)
+        pytest_command.extend(
+            [
+                "--log-file",
+                str(logging_ctx.log_path),
+                "--log-file-level",
+                logging_ctx.log_cfg.level,
+            ]
+        )
+        pytest_command.extend(_DEFAULT_TEST_TARGETS)
+        pytest_command.extend(_extract_pytest_args(args.pytest_args))
+
+        exit_code = run_pytest(pytest_command)
+
+        raw_report = _load_raw_report()
+        structured = build_structured_report(raw_report, exit_code)
+        write_json_report(structured)
+        write_summary(structured)
+
+        log_path = _relative_to_root(logging_ctx.log_path)
+        logger.info("Pytest finished with exit code %s", exit_code)
+        logger.info("Log saved to %s", log_path)
+        if RAW_REPORT_FILE.exists():
+            logger.info(
+                "Raw report available at %s",
+                _relative_to_root(RAW_REPORT_FILE),
+            )
+        logger.info(
+            "Structured report written to %s",
+            _relative_to_root(REPORT_FILE),
+        )
+        logger.info(
+            "Summary written to %s",
+            _relative_to_root(SUMMARY_FILE),
+        )
+
     return exit_code
 
 
