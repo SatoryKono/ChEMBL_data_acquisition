@@ -18,19 +18,49 @@ from library.postprocess.common.config import (
 from .schema import ASSAY_SCHEMA, validate_assays
 
 
-def normalize_assay_metadata(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize string-based assay descriptors."""
+def normalize_assay_metadata(
+    df: pd.DataFrame,
+    *,
+    uppercase_categories: bool = True,
+    strip_whitespace: bool = True,
+    collapse_internal_whitespace: bool | None = None,
+) -> pd.DataFrame:
+    """Normalize string-based assay descriptors.
+
+    Parameters
+    ----------
+    df:
+        Input frame to normalize.
+    uppercase_categories:
+        When ``True`` (the default) categorical assay descriptors are converted to
+        upper-case.  Set to ``False`` to preserve the original casing while still
+        applying other configured clean-up rules.
+    strip_whitespace:
+        Remove leading and trailing whitespace around categorical values.  Enabled
+        by default for backwards compatibility with historical exports.
+    collapse_internal_whitespace:
+        Normalise consecutive whitespace characters inside categorical values.  If
+        ``None`` the value defaults to ``strip_whitespace`` to preserve the legacy
+        behaviour where both operations happened together.  Pass ``True`` or
+        ``False`` explicitly to override the coupling.
+    """
 
     normalized = df.copy(deep=True)
+    if collapse_internal_whitespace is None:
+        collapse_internal_whitespace = strip_whitespace
+
     for column in ["assay_type", "assay_test_type", "assay_format"]:
-        if column in normalized.columns:
-            normalized[column] = (
-                normalized[column]
-                .astype("string")
-                .str.strip()
-                .str.replace(r"\s+", " ", regex=True)
-                .str.upper()
-            )
+        if column not in normalized.columns:
+            continue
+
+        series = normalized[column].astype("string")
+        if strip_whitespace:
+            series = series.str.strip()
+        if collapse_internal_whitespace:
+            series = series.str.replace(r"\s+", " ", regex=True)
+        if uppercase_categories:
+            series = series.str.upper()
+        normalized[column] = series
     return normalized
 
 

@@ -106,10 +106,19 @@ def _load_taxonomy_lookup_cached(dictionary_root: str) -> pd.DataFrame:
     root = Path(dictionary_root)
     candidate = root / "_taxonomy" / "taxonomy.csv"
     if not candidate.exists():
-        raise AssayExtendedError(
-            "taxonomy.csv not found; expected at "
-            f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
-    )
+        logger.warning(
+            "assay_extended_missing_taxonomy_dictionary",
+            path=str(candidate),
+            dictionary_root=str(root),
+        )
+        empty = pd.DataFrame(
+            {
+                "assay_tax_id": pd.Series(dtype="string"),
+                "assay_group_taxonomy": pd.Series(dtype="string"),
+                "assay_strain_taxonomy": pd.Series(dtype="string"),
+            }
+        )
+        return empty
 
     frame = helpers.read_csv_with_fallbacks(candidate)
     aliases = {
