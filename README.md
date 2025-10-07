@@ -143,6 +143,13 @@ must produce:
 - `reports/test_report.json` — machine readable execution log
 - `reports/test_summary.md` — condensed Markdown summary
 
+Use the canonical wrapper to collect both artefacts and enforce the ≥95 %
+success-rate gate:
+
+```bash
+python scripts/run_tests.py
+```
+
 `test_report.json` always exposes three top-level keys:
 
 ```json
