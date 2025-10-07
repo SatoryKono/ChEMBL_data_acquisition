@@ -25,9 +25,15 @@ from functools import partial
 from itertools import islice
 from pathlib import Path
 from time import sleep, perf_counter
+from urllib.parse import urlsplit
 
 import pandas as pd
 import requests
+
+try:  # pragma: no cover - urllib3 is part of requests dependency chain
+    from urllib3.exceptions import NameResolutionError as _Urllib3NameResolutionError
+except Exception:  # pragma: no cover - defensive fallback for alternative stacks
+    _Urllib3NameResolutionError = None  # type: ignore[assignment]
 
 from library.integration import chembl_library as cl
 from library import cli
@@ -246,6 +252,61 @@ def _gather_http_diagnostics(cfg: Config, client: object) -> dict[str, object]:
             continue
         clean[key] = value
     return clean
+
+
+def _iter_exception_chain(exc: BaseException) -> Iterator[BaseException]:
+    """Yield ``exc`` and the causal/context chain preserving order."""
+
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        yield current
+        next_exc = current.__cause__ or current.__context__
+        current = next_exc if isinstance(next_exc, BaseException) else None
+
+
+def _is_name_resolution_error(exc: Exception) -> bool:
+    """Return ``True`` when ``exc`` or its causes indicate DNS failure."""
+
+    if isinstance(exc, requests.exceptions.RequestException):
+        for candidate in _iter_exception_chain(exc):
+            if (
+                _Urllib3NameResolutionError is not None
+                and isinstance(candidate, _Urllib3NameResolutionError)
+            ):
+                return True
+            message = str(candidate).strip().lower()
+            if (
+                "name resolution" in message
+                or "nameresolutionerror" in message
+                or "getaddrinfo failed" in message
+            ):
+                return True
+
+    message = str(exc).strip().lower()
+    if (
+        "name resolution" in message
+        or "nameresolutionerror" in message
+        or "getaddrinfo failed" in message
+    ):
+        return True
+    return False
+
+
+def _describe_network_failure(cfg: Config, exc: Exception) -> tuple[str | None, str | None]:
+    """Return a human readable hint and host when DNS failures are detected."""
+
+    if not _is_name_resolution_error(exc):
+        return None, None
+
+    base = getattr(cfg.api, "chembl_base", "")
+    host = urlsplit(str(base)).hostname or str(base) or "www.ebi.ac.uk"
+    hint = (
+        "Unable to resolve the ChEMBL API host. Check internet connectivity "
+        "or configure offline fixtures for testing environments."
+    )
+    return hint, host
 
 class _StreamingCSVStatistics:
     """Accumulate row and null counters while streaming CSV chunks."""
@@ -1045,6 +1106,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         )
                     except (requests.RequestException, ValueError) as exc:
                         error_message = str(exc)
+                        network_hint, network_host = _describe_network_failure(cfg, exc)
                         context = {
                             "chunk_ids": list(id_list),
                             "chunk_size": len(id_list),
@@ -1053,6 +1115,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                             "batch_size": cfg.activity.batch_size,
                             "timeout": cfg.activity.timeout,
                         }
+                        if network_host:
+                            context["api_host"] = network_host
                         for key in (
                             "adapter_total",
                             "api_retries",
@@ -1069,8 +1133,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                             "msg": error_message,
                             "chunk_ids": context["chunk_ids"],
                         }
+                        if network_hint:
+                            last_error_extra["hint"] = network_hint
                         last_error_context = dict(log_context)
+                        if network_host:
+                            last_error_context.setdefault("api_host", network_host)
+                        if network_hint:
+                            last_error_context["network_hint"] = network_hint
                         if attempt >= attempts:
+                            if network_hint:
+                                logger.error(
+                                    "activity_fetch_network_error",
+                                    extra=last_error_extra,
+                                    hint=network_hint,
+                                    **log_context,
+                                )
                             if len(id_list) > 1 and _is_timeout_error(exc):
                                 split_context = dict(log_context)
                                 split_context["depth"] = depth
