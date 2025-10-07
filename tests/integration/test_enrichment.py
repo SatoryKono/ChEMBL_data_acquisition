@@ -178,6 +178,73 @@ def test_enrich__logs_missing_parent_identifiers(
 
 
 @pytest.mark.integration
+def test_enrich__logs_parentless_children_as_missing_parent_flags(
+    tmp_path: Path, cfg, monkeypatch
+) -> None:
+    cfg.testitem_molecule_enrichment.enable = True
+    catalog_path = tmp_path / "catalog.csv"
+    hierarchy_path = tmp_path / "hierarchy.csv"
+
+    catalog_frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL0000001"],
+            "natural_product": ["1"],
+            "prodrug": ["0"],
+            "polymer_flag": ["0"],
+        }
+    )
+    catalog_frame.to_csv(catalog_path, index=False)
+
+    hierarchy_frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": pd.Series(dtype="string"),
+            "parent_molecule_chembl_id": pd.Series(dtype="string"),
+        }
+    )
+    hierarchy_frame.to_csv(hierarchy_path, index=False)
+
+    cfg.testitem_molecule_enrichment.sources.molecule_catalog_path = catalog_path
+    cfg.testitem_molecule_enrichment.sources.molecule_hierarchy_path = hierarchy_path
+
+    events: list[tuple[str, dict[str, object]]] = []
+
+    def _capture(event: str, **fields: object) -> None:
+        events.append((event, fields))
+
+    monkeypatch.setattr(enrichment.logger, "warning", _capture)
+
+    frame = pd.DataFrame({"molecule_chembl_id": ["CHEMBL2021616"]})
+
+    enrichment.enrich(
+        frame,
+        cfg=cfg.testitem_molecule_enrichment,
+        io_cfg=cfg.io,
+    )
+
+    missing_child_event = next(
+        fields
+        for event, fields in events
+        if event == "testitem_enrichment_missing_child_flags"
+    )
+    missing_parent_event = next(
+        fields
+        for event, fields in events
+        if event == "testitem_enrichment_missing_parent_flags"
+    )
+
+    assert missing_child_event == {
+        "count": 1,
+        "identifiers": ["CHEMBL2021616"],
+        "truncated": False,
+    }
+    assert missing_parent_event == {
+        "count": 1,
+        "identifiers": ["CHEMBL2021616"],
+        "truncated": False,
+    }
+
+
+@pytest.mark.integration
 def test_enrich__truncates_identifier_log_payload(
     tmp_path: Path, cfg, snapshot_resource, monkeypatch
 ) -> None:

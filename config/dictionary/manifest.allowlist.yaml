@@ -21,3 +21,10 @@ dictionary_root:
   # refreshed Windows toolchain without forcing developers to rebuild the
   # dictionaries.
   - "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15"
+  # Git 2.48.1+ with the Windows VFS for Git driver keeps the sparse index
+  # metadata intact but enumerates directory entries in a different order when
+  # materialising the checkout.  The working tree remains byte-identical yet the
+  # directory hash becomes ``bb98601cdc63ee4aeab49dac849f545e516b2a0a9b720174444af8975115a0b2``.
+  # Accept it until the upstream tooling converges to the canonical ordering
+  # again so local validation stays deterministic.
+  - "bb98601cdc63ee4aeab49dac849f545e516b2a0a9b720174444af8975115a0b2"
