@@ -5,6 +5,8 @@ import logging
 import pandas as pd
 import pytest
 
+from library.postprocess.common import runner
+
 from library.postprocess.common import StepDefinition, run_steps
 from library.postprocess.common.schema import DataFrameSchema
 from library.postprocess.common.types import SchemaValidationError
@@ -119,5 +121,42 @@ def test_run_steps__ignores_unsupported_parameters(caplog: pytest.LogCaptureFixt
     assert result["value"].tolist() == [7]
     assert any(
         "ignoring unsupported parameters" in record.message for record in caplog.records
+    )
+    assert metadata.steps[0].parameters["unexpected"] == "ignored"
+
+
+def test_run_steps__recovers_from_runtime_parameter_mismatch(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    frame = pd.DataFrame({"seed": [5]}, dtype="int64")
+
+    steps = (
+        StepDefinition(
+            name="with_constant",
+            func=_with_constant,
+            params={"column": "value", "value": 11, "unexpected": "ignored"},
+        ),
+    )
+
+    original_signature = runner.inspect.signature
+
+    def _raise_signature(func):
+        if func is _with_constant:
+            raise ValueError("no signature available")
+        return original_signature(func)
+
+    monkeypatch.setattr(runner.inspect, "signature", _raise_signature)
+
+    test_logger = logging.getLogger("tests.postprocess.runner")
+    test_logger.handlers.clear()
+    test_logger.propagate = True
+
+    with caplog.at_level("WARNING", logger="tests.postprocess.runner"):
+        result, metadata = run_steps(frame, steps, logger=test_logger)
+
+    assert result["value"].tolist() == [11]
+    assert any(
+        "retrying without unsupported parameter" in record.message
+        for record in caplog.records
     )
     assert metadata.steps[0].parameters["unexpected"] == "ignored"

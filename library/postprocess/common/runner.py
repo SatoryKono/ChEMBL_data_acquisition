@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import inspect
+import re
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from time import perf_counter
@@ -54,6 +55,21 @@ def _coerce_step(entry: StepDefinition | StepTuple, index: int) -> StepDefinitio
 
 def _normalise_steps(steps: Iterable[StepDefinition | StepTuple]) -> tuple[StepDefinition, ...]:
     return tuple(_coerce_step(entry, index) for index, entry in enumerate(steps))
+
+
+_UNEXPECTED_KEYWORD_PATTERN = re.compile(
+    r"got an unexpected keyword argument ['\"](?P<name>[^'\"]+)['\"]"
+)
+
+
+def _extract_unexpected_keyword(error: TypeError) -> str | None:
+    """Return the keyword name when ``error`` signals an unexpected argument."""
+
+    message = str(error)
+    match = _UNEXPECTED_KEYWORD_PATTERN.search(message)
+    if match is not None:
+        return match.group("name")
+    return None
 
 
 def _record_error(
@@ -170,6 +186,7 @@ def run_steps(
             logger=log,
             step_name=step.name,
         )
+        call_params = dict(call_params)
         frame = clone_dataframe(current)
         step_started_at = _now_iso()
         step_clock = perf_counter()
@@ -180,7 +197,23 @@ def run_steps(
         log.info("Starting step %s", step.name)
 
         try:
-            result = step.func(frame, **call_params)
+            while True:
+                try:
+                    result = step.func(frame, **call_params)
+                    break
+                except TypeError as exc:
+                    unexpected_keyword = _extract_unexpected_keyword(exc)
+                    if unexpected_keyword is None or unexpected_keyword not in call_params:
+                        raise
+
+                    log.warning(
+                        "Step %s retrying without unsupported parameter: %s",
+                        step.name,
+                        unexpected_keyword,
+                    )
+                    call_params.pop(unexpected_keyword, None)
+
+            # normal execution path continues below once the loop breaks
         except SchemaValidationError as exc:
             log.exception("Schema validation failed during step %s", step.name)
             _record_error(
