@@ -2,22 +2,28 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from functools import lru_cache
+import logging
 import re
 
 import pandas as pd
- 
+
 from library.postprocess.common import StepDefinition, run_steps
 from library.postprocess.common.logging import PipelineRunMetrics
 
- 
+
 from library.pipelines.common.metadata import get_pipeline_version
- 
+
 from library.postprocess.common.config import (
     load_pipeline_config,
     normalize_pipeline_version,
 )
- 
+from library.resources.dictionaries import DictionaryManifestError, get_resource
+
 from .schema import TARGET_SCHEMA, validate_targets
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def normalize_target_fields(
@@ -187,6 +193,8 @@ def finalize_target_records(
                 .replace({"": pd.NA})
             )
 
+    prepared = _populate_target_type(prepared)
+
     if enforce_schema:
         validated = validate_targets(prepared, context="target_finalization")
     else:
@@ -210,6 +218,98 @@ def finalize_target_records(
 
 PIPELINE_CONFIG = load_pipeline_config("targets")
 PIPELINE_STEPS = PIPELINE_CONFIG.step_definitions()
+
+
+@lru_cache(maxsize=1)
+def _load_target_type_lookup() -> pd.Series:
+    """Return cached mapping of target identifiers to target type labels."""
+
+    resource = get_resource("target_types")
+    try:
+        frame = pd.read_csv(
+            resource.path,
+            usecols=["target_chembl_id", "type"],
+            dtype="string",
+        )
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        LOGGER.warning(
+            "Failed to load target type dictionary (%s): %s",
+            resource.path,
+            exc,
+        )
+        return pd.Series(dtype="string")
+
+    if frame.empty or "target_chembl_id" not in frame or "type" not in frame:
+        LOGGER.warning(
+            "Target type dictionary %s is missing required columns",
+            resource.path,
+        )
+        return pd.Series(dtype="string")
+
+    normalised = frame.copy()
+    normalised["target_chembl_id"] = (
+        normalised["target_chembl_id"]
+        .astype("string")
+        .str.strip()
+        .str.upper()
+        .replace({"": pd.NA})
+    )
+    normalised["type"] = (
+        normalised["type"]
+        .astype("string")
+        .str.strip()
+        .replace({"": pd.NA})
+    )
+
+    normalised = normalised.dropna(subset=["target_chembl_id"])
+    if normalised.empty:
+        return pd.Series(dtype="string")
+
+    normalised = normalised.drop_duplicates("target_chembl_id", keep="first")
+    lookup = normalised.set_index("target_chembl_id")["type"].astype("string")
+    return lookup
+
+
+def _get_target_type_lookup() -> pd.Series:
+    try:
+        return _load_target_type_lookup()
+    except (FileNotFoundError, DictionaryManifestError) as exc:
+        LOGGER.warning(
+            "Target type dictionary resource 'target_types' could not be loaded: %s",
+            exc,
+        )
+        return pd.Series(dtype="string")
+
+
+def _populate_target_type(df: pd.DataFrame) -> pd.DataFrame:
+    """Fill missing ``target_type`` values using the bundled dictionary."""
+
+    if "target_type" not in df.columns or "target_chembl_id" not in df.columns:
+        return df
+
+    missing_mask = df["target_type"].isna()
+    if not missing_mask.any():
+        return df
+
+    lookup = _get_target_type_lookup()
+    if lookup.empty:
+        return df
+
+    identifiers = (
+        df["target_chembl_id"]
+        .astype("string")
+        .str.strip()
+        .str.upper()
+        .replace({"": pd.NA})
+    )
+    mapped = identifiers[missing_mask].map(lookup)
+    if mapped.isna().all():
+        return df
+
+    df.loc[missing_mask, "target_type"] = (
+        mapped.astype("string").replace({"": pd.NA})
+    )
+    return df
 
 
 def run_target_pipeline(
