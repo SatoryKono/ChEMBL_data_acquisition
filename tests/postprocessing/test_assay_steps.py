@@ -3,7 +3,11 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from library.postprocess.assays.steps import normalize_assay_metadata
+from library.postprocess.assays.steps import (
+    enrich_assay_flags,
+    finalize_assay_records,
+    normalize_assay_metadata,
+)
 
 
 @pytest.mark.postprocessing
@@ -47,3 +51,40 @@ def test_normalize_assay_metadata__respects_disabled_flags() -> None:
     assert result.loc[0, "assay_test_type"] == " confirmatory   "
     assert result.loc[0, "assay_format"] == " cell based"
     assert str(result["assay_type"].dtype) == "string"
+
+
+@pytest.mark.postprocessing
+@pytest.mark.usefixtures("deterministic_env")
+def test_enrich_assay_flags__applies_custom_terms() -> None:
+    frame = pd.DataFrame(
+        {
+            "assay_type": ["Primary screen", "Counter screen"],
+        }
+    )
+
+    result = enrich_assay_flags(
+        frame,
+        confirmatory_terms=["primary", "confirm"],
+        default_flag=False,
+    )
+
+    assert result["is_confirmatory"].tolist() == [True, False]
+
+
+@pytest.mark.postprocessing
+@pytest.mark.usefixtures("deterministic_env")
+def test_finalize_assay_records__normalizes_identifiers() -> None:
+    frame = pd.DataFrame(
+        {
+            "assay_chembl_id": ["  chEMBL123  "],
+            "assay_type": ["binding"],
+            "assay_test_type": ["confirmatory"],
+            "description": ["Example"],
+            "target_chembl_id": [" chembl999 "],
+        }
+    )
+
+    result = finalize_assay_records(frame, normalize_identifiers=True)
+
+    assert result.loc[0, "assay_chembl_id"] == "CHEMBL123"
+    assert result.loc[0, "target_chembl_id"] == "CHEMBL999"
