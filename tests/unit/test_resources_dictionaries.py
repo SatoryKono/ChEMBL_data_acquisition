@@ -222,6 +222,20 @@ def test_manifest_allows_latest_windows_sha256() -> None:
 
 
 @pytest.mark.unit
+def test_repository_allowlist_includes_sparse_index_checksum(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The repo-level allow-list must include the sparse index checksum variant."""
+
+    dictionaries._load_allowlist_cached.cache_clear()
+    monkeypatch.setattr(dictionaries, "_KNOWN_CHECKSUM_VARIANTS", {})
+
+    variants = dictionaries._iter_additional_checksums(
+        "dictionary_root", base_dir=DICTIONARY_DIR
+    )
+
+    assert dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM in variants
+
+
+@pytest.mark.unit
 def test_manifest_allows_latest_target_uniprot_checksum() -> None:
     """The manifest lists the newly observed UniProt cache checksum variant."""
 

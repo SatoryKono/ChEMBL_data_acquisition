@@ -31,6 +31,7 @@ _IGNORED_FILENAMES = {
     "desktop.ini",
     ".ds_store",
     ".rhistory",
+    _MANIFEST_ALLOWLIST_FILENAME,
 }
 
 _IGNORED_DIRNAMES = {"__pycache__", ".ipynb_checkpoints"}
