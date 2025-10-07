@@ -1,0 +1,28 @@
+name: tissue
+summary: >-
+  Retrieves tissue metadata from ChEMBL, normalises identifiers, and exports a
+  deterministic CSV for reporting.
+schemas:
+  default: TissuesSchema
+pipeline_version:
+  column: pipeline_version
+  description: chembl-data-acquisition package version stamped on every row.
+inputs:
+  primary: tissue.csv
+outputs:
+  primary: tissue.csv
+  artefacts:
+    - tissue.csv.meta.yaml
+parameters:
+  column: tissue.column
+  batch_size: tissue.batch_size
+  timeout: tissue.timeout
+  limit: tissue.limit
+  offset: tissue.offset
+steps:
+  - name: fetch_tissues
+    description: Retrieve tissue metadata from the ChEMBL API.
+  - name: normalize_payload
+    description: Cleanse codes, harmonise identifiers, and align schema order.
+  - name: finalize_export
+    description: Validate results, add metadata columns, and write deterministic CSV artefacts.

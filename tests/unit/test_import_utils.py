@@ -1,0 +1,44 @@
+"""Tests for :mod:`library.postprocess.common.import_utils`."""
+from __future__ import annotations
+
+import pytest
+
+from library.postprocess.common.import_utils import ImportResolutionError, import_by_path
+
+
+@pytest.mark.unit
+def test_import_by_path__resolves_callable() -> None:
+    sqrt = import_by_path("math:sqrt")
+
+    assert sqrt(9) == 3
+
+
+@pytest.mark.unit
+def test_import_by_path__missing_module() -> None:
+    with pytest.raises(ImportResolutionError) as excinfo:
+        import_by_path("not_a_real_module:function")
+
+    assert "Cannot import module" in str(excinfo.value)
+
+
+@pytest.mark.unit
+def test_import_by_path__missing_attribute() -> None:
+    with pytest.raises(ImportResolutionError) as excinfo:
+        import_by_path("math:not_real")
+
+    assert "has no attribute" in str(excinfo.value)
+
+
+@pytest.mark.unit
+def test_import_by_path__non_callable_object_rejected() -> None:
+    with pytest.raises(ImportResolutionError) as excinfo:
+        import_by_path("math:pi")
+
+    assert "must be callable" in str(excinfo.value)
+
+
+@pytest.mark.unit
+def test_import_by_path__custom_expected_type() -> None:
+    value = import_by_path("math:pi", expected_type=(int, float))
+
+    assert isinstance(value, float)

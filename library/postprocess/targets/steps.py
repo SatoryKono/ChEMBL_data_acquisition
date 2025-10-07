@@ -2,10 +2,18 @@
 from __future__ import annotations
 
 import pandas as pd
-
+ 
 from library.postprocess.common import StepDefinition, run_steps
 from library.postprocess.common.logging import PipelineRunMetrics
 
+ 
+from library.pipelines.common.metadata import get_pipeline_version
+ 
+from library.postprocess.common.config import (
+    load_pipeline_config,
+    normalize_pipeline_version,
+)
+ 
 from .schema import TARGET_SCHEMA, validate_targets
 
 
@@ -50,11 +58,8 @@ def finalize_target_records(df: pd.DataFrame) -> pd.DataFrame:
     return validated
 
 
-PIPELINE_STEPS = [
-    StepDefinition("normalize_target_fields", normalize_target_fields),
-    StepDefinition("enrich_target_synonyms", enrich_target_synonyms),
-    StepDefinition("finalize_target_records", finalize_target_records),
-]
+PIPELINE_CONFIG = load_pipeline_config("targets")
+PIPELINE_STEPS = PIPELINE_CONFIG.step_definitions()
 
 
 def run_target_pipeline(
@@ -62,16 +67,30 @@ def run_target_pipeline(
 ) -> tuple[pd.DataFrame, PipelineRunMetrics]:
     """Run the target postprocessing pipeline and return metrics."""
 
+    resolved_version = _resolve_pipeline_version(pipeline_version)
     return run_steps(
         df,
         PIPELINE_STEPS,
         schema=TARGET_SCHEMA,
-        pipeline_version=pipeline_version,
+        pipeline_version=resolved_version,
         logger=logger,
     )
 
 
+def _resolve_pipeline_version(override: str | None) -> str:
+    candidate = normalize_pipeline_version(override)
+    if candidate is not None:
+        return candidate
+
+    config_candidate = normalize_pipeline_version(PIPELINE_CONFIG.pipeline_version)
+    if config_candidate is not None:
+        return config_candidate
+
+    return get_pipeline_version()
+
+
 __all__ = [
+    "PIPELINE_CONFIG",
     "PIPELINE_STEPS",
     "finalize_target_records",
     "normalize_target_fields",

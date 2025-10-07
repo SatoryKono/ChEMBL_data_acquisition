@@ -1,5 +1,6 @@
 """Shared utilities for postprocessing pipelines."""
 from . import logging
+from .import_utils import import_by_path
 from .io import clone_dataframe, ensure_dataframe
 from .schema import DataFrameSchema, coerce_types, validate_schema
 from .types import (
@@ -15,6 +16,7 @@ from .utils import collect_postprocess_metrics, infer_pipeline_version, run_step
 __all__ = [
     "DataFrameSchema",
     "ImportResolutionError",
+    "import_by_path",
     "SchemaValidationError",
     "StepDefinition",
     "StepError",

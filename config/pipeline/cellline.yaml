@@ -1,0 +1,28 @@
+name: cellline
+summary: >-
+  Downloads cell line metadata from ChEMBL and emits a deterministic CSV ready
+  for downstream joins.
+schemas:
+  default: CellLinesSchema
+pipeline_version:
+  column: pipeline_version
+  description: chembl-data-acquisition package version stamped on every row.
+inputs:
+  primary: cellline.csv
+outputs:
+  primary: cellline.csv
+  artefacts:
+    - cellline.csv.meta.yaml
+parameters:
+  column: cellline.column
+  batch_size: cellline.batch_size
+  timeout: cellline.timeout
+  limit: cellline.limit
+  offset: cellline.offset
+steps:
+  - name: fetch_cell_lines
+    description: Retrieve cell line records from the ChEMBL API.
+  - name: normalize_payload
+    description: Cleanse and align the payload with the export schema.
+  - name: finalize_export
+    description: Validate results, add metadata columns, and write deterministic CSV artefacts.

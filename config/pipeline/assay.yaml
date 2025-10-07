@@ -1,0 +1,29 @@
+name: assay
+summary: >-
+  Retrieves assay metadata from ChEMBL, enforces deterministic ordering, and
+  stamps exports with pipeline metadata for traceability.
+schemas:
+  default: AssaysSchema
+pipeline_version:
+  column: pipeline_version
+  description: chembl-data-acquisition package version stamped on every row.
+inputs:
+  primary: assay.csv
+  dependencies:
+    - documents.csv
+outputs:
+  primary: assays.csv
+  artefacts:
+    - assays.csv.meta.yaml
+parameters:
+  column: assay.column
+  batch_size: assay.batch_size
+  timeout: assay.timeout
+  limit: assay.limit
+steps:
+  - name: fetch_assays
+    description: Fetch assay records from the ChEMBL API.
+  - name: normalize_payload
+    description: Normalise columns, apply enrichment helpers, and coerce data types.
+  - name: finalize_export
+    description: Validate results, add metadata columns, and write deterministic CSV artefacts.
