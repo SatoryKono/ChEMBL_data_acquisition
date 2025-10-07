@@ -5,6 +5,7 @@ import pytest
 
 from library.postprocess.documents.steps import (
     enrich_document_publication_year,
+    finalize_document_records,
     normalize_document_fields,
 )
 
@@ -72,3 +73,22 @@ def test_enrich_document_publication_year__validates_fallback_range() -> None:
 
     with pytest.raises(ValueError, match="supported range"):
         enrich_document_publication_year(frame, fallback_year=1400)
+
+
+@pytest.mark.unit
+def test_finalize_document_records__adds_missing_required_columns() -> None:
+    frame = pd.DataFrame({"document_chembl_id": ["CHEMBL1"]})
+
+    result = finalize_document_records(frame)
+
+    assert list(result.columns[:3]) == [
+        "document_chembl_id",
+        "title",
+        "doc_type",
+    ]
+    assert result.loc[0, "document_chembl_id"] == "CHEMBL1"
+    assert pd.isna(result.loc[0, "title"])
+    assert pd.isna(result.loc[0, "doc_type"])
+    assert result["document_chembl_id"].dtype == "string"
+    assert result["title"].dtype == "string"
+    assert result["doc_type"].dtype == "string"
