@@ -5,6 +5,8 @@ from collections.abc import Sequence
 import re
 
 import pandas as pd
+
+_STRING_DTYPE = pd.StringDtype()
  
 from library.postprocess.common import StepDefinition, run_steps
 from library.postprocess.common.logging import PipelineRunMetrics
@@ -162,12 +164,18 @@ def finalize_target_records(
     """Validate and order the DataFrame according to :data:`TARGET_SCHEMA`."""
 
     prepared = df.copy(deep=True)
+
     for column in TARGET_SCHEMA.required_columns:
         if column not in prepared.columns:
-            prepared[column] = pd.Series(pd.NA, index=prepared.index, dtype="string")
+            prepared[column] = pd.Series(pd.NA, index=prepared.index, dtype=_STRING_DTYPE)
+
     for column in ["target_chembl_id", "pref_name", "target_type"]:
         if column in prepared.columns:
-            prepared[column] = prepared[column].astype("string")
+            prepared[column] = (
+                prepared[column]
+                .astype(_STRING_DTYPE)
+                .replace({"": pd.NA})
+            )
 
     if enforce_schema:
         validated = validate_targets(prepared, context="target_finalization")

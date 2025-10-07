@@ -9,6 +9,7 @@ import pytest
 
 from library.config import Config
 from library.pipelines.target import helpers
+from library.postprocess.targets.steps import run_target_pipeline
 
 INPUT_FILE = "target_postprocess_power_query_input.csv"
 EXPECTED_FILE = "target_postprocess_power_query_expected.csv"
@@ -57,3 +58,20 @@ def test_postprocess_target_table__is_idempotent(
     second_run = second_output.read_bytes()
 
     assert first_run == second_run == expected_path.read_bytes()
+
+
+@pytest.mark.integration
+def test_run_target_pipeline__adds_missing_target_type() -> None:
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1000", "CHEMBL2000"],
+            "pref_name": ["Example 1", "Example 2"],
+        }
+    )
+
+    result, metrics = run_target_pipeline(frame)
+
+    assert "target_type" in result.columns
+    assert result["target_type"].isna().all()
+    assert str(result["target_type"].dtype) == "string"
+    assert metrics.output_rows == 2
