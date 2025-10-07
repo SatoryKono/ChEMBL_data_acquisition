@@ -1,0 +1,2 @@
+target_chembl_id,uniprot_id_primary,organism,taxon_id,lineage_superkingdom,lineage_phylum,lineage_class,cellularity,multifunctional_enzyme
+CHEMBL2343,SGK1,Homo,9606,eukaryota,chordata,craniata,multicellular,False
