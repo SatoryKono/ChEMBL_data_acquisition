@@ -71,6 +71,7 @@ flowchart TD
 | Вспомогательные выгрузки таргетов | [`../en/OUTPUT_TARGETS.md`](../en/OUTPUT_TARGETS.md) | [`OUTPUT_TARGETS.md`](./OUTPUT_TARGETS.md) |
 | Контроль качества | [`../en/QA_PROCESS.md`](../en/QA_PROCESS.md) | [`QA_PROCESS.md`](./QA_PROCESS.md) |
 | Архитектура | [`../en/architecture/ARCHITECTURE.md`](../en/architecture/ARCHITECTURE.md) | [`architecture/ARCHITECTURE.md`](./architecture/ARCHITECTURE.md) |
+| Архитектурные улучшения | [`../en/architecture/IMPROVEMENT_PROPOSALS.md`](../en/architecture/IMPROVEMENT_PROPOSALS.md) | [`architecture/IMPROVEMENT_PROPOSALS.md`](./architecture/IMPROVEMENT_PROPOSALS.md) |
 | Модель данных | [`../en/architecture/DATA_MODEL.md`](../en/architecture/DATA_MODEL.md) | [`architecture/DATA_MODEL.md`](./architecture/DATA_MODEL.md) |
 | Разработка | [`../en/development/README.md`](../en/development/README.md) | [`development/README.md`](./development/README.md) |
 | Справочники и глоссарий | [`../en/reference/DICTIONARIES.md`](../en/reference/DICTIONARIES.md) | [`reference/DICTIONARIES.md`](./reference/DICTIONARIES.md) |

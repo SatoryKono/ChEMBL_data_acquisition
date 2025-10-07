@@ -71,6 +71,7 @@ below to navigate the canonical English sources:
 | Target helper exports | [`OUTPUT_TARGETS.md`](./OUTPUT_TARGETS.md) | [`../ru/OUTPUT_TARGETS.md`](../ru/OUTPUT_TARGETS.md) |
 | Quality controls | [`QA_PROCESS.md`](./QA_PROCESS.md) | [`../ru/QA_PROCESS.md`](../ru/QA_PROCESS.md) |
 | Architecture | [`architecture/ARCHITECTURE.md`](./architecture/ARCHITECTURE.md) | [`../ru/architecture/ARCHITECTURE.md`](../ru/architecture/ARCHITECTURE.md) |
+| Architecture improvements | [`architecture/IMPROVEMENT_PROPOSALS.md`](./architecture/IMPROVEMENT_PROPOSALS.md) | [`../ru/architecture/IMPROVEMENT_PROPOSALS.md`](../ru/architecture/IMPROVEMENT_PROPOSALS.md) |
 | Data model | [`architecture/DATA_MODEL.md`](./architecture/DATA_MODEL.md) | [`../ru/architecture/DATA_MODEL.md`](../ru/architecture/DATA_MODEL.md) |
 | Development | [`development/README.md`](./development/README.md) | [`../ru/development/README.md`](../ru/development/README.md) |
 | Dictionaries & glossary | [`reference/DICTIONARIES.md`](./reference/DICTIONARIES.md) | [`../ru/reference/DICTIONARIES.md`](../ru/reference/DICTIONARIES.md) |
