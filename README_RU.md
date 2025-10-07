@@ -90,8 +90,8 @@ python scripts/get_data.py \
 создаёт вспомогательные таблицы `organism.output.target_<stamp>.csv`,
 `isoform.output.target_<stamp>.csv`, `names.output.target_<stamp>.csv` и
 `IUPHAR.output.target_<stamp>.csv`, которые подробно описаны в
-[`docs/OUTPUT_TARGETS_RU.md`](./docs/OUTPUT_TARGETS_RU.md) и
-[`docs/OUTPUT_TARGETS_EN.md`](./docs/OUTPUT_TARGETS_EN.md). Полную спецификацию
+[`docs/ru/OUTPUT_TARGETS.md`](./docs/ru/OUTPUT_TARGETS.md) и
+[`docs/en/OUTPUT_TARGETS.md`](./docs/en/OUTPUT_TARGETS.md). Полную спецификацию
 см. в [`docs/ru/OUTPUT.md`](./docs/ru/OUTPUT.md).
 
 ## Документация
@@ -107,6 +107,8 @@ python scripts/get_data.py \
   [`docs/ru/guides/DEBUGGING.md`](./docs/ru/guides/DEBUGGING.md),
   [`docs/ru/guides/FAQ.md`](./docs/ru/guides/FAQ.md) и зеркальные английские версии в
   `docs/en/guides/`
+- Руководство по постобработке: [`docs/ru/guides/POSTPROCESSING_RUNBOOK.md`](./docs/ru/guides/POSTPROCESSING_RUNBOOK.md),
+  [`docs/en/guides/POSTPROCESSING_RUNBOOK.md`](./docs/en/guides/POSTPROCESSING_RUNBOOK.md)
 - Конфигурация: [`docs/ru/CONFIG.md`](./docs/ru/CONFIG.md),
   [`docs/en/CONFIG.md`](./docs/en/CONFIG.md)
 - Спецификация выходных данных и правила валидации:

@@ -97,8 +97,8 @@ and table-quality reports under the same directory. The target pipeline also
 emits helper lookups named `organism.output.target_<stamp>.csv`,
 `isoform.output.target_<stamp>.csv`, `names.output.target_<stamp>.csv`, and
 `IUPHAR.output.target_<stamp>.csv` — all described in
-[`docs/OUTPUT_TARGETS_EN.md`](./docs/OUTPUT_TARGETS_EN.md) and
-[`docs/OUTPUT_TARGETS_RU.md`](./docs/OUTPUT_TARGETS_RU.md). Refer to the
+[`docs/en/OUTPUT_TARGETS.md`](./docs/en/OUTPUT_TARGETS.md) and
+[`docs/ru/OUTPUT_TARGETS.md`](./docs/ru/OUTPUT_TARGETS.md). Refer to the
 [output reference](./docs/en/OUTPUT.md) for the complete specification.
 
 Custom file names such as `targets.csv` still trigger the post-processing
@@ -119,6 +119,8 @@ languages:
   [`docs/en/guides/DEBUGGING.md`](./docs/en/guides/DEBUGGING.md),
   [`docs/en/guides/FAQ.md`](./docs/en/guides/FAQ.md) and their Russian twins under
   `docs/ru/guides/`
+- Post-processing runbook: [`docs/en/guides/POSTPROCESSING_RUNBOOK.md`](./docs/en/guides/POSTPROCESSING_RUNBOOK.md),
+  [`docs/ru/guides/POSTPROCESSING_RUNBOOK.md`](./docs/ru/guides/POSTPROCESSING_RUNBOOK.md)
 - Configuration guide: [`docs/en/CONFIG.md`](./docs/en/CONFIG.md),
   [`docs/ru/CONFIG.md`](./docs/ru/CONFIG.md)
 - Output specification and validation rules:
