@@ -140,6 +140,12 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
     )
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+    monkeypatch.setattr(
+        get_data,
+        "load_config",
+        lambda *args, **kwargs: Config(),
+        raising=False,
+    )
     monkeypatch.setattr(get_data, "_PIPELINE_APIS", {"document": api}, raising=False)
 
     steps = (step,)
@@ -244,6 +250,103 @@ def test_pipeline_subset__skip_existing_and_force(tmp_path: Path, monkeypatch: p
     manifest_force = _load_manifest(cfg_force)
     assert manifest_force["steps"][0]["status"] == "success"
     assert manifest_force["steps"][0]["output"]["exists"] is True
+
+
+@pytest.mark.integration
+def test_run_pipeline__target_override_invokes_target_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
+
+    args = SimpleNamespace(
+        base_path=base_path,
+        input_dir=Path("input"),
+        output_dir=Path("output"),
+        config=config_path,
+        date_prefix="20200101",
+        log_level="INFO",
+        verbose=False,
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        pipeline_registry=None,
+        override_input=[],
+        override_output_stem=[],
+        override_subcommand=["target=uniprot"],
+    )
+
+    steps = get_data._resolve_pipeline_steps(args)
+    cfg = get_data._prepare_config(args, steps)
+    assert cfg.subcommand_for("target") == "uniprot"
+
+    target_input = cfg.input_path("target")
+    pd.DataFrame(
+        [
+            {"target_chembl_id": "CHEMBLT1", "name": "Target", "organism": "Human"},
+        ]
+    ).to_csv(target_input, index=False)
+
+    target_step = next(step for step in steps if step.name == "target")
+
+    stream = io.StringIO()
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
+    )
+    monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+    monkeypatch.setattr(
+        get_data,
+        "load_config",
+        lambda *args, **kwargs: Config(),
+        raising=False,
+    )
+
+    commands: list[str] = []
+
+    def _fake_run_target_pipeline(
+        config: Config, options: object
+    ) -> PipelineRunResult:
+        command = getattr(options, "command")
+        commands.append(command)
+        assert command == "uniprot"
+        destination = Path(getattr(options, "output_csv"))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(
+            [
+                {
+                    "target_chembl_id": "CHEMBLT1",
+                    "name": "Target",
+                    "organism": "Human",
+                }
+            ]
+        ).to_csv(destination, index=False)
+        return PipelineRunResult(
+            exit_code=0,
+            output_path=destination,
+            executed=True,
+            reason=None,
+            written=True,
+        )
+
+    monkeypatch.setattr(
+        get_data,
+        "_PIPELINE_APIS",
+        {"target": get_data.PipelineApi(get_data._build_target_options, _fake_run_target_pipeline)},
+        raising=False,
+    )
+
+    status = get_data.run_pipeline(cfg, steps=(target_step,))
+
+    assert status == 0
+    assert commands == ["uniprot"]
+    final_output = cfg.output_path("target")
+    assert final_output.exists()
 
 
 @pytest.mark.integration
