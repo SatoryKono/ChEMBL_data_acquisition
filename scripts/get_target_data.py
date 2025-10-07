@@ -1182,8 +1182,15 @@ class _RawDumpStreamWriter:
         self._rows_written = 0
         self._columns: list[str] | None = None
         self._frames: list[pd.DataFrame] | None = [] if self._is_parquet else None
-        _prepare_raw_destination(destination)
         self._destination_opened = False
+        self._destination_prepared = False
+
+    def _ensure_destination_prepared(self) -> None:
+        if self._destination_prepared:
+            return
+
+        _prepare_raw_destination(self.destination)
+        self._destination_prepared = True
 
     @property
     def _is_parquet(self) -> bool:
@@ -1231,6 +1238,8 @@ class _RawDumpStreamWriter:
                 self._frames = []
             self._frames.append(working.copy())
         else:
+            if self._rows_written == 0:
+                self._ensure_destination_prepared()
             mode = "w" if self._rows_written == 0 else "a"
             header = self._rows_written == 0
             working.to_csv(
@@ -1247,6 +1256,7 @@ class _RawDumpStreamWriter:
 
     def finalize(self) -> Path:
         if self._is_parquet:
+            self._ensure_destination_prepared()
             frames = self._frames or []
             if frames:
                 combined = pd.concat(frames, ignore_index=True)
@@ -1258,6 +1268,7 @@ class _RawDumpStreamWriter:
                 raise OSError(f"failed to write parquet: {exc}") from exc
         else:
             if not self._destination_opened:
+                self._ensure_destination_prepared()
                 empty = pd.DataFrame(columns=self._columns or [])
                 empty.to_csv(
                     self.destination,
