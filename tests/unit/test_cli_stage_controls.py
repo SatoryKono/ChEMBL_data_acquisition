@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from library.testitem_pipeline import cli
+from library.pipelines.testitem import cli
 
 
 class DummyLogger:

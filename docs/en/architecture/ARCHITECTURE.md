@@ -61,6 +61,10 @@ from `library/`:
 - `library/qa` & `library/table_quality.py` — Schema validation, quality
   profiling and metadata writers.
 
+For details on the recent relocation of the test item pipeline into the
+`library.pipelines.testitem` namespace, see the
+[test item pipeline module migration guide](../guides/MIGRATION_TESTITEM_PIPELINE.md).
+
 ## Data extraction pipelines
 
 | Pipeline | CLI entry | Primary sources | Outputs |
