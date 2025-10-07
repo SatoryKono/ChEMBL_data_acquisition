@@ -258,7 +258,9 @@ def test_get_data_end_to_end__miniature_pipeline(
     config_path.write_text("io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n")
 
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
-    monkeypatch.setattr(get_data, "_warm_parent_catalog", lambda _cfg: None)
+    monkeypatch.setattr(
+        get_data, "_warm_parent_catalog", lambda _cfg, _base: None
+    )
 
     log_streams: deque[io.StringIO] = deque()
 

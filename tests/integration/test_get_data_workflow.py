@@ -458,10 +458,12 @@ def test_pipeline_subset__testitem_skip_existing_avoids_parent_warm(
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
     )
 
-    warm_calls: list[get_data.PipelineRunConfig] = []
+    warm_calls: list[tuple[get_data.PipelineRunConfig, object]] = []
 
-    def _record_warm(current_cfg: get_data.PipelineRunConfig) -> None:
-        warm_calls.append(current_cfg)
+    def _record_warm(
+        current_cfg: get_data.PipelineRunConfig, base_config: object
+    ) -> None:
+        warm_calls.append((current_cfg, base_config))
 
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
     monkeypatch.setattr(get_data, "_PIPELINE_APIS", {"testitem": api}, raising=False)

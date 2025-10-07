@@ -967,14 +967,13 @@ def _cleanup_failed_step(
         )
 
 
-def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
+def _warm_parent_catalog(cfg: PipelineRunConfig, base_config: Config) -> None:
     """Ensure the molecule parent catalogue cache exists before test item runs."""
 
     from library.integration.molecule_catalog import load_parent_catalog
 
     start_time = time.perf_counter()
-    config: Config = load_config(cfg.config_path, base_path=cfg.base_path)
-    chembl_sources = config.sources.chembl
+    chembl_sources = base_config.sources.chembl
     catalog_cfg = chembl_sources.molecule_catalog
     cache_path = catalog_cfg.cache_path
     sqlite_path = catalog_cfg.sqlite_path
@@ -997,13 +996,15 @@ def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
     def _catalog_client_factory(context: ETLContext) -> ChemblClient:
         return ChemblClient(
             api=chembl_sources.api,
-            retry=config.system.retry,
+            retry=base_config.system.retry,
             chembl=chembl_sources.cache,
             global_limiter=context.global_limiter,
         )
 
     try:
-        with ETLContext(config, chembl_client_factory=_catalog_client_factory) as context:
+        with ETLContext(
+            base_config, chembl_client_factory=_catalog_client_factory
+        ) as context:
             load_parent_catalog(
                 client=context.chembl_client,
                 api_cfg=chembl_sources.api,
@@ -1470,7 +1471,7 @@ def run_pipeline(
                 )
                 if not should_skip_warm:
                     try:
-                        _warm_parent_catalog(current_cfg)
+                        _warm_parent_catalog(current_cfg, base_config)
                     except TimeoutError as exc:
                         overall_status = 1
                         entry.update(
