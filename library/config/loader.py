@@ -47,6 +47,7 @@ CONFIG_DIR = _CONFIG_DIR
 DEFAULT_CONFIG_PATH = _DEFAULT_CONFIG_PATH
 _DEFAULT_CONFIG_NAME = DEFAULT_CONFIG_PATH.name
 DEFAULT_CONFIG_RELATIVE = Path("config") / _DEFAULT_CONFIG_NAME
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class ConfigLoaderError(RuntimeError):
@@ -93,6 +94,42 @@ def load_yaml_config(path: str | Path | None = None) -> tuple[dict[str, Any], Pa
     if not isinstance(data, dict):
         raise ConfigLoaderError("top-level structure in config file must be a mapping")
     return data, cfg_path
+
+
+def _format_source_detail(path: Path) -> str:
+    """Return a stable, human-readable representation of ``path``."""
+
+    candidate = Path(path)
+    try:
+        resolved = candidate.resolve()
+    except OSError:
+        resolved = candidate
+
+    if not resolved.is_absolute():
+        return resolved.as_posix()
+
+    bases: list[Path] = []
+    try:
+        cwd = Path.cwd().resolve()
+    except OSError:
+        cwd = None
+    if cwd is not None:
+        bases.append(cwd)
+
+    project_root = _PROJECT_ROOT
+    if project_root not in bases:
+        bases.append(project_root)
+
+    for base in bases:
+        try:
+            relative = resolved.relative_to(base)
+        except ValueError:
+            continue
+        if not relative.parts:
+            return resolved.name
+        return relative.as_posix()
+
+    return resolved.as_posix()
 
 
 def _absolutise_path_value(value: Any, base_dir: Path) -> Any:
@@ -311,8 +348,9 @@ def load_config(
 
     cli_path_map: dict[str, tuple[str, ...]] = {}
     source_map: dict[tuple[str, ...], ConfigSource] = {}
+    detail = _format_source_detail(resolved_path)
     for path_tuple, _ in _iter_leaf_items(data):
-        source_map[path_tuple] = ConfigSource("config", str(resolved_path))
+        source_map[path_tuple] = ConfigSource("config", detail)
 
     local_path = resolved_path.with_name(
         f"{resolved_path.stem}.local{resolved_path.suffix}"
@@ -323,8 +361,9 @@ def load_config(
         except ConfigLoaderError as exc:
             raise ConfigError(str(exc)) from exc
         _merge_mapping(data, local_data)
+        local_detail = _format_source_detail(local_path)
         for path_tuple, _ in _iter_leaf_items(local_data):
-            source_map[path_tuple] = ConfigSource("config", str(local_path))
+            source_map[path_tuple] = ConfigSource("config", local_detail)
 
     env_overrides = _apply_env_overrides(data)
     for path_tuple, env_key in env_overrides.items():
