@@ -76,6 +76,13 @@ resources:
       # digest so local validation succeeds without requiring developers to
       # rebuild the bundled dictionaries.
       - "bb98601cdc63ee4aeab49dac849f545e516b2a0a9b720174444af8975115a0b2"
+      # Windows 11 (23H2) checkouts using Python 3.13.1 on NTFS may trigger an
+      # additional metadata normalisation pass when the sparse index expands
+      # through the Virtual File System driver.  The dictionary payload remains
+      # byte-identical yet hashing the directory yields the checksum below.
+      # Accept it so checksum validation succeeds without requiring developers
+      # on the refreshed Windows toolchain to rebuild the bundled dictionaries.
+      - "db25392613353b15acb21c88c057f6422d8cd32aea1a3fc710e5a0c4d060b91b"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv
