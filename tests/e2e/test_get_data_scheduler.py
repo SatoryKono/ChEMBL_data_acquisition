@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,6 +7,7 @@ import pytest
 
 from library.pipelines.common import PipelineRunResult
 from scripts import get_data
+from tests.helpers.manifests import load_latest_manifest, list_manifest_files
 
 
 def _build_run_config(tmp_path: Path, steps: tuple[get_data.PipelineStep, ...]) -> get_data.PipelineRunConfig:
@@ -99,8 +99,9 @@ def test_scheduler__selective_run_respects_dependencies(tmp_path: Path, monkeypa
     assert transform_output.exists()
     assert audit_output.exists()
 
-    manifest_path = cfg.base_path / "reports" / "run_manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifests = list_manifest_files(cfg.base_path)
+    assert len(manifests) == 1
+    _, manifest = load_latest_manifest(cfg.base_path)
     step_names = [entry["name"] for entry in manifest["steps"]]
     assert step_names == ["transform", "audit"]
     assert manifest["run"]["status"] == "success"
@@ -145,8 +146,9 @@ def test_scheduler__fails_on_missing_external_dependency(tmp_path: Path, monkeyp
     assert status == 1
     assert executed == []
 
-    manifest_path = cfg.base_path / "reports" / "run_manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifests = list_manifest_files(cfg.base_path)
+    assert len(manifests) == 1
+    _, manifest = load_latest_manifest(cfg.base_path)
     assert manifest["run"]["status"] == "failed"
     transform_entry = next(entry for entry in manifest["steps"] if entry["name"] == "transform")
     assert transform_entry["status"] == "failed"
