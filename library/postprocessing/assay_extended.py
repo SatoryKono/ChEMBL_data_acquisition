@@ -9,13 +9,14 @@ from typing import Iterable, Sequence
 
 import pandas as pd
 
+from config.paths import DICTIONARY_DIR
 from library.common.log import logger
 
 from . import helpers
 
 __all__ = ["AssayExtendedError", "enrich_assay_metadata"]
 
-_DEFAULT_DICTIONARY_DIR = Path("config/dictionary")
+_DEFAULT_DICTIONARY_DIR = DICTIONARY_DIR
 
 
 class AssayExtendedError(RuntimeError):
