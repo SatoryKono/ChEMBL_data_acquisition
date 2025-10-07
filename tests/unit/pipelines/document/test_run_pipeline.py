@@ -13,30 +13,76 @@ from library.pipelines.document import DocumentPipelineOptions, run_pipeline
 
 
 class _DummySection:
-    def __init__(self, *, limit: int | None = None, offset: int = 0) -> None:
+    def __init__(
+        self,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+        **extra: object,
+    ) -> None:
         self.limit = limit
         self.offset = offset
+        for key, value in extra.items():
+            setattr(self, key, value)
 
     def model_copy(self, update: dict[str, object] | None = None) -> "_DummySection":
         update = update or {}
-        limit_value = update.get("limit", self.limit)
+        data = dict(self.__dict__)
+
+        limit_value = update.get("limit", data.get("limit"))
         if not isinstance(limit_value, int) and limit_value is not None:
-            limit_value = self.limit
-        offset_value = update.get("offset", self.offset)
+            limit_value = data.get("limit")
+        data["limit"] = limit_value
+
+        offset_value = update.get("offset", data.get("offset", 0))
         if not isinstance(offset_value, int):
-            offset_value = self.offset
-        return _DummySection(limit=limit_value, offset=offset_value)
+            offset_value = data.get("offset", 0)
+        data["offset"] = offset_value
+
+        for key, value in update.items():
+            if key in {"limit", "offset"}:
+                continue
+            data[key] = value
+
+        return _DummySection(**data)
 
 
 class _DummyConfig:
     def __init__(self) -> None:
-        document = SimpleNamespace(
-            chembl=_DummySection(),
-            pubmed=_DummySection(),
-            all=_DummySection(),
+        document_all = _DummySection(
+            column="molecule_chembl_id",
+            chunk_size=20,
+            sleep=5.0,
+            workers=1,
+            batch_size=50,
+            timeout=90.0,
         )
+        document_chembl = _DummySection(
+            column="molecule_chembl_id",
+            chunk_size=20,
+            timeout=90.0,
+        )
+        document_pubmed = _DummySection(
+            column="PMID",
+            sleep=5.0,
+            workers=1,
+            batch_size=100,
+        )
+        document = SimpleNamespace(
+            chembl=document_chembl,
+            pubmed=document_pubmed,
+            all=document_all,
+        )
+        self.document = document
         self.sources = SimpleNamespace(
             chembl=SimpleNamespace(pipelines=SimpleNamespace(document=document))
+        )
+        self.io = SimpleNamespace(
+            csv_sep=",",
+            csv_encoding="utf-8-sig",
+            output_dir=Path.cwd(),
+            na_markers=("#N/A",),
+            keep_na_markers=False,
         )
 
     def model_copy(self, *, deep: bool = False) -> "_DummyConfig":
@@ -54,6 +100,10 @@ def _install_fake_cli(monkeypatch: pytest.MonkeyPatch, exit_code: int) -> None:
     setattr(module, "run_all", _runner)
     setattr(module, "run_chembl", _runner)
     setattr(module, "run_pubmed", _runner)
+    package = ModuleType("scripts")
+    package.__path__ = []  # type: ignore[attr-defined]
+    setattr(package, "get_document_data", module)
+    monkeypatch.setitem(sys.modules, "scripts", package)
     monkeypatch.setitem(sys.modules, "scripts.get_document_data", module)
 
 
