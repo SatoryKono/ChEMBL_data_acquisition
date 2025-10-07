@@ -121,7 +121,13 @@ class _FallbackPathAction(argparse.Action):
         setattr(namespace, "fallback_doi_csv", values)
 
 
-_EXPORT_COLUMNS: tuple[str, ...] = DOCUMENT_EXPORT_COLUMNS
+# ``DOCUMENT_EXPORT_COLUMNS`` is provided as an immutable tuple in the schema
+# declaration to make accidental mutations unlikely.  Pandas, however, expects a
+# list-like object for column projections and interprets tuples as single column
+# keys (raising ``KeyError`` on recent releases).  Store the export projection as
+# a list locally to keep the deterministic ordering while remaining compatible
+# with pandas' expectations.
+_EXPORT_COLUMNS: list[str] = list(DOCUMENT_EXPORT_COLUMNS)
 
 
 def _resolve_numeric_export_columns() -> tuple[str, ...]:
@@ -306,17 +312,13 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     for target, sources in _EXPORT_COALESCE_SOURCES.items():
         frame[target] = _coalesce_columns(frame, sources)
 
-    for column in _EXPORT_COLUMNS:
-        if column not in frame.columns:
-            frame[column] = ""
-
-    # ``_EXPORT_COLUMNS`` is defined as a tuple for immutability, but pandas expects
-    # a list-like object when selecting multiple columns.  Using a tuple now raises a
-    # ``KeyError`` on recent pandas releases because it is interpreted as a single
-    # column label instead of a sequence of labels.  Convert the tuple to a list to
-    # keep the deterministic ordering while remaining compatible with all pandas
-    # versions.
-    return frame[list(_EXPORT_COLUMNS)]
+    # ``DataFrame.reindex`` guarantees that all expected columns exist while keeping the
+    # deterministic ordering defined by ``_EXPORT_COLUMNS``.  Missing columns are filled
+    # with empty strings which mirrors the legacy behaviour of manually initialising
+    # them in a loop.  Returning the reindexed frame avoids the ``KeyError`` raised by
+    # ``frame[_EXPORT_COLUMNS]`` on newer pandas releases where a tuple of column names
+    # is interpreted as a single label rather than a sequence.
+    return frame.reindex(columns=list(_EXPORT_COLUMNS), fill_value="")
 
 
 def _iter_export_chunks(
