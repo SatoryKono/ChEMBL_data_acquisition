@@ -107,3 +107,16 @@ regressions create an issue labelled `data-quality` including:
 - Pipeline name and run ID.
 - Offending CSV rows (attach redacted snippets if necessary).
 - Steps to reproduce (input files, config overrides).
+
+## Smoke test checklist
+
+Run the optional smoke suite before major merges or releases and tick the
+following items:
+
+- [ ] `make smoke` — orchestrated pipelines on bundled fixtures.
+- [ ] `make get-activities` — delegates to `python scripts/get_activities.py --limit 25 --dry-run` to ensure the synthetic helper
+      still matches documentation.
+- [ ] `check-determinism --baseline <prev> --candidate <curr>` when comparing
+      consecutive runs.
+- [ ] Post the summary (logs, report links, command outputs) to the `#qa-updates`
+      channel so the QA team can audit the run.

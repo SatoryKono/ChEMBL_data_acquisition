@@ -55,6 +55,7 @@ jobs:
             --final-out "${tmp_output}/targets.csv" \
             --log-level INFO \
             --limit 2
+          python scripts/get_activities.py --limit 5 --dry-run
       - name: Upload output data
         if: always()
         uses: actions/upload-artifact@v4

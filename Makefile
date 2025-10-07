@@ -5,6 +5,7 @@ PYTHON ?= python3
 VENV := .venv
 PYTHON_BIN := $(VENV)/bin/python
 PIP := $(VENV)/bin/pip
+ACTIVITY_LIMIT ?= 25
 
 ENV_FILES := $(wildcard .env .env.local)
 ifneq ($(ENV_FILES),)
@@ -12,7 +13,7 @@ ifneq ($(ENV_FILES),)
   export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' $(ENV_FILES))
 endif
 
-.PHONY: init lint test smoke test-report build release clean
+.PHONY: init lint test smoke test-report get-activities build release clean
 
 init: $(PYTHON_BIN)
 
@@ -39,6 +40,9 @@ test-report: $(PYTHON_BIN)
         PYTHONHASHSEED=$${PYTHONHASHSEED:-0} \
         CHEMBL_DA_BASE_PATH=$(PWD)/tests/data \
         $(PYTHON_BIN) -m scripts.run_test_suite --suite full --report-dir $(PWD)/reports
+
+get-activities: $(PYTHON_BIN)
+        $(PYTHON_BIN) scripts/get_activities.py --limit $(ACTIVITY_LIMIT) --dry-run
 
 build: $(PYTHON_BIN)
         rm -rf dist
