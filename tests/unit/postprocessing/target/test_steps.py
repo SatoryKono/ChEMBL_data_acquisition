@@ -177,6 +177,36 @@ def test_finalize_target_records__populates_target_type_from_relationship() -> N
 
 
 @pytest.mark.unit
+def test_finalize_target_records__fills_target_type_from_dictionary(monkeypatch) -> None:
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["chembl1", "CHEMBL2"],
+            "pref_name": ["Alpha", "Beta"],
+            "target_type": [pd.NA, None],
+        }
+    )
+
+    lookup = pd.Series(
+        {
+            "CHEMBL1": "Multicellular organism",
+            "CHEMBL2": "Unicellular organism",
+        },
+        dtype="string",
+    )
+
+    monkeypatch.setattr(
+        "library.postprocess.targets.steps._get_target_type_lookup",
+        lambda: lookup,
+    )
+
+    result = finalize_target_records(frame)
+
+    mapping = {
+        key.upper(): value for key, value in result.set_index("target_chembl_id")["target_type"].items()
+    }
+
+    assert mapping["CHEMBL1"] == "Multicellular organism"
+    assert mapping["CHEMBL2"] == "Unicellular organism"
 def test_finalize_target_records__populates_target_type_from_description() -> None:
     frame = pd.DataFrame(
         {
