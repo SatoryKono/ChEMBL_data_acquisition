@@ -1,6 +1,7 @@
 """Helpers for loading declarative post-processing pipeline configuration."""
 from __future__ import annotations
 
+import inspect
 import os
 import re
 from dataclasses import dataclass
@@ -166,6 +167,8 @@ def _load_step(entry: Any, index: int) -> ConfiguredStep:
             f"resolved object for step '{name}' is not callable: {callable_path}"
         )
 
+    _validate_step_parameters(func, params, step_name=name)
+
     definition = StepDefinition(
         name=name,
         func=func,
@@ -179,6 +182,33 @@ def _load_step(entry: Any, index: int) -> ConfiguredStep:
         params=params,
         description=description,
     )
+
+
+def _validate_step_parameters(func: Any, params: Mapping[str, Any], *, step_name: str) -> None:
+    """Ensure that every configured parameter is supported by ``func``."""
+
+    if not params:
+        return
+
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):  # pragma: no cover - defensive guard
+        return
+
+    if any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    ):
+        return
+
+    unsupported = sorted(
+        key for key in params.keys() if key not in signature.parameters
+    )
+    if unsupported:
+        formatted = ", ".join(unsupported)
+        raise PipelineConfigError(
+            f"step '{step_name}' defines unsupported parameters: {formatted}"
+        )
 
 
 def _expand_environment(value: Any, env: Mapping[str, str]) -> Any:
