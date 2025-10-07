@@ -49,7 +49,15 @@ from library.cli.logging import setup_cli_logging
 from library.clients import ChemblClient
 from library.orchestration import ETLContext
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
-from library.config import Config, DEFAULT_CONFIG_PATH, load_config
+from pydantic import ValidationError
+
+from library.config import (
+    Config,
+    ConfigError,
+    ConfigLoaderError,
+    DEFAULT_CONFIG_PATH,
+    load_config,
+)
 from library.pipelines.activity import (
     ActivityPipelineOptions,
     run_pipeline as run_activity_pipeline,
@@ -81,7 +89,6 @@ from library.pipelines.testitem import (
     TestitemPipelineOptions,
     run_pipeline as run_testitem_pipeline,
 )
-from library.config.loader import DEFAULT_CONFIG_PATH
 
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
@@ -1354,7 +1361,12 @@ def run_pipeline(
         return 1
     effective_steps = plan.steps
     external_requirements = plan.external_artifacts
-    base_config = load_config(cfg.config_path, base_path=cfg.base_path)
+    try:
+        base_config = load_config(cfg.config_path, base_path=cfg.base_path)
+    except (ConfigError, ConfigLoaderError, ValidationError) as exc:
+        _LOGGER.error("config_load_failed", error=str(exc), exc_info=exc)
+        _LOGGER.info("pipeline_done", stage="pipeline", exit_code=1)
+        return 1
     overall_status = 0
     run_started_at = datetime.now(UTC)
     run_started_clock = time.perf_counter()

@@ -10,12 +10,13 @@ from typing import Callable
 import pandas as pd
 import pytest
 
-from library.config import Config
+from library.config import Config, ConfigLoaderError
 from library.pipelines.common import PipelineRunResult
 from scripts import get_data, get_target_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_lines
 from tests.helpers.manifests import load_latest_manifest, list_manifest_files
+from pydantic import BaseModel, ValidationError
 
 
 def _build_stub_api(
@@ -103,6 +104,17 @@ def _load_manifest(cfg: get_data.PipelineRunConfig) -> dict[str, object]:
     return manifest
 
 
+def _make_validation_error() -> ValidationError:
+    class _DummyModel(BaseModel):
+        value: int
+
+    try:
+        _DummyModel.model_validate({"value": "boom"})
+    except ValidationError as exc:  # pragma: no cover - control flow
+        return exc
+    raise AssertionError("expected ValidationError")
+
+
 @pytest.mark.integration
 def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = _prepare_environment(tmp_path)
@@ -180,6 +192,60 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
     assert manifest_failure["steps"][0]["status"] == "failed"
     assert manifest_failure["steps"][0]["reason"] == "schema_mismatch"
     assert manifest_failure["steps"][0]["output"]["exists"] is False
+
+
+@pytest.mark.integration
+def test_run_pipeline__config_loader_error_handled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _prepare_environment(tmp_path)
+    stream = io.StringIO()
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="config-error")
+    )
+    monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+
+    error = ConfigLoaderError("failed to load configuration")
+
+    def _raise_config_error(*_args: object, **_kwargs: object) -> Config:
+        raise error
+
+    monkeypatch.setattr(get_data, "load_config", _raise_config_error, raising=False)
+
+    status = get_data.run_pipeline(cfg, steps=())
+
+    assert status == 1
+    log_text = stream.getvalue()
+    assert "config_load_failed" in log_text
+    assert "pipeline_done exit_code=1" in log_text
+    assert list_manifest_files(cfg.base_path) == []
+
+
+@pytest.mark.integration
+def test_run_pipeline__validation_error_handled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _prepare_environment(tmp_path)
+    stream = io.StringIO()
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="validation-error")
+    )
+    monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+
+    validation_error = _make_validation_error()
+
+    def _raise_validation_error(*_args: object, **_kwargs: object) -> Config:
+        raise validation_error
+
+    monkeypatch.setattr(get_data, "load_config", _raise_validation_error, raising=False)
+
+    status = get_data.run_pipeline(cfg, steps=())
+
+    assert status == 1
+    log_text = stream.getvalue()
+    assert "config_load_failed" in log_text
+    assert "pipeline_done exit_code=1" in log_text
+    assert list_manifest_files(cfg.base_path) == []
 
 
 @pytest.mark.integration
