@@ -185,7 +185,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
             "read_fail",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             path=str(args.input_csv),
         )
         return 1

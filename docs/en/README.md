@@ -51,7 +51,7 @@ Key traits:
   `<name>_quality_report_table.csv` and JSON quality summaries. Target runs also
   emit helper exports named `organism.output.target_<stamp>.csv`,
   `isoform.output.target_<stamp>.csv`, and `names.output.target_<stamp>.csv`
-  described in [`OUTPUT_TARGETS_EN.md`](../OUTPUT_TARGETS_EN.md).
+  described in [`OUTPUT_TARGETS.md`](./OUTPUT_TARGETS.md).
 - Schema validation happens before and after enrichment; failures emit structured
   logs and optional fatal errors based on configuration.
 
@@ -68,11 +68,13 @@ below to navigate the canonical English sources:
 | CLI reference | [`USAGE.md`](./USAGE.md) | [`../ru/USAGE.md`](../ru/USAGE.md) |
 | Configuration | [`CONFIG.md`](./CONFIG.md) | [`../ru/CONFIG.md`](../ru/CONFIG.md) |
 | Outputs & validation | [`OUTPUT.md`](./OUTPUT.md) | [`../ru/OUTPUT.md`](../ru/OUTPUT.md) |
+| Target helper exports | [`OUTPUT_TARGETS.md`](./OUTPUT_TARGETS.md) | [`../ru/OUTPUT_TARGETS.md`](../ru/OUTPUT_TARGETS.md) |
 | Quality controls | [`QA_PROCESS.md`](./QA_PROCESS.md) | [`../ru/QA_PROCESS.md`](../ru/QA_PROCESS.md) |
 | Architecture | [`architecture/ARCHITECTURE.md`](./architecture/ARCHITECTURE.md) | [`../ru/architecture/ARCHITECTURE.md`](../ru/architecture/ARCHITECTURE.md) |
 | Data model | [`architecture/DATA_MODEL.md`](./architecture/DATA_MODEL.md) | [`../ru/architecture/DATA_MODEL.md`](../ru/architecture/DATA_MODEL.md) |
 | Development | [`development/README.md`](./development/README.md) | [`../ru/development/README.md`](../ru/development/README.md) |
 | Dictionaries & glossary | [`reference/DICTIONARIES.md`](./reference/DICTIONARIES.md) | [`../ru/reference/DICTIONARIES.md`](../ru/reference/DICTIONARIES.md) |
+| Post-processing runbook | [`guides/POSTPROCESSING_RUNBOOK.md`](./guides/POSTPROCESSING_RUNBOOK.md) | [`../ru/guides/POSTPROCESSING_RUNBOOK.md`](../ru/guides/POSTPROCESSING_RUNBOOK.md) |
 
 All English files have a one-to-one Russian counterpart with identical structure
 and headings to simplify cross-referencing.

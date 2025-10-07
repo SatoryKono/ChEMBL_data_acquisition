@@ -7,7 +7,7 @@
 
 `get_document_data` требует явного указания флага `--mode` (`chembl`, `pubmed`,
 `all`). Парсер в итоге вызывает
-[`prepare_io_paths`](../../library/cli/parser.py), которому нужен режим при
+[`prepare_io_paths`](../../../library/cli/parser.py), которому нужен режим при
 формировании логов. Передайте `--mode` или используйте позиционный алиас
 (`python scripts/get_document_data.py all ...`).
 

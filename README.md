@@ -90,15 +90,15 @@ python scripts/get_data.py \
 | Test item | `python scripts/get_testitem_data.py --input data/input/testitem.csv --final-out output/testitems.csv --request-limit 500 --hierarchy-path config/dictionary/_testitem/molecule_hierarchy.csv` | Provides parent-molecule enrichment controls and request throttling (`--request-limit`, `--batch-size`, `--dry-run`). |
 | Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto` | Resolves tissue metadata, merges ontology cross-references and normalises synonyms for downstream joins. Run separately before `get_activity_data` when tissue lookups are required. |
 | Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --final-out output/cellline.csv --batch-size 20 --limit 100` | Retrieves ChEMBL cell line records, normalises nullable identifiers and enforces deterministic ordering. |
-| Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --action-type-enabled --bounds-enabled --quality-threshold warn` | Toggles enrichment hooks (`--action-type-enabled`, `--bounds-enabled`), derived bounds and QA thresholds. |
+| Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --timeout 120 --limit 500 --offset 100 --workers 4 --dry-run` | Supports range controls (`--limit`, `--offset`), per-request timeouts, parallel fetching via `--workers` and a dry-run validation mode. |
 
 Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar
 and table-quality reports under the same directory. The target pipeline also
 emits helper lookups named `organism.output.target_<stamp>.csv`,
 `isoform.output.target_<stamp>.csv`, `names.output.target_<stamp>.csv`, and
 `IUPHAR.output.target_<stamp>.csv` — all detailed in
-[`docs/OUTPUT_TARGETS_EN.md`](./docs/OUTPUT_TARGETS_EN.md) and
-[`docs/OUTPUT_TARGETS_RU.md`](./docs/OUTPUT_TARGETS_RU.md). The isoform helper
+[`docs/en/OUTPUT_TARGETS.md`](./docs/en/OUTPUT_TARGETS.md) and
+[`docs/ru/OUTPUT_TARGETS.md`](./docs/ru/OUTPUT_TARGETS.md). The isoform helper
 is produced by `library.postprocessing.target.process_targets`, a direct port of
 the original Power Query workbook that keeps every row byte-identical. Refer to
 the [output reference](./docs/en/OUTPUT.md) for the complete specification.
@@ -121,6 +121,8 @@ languages:
   [`docs/en/guides/DEBUGGING.md`](./docs/en/guides/DEBUGGING.md),
   [`docs/en/guides/FAQ.md`](./docs/en/guides/FAQ.md) and their Russian twins under
   `docs/ru/guides/`
+- Post-processing runbook: [`docs/en/guides/POSTPROCESSING_RUNBOOK.md`](./docs/en/guides/POSTPROCESSING_RUNBOOK.md),
+  [`docs/ru/guides/POSTPROCESSING_RUNBOOK.md`](./docs/ru/guides/POSTPROCESSING_RUNBOOK.md)
 - Configuration guide: [`docs/en/CONFIG.md`](./docs/en/CONFIG.md),
   [`docs/ru/CONFIG.md`](./docs/ru/CONFIG.md)
 - Output specification and validation rules:
