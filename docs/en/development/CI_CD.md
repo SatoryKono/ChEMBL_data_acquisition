@@ -7,7 +7,7 @@
 | Lint | `make lint` | Ensure formatting (`black`) and linting (`ruff`). |
 | Type check | `make typecheck` | Run `mypy` against `library/` and `scripts/`. |
 | Tests | `pytest -q --json-report --json-report-file=reports/test_report.json` | Execute entire test suite. |
-| Report summary | `python tools/make_md_summary.py reports/test_report.json reports/test_summary.md` | Produce Markdown summary for artefacts. |
+| Report summary | `make-md-summary --input reports/test_report.json --output reports/test_summary.md` | Produce Markdown summary for artefacts (paths default to `reports/`). |
 | Smoke pipelines (optional) | `make smoke` | Run orchestrator on bundled input data to ensure pipelines still succeed. |
 | Determinism (optional) | `check-determinism --baseline <prev> --candidate <curr>` | Detect unexpected output changes between runs. |
 

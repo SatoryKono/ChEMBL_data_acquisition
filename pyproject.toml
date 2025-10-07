@@ -69,6 +69,7 @@ table-quality = "library.utils.cli_tools.table_quality_main:main"
 chunk-io = "library.utils.cli_tools.chunk_io_main:main"
 get-activities = "library.utils.cli_tools.get_activities:main"
 check-determinism = "library.utils.cli_tools.check_determinism:main"
+make-md-summary = "tools.make_md_summary:main"
 
 [tool.setuptools]
 include-package-data = true
@@ -80,8 +81,9 @@ include = [
   "config",
   "config.dictionary",
   "config.dictionary.*",
-  "scripts",
-  "scripts.*",
+  "scripts", 
+  "scripts.*", 
+  "tools",
 ]
 
 [tool.setuptools.package-data]

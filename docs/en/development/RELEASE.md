@@ -16,7 +16,8 @@
 4. **Run quality gates**
    - `make lint && make typecheck`
    - `pytest -q --json-report --json-report-file=reports/test_report.json`
-   - `python tools/make_md_summary.py reports/test_report.json reports/test_summary.md`
+   - `python tools/make_md_summary.py --input reports/test_report.json --output reports/test_summary.md`
+     (arguments optional with defaults; console script: `make-md-summary`)
    - `make smoke`
    - `check-determinism` between previous release outputs and the new run (if available).
 
