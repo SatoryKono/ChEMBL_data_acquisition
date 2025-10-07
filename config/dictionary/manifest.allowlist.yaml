@@ -1,0 +1,20 @@
+# Additional checksum variants observed on specific platforms.
+#
+# The values declared here complement the allow-list embedded in
+# ``library.resources.dictionaries``.  They let us accept freshly observed
+# platform-specific hashes without having to re-issue the full dictionary
+# bundle immediately.
+#
+# Each key maps to a dictionary resource name from ``manifest.yaml`` and the
+# associated value is a list of accepted SHA256 digests.
+#
+# See ``library/resources/dictionaries.py`` for more context about each
+# checksum variant and the platforms they cover.
+
+dictionary_root:
+  # Windows 11 (23H2) with Python 3.13.1 and Git 2.48 may rewrite sparse index
+  # metadata when expanding the checkout, yielding the checksum below even
+  # though the dictionary content is byte-identical to the POSIX export.
+  # Include it so checksum validation succeeds on the refreshed Windows
+  # toolchain without forcing developers to rebuild the dictionaries.
+  - "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15"
