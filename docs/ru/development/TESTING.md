@@ -49,7 +49,8 @@ tests/
 
 ```bash
 pytest --json-report --json-report-file=reports/test_report.json
-python tools/make_md_summary.py reports/test_report.json reports/test_summary.md
+python tools/make_md_summary.py --input reports/test_report.json --output reports/test_summary.md
+# пути можно не указывать, если используете значения по умолчанию (`python tools/make_md_summary.py` или `make-md-summary`)
 ```
 
 JSON должен содержать блок `meta` с репозиторием, SHA, веткой, временем,
