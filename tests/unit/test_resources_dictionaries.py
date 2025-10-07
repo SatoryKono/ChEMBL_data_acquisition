@@ -55,6 +55,7 @@ def test_normalise_text_newlines__binary_payload_preserved() -> None:
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
         "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
         "70f0b19c450d0fc8d19ddb41bd69906d6b1a5ac39e3e4e2d2b6dea54a501569d",
+        "2e16836b9f9efe93dd995e70b023e8a83f9b39af457bedae36da5d5f8e67f43a",
     ),
 )
 def test_parse_manifest__accepts_known_checksum_variants(
@@ -86,8 +87,15 @@ def test_parse_manifest__accepts_known_checksum_variants(
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    "checksum",
+    (
+        "c86b314b5d8a0906f1174c8e9f494cf9dde6841be2cb1e8b66c5772976afb5ca",
+        "3fa041266066939dcbe2fb356f9055d2845fb4a46d874fef682c02d4314542cc",
+    ),
+)
 def test_parse_manifest__accepts_target_cache_checksum_variants(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, checksum: str
 ) -> None:
     """The target UniProt cache accepts newly observed checksum variants."""
 
@@ -107,18 +115,11 @@ def test_parse_manifest__accepts_target_cache_checksum_variants(
     }
     manifest_path.write_text(yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8")
 
-    monkeypatch.setattr(
-        dictionaries,
-        "_compute_sha256",
-        lambda path: "c86b314b5d8a0906f1174c8e9f494cf9dde6841be2cb1e8b66c5772976afb5ca",
-    )
+    monkeypatch.setattr(dictionaries, "_compute_sha256", lambda path, value=checksum: value)
 
     resources = dictionaries._parse_manifest(base_dir=manifest_dir)
 
-    assert (
-        resources["target_uniprot_cache"].sha256
-        == "c86b314b5d8a0906f1174c8e9f494cf9dde6841be2cb1e8b66c5772976afb5ca"
-    )
+    assert resources["target_uniprot_cache"].sha256 == checksum
 
 
 @pytest.mark.unit
@@ -176,6 +177,7 @@ def test_manifest_allows_latest_windows_sha256() -> None:
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
         "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
         "70f0b19c450d0fc8d19ddb41bd69906d6b1a5ac39e3e4e2d2b6dea54a501569d",
+        "2e16836b9f9efe93dd995e70b023e8a83f9b39af457bedae36da5d5f8e67f43a",
     }
 
     assert expected.issubset(set(sha_values))
@@ -196,4 +198,5 @@ def test_manifest_allows_latest_target_uniprot_checksum() -> None:
     assert {
         "014e183b12959a4e5f060faf3b77c6a6d143cc00e0dd0121fdd1d1e51a210a2a",
         "c86b314b5d8a0906f1174c8e9f494cf9dde6841be2cb1e8b66c5772976afb5ca",
+        "3fa041266066939dcbe2fb356f9055d2845fb4a46d874fef682c02d4314542cc",
     }.issubset(set(sha_values))

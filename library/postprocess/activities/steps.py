@@ -1,69 +1,127 @@
 """Transformation steps for the activity postprocessing pipeline."""
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import pandas as pd
 
- 
+
 from library.postprocess.common import StepDefinition, run_steps
 from library.postprocess.common.logging import PipelineRunMetrics
- 
+
 from library.pipelines.common.metadata import get_pipeline_version
- 
+
 from library.postprocess.common.config import (
     load_pipeline_config,
     normalize_pipeline_version,
 )
- 
+
+from library.processing.activity.bounds import _normalize_relation as _canonicalize_relation
 
 from .schema import ACTIVITY_SCHEMA, validate_activities
 
 
-def normalize_activity_records(df: pd.DataFrame) -> pd.DataFrame:
+def normalize_activity_records(
+    df: pd.DataFrame,
+    *,
+    relation_normalization: bool = False,
+    enforce_uppercase_units: bool = True,
+    **_: object,
+) -> pd.DataFrame:
     """Normalize string columns and enforce consistent naming."""
 
     normalised = df.copy(deep=True)
     normalised.columns = [col.strip().lower() for col in normalised.columns]
 
-    for column in ["standard_type", "standard_relation", "standard_units"]:
-        if column in normalised.columns:
-            normalised[column] = (
-                normalised[column]
-                .astype("string")
-                .str.strip()
-                .str.replace("\s+", " ", regex=True)
-                .str.upper()
-            )
+    def _prepare(series: pd.Series, *, uppercase: bool) -> pd.Series:
+        prepared = (
+            series.astype("string")
+            .str.strip()
+            .str.replace("\s+", " ", regex=True)
+        )
+        if uppercase:
+            prepared = prepared.str.upper()
+        return prepared
+
+    if "standard_type" in normalised.columns:
+        normalised["standard_type"] = _prepare(
+            normalised["standard_type"], uppercase=True
+        )
+
+    if "standard_units" in normalised.columns:
+        normalised["standard_units"] = _prepare(
+            normalised["standard_units"], uppercase=enforce_uppercase_units
+        )
+
+    if "standard_relation" in normalised.columns:
+        relation_series = normalised["standard_relation"]
+        if relation_normalization:
+            relation_series = relation_series.map(_canonicalize_relation)
+        normalised["standard_relation"] = _prepare(
+            pd.Series(relation_series, index=normalised.index), uppercase=True
+        )
 
     return normalised
 
 
-def enrich_activity_quality(df: pd.DataFrame) -> pd.DataFrame:
+def enrich_activity_quality(
+    df: pd.DataFrame,
+    *,
+    quality_terms: Sequence[str] | None = None,
+    default_quality_flag: bool | None = None,
+    **_: object,
+) -> pd.DataFrame:
     """Add deterministic quality flags based on data validity comments."""
 
     enriched = df.copy(deep=True)
+    default_flag = bool(default_quality_flag) if default_quality_flag is not None else False
+    terms = tuple(
+        term.strip().lower()
+        for term in (quality_terms or ())
+        if isinstance(term, str) and term.strip()
+    )
+
     if "data_validity_comment" in enriched.columns:
         comment_series = enriched["data_validity_comment"].fillna("").astype("string")
-        enriched["quality_flag"] = comment_series.str.contains("valid", case=False)
+        if terms:
+            lowered = comment_series.str.lower()
+            mask = lowered.apply(lambda value: any(term in value for term in terms))
+            enriched["quality_flag"] = mask.astype("boolean").fillna(default_flag)
+        else:
+            enriched["quality_flag"] = pd.Series(default_flag, index=enriched.index, dtype="boolean")
     else:
-        enriched["quality_flag"] = False
+        enriched["quality_flag"] = pd.Series(default_flag, index=enriched.index, dtype="boolean")
 
     return enriched
 
 
-def finalize_activity_records(df: pd.DataFrame) -> pd.DataFrame:
+def finalize_activity_records(
+    df: pd.DataFrame,
+    *,
+    enforce_schema: bool = True,
+    numeric_identifier_dtype: str = "Int64",
+    **_: object,
+) -> pd.DataFrame:
     """Validate and reorder the DataFrame according to :data:`ACTIVITY_SCHEMA`."""
 
     prepared = df.copy(deep=True)
     if "activity_id" in prepared.columns:
-        prepared["activity_id"] = pd.to_numeric(prepared["activity_id"], errors="coerce").astype(
-            "Int64"
-        )
-    for column in ["molecule_chembl_id", "assay_chembl_id", "standard_type", "standard_relation", "standard_units"]:
+        prepared["activity_id"] = pd.to_numeric(
+            prepared["activity_id"], errors="coerce"
+        ).astype(numeric_identifier_dtype)
+    for column in [
+        "molecule_chembl_id",
+        "assay_chembl_id",
+        "standard_type",
+        "standard_relation",
+        "standard_units",
+    ]:
         if column in prepared.columns:
             prepared[column] = prepared[column].astype("string")
 
-    validated = validate_activities(prepared, context="activity_finalization")
-    return validated
+    if enforce_schema:
+        return validate_activities(prepared, context="activity_finalization")
+    return prepared
 
 
 PIPELINE_CONFIG = load_pipeline_config("activities")

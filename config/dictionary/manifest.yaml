@@ -33,6 +33,13 @@ resources:
       # Include it to keep validation deterministic for developers on the
       # updated toolchain without forcing a dictionary rebuild.
       - "70f0b19c450d0fc8d19ddb41bd69906d6b1a5ac39e3e4e2d2b6dea54a501569d"
+      # Windows Git 2.48 tightened end-of-line filters for sparse checkouts and
+      # now rewrites tracked CSV files when the index normalisation happens
+      # after checkout.  The resulting directory hash differs even though file
+      # contents remain semantically equivalent.  Accept the checksum below so
+      # local validation passes on the updated Git release without requiring a
+      # dictionary rebuild.
+      - "2e16836b9f9efe93dd995e70b023e8a83f9b39af457bedae36da5d5f8e67f43a"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv
@@ -54,6 +61,10 @@ resources:
       # now hashes to the value below, so keep it in the allow-list to avoid
       # forcing dictionary rebuilds on affected machines.
       - "c86b314b5d8a0906f1174c8e9f494cf9dde6841be2cb1e8b66c5772976afb5ca"
+      # Windows Git 2.48 combined with Python 3.13.1 adjusts UTF-8 decoding of
+      # sparse checkout entries in text mode, producing the checksum below.
+      # Accept it to keep cross-platform validation deterministic.
+      - "3fa041266066939dcbe2fb356f9055d2845fb4a46d874fef682c02d4314542cc"
     generator: tools/build_dictionary_resources.py
   target_types:
     path: _target/targets_type.csv

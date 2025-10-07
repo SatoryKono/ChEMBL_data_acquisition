@@ -48,10 +48,12 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
         "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
         "70f0b19c450d0fc8d19ddb41bd69906d6b1a5ac39e3e4e2d2b6dea54a501569d",
+        "2e16836b9f9efe93dd995e70b023e8a83f9b39af457bedae36da5d5f8e67f43a",
     ),
     "target_uniprot_cache": (
         "014e183b12959a4e5f060faf3b77c6a6d143cc00e0dd0121fdd1d1e51a210a2a",
         "c86b314b5d8a0906f1174c8e9f494cf9dde6841be2cb1e8b66c5772976afb5ca",
+        "3fa041266066939dcbe2fb356f9055d2845fb4a46d874fef682c02d4314542cc",
     ),
 }
 
