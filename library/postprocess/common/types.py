@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Optional, Protocol
+from typing import Any, Iterable, Optional, Protocol
 
 import pandas as pd
 
@@ -10,7 +10,7 @@ import pandas as pd
 class StepFn(Protocol):
     """Protocol describing a pure DataFrame transformation."""
 
-    def __call__(self, df: pd.DataFrame) -> pd.DataFrame:
+    def __call__(self, df: pd.DataFrame, **kwargs: Any) -> pd.DataFrame:
         """Return a new :class:`pandas.DataFrame` derived from ``df``."""
 
 
