@@ -97,5 +97,11 @@ resources:
   taxonomy_assay_lookup:
     path: _taxonomy/taxonomy.csv
     version: "2025-10-06"
-    sha256: "dc81f4becc78bce0d3d8561a3c6ae20cac9cfa46762bed4d9af43a8cb8c6b8ab"
+    sha256:
+      - "dc81f4becc78bce0d3d8561a3c6ae20cac9cfa46762bed4d9af43a8cb8c6b8ab"
+      # Windows sparse checkout normalisation on Git 2.47.1 produces the
+      # checksum below even though the payload is byte-identical to the
+      # POSIX export.  Accept it to keep dictionary verification
+      # deterministic across development environments.
+      - "0ec9e4342890f9e0f5457d58133fbca291ac30dd8dd133b8d4f2fac82e798c69"
     generator: tools/build_dictionary_resources.py
