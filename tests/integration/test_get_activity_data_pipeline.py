@@ -69,6 +69,11 @@ class _RecordingLogger:
     def error(self, event: str, *args: object, **kwargs: object) -> None:
         self._record("error", event, args, dict(kwargs))
 
+    def exception(self, event: str, *args: object, **kwargs: object) -> None:
+        payload = dict(kwargs)
+        payload.setdefault("exc_info", True)
+        self._record("exception", event, args, payload)
+
 
 @pytest.fixture()
 def activity_resource_dir(snapshot_resource: Path) -> Path:
