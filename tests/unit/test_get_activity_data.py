@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Iterable
+from threading import Event, Lock
+from typing import Iterable, Sequence
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -13,6 +17,15 @@ import requests
 from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS
 from library.postprocessing import activity_extended
 from scripts import get_activity_data
+
+
+def _make_pref_name_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "molecule_chembl_id": pd.Series(["CHEMBL1", "CHEMBL2"], dtype="string"),
+            "molecule_pref_name": pd.Series([pd.NA, pd.NA], dtype="string"),
+        }
+    )
 
 
 def _make_args(tmp_path: Path) -> argparse.Namespace:
@@ -114,6 +127,89 @@ def test_run_chembl__dry_run_short_circuits(cfg, tmp_path, monkeypatch) -> None:
     ]
     assert completion_events
     assert "mode=dry_run" in completion_events[-1]
+
+
+def test_ensure_molecule_pref_name__concurrent_single_fetch(monkeypatch) -> None:
+    cfg = SimpleNamespace(
+        api=SimpleNamespace(),
+        testitem=SimpleNamespace(
+            fields=["pref_name"],
+            batch_size=10,
+            timeout=5.0,
+            request_limit=5,
+        ),
+    )
+
+    frame = _make_pref_name_frame()
+    cache: dict[str, str | None] = {}
+    cache_lock = Lock()
+
+    call_records: list[tuple[str, ...]] = []
+    ready = Event()
+    proceed = Event()
+
+    def fake_get_testitem(
+        identifiers: Sequence[str],
+        *,
+        cfg,
+        client,
+        chunk_size,
+        timeout,
+        fields,
+        page_limit,
+    ) -> pd.DataFrame:
+        call_records.append(tuple(identifiers))
+        ready.set()
+        if not proceed.wait(timeout=1):
+            pytest.fail("proceed event was not set")
+        return pd.DataFrame(
+            {
+                "molecule_chembl_id": pd.Series(
+                    [str(identifier) for identifier in identifiers], dtype="string"
+                ),
+                "pref_name": pd.Series(
+                    [f"name-{identifier}" for identifier in identifiers], dtype="string"
+                ),
+            }
+        )
+
+    monkeypatch.setattr(get_activity_data.cl, "get_testitem", fake_get_testitem)
+
+    def worker() -> pd.DataFrame:
+        return get_activity_data._ensure_molecule_pref_name(
+            frame,
+            cfg=cfg,
+            client=object(),
+            cache=cache,
+            cache_lock=cache_lock,
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(worker) for _ in range(4)]
+        if not ready.wait(timeout=1):
+            proceed.set()
+            pytest.fail("cl.get_testitem was not invoked")
+        proceed.set()
+        results = [future.result() for future in futures]
+
+    expected_series = pd.Series(["name-CHEMBL1", "name-CHEMBL2"], dtype="string")
+    for result in results:
+        pd.testing.assert_series_equal(
+            result["molecule_pref_name"],
+            expected_series.reindex(result.index),
+            check_names=False,
+        )
+
+    identifier_calls = Counter()
+    for entry in call_records:
+        identifier_calls.update(entry)
+
+    assert identifier_calls == Counter({"CHEMBL1": 1, "CHEMBL2": 1})
+    assert len(call_records) == 1
+
+    with cache_lock:
+        assert cache["CHEMBL1"] == "name-CHEMBL1"
+        assert cache["CHEMBL2"] == "name-CHEMBL2"
 
 
 @pytest.mark.parametrize(
