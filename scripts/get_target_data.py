@@ -2059,7 +2059,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error(
             "uniprot_processing_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             input=str(args.input_csv),
             output=str(output_path) if output_path is not None else None,
         )
@@ -2140,7 +2140,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
             "read_fail",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             path=str(args.input_csv),
         )
         return 1
@@ -2229,7 +2229,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             except (requests.RequestException, ValueError) as exc:
                 logger.error(
                     "chembl_fetch_failed",
-                    error=str(exc),
+                    error=str(exc), exc_info=exc,
                     chunk_size=cfg.target.chembl.chunk_size,
                     timeout=cfg.target.chembl.timeout,
                 )
@@ -2279,7 +2279,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             except OSError as exc:
                 logger.error(
                     "raw_to_final_copy_failed",
-                    error=str(exc),
+                    error=str(exc), exc_info=exc,
                     source=str(raw_destination),
                     destination=str(destination),
                 )
@@ -2401,7 +2401,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     except OSError as exc:
                         logger.error(
                             "raw_dump_failed",
-                            error=str(exc),
+                            error=str(exc), exc_info=exc,
                             path=str(raw_destination),
                         )
                         raise PipelineError(str(exc)) from exc
@@ -2412,7 +2412,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         except (requests.RequestException, ValueError) as exc:
             logger.error(
                 "chembl_fetch_failed",
-                error=str(exc),
+                error=str(exc), exc_info=exc,
                 chunk_size=cfg.target.chembl.chunk_size,
                 timeout=cfg.target.chembl.timeout,
             )
@@ -2559,7 +2559,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     try:
         raw_dump_writer.finalize()
     except OSError as exc:
-        logger.error("raw_dump_failed", error=str(exc), path=str(raw_destination))
+        logger.error("raw_dump_failed", error=str(exc), exc_info=exc, path=str(raw_destination))
         return 1
 
     if limit is not None:
@@ -2689,7 +2689,7 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error(
             "iuphar_processing_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             input=str(source_csv),
             target_csv=str(cfg.target.iuphar.target_csv),
             family_csv=str(cfg.target.iuphar.family_csv),
@@ -3857,7 +3857,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         logger.error(
             "pipeline_step_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             step="all",
             input=str(args.input_csv),
             output=str(final_output),
@@ -4045,7 +4045,7 @@ class TargetPipelineCLI(PipelineCLIBase):
                 )
         except PipelineError as exc:
             exit_code = 2
-            logger.error("pipeline_error", error=str(exc))
+            logger.error("pipeline_error", error=str(exc), exc_info=exc)
             print(f"[ERROR] {exc}", file=console_stream, flush=True)
         return exit_code
 

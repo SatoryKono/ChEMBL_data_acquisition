@@ -800,7 +800,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.error(
             "read_fail",
             input=str(args.input_csv),
-            error=str(exc),
+            error=str(exc), exc_info=exc,
         )
         logger.error(
             f"Failed to read identifiers from '{args.input_csv}': {exc}"
