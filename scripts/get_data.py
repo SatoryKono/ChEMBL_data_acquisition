@@ -1405,58 +1405,64 @@ def run_pipeline(
                 _remove_path(working_output)
 
             if step.name == "testitem":
-                try:
-                    _warm_parent_catalog(current_cfg)
-                except TimeoutError as exc:
-                    overall_status = 1
-                    entry.update(
-                        {
-                            "status": "failed",
-                            "exit_code": overall_status,
-                            "executed": False,
-                            "reason": "parent_catalog_timeout",
-                        }
-                    )
-                    _LOGGER.error("parent_catalog_warm_timeout", error=str(exc), exc_info=exc)
-                    _complete_manifest_entry(
-                        entry,
-                        final_output=final_output,
-                        working_output=working_output,
-                        started_at=step_started_clock,
-                    )
-                    failed_index = index
-                    last_executed_index = index
-                    return StepExecutionResult(
-                        exit_code=1,
-                        executed=False,
-                        status="failed",
-                        reason="parent_catalog_timeout",
-                    )
-                except Exception as exc:  # pragma: no cover - defensive guard
-                    overall_status = 1
-                    entry.update(
-                        {
-                            "status": "failed",
-                            "exit_code": overall_status,
-                            "executed": False,
-                            "reason": "parent_catalog_error",
-                        }
-                    )
-                    _LOGGER.error("parent_catalog_warm_error", error=str(exc), exc_info=exc)
-                    _complete_manifest_entry(
-                        entry,
-                        final_output=final_output,
-                        working_output=working_output,
-                        started_at=step_started_clock,
-                    )
-                    failed_index = index
-                    last_executed_index = index
-                    return StepExecutionResult(
-                        exit_code=1,
-                        executed=False,
-                        status="failed",
-                        reason="parent_catalog_error",
-                    )
+                should_skip_warm = (
+                    current_cfg.skip_existing
+                    and final_output.exists()
+                    and not current_cfg.force
+                )
+                if not should_skip_warm:
+                    try:
+                        _warm_parent_catalog(current_cfg)
+                    except TimeoutError as exc:
+                        overall_status = 1
+                        entry.update(
+                            {
+                                "status": "failed",
+                                "exit_code": overall_status,
+                                "executed": False,
+                                "reason": "parent_catalog_timeout",
+                            }
+                        )
+                        _LOGGER.error("parent_catalog_warm_timeout", error=str(exc), exc_info=exc)
+                        _complete_manifest_entry(
+                            entry,
+                            final_output=final_output,
+                            working_output=working_output,
+                            started_at=step_started_clock,
+                        )
+                        failed_index = index
+                        last_executed_index = index
+                        return StepExecutionResult(
+                            exit_code=1,
+                            executed=False,
+                            status="failed",
+                            reason="parent_catalog_timeout",
+                        )
+                    except Exception as exc:  # pragma: no cover - defensive guard
+                        overall_status = 1
+                        entry.update(
+                            {
+                                "status": "failed",
+                                "exit_code": overall_status,
+                                "executed": False,
+                                "reason": "parent_catalog_error",
+                            }
+                        )
+                        _LOGGER.error("parent_catalog_warm_error", error=str(exc), exc_info=exc)
+                        _complete_manifest_entry(
+                            entry,
+                            final_output=final_output,
+                            working_output=working_output,
+                            started_at=step_started_clock,
+                        )
+                        failed_index = index
+                        last_executed_index = index
+                        return StepExecutionResult(
+                            exit_code=1,
+                            executed=False,
+                            status="failed",
+                            reason="parent_catalog_error",
+                        )
 
             try:
                 result = _run_step(
