@@ -122,3 +122,96 @@ def test_run_tests__verbose_creates_debug_log(tmp_path: Path, monkeypatch: pytes
     assert report_file.exists()
     assert summary_file.exists()
     assert captured_configs and captured_configs[-1].level == "DEBUG"
+
+
+@pytest.mark.unit
+def test_build_structured_report__captures_failure_messages() -> None:
+    raw_report = {
+        "duration": 1.5,
+        "tests": [
+            {
+                "nodeid": "tests/unit/test_example.py::test_failure",
+                "outcome": "failed",
+                "call": {
+                    "duration": 0.25,
+                    "longrepr": "AssertionError: boom\nline 1\nline 2",
+                    "stdout": "",
+                    "stderr": "",
+                    "log": [],
+                },
+            },
+            {
+                "nodeid": "tests/unit/test_example.py::test_success",
+                "outcome": "passed",
+                "call": {
+                    "duration": 0.75,
+                    "stdout": "",
+                    "stderr": "",
+                    "log": [],
+                },
+            },
+        ],
+    }
+
+    structured = run_tests.build_structured_report(raw_report, exit_code=1)
+
+    assert structured["meta"]["exit_code"] == 1
+    assert structured["summary"] == {
+        "total": 2,
+        "passed": 1,
+        "failed": 1,
+        "skipped": 0,
+        "xfailed": 0,
+        "xpassed": 0,
+        "error": 0,
+        "success_rate": 50.0,
+    }
+
+    failure_entry = next(
+        item
+        for item in structured["tests"]
+        if item["nodeid"].endswith("test_failure")
+    )
+    assert failure_entry["status"] == "failed"
+    assert failure_entry["error"] == "AssertionError: boom\nline 1\nline 2"
+
+
+@pytest.mark.unit
+def test_build_summary_markdown__renders_error_messages_from_json() -> None:
+    report = {
+        "meta": {
+            "repo": "demo/repo",
+            "commit": "abc123",
+            "branch": "feature",
+            "ts_utc": "2025-01-01T00:00:00+00:00",
+            "duration_sec": 3.14,
+        },
+        "summary": {
+            "total": 1,
+            "passed": 0,
+            "failed": 1,
+            "skipped": 0,
+            "xfailed": 0,
+            "xpassed": 0,
+            "error": 0,
+            "success_rate": 0.0,
+        },
+        "tests": [
+            {
+                "nodeid": "tests/unit/test_example.py::test_failure",
+                "status": "failed",
+                "duration_ms": 123.0,
+                "stdout": "",
+                "stderr": "",
+                "log": [],
+                "error": "AssertionError: boom\nline 1\nline 2",
+            }
+        ],
+    }
+
+    summary_md = run_tests.build_summary_markdown(report)
+
+    assert "- `tests/unit/test_example.py::test_failure` (failed)" in summary_md
+    assert summary_md.count("```") == 2
+    assert "AssertionError: boom" in summary_md
+    assert "line 1" in summary_md and "line 2" in summary_md

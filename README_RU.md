@@ -128,6 +128,48 @@ python scripts/get_data.py \
 - `reports/test_report.json` — машинно читаемый протокол
 - `reports/test_summary.md` — краткое Markdown-резюме
 
+`test_report.json` всегда содержит три корневых секции:
+
+```json
+{
+  "meta": {
+    "repo": "SatoryKono/ChEMBL_data_acquisition",
+    "commit": "<SHA>",
+    "branch": "<branch>",
+    "ts_utc": "<ISO8601>",
+    "duration_sec": 0.0,
+    "python": "3.11",
+    "pytest": "<version>",
+    "exit_code": 0
+  },
+  "summary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0,
+    "error": 0,
+    "success_rate": 0.0
+  },
+  "tests": [
+    {
+      "nodeid": "tests/unit/test_module.py::test_case",
+      "status": "passed",
+      "duration_ms": 12.3,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    }
+  ]
+}
+```
+
+`test_summary.md` дублирует агрегированные показатели и для каждого падения или
+ошибки выводит значение поля `error` из JSON в виде блока кода. Этого достаточно,
+чтобы диагностировать проблему, имея только Markdown-отчёт.
+
 Для смоук-прогона подойдёт `pytest -q -k "not slow and not e2e"`, полный набор —
 `pytest -q`. Детали фикстур, требований к детерминизму и целям по покрытию см. в
 [`docs/ru/development/TESTING.md`](./docs/ru/development/TESTING.md).
