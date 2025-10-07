@@ -85,6 +85,42 @@ def test_parse_manifest__accepts_known_checksum_variants(
 
 
 @pytest.mark.unit
+def test_parse_manifest__accepts_target_cache_checksum_variants(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The target UniProt cache accepts newly observed checksum variants."""
+
+    manifest_dir = tmp_path / "dictionary"
+    manifest_dir.mkdir()
+    manifest_path = manifest_dir / "manifest.yaml"
+    manifest_payload = {
+        "version": 1,
+        "resources": {
+            "target_uniprot_cache": {
+                "path": "_target/_uniprot",
+                "version": "test",
+                "sha256": ["legacy"],
+                "generator": "tests/generator.py",
+            }
+        },
+    }
+    manifest_path.write_text(yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8")
+
+    monkeypatch.setattr(
+        dictionaries,
+        "_compute_sha256",
+        lambda path: "c86b314b5d8a0906f1174c8e9f494cf9dde6841be2cb1e8b66c5772976afb5ca",
+    )
+
+    resources = dictionaries._parse_manifest(base_dir=manifest_dir)
+
+    assert (
+        resources["target_uniprot_cache"].sha256
+        == "c86b314b5d8a0906f1174c8e9f494cf9dde6841be2cb1e8b66c5772976afb5ca"
+    )
+
+
+@pytest.mark.unit
 def test_parse_manifest__allowlist_file_extends_checksums(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -141,3 +177,21 @@ def test_manifest_allows_latest_windows_sha256() -> None:
     }
 
     assert expected.issubset(set(sha_values))
+
+
+@pytest.mark.unit
+def test_manifest_allows_latest_target_uniprot_checksum() -> None:
+    """The manifest lists the newly observed UniProt cache checksum variant."""
+
+    manifest_path = DICTIONARY_DIR / "manifest.yaml"
+    manifest_data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    resources = manifest_data.get("resources", {})
+    entry = resources.get("target_uniprot_cache", {})
+    sha_values = entry.get("sha256", [])
+    if isinstance(sha_values, str):
+        sha_values = [sha_values]
+
+    assert {
+        "014e183b12959a4e5f060faf3b77c6a6d143cc00e0dd0121fdd1d1e51a210a2a",
+        "c86b314b5d8a0906f1174c8e9f494cf9dde6841be2cb1e8b66c5772976afb5ca",
+    }.issubset(set(sha_values))

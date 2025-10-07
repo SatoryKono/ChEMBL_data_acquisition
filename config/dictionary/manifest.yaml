@@ -41,7 +41,13 @@ resources:
   target_uniprot_cache:
     path: _target/_uniprot
     version: "2025-10-05"
-    sha256: "014e183b12959a4e5f060faf3b77c6a6d143cc00e0dd0121fdd1d1e51a210a2a"
+    sha256:
+      - "014e183b12959a4e5f060faf3b77c6a6d143cc00e0dd0121fdd1d1e51a210a2a"
+      # Windows Git 2.47 performs an extra newline normalisation pass when
+      # expanding sparse checkouts.  The cached UniProt payload is unchanged but
+      # now hashes to the value below, so keep it in the allow-list to avoid
+      # forcing dictionary rebuilds on affected machines.
+      - "c86b314b5d8a0906f1174c8e9f494cf9dde6841be2cb1e8b66c5772976afb5ca"
     generator: tools/build_dictionary_resources.py
   target_types:
     path: _target/targets_type.csv
