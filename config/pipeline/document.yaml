@@ -1,0 +1,72 @@
+name: document
+summary: >-
+  Consolidates document metadata from the ChEMBL API and literature partners
+  (PubMed, Semantic Scholar, OpenAlex, CrossRef) before exporting curated CSVs.
+schemas:
+  chembl: DocumentsSchema
+  pubmed: PubMedDocumentsSchema
+  all: DocumentsSchema
+pipeline_version:
+  column: pipeline_version
+  description: chembl-data-acquisition package version stamped on every row.
+inputs:
+  primary: document.csv
+outputs:
+  modes:
+    chembl: documents_chembl.csv
+    pubmed: documents_pubmed.csv
+    all: documents.csv
+  artefacts:
+    - documents.csv.meta.yaml
+parameters:
+  shared:
+    openalex_rps: openalex.rps
+    crossref_rps: crossref.rps
+  modes:
+    chembl:
+      column: document.chembl.column
+      limit: document.chembl.limit
+      chunk_size: document.chembl.chunk_size
+      timeout: document.chembl.timeout
+    pubmed:
+      column: document.pubmed.column
+      limit: document.pubmed.limit
+      batch_size: document.pubmed.batch_size
+      workers: document.pubmed.workers
+      sleep: document.pubmed.sleep
+      timeout: sources.pubmed.timeout_read
+    all:
+      column: document.all.column
+      limit: document.all.limit
+      chunk_size: document.all.chunk_size
+      timeout: document.all.timeout
+      batch_size: document.all.batch_size
+      workers: document.all.workers
+      sleep: document.all.sleep
+      chembl_chunk_size: document.all.chunk_size
+      chembl_timeout: document.all.timeout
+      pubmed_sleep: document.all.sleep
+      pubmed_workers: document.all.workers
+      pubmed_batch_size: document.all.batch_size
+      pubmed_timeout: sources.pubmed.timeout_read
+steps:
+  - name: fetch_chembl_documents
+    description: Retrieve document metadata from the ChEMBL API.
+    applies_to:
+      - chembl
+      - all
+  - name: enrich_literature_partners
+    description: Query PubMed, Semantic Scholar, OpenAlex, and CrossRef for supplemental metadata.
+    applies_to:
+      - pubmed
+      - all
+  - name: merge_payloads
+    description: Merge ChEMBL and PubMed payloads and resolve canonical fields.
+    applies_to:
+      - all
+  - name: finalize_export
+    description: Validate results, add metadata columns, and write deterministic CSV artefacts.
+    applies_to:
+      - chembl
+      - pubmed
+      - all

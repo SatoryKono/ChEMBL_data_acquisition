@@ -1,0 +1,39 @@
+name: activity
+summary: >-
+  Retrieves activity measurements from the ChEMBL API, normalises derived
+  fields and exports a deterministic CSV annotated with pipeline metadata.
+schemas:
+  default: ActivitiesSchema
+pipeline_version:
+  column: pipeline_version
+  description: chembl-data-acquisition package version stamped on every row.
+inputs:
+  primary: activity.csv
+  dependencies:
+    - documents.csv
+    - targets.csv
+    - assays.csv
+    - testitems.csv
+outputs:
+  primary: activities.csv
+  artefacts:
+    - activities.csv.meta.yaml
+parameters:
+  column: activity.column
+  batch_size: activity.batch_size
+  timeout: activity.timeout
+  workers: activity.workers
+  limit: activity.limit
+  offset: activity.offset
+  dry_run: activity.dry_run
+steps:
+  - name: fetch_activities
+    description: Fetch activity payloads from the ChEMBL API in deterministic chunks.
+  - name: annotate_action_type
+    description: Derive action type and functionality columns from enrichment rules.
+  - name: annotate_properties
+    description: Flatten nested activity properties into summary strings and hashes.
+  - name: compute_bounds
+    description: Derive lower/upper bounds for measurements and normalise relations.
+  - name: finalize_export
+    description: Apply validation, append metadata columns, and write deterministic CSV artefacts.
