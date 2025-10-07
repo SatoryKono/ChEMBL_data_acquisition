@@ -29,12 +29,27 @@ def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
     """Return an HTTP session configured for retries and user agent."""
 
     session = Session()
+    # Disable urllib3-level retries to avoid duplicate retry loops and noisy
+    # connection pool warnings.  All HTTP retry logic is implemented by the
+    # higher-level clients (for example :class:`ChemblClient`) where the
+    # behaviour is deterministic and centrally logged.  Leaving retries
+    # enabled in ``HTTPAdapter`` leads to retries that we cannot observe or
+    # control, and in offline environments this manifests as repeated
+    # ``NameResolutionError`` warnings from urllib3.  Setting every retry
+    # counter to ``0`` keeps adapter configuration predictable while still
+    # exposing metadata such as ``backoff_max`` for introspection in tests.
     retry_kwargs: dict[str, Any] = {
-        "total": max(0, retry.max_attempts - 1),
+        "total": 0,
+        "connect": 0,
+        "read": 0,
+        "redirect": 0,
+        "status": 0,
+        "other": 0,
         "backoff_factor": retry.backoff_factor,
         "status_forcelist": retry.status_forcelist,
         "allowed_methods": None,
         "raise_on_status": False,
+        "raise_on_redirect": False,
     }
     if retry.backoff_cap is not None:
         retry_kwargs["backoff_max"] = retry.backoff_cap
