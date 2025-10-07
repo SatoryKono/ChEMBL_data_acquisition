@@ -242,6 +242,86 @@ def test_pipeline_subset__skip_existing_and_force(tmp_path: Path, monkeypatch: p
 
 
 @pytest.mark.integration
+def test_pipeline_subset__testitem_skip_existing_avoids_parent_warm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _prepare_environment(tmp_path)
+    _write_input(
+        cfg,
+        "testitem",
+        pd.DataFrame(
+            [
+                {"testitem_chembl_id": "CHEMBLT1", "compound_key": "A"},
+                {"testitem_chembl_id": "CHEMBLT2", "compound_key": "B"},
+            ],
+            dtype="string",
+        ),
+    )
+
+    executions: list[int] = []
+
+    def _on_execute(rows: pd.DataFrame, destination: Path) -> int:
+        executions.append(len(rows))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        rows.to_csv(destination, index=False)
+        return 0
+
+    api = _build_stub_api(
+        required_columns=["testitem_chembl_id", "compound_key"],
+        key_column="testitem_chembl_id",
+        on_execute=_on_execute,
+    )
+
+    step = get_data.PipelineStep(
+        name="testitem",
+        main=lambda _: 0,
+        input_filename="testitem.csv",
+        output_stem="testitems",
+    )
+
+    stream = io.StringIO()
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
+    )
+
+    warm_calls: list[get_data.PipelineRunConfig] = []
+
+    def _record_warm(current_cfg: get_data.PipelineRunConfig) -> None:
+        warm_calls.append(current_cfg)
+
+    monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+    monkeypatch.setattr(get_data, "_PIPELINE_APIS", {"testitem": api}, raising=False)
+    monkeypatch.setattr(get_data, "_warm_parent_catalog", _record_warm, raising=False)
+
+    status_first = get_data.run_pipeline(cfg, steps=(step,))
+    assert status_first == 0
+    assert executions == [2]
+    assert len(warm_calls) == 1
+
+    final_output = step.expected_output(cfg)
+    assert final_output.exists()
+
+    cfg_skip = replace(cfg, skip_existing=True)
+    status_second = get_data.run_pipeline(cfg_skip, steps=(step,))
+    assert status_second == 0
+    assert executions == [2]
+    assert len(warm_calls) == 1
+
+    logs = parse_log_lines(stream.getvalue())
+    assert any(
+        record.get("event") == "step_skipped_existing"
+        and record.get("data", {}).get("step") == "testitem"
+        for record in logs
+    )
+
+    manifest_skip = _load_manifest(cfg_skip)
+    skip_entry = manifest_skip["steps"][0]
+    assert skip_entry["status"] == "skipped"
+    assert skip_entry["reason"] == "skip_existing"
+    assert skip_entry["executed"] is False
+
+
+@pytest.mark.integration
 def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = _prepare_environment(tmp_path)
     _write_input(
