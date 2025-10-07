@@ -29,12 +29,59 @@ REPO_SLUG = "SatoryKono/ChEMBL_data_acquisition"
 QUALITY_THRESHOLD = 0.95
 QUALITY_FAILURE_EXIT_CODE = 10
 VALIDATION_FAILURE_EXIT_CODE = 11
-TEST_DIRECTORIES = (
-    ROOT_DIR / "tests" / "unit",
-    ROOT_DIR / "tests" / "integration",
-    ROOT_DIR / "tests" / "postprocessing",
-    ROOT_DIR / "tests" / "e2e",
-)
+TESTS_ROOT = ROOT_DIR / "tests"
+
+
+def _normalise_exclude_token(token: str) -> str | None:
+    token = token.strip()
+    if not token:
+        return None
+    normalised = token.replace("\\", "/")
+    if normalised.startswith("tests/"):
+        normalised = normalised[len("tests/"):]
+    normalised = normalised.lstrip("./")
+    if not normalised:
+        return None
+    parts = [part for part in normalised.split("/") if part and part not in {".", ".."}]
+    if not parts:
+        return None
+    return parts[0]
+
+
+def _discover_test_targets(*, exclude: Iterable[str] | None = None) -> tuple[str, ...]:
+    if not TESTS_ROOT.exists() or not TESTS_ROOT.is_dir():
+        return ()
+
+    exclude_tokens = {
+        token
+        for raw_token in (exclude or [])
+        for token in (_normalise_exclude_token(str(raw_token)),)
+        if token is not None
+    }
+
+    targets: list[str] = []
+    for child in sorted(TESTS_ROOT.iterdir(), key=lambda path: path.name):
+        if not child.is_dir():
+            continue
+        if child.name.startswith((".", "_")):
+            continue
+        if child.name in exclude_tokens:
+            continue
+        targets.append(str(child))
+
+    if not exclude_tokens:
+        # Include the root ``tests`` directory if test modules live directly under it.
+        has_root_tests = any(
+            file.name.startswith("test") and file.suffix == ".py"
+            for file in TESTS_ROOT.iterdir()
+            if file.is_file()
+        )
+        if has_root_tests:
+            targets.insert(0, str(TESTS_ROOT))
+
+    return tuple(targets)
+
+
 _BASE_PYTEST_COMMAND: list[str] = [
     sys.executable,
     "-m",
@@ -50,11 +97,6 @@ _BASE_PYTEST_COMMAND: list[str] = [
     f"--cov-report=html:{COVERAGE_HTML}",
     "-vv",
 ]
-_DEFAULT_TEST_TARGETS: tuple[str, ...] = tuple(
-    str(path) for path in TEST_DIRECTORIES if path.exists()
-)
-
-
 logger = logging.getLogger("run_tests")
 
 
@@ -435,6 +477,16 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Date token forwarded to the log file suffix (format: YYYYMMDD)",
     )
     parser.add_argument(
+        "--exclude",
+        action="append",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Relative directory under 'tests/' to exclude from automatic discovery. "
+            "Can be provided multiple times."
+        ),
+    )
+    parser.add_argument(
         "pytest_args",
         nargs=argparse.REMAINDER,
         help="Arguments forwarded to pytest (use '--' before them)",
@@ -472,7 +524,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 logging_ctx.log_cfg.level,
             ]
         )
-        pytest_command.extend(_DEFAULT_TEST_TARGETS)
+        discovered_targets = _discover_test_targets(exclude=args.exclude)
+        if not discovered_targets and TESTS_ROOT.exists():
+            discovered_targets = (str(TESTS_ROOT),)
+        pytest_command.extend(discovered_targets)
         pytest_command.extend(_extract_pytest_args(args.pytest_args))
 
         exit_code = run_pytest(pytest_command)
