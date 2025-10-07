@@ -235,6 +235,134 @@ def test_run__propagates_timeout(cfg: Config, tmp_path: Path, monkeypatch: pytes
     assert called == [42.5]
 
 
+def test_run__pubmed_timeout_override_updates_config(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("PMID\n123\n", encoding="utf-8")
+    output_csv = tmp_path / "output.csv"
+
+    recorded: dict[str, float] = {}
+
+    def fake_pubmed(cfg_obj: Config, args: argparse.Namespace, *, pipeline=None) -> int:  # noqa: ARG001
+        recorded["pubmed"] = cfg_obj.pubmed.timeout_read
+        recorded["api"] = cfg_obj.api.timeout_read
+        return 0
+
+    monkeypatch.setitem(get_document_data.MODE_HANDLERS, "pubmed", fake_pubmed)
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=output_csv,
+        skip_existing=False,
+        force=False,
+        command="pubmed",
+        mode="pubmed",
+        func=fake_pubmed,
+        timeout=25.0,
+        fallback_doi_enabled=False,
+        fallback_doi_overwrite=False,
+        fallback_doi_path=None,
+    )
+
+    previous_api_timeout = cfg.api.timeout_read
+
+    exit_code = get_document_data.run(cfg, args)
+
+    assert exit_code == 0
+    assert recorded["pubmed"] == pytest.approx(25.0)
+    assert recorded["api"] == pytest.approx(previous_api_timeout)
+
+
+def test_run__all_mode_pubmed_timeout_option_updates_config(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("id\n1\n", encoding="utf-8")
+    output_csv = tmp_path / "output.csv"
+
+    recorded: dict[str, float] = {}
+
+    def fake_all(cfg_obj: Config, args: argparse.Namespace, *, pipeline=None) -> int:  # noqa: ARG001
+        recorded["pubmed"] = cfg_obj.pubmed.timeout_read
+        recorded["api"] = cfg_obj.api.timeout_read
+        recorded["pubmed_arg"] = args.pubmed_timeout
+        recorded["chembl_arg"] = getattr(args, "chembl_timeout", None)
+        return 0
+
+    monkeypatch.setitem(get_document_data.MODE_HANDLERS, "all", fake_all)
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=output_csv,
+        skip_existing=False,
+        force=False,
+        command="all",
+        mode="all",
+        func=fake_all,
+        timeout=None,
+        pubmed_timeout=33.0,
+        chembl_timeout=None,
+        fallback_doi_enabled=False,
+        fallback_doi_overwrite=False,
+        fallback_doi_path=None,
+    )
+
+    exit_code = get_document_data.run(cfg, args)
+
+    assert exit_code == 0
+    assert recorded["pubmed"] == pytest.approx(33.0)
+    assert recorded["pubmed_arg"] == pytest.approx(33.0)
+    assert recorded["api"] == pytest.approx(cfg.api.timeout_read)
+
+
+def test_run__all_mode_timeout_fallback_updates_pubmed(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("id\n1\n", encoding="utf-8")
+    output_csv = tmp_path / "output.csv"
+
+    recorded: dict[str, float] = {}
+
+    def fake_all(cfg_obj: Config, args: argparse.Namespace, *, pipeline=None) -> int:  # noqa: ARG001
+        recorded["pubmed"] = cfg_obj.pubmed.timeout_read
+        recorded["pubmed_arg"] = args.pubmed_timeout
+        return 0
+
+    monkeypatch.setitem(get_document_data.MODE_HANDLERS, "all", fake_all)
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=output_csv,
+        skip_existing=False,
+        force=False,
+        command="all",
+        mode="all",
+        func=fake_all,
+        timeout=41.0,
+        pubmed_timeout=None,
+        chembl_timeout=None,
+        fallback_doi_enabled=False,
+        fallback_doi_overwrite=False,
+        fallback_doi_path=None,
+    )
+
+    exit_code = get_document_data.run(cfg, args)
+
+    assert exit_code == 0
+    assert recorded["pubmed"] == pytest.approx(41.0)
+    value = recorded["pubmed_arg"]
+    if value is not None:
+        assert value == pytest.approx(41.0)
+
+
 def test_finalise_export__qa_mismatch_sets_exit_code(
     cfg: Config,
     tmp_path: Path,
