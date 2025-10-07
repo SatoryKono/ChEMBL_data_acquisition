@@ -84,6 +84,7 @@ python scripts/get_data.py \
 | Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto` | Загружает метаданные тканей, объединяет онтологические кросс-ссылки и нормализует синонимы. Запускается отдельно перед `get_activity_data`, когда нужны справочники тканей. |
 | Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --final-out output/cellline.csv --batch-size 20 --limit 100` | Выгружает данные по клеточным линиям из ChEMBL, нормализует идентификаторы и формирует стабильный CSV. |
 | Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --timeout 120 --limit 500 --offset 100 --workers 4 --dry-run` | Поддерживает ограничение диапазона (`--limit`, `--offset`), настройку таймаута, параллельную загрузку через `--workers` и проверку без записи (`--dry-run`). |
+| Синтетические активности | `python scripts/get_activities.py --limit 25 --dry-run` | Генерирует детерминированные тестовые строки для смоук-тестов и поддерживает те же флаги логирования, что и остальные CLI. |
 
 Каждый пайплайн сохраняет детерминированный CSV, файл метаданных
 `<имя>.meta.yaml` и отчёты качества в том же каталоге. Таргет-пайплайн также
@@ -138,7 +139,7 @@ python scripts/get_data.py \
     "branch": "<branch>",
     "ts_utc": "<ISO8601>",
     "duration_sec": 0.0,
-    "python": "3.11",
+    "python": "3.11|3.12",
     "pytest": "<version>",
     "exit_code": 0
   },

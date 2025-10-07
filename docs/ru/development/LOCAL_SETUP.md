@@ -2,7 +2,7 @@
 
 ## Инструменты
 
-- Python 3.11.
+- Python 3.11 или 3.12.
 - `pip` + `requirements-lock.txt` для воспроизводимых установок.
 - `pre-commit` (форматирование `black`, линт `ruff`).
 - Опционально `.env` с переменными `CHEMBL_DA_*`.

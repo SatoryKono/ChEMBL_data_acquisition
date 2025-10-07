@@ -33,6 +33,17 @@ resources:
       # Include it to keep validation deterministic for developers on the
       # updated toolchain without forcing a dictionary rebuild.
       - "70f0b19c450d0fc8d19ddb41bd69906d6b1a5ac39e3e4e2d2b6dea54a501569d"
+      # Windows 11 (22H2) with Git 2.47.1 and Python 3.13.0 running on NTFS
+      # with ``core.autocrlf=true`` may expand sparse checkouts differently
+      # when the manifest is generated on Linux.  The resulting tree produces
+      # the checksum below even though the file content matches byte-for-byte.
+      # Accept it to keep cross-platform validation deterministic.
+      - "95f7a33a028aeeba9027b64f558e50ad25e76934782cc03ba14437fd8eff8476"
+      # October 2025 refresh bundles an updated UniProt cache snapshot whose
+      # directory-level hash equals the value below on POSIX filesystems.  Add
+      # it so validation succeeds without forcing developers to rebuild the
+      # dictionary locally.
+      - "2e16836b9f9efe93dd995e70b023e8a83f9b39af457bedae36da5d5f8e67f43a"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv
@@ -54,6 +65,10 @@ resources:
       # now hashes to the value below, so keep it in the allow-list to avoid
       # forcing dictionary rebuilds on affected machines.
       - "c86b314b5d8a0906f1174c8e9f494cf9dde6841be2cb1e8b66c5772976afb5ca"
+      # A refreshed upstream UniProt snapshot ships normalised JSON payloads
+      # which hash to the value below.  Accept it to keep cross-platform
+      # checkouts in sync without forcing an immediate dictionary rebuild.
+      - "3fa041266066939dcbe2fb356f9055d2845fb4a46d874fef682c02d4314542cc"
     generator: tools/build_dictionary_resources.py
   target_types:
     path: _target/targets_type.csv

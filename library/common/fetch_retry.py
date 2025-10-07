@@ -81,9 +81,12 @@ def compute_backoff_delay(attempt: int, retry_cfg: RetryCfg) -> float:
     if attempt <= 0:
         raise ValueError("attempt must be a positive integer")
     factor = retry_cfg.backoff_factor
-    if factor <= 0:
-        return 0.0
-    delay = factor * (2 ** (attempt - 1))
+    jitter = retry_cfg.build_jitter()
+    delay = 0.0
+    if factor > 0:
+        delay = factor * (2 ** (attempt - 1))
+    if jitter is not None:
+        delay += jitter(retry_cfg.backoff_factor)
     cap = retry_cfg.backoff_cap
     if cap is not None:
         delay = min(delay, cap)
