@@ -70,6 +70,10 @@ def _write_manifest(tmp_path, body: str) -> None:
             "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15",
         ),
         (
+            "dictionary_root",
+            "bb98601cdc63ee4aeab49dac849f545e516b2a0a9b720174444af8975115a0b2",
+        ),
+        (
             "target_uniprot_cache",
             "c86b314b5d8a0906f1174c8e9f494cf9dde6841be2cb1e8b66c5772976afb5ca",
         ),
