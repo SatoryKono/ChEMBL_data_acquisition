@@ -43,6 +43,7 @@ class TestRecord:
     stderr: str
     log: list[dict[str, str]] = field(default_factory=list)
     error: str | None = None
+    artifacts: dict[str, object] = field(default_factory=dict)
 
 
 class ReportCollector:
@@ -102,6 +103,9 @@ class ReportCollector:
             if report.failed:
                 record.error = self._format_longrepr(report.longrepr)
 
+        for key, value in getattr(report, "user_properties", ()):
+            record.artifacts[key] = self._normalise_property_value(value)
+
     # helper methods ---------------------------------------------------
     @staticmethod
     def _determine_status(report: pytest.TestReport) -> str:
@@ -122,6 +126,12 @@ class ReportCollector:
         if hasattr(longrepr, "reprcrash"):
             return str(longrepr)
         return str(longrepr)
+
+    @staticmethod
+    def _normalise_property_value(value: object) -> object:
+        if isinstance(value, Path):
+            return str(value)
+        return value
 
     # synthesis --------------------------------------------------------
     def build_results(self) -> list[TestRecord]:
@@ -198,6 +208,7 @@ def _build_json(
                 "stderr": record.stderr,
                 "log": record.log,
                 "error": record.error,
+                "artifacts": record.artifacts,
             }
             for record in results
         ],
@@ -248,6 +259,22 @@ def _write_markdown(summary_path: Path, data: dict[str, Any]) -> None:
             lines.append(f"- `{nodeid}`: `{short}`")
     else:
         lines.append("## Failed / Error details")
+        lines.append("- none")
+
+    artifact_entries = [
+        (test["nodeid"], test["artifacts"])
+        for test in data["tests"]
+        if test.get("artifacts")
+    ]
+    if artifact_entries:
+        lines.append("")
+        lines.append("## Test artifacts")
+        for nodeid, artifacts in artifact_entries:
+            for name, value in sorted(artifacts.items()):
+                lines.append(f"- `{nodeid}`: {name} = `{value}`")
+    else:
+        lines.append("")
+        lines.append("## Test artifacts")
         lines.append("- none")
 
     summary_path.parent.mkdir(parents=True, exist_ok=True)
