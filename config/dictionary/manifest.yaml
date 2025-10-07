@@ -48,6 +48,12 @@ resources:
       # workspace tree with an extra CSV.  Accept the resulting checksum to keep
       # validation deterministic across environments.
       - "e8000ec66732d0f2b3230640116f8a7313530954e5448f66518f0bd7242dad39"
+      # Windows 11 (23H2) with Python 3.13.0 and Git 2.48 performs an additional
+      # newline canonicalisation pass when sparse checkout expansion happens via
+      # the virtual filesystem driver.  The resulting working tree is byte-for-
+      # byte identical but hashes to the value below.  Include it to keep
+      # checksum validation deterministic for users on that toolchain.
+      - "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv
