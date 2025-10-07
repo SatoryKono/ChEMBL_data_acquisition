@@ -153,7 +153,7 @@ must produce:
     "branch": "<branch>",
     "ts_utc": "<ISO8601>",
     "duration_sec": 0.0,
-    "python": "3.11",
+    "python": "3.11|3.12",
     "pytest": "<version>",
     "exit_code": 0
   },

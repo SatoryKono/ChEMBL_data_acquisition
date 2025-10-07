@@ -436,6 +436,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         finally:
             chunk_failures.save(fetch_failure_path, cfg=cfg)
 
+    exit_status = 0 if exit_code is None else int(exit_code)
+
     dropped_columns_report = [
         column for column in ASSAY_OUTPUT_DROP_COLUMNS if column in dropped_columns_seen
     ]
@@ -486,7 +488,7 @@ def _generate_assay_postprocess_metrics(
             rows_dropped=int(pipeline_stats.get("rows_dropped", 0)),
         )
 
-    if exit_code == 0:
+    if exit_status == 0:
         postprocess_metrics, report_path = _generate_assay_postprocess_metrics(
             cfg,
             output_path,
@@ -522,10 +524,10 @@ def _generate_assay_postprocess_metrics(
             "assay_pipeline_failed",
             output=str(output_path),
             processed=processed_ids,
-            exit_code=exit_code,
+            exit_code=exit_status,
         )
 
-    return exit_code
+    return exit_status
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
@@ -551,7 +553,8 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0
-    return run_chembl(cfg, args)
+    result = run_chembl(cfg, args)
+    return 0 if result is None else int(result)
 
 
 def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
