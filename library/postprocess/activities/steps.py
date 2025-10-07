@@ -3,12 +3,17 @@ from __future__ import annotations
 
 import pandas as pd
 
+ 
+from library.postprocess.common import StepDefinition, run_steps
+from library.postprocess.common.logging import PipelineRunMetrics
+ 
 from library.pipelines.common.metadata import get_pipeline_version
-from library.postprocess.common import run_steps
+ 
 from library.postprocess.common.config import (
     load_pipeline_config,
     normalize_pipeline_version,
 )
+ 
 
 from .schema import ACTIVITY_SCHEMA, validate_activities
 
@@ -67,8 +72,8 @@ PIPELINE_STEPS = PIPELINE_CONFIG.step_definitions()
 
 def run_activity_pipeline(
     df: pd.DataFrame, *, pipeline_version: str | None = None, logger=None
-) -> pd.DataFrame:
-    """Execute the activity postprocessing steps."""
+) -> tuple[pd.DataFrame, PipelineRunMetrics]:
+    """Execute the activity postprocessing steps and return metrics."""
 
     resolved_version = _resolve_pipeline_version(pipeline_version)
     return run_steps(

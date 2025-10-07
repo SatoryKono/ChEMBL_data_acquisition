@@ -72,6 +72,7 @@ from library.common.csv_utils import write_csv_deterministic
 from library.common.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipelines.common import add_pipeline_metadata
+from library.pipelines.common.metadata import get_pipeline_version
 from library import SidecarErrors
 from library.qa.reporting import build_table_quality_hook, is_quality_enabled
 from library.validation import ValidationResult
@@ -81,6 +82,8 @@ from library.schemas.targets import TARGETS_COLUMN_ORDER
 
 from library.postprocessing import target as target_pp
 from library.postprocessing import names as names_pp
+from library.postprocess.targets import run_target_pipeline as run_target_postprocess
+from library.postprocess.common import collect_postprocess_metrics
 
 try:
     from library.postprocessing import iuphar as iuphar_pp
@@ -3809,7 +3812,50 @@ def validate_and_write(
                 exc=exc,
             )
             return 1
-    logger.info("validate_write_done", rows=len(final_df))
+
+    report_extras: dict[str, object] = {
+        "input_rows": input_rows,
+        "normalized_rows": normalized_rows,
+        "final_rows": len(final_df),
+        "total_dropped": total_dropped,
+        "ambiguous_classifications": ambiguous_count,
+    }
+    metrics, report_path = collect_postprocess_metrics(
+        table="target",
+        output_path=output,
+        csv_sep=cfg.io.csv_sep,
+        csv_encoding=cfg.io.csv_encoding,
+        output_dir=cfg.io.output_dir,
+        runner=run_target_postprocess,
+        logger=logger,
+        pipeline_version=get_pipeline_version(),
+        report_extras=report_extras,
+    )
+    pipeline_version_value = (
+        metrics.pipeline_version
+        if metrics and metrics.pipeline_version is not None
+        else get_pipeline_version()
+    )
+    payload: dict[str, object] = {
+        "rows": len(final_df),
+        "output": str(output),
+        "pipeline_version": pipeline_version_value,
+    }
+    if metrics is not None:
+        summary = metrics.summary()
+        if summary.get("rows") is not None:
+            payload["postprocess_rows"] = summary["rows"]
+        if summary.get("columns") is not None:
+            payload["postprocess_columns"] = summary["columns"]
+        if summary.get("duration_s") is not None:
+            payload["postprocess_duration_s"] = summary["duration_s"]
+        if summary.get("steps") is not None:
+            payload["postprocess_steps"] = summary["steps"]
+        if metrics.validation is not None:
+            payload["postprocess_schema"] = metrics.validation.schema
+    if report_path is not None:
+        payload["postprocess_report"] = str(report_path)
+    logger.info("validate_write_done", **payload)
     return exit_code
 
 
