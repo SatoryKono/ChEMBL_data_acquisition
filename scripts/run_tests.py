@@ -388,18 +388,24 @@ def build_summary_markdown(report: dict[str, Any]) -> str:
         "## Failed / Error details",
     ]
 
-    failure_rows = [
-        (test["nodeid"], (test.get("error") or "See logs/run_tests_<date>.log"))
-        for test in tests
-        if test.get("status") in {"failed", "error"}
-    ]
+    failure_rows = []
+    for test in tests:
+        status = str(test.get("status", "")).lower()
+        if status not in {"failed", "error"}:
+            continue
+        nodeid = str(test.get("nodeid", "<unknown>"))
+        message = _normalise_message(test.get("error"))
+        failure_rows.append((nodeid, status, message))
 
     if not failure_rows:
         lines.append("- None")
     else:
-        for nodeid, message in failure_rows:
-            compact_message = message.replace("\n", " ").strip()
-            lines.append(f"- `{nodeid}`: {compact_message}")
+        for nodeid, status, message in failure_rows:
+            lines.append(f"- `{nodeid}` ({status})")
+            display_message = message or "<no message>"
+            lines.append("  ```")
+            lines.extend(f"  {line}" for line in display_message.splitlines())
+            lines.append("  ```")
 
     lines.append("")
     return "\n".join(lines)

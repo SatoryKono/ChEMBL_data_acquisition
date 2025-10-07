@@ -142,6 +142,48 @@ must produce:
 - `reports/test_report.json` — machine readable execution log
 - `reports/test_summary.md` — condensed Markdown summary
 
+`test_report.json` always exposes three top-level keys:
+
+```json
+{
+  "meta": {
+    "repo": "SatoryKono/ChEMBL_data_acquisition",
+    "commit": "<SHA>",
+    "branch": "<branch>",
+    "ts_utc": "<ISO8601>",
+    "duration_sec": 0.0,
+    "python": "3.11",
+    "pytest": "<version>",
+    "exit_code": 0
+  },
+  "summary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0,
+    "error": 0,
+    "success_rate": 0.0
+  },
+  "tests": [
+    {
+      "nodeid": "tests/unit/test_module.py::test_case",
+      "status": "passed",
+      "duration_ms": 12.3,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    }
+  ]
+}
+```
+
+`test_summary.md` mirrors the counts and, for every failure or error, embeds the
+exact `error` message from the JSON report in a fenced code block. This makes it
+possible to triage failures using only the Markdown artefact.
+
 Smoke runs can use `pytest -q -k "not slow and not e2e"`, while full validation
 uses `pytest -q`. See [`docs/en/development/TESTING.md`](./docs/en/development/TESTING.md)
 for fixtures, determinism requirements and coverage targets.
