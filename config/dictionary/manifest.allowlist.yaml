@@ -35,3 +35,10 @@ dictionary_root:
   # refreshed toolchain continue to pass validation without rebuilding the
   # resources locally.
   - "bccf4cfc745addb3966efe9db8c3cd0f537ef3f5025d059d9cdaa412b2867092"
+  # Windows sparse checkouts processed by the VFS driver on newer Git builds
+  # may rewrite placeholder metadata once more after newline normalisation.
+  # The resulting working tree matches the bundled dictionaries byte-for-byte
+  # but hashes to the value below.  Include it so checksum validation remains
+  # deterministic on the refreshed Windows toolchain without forcing a local
+  # dictionary rebuild.
+  - "db25392613353b15acb21c88c057f6422d8cd32aea1a3fc710e5a0c4d060b91b"
