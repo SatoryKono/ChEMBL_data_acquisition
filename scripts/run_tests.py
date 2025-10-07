@@ -26,6 +26,9 @@ COVERAGE_DIR = REPORTS_DIR / "coverage"
 COVERAGE_XML = COVERAGE_DIR / "coverage.xml"
 COVERAGE_HTML = COVERAGE_DIR / "html"
 REPO_SLUG = "SatoryKono/ChEMBL_data_acquisition"
+QUALITY_THRESHOLD = 0.95
+QUALITY_FAILURE_EXIT_CODE = 10
+VALIDATION_FAILURE_EXIT_CODE = 11
 TEST_DIRECTORIES = (
     ROOT_DIR / "tests" / "unit",
     ROOT_DIR / "tests" / "integration",
@@ -200,6 +203,14 @@ def _build_test_entry(test: dict[str, Any]) -> dict[str, Any]:
     return entry
 
 
+def _calculate_success_rate(summary: dict[str, int]) -> float:
+    total = summary.get("total", 0) or 0
+    passed = summary.get("passed", 0) or 0
+    if total <= 0:
+        return 1.0
+    return max(0.0, min(1.0, passed / total))
+
+
 def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, Any]:
     tests_raw = raw.get("tests", [])
     tests: list[dict[str, Any]] = []
@@ -234,12 +245,8 @@ def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, An
         else:
             summary["error"] += 1
 
-    success_rate = (
-        (summary["passed"] / summary["total"] * 100.0)
-        if summary["total"]
-        else 0.0
-    )
-    summary["success_rate"] = round(success_rate, 2)
+    success_rate = _calculate_success_rate(summary)
+    summary["success_rate"] = round(success_rate, 4)
 
     meta = {
         "repo": REPO_SLUG,
@@ -266,6 +273,83 @@ def write_json_report(report: dict[str, Any]) -> None:
     )
 
 
+def validate_structured_report(report: dict[str, Any]) -> None:
+    if not isinstance(report, dict):
+        raise ValueError("Report must be a dictionary")
+
+    summary = report.get("summary")
+    if not isinstance(summary, dict):
+        raise ValueError("Report summary is missing or malformed")
+
+    required_summary_keys = {
+        "total",
+        "passed",
+        "failed",
+        "skipped",
+        "xfailed",
+        "xpassed",
+        "error",
+        "success_rate",
+    }
+    missing_keys = required_summary_keys - set(summary)
+    if missing_keys:
+        raise ValueError(f"Report summary missing keys: {sorted(missing_keys)}")
+
+    for key in required_summary_keys - {"success_rate"}:
+        value = summary.get(key)
+        if not isinstance(value, int) or value < 0:
+            raise ValueError(f"Summary field '{key}' must be a non-negative integer")
+
+    success_rate = summary.get("success_rate")
+    if not isinstance(success_rate, (int, float)):
+        raise ValueError("Summary field 'success_rate' must be numeric")
+    if not 0.0 <= float(success_rate) <= 1.0:
+        raise ValueError("Summary field 'success_rate' must be between 0 and 1")
+
+    tests = report.get("tests")
+    if not isinstance(tests, list):
+        raise ValueError("Report tests section must be a list")
+    for index, entry in enumerate(tests):
+        if not isinstance(entry, dict):
+            raise ValueError(f"Test entry at index {index} must be a dictionary")
+        if "nodeid" not in entry or not isinstance(entry["nodeid"], str):
+            raise ValueError(f"Test entry at index {index} missing string 'nodeid'")
+        if "status" not in entry or not isinstance(entry["status"], str):
+            raise ValueError(f"Test entry at index {index} missing string 'status'")
+        duration = entry.get("duration_ms")
+        if not isinstance(duration, (int, float)) or duration < 0:
+            raise ValueError(
+                f"Test entry at index {index} has invalid 'duration_ms' (must be >= 0)"
+            )
+        for text_field in ("stdout", "stderr"):
+            if text_field in entry and not isinstance(entry[text_field], str):
+                raise ValueError(
+                    f"Test entry at index {index} has non-string '{text_field}'"
+                )
+        log_entries = entry.get("log", [])
+        if not isinstance(log_entries, list) or not all(
+            isinstance(log_entry, str) for log_entry in log_entries
+        ):
+            raise ValueError(
+                f"Test entry at index {index} must contain a list of string logs"
+            )
+        error_field = entry.get("error")
+        if error_field is not None and not isinstance(error_field, str):
+            raise ValueError(
+                f"Test entry at index {index} has non-string 'error' field"
+            )
+
+
+def validate_report_file(path: Path) -> None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise ValueError(f"Report file {path} was not created") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Report file {path} contains invalid JSON") from exc
+    validate_structured_report(payload)
+
+
 def build_summary_markdown(report: dict[str, Any]) -> str:
     meta = report.get("meta", {})
     summary = report.get("summary", {})
@@ -276,7 +360,8 @@ def build_summary_markdown(report: dict[str, Any]) -> str:
     branch = meta.get("branch", "unknown")
     timestamp = meta.get("ts_utc", datetime.now(timezone.utc).isoformat())
     duration = float(meta.get("duration_sec", 0.0) or 0.0)
-    success_rate = summary.get("success_rate", 0.0)
+    success_rate = float(summary.get("success_rate", 0.0) or 0.0)
+    success_rate_pct = success_rate * 100.0
 
     lines = [
         "# Test Summary",
@@ -286,7 +371,7 @@ def build_summary_markdown(report: dict[str, Any]) -> str:
         f"- Branch: {branch}",
         f"- Timestamp (UTC): {timestamp}",
         f"- Duration: {duration:.2f} s",
-        f"- Success rate: {success_rate:.2f}%",
+        f"- Success rate: {success_rate_pct:.2f}%",
         "",
         "| total | passed | failed | skipped | xfailed | xpassed | error |",
         "|------:|-------:|-------:|--------:|--------:|--------:|------:|",
@@ -303,18 +388,24 @@ def build_summary_markdown(report: dict[str, Any]) -> str:
         "## Failed / Error details",
     ]
 
-    failure_rows = [
-        (test["nodeid"], (test.get("error") or "See logs/run_tests_<date>.log"))
-        for test in tests
-        if test.get("status") in {"failed", "error"}
-    ]
+    failure_rows = []
+    for test in tests:
+        status = str(test.get("status", "")).lower()
+        if status not in {"failed", "error"}:
+            continue
+        nodeid = str(test.get("nodeid", "<unknown>"))
+        message = _normalise_message(test.get("error"))
+        failure_rows.append((nodeid, status, message))
 
     if not failure_rows:
         lines.append("- None")
     else:
-        for nodeid, message in failure_rows:
-            compact_message = message.replace("\n", " ").strip()
-            lines.append(f"- `{nodeid}`: {compact_message}")
+        for nodeid, status, message in failure_rows:
+            lines.append(f"- `{nodeid}` ({status})")
+            display_message = message or "<no message>"
+            lines.append("  ```")
+            lines.extend(f"  {line}" for line in display_message.splitlines())
+            lines.append("  ```")
 
     lines.append("")
     return "\n".join(lines)
@@ -388,8 +479,22 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         raw_report = _load_raw_report()
         structured = build_structured_report(raw_report, exit_code)
-        write_json_report(structured)
-        write_summary(structured)
+
+        validation_exit_code: int | None = None
+        try:
+            validate_structured_report(structured)
+        except ValueError as exc:  # pragma: no cover - defensive guard
+            logger.error("Structured report validation failed: %s", exc)
+            validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
+        else:
+            write_json_report(structured)
+            try:
+                validate_report_file(REPORT_FILE)
+            except ValueError as exc:  # pragma: no cover - defensive guard
+                logger.error("Written report failed validation: %s", exc)
+                validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
+            else:
+                write_summary(structured)
 
         log_path = _relative_to_root(logging_ctx.log_path)
         logger.info("Pytest finished with exit code %s", exit_code)
@@ -399,16 +504,42 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "Raw report available at %s",
                 _relative_to_root(RAW_REPORT_FILE),
             )
-        logger.info(
-            "Structured report written to %s",
-            _relative_to_root(REPORT_FILE),
-        )
-        logger.info(
-            "Summary written to %s",
-            _relative_to_root(SUMMARY_FILE),
-        )
+        if REPORT_FILE.exists():
+            logger.info(
+                "Structured report written to %s",
+                _relative_to_root(REPORT_FILE),
+            )
+        if SUMMARY_FILE.exists():
+            logger.info(
+                "Summary written to %s",
+                _relative_to_root(SUMMARY_FILE),
+            )
 
-    return exit_code
+        final_exit_code = exit_code
+        if validation_exit_code is not None:
+            final_exit_code = validation_exit_code
+        else:
+            success_rate = structured.get("summary", {}).get("success_rate", 0.0) or 0.0
+            try:
+                success_rate = float(success_rate)
+            except (TypeError, ValueError):  # pragma: no cover - guarded by validation
+                success_rate = 0.0
+            if success_rate < QUALITY_THRESHOLD:
+                logger.error(
+                    "Success rate %.2f%% is below the required %.0f%% threshold",
+                    success_rate * 100.0,
+                    QUALITY_THRESHOLD * 100.0,
+                )
+                if final_exit_code == 0:
+                    final_exit_code = QUALITY_FAILURE_EXIT_CODE
+            else:
+                logger.info(
+                    "Success rate %.2f%% meets the required %.0f%% threshold",
+                    success_rate * 100.0,
+                    QUALITY_THRESHOLD * 100.0,
+                )
+
+    return final_exit_code
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
 import argparse
+import sys
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence, Callable
 from datetime import datetime, timezone
@@ -1466,6 +1467,15 @@ class ActivityPipelineCLI(PipelineCLIBase):
             parser.error("--limit must be zero or a positive integer")
         if args.offset < 0:
             parser.error("--offset must be zero or a positive integer")
+        input_path = Path(args.input_csv)
+        if not input_path.exists():
+            message = (
+                f"Input CSV '{input_path}' does not exist. "
+                "Provide --input pointing to a valid identifiers file or "
+                "run the upstream pipeline step to generate it."
+            )
+            sys.stderr.write(message + "\n")
+            return 1
         return None
 
     def get_program_name(self) -> str:
