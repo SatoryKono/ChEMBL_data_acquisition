@@ -78,7 +78,7 @@ Consult `tests/conftest.py` for shared fixtures that enforce deterministic envir
 
 ## Generating reports
 
-Run the wrapper to execute the suite, produce the JSON protocol and Markdown summary, and mirror logs under `data/logs/`:
+Run the wrapper to execute the suite, produce the JSON protocol and Markdown summary, and mirror logs under `logs/`:
 
 ```bash
 python tests/run_tests.py

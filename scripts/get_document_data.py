@@ -56,6 +56,8 @@ from library.integration import chembl_library as cl
 from library.document_defaults import ALL_DEFAULTS, CHEMBL_DEFAULTS, PUBMED_DEFAULTS
 from library.pipelines.document import postprocessing as dp
 from library.postprocessing import document as document_export_postprocessing
+from library.postprocess.documents import run_document_pipeline as run_document_postprocess
+from library.postprocess.common import collect_postprocess_metrics
 from library.orchestration import ETLContext
 from library.cli import (
     LoggerConfig,
@@ -96,6 +98,7 @@ from library.reporting.run_manifest import (
 )
 from library.postprocessing.document import preprocess_documents_csv
 from library.pipelines.common import add_pipeline_metadata
+from library.pipelines.common.metadata import get_pipeline_version
 from library.common.sidecar import SidecarErrors
 from library.qa.reporting import build_table_quality_hook
 from library.qa.table_quality import TableQualityProfiler
@@ -718,6 +721,73 @@ def _finalise_export(
     return exit_code
 
 
+def _generate_document_postprocess_metrics(
+    cfg: Config,
+    output_path: Path,
+    *,
+    logger: Logger,
+    extras: Mapping[str, object] | None = None,
+):
+    """Run the document postprocess pipeline and persist the metrics report."""
+
+    return collect_postprocess_metrics(
+        table="document",
+        output_path=output_path,
+        csv_sep=cfg.io.csv_sep,
+        csv_encoding=cfg.io.csv_encoding,
+        output_dir=cfg.io.output_dir,
+        runner=run_document_postprocess,
+        logger=logger,
+        pipeline_version=get_pipeline_version(),
+        report_extras=extras,
+    )
+
+
+def _log_document_completion(
+    event: str,
+    *,
+    cfg: Config,
+    output_path: Path,
+    logger: Logger,
+    extras: Mapping[str, object] | None = None,
+) -> None:
+    """Log pipeline completion details and write the postprocess report."""
+
+    metrics, report_path = _generate_document_postprocess_metrics(
+        cfg,
+        output_path,
+        logger=logger,
+        extras=extras,
+    )
+    pipeline_version_value = (
+        metrics.pipeline_version
+        if metrics and metrics.pipeline_version is not None
+        else get_pipeline_version()
+    )
+
+    payload: dict[str, object] = {
+        "output": str(output_path),
+        "pipeline_version": pipeline_version_value,
+    }
+    if extras:
+        payload.update(extras)
+    if metrics is not None:
+        summary = metrics.summary()
+        if summary.get("rows") is not None:
+            payload["postprocess_rows"] = summary["rows"]
+        if summary.get("columns") is not None:
+            payload["postprocess_columns"] = summary["columns"]
+        if summary.get("duration_s") is not None:
+            payload["postprocess_duration_s"] = summary["duration_s"]
+        if summary.get("steps") is not None:
+            payload["postprocess_steps"] = summary["steps"]
+        if metrics.validation is not None:
+            payload["postprocess_schema"] = metrics.validation.schema
+    if report_path is not None:
+        payload["postprocess_report"] = str(report_path)
+    logger.info(event, **payload)
+
+
 def run_pubmed(
     cfg: Config,
     args: argparse.Namespace,
@@ -951,7 +1021,13 @@ def run_pubmed(
     if limit_counter is not None:
         logger.info("process_limit", limit=limit_counter())
     if exit_code == 0:
-        logger.info("document_pubmed_done", output=str(output_path))
+        _log_document_completion(
+            "document_pubmed_done",
+            cfg=cfg,
+            output_path=output_path,
+            logger=logger,
+            extras={"mode": "pubmed"},
+        )
     else:
         logger.error(
             "document_pubmed_failed",
@@ -1111,7 +1187,16 @@ def run_chembl(
             partial_run=partial_run,
         )
         if exit_code == 0:
-            logger.info("document_chembl_done", output=str(output_path))
+            extras: dict[str, object] = {"mode": "chembl"}
+            if partial_run:
+                extras["partial_run"] = True
+            _log_document_completion(
+                "document_chembl_done",
+                cfg=cfg,
+                output_path=output_path,
+                logger=logger,
+                extras=extras,
+            )
         else:
             logger.error(
                 "document_chembl_failed",
@@ -1358,7 +1443,16 @@ def run_all(
                 **fallback_state.metrics.as_log_kwargs(),
             )
         if exit_code == 0:
-            logger.info("document_all_done", output=str(output_path))
+            extras: dict[str, object] = {"mode": "all"}
+            if partial_run:
+                extras["partial_run"] = True
+            _log_document_completion(
+                "document_all_done",
+                cfg=cfg,
+                output_path=output_path,
+                logger=logger,
+                extras=extras,
+            )
         else:
             logger.error(
                 "document_all_failed",
@@ -1465,7 +1559,16 @@ def run_all(
             **fallback_state.metrics.as_log_kwargs(),
         )
     if exit_code == 0:
-        logger.info("document_all_done", output=str(output_path))
+        extras: dict[str, object] = {"mode": "all"}
+        if partial_run:
+            extras["partial_run"] = True
+        _log_document_completion(
+            "document_all_done",
+            cfg=cfg,
+            output_path=output_path,
+            logger=logger,
+            extras=extras,
+        )
     else:
         logger.error(
             "document_all_failed",
