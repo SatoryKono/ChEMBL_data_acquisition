@@ -51,6 +51,8 @@ Important flags:
 - `--force`, `--skip-existing` — pass-through execution controls.
 - `--dry-run` — validate configuration, log intended actions and exit without
   touching the filesystem.
+- `--print-config` — resolve the effective configuration and exit without
+  running pipelines.
 
 ### Advanced overrides
 
