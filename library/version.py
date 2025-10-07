@@ -1,8 +1,9 @@
 """Runtime checks for interpreter compatibility.
 
 This module provides a helper ensuring the running Python interpreter meets
-project requirements. The package targets Python 3.11+, so running the tools on
-an older version should fail fast with a clear error message.
+project requirements. The package targets Python 3.11 and newer (with CI
+coverage on 3.11 and 3.12), so running the tools on an older version should
+fail fast with a clear error message.
 """
 
 from __future__ import annotations

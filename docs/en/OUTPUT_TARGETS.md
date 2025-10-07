@@ -170,8 +170,8 @@ workbook.
   guaranteeing deterministic survivors when identifiers collide.
 - Outputs are encoded as UTF-8 with Unix newlines and preserve the canonical
   column order `id`, `uniprot_id_primary`, `target_chembl_id`, `name`.
-- The helper is compatible with Python 3.11+ and pandas ≥ 2.0, matching the
-  baseline versions used across the pipeline.
+- The helper is compatible with Python 3.11 and 3.12 (pandas ≥ 2.0), matching
+  the CI matrix and runtime checks used across the pipeline.
 
 Example input snapshot (from `output.target_20250101.csv`):
 

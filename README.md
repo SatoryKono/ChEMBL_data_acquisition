@@ -152,7 +152,7 @@ must produce:
     "branch": "<branch>",
     "ts_utc": "<ISO8601>",
     "duration_sec": 0.0,
-    "python": "3.11",
+    "python": "3.12",
     "pytest": "<version>",
     "exit_code": 0
   },
@@ -179,6 +179,9 @@ must produce:
   ]
 }
 ```
+
+The `python` field reflects the interpreter running the tests (3.11 or 3.12 in
+the current CI matrix).
 
 `test_summary.md` mirrors the counts and, for every failure or error, embeds the
 exact `error` message from the JSON report in a fenced code block. This makes it

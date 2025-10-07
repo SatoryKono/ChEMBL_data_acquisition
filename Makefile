@@ -18,12 +18,11 @@ init: $(PYTHON_BIN)
 
 $(PYTHON_BIN): .python-version requirements.txt pyproject.toml
 	@test -f .python-version
-	@$(PYTHON) -c 'import pathlib, sys; expected = pathlib.Path(".python-version").read_text().strip(); actual = ".".join(map(str, sys.version_info[:3])); assert actual == expected, f"Python {expected} required, but {actual} found"'
+	@$(PYTHON) -c 'import pathlib, sys; raw=[line.strip() for line in pathlib.Path(".python-version").read_text().splitlines() if line.strip() and not line.lstrip().startswith("#")]; actual_full=".".join(map(str, sys.version_info[:3])); actual_mm=".".join(map(str, sys.version_info[:2])); allowed=set(raw); allowed.update(".".join(v.split(".")[:2]) for v in raw if "." in v); expected=", ".join(raw); sys.exit(f"Python {expected} required, but {actual_full} found") if actual_full not in allowed and actual_mm not in allowed else None'
 	$(PYTHON) -m venv $(VENV)
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
 	$(PIP) install -e .[dev]
-
 lint: $(PYTHON_BIN)
 	$(VENV)/bin/ruff check .
 	$(VENV)/bin/black --check .
@@ -33,16 +32,16 @@ test: $(PYTHON_BIN)
 	$(PYTHON_BIN) scripts/run_tests.py
 
 smoke: $(PYTHON_BIN)
-        CHEMBL_DA_BASE_PATH=$(PWD)/tests/data $(VENV)/bin/pytest tests/smoke -k "not testitem"
+	CHEMBL_DA_BASE_PATH=$(PWD)/tests/data $(VENV)/bin/pytest tests/smoke -k "not testitem"
 
 test-report: $(PYTHON_BIN)
-        PYTHONHASHSEED=$${PYTHONHASHSEED:-0} \
-        CHEMBL_DA_BASE_PATH=$(PWD)/tests/data \
-        $(PYTHON_BIN) -m scripts.run_test_suite --suite full --report-dir $(PWD)/reports
+	PYTHONHASHSEED=$${PYTHONHASHSEED:-0} \
+	CHEMBL_DA_BASE_PATH=$(PWD)/tests/data \
+	$(PYTHON_BIN) -m scripts.run_test_suite --suite full --report-dir $(PWD)/reports
 
 build: $(PYTHON_BIN)
-        rm -rf dist
-        $(PYTHON_BIN) -m build
+	rm -rf dist
+	$(PYTHON_BIN) -m build
 
 release: build
 	$(PYTHON_BIN) -m twine check dist/*

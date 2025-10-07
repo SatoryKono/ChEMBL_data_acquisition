@@ -75,14 +75,15 @@ The JSON report must include:
     "branch": "<branch>",
     "ts_utc": "<ISO8601>",
     "duration_sec": 0.0,
-    "python": "3.11",
+    "python": "3.12",
     "pytest": "<ver>"
   }
 }
 ```
 
 The Markdown summary mirrors the structure described in the QA guidelines. CI
-should fail if the success rate falls below 95 %.
+should fail if the success rate falls below 95 %. The `python` field reflects
+the interpreter used for the run (3.11 or 3.12 in the current matrix).
 
 ## Handling failures
 
