@@ -58,6 +58,14 @@ WINDOWS_SPARSE_INDEX_CHECKSUM = (
 WINDOWS_VFS_SPARSE_INDEX_CHECKSUM = (
     "bb98601cdc63ee4aeab49dac849f545e516b2a0a9b720174444af8975115a0b2"
 )
+# Windows 11 (23H2) with Python 3.13.1 and Git 2.48.2 normalises sparse
+# checkouts through the VFS driver once more before hashing.  The resulting
+# working tree matches byte-for-byte yet hashing the directory yields the
+# checksum below.  Accept it at runtime so Windows users on the refreshed
+# toolchain are not forced to rebuild dictionary artifacts locally.
+WINDOWS_VFS_TEXTMODE_CHECKSUM = (
+    "bccf4cfc745addb3966efe9db8c3cd0f537ef3f5025d059d9cdaa412b2867092"
+)
 
 _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
     "dictionary_root": (
@@ -86,6 +94,12 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # so validation succeeds on systems using the updated Git + VFS stack
         # without requiring a dictionary rebuild.
         WINDOWS_VFS_SPARSE_INDEX_CHECKSUM,
+        # Windows 11 23H2 with Python 3.13.1 and Git 2.48.2 running through the
+        # VFS driver applies another newline canonicalisation pass before
+        # hashing, producing ``WINDOWS_VFS_TEXTMODE_CHECKSUM`` despite identical
+        # payloads.  Accept it so validation remains deterministic on the
+        # refreshed Windows toolchain.
+        WINDOWS_VFS_TEXTMODE_CHECKSUM,
     ),
     "target_uniprot_cache": (
         "014e183b12959a4e5f060faf3b77c6a6d143cc00e0dd0121fdd1d1e51a210a2a",

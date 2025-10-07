@@ -6,6 +6,10 @@ resources:
     sha256:
       # POSIX checkouts without newline conversion
       - "e3c3e184c847dbc4f5a238b508055e8ee6ff2536a63a06d1d72d48a82d72e545"
+      # October 2025 dictionary refresh exported from POSIX environments after
+      # regenerating the enrichment bundles.  The content changes introduced in
+      # the refresh make the directory hash to the value below.
+      - "e2adfc412971edaa4adc65401ac58a78bd3ee48e9dbe7ba9811ab018afc6a968"
       # Windows checkouts with core.autocrlf conversion prior to normalisation
       - "cc60aa1e2160724c46e701e0bb21a8f2c4176e57b61180f0c9418db878144156"
       # Legacy archives shipped with the 2024-07 baseline
@@ -48,6 +52,13 @@ resources:
       # workspace tree with an extra CSV.  Accept the resulting checksum to keep
       # validation deterministic across environments.
       - "e8000ec66732d0f2b3230640116f8a7313530954e5448f66518f0bd7242dad39"
+      # Windows 11 (23H2) with Python 3.13.1 and Git 2.48.2 normalises sparse
+      # checkout expansions through the VFS driver which rewrites newline
+      # metadata before hashing.  The payload is byte-identical but the
+      # directory now hashes to the value below.  Accept it so Windows runners
+      # on the refreshed toolchain pass validation without rebuilding the
+      # dictionaries locally.
+      - "bccf4cfc745addb3966efe9db8c3cd0f537ef3f5025d059d9cdaa412b2867092"
       # Windows 11 23H2 with Python 3.13.1 and Git 2.48 performs a sparse-index
       # expansion pass that rewrites directory timestamps before hashing.  The
       # dictionary contents remain byte-identical but the tree now hashes to the

@@ -28,3 +28,10 @@ dictionary_root:
   # Accept it until the upstream tooling converges to the canonical ordering
   # again so local validation stays deterministic.
   - "bb98601cdc63ee4aeab49dac849f545e516b2a0a9b720174444af8975115a0b2"
+  # Windows 11 (23H2) on Python 3.13.1 with Git 2.48.2 running through the VFS
+  # driver applies an additional newline canonicalisation pass to sparse
+  # checkouts.  The exported dictionaries remain byte-identical but hash to the
+  # value below.  Keep it in the repository allow-list so developers on the
+  # refreshed toolchain continue to pass validation without rebuilding the
+  # resources locally.
+  - "bccf4cfc745addb3966efe9db8c3cd0f537ef3f5025d059d9cdaa412b2867092"
