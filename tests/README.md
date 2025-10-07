@@ -39,14 +39,15 @@ Shared fixtures live in `tests/conftest.py`. They configure a deterministic envi
 
 ## CLI pipeline orchestration
 
-End-to-end smoke tests now cover every `scripts/get_*` entrypoint via `tests/e2e/test_get_cli_pipelines.py`. Each scenario patches the network-heavy stages with deterministic stubs and asserts that the orchestrator:
+Declarative pipeline scenarios are now covered in both integration and end-to-end suites. The integration module `tests/integration/test_pipeline_config_loading.py` exercises `load_pipeline_config`, asserting that YAML-defined steps, runners and metrics definitions are resolved into deterministic orchestrator payloads. The complementary end-to-end suite `tests/e2e/test_get_cli_pipelines.py` drives every `scripts/get_*` entrypoint with those declarative configurations, patches the network-heavy stages with deterministic stubs and validates that the orchestrator:
 
 - loads miniature CSV fixtures and normalises core columns,
 - emits structured WARN/ERROR events for missing or duplicated records,
+- records pipeline metadata such as `pipeline_version`, per-step metric payloads and runner identifiers,
 - writes the derived tables with deterministic ordering and derived fields, and
-- honours `--skip-existing` semantics without invoking the pipeline.
+- honours the edge-case flags `--skip-existing`, `--limit` and `--dry-run` without invoking unintended side effects.
 
-The tests exercise success and failure paths for `get_testitem_data`, `get_document_data`, `get_target_data`, `get_assay_data`, `get_tissue_data` and `get_activity_data`, bringing the CLI surface under the deterministic test umbrella.
+The scenarios exercise success and failure paths for `get_testitem_data`, `get_document_data`, `get_target_data`, `get_assay_data`, `get_tissue_data` and `get_activity_data`, bringing both the declarative configuration loading and CLI surface under the deterministic test umbrella.
 
 ## Running tests and generating reports
 
@@ -79,3 +80,5 @@ When developing additional scenarios, keep the guardrails documented in `tests/c
 - [x] Постобработка и экспорт: корректность форматов/имён/путей
 - [x] Деградационные кейсы: частичные данные, пустые файлы, неверный заголовок
 - [x] Идемпотентность: повторный запуск на тех же входах даёт тот же результат
+- [x] Метаданные пайплайна: `pipeline_version`, метрики по шагам и идентификаторы раннеров сохраняются и проверяются
+- [x] Пограничные флаги CLI: `--skip-existing`, `--limit`, `--dry-run` не нарушают детерминированность и корректность
