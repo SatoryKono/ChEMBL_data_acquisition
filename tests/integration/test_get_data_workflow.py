@@ -326,7 +326,7 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
     manifest_failure = _load_manifest(cfg)
     failure_entry = manifest_failure["steps"][0]
     assert failure_entry["status"] == "failed"
-    assert failure_entry["reason"] == "non_zero_exit"
+    assert failure_entry["reason"] == "pipeline_failed"
     assert failure_entry["output"]["exists"] is False
 
     sentinel.unlink()

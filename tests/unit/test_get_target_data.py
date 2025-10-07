@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Callable, Iterable, Sequence
 
 import pandas as pd
 from types import SimpleNamespace
@@ -309,21 +309,30 @@ def test_run_uniprot__doc_quality_reports(
 
     captured: dict[str, object] = {}
 
-    def _fake_analyze(
-        df: pd.DataFrame,
+    def _fake_build_quality(
+        quality_cfg: object,
         *,
-        table_name: str,
-        destination_dir: Path,
-        sample_rows: int | None,
-        include_columns: Sequence[str] | None,
-        exclude_columns: Sequence[str] | None,
-    ) -> None:
-        captured["table_name"] = table_name
-        captured["destination_dir"] = destination_dir
-        captured["sample_rows"] = sample_rows
-        captured["df"] = df.copy()
+        table_name: str | Path,
+        destination: Path | str | None,
+    ) -> Callable[[pd.DataFrame], None]:
+        captured["sample_rows"] = getattr(quality_cfg, "sample_rows", None)
+        captured["table_name"] = Path(table_name).name
+        if destination is None:
+            captured["destination_dir"] = None
+        else:
+            captured["destination_dir"] = Path(destination)
 
-    monkeypatch.setattr(get_target_data, "analyze_table_quality", _fake_analyze)
+        def _hook(df: pd.DataFrame) -> None:
+            captured["df"] = df.copy()
+            captured["hook_called"] = True
+
+        return _hook
+
+    monkeypatch.setattr(
+        get_target_data,
+        "build_table_quality_hook",
+        _fake_build_quality,
+    )
 
     args = argparse.Namespace(input_csv=input_csv, final_out=output_csv)
 
@@ -332,6 +341,7 @@ def test_run_uniprot__doc_quality_reports(
     assert exit_code == 0
     assert captured["table_name"] == output_csv.resolve().stem
     assert captured["destination_dir"] == output_csv.resolve().parent
+    assert captured.get("hook_called") is True
     pd.testing.assert_frame_equal(
         captured["df"], pd.DataFrame({"uniprot_id": ["P12345"]})
     )
