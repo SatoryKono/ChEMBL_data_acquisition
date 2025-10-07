@@ -21,6 +21,7 @@ import sys
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence, Callable
 from dataclasses import dataclass
+from threading import Lock
 from datetime import datetime, timezone
 
 from functools import partial
@@ -649,6 +650,7 @@ def _ensure_molecule_pref_name(
     cfg: Config,
     client: ChemblClient,
     cache: dict[str, str | None],
+    cache_lock: Lock,
     chunk_failures: ChunkFailureTracker | None = None,
 ) -> pd.DataFrame:
     """Populate ``molecule_pref_name`` via the test item API when missing."""
@@ -677,9 +679,19 @@ def _ensure_molecule_pref_name(
         return result
 
     pending: list[str] = []
-    for identifier in unique_ids:
-        if identifier not in cache:
-            pending.append(identifier)
+    wait_for: set[str] = set()
+
+    with cache_lock:
+        for identifier in unique_ids:
+            cache_key = str(identifier)
+            current = cache.get(cache_key, _CACHE_MISS)
+            if current is _CACHE_IN_PROGRESS:
+                wait_for.add(cache_key)
+                continue
+            if current is not _CACHE_MISS:
+                continue
+            cache[cache_key] = _CACHE_IN_PROGRESS
+            pending.append(cache_key)
 
     if pending:
         fields = list(cfg.testitem.fields)
@@ -706,6 +718,7 @@ def _ensure_molecule_pref_name(
             if chunk_failures is not None:
                 chunk_failures.add_failure(tuple(pending), error_message)
             lookup = pd.DataFrame(columns=["molecule_chembl_id", "pref_name"])
+        resolved: set[str] = set()
         if not lookup.empty and {"molecule_chembl_id", "pref_name"}.issubset(lookup.columns):
             mapped = (
                 lookup[["molecule_chembl_id", "pref_name"]]
@@ -713,11 +726,35 @@ def _ensure_molecule_pref_name(
                 .astype({"molecule_chembl_id": "string"})
             )
             for chembl_id, pref_name in mapped.itertuples(index=False):
-                cache[str(chembl_id)] = str(pref_name) if pd.notna(pref_name) else None
-        for identifier in pending:
-            cache.setdefault(identifier, None)
+                value = str(pref_name) if pd.notna(pref_name) else None
+                cache_key = str(chembl_id)
+                with cache_lock:
+                    cache[cache_key] = value
+                resolved.add(cache_key)
+        missing = [identifier for identifier in pending if identifier not in resolved]
+        if missing:
+            with cache_lock:
+                for identifier in missing:
+                    cache[identifier] = None
 
-    fill_map = {key: value for key, value in cache.items() if value}
+    if wait_for:
+        while True:
+            with cache_lock:
+                outstanding = [
+                    identifier
+                    for identifier in wait_for
+                    if cache.get(identifier, _CACHE_MISS) is _CACHE_IN_PROGRESS
+                ]
+            if not outstanding:
+                break
+            sleep(0)
+
+    with cache_lock:
+        fill_map = {
+            key: value
+            for key, value in cache.items()
+            if value and value is not _CACHE_IN_PROGRESS
+        }
     if not fill_map:
         return result
 
@@ -1112,6 +1149,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     last_error_context: dict[str, object] = {}
 
     pref_name_cache: dict[str, str | None] = {}
+    pref_name_cache_lock = Lock()
 
     with ETLContext(cfg) as context:
         client = context.chembl_client
@@ -1250,6 +1288,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                             cfg=cfg,
                             client=client,
                             cache=pref_name_cache,
+                            cache_lock=pref_name_cache_lock,
                             chunk_failures=chunk_failures,
                         )
                 return pd.DataFrame(columns=ACTIVITY_COLUMNS)
