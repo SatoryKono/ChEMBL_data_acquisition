@@ -8,11 +8,12 @@ import warnings
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Iterable
+from typing import Callable, Iterable
 
 import numpy as np
 import pandas as pd
 import pytest
+import requests
 import yaml
 
 from dataclasses import dataclass
@@ -91,6 +92,7 @@ def _install_fetch_stubs(
     frame: pd.DataFrame,
     *,
     testitem_frame: pd.DataFrame | None = None,
+    testitem_error: Callable[[], Exception] | Exception | None = None,
 ) -> _FetchCapture:
     captured_activities: list[tuple[str, ...]] = []
     captured_testitems: list[tuple[str, ...]] = []
@@ -111,6 +113,9 @@ def _install_fetch_stubs(
     def _fake_get_testitem(chunk_ids: Iterable[str], **_: object) -> pd.DataFrame:
         identifiers = [str(item) for item in chunk_ids]
         captured_testitems.append(tuple(identifiers))
+        if testitem_error is not None:
+            exc = testitem_error() if callable(testitem_error) else testitem_error
+            raise exc
         if identifiers:
             mask = testitem_frame["molecule_chembl_id"].astype(str).isin(identifiers)
             return testitem_frame.loc[mask].copy().reset_index(drop=True)
@@ -701,6 +706,102 @@ def test_activity_pipeline__fills_compound_name_from_pref_name(cfg, tmp_path, mo
     fill_mask = compound_series.notna() & compound_series.str.strip().ne("")
     fill_rate = fill_mask.sum() / len(compound_series)
     assert fill_rate >= 0.95
+
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("deterministic_env")
+@pytest.mark.parametrize(
+    ("error_factory", "expected_message"),
+    [
+        pytest.param(
+            lambda: requests.Timeout("pref name lookup timed out"),
+            "pref name lookup timed out",
+            id="timeout",
+        ),
+        pytest.param(
+            lambda: requests.HTTPError("404 Client Error: Not Found for url"),
+            "404 Client Error",
+            id="http-404",
+        ),
+    ],
+)
+def test_activity_pipeline__records_pref_name_fetch_failures(
+    cfg,
+    tmp_path,
+    monkeypatch,
+    error_factory,
+    expected_message,
+):
+    _configure_cfg(cfg)
+
+    input_csv = tmp_path / "ids_pref_name.csv"
+    input_csv.write_text("activity_id\nACT1\nACT2\n", encoding="utf-8")
+
+    chunk_df = pd.DataFrame.from_records(
+        [
+            {
+                "activity_id": "ACT1",
+                "molecule_chembl_id": "CHEMBL1",
+                "assay_chembl_id": "ASSAY1",
+                "standard_value": 1.0,
+                "standard_units": "nM",
+                "standard_type": "IC50",
+                "relation": "=",
+            },
+            {
+                "activity_id": "ACT2",
+                "molecule_chembl_id": "CHEMBL2",
+                "assay_chembl_id": "ASSAY2",
+                "standard_value": 2.0,
+                "standard_units": "nM",
+                "standard_type": "IC50",
+                "relation": "=",
+            },
+        ]
+    )
+
+    capture = _install_fetch_stubs(
+        monkeypatch,
+        chunk_df,
+        testitem_error=error_factory,
+    )
+    written = _install_writer_stub(monkeypatch)
+    logger_stub = _RecordingLogger()
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    monkeypatch.setattr("library.validation.logger", logger_stub)
+
+    output_csv = tmp_path / "activities.csv"
+    args = _make_args(input_csv, output_csv)
+
+    exit_code = get_activity_data.run_chembl(cfg, args)
+
+    assert exit_code == 0
+    assert capture.testitems, "expected pref name fetch attempts"
+    assert written, "pipeline should produce output"
+
+    pref_name_events = [
+        payload
+        for level, event, payload in logger_stub.events
+        if level == "warning" and event == "pref_name_fetch_failed"
+    ]
+    assert pref_name_events, "pref name fetch failure should be logged"
+    assert pref_name_events[0]["pending"] == list(capture.testitems[0])
+    assert expected_message in str(pref_name_events[0]["error"])
+
+    fetch_failure_path = output_csv.with_name("activities_fetch_failures.csv")
+    assert fetch_failure_path.exists()
+
+    failure_df = pd.read_csv(fetch_failure_path)
+    assert len(failure_df) == 1
+    recorded_ids = failure_df.loc[0, "chunk_ids"].split(",")
+    assert recorded_ids == list(capture.testitems[0])
+    assert failure_df.loc[0, "chunk_size"] == len(capture.testitems[0])
+    assert expected_message in str(failure_df.loc[0, "error"])
+
+    meta_path = Path(f"{fetch_failure_path}.meta.yaml")
+    assert meta_path.exists()
+    meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert set(meta.get("columns", [])) >= {"chunk_ids", "chunk_size", "error"}
 
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
