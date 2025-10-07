@@ -188,3 +188,7 @@ possible to triage failures using only the Markdown artefact.
 Smoke runs can use `pytest -q -k "not slow and not e2e"`, while full validation
 uses `pytest -q`. See [`docs/en/development/TESTING.md`](./docs/en/development/TESTING.md)
 for fixtures, determinism requirements and coverage targets.
+
+## License
+
+The project is distributed under the [MIT License](./LICENSE).
