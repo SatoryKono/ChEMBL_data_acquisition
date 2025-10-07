@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import logging
 from typing import Sequence
 
 import pandas as pd
@@ -21,12 +22,16 @@ from library.postprocess.common.config import (
 from .schema import ASSAY_SCHEMA, validate_assays
 
 
+_LOGGER = logging.getLogger(__name__)
+
+
 def normalize_assay_metadata(
     df: pd.DataFrame,
     *,
     uppercase_categories: bool = True,
     strip_whitespace: bool = True,
     collapse_internal_whitespace: bool | None = None,
+    **extra_kwargs: object,
 ) -> pd.DataFrame:
     """Normalize string-based assay descriptors.
 
@@ -47,6 +52,12 @@ def normalize_assay_metadata(
         behaviour where both operations happened together.  Pass ``True`` or
         ``False`` explicitly to override the coupling.
     """
+
+    if extra_kwargs:
+        _LOGGER.debug(
+            "normalize_assay_metadata ignoring unsupported parameters: %s",
+            ", ".join(sorted(extra_kwargs)),
+        )
 
     normalized = df.copy(deep=True)
     if collapse_internal_whitespace is None:

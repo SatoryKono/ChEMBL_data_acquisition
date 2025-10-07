@@ -55,6 +55,26 @@ def test_normalize_assay_metadata__respects_disabled_flags() -> None:
 
 @pytest.mark.postprocessing
 @pytest.mark.usefixtures("deterministic_env")
+def test_normalize_assay_metadata__ignores_unknown_parameters() -> None:
+    frame = pd.DataFrame(
+        {
+            "assay_type": ["primary"],
+            "assay_format": ["cell"],
+            "assay_test_type": ["screen"],
+        }
+    )
+
+    result = normalize_assay_metadata(frame, uppercase_categories=False, unsupported_flag=True)
+
+    expected = frame.copy()
+    for column in expected.columns:
+        expected[column] = expected[column].astype("string")
+
+    pd.testing.assert_frame_equal(result, expected)
+
+
+@pytest.mark.postprocessing
+@pytest.mark.usefixtures("deterministic_env")
 def test_enrich_assay_flags__applies_custom_terms() -> None:
     frame = pd.DataFrame(
         {
