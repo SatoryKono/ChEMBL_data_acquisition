@@ -28,7 +28,7 @@ def normalize_assay_metadata(df: pd.DataFrame) -> pd.DataFrame:
                 normalized[column]
                 .astype("string")
                 .str.strip()
-                .str.replace("\s+", " ", regex=True)
+                .str.replace(r"\s+", " ", regex=True)
                 .str.upper()
             )
     return normalized

@@ -319,6 +319,6 @@ python scripts/get_cellline_data.py \
 | `mapper` | Интерактивное сопоставление UniProt↔ChEMBL на основе кешей. |
 | `chunk-io` | Потоковая обработка CSV с сохранением порядка. |
 | `get-input-initialisation` | Объединение Excel-шаблонов инициализации в канонический CSV. |
-| `get-activities` | Создание синтетических записей активностей для smoke-тестов. |
+| `get-activities` | Создание синтетических активностей и детерминированных CSV + `.meta.yaml` для smoke-тестов. |
 
 Примеры сложных сценариев см. в [`guides/ADVANCED_SCENARIOS.md`](./guides/ADVANCED_SCENARIOS.md).
