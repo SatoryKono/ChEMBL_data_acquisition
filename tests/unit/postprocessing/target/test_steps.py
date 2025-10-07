@@ -174,3 +174,19 @@ def test_finalize_target_records__populates_target_type_from_relationship() -> N
     result = finalize_target_records(frame)
 
     assert result.loc[0, "target_type"] == "SINGLE PROTEIN"
+
+
+@pytest.mark.unit
+def test_finalize_target_records__populates_target_type_from_description() -> None:
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL9000"],
+            "pref_name": ["Example target"],
+            "target_type_description": ["PROTEIN COMPLEX"],
+        }
+    )
+
+    result = finalize_target_records(frame)
+
+    assert result.loc[0, "target_type"] == "PROTEIN COMPLEX"
+    assert str(result["target_type"].dtype) == "string"
