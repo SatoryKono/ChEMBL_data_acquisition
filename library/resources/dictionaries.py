@@ -369,9 +369,13 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
 
         sha256_actual = _compute_sha256(absolute_path)
         if sha256_actual not in sha256_expected:
+            allowlist_path = manifest_root / _MANIFEST_ALLOWLIST_FILENAME
+            env_hint = f"{_ENV_CHECKSUM_ALLOWLIST}={name}={sha256_actual}"
             raise DictionaryManifestError(
                 "Checksum mismatch for resource"
-                f" {name!r}: expected one of {sha256_expected}, got {sha256_actual}"
+                f" {name!r}: expected one of {sha256_expected}, got {sha256_actual}. "
+                "If this digest is valid for your platform, add it to the allow-list at "
+                f"{allowlist_path} or export {env_hint} before rerunning."
             )
 
         parsed[name] = DictionaryResource(

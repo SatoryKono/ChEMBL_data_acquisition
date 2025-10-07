@@ -131,3 +131,32 @@ def test_known_checksum_variants__includes_sparse_index_checksum(tmp_path: Path)
     variants = dictionaries._iter_additional_checksums("dictionary_root", base_dir=tmp_path)
 
     assert dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM in variants
+
+
+@pytest.mark.unit
+def test_parse_manifest__checksum_mismatch_hint(tmp_path: Path) -> None:
+    """Checksum mismatches should include remediation hints in the error message."""
+
+    manifest_dir = tmp_path / "dictionary"
+    manifest_dir.mkdir()
+
+    manifest_payload = {
+        "resources": {
+            "dictionary_root": {
+                "path": ".",
+                "version": "test",
+                "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "generator": "tools/build_dictionary_resources.py",
+            }
+        }
+    }
+    manifest_path = manifest_dir / "manifest.yaml"
+    manifest_path.write_text(yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(dictionaries.DictionaryManifestError) as exc_info:
+        dictionaries._parse_manifest(base_dir=manifest_dir)
+
+    message = str(exc_info.value)
+    assert "manifest.allowlist.yaml" in message
+    assert dictionaries._ENV_CHECKSUM_ALLOWLIST in message
+    assert "dictionary_root" in message
