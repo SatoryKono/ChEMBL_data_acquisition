@@ -94,6 +94,11 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
     written_path = _write_output(frame, output_path, cfg=cfg)
     logger.info(
+        "generated",
+        output=str(written_path),
+        count=int(frame.shape[0]),
+    )
+    logger.info(
         "activity_pipeline_done",
         output=str(written_path),
         rows=int(frame.shape[0]),
