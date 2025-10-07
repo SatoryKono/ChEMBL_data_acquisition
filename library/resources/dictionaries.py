@@ -49,6 +49,10 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
         "70f0b19c450d0fc8d19ddb41bd69906d6b1a5ac39e3e4e2d2b6dea54a501569d",
         "95f7a33a028aeeba9027b64f558e50ad25e76934782cc03ba14437fd8eff8476",
+        # Windows 11 (23H2) with Python 3.13.0 and Git 2.48 may perform an
+        # additional newline normalisation pass when sparse checkouts expand via
+        # the virtual filesystem driver.  The working tree remains byte-for-byte
+        # identical but hashing the directory yields the checksum below.
         # Windows 11 23H2 with Git 2.48 expands sparse indexes differently when
         # Python 3.13.1 is installed.  The working tree matches byte-for-byte but
         # the directory hash becomes ``9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15``.
