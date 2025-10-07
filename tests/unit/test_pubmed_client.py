@@ -56,3 +56,20 @@ def test_session_with_retry__uses_backoff_cap() -> None:
 
     assert isinstance(max_retries, urllib3_retry.Retry)
     assert max_retries.backoff_max == pytest.approx(7.5)
+
+
+@pytest.mark.unit
+def test_session_with_retry__disables_urllib3_retries() -> None:
+    api_cfg = ApiCfg()
+    retry_cfg = RetryCfg(max_attempts=4, backoff_factor=1.0, backoff_cap=None)
+
+    with session_with_retry(api_cfg, retry_cfg) as session:
+        adapter = session.get_adapter("https://")
+        max_retries = adapter.max_retries
+
+    assert isinstance(max_retries, urllib3_retry.Retry)
+    assert max_retries.total == 0
+    assert max_retries.connect == 0
+    assert max_retries.read == 0
+    assert max_retries.redirect == 0
+    assert max_retries.status == 0
