@@ -1,6 +1,6 @@
-generated_at: '2025-10-07T00:12:14.567996+00:00'
-git_sha: e1535fa24ba373aef3fb5a01ed1764c3b4c61875
-command: scripts\get_testitem_data.py --input data\input\testitem.csv --limit 1
+generated_at: '2025-10-07T00:19:03.309354+00:00'
+git_sha: 48b054ddc83abb562887e53b082051101e4b0ce9
+command: scripts\get_testitem_data.py --input data\input\testitem.csv --limit 10
 columns:
 - molecule_chembl_id
 - parent_molecule_chembl_id
@@ -125,7 +125,7 @@ config:
           column: molecule_chembl_id
           batch_size: 250
           timeout: 90.0
-          limit: 1
+          limit: 10
           offset: 0
           fields:
           - molecule_chembl_id
@@ -445,13 +445,16 @@ platform: Windows-10-10.0.19045-SP0
 inputs:
   input_csv: data\input\testitem.csv
 stats:
-  rows_total: 1
-  rows_kept: 1
+  rows_total: 10
+  rows_kept: 10
   rows_dropped: 0
-  output_sha256: d824894e965a47c9a493e984eb2a5374415cb1bcd2c0a8459480a98d0db3d67b
+  output_sha256: a26ea3d326437030502cb20b6f55c84bd15d116f9fa620f12f8333cc5b5d7b4b
   parent_lookup_source: skipped
-  parent_lookup_missing: 1
-  parent_lookup_hierarchy_attached: 1
+  parent_lookup_missing: 11
+  parent_lookup_hierarchy_attached: 9
   parent_lookup_fallback_attached: 0
-  parent_lookup_no_parent: 1
+  parent_lookup_no_parent: 10
+  parent_lookup_failed_ids:
+  - CHEMBL2021616
+  parent_lookup_failed_count: 1
 schema: TestitemsSchema
