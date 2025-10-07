@@ -29,7 +29,7 @@ def test_document_schema_groups__pipeline_alignment() -> None:
 
 @pytest.mark.unit
 def test_document_schema_export__shared_constant() -> None:
-    assert get_document_data._EXPORT_COLUMNS == DOCUMENT_EXPORT_COLUMNS
+    assert get_document_data._EXPORT_COLUMNS == list(DOCUMENT_EXPORT_COLUMNS)
 
 
 @pytest.mark.unit
