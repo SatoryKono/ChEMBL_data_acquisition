@@ -117,6 +117,7 @@ def test_manifest_allows_windows_textmode_checksum() -> None:
 
     expected = {
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        "92b6b3612557eb0916f38aee701a61f3bc470b0ffd0251866ecaf7364fb16d64",
         "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
         dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM,
         dictionaries.WINDOWS_VFS_SPARSE_INDEX_CHECKSUM,
