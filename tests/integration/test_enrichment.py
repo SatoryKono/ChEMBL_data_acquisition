@@ -49,7 +49,11 @@ def test_enrich__attaches_flags_and_parent(
         fields for event, fields in events if event == "testitem_enrichment_missing_child_flags"
     ]
     assert missing_child_events == [
-        {"count": 2, "identifiers": ["CHEMBL2", "CHEMBL3"]}
+        {
+            "count": 2,
+            "identifiers": ["CHEMBL2", "CHEMBL3"],
+            "truncated": False,
+        }
     ]
 
 
@@ -171,3 +175,48 @@ def test_enrich__logs_missing_parent_identifiers(
         "identifiers": ["CHEMBL404"],
         "truncated": False,
     }
+
+
+@pytest.mark.integration
+def test_enrich__truncates_identifier_log_payload(
+    tmp_path: Path, cfg, snapshot_resource, monkeypatch
+) -> None:
+    cfg.testitem_molecule_enrichment.enable = True
+    cfg.testitem_molecule_enrichment.sources.molecule_catalog_path = (
+        snapshot_resource / "molecule_catalog.csv"
+    )
+    cfg.testitem_molecule_enrichment.sources.molecule_hierarchy_path = (
+        snapshot_resource / "molecule_hierarchy.csv"
+    )
+
+    identifiers = [f"CHEMBL{index:07d}" for index in range(1000, 1025)]
+
+    events: list[tuple[str, dict[str, object]]] = []
+
+    def _capture(event: str, **fields: object) -> None:
+        events.append((event, fields))
+
+    monkeypatch.setattr(enrichment.logger, "warning", _capture)
+
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": identifiers,
+            "parent_molecule_chembl_id": [pd.NA] * len(identifiers),
+        }
+    )
+
+    enrichment.enrich(
+        frame,
+        cfg=cfg.testitem_molecule_enrichment,
+        io_cfg=cfg.io,
+    )
+
+    missing_child_event = next(
+        fields
+        for event, fields in events
+        if event == "testitem_enrichment_missing_child_flags"
+    )
+
+    assert missing_child_event["count"] == len(identifiers)
+    assert missing_child_event["truncated"] is True
+    assert len(missing_child_event["identifiers"]) == 20
