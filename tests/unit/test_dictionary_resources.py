@@ -118,7 +118,16 @@ def test_manifest_allows_windows_textmode_checksum() -> None:
     expected = {
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
         "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
-        "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15",
+        dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM,
     }
 
     assert expected.issubset(sha256_values)
+
+
+@pytest.mark.unit
+def test_known_checksum_variants__includes_sparse_index_checksum(tmp_path: Path) -> None:
+    """The runtime allow-list should accept the new sparse-index checksum."""
+
+    variants = dictionaries._iter_additional_checksums("dictionary_root", base_dir=tmp_path)
+
+    assert dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM in variants
