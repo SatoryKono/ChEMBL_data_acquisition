@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final
+from typing import Any
 
 from ..config import Config, RetryCfg
 from ..sidecar import SidecarErrors
@@ -17,9 +17,6 @@ class _ChunkFailure:
 
     chunk_ids: list[str]
     error: str
-
-
-_EMPTY_STATS: Final[dict[str, Any]] = {}
 
 
 class ChunkFailureTracker:
@@ -47,7 +44,7 @@ class ChunkFailureTracker:
         """Return aggregated statistics for persisted metadata files."""
 
         if not self._failures:
-            return _EMPTY_STATS
+            return {}
         unique_ids = sorted(
             {
                 identifier
