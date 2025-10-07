@@ -68,11 +68,13 @@ def test_finalize_target_records__fills_missing_required_columns() -> None:
 
     result = finalize_target_records(frame)
 
-    assert list(result.columns) == [
+    assert list(result.columns[:3]) == [
         "target_chembl_id",
         "pref_name",
         "target_type",
     ]
+    for column in ["organism", "target_class", "protein_family", "synonyms", "pipeline_version"]:
+        assert column in result.columns
     assert pd.isna(result.loc[0, "target_type"])
     assert str(result["target_type"].dtype) == "string"
     assert str(result["pref_name"].dtype) == "string"
@@ -85,11 +87,13 @@ def test_finalize_target_records__handles_empty_input_frame() -> None:
     result = finalize_target_records(frame)
 
     assert result.empty
-    assert list(result.columns) == [
+    assert list(result.columns[:3]) == [
         "target_chembl_id",
         "pref_name",
         "target_type",
     ]
+    for column in ["organism", "target_class", "protein_family", "synonyms", "pipeline_version"]:
+        assert column in result.columns
     assert str(result["target_chembl_id"].dtype) == "string"
     assert str(result["pref_name"].dtype) == "string"
     assert str(result["target_type"].dtype) == "string"
@@ -136,3 +140,18 @@ def test_finalize_target_records__supports_optional_flags(monkeypatch) -> None:
     )
 
     assert result["target_chembl_id"].tolist() == ["CHEMBL1", "CHEMBL2"]
+
+
+@pytest.mark.unit
+def test_finalize_target_records__populates_target_type_from_relationship() -> None:
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL42"],
+            "pref_name": ["Some target"],
+            "relationship": ["SINGLE PROTEIN"],
+        }
+    )
+
+    result = finalize_target_records(frame)
+
+    assert result.loc[0, "target_type"] == "SINGLE PROTEIN"
