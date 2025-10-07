@@ -33,6 +33,12 @@ resources:
       # Include it to keep validation deterministic for developers on the
       # updated toolchain without forcing a dictionary rebuild.
       - "70f0b19c450d0fc8d19ddb41bd69906d6b1a5ac39e3e4e2d2b6dea54a501569d"
+      # Windows 11 (22H2) with Git 2.47.1 and Python 3.13.0 running on NTFS
+      # with ``core.autocrlf=true`` may expand sparse checkouts differently
+      # when the manifest is generated on Linux.  The resulting tree produces
+      # the checksum below even though the file content matches byte-for-byte.
+      # Accept it to keep cross-platform validation deterministic.
+      - "95f7a33a028aeeba9027b64f558e50ad25e76934782cc03ba14437fd8eff8476"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv
