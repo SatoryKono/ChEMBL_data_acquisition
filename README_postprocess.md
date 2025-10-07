@@ -51,6 +51,8 @@ Available overrides:
 
 - `CHEMBL_ACTIVITY_PIPELINE_VERSION`, `CHEMBL_ASSAY_PIPELINE_VERSION`, `CHEMBL_DOCUMENT_PIPELINE_VERSION`, `CHEMBL_TARGET_PIPELINE_VERSION` — override the exported `pipeline_version` per domain; defaults to `auto`.
 - `POSTPROCESS_LOG_LEVEL` — baseline logger verbosity, defaulting to `INFO`.
+- `POSTPROCESS_DEFAULT_ENCODING` — shared file encoding for CSV loads/saves, defaulting to `utf-8`.
+- `POSTPROCESS_DEFAULT_CSV_SEPARATOR` — shared CSV delimiter, defaulting to `,`.
 
 ### Domain configuration defaults
 

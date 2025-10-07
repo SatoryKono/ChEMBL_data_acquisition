@@ -26,8 +26,8 @@ params:
     pipeline_version: "${CHEMBL_ACTIVITY_PIPELINE_VERSION:-auto}"
     log_level: "${POSTPROCESS_LOG_LEVEL:-INFO}"
   io:
-    encoding: "utf-8"
-    csv_sep: ","
+    encoding: "${POSTPROCESS_DEFAULT_ENCODING:-utf-8}"
+    csv_sep: "${POSTPROCESS_DEFAULT_CSV_SEPARATOR:-,}"
   quality:
     missing_comment_flag: false
     comment_terms:
