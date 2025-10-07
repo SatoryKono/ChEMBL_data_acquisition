@@ -14,7 +14,10 @@ import pytest
 import library
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+pytestmark = pytest.mark.integration
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _load_names_module() -> types.ModuleType:
@@ -53,26 +56,22 @@ def _load_names_module() -> types.ModuleType:
 names = _load_names_module()
 
 
-@pytest.mark.unit
 def test_is_hidrate__detects_known_annotations() -> None:
     assert names.is_hidrate("Calcium dihydrate") is True
     assert names.is_hidrate("anhydrous sodium chloride") is False
 
 
-@pytest.mark.unit
 def test_remove_hidrate__removes_tokens_and_collapses_spaces() -> None:
     text = "  Magnesium sesquihydrate   "
     assert names.remove_hidrate(text) == "Magnesium"
 
 
-@pytest.mark.unit
 def test_sort_my_list__deduplicates_and_preserves_stable_order() -> None:
     values = ["Beta", "alpha", "Alpha", None, "beta", "Gamma", "Beta"]
     result = names.sort_my_list(values)
     assert result == "alpha|Alpha|Beta|beta|Gamma"
 
 
-@pytest.mark.unit
 def test_reference_smiles__override_priority_over_table(tmp_path: Path) -> None:
     table_path = tmp_path / "Table6.csv"
     table_path.write_text(
@@ -89,14 +88,12 @@ def test_reference_smiles__override_priority_over_table(tmp_path: Path) -> None:
     assert result == "C[C@H](O)C"
 
 
-@pytest.mark.unit
 def test_reference_smiles__missing_table_raises_error(tmp_path: Path) -> None:
     missing = tmp_path / "Table6.csv"
     with pytest.raises(names.TargetNamesError, match="Reference SMILES table not found"):
         names.reference_SMILES("CHEMBL1", reference_path=missing)
 
 
-@pytest.mark.unit
 def test_reference_smiles__missing_required_columns_raises(tmp_path: Path) -> None:
     bad_table = tmp_path / "Table6.csv"
     bad_table.write_text("molecule_chembl_id\nCHEMBL1\n", encoding="utf-8")
@@ -105,7 +102,6 @@ def test_reference_smiles__missing_required_columns_raises(tmp_path: Path) -> No
         names.reference_SMILES("CHEMBL1", reference_path=bad_table)
 
 
-@pytest.mark.unit
 def test_component_rows__hydrates_salts_and_structures(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     reference_path = tmp_path / "Table6.csv"
     reference_path.write_text(
@@ -192,7 +188,6 @@ def test_component_rows__hydrates_salts_and_structures(tmp_path: Path, monkeypat
     assert second["active_component_type"] == "Complex"
 
 
-@pytest.mark.unit
 def test_component_rows__missing_identifier_raises_error() -> None:
     frame = pd.DataFrame(
         [
@@ -207,7 +202,6 @@ def test_component_rows__missing_identifier_raises_error() -> None:
         names._component_rows(frame)
 
 
-@pytest.mark.unit
 def test_process_target_names_helper__writes_byte_identical_output(tmp_path: Path) -> None:
     input_path = tmp_path / "output.target_20250101.csv"
     data = pd.DataFrame(
@@ -298,7 +292,6 @@ def test_process_target_names_helper__writes_byte_identical_output(tmp_path: Pat
     assert output_path.read_bytes() == expected_path.read_bytes()
 
 
-@pytest.mark.unit
 def test_process_target_names_helper__summary_counts(tmp_path: Path) -> None:
     input_path = tmp_path / "output.target_20250101.csv"
     frame = pd.DataFrame(
@@ -332,7 +325,6 @@ def test_process_target_names_helper__summary_counts(tmp_path: Path) -> None:
     assert summary["active_component_type"] == {"protein": 1, "complex": 1}
 
 
-@pytest.mark.unit
 def test_process_target_names_helper__verbose_logs_summary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -363,7 +355,6 @@ def test_process_target_names_helper__verbose_logs_summary(
     assert Path(result["path"]).name.startswith("names.output.target_20250101.csv")
 
 
-@pytest.mark.unit
 def test_process_target_names_helper__stable_sorting_of_duplicates(tmp_path: Path) -> None:
     input_path = tmp_path / "output.target_20250101.csv"
     pd.DataFrame(
@@ -385,7 +376,6 @@ def test_process_target_names_helper__stable_sorting_of_duplicates(tmp_path: Pat
     assert list(subset["source_column"]) == ["gene_symbol", "gene_symbol_list"]
 
 
-@pytest.mark.unit
 def test_ensure_columns__missing_required_columns_raise() -> None:
     frame = pd.DataFrame({"target_components": ["[]"]})
     with pytest.raises(names.TargetNamesError, match="missing required columns"):

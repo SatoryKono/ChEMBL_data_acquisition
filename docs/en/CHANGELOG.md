@@ -4,6 +4,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.4] - 2025-10-21
+- Harmonised the pytest layout by relocating post-processing regression suites under `tests/integration/postprocessing` and
+  updating module markers.
+- Refreshed the documentation set in both languages to reference the new structure, clarify reporting outputs and remove stale
+  references to the deprecated `tests/postprocessing` path.
+- Synced the testing handbook and runbook with the current QA checklist and added status notes to completed improvement
+  proposals.
+
 ## [0.1.3] - 2025-10-16
 - Refined hierarchy resolution to favour curated relationships and introduce safe fallbacks when source data is incomplete.
 - Extended structured INFO-level logging to cover fallback decisions so hierarchy handling remains auditable.

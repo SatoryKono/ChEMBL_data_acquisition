@@ -3,8 +3,9 @@
 The test suite is organised around the key scenarios of the ChEMBL data acquisition pipeline:
 
 - `unit/` – fast checks for isolated helpers (loading, normalisation, validation logic).
-- `integration/` – composed workflows that verify enrichment rules, schema validation and failure handling.
-- `postprocessing/` – regression tests for the standalone transformation helpers backed by snapshot fixtures.
+- `integration/` – composed workflows that verify enrichment rules, schema validation and failure handling. This directory also
+  houses `postprocessing/`, a specialised sub-package with regression suites for the standalone transformation helpers backed by
+  snapshot fixtures.
 - `e2e/` – deterministic end-to-end runs of the test-item pipeline on synthetic fixtures, including export idempotence.
 - `resources/` – small CSV snapshots used by the integration and e2e scenarios.
 
@@ -29,7 +30,7 @@ Shared fixtures live in `tests/conftest.py`. They configure a deterministic envi
 
 ## Post-processing helper coverage
 
-`tests/postprocessing/test_target_postprocessing.py` exercises the new helper modules (`helpers.py`, `cellularity.py`, `multifunctional.py`) that reproduce the Power Query logic for the target lookup. The tests assert deterministic CSV loading, taxonomy normalisation, cellularity labels, multifunctional flag derivation and byte-identical exports using the snapshots under `tests/resources/target_postprocess_power_query_*.csv`.
+`tests/integration/postprocessing/test_target_postprocessing.py` exercises the helper modules (`helpers.py`, `cellularity.py`, `multifunctional.py`) that reproduce the Power Query logic for the target lookup. The tests assert deterministic CSV loading, taxonomy normalisation, cellularity labels, multifunctional flag derivation and byte-identical exports using the snapshots under `tests/resources/target_postprocess_power_query_*.csv`.
 
 `tests/integration/test_target_postprocess_table.py` feeds the same fixtures through `helpers.postprocess_target_table_file` to validate file I/O, export naming and idempotency.
 

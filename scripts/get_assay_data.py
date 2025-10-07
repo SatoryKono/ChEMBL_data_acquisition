@@ -441,37 +441,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     ]
     if dropped_columns_report:
         logger.info(
-        "Dropped columns from output.assay_*: %s",
-        ", ".join(dropped_columns_report),
-    )
+            "Dropped columns from output.assay_*: %s",
+            ", ".join(dropped_columns_report),
+        )
     else:
         logger.info("Dropped columns from output.assay_*: <none>")
-
-
-def _generate_assay_postprocess_metrics(
-    cfg: Config,
-    output_path: Path,
-    *,
-    logger: Logger,
-    processed_rows: int | None = None,
-):
-    """Run the postprocess pipeline for metrics and emit a JSON report."""
-
-    extras: dict[str, Any] | None = None
-    if processed_rows is not None:
-        extras = {"processed_rows": processed_rows}
-
-    return collect_postprocess_metrics(
-        table="assay",
-        output_path=output_path,
-        csv_sep=cfg.io.csv_sep,
-        csv_encoding=cfg.io.csv_encoding,
-        output_dir=cfg.io.output_dir,
-        runner=run_assay_postprocess,
-        logger=logger,
-        pipeline_version=get_pipeline_version(),
-        report_extras=extras,
-    )
 
     if limit is not None:
         logger.info("process_limit", limit=processed_ids)
@@ -498,7 +472,8 @@ def _generate_assay_postprocess_metrics(
             "processed": processed_ids,
             "pipeline_version": (
                 postprocess_metrics.pipeline_version
-                if postprocess_metrics and postprocess_metrics.pipeline_version is not None
+                if postprocess_metrics
+                and postprocess_metrics.pipeline_version is not None
                 else get_pipeline_version()
             ),
         }
@@ -526,6 +501,32 @@ def _generate_assay_postprocess_metrics(
         )
 
     return exit_code
+
+
+def _generate_assay_postprocess_metrics(
+    cfg: Config,
+    output_path: Path,
+    *,
+    logger: Logger,
+    processed_rows: int | None = None,
+):
+    """Run the postprocess pipeline for metrics and emit a JSON report."""
+
+    extras: dict[str, Any] | None = None
+    if processed_rows is not None:
+        extras = {"processed_rows": processed_rows}
+
+    return collect_postprocess_metrics(
+        table="assay",
+        output_path=output_path,
+        csv_sep=cfg.io.csv_sep,
+        csv_encoding=cfg.io.csv_encoding,
+        output_dir=cfg.io.output_dir,
+        runner=run_assay_postprocess,
+        logger=logger,
+        pipeline_version=get_pipeline_version(),
+        report_extras=extras,
+    )
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
