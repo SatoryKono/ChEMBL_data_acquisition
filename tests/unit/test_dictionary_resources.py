@@ -122,3 +122,24 @@ def test_manifest_allows_windows_textmode_checksum() -> None:
     }
 
     assert expected.issubset(sha256_values)
+
+
+@pytest.mark.unit
+def test_manifest_allowlist_accepts_latest_windows_checksum() -> None:
+    """The allowlist supplements the manifest with new checksum variants."""
+
+    allowlist_path = Path("config/dictionary/manifest.allowlist.yaml")
+    payload = yaml.safe_load(allowlist_path.read_text(encoding="utf-8"))
+
+    assert "dictionary_root" in payload
+
+    entries = payload["dictionary_root"]
+    if isinstance(entries, str):
+        checksums = {entries}
+    else:
+        checksums = set(entries)
+
+    assert (
+        "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15"
+        in checksums
+    )
