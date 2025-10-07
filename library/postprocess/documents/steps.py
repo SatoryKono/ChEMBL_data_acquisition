@@ -1,6 +1,8 @@
 """Transformation steps for document postprocessing."""
 from __future__ import annotations
 
+import unicodedata
+
 import pandas as pd
  
 from library.postprocess.common import StepDefinition, run_steps
@@ -17,14 +19,32 @@ from library.postprocess.common.config import (
 from .schema import DOCUMENT_SCHEMA, validate_documents
 
 
-def normalize_document_fields(df: pd.DataFrame) -> pd.DataFrame:
+def normalize_document_fields(
+    df: pd.DataFrame,
+    *,
+    trim_whitespace: bool = True,
+    normalise_unicode: bool = False,
+) -> pd.DataFrame:
     """Normalize whitespace and casing for textual document fields."""
 
     normalized = df.copy(deep=True)
     normalized.columns = [col.strip().lower() for col in normalized.columns]
-    for column in ["title", "journal", "doc_type"]:
-        if column in normalized.columns:
-            normalized[column] = normalized[column].astype("string").str.strip()
+
+    textual_columns = ["title", "journal", "doc_type"]
+    for column in textual_columns:
+        if column not in normalized.columns:
+            continue
+        series = normalized[column].astype("string")
+        if trim_whitespace:
+            series = series.str.strip().str.replace(r"\s+", " ", regex=True)
+        if normalise_unicode:
+            series = series.map(
+                lambda value: unicodedata.normalize("NFKC", value)
+                if not pd.isna(value)
+                else value
+            )
+        normalized[column] = series.replace({"": pd.NA})
+
     return normalized
 
 
