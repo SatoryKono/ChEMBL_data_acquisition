@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from types import SimpleNamespace
-
+from library.cli.commands.get_activity_data import (
+    ActivityCommandOptions,
+    run_activity_pipeline,
+)
 from library.config import Config
 
 from library.pipelines.common import PipelineRunResult
@@ -69,8 +71,6 @@ def run_pipeline(config: Config, options: ActivityPipelineOptions) -> PipelineRu
             written=False,
         )
 
-    from scripts import get_activity_data as activity_cli  # Lazy import for cycles
-
     cfg = config.model_copy(deep=True)
     _update_activity_config(
         cfg,
@@ -81,21 +81,21 @@ def run_pipeline(config: Config, options: ActivityPipelineOptions) -> PipelineRu
         workers=options.workers,
     )
 
-    args = SimpleNamespace(
+    helper_options = ActivityCommandOptions(
         input_csv=Path(options.input_csv),
-        final_out=output_path,
         output_csv=output_path,
+        final_output=output_path,
         limit=options.limit,
         offset=options.offset,
-        timeout=options.timeout or cfg.activity.timeout,
-        batch_size=options.batch_size or cfg.activity.batch_size,
-        workers=options.workers or getattr(cfg.activity, "workers", 1),
+        timeout=options.timeout,
+        batch_size=options.batch_size,
+        workers=options.workers,
+        dry_run=options.dry_run,
         skip_existing=options.skip_existing,
         force=options.force,
-        dry_run=options.dry_run,
     )
 
-    exit_code = activity_cli.run(cfg, args)
+    exit_code = run_activity_pipeline(cfg, helper_options)
     reason = None if exit_code == 0 else "pipeline_failed"
     written = None if exit_code != 0 else True
     return PipelineRunResult(

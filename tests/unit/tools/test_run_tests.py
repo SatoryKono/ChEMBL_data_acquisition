@@ -3,32 +3,54 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import sys
 from contextlib import contextmanager
-import io
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _RUN_TESTS_PATH = _PROJECT_ROOT / "tests" / "run_tests.py"
-_SPEC = importlib.util.spec_from_file_location("tests.run_tests", _RUN_TESTS_PATH)
-if _SPEC is None or _SPEC.loader is None:  # pragma: no cover - defensive guard
-    raise RuntimeError(f"Unable to load run_tests module from {_RUN_TESTS_PATH}")
 
-run_tests = importlib.util.module_from_spec(_SPEC)
-sys.modules.setdefault("tests.run_tests", run_tests)
-_SPEC.loader.exec_module(run_tests)
+
+@pytest.fixture(name="run_tests_module")
+def fixture_run_tests_module() -> ModuleType:
+    """Load :mod:`tests.run_tests` in isolation and restore ``sys.modules`` afterwards."""
+
+    module_name = "tests.run_tests"
+    spec = importlib.util.spec_from_file_location(module_name, _RUN_TESTS_PATH)
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive guard
+        raise RuntimeError(f"Unable to load run_tests module from {_RUN_TESTS_PATH}")
+
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.modules.get(module_name)
+    sys.modules[module_name] = module
+
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(module_name, None)
+        if previous is not None:
+            sys.modules[module_name] = previous
+        raise
+
+    try:
+        yield module
+    finally:
+        sys.modules.pop(module_name, None)
+        if previous is not None:
+            sys.modules[module_name] = previous
 
 
 def _stub_git_output(_: list[str]) -> str:
     return "stub"
 
 
-def _make_record(nodeid: str, status: str) -> run_tests.TestRecord:
+def _make_record(run_tests: ModuleType, nodeid: str, status: str):
     return run_tests.TestRecord(
         nodeid=nodeid,
         status=status,
@@ -40,25 +62,29 @@ def _make_record(nodeid: str, status: str) -> run_tests.TestRecord:
 
 @pytest.mark.unit
 def test_build_json__stores_fractional_success_rate(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    run_tests_module: ModuleType,
 ) -> None:
-    _install_fake_cli_logging(monkeypatch, tmp_path)
-    monkeypatch.setattr(run_tests, "_git_output", _stub_git_output)
+    _install_fake_cli_logging(run_tests_module, monkeypatch, tmp_path)
+    monkeypatch.setattr(run_tests_module, "_git_output", _stub_git_output)
 
-    collector = run_tests.ReportCollector()
+    collector = run_tests_module.ReportCollector()
     collector.start_time = 100.0
     collector.end_time = 100.5
     collector.tests = {
         "tests/test_demo.py::test_pass": _make_record(
+            run_tests_module,
             "tests/test_demo.py::test_pass", "passed"
         ),
         "tests/test_demo.py::test_fail": _make_record(
+            run_tests_module,
             "tests/test_demo.py::test_fail", "failed"
         ),
     }
 
     report_path = tmp_path / "report.json"
-    payload = run_tests._build_json(collector, report_path=report_path)
+    payload = run_tests_module._build_json(collector, report_path=report_path)
 
     assert report_path.exists()
     saved = json.loads(report_path.read_text(encoding="utf-8"))
@@ -67,30 +93,85 @@ def test_build_json__stores_fractional_success_rate(
         assert data["summary"]["success_rate"] == pytest.approx(0.5)
 
     summary_path = tmp_path / "summary.md"
-    run_tests._write_markdown(summary_path, payload)
+    run_tests_module._write_markdown(summary_path, payload)
     summary_text = summary_path.read_text(encoding="utf-8")
 
     assert "Success rate: 50.00%" in summary_text
 
 
 @pytest.mark.unit
-def test_build_json__uses_full_success_for_empty_suite(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_build_json__counts_xfailed_and_excludes_skipped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    run_tests_module: ModuleType,
 ) -> None:
-    _install_fake_cli_logging(monkeypatch, tmp_path)
-    monkeypatch.setattr(run_tests, "_git_output", _stub_git_output)
+    _install_fake_cli_logging(run_tests_module, monkeypatch, tmp_path)
+    monkeypatch.setattr(run_tests_module, "_git_output", _stub_git_output)
 
-    collector = run_tests.ReportCollector()
+    collector = run_tests_module.ReportCollector()
+    collector.start_time = 10.0
+    collector.end_time = 10.0
+    collector.tests = {
+        "tests/test_demo.py::test_pass": _make_record(
+            run_tests_module, "tests/test_demo.py::test_pass", "passed"
+        ),
+        "tests/test_demo.py::test_skip": _make_record(
+            run_tests_module, "tests/test_demo.py::test_skip", "skipped"
+        ),
+        "tests/test_demo.py::test_xfail": _make_record(
+            run_tests_module, "tests/test_demo.py::test_xfail", "xfailed"
+        ),
+        "tests/test_demo.py::test_fail": _make_record(
+            run_tests_module, "tests/test_demo.py::test_fail", "failed"
+        ),
+        "tests/test_demo.py::test_error": _make_record(
+            run_tests_module, "tests/test_demo.py::test_error", "error"
+        ),
+        "tests/test_demo.py::test_xpass": _make_record(
+            run_tests_module, "tests/test_demo.py::test_xpass", "xpassed"
+        ),
+    }
+    collector.tests["tests/test_demo.py::test_error"].error = "boom"
+
+    report_path = tmp_path / "report.json"
+    payload = run_tests_module._build_json(collector, report_path=report_path)
+
+    summary = payload["summary"]
+    assert summary["total"] == 6
+    assert summary["passed"] == 1
+    assert summary["xfailed"] == 1
+    assert summary["skipped"] == 1
+    assert summary["failed"] == 1
+    assert summary["xpassed"] == 1
+    assert summary["error"] == 1
+    assert summary["success_rate"] == pytest.approx(0.4)
+
+    summary_path = tmp_path / "summary.md"
+    run_tests_module._write_markdown(summary_path, payload)
+    summary_text = summary_path.read_text(encoding="utf-8")
+    assert "Success rate: 40.00%" in summary_text
+
+
+@pytest.mark.unit
+def test_build_json__uses_full_success_for_empty_suite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    run_tests_module: ModuleType,
+) -> None:
+    _install_fake_cli_logging(run_tests_module, monkeypatch, tmp_path)
+    monkeypatch.setattr(run_tests_module, "_git_output", _stub_git_output)
+
+    collector = run_tests_module.ReportCollector()
     collector.start_time = 50.0
     collector.end_time = 50.0
 
     report_path = tmp_path / "report.json"
-    payload = run_tests._build_json(collector, report_path=report_path)
+    payload = run_tests_module._build_json(collector, report_path=report_path)
 
     assert payload["summary"]["success_rate"] == pytest.approx(1.0)
 
     summary_path = tmp_path / "summary.md"
-    run_tests._write_markdown(summary_path, payload)
+    run_tests_module._write_markdown(summary_path, payload)
     summary_text = summary_path.read_text(encoding="utf-8")
 
     assert "Success rate: 100.00%" in summary_text
@@ -98,15 +179,19 @@ def test_build_json__uses_full_success_for_empty_suite(
 
 @pytest.mark.unit
 def test_main__downgrades_exit_code_when_threshold_not_met(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    run_tests_module: ModuleType,
 ) -> None:
-    log_path, captured_cfgs = _install_fake_cli_logging(monkeypatch, tmp_path)
-    monkeypatch.setattr(run_tests, "_git_output", _stub_git_output)
+    log_path, captured_cfgs = _install_fake_cli_logging(
+        run_tests_module, monkeypatch, tmp_path
+    )
+    monkeypatch.setattr(run_tests_module, "_git_output", _stub_git_output)
 
     def _fake_pytest_main(pytest_args: list[str], plugins: list[object]) -> int:
         assert plugins, "Collector plugin must be provided"
         collector = plugins[0]
-        assert isinstance(collector, run_tests.ReportCollector)
+        assert isinstance(collector, run_tests_module.ReportCollector)
         assert captured_cfgs, "configure_logger should be called before pytest executes"
         assert f"--log-file={log_path}" in pytest_args
         assert f"--log-file-level={captured_cfgs[-1].level}" in pytest_args
@@ -115,21 +200,23 @@ def test_main__downgrades_exit_code_when_threshold_not_met(
         collector.end_time = 0.5
         collector.tests = {
             "tests/test_demo.py::test_pass": _make_record(
+                run_tests_module,
                 "tests/test_demo.py::test_pass", "passed"
             ),
             "tests/test_demo.py::test_fail": _make_record(
+                run_tests_module,
                 "tests/test_demo.py::test_fail", "failed"
             ),
         }
         collector.tests["tests/test_demo.py::test_fail"].error = "boom"
         return 0
 
-    monkeypatch.setattr(run_tests.pytest, "main", _fake_pytest_main)
+    monkeypatch.setattr(run_tests_module.pytest, "main", _fake_pytest_main)
 
     json_path = tmp_path / "report.json"
     markdown_path = tmp_path / "summary.md"
 
-    exit_code = run_tests.main([
+    exit_code = run_tests_module.main([
         "--json",
         str(json_path),
         "--markdown",
@@ -147,18 +234,24 @@ def test_main__downgrades_exit_code_when_threshold_not_met(
 
 
 @pytest.mark.unit
-def test_main__verbose_propagates_debug_logging(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    log_path, captured_cfgs = _install_fake_cli_logging(monkeypatch, tmp_path)
-    monkeypatch.setattr(run_tests, "_git_output", _stub_git_output)
+def test_main__verbose_propagates_debug_logging(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    run_tests_module: ModuleType,
+) -> None:
+    log_path, captured_cfgs = _install_fake_cli_logging(
+        run_tests_module, monkeypatch, tmp_path
+    )
+    monkeypatch.setattr(run_tests_module, "_git_output", _stub_git_output)
 
     def _fake_pytest_main(pytest_args: list[str], plugins: list[object]) -> int:
         assert f"--log-file={log_path}" in pytest_args
         assert f"--log-file-level=DEBUG" in pytest_args
         return 0
 
-    monkeypatch.setattr(run_tests.pytest, "main", _fake_pytest_main)
+    monkeypatch.setattr(run_tests_module.pytest, "main", _fake_pytest_main)
 
-    exit_code = run_tests.main([
+    exit_code = run_tests_module.main([
         "--json",
         str(tmp_path / "report.json"),
         "--markdown",
@@ -171,7 +264,7 @@ def test_main__verbose_propagates_debug_logging(tmp_path: Path, monkeypatch: pyt
 
 
 def _install_fake_cli_logging(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    run_tests: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> tuple[Path, list[run_tests.LoggerConfig]]:
     log_path = tmp_path / "run_tests.log"
     captured_cfgs: list[run_tests.LoggerConfig] = []

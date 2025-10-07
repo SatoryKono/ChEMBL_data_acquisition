@@ -220,13 +220,16 @@ def test_finalize_output__quality_report_failure_non_fatal(
     stats_supplier = _StatsSupplier(_base_stats())
     recorded: list[dict[str, object]] = []
 
-    def fake_analyze(*_args: object, **_kwargs: object) -> None:
-        raise RuntimeError("quality failed")
+    def fake_build_quality(*_args: object, **_kwargs: object):
+        def _hook(*__args: object, **__kwargs: object) -> None:
+            raise RuntimeError("quality failed")
+
+        return _hook
 
     def capture_failure(*_args: object, **kwargs: object) -> None:
         recorded.append(kwargs)
 
-    monkeypatch.setattr(cli, "analyze_table_quality", fake_analyze)
+    monkeypatch.setattr(cli, "build_table_quality_hook", fake_build_quality)
     monkeypatch.setattr(cli, "record_quality_failure", capture_failure)
 
     exit_code = cli.finalize_output(
@@ -255,10 +258,13 @@ def test_finalize_output__quality_report_failure_fatal(
     output_path = tmp_path / "quality_fatal.csv"
     stats_supplier = _StatsSupplier(_base_stats())
 
-    def fake_analyze(*_args: object, **_kwargs: object) -> None:
-        raise RuntimeError("quality failed")
+    def fake_build_quality(*_args: object, **_kwargs: object):
+        def _hook(*__args: object, **__kwargs: object) -> None:
+            raise RuntimeError("quality failed")
 
-    monkeypatch.setattr(cli, "analyze_table_quality", fake_analyze)
+        return _hook
+
+    monkeypatch.setattr(cli, "build_table_quality_hook", fake_build_quality)
 
     exit_code = cli.finalize_output(
         [chunk],

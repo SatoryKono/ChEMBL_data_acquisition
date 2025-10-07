@@ -7,7 +7,7 @@
 | Lint | `make lint` | Ensure formatting (`black`) and linting (`ruff`). |
 | Type check | `make typecheck` | Run `mypy` against `library/` and `scripts/`. |
 | Tests | `pytest -q --json-report --json-report-file=reports/test_report.json` | Execute entire test suite. |
-| Report summary | `python tools/make_md_summary.py reports/test_report.json reports/test_summary.md` | Produce Markdown summary for artefacts. |
+| Report summary | `make-md-summary --input reports/test_report.json --output reports/test_summary.md` | Produce Markdown summary for artefacts (paths default to `reports/`). |
 | Smoke pipelines (optional) | `make smoke` | Run orchestrator on bundled input data to ensure pipelines still succeed. |
 | Determinism (optional) | `check-determinism --baseline <prev> --candidate <curr>` | Detect unexpected output changes between runs. |
 
@@ -21,8 +21,8 @@
 
 - Upload `reports/test_report.json` and `reports/test_summary.md` from every CI run.
 - When smoke pipelines are enabled, archive output CSVs and metadata for manual QA.
-- Capture logs (`<base>/logs/*.log`, `<base>` defaults to `data`) to simplify
-  debugging.
+- Capture logs (`logs/*.log` by default; override with
+  `CHEMBL_DA_BASE_PATH=<base>` to use `<base>/logs`) to simplify debugging.
 
 ## Branching model
 

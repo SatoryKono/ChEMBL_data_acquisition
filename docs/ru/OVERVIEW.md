@@ -61,7 +61,7 @@
 | `table-quality` | `library.utils.cli_tools.table_quality_main:main` | Формирует отчёты качества по колонкам. |
 | `chunk-io` | `library.utils.cli_tools.chunk_io_main:main` | Потоковое чтение/запись CSV с сохранением порядка. |
 | `get-input-initialisation` | `library.utils.cli_tools.get_input_initialisation:main` | Объединяет Excel-книги инициализации. |
-| `get-activities` | `library.utils.cli_tools.get_activities:main` | Генерирует синтетические активности для смоук-тестов. |
+| `get-activities` | `library.utils.cli_tools.get_activities:main` | Генерирует синтетические активности и детерминированные CSV + `.meta.yaml` артефакты для смоук-тестов. |
 | `check-determinism` | `library.utils.cli_tools.check_determinism:main` | Сравнивает хэши CSV между запусками. |
 
 Подробные сценарии приведены в [`USAGE.md`](./USAGE.md) и английской
@@ -71,7 +71,7 @@
 
 | Компонент | Поддерживаемый диапазон | Последняя проверка |
 |-----------|-------------------------|--------------------|
-| Python | 3.11.x | 3.11.12 |
+| Python | 3.11.x-3.12.x | 3.12.3 |
 | numpy | >=2.3.3,<3.0 | 2.3.3 |
 | pandas | >=2.3.3,<3.0 | 2.3.3 |
 | requests | >=2.32.5,<3.0 | 2.32.5 |

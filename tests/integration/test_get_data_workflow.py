@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import io
-import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,11 +10,13 @@ from typing import Callable
 import pandas as pd
 import pytest
 
-from library.config import Config
+from library.config import Config, ConfigLoaderError
 from library.pipelines.common import PipelineRunResult
 from scripts import get_data, get_target_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_lines
+from tests.helpers.manifests import load_latest_manifest, list_manifest_files
+from pydantic import BaseModel, ValidationError
 
 
 def _build_stub_api(
@@ -74,6 +75,7 @@ def _prepare_environment(tmp_path: Path) -> get_data.PipelineRunConfig:
     config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
     input_files = dict(get_data.DEFAULT_INPUT_FILES)
     output_stems = dict(get_data.DEFAULT_OUTPUT_STEMS)
+    subcommands = {step.name: step.subcommand for step in get_data.DEFAULT_PIPELINE_STEPS}
     return get_data.PipelineRunConfig(
         base_path=base_path,
         input_dir=input_dir,
@@ -87,6 +89,7 @@ def _prepare_environment(tmp_path: Path) -> get_data.PipelineRunConfig:
         dry_run=False,
         input_files=input_files,
         output_stems=output_stems,
+        subcommands=subcommands,
     )
 
 
@@ -97,9 +100,19 @@ def _write_input(cfg: get_data.PipelineRunConfig, name: str, frame: pd.DataFrame
 
 
 def _load_manifest(cfg: get_data.PipelineRunConfig) -> dict[str, object]:
-    manifest_path = cfg.base_path / "reports" / "run_manifest.json"
-    assert manifest_path.exists(), "expected run manifest to be created"
-    return json.loads(manifest_path.read_text(encoding="utf-8"))
+    _, manifest = load_latest_manifest(cfg.base_path)
+    return manifest
+
+
+def _make_validation_error() -> ValidationError:
+    class _DummyModel(BaseModel):
+        value: int
+
+    try:
+        _DummyModel.model_validate({"value": "boom"})
+    except ValidationError as exc:  # pragma: no cover - control flow
+        return exc
+    raise AssertionError("expected ValidationError")
 
 
 @pytest.mark.integration
@@ -139,6 +152,12 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
         get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
     )
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+    monkeypatch.setattr(
+        get_data,
+        "load_config",
+        lambda *args, **kwargs: Config(),
+        raising=False,
+    )
     monkeypatch.setattr(get_data, "_PIPELINE_APIS", {"document": api}, raising=False)
 
     steps = (step,)
@@ -149,6 +168,8 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
     assert list(output_frame["document_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
     logs = parse_log_lines(stream.getvalue())
     assert any(record.get("event") == "duplicates_detected" for record in logs)
+    manifests_after_success = list_manifest_files(cfg.base_path)
+    assert len(manifests_after_success) == 1
     manifest_success = _load_manifest(cfg)
     assert manifest_success["run"]["exit_code"] == 0
     assert manifest_success["steps"][0]["status"] == "success"
@@ -164,11 +185,67 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
     assert status_malformed == 1
     logs = parse_log_lines(stream.getvalue())
     assert any(record.get("event") == "schema_mismatch" for record in logs)
+    manifests_after_failure = list_manifest_files(cfg.base_path)
+    assert len(manifests_after_failure) == 2
     manifest_failure = _load_manifest(cfg)
     assert manifest_failure["run"]["exit_code"] == 1
     assert manifest_failure["steps"][0]["status"] == "failed"
     assert manifest_failure["steps"][0]["reason"] == "schema_mismatch"
     assert manifest_failure["steps"][0]["output"]["exists"] is False
+
+
+@pytest.mark.integration
+def test_run_pipeline__config_loader_error_handled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _prepare_environment(tmp_path)
+    stream = io.StringIO()
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="config-error")
+    )
+    monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+
+    error = ConfigLoaderError("failed to load configuration")
+
+    def _raise_config_error(*_args: object, **_kwargs: object) -> Config:
+        raise error
+
+    monkeypatch.setattr(get_data, "load_config", _raise_config_error, raising=False)
+
+    status = get_data.run_pipeline(cfg, steps=())
+
+    assert status == 1
+    log_text = stream.getvalue()
+    assert "config_load_failed" in log_text
+    assert "pipeline_done exit_code=1" in log_text
+    assert list_manifest_files(cfg.base_path) == []
+
+
+@pytest.mark.integration
+def test_run_pipeline__validation_error_handled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _prepare_environment(tmp_path)
+    stream = io.StringIO()
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="validation-error")
+    )
+    monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+
+    validation_error = _make_validation_error()
+
+    def _raise_validation_error(*_args: object, **_kwargs: object) -> Config:
+        raise validation_error
+
+    monkeypatch.setattr(get_data, "load_config", _raise_validation_error, raising=False)
+
+    status = get_data.run_pipeline(cfg, steps=())
+
+    assert status == 1
+    log_text = stream.getvalue()
+    assert "config_load_failed" in log_text
+    assert "pipeline_done exit_code=1" in log_text
+    assert list_manifest_files(cfg.base_path) == []
 
 
 @pytest.mark.integration
@@ -239,6 +316,185 @@ def test_pipeline_subset__skip_existing_and_force(tmp_path: Path, monkeypatch: p
     manifest_force = _load_manifest(cfg_force)
     assert manifest_force["steps"][0]["status"] == "success"
     assert manifest_force["steps"][0]["output"]["exists"] is True
+
+
+@pytest.mark.integration
+def test_run_pipeline__target_override_invokes_target_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
+
+    args = SimpleNamespace(
+        base_path=base_path,
+        input_dir=Path("input"),
+        output_dir=Path("output"),
+        config=config_path,
+        date_prefix="20200101",
+        log_level="INFO",
+        verbose=False,
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        pipeline_registry=None,
+        override_input=[],
+        override_output_stem=[],
+        override_subcommand=["target=uniprot"],
+    )
+
+    steps = get_data._resolve_pipeline_steps(args)
+    cfg = get_data._prepare_config(args, steps)
+    assert cfg.subcommand_for("target") == "uniprot"
+
+    target_input = cfg.input_path("target")
+    pd.DataFrame(
+        [
+            {"target_chembl_id": "CHEMBLT1", "name": "Target", "organism": "Human"},
+        ]
+    ).to_csv(target_input, index=False)
+
+    target_step = next(step for step in steps if step.name == "target")
+
+    stream = io.StringIO()
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
+    )
+    monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+    monkeypatch.setattr(
+        get_data,
+        "load_config",
+        lambda *args, **kwargs: Config(),
+        raising=False,
+    )
+
+    commands: list[str] = []
+
+    def _fake_run_target_pipeline(
+        config: Config, options: object
+    ) -> PipelineRunResult:
+        command = getattr(options, "command")
+        commands.append(command)
+        assert command == "uniprot"
+        destination = Path(getattr(options, "output_csv"))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(
+            [
+                {
+                    "target_chembl_id": "CHEMBLT1",
+                    "name": "Target",
+                    "organism": "Human",
+                }
+            ]
+        ).to_csv(destination, index=False)
+        return PipelineRunResult(
+            exit_code=0,
+            output_path=destination,
+            executed=True,
+            reason=None,
+            written=True,
+        )
+
+    monkeypatch.setattr(
+        get_data,
+        "_PIPELINE_APIS",
+        {"target": get_data.PipelineApi(get_data._build_target_options, _fake_run_target_pipeline)},
+        raising=False,
+    )
+
+    status = get_data.run_pipeline(cfg, steps=(target_step,))
+
+    assert status == 0
+    assert commands == ["uniprot"]
+    final_output = cfg.output_path("target")
+    assert final_output.exists()
+
+
+@pytest.mark.integration
+def test_pipeline_subset__testitem_skip_existing_avoids_parent_warm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _prepare_environment(tmp_path)
+    _write_input(
+        cfg,
+        "testitem",
+        pd.DataFrame(
+            [
+                {"testitem_chembl_id": "CHEMBLT1", "compound_key": "A"},
+                {"testitem_chembl_id": "CHEMBLT2", "compound_key": "B"},
+            ],
+            dtype="string",
+        ),
+    )
+
+    executions: list[int] = []
+
+    def _on_execute(rows: pd.DataFrame, destination: Path) -> int:
+        executions.append(len(rows))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        rows.to_csv(destination, index=False)
+        return 0
+
+    api = _build_stub_api(
+        required_columns=["testitem_chembl_id", "compound_key"],
+        key_column="testitem_chembl_id",
+        on_execute=_on_execute,
+    )
+
+    step = get_data.PipelineStep(
+        name="testitem",
+        main=lambda _: 0,
+        input_filename="testitem.csv",
+        output_stem="testitems",
+    )
+
+    stream = io.StringIO()
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration")
+    )
+
+    warm_calls: list[tuple[get_data.PipelineRunConfig, object]] = []
+
+    def _record_warm(
+        current_cfg: get_data.PipelineRunConfig, base_config: object
+    ) -> None:
+        warm_calls.append((current_cfg, base_config))
+
+    monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+    monkeypatch.setattr(get_data, "_PIPELINE_APIS", {"testitem": api}, raising=False)
+    monkeypatch.setattr(get_data, "_warm_parent_catalog", _record_warm, raising=False)
+
+    status_first = get_data.run_pipeline(cfg, steps=(step,))
+    assert status_first == 0
+    assert executions == [2]
+    assert len(warm_calls) == 1
+
+    final_output = step.expected_output(cfg)
+    assert final_output.exists()
+
+    cfg_skip = replace(cfg, skip_existing=True)
+    status_second = get_data.run_pipeline(cfg_skip, steps=(step,))
+    assert status_second == 0
+    assert executions == [2]
+    assert len(warm_calls) == 1
+
+    logs = parse_log_lines(stream.getvalue())
+    assert any(
+        record.get("event") == "step_skipped_existing"
+        and record.get("data", {}).get("step") == "testitem"
+        for record in logs
+    )
+
+    manifest_skip = _load_manifest(cfg_skip)
+    skip_entry = manifest_skip["steps"][0]
+    assert skip_entry["status"] == "skipped"
+    assert skip_entry["reason"] == "skip_existing"
+    assert skip_entry["executed"] is False
 
 
 @pytest.mark.integration
@@ -326,7 +582,7 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
     manifest_failure = _load_manifest(cfg)
     failure_entry = manifest_failure["steps"][0]
     assert failure_entry["status"] == "failed"
-    assert failure_entry["reason"] == "non_zero_exit"
+    assert failure_entry["reason"] == "pipeline_failed"
     assert failure_entry["output"]["exists"] is False
 
     sentinel.unlink()

@@ -1180,6 +1180,11 @@
     "IupharCfg": {
       "additionalProperties": false,
       "properties": {
+        "enable": {
+          "default": true,
+          "title": "Enable",
+          "type": "boolean"
+        },
         "base": {
           "default": "https://www.guidetopharmacology.org/services",
           "title": "Base",
@@ -1499,6 +1504,18 @@
           ],
           "default": null,
           "title": "Burst"
+        },
+        "tool": {
+          "default": "chembl-da",
+          "minLength": 1,
+          "title": "Tool",
+          "type": "string"
+        },
+        "email": {
+          "default": "chembl-data@ebi.ac.uk",
+          "pattern": "[^@\\s]+@[^@\\s]+\\.[^@\\s]+",
+          "title": "Email",
+          "type": "string"
         }
       },
       "title": "PubMedCfg",
@@ -2027,6 +2044,11 @@
           "format": "path",
           "title": "Data Dir",
           "type": "string"
+        },
+        "enable_gtop": {
+          "default": true,
+          "title": "Enable Gtop",
+          "type": "boolean"
         }
       },
       "title": "TargetUniprotCfg",

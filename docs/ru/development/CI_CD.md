@@ -7,7 +7,7 @@
 | Lint | `make lint` | Проверка формата (`black`) и стиля (`ruff`). |
 | Type check | `make typecheck` | `mypy` для `library/` и `scripts/`. |
 | Tests | `pytest -q --json-report --json-report-file=reports/test_report.json` | Полный прогон тестов. |
-| Report summary | `python tools/make_md_summary.py reports/test_report.json reports/test_summary.md` | Генерация Markdown-отчёта. |
+| Report summary | `make-md-summary --input reports/test_report.json --output reports/test_summary.md` | Генерация Markdown-отчёта (пути по умолчанию — `reports/`). |
 | Smoke (опция) | `make smoke` | Запуск оркестратора на тестовых данных. |
 | Determinism (опция) | `check-determinism --baseline <prev> --candidate <curr>` | Проверка изменений CSV между прогоном. |
 
@@ -21,8 +21,8 @@
 
 - Загружайте `reports/test_report.json` и `reports/test_summary.md`.
 - При smoke-запуске архивируйте выходные CSV и метаданные.
-- Сохраняйте логи `<base>/logs/*.log` (по умолчанию `<base>` — `data`) для
-  диагностики.
+- Сохраняйте логи `logs/*.log` (по умолчанию) или `<base>/logs`, если задана
+  `CHEMBL_DA_BASE_PATH`, для диагностики.
 
 ## Ветвление
 

@@ -22,6 +22,7 @@ del bootstrap_cli
 
 # ruff: noqa: E402
 import argparse
+import os
 import sys
 import shutil
 from collections.abc import Iterator, Mapping, Sequence
@@ -31,6 +32,7 @@ import math
 from inspect import signature
 from itertools import islice
 from pathlib import Path
+import stat
 from typing import IO, Any, cast
 
 from datetime import datetime, timezone
@@ -72,6 +74,7 @@ from library.common.csv_utils import write_csv_deterministic
 from library.common.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipelines.common import add_pipeline_metadata
+from library.pipelines.common.metadata import get_pipeline_version
 from library import SidecarErrors
 from library.qa.reporting import build_table_quality_hook, is_quality_enabled
 from library.validation import ValidationResult
@@ -81,6 +84,8 @@ from library.schemas.targets import TARGETS_COLUMN_ORDER
 
 from library.postprocessing import target as target_pp
 from library.postprocessing import names as names_pp
+from library.postprocess.targets import run_target_pipeline as run_target_postprocess
+from library.postprocess.common import collect_postprocess_metrics
 
 try:
     from library.postprocessing import iuphar as iuphar_pp
@@ -1131,6 +1136,35 @@ def _raw_output_path(base: Path) -> Path:
     return base.with_name(f"{base.stem}{RAW_SUFFIX}{suffix}")
 
 
+def _prepare_raw_destination(destination: Path) -> None:
+    """Ensure the raw dump destination can be written to safely."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if not destination.exists():
+        return
+
+    try:
+        destination.unlink()
+    except PermissionError:
+        writable_mode = stat.S_IRUSR | stat.S_IWUSR
+        writable_mode |= getattr(stat, "S_IWRITE", 0)
+        try:
+            os.chmod(destination, writable_mode)
+        except OSError as exc:  # pragma: no cover - defensive guard
+            raise OSError(
+                f"failed to prepare raw dump destination: {exc}"
+            ) from exc
+
+        try:
+            destination.unlink()
+        except OSError as exc:
+            raise OSError(
+                f"failed to prepare raw dump destination: {exc}"
+            ) from exc
+    except OSError as exc:  # pragma: no cover - defensive guard
+        raise OSError(f"failed to prepare raw dump destination: {exc}") from exc
+
+
 class _RawDumpStreamWriter:
     """Stream ChEMBL raw payloads to disk without accumulating chunks."""
 
@@ -1148,7 +1182,7 @@ class _RawDumpStreamWriter:
         self._rows_written = 0
         self._columns: list[str] | None = None
         self._frames: list[pd.DataFrame] | None = [] if self._is_parquet else None
-        self.destination.parent.mkdir(parents=True, exist_ok=True)
+        _prepare_raw_destination(destination)
         self._destination_opened = False
 
     @property
@@ -1627,6 +1661,18 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         ),
     )
     uniprot.set_defaults(func=run_uniprot)
+    uniprot.set_defaults(disable_gtop=False)
+
+    uniprot_network = uniprot.add_argument_group("Network controls")
+    uniprot_network.add_argument(
+        "--disable-gtop",
+        dest="disable_gtop",
+        action="store_true",
+        help=(
+            "Skip Guide-to-Pharmacology enrichment when retrieving UniProt "
+            "data to avoid external HTTP requests"
+        ),
+    )
 
     # ----------------------------
     # ChEMBL sub-command
@@ -1717,6 +1763,16 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         dest="iuphar_out",
         type=path_argument,
         help="Optional path to save intermediate IUPHAR data",
+    )
+    network_group = all_cmd.add_argument_group("Network controls")
+    network_group.add_argument(
+        "--disable-gtop",
+        dest="disable_gtop",
+        action="store_true",
+        help=(
+            "Skip Guide-to-Pharmacology enrichment during the combined "
+            "pipeline to avoid external HTTP requests"
+        ),
     )
     all_sources = all_cmd.add_argument_group("Data sources")
     all_sources.add_argument(
@@ -1911,6 +1967,7 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         ),
     )
     all_cmd.set_defaults(func=run_all)
+    all_cmd.set_defaults(disable_gtop=False)
 
     parser.subparsers_map = {  # type: ignore[attr-defined]
         "uniprot": uniprot,
@@ -1942,6 +1999,25 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         derived artefacts. Input validation errors are logged and converted into
         a failure code.
     """
+    disable_gtop_cli = bool(getattr(args, "disable_gtop", False))
+    gtop_enabled = (
+        cfg.target.uniprot.enable_gtop
+        and getattr(cfg.iuphar, "enable", True)
+        and not disable_gtop_cli
+    )
+    if not gtop_enabled:
+        if disable_gtop_cli:
+            reason = "cli"
+        elif not cfg.target.uniprot.enable_gtop:
+            reason = "config"
+        else:
+            reason = "source"
+        logger.info("gtop_enrichment_disabled", reason=reason)
+        gtop_cfg = cfg.iuphar.model_copy()
+        gtop_cfg.enable = False
+    else:
+        gtop_cfg = cfg.iuphar
+
     limit = cfg.target.uniprot.limit
     if limit is not None and limit < 1:
         logger.error(
@@ -2007,7 +2083,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
                 output_csv=str(output_path),
                 data_dir=data_dir,
                 cfg=cfg.uniprot,
-                gtop_cfg=cfg.iuphar,
+                gtop_cfg=gtop_cfg,
                 sep=cfg.io.csv_sep,
                 encoding=cfg.io.csv_encoding,
             )
@@ -2059,7 +2135,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error(
             "uniprot_processing_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             input=str(args.input_csv),
             output=str(output_path) if output_path is not None else None,
         )
@@ -2140,7 +2216,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
             "read_fail",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             path=str(args.input_csv),
         )
         return 1
@@ -2229,7 +2305,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             except (requests.RequestException, ValueError) as exc:
                 logger.error(
                     "chembl_fetch_failed",
-                    error=str(exc),
+                    error=str(exc), exc_info=exc,
                     chunk_size=cfg.target.chembl.chunk_size,
                     timeout=cfg.target.chembl.timeout,
                 )
@@ -2279,7 +2355,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             except OSError as exc:
                 logger.error(
                     "raw_to_final_copy_failed",
-                    error=str(exc),
+                    error=str(exc), exc_info=exc,
                     source=str(raw_destination),
                     destination=str(destination),
                 )
@@ -2401,7 +2477,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     except OSError as exc:
                         logger.error(
                             "raw_dump_failed",
-                            error=str(exc),
+                            error=str(exc), exc_info=exc,
                             path=str(raw_destination),
                         )
                         raise PipelineError(str(exc)) from exc
@@ -2412,7 +2488,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         except (requests.RequestException, ValueError) as exc:
             logger.error(
                 "chembl_fetch_failed",
-                error=str(exc),
+                error=str(exc), exc_info=exc,
                 chunk_size=cfg.target.chembl.chunk_size,
                 timeout=cfg.target.chembl.timeout,
             )
@@ -2559,7 +2635,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     try:
         raw_dump_writer.finalize()
     except OSError as exc:
-        logger.error("raw_dump_failed", error=str(exc), path=str(raw_destination))
+        logger.error("raw_dump_failed", error=str(exc), exc_info=exc, path=str(raw_destination))
         return 1
 
     if limit is not None:
@@ -2689,7 +2765,7 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error(
             "iuphar_processing_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             input=str(source_csv),
             target_csv=str(cfg.target.iuphar.target_csv),
             family_csv=str(cfg.target.iuphar.family_csv),
@@ -3767,7 +3843,50 @@ def validate_and_write(
                 exc=exc,
             )
             return 1
-    logger.info("validate_write_done", rows=len(final_df))
+
+    report_extras: dict[str, object] = {
+        "input_rows": input_rows,
+        "normalized_rows": normalized_rows,
+        "final_rows": len(final_df),
+        "total_dropped": total_dropped,
+        "ambiguous_classifications": ambiguous_count,
+    }
+    metrics, report_path = collect_postprocess_metrics(
+        table="target",
+        output_path=output,
+        csv_sep=cfg.io.csv_sep,
+        csv_encoding=cfg.io.csv_encoding,
+        output_dir=cfg.io.output_dir,
+        runner=run_target_postprocess,
+        logger=logger,
+        pipeline_version=get_pipeline_version(),
+        report_extras=report_extras,
+    )
+    pipeline_version_value = (
+        metrics.pipeline_version
+        if metrics and metrics.pipeline_version is not None
+        else get_pipeline_version()
+    )
+    payload: dict[str, object] = {
+        "rows": len(final_df),
+        "output": str(output),
+        "pipeline_version": pipeline_version_value,
+    }
+    if metrics is not None:
+        summary = metrics.summary()
+        if summary.get("rows") is not None:
+            payload["postprocess_rows"] = summary["rows"]
+        if summary.get("columns") is not None:
+            payload["postprocess_columns"] = summary["columns"]
+        if summary.get("duration_s") is not None:
+            payload["postprocess_duration_s"] = summary["duration_s"]
+        if summary.get("steps") is not None:
+            payload["postprocess_steps"] = summary["steps"]
+        if metrics.validation is not None:
+            payload["postprocess_schema"] = metrics.validation.schema
+    if report_path is not None:
+        payload["postprocess_report"] = str(report_path)
+    logger.info("validate_write_done", **payload)
     return exit_code
 
 
@@ -3799,6 +3918,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 1
 
+    disable_gtop_cli = bool(getattr(args, "disable_gtop", False))
+    original_enable_gtop = cfg.target.uniprot.enable_gtop
+    if disable_gtop_cli:
+        cfg.target.uniprot.enable_gtop = False
     try:
         final_candidate = getattr(args, "final_out", None)
         if final_candidate in (None, argparse.SUPPRESS):
@@ -3857,12 +3980,14 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         logger.error(
             "pipeline_step_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             step="all",
             input=str(args.input_csv),
             output=str(final_output),
         )
         return 1
+    finally:
+        cfg.target.uniprot.enable_gtop = original_enable_gtop
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
@@ -4045,7 +4170,7 @@ class TargetPipelineCLI(PipelineCLIBase):
                 )
         except PipelineError as exc:
             exit_code = 2
-            logger.error("pipeline_error", error=str(exc))
+            logger.error("pipeline_error", error=str(exc), exc_info=exc)
             print(f"[ERROR] {exc}", file=console_stream, flush=True)
         return exit_code
 

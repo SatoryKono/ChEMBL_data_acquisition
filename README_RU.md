@@ -76,22 +76,23 @@ python scripts/get_data.py \
 
 | Команда | Пример запуска | Особенности |
 |---------|----------------|-------------|
-| Оркестратор | `python scripts/get_data.py --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --dry-run` | Запускает всю цепочку один раз, прокидывая `--limit`, `--force`, `--skip-existing` и `--dry-run` на отдельные этапы. |
+| Оркестратор | `python scripts/get_data.py --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --dry-run` | Запускает всю цепочку один раз, прокидывая `--limit`, `--force`, `--skip-existing` и `--dry-run` на отдельные этапы. Дополнительно поддерживает `--pipeline-registry` для загрузки альтернативных определений шагов и `--override-{input,output-stem,subcommand}` для точечных переопределений. |
 | Document | `python scripts/get_document_data.py --mode all --input data/input/document.csv --final-out output/documents.csv --fallback-doi-enabled --fallback-doi-path data/input/fallback.csv --openalex-rps 2` | Поддерживает режимы `chembl`, `pubmed`, `all`, настройку размера батчей и CSV с резервными DOI. |
 | Target | `python scripts/get_target_data.py all --input data/input/target.csv --final-out output/targets.csv --chembl-chunk-size 10 --uniprot-data-dir cache/uniprot --raw-out output/targets_raw.parquet --raw-format parquet` | Подкоманды (`uniprot`, `chembl`, `iuphar`, `all`) принимают префиксные оверрайды и позволяют сохранять «сырые» выгрузки. |
 | Assay | `python scripts/get_assay_data.py --input data/input/assay.csv --final-out output/assays.csv --chunk-size 25 --timeout 45` | Требует словари assay, taxonomy и target в `config/dictionary` для обогащения полей `assay_group`, `assay_strain`, `year` и `accession` перед нормализацией; общие флаги плюс настройка размера пачки и таймаута запросов. |
 | Test item | `python scripts/get_testitem_data.py --input data/input/testitem.csv --final-out output/testitems.csv --request-limit 500 --hierarchy-path config/dictionary/_testitem/molecule_hierarchy.csv` | Управляет обогащением родительских молекул и лимитами запросов (`--request-limit`, `--batch-size`, `--dry-run`). |
 | Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto` | Загружает метаданные тканей, объединяет онтологические кросс-ссылки и нормализует синонимы. Запускается отдельно перед `get_activity_data`, когда нужны справочники тканей. |
 | Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --final-out output/cellline.csv --batch-size 20 --limit 100` | Выгружает данные по клеточным линиям из ChEMBL, нормализует идентификаторы и формирует стабильный CSV. |
-| Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --action-type-enabled --bounds-enabled --quality-threshold warn` | Включает обогащения (`--action-type-enabled`, `--bounds-enabled`), расчёт границ и пороги QA. |
+| Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --timeout 120 --limit 500 --offset 100 --workers 4 --dry-run` | Флаги: `--timeout`, `--limit`, `--offset`, `--dry-run`, `--workers`. |
+| Синтетические активности | `python scripts/get_activities.py --limit 25 --dry-run` | Генерирует детерминированные тестовые строки для смоук-тестов и поддерживает те же флаги логирования, что и остальные CLI. |
 
 Каждый пайплайн сохраняет детерминированный CSV, файл метаданных
 `<имя>.meta.yaml` и отчёты качества в том же каталоге. Таргет-пайплайн также
 создаёт вспомогательные таблицы `organism.output.target_<stamp>.csv`,
 `isoform.output.target_<stamp>.csv`, `names.output.target_<stamp>.csv` и
 `IUPHAR.output.target_<stamp>.csv`, которые подробно описаны в
-[`docs/OUTPUT_TARGETS_RU.md`](./docs/OUTPUT_TARGETS_RU.md) и
-[`docs/OUTPUT_TARGETS_EN.md`](./docs/OUTPUT_TARGETS_EN.md). Полную спецификацию
+[`docs/ru/OUTPUT_TARGETS.md`](./docs/ru/OUTPUT_TARGETS.md) и
+[`docs/en/OUTPUT_TARGETS.md`](./docs/en/OUTPUT_TARGETS.md). Полную спецификацию
 см. в [`docs/ru/OUTPUT.md`](./docs/ru/OUTPUT.md).
 
 ## Документация
@@ -107,6 +108,8 @@ python scripts/get_data.py \
   [`docs/ru/guides/DEBUGGING.md`](./docs/ru/guides/DEBUGGING.md),
   [`docs/ru/guides/FAQ.md`](./docs/ru/guides/FAQ.md) и зеркальные английские версии в
   `docs/en/guides/`
+- Руководство по постобработке: [`docs/ru/guides/POSTPROCESSING_RUNBOOK.md`](./docs/ru/guides/POSTPROCESSING_RUNBOOK.md),
+  [`docs/en/guides/POSTPROCESSING_RUNBOOK.md`](./docs/en/guides/POSTPROCESSING_RUNBOOK.md)
 - Конфигурация: [`docs/ru/CONFIG.md`](./docs/ru/CONFIG.md),
   [`docs/en/CONFIG.md`](./docs/en/CONFIG.md)
 - Спецификация выходных данных и правила валидации:
@@ -126,6 +129,52 @@ python scripts/get_data.py \
 - `reports/test_report.json` — машинно читаемый протокол
 - `reports/test_summary.md` — краткое Markdown-резюме
 
+`test_report.json` всегда содержит три корневых секции:
+
+```json
+{
+  "meta": {
+    "repo": "SatoryKono/ChEMBL_data_acquisition",
+    "commit": "<SHA>",
+    "branch": "<branch>",
+    "ts_utc": "<ISO8601>",
+    "duration_sec": 0.0,
+    "python": "3.11|3.12",
+    "pytest": "<version>",
+    "exit_code": 0
+  },
+  "summary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0,
+    "error": 0,
+    "success_rate": 0.0
+  },
+  "tests": [
+    {
+      "nodeid": "tests/unit/test_module.py::test_case",
+      "status": "passed",
+      "duration_ms": 12.3,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    }
+  ]
+}
+```
+
+`test_summary.md` дублирует агрегированные показатели и для каждого падения или
+ошибки выводит значение поля `error` из JSON в виде блока кода. Этого достаточно,
+чтобы диагностировать проблему, имея только Markdown-отчёт.
+
 Для смоук-прогона подойдёт `pytest -q -k "not slow and not e2e"`, полный набор —
 `pytest -q`. Детали фикстур, требований к детерминизму и целям по покрытию см. в
 [`docs/ru/development/TESTING.md`](./docs/ru/development/TESTING.md).
+
+## Лицензия
+
+Проект распространяется по [лицензии MIT](./LICENSE).

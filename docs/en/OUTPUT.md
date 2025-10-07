@@ -21,7 +21,7 @@ These artefacts support reproducibility and downstream QA pipelines.
 
 ## Document export (`documents`)
 
-Schema: [`library/schemas/documents.py`](../library/schemas/documents.py).
+Schema: [`library/schemas/documents.py`](../../library/schemas/documents.py).
 
 ### ChEMBL base columns
 
@@ -121,7 +121,7 @@ E-utilities payload and may contain structured lists encoded as strings.
 
 ## Target export (`targets`)
 
-Schema: [`library/schemas/targets.py`](../library/schemas/targets.py). Column
+Schema: [`library/schemas/targets.py`](../../library/schemas/targets.py). Column
 order follows `TARGETS_COLUMN_ORDER`.
 
 ### Core identifiers and naming
@@ -140,6 +140,22 @@ order follows `TARGETS_COLUMN_ORDER`.
 | `organism` | string | Organism name. |
 | `tax_id` | string | NCBI taxonomy ID from ChEMBL. |
 | `taxon_id` | string/int | Taxonomy ID from UniProt payload. |
+
+### Optional classification summary
+
+The modular post-processing pipeline for targets
+(`library.postprocess.targets.run_target_pipeline`) validates an aggregated view
+that powers QA metrics and downstream consumers needing concise taxonomy
+labels. The helper is invoked automatically after the canonical CSV is written
+and enforces the schema defined in
+`library/postprocess/targets/schema.py`.
+
+| Column | Description |
+|--------|-------------|
+| `target_class` | Primary classification extracted from the ChEMBL protein classes. |
+| `protein_family` | First-level protein family description surfaced during aggregation. |
+| `synonyms` | Deterministically ordered synonym list combining preferred names, component descriptions and alternative names. |
+| `pipeline_version` | Version recorded by the post-processing runner (may differ from the export when executed independently). |
 
 ### UniProt accession data
 
@@ -218,7 +234,7 @@ order follows `TARGETS_COLUMN_ORDER`.
 
 ## Assay export (`assays`)
 
-Schema: [`library/schemas/assays.py`](../library/schemas/assays.py).
+Schema: [`library/schemas/assays.py`](../../library/schemas/assays.py).
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -246,7 +262,7 @@ Schema: [`library/schemas/assays.py`](../library/schemas/assays.py).
 
 ## Activity export (`activities`)
 
-Schema: [`library/schemas/activities.py`](../library/schemas/activities.py).
+Schema: [`library/schemas/activities.py`](../../library/schemas/activities.py).
 
 | Column | Type | Validation |
 |--------|------|-----------|
@@ -280,7 +296,7 @@ Schema: [`library/schemas/activities.py`](../library/schemas/activities.py).
 
 ## Test item export (`testitems`)
 
-Schema: [`library/schemas/testitems.py`](../library/schemas/testitems.py).
+Schema: [`library/schemas/testitems.py`](../../library/schemas/testitems.py).
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -306,7 +322,7 @@ Schema: [`library/schemas/testitems.py`](../library/schemas/testitems.py).
 
 ## Tissue export (`tissues`)
 
-Schema: [`library/schemas/tissues.py`](../library/schemas/tissues.py). Column
+Schema: [`library/schemas/tissues.py`](../../library/schemas/tissues.py). Column
 ordering follows `TISSUES_COLUMN_ORDER`.
 
 ### Columns
@@ -338,7 +354,7 @@ ordering follows `TISSUES_COLUMN_ORDER`.
 
 ## Cell line export (`cellline`)
 
-Schema: [`library/schemas/celllines.py`](../library/schemas/celllines.py). The
+Schema: [`library/schemas/celllines.py`](../../library/schemas/celllines.py). The
 columns follow `CELL_LINE_COLUMN_ORDER` and include the pipeline metadata
 (`pipeline_version`, `timestamp_utc`).
 

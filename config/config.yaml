@@ -215,6 +215,8 @@ sources:
     retries: 2  # (env: CHEMBL_DA_PUBMED_RETRIES)
     rps: null  # Optional requests-per-second override for document acquisition
     burst: null  # Optional burst override for document acquisition
+    tool: "chembl-da"  # (env: CHEMBL_DA_PUBMED_TOOL)
+    email: "chembl-data@ebi.ac.uk"  # Contact email required by NCBI (env: CHEMBL_DA_PUBMED_EMAIL)
   semantic_scholar:
     base: "https://api.semanticscholar.org/graph/v1"  # Semantic Scholar API root (env: CHEMBL_DA__SOURCES__SEMANTIC_SCHOLAR__BASE)
     timeout_connect: 5  # (env: CHEMBL_DA_SEMANTIC_SCHOLAR_TIMEOUT_CONNECT)

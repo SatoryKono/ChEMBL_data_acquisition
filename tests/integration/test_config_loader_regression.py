@@ -23,6 +23,7 @@ def test_load_config__default_configuration_roundtrip(monkeypatch, tmp_path):
     rps_metadata = metadata.get("sources.chembl.api.rps")
     assert rps_metadata["value"] == 20
     assert rps_metadata["source"] == "config"
+    assert rps_metadata["detail"] == config_loader.DEFAULT_CONFIG_RELATIVE.as_posix()
     assert Path(rps_metadata["detail"]).name == "config.yaml"
 
 

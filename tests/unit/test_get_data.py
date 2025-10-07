@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import io
-import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,6 +11,7 @@ import pytest
 
 from scripts import get_data
 from tests.helpers.logs import iter_events, parse_log_lines
+from tests.helpers.manifests import load_latest_manifest
 from library.pipelines.common import PipelineRunResult
 
 
@@ -23,6 +23,7 @@ def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
     output_dir.mkdir()
     input_files = dict(get_data.DEFAULT_INPUT_FILES)
     output_stems = dict(get_data.DEFAULT_OUTPUT_STEMS)
+    subcommands = {step.name: step.subcommand for step in get_data.DEFAULT_PIPELINE_STEPS}
     for name, filename in input_files.items():
         target = input_dir / filename
         target.write_text("id\nplaceholder\n", encoding="utf-8")
@@ -41,13 +42,13 @@ def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
         dry_run=False,
         input_files=input_files,
         output_stems=output_stems,
+        subcommands=subcommands,
     )
 
 
 def _load_manifest(cfg: get_data.PipelineRunConfig) -> dict[str, object]:
-    manifest_path = cfg.base_path / "reports" / "run_manifest.json"
-    assert manifest_path.exists(), "expected manifest to be written"
-    return json.loads(manifest_path.read_text(encoding="utf-8"))
+    _, manifest = load_latest_manifest(cfg.base_path)
+    return manifest
 
 
 @pytest.mark.unit
@@ -66,6 +67,7 @@ def test_parse_args__defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert args.force is False
     assert args.skip_existing is False
     assert args.dry_run is False
+    assert args.print_config is False
     assert args.pipeline_registry is None
     assert args.override_input == []
     assert args.override_output_stem == []
@@ -94,6 +96,7 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
             "--force",
             "--skip-existing",
             "--dry-run",
+            "--print-config",
             "--verbose",
             "--pipeline-registry",
             str(tmp_path / "registry.yaml"),
@@ -116,10 +119,99 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
     assert args.force is True
     assert args.skip_existing is True
     assert args.dry_run is True
+    assert args.print_config is True
     assert args.pipeline_registry == tmp_path / "registry.yaml"
     assert args.override_input == ["document=document_custom.csv"]
     assert args.override_output_stem == ["target=custom_targets"]
     assert args.override_subcommand == ["target=sync"]
+
+
+@pytest.mark.unit
+def test_main__print_config__exits_early(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    input_dir.mkdir()
+    (base_path / "output").mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
+
+    printed: dict[str, object] = {}
+
+    def _fake_print_config(cfg: object) -> None:
+        printed["config"] = cfg
+
+    monkeypatch.setattr(get_data, "print_config", _fake_print_config)
+
+    loaded: dict[str, Path] = {}
+
+    def _fake_load_config(path: Path, *, base_path: Path) -> object:
+        loaded["path"] = path
+        loaded["base"] = base_path
+        return object()
+
+    monkeypatch.setattr(get_data, "load_config", _fake_load_config)
+
+    run_invoked = False
+
+    def _fake_run_pipeline(
+        cfg: get_data.PipelineRunConfig, *, steps: Sequence[get_data.PipelineStep] | None = None
+    ) -> int:
+        nonlocal run_invoked
+        run_invoked = True
+        return 0
+
+    monkeypatch.setattr(get_data, "run_pipeline", _fake_run_pipeline)
+    monkeypatch.setattr(get_data, "_resolve_pipeline_steps", lambda args=None: ())
+
+    def _fake_setup_cli_logging(
+        script_name: str,
+        log_cfg: get_data.LoggerConfig,
+        date_str: str | None = None,
+        *,
+        log_dir: Path | None = None,
+    ) -> object:
+        stream = io.StringIO()
+        ctx_cfg = get_data.LoggerConfig(
+            level=log_cfg.level,
+            run_id=log_cfg.run_id,
+            stream=stream,
+            handlers=list(log_cfg.handlers),
+            redact_secrets=log_cfg.redact_secrets,
+            logger_name=log_cfg.logger_name,
+        )
+
+        class _Manager:
+            def __enter__(self) -> SimpleNamespace:
+                return SimpleNamespace(log_cfg=ctx_cfg, console_stream=stream)
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        return _Manager()
+
+    monkeypatch.setattr(get_data, "setup_cli_logging", _fake_setup_cli_logging)
+
+    status = get_data.main(
+        [
+            "--base-path",
+            str(base_path),
+            "--input-dir",
+            "input",
+            "--output-dir",
+            "output",
+            "--config",
+            str(config_path),
+            "--print-config",
+        ]
+    )
+
+    assert status == 0
+    assert loaded["path"] == config_path.resolve()
+    assert loaded["base"] == base_path.resolve()
+    assert printed["config"] is not None
+    assert run_invoked is False
 
 
 @pytest.mark.unit
@@ -199,6 +291,83 @@ def test_resolve_pipeline_steps__applies_overrides() -> None:
     assert mapping["document"].input_filename == "doc.csv"
     assert mapping["activity"].output_stem == "custom"
     assert mapping["target"].subcommand is None
+
+
+@pytest.mark.unit
+def test_override_subcommand__target_pipeline_uses_selected_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("{}", encoding="utf-8")
+    (input_dir / "target.csv").write_text("target_chembl_id\nT1\n", encoding="utf-8")
+
+    args = argparse.Namespace(
+        base_path=base_path,
+        input_dir=Path("input"),
+        output_dir=Path("output"),
+        config=config_path,
+        date_prefix="20240214",
+        log_level="INFO",
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        verbose=False,
+        pipeline_registry=None,
+        override_input=[],
+        override_output_stem=[],
+        override_subcommand=["target=chembl"],
+    )
+
+    resolved_steps = get_data._resolve_pipeline_steps(args)
+    target_only = tuple(step for step in resolved_steps if step.name == "target")
+    cfg = get_data._prepare_config(args, target_only)
+    assert cfg.subcommand_for("target") == "chembl"
+
+    captured: list[str] = []
+
+    def _build_options(
+        run_cfg: get_data.PipelineRunConfig, input_path: Path, output_path: Path
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            input_csv=input_path,
+            output_csv=output_path,
+            command=run_cfg.subcommand_for("target") or "all",
+        )
+
+    def _runner(_: get_data.Config, options: SimpleNamespace) -> PipelineRunResult:
+        captured.append(options.command)
+        destination = Path(options.output_csv)
+        destination.write_text("target_chembl_id\nT1\n", encoding="utf-8")
+        return PipelineRunResult(
+            exit_code=0,
+            output_path=destination,
+            executed=True,
+            reason=None,
+            written=True,
+        )
+
+    stream = io.StringIO()
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="unit_override")
+    )
+    monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+    monkeypatch.setattr(
+        get_data,
+        "_PIPELINE_APIS",
+        {"target": get_data.PipelineApi(_build_options, _runner)},
+        raising=False,
+    )
+    monkeypatch.setattr(get_data, "load_config", lambda *args, **kwargs: SimpleNamespace(), raising=False)
+
+    status = get_data.run_pipeline(cfg, steps=target_only)
+    assert status == 0
+    assert captured == ["chembl"]
 
 
 @pytest.mark.unit
@@ -334,8 +503,18 @@ def test_run_pipeline__dry_run_manifest(tmp_path: Path, monkeypatch: pytest.Monk
         return 0
 
     steps = (
-        get_data.PipelineStep("document", _record, None),
-        get_data.PipelineStep("target", _record, None),
+        get_data.PipelineStep(
+            "document",
+            _record,
+            "document.csv",
+            "documents",
+        ),
+        get_data.PipelineStep(
+            "target",
+            _record,
+            "target.csv",
+            "targets",
+        ),
     )
 
     stream = io.StringIO()
@@ -345,7 +524,7 @@ def test_run_pipeline__dry_run_manifest(tmp_path: Path, monkeypatch: pytest.Monk
     monkeypatch.setattr(get_data, "_PIPELINE_STEPS", steps, raising=False)
     monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
 
-    status = get_data.run_pipeline(cfg)
+    status = get_data.run_pipeline(cfg, steps=steps)
     assert status == 0
     assert not executions
 

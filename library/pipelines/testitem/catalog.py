@@ -46,6 +46,18 @@ _PARENT_SOURCE_PRIORITY: Mapping[str, int] = {
 }
 
 
+def _summarise_identifiers(
+    values: Sequence[str], *, limit: int = 20
+) -> tuple[list[str], bool]:
+    """Return a sorted, truncated list of identifiers for structured logging."""
+
+    identifiers = sorted({str(value) for value in values})
+    truncated = len(identifiers) > limit
+    if truncated:
+        identifiers = identifiers[:limit]
+    return identifiers, truncated
+
+
 @dataclass
 class ParentEnrichmentPreparation:
     """Intermediate data required to attach parent identifiers."""
@@ -487,10 +499,12 @@ def attach_parent_molecule_ids(
     )
 
     if skip_full_sync:
+        identifiers, truncated = _summarise_identifiers(missing_ids)
         logger.warning(
             "parent_lookup_full_sync_skipped_parentless",
             count=len(missing_ids),
-            identifiers=missing_ids,
+            identifiers=identifiers,
+            truncated=truncated,
         )
         source_resolved = PARENT_LOOKUP_SOURCE_SKIPPED
     elif missing_ids and catalog is None and needs_full_sync:
@@ -523,10 +537,12 @@ def attach_parent_molecule_ids(
             uncovered_children = len(missing_ids)
 
     if missing_ids:
+        identifiers, truncated = _summarise_identifiers(missing_ids)
         logger.warning(
             "parent_lookup_missing_parents",
             count=len(missing_ids),
-            identifiers=missing_ids,
+            identifiers=identifiers,
+            truncated=truncated,
         )
 
     refreshed_parent = normalised_child.map(parent_map).astype("string")

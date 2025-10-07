@@ -10,22 +10,23 @@ from typing import Iterable, Sequence
 import pandas as pd
 
 from library.common.log import logger
+from config.paths import DICTIONARY_DIR
 
 from . import helpers
 
 __all__ = ["AssayExtendedError", "enrich_assay_metadata"]
 
-_DEFAULT_DICTIONARY_DIR = Path("config/dictionary")
+_DEFAULT_DICTIONARY_DIR = DICTIONARY_DIR
 
 
 class AssayExtendedError(RuntimeError):
     """Raised when the assay enrichment workflow cannot proceed."""
 
 
-def _resolve_dictionary_root(dictionary_dir: Path | None) -> Path:
+def _resolve_dictionary_root(dictionary_dir: Path | str | None) -> Path:
     if dictionary_dir is None:
         return _DEFAULT_DICTIONARY_DIR
-    return dictionary_dir
+    return Path(dictionary_dir)
 
 
 def _normalise_column_key(name: str) -> str:
@@ -106,10 +107,19 @@ def _load_taxonomy_lookup_cached(dictionary_root: str) -> pd.DataFrame:
     root = Path(dictionary_root)
     candidate = root / "_taxonomy" / "taxonomy.csv"
     if not candidate.exists():
-        raise AssayExtendedError(
-            "taxonomy.csv not found; expected at "
-            f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
-    )
+        logger.warning(
+            "assay_extended_missing_taxonomy_dictionary",
+            path=str(candidate),
+            dictionary_root=str(root),
+        )
+        empty = pd.DataFrame(
+            {
+                "assay_tax_id": pd.Series(dtype="string"),
+                "assay_group_taxonomy": pd.Series(dtype="string"),
+                "assay_strain_taxonomy": pd.Series(dtype="string"),
+            }
+        )
+        return empty
 
     frame = helpers.read_csv_with_fallbacks(candidate)
     aliases = {
@@ -338,7 +348,7 @@ def enrich_assay_metadata(
 ) -> pd.DataFrame:
     """Return ``df`` enriched with dictionary-driven assay metadata."""
 
-    dictionary_root = _resolve_dictionary_root(Path(dictionary_dir) if dictionary_dir is not None else None)
+    dictionary_root = _resolve_dictionary_root(dictionary_dir)
     if not isinstance(dictionary_root, Path):  # pragma: no cover - defensive
         dictionary_root = Path(dictionary_root)
 

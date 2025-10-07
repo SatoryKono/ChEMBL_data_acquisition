@@ -108,11 +108,55 @@ def test_compute_sha256__normalises_crlf_in_non_utf8_files(tmp_path: Path) -> No
 
 @pytest.mark.unit
 def test_manifest_allows_windows_textmode_checksum() -> None:
-    """Ensure the dictionary manifest accepts the Windows CRLF hash variant."""
+    """Ensure the dictionary manifest accepts all known Windows hash variants."""
 
     manifest_path = Path("config/dictionary/manifest.yaml")
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
 
-    sha256_values = manifest["resources"]["dictionary_root"]["sha256"]
+    sha256_values = set(manifest["resources"]["dictionary_root"]["sha256"])
 
-    assert "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a" in sha256_values
+    expected = {
+        "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        "92b6b3612557eb0916f38aee701a61f3bc470b0ffd0251866ecaf7364fb16d64",
+        "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
+        dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM,
+        dictionaries.WINDOWS_VFS_SPARSE_INDEX_CHECKSUM,
+        dictionaries.WINDOWS_VFS_TEXTMODE_CHECKSUM,
+        dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM,
+        dictionaries.WINDOWS_VFS_NTFS_CHECKSUM,
+    }
+
+    assert expected.issubset(sha256_values)
+
+
+@pytest.mark.unit
+def test_known_checksum_variants__includes_sparse_index_checksum(tmp_path: Path) -> None:
+    """The runtime allow-list should accept the new sparse-index checksum."""
+
+    variants = dictionaries._iter_additional_checksums("dictionary_root", base_dir=tmp_path)
+
+    assert dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM in variants
+    assert dictionaries.WINDOWS_VFS_SPARSE_INDEX_CHECKSUM in variants
+    assert dictionaries.WINDOWS_VFS_TEXTMODE_CHECKSUM in variants
+    assert dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM in variants
+    assert dictionaries.WINDOWS_VFS_NTFS_CHECKSUM in variants
+
+
+@pytest.mark.unit
+def test_iter_additional_checksums__merges_manifest_allowlist(tmp_path: Path) -> None:
+    """Allow-list entries declared on disk should extend the runtime variants."""
+
+    allowlist_path = tmp_path / "manifest.allowlist.yaml"
+    custom_checksum = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    allowlist_path.write_text(
+        f"dictionary_root:\n  - \"{custom_checksum}\"\n",
+        encoding="utf-8",
+    )
+
+    variants = dictionaries._iter_additional_checksums("dictionary_root", base_dir=tmp_path)
+
+    assert dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM in variants
+    assert dictionaries.WINDOWS_VFS_SPARSE_INDEX_CHECKSUM in variants
+    assert dictionaries.WINDOWS_VFS_TEXTMODE_CHECKSUM in variants
+    assert dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM in variants
+    assert custom_checksum in variants

@@ -51,15 +51,30 @@ Important flags:
 - `--force`, `--skip-existing` — pass-through execution controls.
 - `--dry-run` — validate configuration, log intended actions and exit without
   touching the filesystem.
+- `--print-config` — resolve the effective configuration and exit without
+  running pipelines.
+
+### Advanced overrides
+
+Customise the orchestrator without editing code by using the following options:
+
+| Option | Purpose |
+|--------|---------|
+| `--pipeline-registry <path>` | Load an alternative pipeline registry YAML (see [`library/pipelines/registry.py`](../../library/pipelines/registry.py)) to change the execution order, provide custom callables or add/remove steps. |
+| `--override-input STEP=FILENAME` | Replace the input CSV filename for a single step while keeping the rest of the registry intact. Multiple overrides may be supplied. |
+| `--override-output-stem STEP=STEM` | Adjust the output stem for a step without touching the registry (affects the generated filename and metadata artefacts). |
+| `--override-subcommand STEP=SUBCOMMAND` | Switch the CLI sub-command used to invoke a step (e.g. run the target pipeline in `chembl` mode only during a partial rerun). |
 
 The orchestrator stops on the first non-zero exit code and reports per-pipeline
 elapsed time in the logs.
 
-After every execution the orchestrator also writes `reports/run_manifest.json`
-relative to `--base-path`. The manifest records each step with the resolved CSV
-destination, discovered sidecars, status (`success`, `skipped`, `failed`, etc.),
-timings and SHA256 checksums for all artefacts. The file is emitted even when
-the workflow aborts part way through so partial results can be inspected.
+After every execution the orchestrator writes a dedicated manifest such as
+`reports/run_<timestamp>.json` relative to `--base-path` and updates the
+`reports/run_manifest.json` pointer to reference the most recent run. Each
+manifest records every step with the resolved CSV destination, discovered
+sidecars, status (`success`, `skipped`, `failed`, etc.), timings and SHA256
+checksums for all artefacts. The file is emitted even when the workflow aborts
+part way through so partial results can be inspected.
 
 ## Document pipeline `get_document_data`
 
@@ -220,13 +235,14 @@ python scripts/get_assay_data.py \
 
 ## Activity pipeline `get_activity_data`
 
-Extends the assay options with parallel execution and dry-run controls. In
-addition to the shared flags the command accepts:
+Extends the assay options with range selection, per-request timeouts, optional
+dry-run execution and parallel fetching controls. In addition to the shared
+flags the command accepts:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--column` | `activity_chembl_id` | Column containing activity identifiers. |
-| `--batch-size` | `20` | Number of identifiers per request. |
+| `--column` | `activity_id` | Column containing activity identifiers (configuration defaults to `activity_chembl_id`). |
+| `--batch-size` | `5` | Number of identifiers per request (configuration usually lifts this to `20`). |
 | `--timeout` | `90.0` | HTTP timeout per request. |
 | `--limit`, `--offset` | `None`, `0` | Range selection; negative values are rejected. |
 | `--workers` | `1` | Worker threads fetching activities. |
@@ -311,7 +327,7 @@ functionality:
 | `mapper` | Interactive UniProt↔ChEMBL mapper backed by cached dictionaries. |
 | `chunk-io` | Stream CSV chunks with deterministic ordering. |
 | `get-input-initialisation` | Merge Excel initialisation templates into canonical CSV form. |
-| `get-activities` | Generate synthetic activity rows for smoke tests. |
+| `get-activities` | Generate synthetic activity rows and write deterministic CSV + `.meta.yaml` artefacts for smoke tests. |
 
 See [`guides/ADVANCED_SCENARIOS.md`](./guides/ADVANCED_SCENARIOS.md) for usage
 examples combining these utilities with the core pipelines.

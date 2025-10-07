@@ -8,7 +8,8 @@ The test suite is organised around the key scenarios of the ChEMBL data acquisit
 - `e2e/` – deterministic end-to-end runs of the test-item pipeline on synthetic fixtures, including export idempotence.
 - `resources/` – small CSV snapshots used by the integration and e2e scenarios.
 
-Standalone smoke checks that previously lived alongside `tests/run_tests.py` were moved into the directories above:
+Standalone smoke checks that previously lived alongside the legacy `tests/run_tests.py`
+wrapper were moved into the directories above:
 
 - activity column filtering helpers now reside in `tests/unit/test_activity_output_columns.py`;
 - assay output pruning checks live in `tests/unit/test_assay_output_columns.py`;
@@ -39,31 +40,36 @@ Shared fixtures live in `tests/conftest.py`. They configure a deterministic envi
 
 ## CLI pipeline orchestration
 
-End-to-end smoke tests now cover every `scripts/get_*` entrypoint via `tests/e2e/test_get_cli_pipelines.py`. Each scenario patches the network-heavy stages with deterministic stubs and asserts that the orchestrator:
+Declarative pipeline scenarios are now covered in both integration and end-to-end suites. The integration module `tests/integration/test_pipeline_config_loading.py` exercises `load_pipeline_config`, asserting that YAML-defined steps, runners and metrics definitions are resolved into deterministic orchestrator payloads. The complementary end-to-end suite `tests/e2e/test_get_cli_pipelines.py` drives every `scripts/get_*` entrypoint with those declarative configurations, patches the network-heavy stages with deterministic stubs and validates that the orchestrator:
 
 - loads miniature CSV fixtures and normalises core columns,
 - emits structured WARN/ERROR events for missing or duplicated records,
+- records pipeline metadata such as `pipeline_version`, per-step metric payloads and runner identifiers,
 - writes the derived tables with deterministic ordering and derived fields, and
-- honours `--skip-existing` semantics without invoking the pipeline.
+- honours the edge-case flags `--skip-existing`, `--limit` and `--dry-run` without invoking unintended side effects.
 
-The tests exercise success and failure paths for `get_testitem_data`, `get_document_data`, `get_target_data`, `get_assay_data`, `get_tissue_data` and `get_activity_data`, bringing the CLI surface under the deterministic test umbrella.
+The scenarios exercise success and failure paths for `get_testitem_data`, `get_document_data`, `get_target_data`, `get_assay_data`, `get_tissue_data` and `get_activity_data`, bringing both the declarative configuration loading and CLI surface under the deterministic test umbrella.
 
 ## Running tests and generating reports
 
-Install dependencies (see the repository `README.md`) and run the suite via the reporting wrapper:
+Install dependencies (see the repository `README.md`) and run the suite via the canonical
+reporting wrapper:
 
 ```bash
-python tests/run_tests.py
+python scripts/run_tests.py
 ```
 
-The command executes `pytest` with the default configuration, writes the full protocol to `reports/test_report.json` and produces a human readable summary in `reports/test_summary.md`. Both artefacts contain Git metadata, timing information, a per-test breakdown and the overall success rate. The JSON payload exposes a `summary` section (totals and a `success_rate` ratio computed as `passed / total`, ranging from 0.0 to 1.0), while the Markdown file includes a `Success rate: NN.NN%` bullet for quick inspection. The wrapper enforces the ≥95% success-rate policy: if the computed ratio drops below the threshold, it emits an error log and returns a non-zero exit code even when pytest itself reports success. All invocations also configure structured logging via `tests/run_tests.py` – log events are mirrored to `data/logs/run_tests_<YYYYMMDD>.log` (or the directory defined by `CHEMBL_DA_BASE_PATH`). Pass `--verbose` to lift the logger to DEBUG and forward the same verbosity to pytest’s log capture.
+The command executes `pytest` with the default configuration, writes the full protocol to `reports/test_report.json` and produces a human readable summary in `reports/test_summary.md`. Both artefacts contain Git metadata, timing information, a per-test breakdown and the overall success rate. The JSON payload exposes a `summary` section (totals and a `success_rate` ratio computed as `(passed + xfailed) / max(1, total - skipped)`, ranging from 0.0 to 1.0), while the Markdown file includes a `Success rate: NN.NN%` bullet for quick inspection. The wrapper enforces the ≥95% success-rate policy: if the computed ratio drops below the threshold, it emits an error log and returns a non-zero exit code even when pytest itself reports success. All invocations also configure structured logging via `scripts/run_tests.py` – log events are mirrored to `logs/run_tests_<YYYYMMDD>.log` (or the directory defined by `CHEMBL_DA_BASE_PATH`). Pass `--verbose` to lift the logger to DEBUG and forward the same verbosity to pytest’s log capture.
 
 
-To focus on a subset, pass extra arguments after `--pytest-args`, for example `python tests/run_tests.py --pytest-args -m unit`. Combine `--verbose` with the forwarding flag to observe detailed DEBUG events in both the console and the generated log file.
+When running pytest manually (e.g. `pytest --json-report --json-report-file=custom.json`), convert the structured JSON into Markdown via `python tools/make_md_summary.py --input <json> --output <markdown>` or the console entry point `make-md-summary`. Both arguments default to the standard `reports/` locations, so invoking `python tools/make_md_summary.py` is sufficient for the common workflow.
+
+
+To focus on a subset, pass extra arguments after `--pytest-args`, for example `python scripts/run_tests.py --pytest-args -m unit`. Combine `--verbose` with the forwarding flag to observe detailed DEBUG events in both the console and the generated log file.
 
 Individual modules can be targeted by pointing pytest at a directory, for example `pytest tests/unit` or `pytest tests/integration -k enrich` to filter by test name.
 
-When developing additional scenarios, keep the guardrails documented in `tests/conftest.py` (seed fixing, network ban, temporary directories) to preserve reproducibility. All new tests should emit deterministic output so that `tests/run_tests.py` can regenerate the reports without spurious diffs.
+When developing additional scenarios, keep the guardrails documented in `tests/conftest.py` (seed fixing, network ban, temporary directories) to preserve reproducibility. All new tests should emit deterministic output so that `scripts/run_tests.py` can regenerate the reports without spurious diffs.
 
 ## End-to-end scenario checklist
 
@@ -79,3 +85,5 @@ When developing additional scenarios, keep the guardrails documented in `tests/c
 - [x] Постобработка и экспорт: корректность форматов/имён/путей
 - [x] Деградационные кейсы: частичные данные, пустые файлы, неверный заголовок
 - [x] Идемпотентность: повторный запуск на тех же входах даёт тот же результат
+- [x] Метаданные пайплайна: `pipeline_version`, метрики по шагам и идентификаторы раннеров сохраняются и проверяются
+- [x] Пограничные флаги CLI: `--skip-existing`, `--limit`, `--dry-run` не нарушают детерминированность и корректность

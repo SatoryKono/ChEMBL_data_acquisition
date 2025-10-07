@@ -18,6 +18,7 @@
 | `target_chembl_id` | `target_chembl_id` | Обязательная для всех режимов. |
 | `mapping_uniprot_id` | `uniprot_id_primary` | Колонка по умолчанию для UniProt в режиме `all`. |
 | `uniprot_id` | `uniprot_id_primary` | Используется, если указан `--column uniprot_id`. |
+| `protein_classifications` | `target_class`, `protein_family` (представление пост-обработки) | Модульная пост-обработка разворачивает первый уровень классификации для QA-отчётов. |
 
 ### Этапы объединения
 

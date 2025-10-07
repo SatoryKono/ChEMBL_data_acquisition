@@ -42,7 +42,9 @@ def test_git_sha__missing_git_directory_logged_as_info(
         pytest.skip("_git_sha missing cache_clear helper")
     cache_clear()
 
-    monkeypatch.setattr(module, "_repo_root", lambda: tmp_path)
+    target_module = importlib.import_module(module._git_sha.__module__)
+
+    monkeypatch.setattr(target_module, "_repo_root", lambda: tmp_path)
 
     caplog.set_level(logging.DEBUG, logger="chembl")
 
@@ -58,3 +60,13 @@ def test_git_sha__missing_git_directory_logged_as_info(
 
     assert directory_logs, "expected git_directory_missing log entry"
     assert all(level < logging.WARNING for level, _ in directory_logs)
+
+
+@pytest.mark.unit
+def test_git_sha__shared_singleton() -> None:
+    """Both modules should expose the same cached helper instance."""
+
+    common = importlib.import_module("library.common.git")
+    legacy = importlib.import_module("library.git_utils")
+
+    assert legacy._git_sha is common._git_sha

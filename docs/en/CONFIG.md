@@ -2,7 +2,7 @@
 
 The pipelines load configuration from three layers (lowest precedence first):
 
-1. Built-in defaults defined in [`library/config/models.py`](../library/config/models.py).
+1. Built-in defaults defined in [`library/config/models.py`](../../library/config/models.py).
 2. YAML files (`config/config.yaml` plus optional overrides such as
    `config/config.local.yaml`).
 3. Environment variables and CLI arguments.
@@ -308,5 +308,5 @@ Controls post-processing of activity tables.
 | `limit` | `null` | Optional cap on processed rows. |
 
 For further customisation consult the Pydantic models in
-[`library/config/models.py`](../library/config/models.py); the documentation above mirrors the
+[`library/config/models.py`](../../library/config/models.py); the documentation above mirrors the
 available fields and their default values.

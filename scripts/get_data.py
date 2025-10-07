@@ -33,6 +33,7 @@ import argparse
 import hashlib
 import json
 import logging
+import shutil
 import time
 import uuid
 from collections import deque
@@ -48,7 +49,16 @@ from library.cli.logging import setup_cli_logging
 from library.clients import ChemblClient
 from library.orchestration import ETLContext
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
-from library.config import Config, DEFAULT_CONFIG_PATH, load_config
+from pydantic import ValidationError
+
+from library.config import (
+    Config,
+    ConfigError,
+    ConfigLoaderError,
+    DEFAULT_CONFIG_PATH,
+    load_config,
+    print_config,
+)
 from library.pipelines.activity import (
     ActivityPipelineOptions,
     run_pipeline as run_activity_pipeline,
@@ -80,7 +90,6 @@ from library.pipelines.testitem import (
     TestitemPipelineOptions,
     run_pipeline as run_testitem_pipeline,
 )
-from library.config.loader import DEFAULT_CONFIG_PATH
 
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
@@ -127,10 +136,11 @@ def _build_document_options(
 def _build_target_options(
     cfg: "PipelineRunConfig", input_path: Path, output_path: Path
 ) -> TargetPipelineOptions:
+    command = cfg.subcommand_for("target") or "all"
     return TargetPipelineOptions(
         input_csv=input_path,
         output_csv=output_path,
-        command="all",
+        command=command,
         limit=cfg.limit,
         force=cfg.force,
     )
@@ -194,6 +204,7 @@ class PipelineRunConfig:
     dry_run: bool
     input_files: Mapping[str, str]
     output_stems: Mapping[str, str]
+    subcommands: Mapping[str, str | None]
 
     def input_path(self, name: str) -> Path:
         """Return the fully resolved path for ``name`` in the input directory."""
@@ -207,6 +218,11 @@ class PipelineRunConfig:
         stem = self.output_stems[name]
         filename = f"output.{stem}_{self.date_prefix}.csv"
         return self.output_dir / filename
+
+    def subcommand_for(self, name: str) -> str | None:
+        """Return the configured subcommand for ``name`` if available."""
+
+        return self.subcommands.get(name)
 
 
 def _resolve_path(base: Path, candidate: Path) -> Path:
@@ -412,6 +428,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print the resolved configuration and exit without running pipelines",
+    )
+    parser.add_argument(
         "--pipeline-registry",
         type=Path,
         default=None,
@@ -449,6 +470,7 @@ def _prepare_config(
     effective_steps = tuple(DEFAULT_PIPELINE_STEPS if steps is None else steps)
     input_files = {step.name: step.input_filename for step in effective_steps}
     output_stems = {step.name: step.output_stem for step in effective_steps}
+    subcommands = {step.name: step.subcommand for step in effective_steps}
 
     base_path = args.base_path.expanduser().resolve()
     input_dir = _resolve_path(base_path, args.input_dir)
@@ -484,6 +506,7 @@ def _prepare_config(
         dry_run=dry_run,
         input_files=input_files,
         output_stems=output_stems,
+        subcommands=subcommands,
     )
 
 
@@ -646,7 +669,7 @@ def _remove_path(path: Path) -> None:
                 "unlink_retry_permission",
                 path=str(path),
                 attempt=attempt,
-                error=str(exc),
+                error=str(exc), exc_info=exc,
             )
             time.sleep(_UNLINK_RETRY_SLEEP_SECONDS)
             continue
@@ -660,7 +683,7 @@ def _remove_path(path: Path) -> None:
                     "unlink_retry_sharing_violation",
                     path=str(path),
                     attempt=attempt,
-                    error=str(exc),
+                    error=str(exc), exc_info=exc,
                 )
                 time.sleep(_UNLINK_RETRY_SLEEP_SECONDS)
                 continue
@@ -950,14 +973,13 @@ def _cleanup_failed_step(
         )
 
 
-def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
+def _warm_parent_catalog(cfg: PipelineRunConfig, base_config: Config) -> None:
     """Ensure the molecule parent catalogue cache exists before test item runs."""
 
     from library.integration.molecule_catalog import load_parent_catalog
 
     start_time = time.perf_counter()
-    config: Config = load_config(cfg.config_path, base_path=cfg.base_path)
-    chembl_sources = config.sources.chembl
+    chembl_sources = base_config.sources.chembl
     catalog_cfg = chembl_sources.molecule_catalog
     cache_path = catalog_cfg.cache_path
     sqlite_path = catalog_cfg.sqlite_path
@@ -980,13 +1002,15 @@ def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
     def _catalog_client_factory(context: ETLContext) -> ChemblClient:
         return ChemblClient(
             api=chembl_sources.api,
-            retry=config.system.retry,
+            retry=base_config.system.retry,
             chembl=chembl_sources.cache,
             global_limiter=context.global_limiter,
         )
 
     try:
-        with ETLContext(config, chembl_client_factory=_catalog_client_factory) as context:
+        with ETLContext(
+            base_config, chembl_client_factory=_catalog_client_factory
+        ) as context:
             load_parent_catalog(
                 client=context.chembl_client,
                 api_cfg=chembl_sources.api,
@@ -998,7 +1022,7 @@ def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
         _LOGGER.error(
             "parent_catalog_warm_failed",
             elapsed=elapsed,
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             **log_kwargs,
         )
         raise
@@ -1167,16 +1191,52 @@ def _write_run_manifest(
         "steps": list(steps),
     }
 
-    manifest_path = cfg.base_path / "reports" / "run_manifest.json"
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    reports_dir = cfg.base_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = run_started_at.astimezone(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    manifest_path = reports_dir / f"run_{timestamp}.json"
     try:
-        manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
     except OSError as exc:  # pragma: no cover - defensive guard
         _LOGGER.warning(
             "manifest_write_failed",
             path=str(manifest_path),
             error=str(exc),
         )
+        return
+
+    latest_alias = reports_dir / "run_manifest.json"
+    alias_removed = True
+    if latest_alias.exists() or latest_alias.is_symlink():
+        try:
+            latest_alias.unlink()
+        except OSError as exc:  # pragma: no cover - defensive guard
+            alias_removed = False
+            _LOGGER.warning(
+                "manifest_alias_cleanup_failed",
+                path=str(latest_alias),
+                error=str(exc),
+            )
+
+    if not alias_removed:
+        return
+
+    try:
+        latest_alias.symlink_to(manifest_path.name)
+    except (OSError, NotImplementedError):  # pragma: no cover - platform dependent
+        try:
+            shutil.copy2(manifest_path, latest_alias)
+        except OSError as exc:  # pragma: no cover - defensive guard
+            _LOGGER.warning(
+                "manifest_alias_update_failed",
+                path=str(latest_alias),
+                target=str(manifest_path),
+                error=str(exc),
+            )
 
 
 @dataclass(frozen=True)
@@ -1304,11 +1364,16 @@ def run_pipeline(
     try:
         plan = _build_execution_plan(effective_steps)
     except ValueError as exc:
-        _LOGGER.error("pipeline_schedule_error", error=str(exc))
+        _LOGGER.error("pipeline_schedule_error", error=str(exc), exc_info=exc)
         return 1
     effective_steps = plan.steps
     external_requirements = plan.external_artifacts
-    base_config = load_config(cfg.config_path, base_path=cfg.base_path)
+    try:
+        base_config = load_config(cfg.config_path, base_path=cfg.base_path)
+    except (ConfigError, ConfigLoaderError, ValidationError) as exc:
+        _LOGGER.error("config_load_failed", error=str(exc), exc_info=exc)
+        _LOGGER.info("pipeline_done", stage="pipeline", exit_code=1)
+        return 1
     overall_status = 0
     run_started_at = datetime.now(UTC)
     run_started_clock = time.perf_counter()
@@ -1405,58 +1470,64 @@ def run_pipeline(
                 _remove_path(working_output)
 
             if step.name == "testitem":
-                try:
-                    _warm_parent_catalog(current_cfg)
-                except TimeoutError as exc:
-                    overall_status = 1
-                    entry.update(
-                        {
-                            "status": "failed",
-                            "exit_code": overall_status,
-                            "executed": False,
-                            "reason": "parent_catalog_timeout",
-                        }
-                    )
-                    _LOGGER.error("parent_catalog_warm_timeout", error=str(exc))
-                    _complete_manifest_entry(
-                        entry,
-                        final_output=final_output,
-                        working_output=working_output,
-                        started_at=step_started_clock,
-                    )
-                    failed_index = index
-                    last_executed_index = index
-                    return StepExecutionResult(
-                        exit_code=1,
-                        executed=False,
-                        status="failed",
-                        reason="parent_catalog_timeout",
-                    )
-                except Exception as exc:  # pragma: no cover - defensive guard
-                    overall_status = 1
-                    entry.update(
-                        {
-                            "status": "failed",
-                            "exit_code": overall_status,
-                            "executed": False,
-                            "reason": "parent_catalog_error",
-                        }
-                    )
-                    _LOGGER.error("parent_catalog_warm_error", error=str(exc))
-                    _complete_manifest_entry(
-                        entry,
-                        final_output=final_output,
-                        working_output=working_output,
-                        started_at=step_started_clock,
-                    )
-                    failed_index = index
-                    last_executed_index = index
-                    return StepExecutionResult(
-                        exit_code=1,
-                        executed=False,
-                        status="failed",
-                        reason="parent_catalog_error",
-                    )
+                should_skip_warm = (
+                    current_cfg.skip_existing
+                    and final_output.exists()
+                    and not current_cfg.force
+                )
+                if not should_skip_warm:
+                    try:
+                        _warm_parent_catalog(current_cfg, base_config)
+                    except TimeoutError as exc:
+                        overall_status = 1
+                        entry.update(
+                            {
+                                "status": "failed",
+                                "exit_code": overall_status,
+                                "executed": False,
+                                "reason": "parent_catalog_timeout",
+                            }
+                        )
+                        _LOGGER.error("parent_catalog_warm_timeout", error=str(exc), exc_info=exc)
+                        _complete_manifest_entry(
+                            entry,
+                            final_output=final_output,
+                            working_output=working_output,
+                            started_at=step_started_clock,
+                        )
+                        failed_index = index
+                        last_executed_index = index
+                        return StepExecutionResult(
+                            exit_code=1,
+                            executed=False,
+                            status="failed",
+                            reason="parent_catalog_timeout",
+                        )
+                    except Exception as exc:  # pragma: no cover - defensive guard
+                        overall_status = 1
+                        entry.update(
+                            {
+                                "status": "failed",
+                                "exit_code": overall_status,
+                                "executed": False,
+                                "reason": "parent_catalog_error",
+                            }
+                        )
+                        _LOGGER.error("parent_catalog_warm_error", error=str(exc), exc_info=exc)
+                        _complete_manifest_entry(
+                            entry,
+                            final_output=final_output,
+                            working_output=working_output,
+                            started_at=step_started_clock,
+                        )
+                        failed_index = index
+                        last_executed_index = index
+                        return StepExecutionResult(
+                            exit_code=1,
+                            executed=False,
+                            status="failed",
+                            reason="parent_catalog_error",
+                        )
 
             try:
                 result = _run_step(
@@ -1640,20 +1711,34 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             steps = _resolve_pipeline_steps(args)
         except (FileNotFoundError, OSError, TypeError, ValueError) as exc:
-            _LOGGER.error("registry_error", error=str(exc))
+            _LOGGER.error("registry_error", error=str(exc), exc_info=exc)
             status = 1
         else:
             try:
                 cfg = _prepare_config(args, steps)
             except (FileNotFoundError, OSError, ValueError) as exc:
-                _LOGGER.error("configuration_error", error=str(exc))
+                _LOGGER.error("configuration_error", error=str(exc), exc_info=exc)
                 status = 1
             else:
-                status = run_pipeline(cfg, steps=steps)
-                if status != 0:
-                    _LOGGER.error("workflow_failed", exit_code=status)
+                if getattr(args, "print_config", False):
+                    try:
+                        config_obj = load_config(
+                            cfg.config_path, base_path=cfg.base_path
+                        )
+                    except (ConfigError, ConfigLoaderError, ValidationError) as exc:
+                        _LOGGER.error(
+                            "config_load_failed", error=str(exc), exc_info=exc
+                        )
+                        status = 1
+                    else:
+                        print_config(config_obj)
+                        status = 0
                 else:
-                    _LOGGER.info("workflow_succeeded")
+                    status = run_pipeline(cfg, steps=steps)
+                    if status != 0:
+                        _LOGGER.error("workflow_failed", exit_code=status)
+                    else:
+                        _LOGGER.info("workflow_succeeded")
 
     return status
 

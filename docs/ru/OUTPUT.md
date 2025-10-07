@@ -17,7 +17,7 @@
 
 ## Таблица документов (`documents`)
 
-Схема: [`library/schemas/documents.py`](../library/schemas/documents.py).
+Схема: [`library/schemas/documents.py`](../../library/schemas/documents.py).
 
 ### Базовые поля ChEMBL
 
@@ -115,7 +115,7 @@
 
 ## Таблица таргетов (`targets`)
 
-Схема: [`library/schemas/targets.py`](../library/schemas/targets.py). Порядок
+Схема: [`library/schemas/targets.py`](../../library/schemas/targets.py). Порядок
 колонок соответствует `TARGETS_COLUMN_ORDER`.
 
 ### Идентификаторы и наименования
@@ -134,6 +134,21 @@
 | `organism` | string | Организм. |
 | `tax_id` | string | Taxonomy ID из ChEMBL. |
 | `taxon_id` | string/int | Taxonomy ID из UniProt. |
+
+### Дополнительная классификация (пост-обработка)
+
+Модульная пост-обработка таргетов
+(`library.postprocess.targets.run_target_pipeline`) формирует агрегированное
+представление для QA-метрик и сервисов, которым нужны компактные
+классификационные поля. Хелпер запускается автоматически после записи основного
+CSV и проверяет схему из `library/postprocess/targets/schema.py`.
+
+| Колонка | Описание |
+|---------|----------|
+| `target_class` | Основная классификация, извлечённая из иерархии классов ChEMBL. |
+| `protein_family` | Описание белкового семейства верхнего уровня. |
+| `synonyms` | Детерминированный список синонимов (предпочтительные имена, описания компонентов, альтернативные названия). |
+| `pipeline_version` | Версия, зафиксированная пост-обработчиком (может отличаться при отдельном запуске). |
 
 ### Данные UniProt
 
@@ -205,7 +220,7 @@
 
 ## Таблица ассайев (`assays`)
 
-Схема: [`library/schemas/assays.py`](../library/schemas/assays.py).
+Схема: [`library/schemas/assays.py`](../../library/schemas/assays.py).
 
 | Колонка | Тип | Описание |
 |---------|-----|----------|
@@ -233,7 +248,7 @@
 
 ## Таблица активностей (`activities`)
 
-Схема: [`library/schemas/activities.py`](../library/schemas/activities.py).
+Схема: [`library/schemas/activities.py`](../../library/schemas/activities.py).
 
 | Колонка | Тип | Проверка |
 |---------|-----|----------|
@@ -267,7 +282,7 @@
 
 ## Таблица тестовых объектов (`testitems`)
 
-Схема: [`library/schemas/testitems.py`](../library/schemas/testitems.py).
+Схема: [`library/schemas/testitems.py`](../../library/schemas/testitems.py).
 
 | Колонка | Тип | Описание |
 |---------|-----|----------|
@@ -293,7 +308,7 @@
 
 ## Таблица тканей (`tissues`)
 
-Схема: [`library/schemas/tissues.py`](../library/schemas/tissues.py). Порядок
+Схема: [`library/schemas/tissues.py`](../../library/schemas/tissues.py). Порядок
 колонок задаётся `TISSUES_COLUMN_ORDER`.
 
 ### Колонки
@@ -324,7 +339,7 @@
 
 ## Экспорт клеточных линий (`cellline`)
 
-Схема описана в [`library/schemas/celllines.py`](../library/schemas/celllines.py);
+Схема описана в [`library/schemas/celllines.py`](../../library/schemas/celllines.py);
 порядок колонок соответствует `CELL_LINE_COLUMN_ORDER` и включает служебные
 поля `pipeline_version`, `timestamp_utc`.
 

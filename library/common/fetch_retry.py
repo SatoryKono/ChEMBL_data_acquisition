@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final
+from typing import Any
 
 from ..config import Config, RetryCfg
 from ..sidecar import SidecarErrors
@@ -17,9 +17,6 @@ class _ChunkFailure:
 
     chunk_ids: list[str]
     error: str
-
-
-_EMPTY_STATS: Final[dict[str, Any]] = {}
 
 
 class ChunkFailureTracker:
@@ -47,7 +44,7 @@ class ChunkFailureTracker:
         """Return aggregated statistics for persisted metadata files."""
 
         if not self._failures:
-            return _EMPTY_STATS
+            return {}
         unique_ids = sorted(
             {
                 identifier
@@ -81,9 +78,12 @@ def compute_backoff_delay(attempt: int, retry_cfg: RetryCfg) -> float:
     if attempt <= 0:
         raise ValueError("attempt must be a positive integer")
     factor = retry_cfg.backoff_factor
-    if factor <= 0:
-        return 0.0
-    delay = factor * (2 ** (attempt - 1))
+    jitter = retry_cfg.build_jitter()
+    delay = 0.0
+    if factor > 0:
+        delay = factor * (2 ** (attempt - 1))
+    if jitter is not None:
+        delay += jitter(retry_cfg.backoff_factor)
     cap = retry_cfg.backoff_cap
     if cap is not None:
         delay = min(delay, cap)

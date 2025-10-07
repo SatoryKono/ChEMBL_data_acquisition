@@ -1,17 +1,15 @@
-# Assay taxonomy lookup
+# Assay taxonomy dictionary
 
-The CSV aggregates organism-level metadata used to enrich assay exports with
-``assay_group`` and ``assay_strain`` values. The table maps the ``tax_id`` values
-that ChEMBL publishes for assays to the curated group/strain labels extracted
-from the historical workbook.
+Этот каталог содержит справочник `taxonomy.csv`, используемый постобработчиком assay для нормализации полей `assay_group` и `assay_strain`. Таблица собрана вручную из наиболее часто встречающихся организмов в выгрузках ChEMBL и покрывает базовые таксоны, необходимые для smoke-тестов пайплайна. Формат CSV:
 
-| Column    | Description                                   |
-|-----------|-----------------------------------------------|
-| `tax_id`  | NCBI taxonomy identifier referenced by assays |
-| `assay_group` | Normalised group label (e.g. `Human`).     |
-| `assay_strain` | Strain label captured in the legacy ETL. |
+| column | type | description |
+|--------|------|-------------|
+| `tax_id` | string | Идентификатор таксона NCBI, полученный из поля `assay_tax_id` выгрузки ChEMBL. |
+| `assay_group` | string | Нормализованная группа организмов (Human, Rodent и т.п.). |
+| `assay_strain` | string | Человеко-читаемый штамм или клеточная линия. |
 
-The enrichment code expects the file at
-``config/dictionary/_taxonomy/taxonomy.csv`` by default. Update this file when
-refreshing dictionary exports and keep the README in sync with the source and
-validation procedure.
+Файл сохраняется в кодировке UTF-8 с переводами строк `\n` и не содержит BOM. При обновлении словаря не забудьте:
+
+1. Расширить перечень строк/штаммов по потребности.
+2. Перегенерировать контрольную сумму в `config/dictionary/manifest.yaml` через `python tools/build_dictionary_resources.py --update-checksums`.
+3. Зафиксировать изменения в тестах/документации, если требуется.

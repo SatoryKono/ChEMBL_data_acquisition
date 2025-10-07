@@ -1,0 +1,36 @@
+# Default target post-processing pipeline configuration.
+pipeline_version: "${CHEMBL_TARGET_PIPELINE_VERSION:-auto}"
+enabled_steps:
+  - name: normalize_target_fields
+    callable: "library.postprocess.targets.steps:normalize_target_fields"
+    description: "Normalize primary identifiers and canonical target metadata."
+    params:
+      normalize_taxonomy: true
+      fill_missing_identifiers: true
+  - name: enrich_target_synonyms
+    callable: "library.postprocess.targets.steps:enrich_target_synonyms"
+    description: "Aggregate synonym sets across configured source dictionaries."
+    params:
+      synonym_sources:
+        - chembl
+        - gtopdb
+      preferred_separator: "; "
+  - name: finalize_target_records
+    callable: "library.postprocess.targets.steps:finalize_target_records"
+    description: "Validate schema expectations and stabilise column ordering."
+    params:
+      enforce_schema: true
+      sort_by:
+        - target_chembl_id
+params:
+  defaults:
+    pipeline_version: "${CHEMBL_TARGET_PIPELINE_VERSION:-auto}"
+    log_level: "${POSTPROCESS_LOG_LEVEL:-INFO}"
+  io:
+    encoding: "${POSTPROCESS_DEFAULT_ENCODING:-utf-8}"
+    csv_sep: "${POSTPROCESS_DEFAULT_CSV_SEPARATOR:-,}"
+  enrichment:
+    synonym_priority:
+      - preferred_name
+      - gene_symbol
+    fill_missing_species: true

@@ -12,6 +12,7 @@ bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
 import argparse
+import csv
 import hashlib
 import os
 import shutil
@@ -29,7 +30,9 @@ def _hash_file(path: Path) -> str:
     return hasher.hexdigest()
 
 
-def _run_activity(limit: int, destination: Path) -> subprocess.CompletedProcess[str]:
+def _run_activity(
+    limit: int, destination: Path, input_csv: Path
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.setdefault("PYTHONHASHSEED", "0")
     cmd = [
@@ -39,14 +42,55 @@ def _run_activity(limit: int, destination: Path) -> subprocess.CompletedProcess[
         str(limit),
         "--final-out",
         str(destination),
+        "--input",
+        str(input_csv),
     ]
     return subprocess.run(cmd, text=True, capture_output=True, env=env)
+
+
+def _default_input_csv(tmp_dir: Path) -> Path:
+    repo_root = Path(__file__).resolve().parents[1]
+    candidate = repo_root / "data" / "input" / "activity.csv"
+    if candidate.exists():
+        return candidate
+
+    fallback = tmp_dir / "activity.csv"
+    with fallback.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["activity_chembl_id"])
+        writer.writerow(["ACT1"])
+        writer.writerow(["ACT2"])
+    return fallback
+
+
+def _report_process_failure(label: str, result: subprocess.CompletedProcess[str]) -> None:
+    sys.stderr.write(f"{label} failed with exit code {result.returncode}\n")
+    if result.stdout:
+        sys.stderr.write("stdout:\n")
+        sys.stderr.write(result.stdout)
+        if not result.stdout.endswith("\n"):
+            sys.stderr.write("\n")
+    if result.stderr:
+        sys.stderr.write("stderr:\n")
+        sys.stderr.write(result.stderr)
+        if not result.stderr.endswith("\n"):
+            sys.stderr.write("\n")
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--limit", type=int, default=10, help="Number of IDs to process"
+    )
+    parser.add_argument(
+        "--input",
+        dest="input_csv",
+        type=Path,
+        default=None,
+        help=(
+            "Path to the identifiers CSV forwarded to get_activity_data. "
+            "Defaults to data/input/activity.csv when available."
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -57,16 +101,24 @@ def main(argv: list[str] | None = None) -> int:
         first = tmp_dir / "first.csv"
         second = tmp_dir / "second.csv"
 
-        first_run = _run_activity(args.limit, first)
+        if args.input_csv is not None:
+            input_csv = args.input_csv
+            if not input_csv.exists():
+                sys.stderr.write(
+                    f"Input CSV '{input_csv}' does not exist; determinism check aborted.\n"
+                )
+                return 1
+        else:
+            input_csv = _default_input_csv(tmp_dir)
+
+        first_run = _run_activity(args.limit, first, input_csv)
         if first_run.returncode != 0:
-            sys.stderr.write("first run failed\n")
-            sys.stderr.write(first_run.stderr)
+            _report_process_failure("first run", first_run)
             return 1
 
-        second_run = _run_activity(args.limit, second)
+        second_run = _run_activity(args.limit, second, input_csv)
         if second_run.returncode != 0:
-            sys.stderr.write("second run failed\n")
-            sys.stderr.write(second_run.stderr)
+            _report_process_failure("second run", second_run)
             return 1
 
         if not first.exists() or not second.exists():

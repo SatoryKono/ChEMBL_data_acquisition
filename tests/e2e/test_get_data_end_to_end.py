@@ -229,7 +229,7 @@ def _make_report_writer(step_count: int) -> Callable[[Path], None]:
             "- Branch: test\n"
             f"- Timestamp (UTC): {timestamp}\n"
             "- Duration: 0.0 s\n"
-            "- Success rate: 100.0%\n\n"
+            "- Success rate: 100.00%\n\n"
             "| total | passed | failed | skipped | xfailed | xpassed | error |\n"
             "|------:|-------:|-------:|--------:|--------:|--------:|------:|\n"
             f"|{step_count:6d}|{step_count:7d}|{0:7d}|{0:8d}|{0:8d}|{0:8d}|{0:6d}|\n"
@@ -258,7 +258,9 @@ def test_get_data_end_to_end__miniature_pipeline(
     config_path.write_text("io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n")
 
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
-    monkeypatch.setattr(get_data, "_warm_parent_catalog", lambda _cfg: None)
+    monkeypatch.setattr(
+        get_data, "_warm_parent_catalog", lambda _cfg, _base: None
+    )
 
     log_streams: deque[io.StringIO] = deque()
 
@@ -355,7 +357,12 @@ def test_get_data_end_to_end__miniature_pipeline(
             output_stem="activities",
         ),
     )
-    monkeypatch.setattr(get_data, "_resolve_pipeline_steps", lambda _: stub_steps)
+    monkeypatch.setattr(
+        get_data,
+        "_resolve_pipeline_steps",
+        lambda _: stub_steps,
+    )
+    monkeypatch.setattr(get_data, "_PIPELINE_APIS", {}, raising=False)
 
     date_prefix = "20240102"
 
@@ -387,7 +394,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     exit_code, logs = _invoke(argv)
     assert exit_code == 0
 
-    log_dir = base_path / "data" / "logs"
+    log_dir = base_path / "logs"
     orchestrator_log = log_dir / f"get_data_{date_prefix}.log"
     assert orchestrator_log.exists()
     orchestrator_records = parse_log_file(orchestrator_log)
@@ -461,7 +468,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert report_payload["summary"]["total"] == 5
     assert report_payload["summary"]["passed"] == 5
     summary_md = summary_md_path.read_text(encoding="utf-8")
-    assert "Success rate: 100.0%" in summary_md
+    assert "Success rate: 100.00%" in summary_md
     assert "|     5|      5|" in summary_md
 
     new_date_prefix = "20240103"

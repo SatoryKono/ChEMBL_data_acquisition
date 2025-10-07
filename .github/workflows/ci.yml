@@ -40,7 +40,16 @@ jobs:
       - name: Type check
         run: mypy --strict library
       - name: Run tests
-        run: pytest
+        run: python scripts/run_tests.py --json reports/test_report.json --markdown reports/test_summary.md
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ matrix.python-version }}
+          path: |
+            reports/test_report.json
+            reports/test_summary.md
+          if-no-files-found: error
       - name: Determinism smoke test
         run: python scripts/check_determinism.py --limit 5
       - name: Smoke test get_data orchestrator
@@ -55,6 +64,7 @@ jobs:
             --final-out "${tmp_output}/targets.csv" \
             --log-level INFO \
             --limit 2
+          python scripts/get_activities.py --limit 5 --dry-run
       - name: Upload output data
         if: always()
         uses: actions/upload-artifact@v4

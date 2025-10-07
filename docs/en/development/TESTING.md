@@ -62,7 +62,8 @@ examples to guarantee byte-for-byte parity.
 
 ```bash
 pytest --json-report --json-report-file=reports/test_report.json
-python tools/make_md_summary.py reports/test_report.json reports/test_summary.md
+python tools/make_md_summary.py --input reports/test_report.json --output reports/test_summary.md
+# defaults can be used directly via `python tools/make_md_summary.py` or `make-md-summary`
 ```
 
 The JSON report must include:
@@ -75,7 +76,7 @@ The JSON report must include:
     "branch": "<branch>",
     "ts_utc": "<ISO8601>",
     "duration_sec": 0.0,
-    "python": "3.11",
+    "python": "3.11|3.12",
     "pytest": "<ver>"
   }
 }

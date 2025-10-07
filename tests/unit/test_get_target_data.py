@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import stat
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Callable, Iterable, Sequence
 
 import pandas as pd
 from types import SimpleNamespace
@@ -112,6 +113,70 @@ def test_is_supported_target_export__cases(
 )
 def test_split_uniprot_tokens__cases(value: str, tokens: list[str]) -> None:
     assert list(get_target_data._split_uniprot_tokens(value)) == tokens
+
+
+def test_prepare_raw_destination__removes_existing(tmp_path: Path) -> None:
+    destination = tmp_path / "raw.csv"
+    destination.write_text("old", encoding="utf-8")
+
+    get_target_data._prepare_raw_destination(destination)
+
+    assert not destination.exists()
+    assert destination.parent.exists()
+
+
+def test_prepare_raw_destination__handles_permission_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "raw.csv"
+    destination.write_text("old", encoding="utf-8")
+
+    unlink_calls = {"count": 0}
+    original_unlink = get_target_data.Path.unlink
+
+    def _fake_unlink(self: Path, *args: object, **kwargs: object) -> None:
+        if self == destination and unlink_calls["count"] == 0:
+            unlink_calls["count"] += 1
+            raise PermissionError("denied")
+        unlink_calls["count"] += 1
+        original_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(
+        get_target_data.Path, "unlink", _fake_unlink, raising=False
+    )
+
+    chmod_modes: list[int] = []
+
+    def _fake_chmod(path: Path, mode: int) -> None:
+        if path == destination:
+            chmod_modes.append(mode)
+
+    monkeypatch.setattr(get_target_data.os, "chmod", _fake_chmod)
+
+    get_target_data._prepare_raw_destination(destination)
+
+    assert unlink_calls["count"] >= 2
+    expected_mode = stat.S_IRUSR | stat.S_IWUSR | getattr(stat, "S_IWRITE", 0)
+    assert chmod_modes == [expected_mode]
+    assert not destination.exists()
+
+
+def test_prepare_raw_destination__raises_when_unlink_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "raw.csv"
+    destination.write_text("old", encoding="utf-8")
+
+    def _always_fail(*args: object, **kwargs: object) -> None:
+        raise PermissionError("locked")
+
+    monkeypatch.setattr(
+        get_target_data.Path, "unlink", _always_fail, raising=False
+    )
+    monkeypatch.setattr(get_target_data.os, "chmod", lambda *_, **__: None)
+
+    with pytest.raises(OSError):
+        get_target_data._prepare_raw_destination(destination)
 
 
 def test_collect_uniprot_candidate_columns__orders_columns(cfg: Config) -> None:
@@ -309,21 +374,30 @@ def test_run_uniprot__doc_quality_reports(
 
     captured: dict[str, object] = {}
 
-    def _fake_analyze(
-        df: pd.DataFrame,
+    def _fake_build_quality(
+        quality_cfg: object,
         *,
-        table_name: str,
-        destination_dir: Path,
-        sample_rows: int | None,
-        include_columns: Sequence[str] | None,
-        exclude_columns: Sequence[str] | None,
-    ) -> None:
-        captured["table_name"] = table_name
-        captured["destination_dir"] = destination_dir
-        captured["sample_rows"] = sample_rows
-        captured["df"] = df.copy()
+        table_name: str | Path,
+        destination: Path | str | None,
+    ) -> Callable[[pd.DataFrame], None]:
+        captured["sample_rows"] = getattr(quality_cfg, "sample_rows", None)
+        captured["table_name"] = Path(table_name).name
+        if destination is None:
+            captured["destination_dir"] = None
+        else:
+            captured["destination_dir"] = Path(destination)
 
-    monkeypatch.setattr(get_target_data, "analyze_table_quality", _fake_analyze)
+        def _hook(df: pd.DataFrame) -> None:
+            captured["df"] = df.copy()
+            captured["hook_called"] = True
+
+        return _hook
+
+    monkeypatch.setattr(
+        get_target_data,
+        "build_table_quality_hook",
+        _fake_build_quality,
+    )
 
     args = argparse.Namespace(input_csv=input_csv, final_out=output_csv)
 
@@ -332,6 +406,7 @@ def test_run_uniprot__doc_quality_reports(
     assert exit_code == 0
     assert captured["table_name"] == output_csv.resolve().stem
     assert captured["destination_dir"] == output_csv.resolve().parent
+    assert captured.get("hook_called") is True
     pd.testing.assert_frame_equal(
         captured["df"], pd.DataFrame({"uniprot_id": ["P12345"]})
     )

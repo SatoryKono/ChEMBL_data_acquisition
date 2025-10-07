@@ -3,21 +3,25 @@
 from __future__ import annotations
 
 import argparse
+import json
 import warnings
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Iterable
+from typing import Callable, Iterable
 
 import numpy as np
 import pandas as pd
 import pytest
+import requests
 import yaml
 
 from dataclasses import dataclass
 
 from config.paths import DICTIONARY_DIR
 from scripts import get_activity_data
+from library.cli.commands import get_activity_data as command_activity
+from library.config import Config
 from library.resources.dictionaries import get_resource
 
 
@@ -90,6 +94,7 @@ def _install_fetch_stubs(
     frame: pd.DataFrame,
     *,
     testitem_frame: pd.DataFrame | None = None,
+    testitem_error: Callable[[], Exception] | Exception | None = None,
 ) -> _FetchCapture:
     captured_activities: list[tuple[str, ...]] = []
     captured_testitems: list[tuple[str, ...]] = []
@@ -110,6 +115,9 @@ def _install_fetch_stubs(
     def _fake_get_testitem(chunk_ids: Iterable[str], **_: object) -> pd.DataFrame:
         identifiers = [str(item) for item in chunk_ids]
         captured_testitems.append(tuple(identifiers))
+        if testitem_error is not None:
+            exc = testitem_error() if callable(testitem_error) else testitem_error
+            raise exc
         if identifiers:
             mask = testitem_frame["molecule_chembl_id"].astype(str).isin(identifiers)
             return testitem_frame.loc[mask].copy().reset_index(drop=True)
@@ -182,9 +190,61 @@ def _make_args(input_csv: Path, output_csv: Path) -> argparse.Namespace:
     )
 
 
+def _activity_options_from_args(args: argparse.Namespace) -> command_activity.ActivityCommandOptions:
+    """Construct :class:`ActivityCommandOptions` mirroring CLI semantics."""
+
+    return command_activity.ActivityCommandOptions(
+        input_csv=args.input_csv,
+        output_csv=args.output_csv,
+        final_output=args.output_csv,
+        limit=getattr(args, "limit", None),
+        offset=getattr(args, "offset", 0),
+        timeout=getattr(args, "timeout", None),
+        batch_size=getattr(args, "batch_size", None),
+        workers=getattr(args, "workers", None),
+        dry_run=getattr(args, "dry_run", False),
+        skip_existing=getattr(args, "skip_existing", False),
+        force=getattr(args, "force", False),
+        invocation=getattr(args, "invocation", None),
+    )
+
+
+def _patch_activity_loggers(monkeypatch: pytest.MonkeyPatch, logger_stub: _RecordingLogger) -> None:
+    """Ensure both CLI entry points emit logs to the stub."""
+
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    monkeypatch.setattr(command_activity, "logger", logger_stub)
+
+
+def _invoke_activity_runner(
+    cfg,
+    args: argparse.Namespace,
+    variant: str,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    runner: Callable[[Config, argparse.Namespace], int],
+) -> int:
+    """Execute the orchestrator via the requested variant."""
+
+    if variant == "cli":
+        monkeypatch.setattr(get_activity_data, "run_chembl", runner)
+        return get_activity_data.run(cfg, args)
+
+    helper_options = _activity_options_from_args(args)
+    return command_activity.run_activity_pipeline(
+        cfg,
+        helper_options,
+        runner=runner,
+        emit_completion_message=get_activity_data._emit_completion_message,
+    )
+
+
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
-def test_activity_pipeline__timeout_clamped_when_below_minimum(cfg, tmp_path, monkeypatch):
+@pytest.mark.parametrize("runner_variant", ["cli", "api"])
+def test_activity_pipeline__timeout_clamped_when_below_minimum(
+    cfg, tmp_path, monkeypatch, runner_variant
+) -> None:
     _configure_cfg(cfg)
     cfg.activity.timeout = get_activity_data.MIN_ACTIVITY_TIMEOUT - 5
 
@@ -193,7 +253,7 @@ def test_activity_pipeline__timeout_clamped_when_below_minimum(cfg, tmp_path, mo
     output_csv = tmp_path / "activities.csv"
 
     logger_stub = _RecordingLogger()
-    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    _patch_activity_loggers(monkeypatch, logger_stub)
 
     captured_timeout: dict[str, float] = {}
 
@@ -201,11 +261,15 @@ def test_activity_pipeline__timeout_clamped_when_below_minimum(cfg, tmp_path, mo
         captured_timeout["timeout"] = float(passed_cfg.activity.timeout)
         return 0
 
-    monkeypatch.setattr(get_activity_data, "run_chembl", _run_chembl_stub)
-
     args = _make_args(input_csv, output_csv)
 
-    exit_code = get_activity_data.run(cfg, args)
+    exit_code = _invoke_activity_runner(
+        cfg,
+        args,
+        runner_variant,
+        monkeypatch,
+        runner=_run_chembl_stub,
+    )
 
     warning_events = [event for level, event, _ in logger_stub.events if level == "warning"]
     assert "activity_timeout_clamped" in warning_events
@@ -216,7 +280,10 @@ def test_activity_pipeline__timeout_clamped_when_below_minimum(cfg, tmp_path, mo
 
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
-def test_activity_pipeline__warns_when_retry_disabled(cfg, tmp_path, monkeypatch):
+@pytest.mark.parametrize("runner_variant", ["cli", "api"])
+def test_activity_pipeline__warns_when_retry_disabled(
+    cfg, tmp_path, monkeypatch, runner_variant
+) -> None:
     _configure_cfg(cfg)
     cfg.retry.max_attempts = 1
 
@@ -225,17 +292,21 @@ def test_activity_pipeline__warns_when_retry_disabled(cfg, tmp_path, monkeypatch
     output_csv = tmp_path / "activities.csv"
 
     logger_stub = _RecordingLogger()
-    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    _patch_activity_loggers(monkeypatch, logger_stub)
 
     def _run_stub(passed_cfg, _args):
         assert passed_cfg.retry.max_attempts == 1
         return 0
 
-    monkeypatch.setattr(get_activity_data, "run_chembl", _run_stub)
-
     args = _make_args(input_csv, output_csv)
 
-    exit_code = get_activity_data.run(cfg, args)
+    exit_code = _invoke_activity_runner(
+        cfg,
+        args,
+        runner_variant,
+        monkeypatch,
+        runner=_run_stub,
+    )
 
     warning_events = [event for level, event, _ in logger_stub.events if level == "warning"]
     assert "activity_retry_disabled" in warning_events
@@ -244,7 +315,10 @@ def test_activity_pipeline__warns_when_retry_disabled(cfg, tmp_path, monkeypatch
 
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
-def test_activity_pipeline__warns_when_api_retries_disabled(cfg, tmp_path, monkeypatch):
+@pytest.mark.parametrize("runner_variant", ["cli", "api"])
+def test_activity_pipeline__warns_when_api_retries_disabled(
+    cfg, tmp_path, monkeypatch, runner_variant
+) -> None:
     _configure_cfg(cfg)
     cfg.api.retries = 0
 
@@ -253,17 +327,21 @@ def test_activity_pipeline__warns_when_api_retries_disabled(cfg, tmp_path, monke
     output_csv = tmp_path / "activities.csv"
 
     logger_stub = _RecordingLogger()
-    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    _patch_activity_loggers(monkeypatch, logger_stub)
 
     def _run_stub(passed_cfg, _args):
         assert passed_cfg.api.retries == 0
         return 0
 
-    monkeypatch.setattr(get_activity_data, "run_chembl", _run_stub)
-
     args = _make_args(input_csv, output_csv)
 
-    exit_code = get_activity_data.run(cfg, args)
+    exit_code = _invoke_activity_runner(
+        cfg,
+        args,
+        runner_variant,
+        monkeypatch,
+        runner=_run_stub,
+    )
 
     warning_events = [event for level, event, _ in logger_stub.events if level == "warning"]
     assert "activity_api_retry_disabled" in warning_events
@@ -346,6 +424,11 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
         else 0.0
     )
     assert f"null_fraction={expected_null_fraction:.6f}" in summary_message
+    report_path = cfg.io.output_dir / "activity.postprocess.report.json"
+    assert report_path.exists()
+    report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report_payload["table"] == "activity"
+    assert "metrics" in report_payload
 
     meta_path = output_csv.with_name(output_csv.name + ".meta.yaml")
     assert meta_path.exists()
@@ -537,7 +620,13 @@ def test_activity_pipeline__missing_column_input(activity_resource_dir: Path, cf
 
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
-def test_activity_pipeline__batch_size_clamped(cfg, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.parametrize("runner_variant", ["cli", "api"])
+def test_activity_pipeline__batch_size_clamped(
+    cfg,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    runner_variant,
+) -> None:
     _configure_cfg(cfg)
     cfg.activity.batch_size = get_activity_data.MAX_ACTIVITY_CHUNK_SIZE + 5
 
@@ -546,7 +635,7 @@ def test_activity_pipeline__batch_size_clamped(cfg, tmp_path: Path, monkeypatch:
     output_csv = tmp_path / "activities.csv"
 
     logger_stub = _RecordingLogger()
-    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    _patch_activity_loggers(monkeypatch, logger_stub)
 
     captured_batch_sizes: list[int | None] = []
 
@@ -554,11 +643,15 @@ def test_activity_pipeline__batch_size_clamped(cfg, tmp_path: Path, monkeypatch:
         captured_batch_sizes.append(getattr(config.activity, "batch_size", None))
         return 0
 
-    monkeypatch.setattr(get_activity_data, "run_chembl", _fake_run_chembl)
-
     args = _make_args(input_csv, output_csv)
 
-    exit_code = get_activity_data.run(cfg, args)
+    exit_code = _invoke_activity_runner(
+        cfg,
+        args,
+        runner_variant,
+        monkeypatch,
+        runner=_fake_run_chembl,
+    )
 
     assert exit_code == 0
     assert captured_batch_sizes == [get_activity_data.MAX_ACTIVITY_CHUNK_SIZE]
@@ -695,6 +788,102 @@ def test_activity_pipeline__fills_compound_name_from_pref_name(cfg, tmp_path, mo
     fill_mask = compound_series.notna() & compound_series.str.strip().ne("")
     fill_rate = fill_mask.sum() / len(compound_series)
     assert fill_rate >= 0.95
+
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("deterministic_env")
+@pytest.mark.parametrize(
+    ("error_factory", "expected_message"),
+    [
+        pytest.param(
+            lambda: requests.Timeout("pref name lookup timed out"),
+            "pref name lookup timed out",
+            id="timeout",
+        ),
+        pytest.param(
+            lambda: requests.HTTPError("404 Client Error: Not Found for url"),
+            "404 Client Error",
+            id="http-404",
+        ),
+    ],
+)
+def test_activity_pipeline__records_pref_name_fetch_failures(
+    cfg,
+    tmp_path,
+    monkeypatch,
+    error_factory,
+    expected_message,
+):
+    _configure_cfg(cfg)
+
+    input_csv = tmp_path / "ids_pref_name.csv"
+    input_csv.write_text("activity_id\nACT1\nACT2\n", encoding="utf-8")
+
+    chunk_df = pd.DataFrame.from_records(
+        [
+            {
+                "activity_id": "ACT1",
+                "molecule_chembl_id": "CHEMBL1",
+                "assay_chembl_id": "ASSAY1",
+                "standard_value": 1.0,
+                "standard_units": "nM",
+                "standard_type": "IC50",
+                "relation": "=",
+            },
+            {
+                "activity_id": "ACT2",
+                "molecule_chembl_id": "CHEMBL2",
+                "assay_chembl_id": "ASSAY2",
+                "standard_value": 2.0,
+                "standard_units": "nM",
+                "standard_type": "IC50",
+                "relation": "=",
+            },
+        ]
+    )
+
+    capture = _install_fetch_stubs(
+        monkeypatch,
+        chunk_df,
+        testitem_error=error_factory,
+    )
+    written = _install_writer_stub(monkeypatch)
+    logger_stub = _RecordingLogger()
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    monkeypatch.setattr("library.validation.logger", logger_stub)
+
+    output_csv = tmp_path / "activities.csv"
+    args = _make_args(input_csv, output_csv)
+
+    exit_code = get_activity_data.run_chembl(cfg, args)
+
+    assert exit_code == 0
+    assert capture.testitems, "expected pref name fetch attempts"
+    assert written, "pipeline should produce output"
+
+    pref_name_events = [
+        payload
+        for level, event, payload in logger_stub.events
+        if level == "warning" and event == "pref_name_fetch_failed"
+    ]
+    assert pref_name_events, "pref name fetch failure should be logged"
+    assert pref_name_events[0]["pending"] == list(capture.testitems[0])
+    assert expected_message in str(pref_name_events[0]["error"])
+
+    fetch_failure_path = output_csv.with_name("activities_fetch_failures.csv")
+    assert fetch_failure_path.exists()
+
+    failure_df = pd.read_csv(fetch_failure_path)
+    assert len(failure_df) == 1
+    recorded_ids = failure_df.loc[0, "chunk_ids"].split(",")
+    assert recorded_ids == list(capture.testitems[0])
+    assert failure_df.loc[0, "chunk_size"] == len(capture.testitems[0])
+    assert expected_message in str(failure_df.loc[0, "error"])
+
+    meta_path = Path(f"{fetch_failure_path}.meta.yaml")
+    assert meta_path.exists()
+    meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert set(meta.get("columns", [])) >= {"chunk_ids", "chunk_size", "error"}
 
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")

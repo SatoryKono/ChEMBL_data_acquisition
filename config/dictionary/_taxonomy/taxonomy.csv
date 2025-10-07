@@ -1,4 +1,11 @@
 tax_id,assay_group,assay_strain
-9606,Human,HEK293
-10090,Rodent,Balb/c
-4932,Fungus,Saccharomyces cerevisiae
+9606,Human,Homo sapiens
+10090,Rodent,Mus musculus
+10116,Rodent,Rattus norvegicus
+7227,Invertebrate,Drosophila melanogaster
+6239,Invertebrate,Caenorhabditis elegans
+562,Bacteria,Escherichia coli K-12
+4932,Yeast,Saccharomyces cerevisiae S288C
+3702,Plant,Arabidopsis thaliana Col-0
+8355,Amphibian,Xenopus laevis
+9823,Porcine,Sus scrofa domesticus

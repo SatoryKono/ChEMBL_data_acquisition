@@ -78,6 +78,7 @@ def test_build_parser__pubmed_defaults() -> None:
     assert args.limit is None
     assert args.fallback_doi_csv is None
     assert args.offset == 0
+    assert args.timeout is None
 
 
 @pytest.mark.unit

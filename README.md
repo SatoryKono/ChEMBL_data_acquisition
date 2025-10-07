@@ -83,22 +83,23 @@ python scripts/get_data.py \
 
 | Command | Example invocation | Highlights |
 |---------|--------------------|------------|
-| Orchestrator | `python scripts/get_data.py --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --dry-run` | Runs the full pipeline chain once, forwarding `--limit`, `--force`, `--skip-existing` and `--dry-run` to individual stages. |
+| Orchestrator | `python scripts/get_data.py --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --dry-run` | Runs the full pipeline chain once, forwarding `--limit`, `--force`, `--skip-existing` and `--dry-run` to individual stages. Advanced flags include `--pipeline-registry` to load alternative step definitions and `--override-{input,output-stem,subcommand}` for ad hoc tweaks. |
 | Document | `python scripts/get_document_data.py --mode all --input data/input/document.csv --final-out output/documents.csv --fallback-doi-enabled --fallback-doi-path data/input/fallback.csv --openalex-rps 2` | Supports `--mode chembl|pubmed|all`, per-source batch sizing and fallback DOI overrides. |
 | Target | `python scripts/get_target_data.py all --input data/input/target.csv --final-out output/targets.csv --chembl-chunk-size 10 --uniprot-data-dir cache/uniprot --raw-out output/targets_raw.parquet --raw-format parquet` | Sub-commands (`uniprot`, `chembl`, `iuphar`, `all`) accept prefixed overrides and optional raw exports. |
 | Assay | `python scripts/get_assay_data.py --input data/input/assay.csv --final-out output/assays.csv --chunk-size 25 --timeout 45` | Requires the assay, taxonomy and target dictionaries under `config/dictionary` to enrich `assay_group`, `assay_strain`, `year` and `accession` before normalisation; shares global options plus per-request chunk size and timeout tuning. |
 | Test item | `python scripts/get_testitem_data.py --input data/input/testitem.csv --final-out output/testitems.csv --request-limit 500 --hierarchy-path config/dictionary/_testitem/molecule_hierarchy.csv` | Provides parent-molecule enrichment controls and request throttling (`--request-limit`, `--batch-size`, `--dry-run`). |
 | Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto` | Resolves tissue metadata, merges ontology cross-references and normalises synonyms for downstream joins. Run separately before `get_activity_data` when tissue lookups are required. |
 | Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --final-out output/cellline.csv --batch-size 20 --limit 100` | Retrieves ChEMBL cell line records, normalises nullable identifiers and enforces deterministic ordering. |
-| Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --action-type-enabled --bounds-enabled --quality-threshold warn` | Toggles enrichment hooks (`--action-type-enabled`, `--bounds-enabled`), derived bounds and QA thresholds. |
+| Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --timeout 120 --limit 500 --offset 100 --workers 4 --dry-run` | Flags: `--timeout`, `--limit`, `--offset`, `--dry-run`, `--workers`. |
+| Synthetic activities | `python scripts/get_activities.py --limit 25 --dry-run` | Generates deterministic dummy rows for smoke tests; accepts the same logging flags as other CLI tools. |
 
 Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar
 and table-quality reports under the same directory. The target pipeline also
 emits helper lookups named `organism.output.target_<stamp>.csv`,
 `isoform.output.target_<stamp>.csv`, `names.output.target_<stamp>.csv`, and
 `IUPHAR.output.target_<stamp>.csv` — all detailed in
-[`docs/OUTPUT_TARGETS_EN.md`](./docs/OUTPUT_TARGETS_EN.md) and
-[`docs/OUTPUT_TARGETS_RU.md`](./docs/OUTPUT_TARGETS_RU.md). The isoform helper
+[`docs/en/OUTPUT_TARGETS.md`](./docs/en/OUTPUT_TARGETS.md) and
+[`docs/ru/OUTPUT_TARGETS.md`](./docs/ru/OUTPUT_TARGETS.md). The isoform helper
 is produced by `library.postprocessing.target.process_targets`, a direct port of
 the original Power Query workbook that keeps every row byte-identical. Refer to
 the [output reference](./docs/en/OUTPUT.md) for the complete specification.
@@ -121,6 +122,8 @@ languages:
   [`docs/en/guides/DEBUGGING.md`](./docs/en/guides/DEBUGGING.md),
   [`docs/en/guides/FAQ.md`](./docs/en/guides/FAQ.md) and their Russian twins under
   `docs/ru/guides/`
+- Post-processing runbook: [`docs/en/guides/POSTPROCESSING_RUNBOOK.md`](./docs/en/guides/POSTPROCESSING_RUNBOOK.md),
+  [`docs/ru/guides/POSTPROCESSING_RUNBOOK.md`](./docs/ru/guides/POSTPROCESSING_RUNBOOK.md)
 - Configuration guide: [`docs/en/CONFIG.md`](./docs/en/CONFIG.md),
   [`docs/ru/CONFIG.md`](./docs/ru/CONFIG.md)
 - Output specification and validation rules:
@@ -140,6 +143,59 @@ must produce:
 - `reports/test_report.json` — machine readable execution log
 - `reports/test_summary.md` — condensed Markdown summary
 
+Use the canonical wrapper to collect both artefacts and enforce the ≥95 %
+success-rate gate:
+
+```bash
+python scripts/run_tests.py
+```
+
+`test_report.json` always exposes three top-level keys:
+
+```json
+{
+  "meta": {
+    "repo": "SatoryKono/ChEMBL_data_acquisition",
+    "commit": "<SHA>",
+    "branch": "<branch>",
+    "ts_utc": "<ISO8601>",
+    "duration_sec": 0.0,
+    "python": "3.11|3.12",
+    "pytest": "<version>",
+    "exit_code": 0
+  },
+  "summary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0,
+    "error": 0,
+    "success_rate": 0.0
+  },
+  "tests": [
+    {
+      "nodeid": "tests/unit/test_module.py::test_case",
+      "status": "passed",
+      "duration_ms": 12.3,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    }
+  ]
+}
+```
+
+`test_summary.md` mirrors the counts and, for every failure or error, embeds the
+exact `error` message from the JSON report in a fenced code block. This makes it
+possible to triage failures using only the Markdown artefact.
+
 Smoke runs can use `pytest -q -k "not slow and not e2e"`, while full validation
 uses `pytest -q`. See [`docs/en/development/TESTING.md`](./docs/en/development/TESTING.md)
 for fixtures, determinism requirements and coverage targets.
+
+## License
+
+The project is distributed under the [MIT License](./LICENSE).

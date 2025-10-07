@@ -461,11 +461,17 @@ class UniprotMappingCfg(_BaseModel):
 
 
 class IupharCfg(_BaseModel):
+    enable: bool = True
     base: str = "https://www.guidetopharmacology.org/services"
     timeout_connect: float = Field(5.0, ge=1)
     timeout_read: float = Field(30.0, ge=1)
     rps: int = Field(4, ge=1)
     burst: int = Field(5, ge=1)
+
+    @field_validator("enable", mode="before")
+    @classmethod
+    def _coerce_enable(cls, value: Any) -> bool:
+        return _BoolModel._parse_bool(value)
 
     @field_validator("base")
     @classmethod
@@ -588,6 +594,8 @@ class PubMedCfg(_BaseModel):
     retries: int = Field(2, ge=0)
     rps: int | None = Field(default=None, ge=1)
     burst: int | None = Field(default=None, ge=1)
+    tool: str = Field("chembl-da", min_length=1)
+    email: str = "chembl-data@ebi.ac.uk"
 
     @field_validator("base")
     @classmethod
@@ -595,6 +603,20 @@ class PubMedCfg(_BaseModel):
         if not _valid_url(v):
             raise ValueError("invalid URL")
         return v
+
+    @field_validator("tool")
+    @classmethod
+    def _tool(cls, v: str) -> str:
+        value = v.strip()
+        if not value:
+            raise ValueError("pubmed.tool must be non-empty")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        value = v.strip()
+        return _require_non_placeholder_email("pubmed.email", value)
 
 
 class SemanticScholarCfg(_BaseModel):
@@ -1135,6 +1157,7 @@ class TargetUniprotCfg(_BaseModel):
     chunk_size: int = Field(100, ge=1)
     timeout: float = Field(30.0, gt=0)
     offset: int = Field(0, ge=0)
+    enable_gtop: bool = True
 
     @field_validator("data_dir", mode="before")
     @classmethod
@@ -1142,6 +1165,11 @@ class TargetUniprotCfg(_BaseModel):
         if value is None:
             return value
         return resolve_resource_reference(value)
+
+    @field_validator("enable_gtop", mode="before")
+    @classmethod
+    def _coerce_enable_gtop(cls, value: Any) -> bool:
+        return _BoolModel._parse_bool(value)
 
 
 class TargetChemblBatchRetryCfg(_BoolModel):
@@ -1475,6 +1503,8 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_RPS": ["sources", "chembl", "api", "rps"],
     "CHEMBL_DA_PUBMED_RPS": ["sources", "pubmed", "rps"],
     "CHEMBL_DA_PUBMED_BURST": ["sources", "pubmed", "burst"],
+    "CHEMBL_DA_PUBMED_TOOL": ["sources", "pubmed", "tool"],
+    "CHEMBL_DA_PUBMED_EMAIL": ["sources", "pubmed", "email"],
     "CHEMBL_DA_SEMANTIC_SCHOLAR_RPS": ["sources", "semantic_scholar", "rps"],
     "CHEMBL_DA_SEMANTIC_SCHOLAR_BURST": [
         "sources",

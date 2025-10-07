@@ -8,7 +8,7 @@ corresponding remediation steps. The Russian counterpart lives at
 
 `get_document_data` accepts a `--mode` flag (`chembl`, `pubmed`, `all`) and
 refuses to run without it. The parser eventually calls
-[`prepare_io_paths`](../../library/cli/parser.py) which expects the mode to be set
+[`prepare_io_paths`](../../../library/cli/parser.py) which expects the mode to be set
 when building log messages. Supply `--mode` explicitly or use the positional
 alias (`python scripts/get_document_data.py all ...`).
 

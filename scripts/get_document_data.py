@@ -56,6 +56,8 @@ from library.integration import chembl_library as cl
 from library.document_defaults import ALL_DEFAULTS, CHEMBL_DEFAULTS, PUBMED_DEFAULTS
 from library.pipelines.document import postprocessing as dp
 from library.postprocessing import document as document_export_postprocessing
+from library.postprocess.documents import run_document_pipeline as run_document_postprocess
+from library.postprocess.common import collect_postprocess_metrics
 from library.orchestration import ETLContext
 from library.cli import (
     LoggerConfig,
@@ -96,6 +98,7 @@ from library.reporting.run_manifest import (
 )
 from library.postprocessing.document import preprocess_documents_csv
 from library.pipelines.common import add_pipeline_metadata
+from library.pipelines.common.metadata import get_pipeline_version
 from library.common.sidecar import SidecarErrors
 from library.qa.reporting import build_table_quality_hook
 from library.qa.table_quality import TableQualityProfiler
@@ -181,6 +184,14 @@ _EXPORT_SORT_FALLBACK = [
 
 
 _EXPORT_STREAM_CHUNK_SIZE = 10_000
+
+
+def _resolve_timeout(value: float | None, default: float) -> float:
+    """Return ``default`` when ``value`` is ``None`` otherwise the float value."""
+
+    if value is None:
+        return float(default)
+    return float(value)
 
 
 def _iter_export_chunks(df: pd.DataFrame, *, chunk_size: int) -> Iterable[pd.DataFrame]:
@@ -441,7 +452,7 @@ def _write_export_chunks(
     )
 
 
-def _maybe_run_document_postprocessing(csv_path: Path) -> None:
+def _maybe_run_document_postprocessing(csv_path: Path, *, skip_qa: bool = False) -> None:
     if not csv_path.name.startswith("output.document_"):
         return
 
@@ -470,7 +481,14 @@ def _maybe_run_document_postprocessing(csv_path: Path) -> None:
         base_path=str(data_dir),
         ref_document_rel=ref_rel_windows,
         out_document_rel=out_rel_windows,
+        run_qa=not skip_qa,
     )
+    if skip_qa:
+        logger.info(
+            "document_postprocess_qa_skipped_partial",
+            output=str(csv_path),
+            reason="partial_run",
+        )
 
 
 def _finalise_export(
@@ -481,6 +499,7 @@ def _finalise_export(
     input_csv: Path,
     key_columns: Sequence[str] | None = None,
     chunk_size: int | None = None,
+    partial_run: bool = False,
 ) -> int:
     """Validate input frames and write CSV/metadata artefacts."""
 
@@ -536,7 +555,7 @@ def _finalise_export(
                     "document_validation_failed",
                     failure_count=len(exc.failure_cases),
                     failure_path=str(failure_path),
-                    error=str(exc),
+                    error=str(exc), exc_info=exc,
                 )
                 validated = getattr(exc, "validated_data", ordered)
                 exit_code = 1
@@ -594,7 +613,7 @@ def _finalise_export(
             encoding=cfg.io.csv_encoding,
         )
     except OSError as exc:
-        logger.error("csv_write_failed", error=str(exc), path=str(output))
+        logger.error("csv_write_failed", error=str(exc), exc_info=exc, path=str(output))
         return 1
 
     try:
@@ -605,7 +624,7 @@ def _finalise_export(
     except (OSError, ValueError, pd.errors.ParserError) as exc:
         logger.error(
             "document_export_postprocess_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             path=str(csv_path),
         )
         exit_code = 1
@@ -642,7 +661,26 @@ def _finalise_export(
     if exit_code == 0:
         logger.info("write_done", rows=rows_kept, path=str(csv_path))
         if csv_path.name.startswith("output.document_"):
-            _maybe_run_document_postprocessing(csv_path)
+            try:
+                _maybe_run_document_postprocessing(
+                    csv_path,
+                    skip_qa=partial_run,
+                )
+            except RuntimeError as exc:
+                logger.error(
+                    "document_postprocess_qa_mismatch",
+                    error=str(exc),
+                    path=str(csv_path),
+                )
+                exit_code = 1
+            except Exception as exc:  # pragma: no cover - defensive guard
+                logger.error(
+                    "document_postprocess_qa_error",
+                    error=str(exc),
+                    path=str(csv_path),
+                    exc_info=exc,
+                )
+                exit_code = 1
 
     doc_quality_cfg = getattr(cfg.system, "doc_quality", None)
     quality_hook = build_table_quality_hook(
@@ -669,7 +707,7 @@ def _finalise_export(
         destination = exc.path or csv_path.with_suffix(".quality.json")
         logger.error(
             "quality_report_write_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             path=str(destination),
         )
         return 1
@@ -681,6 +719,73 @@ def _finalise_export(
         )
         return 1
     return exit_code
+
+
+def _generate_document_postprocess_metrics(
+    cfg: Config,
+    output_path: Path,
+    *,
+    logger: Logger,
+    extras: Mapping[str, object] | None = None,
+):
+    """Run the document postprocess pipeline and persist the metrics report."""
+
+    return collect_postprocess_metrics(
+        table="document",
+        output_path=output_path,
+        csv_sep=cfg.io.csv_sep,
+        csv_encoding=cfg.io.csv_encoding,
+        output_dir=cfg.io.output_dir,
+        runner=run_document_postprocess,
+        logger=logger,
+        pipeline_version=get_pipeline_version(),
+        report_extras=extras,
+    )
+
+
+def _log_document_completion(
+    event: str,
+    *,
+    cfg: Config,
+    output_path: Path,
+    logger: Logger,
+    extras: Mapping[str, object] | None = None,
+) -> None:
+    """Log pipeline completion details and write the postprocess report."""
+
+    metrics, report_path = _generate_document_postprocess_metrics(
+        cfg,
+        output_path,
+        logger=logger,
+        extras=extras,
+    )
+    pipeline_version_value = (
+        metrics.pipeline_version
+        if metrics and metrics.pipeline_version is not None
+        else get_pipeline_version()
+    )
+
+    payload: dict[str, object] = {
+        "output": str(output_path),
+        "pipeline_version": pipeline_version_value,
+    }
+    if extras:
+        payload.update(extras)
+    if metrics is not None:
+        summary = metrics.summary()
+        if summary.get("rows") is not None:
+            payload["postprocess_rows"] = summary["rows"]
+        if summary.get("columns") is not None:
+            payload["postprocess_columns"] = summary["columns"]
+        if summary.get("duration_s") is not None:
+            payload["postprocess_duration_s"] = summary["duration_s"]
+        if summary.get("steps") is not None:
+            payload["postprocess_steps"] = summary["steps"]
+        if metrics.validation is not None:
+            payload["postprocess_schema"] = metrics.validation.schema
+    if report_path is not None:
+        payload["postprocess_report"] = str(report_path)
+    logger.info(event, **payload)
 
 
 def run_pubmed(
@@ -785,7 +890,7 @@ def run_pubmed(
         context = service.build_missing_input_context(Path(args.input_csv))
         logger.error(
             "input_read_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             path=str(args.input_csv),
             **context,
         )
@@ -799,6 +904,8 @@ def run_pubmed(
         pmids_limited, get_limit_count = service.limit_iterable(pmids_iter, limit)
         pmids = pmids_limited
         limit_counter = get_limit_count
+
+    partial_run = (limit is not None) or (offset > 0)
 
     fallback_state: FallbackDoiState | None = None
     if fallback_enabled:
@@ -826,7 +933,7 @@ def run_pubmed(
         except (FileNotFoundError, pd.errors.ParserError, UnicodeError, OSError) as exc:
             logger.error(
                 "fallback_doi_read_failed",
-                error=str(exc),
+                error=str(exc), exc_info=exc,
                 path=str(fallback_path),
                 delimiter=delimiter,
                 encoding=encoding,
@@ -842,7 +949,7 @@ def run_pubmed(
         except ValueError as exc:
             logger.error(
                 "fallback_doi_invalid",
-                error=str(exc),
+                error=str(exc), exc_info=exc,
                 path=str(fallback_path),
             )
             return 1
@@ -894,11 +1001,12 @@ def run_pubmed(
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
             chunk_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
+            partial_run=partial_run,
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error(
             "pubmed_pipeline_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             output=str(output_path),
         )
         return 1
@@ -913,7 +1021,13 @@ def run_pubmed(
     if limit_counter is not None:
         logger.info("process_limit", limit=limit_counter())
     if exit_code == 0:
-        logger.info("document_pubmed_done", output=str(output_path))
+        _log_document_completion(
+            "document_pubmed_done",
+            cfg=cfg,
+            output_path=output_path,
+            logger=logger,
+            extras={"mode": "pubmed"},
+        )
     else:
         logger.error(
             "document_pubmed_failed",
@@ -970,7 +1084,8 @@ def run_chembl(
             args.final_out = output_path
         setattr(args, "output_csv", output_path)
     chunk_size = getattr(args, "chunk_size", chembl_defaults.chunk_size)
-    timeout = getattr(args, "timeout", chembl_defaults.timeout)
+    timeout = _resolve_timeout(getattr(args, "timeout", None), chembl_defaults.timeout)
+    setattr(args, "timeout", timeout)
     metadata_obj = getattr(args, "_config_metadata", None)
     if not isinstance(metadata_obj, ConfigMetadata):
         metadata_obj = None
@@ -1024,7 +1139,7 @@ def run_chembl(
             context = service.build_missing_input_context(Path(args.input_csv))
             logger.error(
                 "input_read_failed",
-                error=str(exc),
+                error=str(exc), exc_info=exc,
                 path=str(args.input_csv),
                 **context,
             )
@@ -1041,19 +1156,21 @@ def run_chembl(
             ids = limited_ids
             limit_counter = get_limit_count
 
+        partial_run = (limit is not None) or (offset > 0)
         try:
             df = cl.get_documents(
                 ids,
                 cfg=cfg.api,
                 client=client,
                 chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
-                timeout=getattr(args, "timeout", chembl_defaults.timeout),
+                timeout=timeout,
             )
         except (requests.RequestException, ValueError) as exc:
             logger.error(
                 "chembl_documents_fetch_failed",
-                error=str(exc),
+                error=str(exc), exc_info=exc,
                 chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
+                timeout=timeout,
             )
             return 1
         if "doi" in df.columns:
@@ -1067,9 +1184,19 @@ def run_chembl(
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
             chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
+            partial_run=partial_run,
         )
         if exit_code == 0:
-            logger.info("document_chembl_done", output=str(output_path))
+            extras: dict[str, object] = {"mode": "chembl"}
+            if partial_run:
+                extras["partial_run"] = True
+            _log_document_completion(
+                "document_chembl_done",
+                cfg=cfg,
+                output_path=output_path,
+                logger=logger,
+                extras=extras,
+            )
         else:
             logger.error(
                 "document_chembl_failed",
@@ -1126,7 +1253,7 @@ def run_all(
         context = service.build_missing_input_context(Path(args.input_csv))
         logger.error(
             "input_read_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             path=str(args.input_csv),
             **context,
         )
@@ -1144,6 +1271,7 @@ def run_all(
         ids_source = ids_limited
         limit_counter = get_limit_count
 
+    partial_run = (limit is not None) or (offset > 0)
     iterator = iter(ids_source)
     sample_size = getattr(args, "chembl_chunk_size", all_defaults.chunk_size)
     sample_ids = list(islice(iterator, sample_size))
@@ -1167,17 +1295,32 @@ def run_all(
         setattr(args, "output_csv", output_path)
     fallback_enabled = getattr(args, "fallback_doi_enabled", False)
     fallback_path_arg = getattr(args, "fallback_doi_path", None)
+    chembl_chunk_size = getattr(
+        args, "chembl_chunk_size", all_defaults.chunk_size
+    )
+    setattr(args, "chembl_chunk_size", chembl_chunk_size)
+    chembl_timeout_value = getattr(args, "chembl_timeout", None)
+    if chembl_timeout_value is None:
+        chembl_timeout_value = getattr(args, "timeout", None)
+    chembl_timeout = _resolve_timeout(chembl_timeout_value, all_defaults.timeout)
+    setattr(args, "chembl_timeout", chembl_timeout)
+    pubmed_timeout_value = getattr(args, "pubmed_timeout", None)
+    if pubmed_timeout_value is None:
+        pubmed_timeout_value = getattr(args, "timeout", None)
+    pubmed_timeout = _resolve_timeout(pubmed_timeout_value, PUBMED_DEFAULTS.timeout)
+    setattr(args, "pubmed_timeout", pubmed_timeout)
     logger.info(
         "document_all_start",
         input=str(args.input_csv),
         output=str(output_path),
         limit=limit,
         offset=offset,
-        chembl_chunk_size=getattr(args, "chembl_chunk_size", all_defaults.chunk_size),
+        chembl_chunk_size=chembl_chunk_size,
         pubmed_workers=getattr(args, "pubmed_workers", all_defaults.workers),
         pubmed_batch_size=getattr(args, "pubmed_batch_size", all_defaults.batch_size),
         pubmed_sleep=getattr(args, "pubmed_sleep", all_defaults.sleep),
-        chembl_timeout=getattr(args, "chembl_timeout", all_defaults.timeout),
+        chembl_timeout=chembl_timeout,
+        pubmed_timeout=pubmed_timeout,
         fallback_doi_enabled=fallback_enabled,
         fallback_doi_overwrite=getattr(args, "fallback_doi_overwrite", False),
         fallback_doi_path=str(fallback_path_arg) if fallback_path_arg else None,
@@ -1209,7 +1352,7 @@ def run_all(
         except (FileNotFoundError, pd.errors.ParserError, UnicodeError, OSError) as exc:
             logger.error(
                 "fallback_doi_read_failed",
-                error=str(exc),
+                error=str(exc), exc_info=exc,
                 path=str(fallback_path),
                 delimiter=delimiter,
                 encoding=encoding,
@@ -1225,7 +1368,7 @@ def run_all(
         except ValueError as exc:
             logger.error(
                 "fallback_doi_invalid",
-                error=str(exc),
+                error=str(exc), exc_info=exc,
                 path=str(fallback_path),
             )
             return 1
@@ -1244,20 +1387,17 @@ def run_all(
                 ids_for_fetch,
                 cfg=cfg.api,
                 client=client,
-                chunk_size=getattr(
-                    args, "chembl_chunk_size", all_defaults.chunk_size
-                ),
-                timeout=getattr(
-                    args, "chembl_timeout", all_defaults.timeout
-                ),
+                chunk_size=chembl_chunk_size,
+                timeout=chembl_timeout,
             )
     except (requests.RequestException, ValueError) as exc:
         logger.error(
             "chembl_documents_fetch_failed",
             ids=sample_ids,
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             output=str(output_path),
-            chunk_size=getattr(args, "chembl_chunk_size", all_defaults.chunk_size),
+            chunk_size=chembl_chunk_size,
+            timeout=chembl_timeout,
         )
         return 1
     if limit_counter is not None:
@@ -1292,6 +1432,7 @@ def run_all(
             chunk_size=getattr(
                 args, "chembl_chunk_size", all_defaults.chunk_size
             ),
+            partial_run=partial_run,
         )
         if fallback_state is not None:
             logger.info(
@@ -1302,7 +1443,16 @@ def run_all(
                 **fallback_state.metrics.as_log_kwargs(),
             )
         if exit_code == 0:
-            logger.info("document_all_done", output=str(output_path))
+            extras: dict[str, object] = {"mode": "all"}
+            if partial_run:
+                extras["partial_run"] = True
+            _log_document_completion(
+                "document_all_done",
+                cfg=cfg,
+                output_path=output_path,
+                logger=logger,
+                extras=extras,
+            )
         else:
             logger.error(
                 "document_all_failed",
@@ -1378,7 +1528,7 @@ def run_all(
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error(
             "pubmed_pipeline_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             output=str(output_path),
         )
         return 1
@@ -1398,6 +1548,7 @@ def run_all(
         input_csv=Path(args.input_csv),
         key_columns=["document_chembl_id"],
         chunk_size=getattr(args, "chembl_chunk_size", all_defaults.chunk_size),
+        partial_run=partial_run,
     )
     if fallback_state is not None:
         logger.info(
@@ -1408,7 +1559,16 @@ def run_all(
             **fallback_state.metrics.as_log_kwargs(),
         )
     if exit_code == 0:
-        logger.info("document_all_done", output=str(output_path))
+        extras: dict[str, object] = {"mode": "all"}
+        if partial_run:
+            extras["partial_run"] = True
+        _log_document_completion(
+            "document_all_done",
+            cfg=cfg,
+            output_path=output_path,
+            logger=logger,
+            extras=extras,
+        )
     else:
         logger.error(
             "document_all_failed",
@@ -1448,15 +1608,23 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     mode = getattr(args, "mode", None)
     if mode in (None, ""):
         mode = getattr(args, "command", None)
-    timeout_value = None
+    chembl_timeout_override: float | None = None
+    pubmed_timeout_override: float | None = None
     if mode == "chembl":
-        timeout_value = getattr(args, "timeout", None)
+        chembl_timeout_override = getattr(args, "timeout", None)
+    elif mode == "pubmed":
+        pubmed_timeout_override = getattr(args, "timeout", None)
     elif mode == "all":
-        timeout_value = getattr(args, "chembl_timeout", None)
-        if timeout_value is None:
-            timeout_value = getattr(args, "timeout", None)
-    if timeout_value is not None:
-        cfg.api.timeout_read = timeout_value
+        chembl_timeout_override = getattr(args, "chembl_timeout", None)
+        if chembl_timeout_override is None:
+            chembl_timeout_override = getattr(args, "timeout", None)
+        pubmed_timeout_override = getattr(args, "pubmed_timeout", None)
+        if pubmed_timeout_override is None:
+            pubmed_timeout_override = getattr(args, "timeout", None)
+    if chembl_timeout_override is not None:
+        cfg.api.timeout_read = float(chembl_timeout_override)
+    if pubmed_timeout_override is not None:
+        cfg.pubmed.timeout_read = float(pubmed_timeout_override)
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0
@@ -1599,7 +1767,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     single_group.add_argument(
         "--timeout",
         type=float,
-        default=CHEMBL_DEFAULTS.timeout,
+        default=None,
         help=(
             "HTTP read timeout in seconds (defaults: chembl/all="
             f"{CHEMBL_DEFAULTS.timeout}, pubmed={PUBMED_DEFAULTS.timeout})"
@@ -1622,7 +1790,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--chembl-timeout",
         dest="chembl_timeout",
         type=float,
-        default=ALL_DEFAULTS.timeout,
+        default=None,
         help=(
             "Timeout in seconds for ChEMBL requests when running in all mode "
             f"(default: {ALL_DEFAULTS.timeout})"
@@ -1665,7 +1833,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--pubmed-timeout",
         dest="pubmed_timeout",
         type=float,
-        default=PUBMED_DEFAULTS.timeout,
+        default=None,
         help=(
             "Timeout in seconds for PubMed requests when running in all mode "
             f"(default: {PUBMED_DEFAULTS.timeout})"

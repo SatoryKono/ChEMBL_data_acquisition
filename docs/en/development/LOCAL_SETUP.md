@@ -2,7 +2,7 @@
 
 ## Toolchain
 
-- Python 3.11 (matching `.python-version` or CI configuration).
+- Python 3.11 or 3.12 (matching `.python-version` or CI configuration).
 - `pip` with `requirements-lock.txt` for deterministic installs.
 - `pre-commit` for formatting (`black`), linting (`ruff`) and import sorting.
 - Optional: `direnv` or `.env` file with environment variables (`CHEMBL_DA_*`).

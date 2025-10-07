@@ -35,9 +35,10 @@ three tiers:
 
 All commands exit with a non-zero status on validation errors, IO issues, or
 upstream API failures. Each run writes a text log to
-`<base>/logs/<script>_<YYYYMMDD>.log` (with `<base>` defaulting to `data` and
-overridable via `CHEMBL_DA_BASE_PATH`) using the `[timestamp] [LEVEL] [logger]
-message` format so that warnings and errors can be audited after the fact.
+`logs/<script>_<YYYYMMDD>.log` in the repository root. Setting
+`CHEMBL_DA_BASE_PATH` relocates the folder to `<base>/logs`. All entries use the
+`[timestamp] [LEVEL] [logger] message` format so that warnings and errors can be
+audited after the fact.
 
 ### Input templates
 
@@ -250,7 +251,8 @@ Use these modules for diagnostics, QA, or offline workflows. Each exposes a
 | `library.utils.cli_tools.chunk_io_main` | `chunk-io --input data.csv --final-out copy.csv` | Re-serialise CSV files in deterministic chunks. |
 | `library.utils.cli_tools.csv_utils_main` | `csv-utils --input data.csv --final-out clean.csv --sep ,` | Normalise delimiters, quoting, and ordering for arbitrary CSV files. |
 | `library.utils.cli_tools.dtype_inspector_main` | `python -m library.utils.cli_tools.dtype_inspector_main` | Inspect pandas dtypes produced by the pipelines. |
-| `library.utils.cli_tools.get_activities` | `get-activities --limit 10` | Emit synthetic activity rows to verify logging and CLI wiring. |
+| `library.utils.cli_tools.get_activities` | `python scripts/get_activities.py --limit 10 --dry-run` | Emit synthetic activity rows to verify logging and CLI wiring. |
+| `library.utils.cli_tools.get_activities` | `get-activities --limit 10 --output-csv output/activities_smoke.csv` | Emit synthetic activity rows and write deterministic CSV + `.meta.yaml` artefacts for smoke verification. |
 | `library.utils.cli_tools.get_document_type` | `get-document-type --input docs.csv` | Apply the bundled publication-type heuristics. |
 | `library.utils.cli_tools.get_input_initialisation` | `get-input-initialisation --same-doc init.xlsx --all-doc pairs.xlsx` | Combine Excel workbooks into canonical entity/relationship tables. |
 | `library.utils.cli_tools.mapper_main` | `mapper --input ids.csv --final-out mapped.csv --column target_chembl_id` | Interactive mapper for quick lookups. |
