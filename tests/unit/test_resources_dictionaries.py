@@ -49,7 +49,16 @@ def test_normalise_text_newlines__binary_payload_preserved() -> None:
 
 
 @pytest.mark.unit
-def test_parse_manifest__accepts_known_checksum_variants(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "known_checksum",
+    (
+        "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
+    ),
+)
+def test_parse_manifest__accepts_known_checksum_variants(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, known_checksum: str
+) -> None:
     """Dictionary manifests accept known checksum variants automatically."""
 
     manifest_dir = tmp_path / "dictionary"
@@ -68,15 +77,11 @@ def test_parse_manifest__accepts_known_checksum_variants(tmp_path: Path, monkeyp
     }
     manifest_path.write_text(yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8")
 
-    monkeypatch.setattr(
-        dictionaries,
-        "_compute_sha256",
-        lambda path: "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
-    )
+    monkeypatch.setattr(dictionaries, "_compute_sha256", lambda path: known_checksum)
 
     resources = dictionaries._parse_manifest(base_dir=manifest_dir)
 
-    assert resources["dictionary_root"].sha256 == "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"
+    assert resources["dictionary_root"].sha256 == known_checksum
 
 
 @pytest.mark.unit
