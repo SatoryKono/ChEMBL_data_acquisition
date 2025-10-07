@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import sys
+import threading
+import time
 import traceback
 from collections import OrderedDict, deque
 from dataclasses import dataclass
@@ -251,6 +253,140 @@ class TestitemPipelineStageError(RuntimeError):
         super().__init__(detail)
         self.code = code
 
+
+class StageExecutionBudget:
+    """Track a shared execution budget for a pipeline stage."""
+
+    def __init__(
+        self,
+        stage_name: str,
+        *,
+        minutes: float | None,
+        logger: Any = logger,
+    ) -> None:
+        self.stage_name = stage_name
+        self._logger = logger
+        if minutes is None or minutes <= 0:
+            self._budget_seconds: float | None = None
+            self._deadline: float | None = None
+        else:
+            self._budget_seconds = float(minutes) * 60.0
+            self._deadline = time.monotonic() + self._budget_seconds
+        self._exhausted = False
+
+    def start(self) -> None:
+        if self._deadline is None or self._budget_seconds is None:
+            return
+        self._logger.info(
+            f"{self.stage_name}_execution_budget_started",
+            budget_seconds=int(self._budget_seconds),
+        )
+
+    def enforce(self, label: str | None = None) -> None:
+        if self._deadline is None or self._budget_seconds is None:
+            return
+        remaining = self._deadline - time.monotonic()
+        if remaining >= 0:
+            return
+        if not self._exhausted:
+            self._logger.error(
+                f"{self.stage_name}_execution_budget_exhausted",
+                label=label,
+                budget_seconds=int(self._budget_seconds),
+            )
+            self._exhausted = True
+        raise TestitemPipelineStageError(
+            1,
+            (
+                f"{self.stage_name} stage exceeded execution budget "
+                f"({self._budget_seconds / 60:.1f} minutes)"
+            ),
+        )
+
+
+class StageWatchdog:
+    """Background timer that monitors progress for a pipeline stage."""
+
+    def __init__(
+        self,
+        stage_name: str,
+        *,
+        idle_minutes: float,
+        logger: Any = logger,
+        check_interval: float = 60.0,
+    ) -> None:
+        self.stage_name = stage_name
+        self._logger = logger
+        self._idle_timeout_seconds = max(0.0, float(idle_minutes)) * 60.0
+        self._check_interval = check_interval
+        self._stop_event = threading.Event()
+        self._timed_out = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._last_activity = time.monotonic()
+        self._effective_interval = 0.0
+
+    def __enter__(self) -> "StageWatchdog":
+        self.start()
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        self.stop()
+
+    def start(self) -> None:
+        if self._idle_timeout_seconds <= 0:
+            return
+        self._stop_event.clear()
+        self._timed_out.clear()
+        self._last_activity = time.monotonic()
+        interval = self._idle_timeout_seconds / 2 if self._idle_timeout_seconds else 0
+        self._effective_interval = max(1.0, min(self._check_interval, interval or self._check_interval))
+        self._thread = threading.Thread(
+            target=self._monitor,
+            name=f"{self.stage_name}-watchdog",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        if self._thread is None:
+            return
+        self._stop_event.set()
+        self._thread.join(timeout=1)
+        self._thread = None
+
+    def ping(self, event: str | None = None, **payload: Any) -> None:
+        self._last_activity = time.monotonic()
+        if event:
+            self._logger.info(
+                f"{self.stage_name}_watchdog_progress",
+                watchdog_event=event,
+                **payload,
+            )
+
+    def raise_if_timed_out(self) -> None:
+        if self._timed_out.is_set():
+            raise TestitemPipelineStageError(
+                1,
+                (
+                    f"{self.stage_name} stage stalled (idle timeout "
+                    f"{self._idle_timeout_seconds / 60:.1f} minutes)"
+                ),
+            )
+
+    def _monitor(self) -> None:
+        if self._idle_timeout_seconds <= 0:
+            return
+        interval = self._effective_interval or max(1.0, self._idle_timeout_seconds / 2)
+        while not self._stop_event.wait(interval):
+            idle = time.monotonic() - self._last_activity
+            if idle >= self._idle_timeout_seconds:
+                self._logger.error(
+                    f"{self.stage_name}_watchdog_timeout",
+                    idle_seconds=int(idle),
+                    timeout_seconds=int(self._idle_timeout_seconds),
+                )
+                self._timed_out.set()
+                return
 
 @lru_cache(maxsize=1)
 def _load_chembl_library():
