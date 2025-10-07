@@ -38,7 +38,7 @@ import csv
 import json
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -160,59 +160,87 @@ _GTOP_SKIPPED_FAILURE_LOG: set[tuple[str, str]] = set()
 
 
 @dataclass
-class _CircuitBreaker:
-    """Simple circuit breaker to guard repeated Guide-to-Pharmacology failures."""
+class _CircuitState:
+    """State container tracking failures per Guide-to-Pharmacology endpoint."""
 
     failure_count: int = 0
-    opened_until: float = 0.0
     open: bool = False
+    opened_until: float = 0.0
+    last_holdoff: float = 0.0
+    reset_pending: bool = False
+
+
+@dataclass
+class _CircuitDecision:
+    """Outcome returned when consulting the circuit breaker before a request."""
+
+    allow_call: bool
+    remaining: float = 0.0
+    reset_holdoff: float | None = None
+
+
+@dataclass
+class _CircuitBreaker:
+    """Circuit breaker that throttles failing Guide-to-Pharmacology endpoints."""
+
+    _states: dict[str, _CircuitState] = field(default_factory=dict)
     last_opened_at: float = 0.0
     last_holdoff: float = 0.0
+    last_opened_endpoint: str | None = None
 
     def reset(self) -> None:
         """Reset the breaker state."""
 
-        self.failure_count = 0
-        self.opened_until = 0.0
-        self.open = False
+        self._states.clear()
+        self.last_opened_at = 0.0
+        self.last_holdoff = 0.0
+        self.last_opened_endpoint = None
 
-    def is_open(self) -> bool:
-        """Return ``True`` when the breaker is currently open."""
+    def before_call(self, endpoint: str) -> _CircuitDecision:
+        """Return a decision describing whether a request should be attempted."""
 
-        if not self.open:
-            return False
+        state = self._states.get(endpoint)
+        if state is None:
+            return _CircuitDecision(True)
+
         now = time.monotonic()
-        if now >= self.opened_until:
-            self.reset()
+        if state.open:
+            if now < state.opened_until:
+                remaining = state.opened_until - now
+                return _CircuitDecision(False, remaining=remaining if remaining > 0 else 0.0)
+            state.open = False
+            state.reset_pending = True
+
+        if state.reset_pending:
+            state.reset_pending = False
+            return _CircuitDecision(True, reset_holdoff=state.last_holdoff)
+
+        return _CircuitDecision(True)
+
+    def record_success(self, endpoint: str) -> None:
+        """Clear any accumulated failures for ``endpoint`` after success."""
+
+        if endpoint in self._states:
+            del self._states[endpoint]
+
+    def record_failure(self, endpoint: str, holdoff: float) -> bool:
+        """Record a failure for ``endpoint`` and open the breaker if needed."""
+
+        state = self._states.setdefault(endpoint, _CircuitState())
+        state.failure_count += 1
+        if state.failure_count < _GTOP_CIRCUIT_FAILURE_THRESHOLD:
             return False
-        return True
 
-    def remaining(self) -> float:
-        """Return seconds remaining until the breaker closes."""
-
-        if not self.open:
-            return 0.0
-        remaining = self.opened_until - time.monotonic()
-        return remaining if remaining > 0 else 0.0
-
-    def record_success(self) -> None:
-        """Clear any accumulated failures after a successful call."""
-
-        self.reset()
-
-    def record_failure(self, holdoff: float) -> bool:
-        """Record a failure and open the breaker when the threshold is reached."""
-
-        self.failure_count += 1
-        if self.failure_count < _GTOP_CIRCUIT_FAILURE_THRESHOLD:
-            return False
         now = time.monotonic()
         holdoff = max(0.0, float(holdoff))
-        self.opened_until = now + holdoff
-        self.open = True
+        state.open = True
+        state.opened_until = now + holdoff
+        state.last_holdoff = holdoff
+        state.failure_count = 0
+        state.reset_pending = False
         self.last_opened_at = now
         self.last_holdoff = holdoff
-        self.failure_count = 0
+        self.last_opened_endpoint = endpoint
         return True
 
 
@@ -967,25 +995,25 @@ def _fetch_gtop_endpoint(
             _GTOP_SKIPPED_FAILURE_LOG.add(cache_key)
         return None
 
-    was_open = _GTOP_CIRCUIT_BREAKER.open
-    if _GTOP_CIRCUIT_BREAKER.is_open():
-        remaining = _GTOP_CIRCUIT_BREAKER.remaining()
+    decision = _GTOP_CIRCUIT_BREAKER.before_call(endpoint)
+    if decision.reset_holdoff is not None:
+        if _GTOP_CIRCUIT_SKIP_LOG:
+            _GTOP_CIRCUIT_SKIP_LOG.clear()
+        logger.info(
+            "gtop_circuit_reset",
+            downtime=decision.reset_holdoff,
+        )
+
+    if not decision.allow_call:
         if cache_key not in _GTOP_CIRCUIT_SKIP_LOG:
             logger.warning(
                 "gtop_circuit_open_skip",
                 gtop_id=gtop_id,
                 endpoint=endpoint,
-                retry_after=round(remaining, 3),
+                retry_after=round(decision.remaining, 3),
             )
             _GTOP_CIRCUIT_SKIP_LOG.add(cache_key)
         return None
-    if was_open and not _GTOP_CIRCUIT_BREAKER.open:
-        if _GTOP_CIRCUIT_SKIP_LOG:
-            _GTOP_CIRCUIT_SKIP_LOG.clear()
-        logger.info(
-            "gtop_circuit_reset",
-            downtime=_GTOP_CIRCUIT_BREAKER.last_holdoff,
-        )
 
     limiter = get_limiter("iuphar", cfg.rps, cfg.burst)
     base = cfg.base.rstrip("/")
@@ -1005,7 +1033,7 @@ def _fetch_gtop_endpoint(
                     status_code=status_code,
                 )
                 _GTOP_JSON_FAILURE_CACHE.add(cache_key)
-                _GTOP_CIRCUIT_BREAKER.record_success()
+                _GTOP_CIRCUIT_BREAKER.record_success(endpoint)
                 return None
 
             response.raise_for_status()
@@ -1026,7 +1054,7 @@ def _fetch_gtop_endpoint(
                     endpoint=endpoint,
                     content_type=raw_content_type,
                 )
-                _GTOP_CIRCUIT_BREAKER.record_success()
+                _GTOP_CIRCUIT_BREAKER.record_success(endpoint)
                 return []
             try:
                 payload = response.json()
@@ -1040,7 +1068,7 @@ def _fetch_gtop_endpoint(
                 )
                 _GTOP_JSON_FAILURE_CACHE.add(cache_key)
                 opened = _GTOP_CIRCUIT_BREAKER.record_failure(
-                    _GTOP_CIRCUIT_HOLDOFF_SECONDS
+                    endpoint, _GTOP_CIRCUIT_HOLDOFF_SECONDS
                 )
                 if opened:
                     logger.warning(
@@ -1060,7 +1088,7 @@ def _fetch_gtop_endpoint(
                         content_type=raw_content_type,
                     )
                     _GTOP_NON_JSON_CONTENT_TYPE_CACHE.add(cache_key)
-            _GTOP_CIRCUIT_BREAKER.record_success()
+            _GTOP_CIRCUIT_BREAKER.record_success(endpoint)
             return payload
     except requests.RequestException as exc:  # pragma: no cover - network failures
         response = getattr(exc, "response", None)
@@ -1073,7 +1101,7 @@ def _fetch_gtop_endpoint(
                 status_code=status_code,
             )
             _GTOP_JSON_FAILURE_CACHE.add(cache_key)
-            _GTOP_CIRCUIT_BREAKER.record_success()
+            _GTOP_CIRCUIT_BREAKER.record_success(endpoint)
             return None
         logger.warning(
             "gtop_request_failed",
@@ -1084,7 +1112,7 @@ def _fetch_gtop_endpoint(
         )
         if status_code is None or status_code >= 500:
             opened = _GTOP_CIRCUIT_BREAKER.record_failure(
-                _GTOP_CIRCUIT_HOLDOFF_SECONDS
+                endpoint, _GTOP_CIRCUIT_HOLDOFF_SECONDS
             )
             if opened:
                 logger.warning(
@@ -1095,7 +1123,7 @@ def _fetch_gtop_endpoint(
                     failure_threshold=_GTOP_CIRCUIT_FAILURE_THRESHOLD,
                 )
         else:
-            _GTOP_CIRCUIT_BREAKER.record_success()
+            _GTOP_CIRCUIT_BREAKER.record_success(endpoint)
         _GTOP_JSON_FAILURE_CACHE.add(cache_key)
     return None
 

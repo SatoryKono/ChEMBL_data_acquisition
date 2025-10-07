@@ -559,3 +559,97 @@ def test_fetch_gtop_endpoint__circuit_breaker_limits_retries(
             {"gtop_id": sixth_id, "endpoint": "function", "retry_after": 9.0},
         )
     ]
+
+
+@pytest.mark.unit
+def test_fetch_gtop_endpoint__circuit_breaker_counts_per_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+    reset_gtop_caches: None,
+) -> None:
+    session: _DummySession
+
+    def response_factory() -> _DummyResponse:
+        assert session.last_url is not None
+        if session.last_url.endswith("/naturalLigands"):
+            return _DummyResponse([], "application/json")
+        if session.last_url.endswith("/interactions"):
+            return _DummyResponse([], "application/json")
+        if session.last_url.endswith("/function"):
+            return _DummyResponse({}, "application/json", status_code=500)
+        raise AssertionError(f"unexpected URL {session.last_url}")
+
+    session = _DummySession(response_factory)
+    _patch_dependencies(monkeypatch, session)
+
+    clock = _FakeMonotonic()
+    monkeypatch.setattr(uniprot.time, "monotonic", clock)
+    monkeypatch.setattr(uniprot, "_GTOP_CIRCUIT_FAILURE_THRESHOLD", 2)
+    monkeypatch.setattr(uniprot, "_GTOP_CIRCUIT_HOLDOFF_SECONDS", 10.0)
+
+    warning_events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        uniprot.logger,
+        "warning",
+        lambda event, **kwargs: warning_events.append((event, dict(kwargs))),
+    )
+
+    cfg = IupharCfg()
+
+    # First ID: successes for other endpoints should not affect the function breaker
+    assert uniprot._fetch_gtop_endpoint("GTP7A", "naturalLigands", cfg=cfg) == []
+    assert uniprot._fetch_gtop_endpoint("GTP7A", "interactions", cfg=cfg) == []
+    assert uniprot._fetch_gtop_endpoint("GTP7A", "function", cfg=cfg) is None
+    assert warning_events == [
+        (
+            "gtop_request_failed",
+            {
+                "gtop_id": "GTP7A",
+                "endpoint": "function",
+                "error": "500 error",
+                "status_code": 500,
+            },
+        )
+    ]
+
+    warning_events.clear()
+
+    # Second ID: after another failure for the same endpoint the circuit opens
+    assert uniprot._fetch_gtop_endpoint("GTP7B", "naturalLigands", cfg=cfg) == []
+    assert uniprot._fetch_gtop_endpoint("GTP7B", "interactions", cfg=cfg) == []
+    assert uniprot._fetch_gtop_endpoint("GTP7B", "function", cfg=cfg) is None
+    assert warning_events == [
+        (
+            "gtop_request_failed",
+            {
+                "gtop_id": "GTP7B",
+                "endpoint": "function",
+                "error": "500 error",
+                "status_code": 500,
+            },
+        ),
+        (
+            "gtop_circuit_opened",
+            {
+                "gtop_id": "GTP7B",
+                "endpoint": "function",
+                "retry_after": 10.0,
+                "failure_threshold": 2,
+            },
+        ),
+    ]
+
+    warning_events.clear()
+    clock.advance(1.0)
+
+    # Third ID: circuit remains open for the function endpoint and skips the call
+    assert uniprot._fetch_gtop_endpoint("GTP7C", "naturalLigands", cfg=cfg) == []
+    assert uniprot._fetch_gtop_endpoint("GTP7C", "interactions", cfg=cfg) == []
+    assert uniprot._fetch_gtop_endpoint("GTP7C", "function", cfg=cfg) is None
+    assert warning_events == [
+        (
+            "gtop_circuit_open_skip",
+            {"gtop_id": "GTP7C", "endpoint": "function", "retry_after": 9.0},
+        )
+    ]
+
+    assert session.calls == 8
