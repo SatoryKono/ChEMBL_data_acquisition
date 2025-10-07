@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 import pytest
 import requests
+from urllib3.connectionpool import HTTPSConnectionPool
+from urllib3.exceptions import MaxRetryError, ReadTimeoutError
 
 from library.clients import ChemblClient
 from library.clients.chembl import _backoff_delay
@@ -90,6 +93,26 @@ class _TimeoutSession:
         return None
 
 
+class _MaxRetryTimeoutSession:
+    """Raise a wrapped timeout resembling urllib3's ``MaxRetryError``."""
+
+    def __init__(self, primary: str, fallback: str) -> None:
+        self.primary_url = primary
+        self.fallback_url = fallback
+        self.calls: list[str] = []
+
+    def get(self, url: str, timeout: object) -> _StubResponse:
+        del timeout
+        self.calls.append(url)
+        host = urlsplit(url).netloc or "example.test"
+        pool = HTTPSConnectionPool(host)
+        reason = ReadTimeoutError(pool, url, "Read timed out.")
+        raise requests.ConnectionError(MaxRetryError(pool, url, reason))
+
+    def close(self) -> None:  # pragma: no cover - compatibility shim
+        return None
+
+
 @pytest.mark.unit
 def test_request_json__falls_back_to_extensionless_endpoint() -> None:
     """The client retries with an extensionless URL when a 404 is returned."""
@@ -129,6 +152,25 @@ def test_request_json__falls_back_after_timeout() -> None:
     result = client.request_json(primary_url, cfg=cfg)
 
     assert result == payload
+    assert session.calls == [primary_url, fallback_url]
+
+
+@pytest.mark.unit
+def test_request_json__raises_read_timeout_for_max_retry_chain() -> None:
+    """Connection errors caused by read timeouts surface as ``ReadTimeout``."""
+
+    base = "https://example.test/chembl/api/data"
+    query = "format=json&assay_chembl_id__in=CHEMBL1&limit=1"
+    primary_url = f"{base}/assay.json?{query}"
+    fallback_url = f"{base}/assay?{query}"
+    session = _MaxRetryTimeoutSession(primary_url, fallback_url)
+    client = ChemblClient(session=session)
+    cfg = ApiCfg(chembl_base=base, timeout_read=5.0, retries=0)
+
+    with pytest.raises(requests.ReadTimeout) as excinfo:
+        client.request_json(primary_url, cfg=cfg)
+
+    assert "Read timed out" in str(excinfo.value)
     assert session.calls == [primary_url, fallback_url]
 
 
