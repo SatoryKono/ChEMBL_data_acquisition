@@ -90,7 +90,9 @@ def test_enrich_assay_metadata__fills_missing_fields(tmp_path: Path) -> None:
 
 
 @pytest.mark.postprocessing
-def test_enrich_assay_metadata__missing_taxonomy_dir_raises(tmp_path: Path) -> None:
+def test_enrich_assay_metadata__missing_taxonomy_dir_logs_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     dictionary_root = tmp_path
     (dictionary_root / "_assay").mkdir()
     (dictionary_root / "_document").mkdir()
@@ -108,5 +110,30 @@ def test_enrich_assay_metadata__missing_taxonomy_dir_raises(tmp_path: Path) -> N
 
     frame = pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]})
 
-    with pytest.raises(AssayExtendedError):
-        enrich_assay_metadata(frame, dictionary_dir=dictionary_root)
+    with caplog.at_level("WARNING"):
+        result = enrich_assay_metadata(frame, dictionary_dir=dictionary_root)
+
+    assert "assay_extended_missing_taxonomy_dictionary" in caplog.text
+    assert list(result.columns) == [
+        "assay_chembl_id",
+        "assay_tax_id",
+        "assay_group",
+        "assay_strain",
+        "target_chembl_id",
+        "document_chembl_id",
+        "year",
+        "accession",
+    ]
+    assert result.loc[0, "assay_chembl_id"] == "CHEMBL1"
+    assert result["assay_tax_id"].isna().all()
+    assert result["assay_group"].isna().all()
+    assert result["assay_strain"].isna().all()
+    assert result["target_chembl_id"].isna().all()
+    assert result["document_chembl_id"].isna().all()
+    assert result["accession"].isna().all()
+    assert result["year"].isna().all()
+    assert str(result["assay_tax_id"].dtype) == "string"
+    assert str(result["assay_group"].dtype) == "string"
+    assert str(result["assay_strain"].dtype) == "string"
+    assert str(result["accession"].dtype) == "string"
+    assert str(result["year"].dtype) == "Int64"
