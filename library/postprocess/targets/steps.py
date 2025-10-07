@@ -108,6 +108,7 @@ def enrich_target_synonyms(
     *,
     synonym_sources: Sequence[str] | None = None,
     preferred_separator: str = ", ",
+    **_: object,
 ) -> pd.DataFrame:
     """Aggregate synonyms from configured sources into a deterministic string column."""
 
