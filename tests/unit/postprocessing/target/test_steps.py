@@ -119,6 +119,25 @@ def test_enrich_target_synonyms__combines_sources_with_separator() -> None:
 
 
 @pytest.mark.unit
+def test_enrich_target_synonyms__ignores_unrecognised_parameters() -> None:
+    frame = pd.DataFrame(
+        {
+            "synonyms": ["alpha"],
+            "chembl_synonyms": ["beta"],
+        }
+    )
+
+    result = enrich_target_synonyms(
+        frame,
+        synonym_sources=["chembl"],
+        preferred_separator="; ",
+        future_flag=True,
+    )
+
+    assert result["synonyms"].tolist() == ["alpha; beta"]
+
+
+@pytest.mark.unit
 def test_finalize_target_records__supports_optional_flags(monkeypatch) -> None:
     frame = pd.DataFrame(
         {
