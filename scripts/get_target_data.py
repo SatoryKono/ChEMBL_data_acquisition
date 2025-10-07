@@ -22,6 +22,7 @@ del bootstrap_cli
 
 # ruff: noqa: E402
 import argparse
+import os
 import sys
 import shutil
 from collections.abc import Iterator, Mapping, Sequence
@@ -31,6 +32,7 @@ import math
 from inspect import signature
 from itertools import islice
 from pathlib import Path
+import stat
 from typing import IO, Any, cast
 
 from datetime import datetime, timezone
@@ -1134,6 +1136,35 @@ def _raw_output_path(base: Path) -> Path:
     return base.with_name(f"{base.stem}{RAW_SUFFIX}{suffix}")
 
 
+def _prepare_raw_destination(destination: Path) -> None:
+    """Ensure the raw dump destination can be written to safely."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if not destination.exists():
+        return
+
+    try:
+        destination.unlink()
+    except PermissionError:
+        writable_mode = stat.S_IRUSR | stat.S_IWUSR
+        writable_mode |= getattr(stat, "S_IWRITE", 0)
+        try:
+            os.chmod(destination, writable_mode)
+        except OSError as exc:  # pragma: no cover - defensive guard
+            raise OSError(
+                f"failed to prepare raw dump destination: {exc}"
+            ) from exc
+
+        try:
+            destination.unlink()
+        except OSError as exc:
+            raise OSError(
+                f"failed to prepare raw dump destination: {exc}"
+            ) from exc
+    except OSError as exc:  # pragma: no cover - defensive guard
+        raise OSError(f"failed to prepare raw dump destination: {exc}") from exc
+
+
 class _RawDumpStreamWriter:
     """Stream ChEMBL raw payloads to disk without accumulating chunks."""
 
@@ -1151,7 +1182,7 @@ class _RawDumpStreamWriter:
         self._rows_written = 0
         self._columns: list[str] | None = None
         self._frames: list[pd.DataFrame] | None = [] if self._is_parquet else None
-        self.destination.parent.mkdir(parents=True, exist_ok=True)
+        _prepare_raw_destination(destination)
         self._destination_opened = False
 
     @property
