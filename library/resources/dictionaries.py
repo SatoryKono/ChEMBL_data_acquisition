@@ -46,6 +46,7 @@ _SHA256_WILDCARD = "*"
 _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
     "dictionary_root": (
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
     ),
 }
 
