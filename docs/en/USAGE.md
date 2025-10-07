@@ -220,8 +220,9 @@ python scripts/get_assay_data.py \
 
 ## Activity pipeline `get_activity_data`
 
-Extends the assay options with parallel execution and dry-run controls. In
-addition to the shared flags the command accepts:
+Extends the assay options with range selection, per-request timeouts, optional
+dry-run execution and parallel fetching controls. In addition to the shared
+flags the command accepts:
 
 | Option | Default | Description |
 |--------|---------|-------------|
