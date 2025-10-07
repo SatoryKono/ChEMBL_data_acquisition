@@ -1,6 +1,9 @@
 """Transformation steps for target postprocessing."""
 from __future__ import annotations
 
+from collections.abc import Sequence
+import re
+
 import pandas as pd
  
 from library.postprocess.common import StepDefinition, run_steps
@@ -87,31 +90,83 @@ def normalize_target_fields(
     return normalized
 
 
-def enrich_target_synonyms(df: pd.DataFrame) -> pd.DataFrame:
-    """Ensure synonyms column is deterministically ordered."""
+def _split_synonyms(value: str) -> list[str]:
+    """Split ``value`` into individual synonym tokens."""
+
+    if not value:
+        return []
+    parts = re.split(r"[;,]", value)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def enrich_target_synonyms(
+    df: pd.DataFrame,
+    *,
+    preferred_separator: str = ", ",
+    synonym_sources: Sequence[str] | None = None,
+) -> pd.DataFrame:
+    """Ensure synonyms column is deterministically ordered.
+
+    Parameters
+    ----------
+    preferred_separator:
+        Separator used to join the normalised synonym tokens. Defaults to `", "`.
+    synonym_sources:
+        Accepted for compatibility with pipeline configuration. The current
+        implementation operates on the aggregated ``synonyms`` column only and
+        therefore ignores these values, but the parameter is retained to avoid
+        configuration warnings and ease future enhancements.
+    """
+
+    del synonym_sources  # intentionally unused but documented above
+
+    separator = preferred_separator or ", "
 
     enriched = df.copy(deep=True)
     if "synonyms" in enriched.columns:
         enriched["synonyms"] = (
-            enriched["synonyms"].fillna("")
+            enriched["synonyms"]
+            .fillna("")
             .astype("string")
-            .apply(
-                lambda value: ", ".join(sorted(part.strip() for part in value.split(",") if part.strip()))
+            .map(
+                lambda value: separator.join(
+                    sorted(dict.fromkeys(_split_synonyms(value)), key=str.casefold)
+                )
             )
         )
     return enriched
 
 
-def finalize_target_records(df: pd.DataFrame) -> pd.DataFrame:
+def finalize_target_records(
+    df: pd.DataFrame,
+    *,
+    enforce_schema: bool = True,
+    sort_by: Sequence[str] | None = None,
+) -> pd.DataFrame:
     """Validate and order the DataFrame according to :data:`TARGET_SCHEMA`."""
 
     prepared = df.copy(deep=True)
+
+    for column in TARGET_SCHEMA.required_columns:
+        if column not in prepared.columns:
+            prepared[column] = pd.Series(pd.NA, index=prepared.index, dtype="string")
+
     for column in ["target_chembl_id", "pref_name", "target_type"]:
         if column in prepared.columns:
             prepared[column] = prepared[column].astype("string")
 
-    validated = validate_targets(prepared, context="target_finalization")
-    return validated
+    if enforce_schema:
+        result = validate_targets(prepared, context="target_finalization")
+    else:
+        result = prepared.copy(deep=True)
+
+    sort_columns: Sequence[str] | None = sort_by
+    if sort_columns:
+        sortable = [column for column in sort_columns if column in result.columns]
+        if sortable:
+            result = result.sort_values(sortable, kind="mergesort").reset_index(drop=True)
+
+    return result
 
 
 PIPELINE_CONFIG = load_pipeline_config("targets")

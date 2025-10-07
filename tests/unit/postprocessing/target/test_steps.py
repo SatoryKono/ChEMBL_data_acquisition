@@ -3,7 +3,11 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from library.postprocess.targets.steps import normalize_target_fields
+from library.postprocess.targets.steps import (
+    enrich_target_synonyms,
+    finalize_target_records,
+    normalize_target_fields,
+)
 
 
 @pytest.mark.unit
@@ -56,3 +60,39 @@ def test_normalize_target_fields__without_optional_flags_preserves_extra_columns
     assert result.loc[0, "target_chembl_id"] == "CHEMBL1"
     assert result.loc[0, "pref_name"] == "Gamma"
     assert result.loc[0, "taxon_id"] == " 9606 "
+
+
+@pytest.mark.unit
+def test_enrich_target_synonyms__respects_configured_separator() -> None:
+    frame = pd.DataFrame(
+        {
+            "synonyms": [" Beta ; Alpha, Gamma ,Beta", pd.NA],
+        }
+    )
+
+    result = enrich_target_synonyms(frame, preferred_separator="; ")
+
+    assert result.loc[0, "synonyms"] == "Alpha; Beta; Gamma"
+    assert result.loc[1, "synonyms"] == ""
+    assert frame.loc[0, "synonyms"] == " Beta ; Alpha, Gamma ,Beta"
+
+
+@pytest.mark.unit
+def test_finalize_target_records__injects_missing_required_columns() -> None:
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1"],
+            "pref_name": ["Example"],
+        }
+    )
+
+    result = finalize_target_records(frame)
+
+    assert list(result.columns[:3]) == [
+        "target_chembl_id",
+        "pref_name",
+        "target_type",
+    ]
+    assert pd.isna(result.loc[0, "target_type"])
+    assert result["target_type"].dtype.name == "string"
+    assert frame.columns.tolist() == ["target_chembl_id", "pref_name"]
