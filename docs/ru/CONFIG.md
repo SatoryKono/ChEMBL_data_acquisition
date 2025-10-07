@@ -2,7 +2,7 @@
 
 Конфигурация загружается из трёх слоёв (по возрастанию приоритета):
 
-1. Значения по умолчанию, определённые в [`library/config/models.py`](../library/config/models.py).
+1. Значения по умолчанию, определённые в [`library/config/models.py`](../../library/config/models.py).
 2. YAML-файлы (`config/config.yaml` и необязательный `config/config.local.yaml`).
 3. Переменные окружения и аргументы CLI.
 
@@ -297,5 +297,5 @@ system:
 | `thresholds` | `{review:1, experimental:1, unknown:2}` | Пороговые значения. |
 | `limit` | `null` | Ограничение по числу строк. |
 
-Подробности и дополнительные поля см. в [`library/config/models.py`](../library/config/models.py);
+Подробности и дополнительные поля см. в [`library/config/models.py`](../../library/config/models.py);
 данный документ синхронизирован с актуальными моделями.
