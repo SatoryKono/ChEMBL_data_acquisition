@@ -4,8 +4,38 @@ import pytest
 from urllib3.util import retry as urllib3_retry
 
 from library.clients import pubmed
-from library.config.models import ApiCfg, RetryCfg
+from library.config.models import ApiCfg, PubMedCfg, RetryCfg
 from library.config.runtime import session_with_retry
+
+
+class _DummyResponse:
+    def __init__(self, text: str = "<PubmedArticleSet></PubmedArticleSet>") -> None:
+        self.status_code = 200
+        self.text = text
+        self.headers: dict[str, str] = {}
+
+    def json(self) -> dict[str, str]:  # pragma: no cover - JSON not expected here
+        raise AssertionError("JSON payloads are not used in PubMed XML fetches")
+
+    def __enter__(self) -> "_DummyResponse":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: object | None,
+    ) -> bool:
+        return False
+
+
+class _DummySession:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, float | tuple[float, float], dict[str, object]]] = []
+
+    def get(self, url: str, *, timeout: float | tuple[float, float], **kwargs: object) -> _DummyResponse:
+        self.calls.append((url, timeout, kwargs))
+        return _DummyResponse()
 
 
 @pytest.mark.unit
@@ -56,3 +86,35 @@ def test_session_with_retry__uses_backoff_cap() -> None:
 
     assert isinstance(max_retries, urllib3_retry.Retry)
     assert max_retries.backoff_max == pytest.approx(7.5)
+
+
+@pytest.mark.unit
+def test_fetch_pubmed_batch__includes_contact_parameters() -> None:
+    session = _DummySession()
+    cfg = PubMedCfg(tool="chembl-da-test", email="team@ebi.ac.uk")
+
+    text, error = pubmed.fetch_pubmed_batch(session, ["123", "456"], 0.0, cfg=cfg)
+
+    assert error == ""
+    assert isinstance(text, str)
+    assert session.calls, "Expected PubMed request to be issued"
+    url, timeout, kwargs = session.calls[-1]
+    assert url.endswith("/efetch.fcgi")
+    params = kwargs.get("params")
+    assert isinstance(params, dict)
+    assert params["tool"] == "chembl-da-test"
+    assert params["email"] == "team@ebi.ac.uk"
+    assert params["id"] == "123,456"
+    assert timeout == (cfg.timeout_connect, cfg.timeout_read)
+
+
+@pytest.mark.unit
+def test_pubmed_cfg__rejects_placeholder_email() -> None:
+    with pytest.raises(ValueError):
+        PubMedCfg(email="user@example.org")
+
+
+@pytest.mark.unit
+def test_pubmed_cfg__requires_non_empty_tool() -> None:
+    with pytest.raises(ValueError):
+        PubMedCfg(tool="   ")
