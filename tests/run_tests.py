@@ -162,10 +162,17 @@ def _build_json(
     results = collector.build_results()
     summary = collector.summary
     duration_sec = collector.duration()
-    if summary["total"]:
-        success_rate = summary["passed"] / summary["total"]
+
+    executed_total = summary["total"] - summary["skipped"]
+    executed_total = max(executed_total, 0)
+    successes = summary["passed"] + summary["xfailed"]
+
+    if executed_total:
+        success_rate = successes / executed_total
     else:
         success_rate = 1.0
+
+    success_rate = max(0.0, min(success_rate, 1.0))
 
     repo = _git_output(["config", "--get", "remote.origin.url"]) or REPO_NAME
     payload = {

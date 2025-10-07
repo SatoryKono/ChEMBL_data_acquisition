@@ -100,6 +100,59 @@ def test_build_json__stores_fractional_success_rate(
 
 
 @pytest.mark.unit
+def test_build_json__counts_xfailed_and_excludes_skipped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    run_tests_module: ModuleType,
+) -> None:
+    _install_fake_cli_logging(run_tests_module, monkeypatch, tmp_path)
+    monkeypatch.setattr(run_tests_module, "_git_output", _stub_git_output)
+
+    collector = run_tests_module.ReportCollector()
+    collector.start_time = 10.0
+    collector.end_time = 10.0
+    collector.tests = {
+        "tests/test_demo.py::test_pass": _make_record(
+            run_tests_module, "tests/test_demo.py::test_pass", "passed"
+        ),
+        "tests/test_demo.py::test_skip": _make_record(
+            run_tests_module, "tests/test_demo.py::test_skip", "skipped"
+        ),
+        "tests/test_demo.py::test_xfail": _make_record(
+            run_tests_module, "tests/test_demo.py::test_xfail", "xfailed"
+        ),
+        "tests/test_demo.py::test_fail": _make_record(
+            run_tests_module, "tests/test_demo.py::test_fail", "failed"
+        ),
+        "tests/test_demo.py::test_error": _make_record(
+            run_tests_module, "tests/test_demo.py::test_error", "error"
+        ),
+        "tests/test_demo.py::test_xpass": _make_record(
+            run_tests_module, "tests/test_demo.py::test_xpass", "xpassed"
+        ),
+    }
+    collector.tests["tests/test_demo.py::test_error"].error = "boom"
+
+    report_path = tmp_path / "report.json"
+    payload = run_tests_module._build_json(collector, report_path=report_path)
+
+    summary = payload["summary"]
+    assert summary["total"] == 6
+    assert summary["passed"] == 1
+    assert summary["xfailed"] == 1
+    assert summary["skipped"] == 1
+    assert summary["failed"] == 1
+    assert summary["xpassed"] == 1
+    assert summary["error"] == 1
+    assert summary["success_rate"] == pytest.approx(0.4)
+
+    summary_path = tmp_path / "summary.md"
+    run_tests_module._write_markdown(summary_path, payload)
+    summary_text = summary_path.read_text(encoding="utf-8")
+    assert "Success rate: 40.00%" in summary_text
+
+
+@pytest.mark.unit
 def test_build_json__uses_full_success_for_empty_suite(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
