@@ -153,6 +153,37 @@ def test_run_chembl__passes_options(cfg: Config, tmp_path: Path, monkeypatch: py
     assert options.output_csv == output_csv
 
 
+def test_run_chembl__passes_limit_and_offset(
+    cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("molecule_chembl_id\nCHEMBL1\nCHEMBL2\n", encoding="utf-8")
+    output_csv = tmp_path / "output.csv"
+
+    captured: dict[str, object] = {}
+
+    def fake_run_pipeline(config: Config, options: get_testitem_data.TestitemPipelineOptions) -> int:
+        captured["options"] = options
+        return 0
+
+    monkeypatch.setattr(get_testitem_data, "run_testitem_pipeline", fake_run_pipeline)
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=output_csv,
+        limit=5,
+        offset=2,
+    )
+
+    exit_code = get_testitem_data.run_chembl(cfg, args)
+
+    assert exit_code == 0
+    options = captured["options"]
+    assert isinstance(options, get_testitem_data.TestitemPipelineOptions)
+    assert options.limit == 5
+    assert options.offset == 2
+
+
 def test_run__skip_existing_without_force(
     cfg: Config,
     tmp_path: Path,

@@ -568,6 +568,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     options = TestitemPipelineOptions(
         input_csv=Path(args.input_csv),
         output_csv=output_path,
+        limit=getattr(args, "limit", None),
+        offset=getattr(args, "offset", None),
     )
     return run_testitem_pipeline(cfg, options)
 
@@ -597,7 +599,9 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     if not isinstance(metadata_obj, ConfigMetadata):
         metadata_obj = None
     output_source = "cli" if getattr(args, "final_out", None) else "derived"
-    limit_value = getattr(cfg.testitem, "limit", None)
+    limit_value = getattr(args, "limit", None)
+    if limit_value is None:
+        limit_value = getattr(cfg.testitem, "limit", None)
     offset_value = getattr(args, "offset", getattr(cfg.testitem, "offset", None))
     logger.info(
         "testitem_pipeline_start",
