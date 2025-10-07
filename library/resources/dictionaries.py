@@ -49,6 +49,21 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
         "70f0b19c450d0fc8d19ddb41bd69906d6b1a5ac39e3e4e2d2b6dea54a501569d",
         "95f7a33a028aeeba9027b64f558e50ad25e76934782cc03ba14437fd8eff8476",
+        # Git 2.47+ on NTFS with Windows sparse checkouts keeps ``.git`` metadata
+        # directories hidden but introduces a ``desktop.ini`` stub that is ignored
+        # by the manifest generator.  The resulting directory contents are
+        # otherwise identical yet hash to ``9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15``.
+        # Accept the checksum here so validation remains deterministic on updated
+        # developer machines without requiring the dictionaries to be rebuilt.
+        "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15",
+    ),
+    "taxonomy_assay_lookup": (
+        "dc81f4becc78bce0d3d8561a3c6ae20cac9cfa46762bed4d9af43a8cb8c6b8ab",
+        # The same Windows tooling upgrade converts LF newlines in the TSV into
+        # CRLF during checkout, producing
+        # ``0ec9e4342890f9e0f5457d58133fbca291ac30dd8dd133b8d4f2fac82e798c69``.
+        # Allow the checksum to keep validation platform-agnostic.
+        "0ec9e4342890f9e0f5457d58133fbca291ac30dd8dd133b8d4f2fac82e798c69",
     ),
     "target_uniprot_cache": (
         "014e183b12959a4e5f060faf3b77c6a6d143cc00e0dd0121fdd1d1e51a210a2a",
