@@ -12,7 +12,7 @@ ifneq ($(ENV_FILES),)
   export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' $(ENV_FILES))
 endif
 
-.PHONY: init lint test smoke test-report build release clean
+.PHONY: init lint test smoke test-report build release clean validate-config-postprocessing
 
 init: $(PYTHON_BIN)
 
@@ -48,4 +48,7 @@ release: build
 	$(PYTHON_BIN) -m twine check dist/*
 
 clean:
-	rm -rf $(VENV) build dist .mypy_cache .pytest_cache
+        rm -rf $(VENV) build dist .mypy_cache .pytest_cache
+
+validate-config-postprocessing: $(PYTHON_BIN)
+	$(PYTHON_BIN) tools/postprocessing_config.py validate

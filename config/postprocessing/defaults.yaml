@@ -1,0 +1,25 @@
+version: 1
+
+# Default pipeline shared by post-processing tables. Individual tables can
+# override steps, extend the sequence or redefine feature flags.
+defaults:
+  step:
+    enabled: true
+    continue_on_error: false
+    kwargs: {}
+    gates: []
+
+flags:
+  run_quality_checks: false
+
+steps:
+  - id: ensure-string-columns
+    description: "Coerce textual export columns to the canonical string dtype."
+    callable: library.postprocessing.helpers:ensure_string_columns
+    kwargs:
+      columns: []
+  - id: run-quality-checks
+    description: "Placeholder QA hook gated by the run_quality_checks flag."
+    callable: library.postprocessing.pipeline:passthrough
+    gates:
+      - run_quality_checks
