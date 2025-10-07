@@ -124,6 +124,42 @@ def test_parse_manifest__accepts_target_cache_checksum_variants(
 
 
 @pytest.mark.unit
+def test_parse_manifest__accepts_taxonomy_lookup_checksum_variant(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The taxonomy lookup dictionary honours the Windows-specific checksum."""
+
+    manifest_dir = tmp_path / "dictionary"
+    manifest_dir.mkdir()
+    manifest_path = manifest_dir / "manifest.yaml"
+    manifest_payload = {
+        "version": 1,
+        "resources": {
+            "taxonomy_assay_lookup": {
+                "path": "_taxonomy/taxonomy.csv",
+                "version": "test",
+                "sha256": ["dc81f4becc78bce0d3d8561a3c6ae20cac9cfa46762bed4d9af43a8cb8c6b8ab"],
+                "generator": "tests/generator.py",
+            }
+        },
+    }
+    manifest_path.write_text(yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8")
+
+    monkeypatch.setattr(
+        dictionaries,
+        "_compute_sha256",
+        lambda path: "0ec9e4342890f9e0f5457d58133fbca291ac30dd8dd133b8d4f2fac82e798c69",
+    )
+
+    resources = dictionaries._parse_manifest(base_dir=manifest_dir)
+
+    assert (
+        resources["taxonomy_assay_lookup"].sha256
+        == "0ec9e4342890f9e0f5457d58133fbca291ac30dd8dd133b8d4f2fac82e798c69"
+    )
+
+
+@pytest.mark.unit
 def test_parse_manifest__allowlist_file_extends_checksums(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
