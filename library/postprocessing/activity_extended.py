@@ -23,11 +23,12 @@ import numpy as np
 import pandas as pd
 
 from library.common.log import logger
+from config.paths import DICTIONARY_DIR
 
 from . import helpers
 
 _DEFAULT_SEARCH_DIR = Path("data/output")
-_DEFAULT_DICTIONARY_DIR = Path("config/dictionary")
+_DEFAULT_DICTIONARY_DIR = DICTIONARY_DIR
 _FILENAME_RE = re.compile(r"output\.activit(?:y|ies)_(\d{8})\.csv\Z")
 
 _REQUIRED_COLUMNS: frozenset[str] = frozenset(
@@ -299,7 +300,7 @@ def _latest_activity_export(search_dir: Path) -> Path:
     return candidates[-1][2]
 
 
-def _resolve_dictionary_root(dictionary_dir: Path | None) -> Path:
+def _resolve_dictionary_root(dictionary_dir: Path | str | None) -> Path:
     if dictionary_dir is None:
         return _DEFAULT_DICTIONARY_DIR
     return Path(dictionary_dir)
@@ -1463,7 +1464,7 @@ def process_activity_extended(
         )
 
     input_path = explicit_input or _latest_activity_export(resolved_search_dir)
-    dictionary_root = _resolve_dictionary_root(Path(dictionary_dir) if dictionary_dir is not None else None)
+    dictionary_root = _resolve_dictionary_root(dictionary_dir)
 
     frame = helpers.read_csv_strict(
         input_path,

@@ -160,3 +160,40 @@ def test_run_steps__recovers_from_runtime_parameter_mismatch(
         for record in caplog.records
     )
     assert metadata.steps[0].parameters["unexpected"] == "ignored"
+
+
+def test_run_steps__handles_unparsed_typeerror_messages(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    frame = pd.DataFrame({"seed": [5]}, dtype="int64")
+
+    steps = (
+        StepDefinition(
+            name="with_constant",
+            func=_with_constant,
+            params={"column": "value", "value": 13, "unexpected": "ignored"},
+        ),
+    )
+
+    def _no_keyword(_error):
+        return None
+
+    def _pass_through_prepare(func, params, *, logger, step_name):
+        return dict(params)
+
+    monkeypatch.setattr(runner, "_prepare_step_arguments", _pass_through_prepare)
+    monkeypatch.setattr(runner, "_extract_unexpected_keyword", _no_keyword)
+
+    test_logger = logging.getLogger("tests.postprocess.runner")
+    test_logger.handlers.clear()
+    test_logger.propagate = True
+
+    with caplog.at_level("WARNING", logger="tests.postprocess.runner"):
+        result, metadata = run_steps(frame, steps, logger=test_logger)
+
+    assert result["value"].tolist() == [13]
+    assert any(
+        "retrying without unsupported parameters" in record.message
+        for record in caplog.records
+    )
+    assert metadata.steps[0].parameters["unexpected"] == "ignored"
