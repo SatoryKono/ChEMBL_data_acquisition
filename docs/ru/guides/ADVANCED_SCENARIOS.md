@@ -66,6 +66,41 @@ python scripts/get_target_data.py all \
 
 Просмотрите parquet, чтобы убедиться в корректности объединений до финальной нормализации.
 
+## Кастомный реестр пайплайнов
+
+Для альтернативных сценариев (например, пропустить обогащение документов или
+добавить собственные QA-этапы) подготовьте YAML-реестр и передайте его через
+`--pipeline-registry`:
+
+```yaml
+pipelines:
+  - name: document
+    callable: scripts.get_document_data:main
+    input: document_subset.csv
+    output: documents_subset
+  - name: target
+    callable: scripts.get_target_data:main
+    subcommand: chembl
+    output: targets_chembl_only
+  - name: audit
+    callable: tools.audit_pipeline:main
+    input: targets_chembl_only.csv
+    output: audit_report
+```
+
+Запуск с адресными переопределениями:
+
+```bash
+python scripts/get_data.py \
+  --base-path /data/chembl \
+  --pipeline-registry config/custom_registry.yaml \
+  --override-input document=document_snapshot.csv \
+  --override-subcommand target=all
+```
+
+Опция `--override-output-stem` пригодится, когда нужен стандартный реестр, но
+временные имена файлов следует перенаправить без правки YAML.
+
 ## Интеграция с Makefile
 
 Полезные цели (`Makefile`):

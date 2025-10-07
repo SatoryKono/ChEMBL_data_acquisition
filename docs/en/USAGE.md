@@ -52,6 +52,17 @@ Important flags:
 - `--dry-run` — validate configuration, log intended actions and exit without
   touching the filesystem.
 
+### Advanced overrides
+
+Customise the orchestrator without editing code by using the following options:
+
+| Option | Purpose |
+|--------|---------|
+| `--pipeline-registry <path>` | Load an alternative pipeline registry YAML (see [`library/pipelines/registry.py`](../../library/pipelines/registry.py)) to change the execution order, provide custom callables or add/remove steps. |
+| `--override-input STEP=FILENAME` | Replace the input CSV filename for a single step while keeping the rest of the registry intact. Multiple overrides may be supplied. |
+| `--override-output-stem STEP=STEM` | Adjust the output stem for a step without touching the registry (affects the generated filename and metadata artefacts). |
+| `--override-subcommand STEP=SUBCOMMAND` | Switch the CLI sub-command used to invoke a step (e.g. run the target pipeline in `chembl` mode only during a partial rerun). |
+
 The orchestrator stops on the first non-zero exit code and reports per-pipeline
 elapsed time in the logs.
 
