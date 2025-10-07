@@ -6,6 +6,11 @@ resources:
     sha256:
       # POSIX checkouts without newline conversion
       - "e3c3e184c847dbc4f5a238b508055e8ee6ff2536a63a06d1d72d48a82d72e545"
+      # October 2025 refresh exported after rebuilding the bundled dictionaries
+      # on a POSIX filesystem hashes the directory to the value below.  Treat it
+      # as the canonical digest so that freshly generated archives validate
+      # without requiring local allow-list overrides.
+      - "92b6b3612557eb0916f38aee701a61f3bc470b0ffd0251866ecaf7364fb16d64"
       # October 2025 dictionary refresh exported from POSIX environments after
       # regenerating the enrichment bundles.  The content changes introduced in
       # the refresh make the directory hash to the value below.

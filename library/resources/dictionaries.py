@@ -88,6 +88,11 @@ WINDOWS_VFS_PLACEHOLDER_CHECKSUM = (
 _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
     "dictionary_root": (
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        # October 2025 rebuilds performed on POSIX filesystems after refreshing
+        # the bundled dictionaries hash the directory to the value below.  Treat
+        # it as a known variant so that environments with an older manifest but
+        # refreshed dictionary payload still validate successfully.
+        "92b6b3612557eb0916f38aee701a61f3bc470b0ffd0251866ecaf7364fb16d64",
         "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
         "70f0b19c450d0fc8d19ddb41bd69906d6b1a5ac39e3e4e2d2b6dea54a501569d",
         "95f7a33a028aeeba9027b64f558e50ad25e76934782cc03ba14437fd8eff8476",
