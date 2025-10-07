@@ -94,3 +94,8 @@ resources:
     version: "2025-10-06"
     sha256: "55b407b6cf02c4304b1edfe03e6aea8f2a4455f75d7a34a70542183e681c6276"
     generator: tools/build_dictionary_resources.py
+  taxonomy_assay_lookup:
+    path: _taxonomy/taxonomy.csv
+    version: "2025-10-06"
+    sha256: "dc81f4becc78bce0d3d8561a3c6ae20cac9cfa46762bed4d9af43a8cb8c6b8ab"
+    generator: tools/build_dictionary_resources.py
