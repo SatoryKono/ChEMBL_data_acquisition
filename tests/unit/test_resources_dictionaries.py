@@ -216,6 +216,7 @@ def test_manifest_allows_latest_windows_sha256() -> None:
         "70f0b19c450d0fc8d19ddb41bd69906d6b1a5ac39e3e4e2d2b6dea54a501569d",
         "95f7a33a028aeeba9027b64f558e50ad25e76934782cc03ba14437fd8eff8476",
         "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15",
+        dictionaries.WINDOWS_VFS_SPARSE_INDEX_CHECKSUM,
     }
 
     assert expected.issubset(set(sha_values))
@@ -233,6 +234,7 @@ def test_repository_allowlist_includes_sparse_index_checksum(monkeypatch: pytest
     )
 
     assert dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM in variants
+    assert dictionaries.WINDOWS_VFS_SPARSE_INDEX_CHECKSUM in variants
 
 
 @pytest.mark.unit
