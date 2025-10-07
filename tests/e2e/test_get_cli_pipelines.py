@@ -16,6 +16,7 @@ import requests
 from library.cli.base import PipelineCLIBase
 from library.config import Config
 from library import cli_utils
+from library.pipelines.common import PipelineRunResult
 from scripts import (
     get_activity_data,
     get_assay_data,
@@ -167,6 +168,50 @@ def _install_activity_writer(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path
 
     monkeypatch.setattr(get_activity_data, "write_csv_chunks_deterministic", _writer)
     return written
+
+
+def _fake_activity_pipeline(
+    params: dict[str, object],
+    captured: dict[str, int],
+    output_csv: Path,
+) -> PipelineRunResult:
+    fetch_config = params["fetch_config"]
+    fetch_chunk = params["fetch_chunk"]
+    metadata_hooks = params["metadata_hooks"]
+    definition_kwargs = params["definition_kwargs"]
+    writer_config = params["writer_config"]
+
+    captured["workers"] = fetch_config.workers
+    captured["chunk_size"] = fetch_config.chunk_size
+
+    frames = [
+        fetch_chunk(list(chunk_ids))
+        for chunk_ids in fetch_config.chunker(fetch_config.ids, fetch_config.chunk_size)
+    ]
+    result = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    for hook in metadata_hooks:
+        result = hook(result)
+
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    writer = writer_config.writer
+    writer_kwargs = dict(writer_config.kwargs)
+    writer(
+        [result],
+        output_csv,
+        list(result.columns),
+        definition_kwargs.get("key_columns", ()),
+        **writer_kwargs,
+    )
+
+    stats_callback = definition_kwargs.get("stats_callback")
+    if stats_callback is not None:
+        stats_callback({"rows_total": len(result), "rows_kept": len(result), "rows_dropped": 0})
+
+    table_quality = definition_kwargs.get("table_quality")
+    if callable(table_quality):
+        table_quality(output_csv)
+
+    return PipelineRunResult(exit_code=0, output_path=output_csv, written=True)
 
 
 def _patch_activity_cli(monkeypatch: pytest.MonkeyPatch, cfg: Config) -> None:
@@ -519,33 +564,14 @@ def test_get_activity_cli__workers_and_offset(
 
     captured: dict[str, int] = {}
 
-    def _fake_prepare_chunked_pipeline(*, fetch_config, fetch_chunk, csv_writer):
-        captured["workers"] = fetch_config.workers
-        captured["chunk_size"] = fetch_config.chunk_size
-
-        def _fetcher():
-            for chunk_ids in fetch_config.chunker(fetch_config.ids, fetch_config.chunk_size):
-                yield fetch_chunk(list(chunk_ids))
-
-        def _writer(chunks, destination, col_order, key_cols):
-            return csv_writer.writer(
-                chunks,
-                destination,
-                col_order=col_order,
-                key_cols=key_cols,
-            )
-
-        return _fetcher, _writer
-
     monkeypatch.setattr(
         "library.orchestration.context.ChemblClient",
         _DummyChemblClient,
     )
     monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
     monkeypatch.setattr(
-        get_activity_data,
-        "prepare_chunked_pipeline",
-        _fake_prepare_chunked_pipeline,
+        "library.pipelines.activity.run.run_activity_pipeline",
+        lambda **kwargs: _fake_activity_pipeline(kwargs, captured, output_csv),
     )
 
     written = _install_activity_writer(monkeypatch)
@@ -1364,31 +1390,27 @@ def test_get_activity_run_workers_offset_and_non_csv(
 
     captured: dict[str, int] = {}
 
-    def _prepare_stub(*, fetch_config, fetch_chunk, csv_writer):
+    def _fake_pipeline(**kwargs):
+        fetch_config = kwargs["fetch_config"]
         captured["workers"] = fetch_config.workers
+        output_path = kwargs["output_path"]
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(
+            [
+                {
+                    "activity_id": "ACT2",
+                    "molecule_chembl_id": "CHEMBL2",
+                    "assay_chembl_id": "ASSAY2",
+                    "standard_value": 7.0,
+                }
+            ]
+        ).to_csv(output_path, index=False, sep=cfg.io.csv_sep)
+        return PipelineRunResult(exit_code=0, output_path=output_path, written=True)
 
-        def _fetcher() -> Iterable[pd.DataFrame]:
-            yield pd.DataFrame(
-                [
-                    {
-                        "activity_id": "ACT2",
-                        "molecule_chembl_id": "CHEMBL2",
-                        "assay_chembl_id": "ASSAY2",
-                        "standard_value": 7.0,
-                    }
-                ]
-            )
-
-        def _writer(chunks: Iterable[pd.DataFrame], destination: Path, col_order, key_cols):
-            frames = list(chunks)
-            result = pd.concat(frames, ignore_index=True)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            result.to_csv(destination, index=False, sep=cfg.io.csv_sep)
-            return destination
-
-        return _fetcher, _writer
-
-    monkeypatch.setattr(get_activity_data, "prepare_chunked_pipeline", _prepare_stub)
+    monkeypatch.setattr(
+        "library.pipelines.activity.run.run_activity_pipeline",
+        _fake_pipeline,
+    )
     monkeypatch.setattr(
         "library.orchestration.context.ChemblClient",
         _DummyChemblClient,

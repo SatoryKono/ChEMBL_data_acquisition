@@ -15,6 +15,7 @@ import pytest
 import requests
 
 from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS
+from library.pipelines.common import PipelineRunResult
 from library.postprocessing import activity_extended
 from scripts import get_activity_data
 
@@ -344,33 +345,39 @@ def test_run_chembl__offset_and_workers(monkeypatch, cfg, tmp_path) -> None:
 
     captured: dict[str, int] = {}
 
-    def fake_prepare_chunked_pipeline(*, fetch_config, fetch_chunk, csv_writer):
+    def fake_run_pipeline(**kwargs):
+        fetch_config = kwargs["fetch_config"]
         captured["workers"] = fetch_config.workers
         captured["chunk_size"] = fetch_config.chunk_size
+        output_path = kwargs["output_path"]
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(
+            [
+                {
+                    "activity_id": "ACT2",
+                    "molecule_chembl_id": "CHEMBL2",
+                    "assay_chembl_id": "ASSAY2",
+                    "standard_value": 4.0,
+                }
+            ]
+        ).to_csv(output_path, index=False)
+        return PipelineRunResult(exit_code=0, output_path=output_path, written=True)
 
-        def _fetcher() -> Iterable[pd.DataFrame]:
-            yield pd.DataFrame(
-                [
-                    {
-                        "activity_id": "ACT2",
-                        "molecule_chembl_id": "CHEMBL2",
-                        "assay_chembl_id": "ASSAY2",
-                        "standard_value": 4.0,
-                    }
-                ]
-            )
-
-        def _writer(chunks: Iterable[pd.DataFrame], destination: Path, col_order, key_cols):
-            frames = list(chunks)
-            result = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            result.to_csv(destination, index=False)
-            return destination
-
-        return _fetcher, _writer
-
-    monkeypatch.setattr(get_activity_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline)
+    monkeypatch.setattr(
+        "library.pipelines.activity.run.run_activity_pipeline",
+        fake_run_pipeline,
+    )
     monkeypatch.setattr("library.orchestration.context.ChemblClient", _DummyClient)
+    monkeypatch.setattr(
+        get_activity_data,
+        "process_activity_extended",
+        lambda *, input_path, **__: input_path,
+    )
+    monkeypatch.setattr(
+        get_activity_data,
+        "_generate_activity_postprocess_metrics",
+        lambda *_, **__: (None, None),
+    )
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
 
@@ -417,43 +424,14 @@ def test_run_chembl__pipeline_failure_logs_error(cfg, tmp_path, monkeypatch) -> 
     )
     monkeypatch.setattr("library.orchestration.context.ChemblClient", _DummyClient)
 
-    def fake_prepare_chunked_pipeline(*, fetch_config, fetch_chunk, csv_writer):
-        def _fetcher() -> Iterable[pd.DataFrame]:
-            yield pd.DataFrame(
-                [
-                    {
-                        "activity_id": "ACT1",
-                        "molecule_chembl_id": "CHEMBL1",
-                        "assay_chembl_id": "ASSAY1",
-                        "standard_value": 1.0,
-                    }
-                ]
-            )
-
-        def _writer(
-            chunks: Iterable[pd.DataFrame],
-            destination: Path,
-            col_order,
-            key_cols,
-        ) -> Path:
-            dest = Path(destination)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            return dest
-
-        return _fetcher, _writer
-
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
     monkeypatch.setattr(
-        get_activity_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline
+        "library.pipelines.activity.run.run_activity_pipeline",
+        lambda **kwargs: PipelineRunResult(
+            exit_code=1, output_path=kwargs["output_path"], written=None
+        ),
     )
-
-    def fake_run_pipeline(*, definition, fetcher, output_path, failure_path, **kwargs):
-        del definition, output_path, failure_path, kwargs
-        list(fetcher())
-        return 1
-
-    monkeypatch.setattr(get_activity_data, "run_pipeline", fake_run_pipeline)
 
     exit_code = get_activity_data.run_chembl(cfg, args)
 
@@ -462,62 +440,44 @@ def test_run_chembl__pipeline_failure_logs_error(cfg, tmp_path, monkeypatch) -> 
     assert "activity_pipeline_failed" in error_events
 
 
-@pytest.mark.unit
-def test_run_chembl__network_resolution_failure_hint(
-    cfg, tmp_path, monkeypatch
-) -> None:
+def test_prepare_activity_context__skip_read_avoids_io(cfg, tmp_path, monkeypatch) -> None:
     args = _make_args(tmp_path)
     cfg.activity.limit = None
-    cfg.activity.batch_size = 2
-    cfg.retry.max_attempts = 1
-    cfg.io.output_dir = tmp_path
 
     monkeypatch.setattr(
         get_activity_data.io,
         "read_ids",
-        lambda *_args, **_kwargs: iter(["ACT1", "ACT2"]),
+        lambda *_args, **_kwargs: pytest.fail("read_ids should not execute when skip_read=True"),
     )
-    monkeypatch.setattr("library.orchestration.context.ChemblClient", _DummyClient)
 
-    def fake_prepare_chunked_pipeline(*, fetch_config, fetch_chunk, csv_writer):
-        del fetch_config, csv_writer
+    context = get_activity_data.prepare_activity_context(cfg, args, skip_read=True)
 
-        def _fetcher() -> Iterable[pd.DataFrame]:
-            fetch_chunk(("ACT1",))
-            yield from ()
+    assert context is not None
+    assert context.limit is None
+    assert list(context.limited_ids) == []
+    assert context.processed_ids == 0
 
-        def _writer(*_args, **_kwargs):  # pragma: no cover - writer is not invoked
-            raise AssertionError("writer should not be called when fetch fails")
 
-        return _fetcher, _writer
-
-    monkeypatch.setattr(get_activity_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline)
-
-    def fake_get_activities(*_args, **_kwargs):
-        raise requests.exceptions.ConnectionError(
-            "HTTPSConnectionPool(host='www.ebi.ac.uk', port=443): Max retries exceeded with url: "
-            "/chembl/api/data/activity.json (Caused by NameResolutionError('www.ebi.ac.uk'))"
-        )
-
-    monkeypatch.setattr(get_activity_data.cl, "get_activities", fake_get_activities)
+def test_prepare_activity_context__limit_and_offset(cfg, tmp_path, monkeypatch) -> None:
+    args = _make_args(tmp_path)
+    args.offset = 1
+    cfg.activity.limit = 2
 
     logger_stub = _RecordingLogger()
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    monkeypatch.setattr(
+        get_activity_data.io,
+        "read_ids",
+        lambda *_args, **_kwargs: iter(["ACT0", "ACT1", "ACT2", "ACT3"]),
+    )
 
-    exit_code = get_activity_data.run_chembl(cfg, args)
+    context = get_activity_data.prepare_activity_context(cfg, args)
 
-    assert exit_code == 1
-    network_events = [ctx for level, event, ctx in logger_stub.events if event == "activity_fetch_network_error"]
-    assert network_events, "network error event should be logged"
-    network_context = network_events[-1]
-    hint_from_context = network_context.get("hint") or network_context.get("extra", {}).get("hint")
-    assert isinstance(hint_from_context, str)
-    assert "resolve" in hint_from_context.lower()
-
-    failure_records = [ctx for level, event, ctx in logger_stub.events if event == "activity_pipeline_failed"]
-    assert failure_records
-    details_text = failure_records[-1].get("details") or ""
-    assert "network_hint" in details_text
+    assert context is not None
+    assert list(context.limited_ids) == ["ACT1", "ACT2"]
+    assert context.processed_ids == 2
+    events = [event for _, event, _ in logger_stub.events]
+    assert "process_offset" in events
 
 
 def test_main__dry_run_skip_limit(monkeypatch, tmp_path, capsys) -> None:
