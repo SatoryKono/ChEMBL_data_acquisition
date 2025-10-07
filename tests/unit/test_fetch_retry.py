@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from library.common.fetch_retry import compute_backoff_delay
+from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 from library.config import RetryCfg
 
 
@@ -26,3 +26,27 @@ def test_compute_backoff_delay__adds_jitter_before_cap() -> None:
     expected = min(base_delay + jitter(retry_cfg.backoff_factor), retry_cfg.backoff_cap)
 
     assert compute_backoff_delay(attempt, retry_cfg) == pytest.approx(expected)
+
+
+def test_chunk_failure_tracker_stats__returns_fresh_mapping_when_empty() -> None:
+    tracker = ChunkFailureTracker()
+
+    first = tracker.stats()
+    first["custom"] = "value"
+
+    second = tracker.stats()
+
+    assert first is not second
+    assert second == {}
+
+
+def test_chunk_failure_tracker_stats__does_not_share_lists() -> None:
+    tracker = ChunkFailureTracker()
+    tracker.add_failure(["A", "B"], "boom")
+
+    first = tracker.stats()
+    first["chunk_fetch_failure_ids"].append("C")
+
+    second = tracker.stats()
+
+    assert second["chunk_fetch_failure_ids"] == ["A", "B"]
