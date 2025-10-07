@@ -10,7 +10,9 @@ import pytest
 from library.postprocessing import AssayExtendedError, enrich_assay_metadata
 
 
-@pytest.mark.postprocessing
+pytestmark = pytest.mark.integration
+
+
 @pytest.mark.usefixtures("deterministic_env")
 def test_enrich_assay_metadata__fills_missing_fields(tmp_path: Path) -> None:
     dictionary_root = tmp_path
@@ -88,8 +90,6 @@ def test_enrich_assay_metadata__fills_missing_fields(tmp_path: Path) -> None:
 
     assert str(result["year"].dtype) == "Int64"
 
-
-@pytest.mark.postprocessing
 def test_enrich_assay_metadata__missing_taxonomy_dir_raises(tmp_path: Path) -> None:
     dictionary_root = tmp_path
     (dictionary_root / "_assay").mkdir()

@@ -9,6 +9,9 @@ import pytest
 from library.postprocessing import iuphar
 
 
+pytestmark = pytest.mark.integration
+
+
 def test_ensure_required_columns__raises_for_missing_columns() -> None:
     frame = pd.DataFrame(
         [

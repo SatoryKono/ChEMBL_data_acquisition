@@ -24,9 +24,12 @@ from library.pipelines.target import cellularity, helpers, multifunctional
 from library.postprocessing import names as target_names
 from library.postprocessing.names import process_target_names
 from library.postprocessing.target import isoform
- 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+
+pytestmark = pytest.mark.integration
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _load_postprocessing_cellularity_module():
@@ -69,7 +72,7 @@ from library.schemas.targets import CELLULARITY_COLUMN_NAME, TARGETS_COLUMN_ORDE
 INPUT_FILE = "target_postprocess_power_query_input.csv"
 EXPECTED_FILE = "target_postprocess_power_query_expected.csv"
 
-_ROOT = Path(__file__).resolve().parents[2]
+_ROOT = Path(__file__).resolve().parents[3]
 
 if "library.postprocessing" not in sys.modules:
     postprocessing_pkg = types.ModuleType("library.postprocessing")
@@ -92,14 +95,12 @@ _SPEC.loader.exec_module(_cellularity_module)
 Cellularity = _cellularity_module.Cellularity
 
 
-@pytest.mark.unit
 def test_read_snapshot__validates_required_columns(snapshot_resource: Path) -> None:
     path = snapshot_resource / INPUT_FILE
     with pytest.raises(ValueError, match="missing required columns"):
         helpers.read_snapshot(path, columns=["target_chembl_id", "missing"])
 
 
-@pytest.mark.unit
 def test_postprocess_target_table__matches_power_query_snapshot(
     snapshot_resource: Path,
 ) -> None:
@@ -117,7 +118,6 @@ def test_postprocess_target_table__matches_power_query_snapshot(
     pdt.assert_frame_equal(result.reset_index(drop=True), expected)
 
 
-@pytest.mark.unit
 def test_postprocess_target_table_file__writes_expected_bytes(
     tmp_path: Path, cfg: Config, snapshot_resource: Path
 ) -> None:
@@ -144,7 +144,6 @@ def test_postprocess_target_table_file__writes_expected_bytes(
     pdt.assert_frame_equal(result, expected)
 
 
-@pytest.mark.unit
 def test_process_target_names__strips_bom_headers(tmp_path: Path) -> None:
     """Ensure UTF-8 BOM headers are stripped so downstream helpers continue to work."""
 
@@ -182,7 +181,6 @@ def test_process_target_names__strips_bom_headers(tmp_path: Path) -> None:
     assert set(result["target_chembl_id"]) == {"CHEMBL_TGT"}
 
 
-@pytest.mark.unit
 def test_cellularity_classification__matches_examples() -> None:
     records = [
         {
@@ -213,7 +211,6 @@ def test_cellularity_classification__matches_examples() -> None:
         assert label == record["expected"]
 
 
-@pytest.mark.unit
 def test_add_cellularity_smart__fills_column(snapshot_resource: Path) -> None:
     input_path = snapshot_resource / INPUT_FILE
     frame = pd.read_csv(input_path, dtype=str, keep_default_na=False)
@@ -230,7 +227,6 @@ def test_add_cellularity_smart__fills_column(snapshot_resource: Path) -> None:
     ]
 
 
-@pytest.mark.unit
 def test_add_cellularity_smart__missing_tax_ids_skip_fetch() -> None:
     calls: list[tuple[object, object | None]] = []
 
@@ -258,7 +254,6 @@ def test_add_cellularity_smart__missing_tax_ids_skip_fetch() -> None:
     assert enriched["cellularity"].tolist() == ["ambiguous", "ambiguous"]
 
 
-@pytest.mark.unit
 def test_append_multifunctional_flag__detects_keywords(snapshot_resource: Path) -> None:
     input_path = snapshot_resource / INPUT_FILE
     frame = pd.read_csv(input_path, dtype=str, keep_default_na=False)
@@ -270,7 +265,6 @@ def test_append_multifunctional_flag__detects_keywords(snapshot_resource: Path) 
     assert result["multifunctional_enzyme"].tolist() == [True, False, False]
 
 
-@pytest.mark.unit
 def test_classify_by_fetch__trailing_whitespace_lineage_remains_ambiguous() -> None:
     lineage = [
         "Viruses ",
@@ -312,7 +306,6 @@ def test_classify_by_fetch__trailing_spaces_remain_ambiguous() -> None:
     assert classifier.get_lineage_names("9606") == lineage
 
 
-@pytest.mark.unit
 def test_get_lineage_names__numeric_tax_id_returns_lineage() -> None:
     lineage = ["Cellular organisms", "Eukaryota", "Chordata", "Homo sapiens"]
     calls: list[tuple[Any, str | None]] = []
@@ -329,14 +322,12 @@ def test_get_lineage_names__numeric_tax_id_returns_lineage() -> None:
     assert calls == [(9606, None)]
 
 
-@pytest.mark.unit
 def test_isoform_split_pipes__trims_and_discards_empty() -> None:
     assert isoform._split_pipes("") == []
     assert isoform._split_pipes("a|b") == ["a", "b"]
     assert isoform._split_pipes(" a | | b ") == ["a", "b"]
 
 
-@pytest.mark.unit
 def test_isoform_make_triples__pads_shorter_lists() -> None:
     triples = isoform._make_triples(
         ["name1", "name2"],
@@ -351,7 +342,6 @@ def test_isoform_make_triples__pads_shorter_lists() -> None:
     ]
 
 
-@pytest.mark.unit
 def test_isoform_normalisation__only_names_and_synonyms_lowercased() -> None:
     frame = pd.DataFrame(
         {
@@ -370,14 +360,12 @@ def test_isoform_normalisation__only_names_and_synonyms_lowercased() -> None:
     assert "ensp0002" in transform.result["id"].tolist()
 
 
-@pytest.mark.unit
 def test_isoform_tokenise_synonym__pde3a_alpha() -> None:
     tokens = isoform._tokenize_synonym("PDE3A:alpha")
 
     assert tokens == ["pde3a", "3a", "alpha"]
 
 
-@pytest.mark.unit
 def test_isoform_name_filter__drops_empty_and_na(snapshot_resource: Path) -> None:
     frame = pd.read_csv(
         snapshot_resource / "target_isoform_minimal.csv",
@@ -392,7 +380,6 @@ def test_isoform_name_filter__drops_empty_and_na(snapshot_resource: Path) -> Non
     assert "none" not in transform.result["name"].tolist()
 
 
-@pytest.mark.unit
 def test_isoform_synonym_tokens__preserve_identifier(snapshot_resource: Path) -> None:
     frame = pd.read_csv(
         snapshot_resource / "target_isoform_minimal.csv",
@@ -409,7 +396,6 @@ def test_isoform_synonym_tokens__preserve_identifier(snapshot_resource: Path) ->
     assert "ENSP0002" in alpha_ids
 
 
-@pytest.mark.unit
 def test_isoform_stage1_dedup__matches_table_distinct(snapshot_resource: Path) -> None:
     frame = pd.read_csv(
         snapshot_resource / "target_isoform_duplicates.csv",
@@ -427,7 +413,6 @@ def test_isoform_stage1_dedup__matches_table_distinct(snapshot_resource: Path) -
     pdt.assert_frame_equal(transform.dedup_stage1.reset_index(drop=True), expected)
 
 
-@pytest.mark.unit
 def test_isoform_sorted_stage__uses_mergesort(snapshot_resource: Path) -> None:
     frame = pd.read_csv(
         snapshot_resource / "target_isoform_duplicates.csv",
@@ -446,7 +431,6 @@ def test_isoform_sorted_stage__uses_mergesort(snapshot_resource: Path) -> None:
     pdt.assert_frame_equal(transform.sorted_stage.reset_index(drop=True), expected)
 
 
-@pytest.mark.unit
 def test_isoform_stage2_dedup__matches_drop_duplicates(snapshot_resource: Path) -> None:
     frame = pd.read_csv(
         snapshot_resource / "target_isoform_duplicates.csv",
@@ -464,7 +448,6 @@ def test_isoform_stage2_dedup__matches_drop_duplicates(snapshot_resource: Path) 
     pdt.assert_frame_equal(transform.dedup_stage2.reset_index(drop=True), expected)
 
 
-@pytest.mark.unit
 def test_isoform_final_dedup__matches_last_distinct(snapshot_resource: Path) -> None:
     frame = pd.read_csv(
         snapshot_resource / "target_isoform_duplicates.csv",
@@ -482,7 +465,6 @@ def test_isoform_final_dedup__matches_last_distinct(snapshot_resource: Path) -> 
     pdt.assert_frame_equal(transform.result.reset_index(drop=True), expected)
 
 
-@pytest.mark.unit
 def test_isoform_output_columns__match_spec(snapshot_resource: Path) -> None:
     frame = pd.read_csv(
         snapshot_resource / "target_isoform_minimal.csv",
@@ -495,7 +477,6 @@ def test_isoform_output_columns__match_spec(snapshot_resource: Path) -> None:
     assert list(transform.result.columns) == list(isoform._OUTPUT_COLUMNS)
 
 
-@pytest.mark.unit
 def test_isoform_make_triples_fixture__pads_missing_values(snapshot_resource: Path) -> None:
     frame = pd.read_csv(
         snapshot_resource / "target_isoform_length_mismatch.csv",
@@ -515,7 +496,6 @@ def test_isoform_make_triples_fixture__pads_missing_values(snapshot_resource: Pa
     assert syn5_row["id"].apply(lambda value: pd.isna(value) or value == "").all()
 
 
-@pytest.mark.unit
 def test_isoform_process_targets__writes_isoform_prefix(tmp_path: Path, snapshot_resource: Path) -> None:
     source = snapshot_resource / "target_isoform_minimal.csv"
     input_path = tmp_path / "output.target_20250101.csv"
@@ -527,7 +507,6 @@ def test_isoform_process_targets__writes_isoform_prefix(tmp_path: Path, snapshot
     assert output_path.parent == input_path.parent
 
 
-@pytest.mark.unit
 def test_isoform_process_targets__strips_csv_normalized_suffix(
     tmp_path: Path, snapshot_resource: Path
 ) -> None:
@@ -543,7 +522,6 @@ def test_isoform_process_targets__strips_csv_normalized_suffix(
     assert output_path.parent == input_path.parent
 
 
-@pytest.mark.unit
 def test_isoform_process_targets__accepts_explicit_custom_name(
     tmp_path: Path, snapshot_resource: Path
 ) -> None:
@@ -559,7 +537,6 @@ def test_isoform_process_targets__accepts_explicit_custom_name(
     assert output_path.parent == input_path.parent
 
 
-@pytest.mark.unit
 def test_isoform_process_targets__warns_on_non_csv_extension(
     tmp_path: Path, snapshot_resource: Path
 ) -> None:

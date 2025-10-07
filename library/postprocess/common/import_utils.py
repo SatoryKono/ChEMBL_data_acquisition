@@ -81,4 +81,16 @@ def _format_expected_type(expected: type | tuple[type, ...]) -> str:
     return repr(expected)
 
 
-__all__ = ["ImportResolutionError", "import_by_path"]
+def resolve_dotted_path(path: str) -> Any:
+    """Return the callable referenced by ``path``.
+
+    The helper mirrors the legacy Power Query tooling API used in historical
+    post-processing scripts while delegating to :func:`import_by_path` for
+    validation. Keeping the dedicated wrapper avoids touching older pipeline
+    configuration files that still refer to ``resolve_dotted_path``.
+    """
+
+    return import_by_path(path)
+
+
+__all__ = ["ImportResolutionError", "import_by_path", "resolve_dotted_path"]

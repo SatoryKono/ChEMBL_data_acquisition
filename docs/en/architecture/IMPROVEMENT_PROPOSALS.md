@@ -46,7 +46,8 @@
    - **Expected effect.** Easier testing, clearer separation between infrastructure and business logic, and better support for offline execution.
 
 10. **Align test layout with pipeline layers**
-    - **Description.** Collapse helper suites under `tests/unit`, `tests/integration` and `tests/e2e` (e.g. move `tests/postprocessing/` into `tests/integration/`) and document fixtures per stage.
-    - **Problem.** The current structure spreads assertions across extra top-level folders, obscuring the unit/integration/e2e boundaries described in the testing policy.
+    - **Status.** ✅ Completed in 0.1.4: helper suites now reside under `tests/unit`, `tests/integration` (with the dedicated `postprocessing/` sub-package) and `tests/e2e`.
+    - **Description.** Collapse helper suites under `tests/unit`, `tests/integration` and `tests/e2e` and document fixtures per stage.
+    - **Problem.** The previous structure spread assertions across extra top-level folders, obscuring the unit/integration/e2e boundaries described in the testing policy.
     - **Expected effect.** A predictable test taxonomy that mirrors the ETL layering and simplifies coverage tracking in CI.
 

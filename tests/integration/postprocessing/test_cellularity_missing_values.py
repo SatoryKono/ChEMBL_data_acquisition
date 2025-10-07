@@ -7,7 +7,9 @@ import pytest
 from library.postprocessing.target.cellularity import add_cellularity_smart
 
 
-@pytest.mark.unit
+pytestmark = pytest.mark.integration
+
+
 def test_add_cellularity_smart__skips_fetch_for_missing_tax_ids() -> None:
     def _fetch_stub(tax_id: object, email: str | None) -> list[str]:
         raise AssertionError("fetcher should not be invoked for missing tax IDs")
