@@ -83,7 +83,7 @@ python scripts/get_data.py \
 | Test item | `python scripts/get_testitem_data.py --input data/input/testitem.csv --final-out output/testitems.csv --request-limit 500 --hierarchy-path config/dictionary/_testitem/molecule_hierarchy.csv` | Управляет обогащением родительских молекул и лимитами запросов (`--request-limit`, `--batch-size`, `--dry-run`). |
 | Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto` | Загружает метаданные тканей, объединяет онтологические кросс-ссылки и нормализует синонимы. Запускается отдельно перед `get_activity_data`, когда нужны справочники тканей. |
 | Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --final-out output/cellline.csv --batch-size 20 --limit 100` | Выгружает данные по клеточным линиям из ChEMBL, нормализует идентификаторы и формирует стабильный CSV. |
-| Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --action-type-enabled --bounds-enabled --quality-threshold warn` | Включает обогащения (`--action-type-enabled`, `--bounds-enabled`), расчёт границ и пороги QA. |
+| Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --timeout 120 --limit 500 --offset 100 --workers 4 --dry-run` | Поддерживает ограничение диапазона (`--limit`, `--offset`), настройку таймаута, параллельную загрузку через `--workers` и проверку без записи (`--dry-run`). |
 
 Каждый пайплайн сохраняет детерминированный CSV, файл метаданных
 `<имя>.meta.yaml` и отчёты качества в том же каталоге. Таргет-пайплайн также
