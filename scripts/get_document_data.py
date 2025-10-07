@@ -183,6 +183,14 @@ _EXPORT_SORT_FALLBACK = [
 _EXPORT_STREAM_CHUNK_SIZE = 10_000
 
 
+def _resolve_timeout(value: float | None, default: float) -> float:
+    """Return ``default`` when ``value`` is ``None`` otherwise the float value."""
+
+    if value is None:
+        return float(default)
+    return float(value)
+
+
 def _iter_export_chunks(df: pd.DataFrame, *, chunk_size: int) -> Iterable[pd.DataFrame]:
     """Yield export-ready DataFrame chunks from ``df``."""
 
@@ -1000,7 +1008,8 @@ def run_chembl(
             args.final_out = output_path
         setattr(args, "output_csv", output_path)
     chunk_size = getattr(args, "chunk_size", chembl_defaults.chunk_size)
-    timeout = getattr(args, "timeout", chembl_defaults.timeout)
+    timeout = _resolve_timeout(getattr(args, "timeout", None), chembl_defaults.timeout)
+    setattr(args, "timeout", timeout)
     metadata_obj = getattr(args, "_config_metadata", None)
     if not isinstance(metadata_obj, ConfigMetadata):
         metadata_obj = None
@@ -1078,13 +1087,14 @@ def run_chembl(
                 cfg=cfg.api,
                 client=client,
                 chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
-                timeout=getattr(args, "timeout", chembl_defaults.timeout),
+                timeout=timeout,
             )
         except (requests.RequestException, ValueError) as exc:
             logger.error(
                 "chembl_documents_fetch_failed",
                 error=str(exc), exc_info=exc,
                 chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
+                timeout=timeout,
             )
             return 1
         if "doi" in df.columns:
@@ -1200,17 +1210,32 @@ def run_all(
         setattr(args, "output_csv", output_path)
     fallback_enabled = getattr(args, "fallback_doi_enabled", False)
     fallback_path_arg = getattr(args, "fallback_doi_path", None)
+    chembl_chunk_size = getattr(
+        args, "chembl_chunk_size", all_defaults.chunk_size
+    )
+    setattr(args, "chembl_chunk_size", chembl_chunk_size)
+    chembl_timeout_value = getattr(args, "chembl_timeout", None)
+    if chembl_timeout_value is None:
+        chembl_timeout_value = getattr(args, "timeout", None)
+    chembl_timeout = _resolve_timeout(chembl_timeout_value, all_defaults.timeout)
+    setattr(args, "chembl_timeout", chembl_timeout)
+    pubmed_timeout_value = getattr(args, "pubmed_timeout", None)
+    if pubmed_timeout_value is None:
+        pubmed_timeout_value = getattr(args, "timeout", None)
+    pubmed_timeout = _resolve_timeout(pubmed_timeout_value, PUBMED_DEFAULTS.timeout)
+    setattr(args, "pubmed_timeout", pubmed_timeout)
     logger.info(
         "document_all_start",
         input=str(args.input_csv),
         output=str(output_path),
         limit=limit,
         offset=offset,
-        chembl_chunk_size=getattr(args, "chembl_chunk_size", all_defaults.chunk_size),
+        chembl_chunk_size=chembl_chunk_size,
         pubmed_workers=getattr(args, "pubmed_workers", all_defaults.workers),
         pubmed_batch_size=getattr(args, "pubmed_batch_size", all_defaults.batch_size),
         pubmed_sleep=getattr(args, "pubmed_sleep", all_defaults.sleep),
-        chembl_timeout=getattr(args, "chembl_timeout", all_defaults.timeout),
+        chembl_timeout=chembl_timeout,
+        pubmed_timeout=pubmed_timeout,
         fallback_doi_enabled=fallback_enabled,
         fallback_doi_overwrite=getattr(args, "fallback_doi_overwrite", False),
         fallback_doi_path=str(fallback_path_arg) if fallback_path_arg else None,
@@ -1277,12 +1302,8 @@ def run_all(
                 ids_for_fetch,
                 cfg=cfg.api,
                 client=client,
-                chunk_size=getattr(
-                    args, "chembl_chunk_size", all_defaults.chunk_size
-                ),
-                timeout=getattr(
-                    args, "chembl_timeout", all_defaults.timeout
-                ),
+                chunk_size=chembl_chunk_size,
+                timeout=chembl_timeout,
             )
     except (requests.RequestException, ValueError) as exc:
         logger.error(
@@ -1290,7 +1311,8 @@ def run_all(
             ids=sample_ids,
             error=str(exc), exc_info=exc,
             output=str(output_path),
-            chunk_size=getattr(args, "chembl_chunk_size", all_defaults.chunk_size),
+            chunk_size=chembl_chunk_size,
+            timeout=chembl_timeout,
         )
         return 1
     if limit_counter is not None:
@@ -1483,15 +1505,23 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     mode = getattr(args, "mode", None)
     if mode in (None, ""):
         mode = getattr(args, "command", None)
-    timeout_value = None
+    chembl_timeout_override: float | None = None
+    pubmed_timeout_override: float | None = None
     if mode == "chembl":
-        timeout_value = getattr(args, "timeout", None)
+        chembl_timeout_override = getattr(args, "timeout", None)
+    elif mode == "pubmed":
+        pubmed_timeout_override = getattr(args, "timeout", None)
     elif mode == "all":
-        timeout_value = getattr(args, "chembl_timeout", None)
-        if timeout_value is None:
-            timeout_value = getattr(args, "timeout", None)
-    if timeout_value is not None:
-        cfg.api.timeout_read = timeout_value
+        chembl_timeout_override = getattr(args, "chembl_timeout", None)
+        if chembl_timeout_override is None:
+            chembl_timeout_override = getattr(args, "timeout", None)
+        pubmed_timeout_override = getattr(args, "pubmed_timeout", None)
+        if pubmed_timeout_override is None:
+            pubmed_timeout_override = getattr(args, "timeout", None)
+    if chembl_timeout_override is not None:
+        cfg.api.timeout_read = float(chembl_timeout_override)
+    if pubmed_timeout_override is not None:
+        cfg.pubmed.timeout_read = float(pubmed_timeout_override)
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0
@@ -1634,7 +1664,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     single_group.add_argument(
         "--timeout",
         type=float,
-        default=CHEMBL_DEFAULTS.timeout,
+        default=None,
         help=(
             "HTTP read timeout in seconds (defaults: chembl/all="
             f"{CHEMBL_DEFAULTS.timeout}, pubmed={PUBMED_DEFAULTS.timeout})"
@@ -1657,7 +1687,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--chembl-timeout",
         dest="chembl_timeout",
         type=float,
-        default=ALL_DEFAULTS.timeout,
+        default=None,
         help=(
             "Timeout in seconds for ChEMBL requests when running in all mode "
             f"(default: {ALL_DEFAULTS.timeout})"
@@ -1700,7 +1730,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--pubmed-timeout",
         dest="pubmed_timeout",
         type=float,
-        default=PUBMED_DEFAULTS.timeout,
+        default=None,
         help=(
             "Timeout in seconds for PubMed requests when running in all mode "
             f"(default: {PUBMED_DEFAULTS.timeout})"
