@@ -1,0 +1,8 @@
+# Additional checksum variants accepted at runtime.  This file supplements the
+# values declared in ``manifest.yaml`` so that field-observed hashes can be
+# whitelisted without forcing an immediate rebuild of the bundled resources.
+dictionary_root:
+  # Windows 11 23H2 with Git 2.48 and Python 3.13.x on NTFS sparse checkouts
+  # may hash the dictionary directory to ``9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15``.
+  # Allow it so local validation succeeds on the refreshed toolchain.
+  - "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15"

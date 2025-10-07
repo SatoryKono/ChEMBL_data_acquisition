@@ -125,6 +125,17 @@ def test_manifest_allows_windows_textmode_checksum() -> None:
 
 
 @pytest.mark.unit
+def test_packaged_allowlist__includes_sparse_index_checksum() -> None:
+    """The shipped allow-list should include the sparse-index checksum."""
+
+    base_dir = Path("config/dictionary")
+
+    variants = dictionaries._iter_additional_checksums("dictionary_root", base_dir=base_dir)
+
+    assert dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM in variants
+
+
+@pytest.mark.unit
 def test_known_checksum_variants__includes_sparse_index_checksum(tmp_path: Path) -> None:
     """The runtime allow-list should accept the new sparse-index checksum."""
 
