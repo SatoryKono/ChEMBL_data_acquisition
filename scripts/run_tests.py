@@ -29,12 +29,7 @@ REPO_SLUG = "SatoryKono/ChEMBL_data_acquisition"
 QUALITY_THRESHOLD_PERCENT = 95.0
 QUALITY_FAILURE_EXIT_CODE = 1
 VALIDATION_FAILURE_EXIT_CODE = 11
-TEST_DIRECTORIES = (
-    ROOT_DIR / "tests" / "unit",
-    ROOT_DIR / "tests" / "integration",
-    ROOT_DIR / "tests" / "postprocessing",
-    ROOT_DIR / "tests" / "e2e",
-)
+TESTS_ROOT = ROOT_DIR / "tests"
 _BASE_PYTEST_COMMAND: list[str] = [
     sys.executable,
     "-m",
@@ -50,9 +45,6 @@ _BASE_PYTEST_COMMAND: list[str] = [
     f"--cov-report=html:{COVERAGE_HTML}",
     "-vv",
 ]
-_DEFAULT_TEST_TARGETS: tuple[str, ...] = tuple(
-    str(path) for path in TEST_DIRECTORIES if path.exists()
-)
 
 
 logger = logging.getLogger("run_tests")
@@ -63,6 +55,64 @@ def _relative_to_root(path: Path) -> str:
         return str(path.relative_to(ROOT_DIR))
     except ValueError:
         return str(path)
+
+
+def _normalise_excluded_names(excluded: Iterable[str] | None) -> set[str]:
+    names: set[str] = set()
+    if not excluded:
+        return names
+    for entry in excluded:
+        if not entry:
+            continue
+        candidate = Path(entry).name.strip()
+        if candidate:
+            names.add(candidate)
+    return names
+
+
+def discover_test_targets(
+    root: Path, excluded: Iterable[str] | None = None
+) -> tuple[str, ...]:
+    """Return pytest targets discovered under ``root``.
+
+    Directories listed in ``excluded`` are ignored. When ``root`` contains
+    top-level ``test_*.py`` files, the root itself is added as an explicit
+    target to ensure they are collected.
+    """
+
+    if not root.exists():
+        return ()
+
+    entries = list(root.iterdir())
+    excluded_names = _normalise_excluded_names(excluded)
+
+    directories = [
+        path
+        for path in entries
+        if path.is_dir()
+        and path.name not in excluded_names
+        and not path.name.startswith(".")
+        and path.name != "__pycache__"
+    ]
+    directories.sort(key=lambda item: item.name)
+
+    has_direct_tests = any(
+        path.is_file()
+        and path.suffix == ".py"
+        and path.name.startswith("test_")
+        for path in entries
+    )
+
+    targets: list[str] = []
+    if has_direct_tests:
+        targets.append(str(root))
+
+    targets.extend(str(path) for path in directories)
+
+    if not targets:
+        targets.append(str(root))
+
+    return tuple(targets)
 
 
 def ensure_reports_directory() -> None:
@@ -435,6 +485,16 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Date token forwarded to the log file suffix (format: YYYYMMDD)",
     )
     parser.add_argument(
+        "--exclude",
+        dest="exclude",
+        action="append",
+        default=None,
+        metavar="NAME",
+        help=(
+            "Directory name under the tests/ root to skip (can be provided multiple times)"
+        ),
+    )
+    parser.add_argument(
         "pytest_args",
         nargs=argparse.REMAINDER,
         help="Arguments forwarded to pytest (use '--' before them)",
@@ -472,7 +532,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 logging_ctx.log_cfg.level,
             ]
         )
-        pytest_command.extend(_DEFAULT_TEST_TARGETS)
+
+        test_targets = discover_test_targets(TESTS_ROOT, args.exclude)
+        if not test_targets:
+            logger.warning("No test targets discovered under %s", TESTS_ROOT)
+        pytest_command.extend(test_targets)
         pytest_command.extend(_extract_pytest_args(args.pytest_args))
 
         exit_code = run_pytest(pytest_command)
