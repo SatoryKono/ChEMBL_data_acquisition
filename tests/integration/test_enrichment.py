@@ -49,7 +49,7 @@ def test_enrich__attaches_flags_and_parent(
         fields for event, fields in events if event == "testitem_enrichment_missing_child_flags"
     ]
     assert missing_child_events == [
-        {"count": 2, "identifiers": ["CHEMBL2", "CHEMBL3"]}
+        {"count": 2, "identifiers": ["CHEMBL2", "CHEMBL3"], "truncated": False}
     ]
 
 
