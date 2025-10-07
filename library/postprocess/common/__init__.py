@@ -10,7 +10,7 @@ from .types import (
     StepFn,
     StepIterable,
 )
-from .utils import run_steps
+from .utils import collect_postprocess_metrics, infer_pipeline_version, run_steps
 
 __all__ = [
     "DataFrameSchema",
@@ -23,6 +23,8 @@ __all__ = [
     "clone_dataframe",
     "coerce_types",
     "ensure_dataframe",
+    "collect_postprocess_metrics",
+    "infer_pipeline_version",
     "logging",
     "run_steps",
     "validate_schema",

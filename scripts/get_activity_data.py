@@ -70,12 +70,15 @@ from library.config import Config, _serialize_paths
 from library.common.log import logger
 from library.cli.logging import setup_cli_logging
 from library.pipelines.common import add_pipeline_metadata
+from library.pipelines.common.metadata import get_pipeline_version
 from library.processing.activity import (
     apply_activity_annotations,
     compute_activity_bounds,
 )
 from library.postprocessing.activity_extended import process_activity_extended
 from library.postprocessing import helpers as postprocessing_helpers
+from library.postprocess.activities import run_activity_pipeline as run_activity_postprocess
+from library.postprocess.common import collect_postprocess_metrics
 from library.qa.reporting import build_table_quality_hook
 from library.validation import validate_activities
 from library.schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
@@ -1230,14 +1233,54 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     pipeline_stats.get("rows_total", processed_ids),
                 )
             )
+
+        report_extras: dict[str, object] = {"rows": completion_rows, "processed": processed_ids}
+        if pipeline_stats is not None:
+            report_extras.update(pipeline_stats)
+        if summary_snapshot:
+            report_extras["summary_snapshot"] = summary_snapshot
+        if extended_output_path is not None:
+            report_extras["extended_output"] = str(extended_output_path)
+
+        postprocess_metrics, report_path = _generate_activity_postprocess_metrics(
+            cfg,
+            output_path,
+            logger=logger,
+            extras=report_extras,
+        )
+
+        pipeline_version_value = (
+            postprocess_metrics.pipeline_version
+            if postprocess_metrics and postprocess_metrics.pipeline_version is not None
+            else get_pipeline_version()
+        )
+
         pipeline_done_payload: dict[str, object] = {
             "output": str(output_path),
             "rows": completion_rows,
+            "pipeline_version": pipeline_version_value,
         }
         if summary_snapshot:
             pipeline_done_payload["null_fraction"] = summary_snapshot.get("null_fraction")
         if extended_output_path is not None:
             pipeline_done_payload["extended_output"] = str(extended_output_path)
+        if postprocess_metrics is not None:
+            summary = postprocess_metrics.summary()
+            if summary.get("rows") is not None:
+                pipeline_done_payload["postprocess_rows"] = summary["rows"]
+            if summary.get("columns") is not None:
+                pipeline_done_payload["postprocess_columns"] = summary["columns"]
+            if summary.get("duration_s") is not None:
+                pipeline_done_payload["postprocess_duration_s"] = summary["duration_s"]
+            if summary.get("steps") is not None:
+                pipeline_done_payload["postprocess_steps"] = summary["steps"]
+            if postprocess_metrics.validation is not None:
+                pipeline_done_payload["postprocess_schema"] = (
+                    postprocess_metrics.validation.schema
+                )
+        if report_path is not None:
+            pipeline_done_payload["postprocess_report"] = str(report_path)
+
         logger.info("activity_pipeline_done", **pipeline_done_payload)
         if extended_output_path is not None:
             logger.info(
@@ -1283,6 +1326,28 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
 
     return exit_code
+
+
+def _generate_activity_postprocess_metrics(
+    cfg: Config,
+    output_path: Path,
+    *,
+    logger: Logger,
+    extras: Mapping[str, object] | None = None,
+):
+    """Run the activity postprocess pipeline and persist the metrics report."""
+
+    return collect_postprocess_metrics(
+        table="activity",
+        output_path=output_path,
+        csv_sep=cfg.io.csv_sep,
+        csv_encoding=cfg.io.csv_encoding,
+        output_dir=cfg.io.output_dir,
+        runner=run_activity_postprocess,
+        logger=logger,
+        pipeline_version=get_pipeline_version(),
+        report_extras=extras,
+    )
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:

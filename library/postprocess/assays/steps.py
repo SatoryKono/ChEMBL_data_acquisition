@@ -4,6 +4,7 @@ from __future__ import annotations
 import pandas as pd
 
 from library.postprocess.common import StepDefinition, run_steps
+from library.postprocess.common.logging import PipelineRunMetrics
 
 from .schema import ASSAY_SCHEMA, validate_assays
 
@@ -59,8 +60,8 @@ PIPELINE_STEPS = [
 
 def run_assay_pipeline(
     df: pd.DataFrame, *, pipeline_version: str | None = None, logger=None
-) -> pd.DataFrame:
-    """Run the assay postprocessing pipeline."""
+) -> tuple[pd.DataFrame, PipelineRunMetrics]:
+    """Run the assay postprocessing pipeline and return metrics."""
 
     return run_steps(
         df,

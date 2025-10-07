@@ -22,6 +22,7 @@ import argparse
 import sys
 from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
+from typing import Any
 from functools import partial
 from itertools import islice
 
@@ -31,6 +32,8 @@ import requests
 from library.integration import chembl_library as cl
 from library.pipelines.assay import postprocessing as ap
 from library.postprocessing import enrich_assay_metadata
+from library.postprocess.assays import run_assay_pipeline as run_assay_postprocess
+from library.postprocess.common import collect_postprocess_metrics
 from library import cli
 from library import io
 from library.common.csv_utils import write_csv_chunks_deterministic
@@ -62,6 +65,7 @@ from library.pipelines.common import (
     CsvWriterConfig,
     prepare_chunked_pipeline,
 )
+from library.pipelines.common.metadata import get_pipeline_version
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 
 configure_logger = cli.configure_logger
@@ -437,11 +441,37 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     ]
     if dropped_columns_report:
         logger.info(
-            "Dropped columns from output.assay_*: %s",
-            ", ".join(dropped_columns_report),
-        )
+        "Dropped columns from output.assay_*: %s",
+        ", ".join(dropped_columns_report),
+    )
     else:
         logger.info("Dropped columns from output.assay_*: <none>")
+
+
+def _generate_assay_postprocess_metrics(
+    cfg: Config,
+    output_path: Path,
+    *,
+    logger: Logger,
+    processed_rows: int | None = None,
+):
+    """Run the postprocess pipeline for metrics and emit a JSON report."""
+
+    extras: dict[str, Any] | None = None
+    if processed_rows is not None:
+        extras = {"processed_rows": processed_rows}
+
+    return collect_postprocess_metrics(
+        table="assay",
+        output_path=output_path,
+        csv_sep=cfg.io.csv_sep,
+        csv_encoding=cfg.io.csv_encoding,
+        output_dir=cfg.io.output_dir,
+        runner=run_assay_postprocess,
+        logger=logger,
+        pipeline_version=get_pipeline_version(),
+        report_extras=extras,
+    )
 
     if limit is not None:
         logger.info("process_limit", limit=processed_ids)
@@ -457,11 +487,36 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
 
     if exit_code == 0:
-        logger.info(
-            "assay_pipeline_done",
-            output=str(output_path),
-            processed=processed_ids,
+        postprocess_metrics, report_path = _generate_assay_postprocess_metrics(
+            cfg,
+            output_path,
+            logger=logger,
+            processed_rows=processed_ids,
         )
+        payload: dict[str, Any] = {
+            "output": str(output_path),
+            "processed": processed_ids,
+            "pipeline_version": (
+                postprocess_metrics.pipeline_version
+                if postprocess_metrics and postprocess_metrics.pipeline_version is not None
+                else get_pipeline_version()
+            ),
+        }
+        if postprocess_metrics is not None:
+            summary = postprocess_metrics.summary()
+            if summary.get("rows") is not None:
+                payload["postprocess_rows"] = summary["rows"]
+            if summary.get("columns") is not None:
+                payload["postprocess_columns"] = summary["columns"]
+            if summary.get("duration_s") is not None:
+                payload["postprocess_duration_s"] = summary["duration_s"]
+            if summary.get("steps") is not None:
+                payload["postprocess_steps"] = summary["steps"]
+            if postprocess_metrics.validation is not None:
+                payload["postprocess_schema"] = postprocess_metrics.validation.schema
+        if report_path is not None:
+            payload["postprocess_report"] = str(report_path)
+        logger.info("assay_pipeline_done", **payload)
     else:
         logger.error(
             "assay_pipeline_failed",

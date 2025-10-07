@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import warnings
 from contextlib import contextmanager
 from pathlib import Path
@@ -346,6 +347,11 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
         else 0.0
     )
     assert f"null_fraction={expected_null_fraction:.6f}" in summary_message
+    report_path = cfg.io.output_dir / "activity.postprocess.report.json"
+    assert report_path.exists()
+    report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report_payload["table"] == "activity"
+    assert "metrics" in report_payload
 
     meta_path = output_csv.with_name(output_csv.name + ".meta.yaml")
     assert meta_path.exists()
