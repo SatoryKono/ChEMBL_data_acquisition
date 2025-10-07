@@ -74,6 +74,7 @@ from library.processing.activity import (
     compute_activity_bounds,
 )
 from library.postprocessing.activity_extended import process_activity_extended
+from library.postprocessing import helpers as postprocessing_helpers
 from library.qa.reporting import build_table_quality_hook
 from library.validation import validate_activities
 from library.schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
@@ -403,11 +404,7 @@ def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
 
     candidate = Path(dictionary_dir) / "_assay" / "assay.csv"
     try:
-        frame = pd.read_csv(
-            candidate,
-            usecols=["assay_chembl_id", "src_assay_id"],
-            dtype="string",
-        )
+        frame = postprocessing_helpers.read_csv_with_fallbacks(candidate)
     except FileNotFoundError:
         logger.warning(
             f"Assay lookup file '{candidate}' was not found; src_assay_id enrichment will be skipped."
@@ -428,6 +425,18 @@ def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
             f"Reading assay lookup file '{candidate}' failed due to an OS error: {exc}"
         )
         return {}
+
+    required_columns = {"assay_chembl_id", "src_assay_id"}
+    missing_columns = required_columns.difference(frame.columns)
+    if missing_columns:
+        logger.warning(
+            "Assay lookup file '%s' is missing required columns: %s; src_assay_id enrichment will be skipped.",
+            candidate,
+            ", ".join(sorted(missing_columns)),
+        )
+        return {}
+
+    frame = frame.loc[:, ["assay_chembl_id", "src_assay_id"]]
 
     if frame.empty:
         return {}
