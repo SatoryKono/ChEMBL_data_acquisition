@@ -1,7 +1,10 @@
 """Transformation steps for target postprocessing."""
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import pandas as pd
+from pandas.api.types import pandas_dtype
  
 from library.postprocess.common import StepDefinition, run_steps
 from library.postprocess.common.logging import PipelineRunMetrics
@@ -102,19 +105,69 @@ def enrich_target_synonyms(df: pd.DataFrame) -> pd.DataFrame:
     return enriched
 
 
-def finalize_target_records(df: pd.DataFrame) -> pd.DataFrame:
-    """Validate and order the DataFrame according to :data:`TARGET_SCHEMA`."""
+def _build_empty_column(index: pd.Index, dtype: str | type | None) -> pd.Series:
+    """Return an empty series matching ``index`` and ``dtype``."""
+
+    target_dtype = "string" if dtype is None else dtype
+    try:
+        resolved_dtype = pandas_dtype(target_dtype)
+    except TypeError:
+        resolved_dtype = pandas_dtype("string")
+    return pd.Series(pd.NA, index=index, dtype=resolved_dtype)
+
+
+def _expected_columns() -> list[str]:
+    """Return the set of columns that must exist before validation."""
+
+    return list(TARGET_SCHEMA.required_columns)
+
+
+def finalize_target_records(
+    df: pd.DataFrame,
+    *,
+    enforce_schema: bool = True,
+    sort_by: Sequence[str] | None = None,
+) -> pd.DataFrame:
+    """Validate and order the DataFrame according to :data:`TARGET_SCHEMA`.
+
+    Parameters
+    ----------
+    df:
+        The input frame produced by previous pipeline steps.
+    enforce_schema:
+        When ``True`` (default) run :func:`validate_targets` to apply schema
+        validation and canonical ordering. When ``False`` the function still
+        ensures required columns exist but skips the expensive validation pass.
+    sort_by:
+        Optional override for output ordering. Values not present in the frame
+        are ignored.
+    """
 
     prepared = df.copy(deep=True)
-    for column in TARGET_SCHEMA.required_columns:
-        if column not in prepared.columns:
-            prepared[column] = pd.Series(pd.NA, index=prepared.index, dtype="string")
-    for column in ["target_chembl_id", "pref_name", "target_type"]:
-        if column in prepared.columns:
-            prepared[column] = prepared[column].astype("string")
+    index = prepared.index
 
-    validated = validate_targets(prepared, context="target_finalization")
-    return validated
+    for column in _expected_columns():
+        if column in prepared.columns:
+            continue
+        prepared[column] = _build_empty_column(index, TARGET_SCHEMA.dtypes.get(column))
+
+    for column, dtype in TARGET_SCHEMA.dtypes.items():
+        if column in prepared.columns:
+            prepared[column] = prepared[column].astype(dtype)
+
+    if sort_by:
+        sort_columns = [column for column in sort_by if column in prepared.columns]
+        if sort_columns:
+            prepared = prepared.sort_values(sort_columns, kind="mergesort").reset_index(drop=True)
+
+    if enforce_schema:
+        prepared = validate_targets(prepared, context="target_finalization")
+    elif TARGET_SCHEMA.column_order:
+        ordered_columns = [col for col in TARGET_SCHEMA.column_order if col in prepared.columns]
+        remaining = [col for col in prepared.columns if col not in ordered_columns]
+        prepared = prepared.loc[:, ordered_columns + remaining]
+
+    return prepared
 
 
 PIPELINE_CONFIG = load_pipeline_config("targets")
