@@ -141,6 +141,22 @@ order follows `TARGETS_COLUMN_ORDER`.
 | `tax_id` | string | NCBI taxonomy ID from ChEMBL. |
 | `taxon_id` | string/int | Taxonomy ID from UniProt payload. |
 
+### Optional classification summary
+
+The modular post-processing pipeline for targets
+(`library.postprocess.targets.run_target_pipeline`) validates an aggregated view
+that powers QA metrics and downstream consumers needing concise taxonomy
+labels. The helper is invoked automatically after the canonical CSV is written
+and enforces the schema defined in
+`library/postprocess/targets/schema.py`.
+
+| Column | Description |
+|--------|-------------|
+| `target_class` | Primary classification extracted from the ChEMBL protein classes. |
+| `protein_family` | First-level protein family description surfaced during aggregation. |
+| `synonyms` | Deterministically ordered synonym list combining preferred names, component descriptions and alternative names. |
+| `pipeline_version` | Version recorded by the post-processing runner (may differ from the export when executed independently). |
+
 ### UniProt accession data
 
 | Column | Type | Description |

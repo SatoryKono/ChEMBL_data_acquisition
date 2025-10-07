@@ -17,6 +17,7 @@ This appendix maps input columns to output columns and highlights key joins.
 | `target_chembl_id` | `target_chembl_id` | Required for all modes. |
 | `mapping_uniprot_id` | `uniprot_id_primary` | Default column for UniProt processing in `--mode all`. |
 | `uniprot_id` | `uniprot_id_primary` (when `--column uniprot_id`) | Direct UniProt processing. |
+| `protein_classifications` | `target_class`, `protein_family` (post-processing view) | Modular post-processing flattens the first classification tier for QA reports. |
 
 ### Joins
 
