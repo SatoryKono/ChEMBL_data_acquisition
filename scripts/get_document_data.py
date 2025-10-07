@@ -310,7 +310,13 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
         if column not in frame.columns:
             frame[column] = ""
 
-    return frame[_EXPORT_COLUMNS]
+    # ``_EXPORT_COLUMNS`` is defined as a tuple for immutability, but pandas expects
+    # a list-like object when selecting multiple columns.  Using a tuple now raises a
+    # ``KeyError`` on recent pandas releases because it is interpreted as a single
+    # column label instead of a sequence of labels.  Convert the tuple to a list to
+    # keep the deterministic ordering while remaining compatible with all pandas
+    # versions.
+    return frame[list(_EXPORT_COLUMNS)]
 
 
 def _iter_export_chunks(
