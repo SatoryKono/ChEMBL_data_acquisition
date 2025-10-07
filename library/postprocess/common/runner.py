@@ -1,6 +1,7 @@
 """Orchestration helpers for executing post-processing pipelines."""
 from __future__ import annotations
 
+import inspect
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from time import perf_counter
@@ -86,6 +87,47 @@ def _record_error(
     )
 
 
+def _prepare_step_arguments(
+    func: Any,
+    params: Mapping[str, Any],
+    *,
+    logger,
+    step_name: str,
+) -> dict[str, Any]:
+    """Return a mapping limited to arguments accepted by ``func``."""
+
+    if not params:
+        return {}
+
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):  # pragma: no cover - fallback for builtins
+        return dict(params)
+
+    has_var_kwargs = any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    )
+
+    accepted: dict[str, Any] = {}
+    ignored: list[str] = []
+
+    for key, value in params.items():
+        if key in signature.parameters or has_var_kwargs:
+            accepted[key] = value
+        else:
+            ignored.append(key)
+
+    if ignored:
+        logger.warning(
+            "Step %s ignoring unsupported parameters: %s",
+            step_name,
+            ", ".join(sorted(ignored)),
+        )
+
+    return accepted
+
+
 def run_steps(
     df: pd.DataFrame,
     steps: Iterable[StepDefinition | StepTuple],
@@ -122,6 +164,12 @@ def run_steps(
 
     for index, step in enumerate(normalised_steps):
         params = dict(step.params)
+        call_params = _prepare_step_arguments(
+            step.func,
+            params,
+            logger=log,
+            step_name=step.name,
+        )
         frame = clone_dataframe(current)
         step_started_at = _now_iso()
         step_clock = perf_counter()
@@ -132,7 +180,7 @@ def run_steps(
         log.info("Starting step %s", step.name)
 
         try:
-            result = step.func(frame, **params)
+            result = step.func(frame, **call_params)
         except SchemaValidationError as exc:
             log.exception("Schema validation failed during step %s", step.name)
             _record_error(
