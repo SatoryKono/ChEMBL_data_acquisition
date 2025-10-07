@@ -646,7 +646,7 @@ def _remove_path(path: Path) -> None:
                 "unlink_retry_permission",
                 path=str(path),
                 attempt=attempt,
-                error=str(exc),
+                error=str(exc), exc_info=exc,
             )
             time.sleep(_UNLINK_RETRY_SLEEP_SECONDS)
             continue
@@ -660,7 +660,7 @@ def _remove_path(path: Path) -> None:
                     "unlink_retry_sharing_violation",
                     path=str(path),
                     attempt=attempt,
-                    error=str(exc),
+                    error=str(exc), exc_info=exc,
                 )
                 time.sleep(_UNLINK_RETRY_SLEEP_SECONDS)
                 continue
@@ -998,7 +998,7 @@ def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
         _LOGGER.error(
             "parent_catalog_warm_failed",
             elapsed=elapsed,
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             **log_kwargs,
         )
         raise
@@ -1304,7 +1304,7 @@ def run_pipeline(
     try:
         plan = _build_execution_plan(effective_steps)
     except ValueError as exc:
-        _LOGGER.error("pipeline_schedule_error", error=str(exc))
+        _LOGGER.error("pipeline_schedule_error", error=str(exc), exc_info=exc)
         return 1
     effective_steps = plan.steps
     external_requirements = plan.external_artifacts
@@ -1417,7 +1417,7 @@ def run_pipeline(
                             "reason": "parent_catalog_timeout",
                         }
                     )
-                    _LOGGER.error("parent_catalog_warm_timeout", error=str(exc))
+                    _LOGGER.error("parent_catalog_warm_timeout", error=str(exc), exc_info=exc)
                     _complete_manifest_entry(
                         entry,
                         final_output=final_output,
@@ -1442,7 +1442,7 @@ def run_pipeline(
                             "reason": "parent_catalog_error",
                         }
                     )
-                    _LOGGER.error("parent_catalog_warm_error", error=str(exc))
+                    _LOGGER.error("parent_catalog_warm_error", error=str(exc), exc_info=exc)
                     _complete_manifest_entry(
                         entry,
                         final_output=final_output,
@@ -1640,13 +1640,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             steps = _resolve_pipeline_steps(args)
         except (FileNotFoundError, OSError, TypeError, ValueError) as exc:
-            _LOGGER.error("registry_error", error=str(exc))
+            _LOGGER.error("registry_error", error=str(exc), exc_info=exc)
             status = 1
         else:
             try:
                 cfg = _prepare_config(args, steps)
             except (FileNotFoundError, OSError, ValueError) as exc:
-                _LOGGER.error("configuration_error", error=str(exc))
+                _LOGGER.error("configuration_error", error=str(exc), exc_info=exc)
                 status = 1
             else:
                 status = run_pipeline(cfg, steps=steps)

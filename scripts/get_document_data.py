@@ -536,7 +536,7 @@ def _finalise_export(
                     "document_validation_failed",
                     failure_count=len(exc.failure_cases),
                     failure_path=str(failure_path),
-                    error=str(exc),
+                    error=str(exc), exc_info=exc,
                 )
                 validated = getattr(exc, "validated_data", ordered)
                 exit_code = 1
@@ -594,7 +594,7 @@ def _finalise_export(
             encoding=cfg.io.csv_encoding,
         )
     except OSError as exc:
-        logger.error("csv_write_failed", error=str(exc), path=str(output))
+        logger.error("csv_write_failed", error=str(exc), exc_info=exc, path=str(output))
         return 1
 
     try:
@@ -605,7 +605,7 @@ def _finalise_export(
     except (OSError, ValueError, pd.errors.ParserError) as exc:
         logger.error(
             "document_export_postprocess_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             path=str(csv_path),
         )
         exit_code = 1
@@ -669,7 +669,7 @@ def _finalise_export(
         destination = exc.path or csv_path.with_suffix(".quality.json")
         logger.error(
             "quality_report_write_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             path=str(destination),
         )
         return 1
@@ -785,7 +785,7 @@ def run_pubmed(
         context = service.build_missing_input_context(Path(args.input_csv))
         logger.error(
             "input_read_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             path=str(args.input_csv),
             **context,
         )
@@ -826,7 +826,7 @@ def run_pubmed(
         except (FileNotFoundError, pd.errors.ParserError, UnicodeError, OSError) as exc:
             logger.error(
                 "fallback_doi_read_failed",
-                error=str(exc),
+                error=str(exc), exc_info=exc,
                 path=str(fallback_path),
                 delimiter=delimiter,
                 encoding=encoding,
@@ -842,7 +842,7 @@ def run_pubmed(
         except ValueError as exc:
             logger.error(
                 "fallback_doi_invalid",
-                error=str(exc),
+                error=str(exc), exc_info=exc,
                 path=str(fallback_path),
             )
             return 1
@@ -898,7 +898,7 @@ def run_pubmed(
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error(
             "pubmed_pipeline_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             output=str(output_path),
         )
         return 1
@@ -1024,7 +1024,7 @@ def run_chembl(
             context = service.build_missing_input_context(Path(args.input_csv))
             logger.error(
                 "input_read_failed",
-                error=str(exc),
+                error=str(exc), exc_info=exc,
                 path=str(args.input_csv),
                 **context,
             )
@@ -1052,7 +1052,7 @@ def run_chembl(
         except (requests.RequestException, ValueError) as exc:
             logger.error(
                 "chembl_documents_fetch_failed",
-                error=str(exc),
+                error=str(exc), exc_info=exc,
                 chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
             )
             return 1
@@ -1126,7 +1126,7 @@ def run_all(
         context = service.build_missing_input_context(Path(args.input_csv))
         logger.error(
             "input_read_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             path=str(args.input_csv),
             **context,
         )
@@ -1209,7 +1209,7 @@ def run_all(
         except (FileNotFoundError, pd.errors.ParserError, UnicodeError, OSError) as exc:
             logger.error(
                 "fallback_doi_read_failed",
-                error=str(exc),
+                error=str(exc), exc_info=exc,
                 path=str(fallback_path),
                 delimiter=delimiter,
                 encoding=encoding,
@@ -1225,7 +1225,7 @@ def run_all(
         except ValueError as exc:
             logger.error(
                 "fallback_doi_invalid",
-                error=str(exc),
+                error=str(exc), exc_info=exc,
                 path=str(fallback_path),
             )
             return 1
@@ -1255,7 +1255,7 @@ def run_all(
         logger.error(
             "chembl_documents_fetch_failed",
             ids=sample_ids,
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             output=str(output_path),
             chunk_size=getattr(args, "chembl_chunk_size", all_defaults.chunk_size),
         )
@@ -1378,7 +1378,7 @@ def run_all(
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error(
             "pubmed_pipeline_failed",
-            error=str(exc),
+            error=str(exc), exc_info=exc,
             output=str(output_path),
         )
         return 1
