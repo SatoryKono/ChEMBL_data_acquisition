@@ -247,16 +247,19 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         if cached.is_hit:
             logger.debug("cache_hit", url=url, rps=cfg.rps, status="hit")
             return cast(dict[str, Any], cached.payload)
-        miss_details = {
-            key: value
-            for key, value in (cached.details or {}).items()
-            if key != "timeout_stored_at"
-        }
-        if timeout_retry_in is not None:
-            miss_details["timeout_retry_in"] = timeout_retry_in
-        logger.debug(
-            "cache_hit",
-            url=url,
+            miss_details: dict[str, Any] = {}
+            for key, value in (cached.details or {}).items():
+                if key == "timeout_stored_at":
+                    continue
+                if key == "status":
+                    miss_details["http_status"] = value
+                else:
+                    miss_details[key] = value
+            if timeout_retry_in is not None:
+                miss_details["timeout_retry_in"] = timeout_retry_in
+            logger.debug(
+                "cache_hit",
+                url=url,
             rps=cfg.rps,
             status="miss",
             outcome=cached.outcome,
@@ -365,6 +368,12 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                         **warning_context,
                     )
                     if attempt >= total_attempts:
+                        _store_cache_miss(
+                            url,
+                            cfg,
+                            reason,
+                            last_failure_details,
+                        )
                         logger.debug(
                             "request_fail",
                             url=url,
