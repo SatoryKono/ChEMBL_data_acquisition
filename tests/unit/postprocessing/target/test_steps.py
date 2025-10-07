@@ -6,6 +6,7 @@ import pytest
 from library.postprocess.targets.steps import (
     finalize_target_records,
     normalize_target_fields,
+    enrich_target_synonyms,
 )
 
 
@@ -92,3 +93,38 @@ def test_finalize_target_records__handles_empty_input_frame() -> None:
     assert str(result["target_chembl_id"].dtype) == "string"
     assert str(result["pref_name"].dtype) == "string"
     assert str(result["target_type"].dtype) == "string"
+
+
+@pytest.mark.unit
+def test_finalize_target_records__respects_sort_override() -> None:
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL2", "CHEMBL1"],
+            "pref_name": ["Beta", "Alpha"],
+        }
+    )
+
+    result = finalize_target_records(frame, sort_by=("pref_name",))
+
+    assert result["pref_name"].tolist() == ["Alpha", "Beta"]
+    assert result["target_chembl_id"].tolist() == ["CHEMBL1", "CHEMBL2"]
+
+
+@pytest.mark.unit
+def test_finalize_target_records__skips_schema_validation_when_disabled() -> None:
+    frame = pd.DataFrame({"target_chembl_id": ["CHEMBL1"]})
+
+    result = finalize_target_records(frame, enforce_schema=False)
+
+    assert "pref_name" in result.columns
+    assert "target_type" in result.columns
+    assert pd.isna(result.loc[0, "target_type"])
+
+
+@pytest.mark.unit
+def test_enrich_target_synonyms__uses_configured_separator() -> None:
+    frame = pd.DataFrame({"synonyms": ["Gamma, Beta, Alpha"]})
+
+    result = enrich_target_synonyms(frame, preferred_separator="; ")
+
+    assert result.loc[0, "synonyms"] == "Alpha; Beta; Gamma"
