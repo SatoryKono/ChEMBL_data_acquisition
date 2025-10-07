@@ -11,7 +11,7 @@ import pandas as pd
 class StepFn(Protocol):
     """Protocol describing a pure DataFrame transformation."""
 
-    def __call__(self, df: pd.DataFrame) -> pd.DataFrame:
+    def __call__(self, df: pd.DataFrame, **kwargs: Any) -> pd.DataFrame:
         """Return a new :class:`pandas.DataFrame` derived from ``df``."""
 
 
