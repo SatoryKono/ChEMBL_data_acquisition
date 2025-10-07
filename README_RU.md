@@ -138,7 +138,7 @@ python scripts/get_data.py \
     "branch": "<branch>",
     "ts_utc": "<ISO8601>",
     "duration_sec": 0.0,
-    "python": "3.11",
+    "python": "3.12",
     "pytest": "<version>",
     "exit_code": 0
   },
@@ -165,6 +165,9 @@ python scripts/get_data.py \
   ]
 }
 ```
+
+Поле `python` показывает версию интерпретатора, выполнившего тесты (в CI
+сейчас используются Python 3.11 и 3.12).
 
 `test_summary.md` дублирует агрегированные показатели и для каждого падения или
 ошибки выводит значение поля `error` из JSON в виде блока кода. Этого достаточно,
