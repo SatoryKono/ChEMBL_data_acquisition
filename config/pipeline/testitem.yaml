@@ -1,0 +1,32 @@
+name: testitem
+summary: >-
+  Fetches compound metadata from the ChEMBL and PubChem APIs, reconciles parent
+  relationships, and emits deterministic exports for downstream pipelines.
+schemas:
+  default: TestitemsSchema
+pipeline_version:
+  column: pipeline_version
+  description: chembl-data-acquisition package version stamped on every row.
+inputs:
+  primary: testitem.csv
+  dependencies:
+    - testitem_molecule_catalog.csv
+outputs:
+  primary: testitems.csv
+  artefacts:
+    - testitems.csv.meta.yaml
+parameters:
+  column: testitem.column
+  batch_size: testitem.batch_size
+  timeout: testitem.timeout
+  limit: testitem.limit
+  offset: testitem.offset
+steps:
+  - name: read_identifiers
+    description: Load and validate identifier column from the input CSV.
+  - name: fetch_chembl_metadata
+    description: Query ChEMBL for compound metadata and normalised properties.
+  - name: enrich_pubchem
+    description: Resolve PubChem identifiers and merge additional annotations.
+  - name: finalize_export
+    description: Validate results, add metadata columns, and write deterministic CSV artefacts.

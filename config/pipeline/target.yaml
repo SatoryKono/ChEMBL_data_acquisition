@@ -1,0 +1,98 @@
+name: target
+summary: >-
+  Harmonises targets from ChEMBL, UniProt, and Guide to PHARMACOLOGY, merges
+  partner annotations, and emits deterministic exports for downstream joins.
+schemas:
+  chembl: TargetsSchema
+  uniprot: TargetsSchema
+  iuphar: TargetsSchema
+  all: TargetsSchema
+pipeline_version:
+  column: pipeline_version
+  description: chembl-data-acquisition package version stamped on every row.
+inputs:
+  primary: target.csv
+outputs:
+  commands:
+    chembl: targets_chembl.csv
+    uniprot: targets_uniprot.csv
+    iuphar: targets_iuphar.csv
+    all: targets.csv
+  artefacts:
+    - targets.csv.meta.yaml
+parameters:
+  commands:
+    chembl:
+      column: target.chembl.column
+      chunk_size: target.chembl.chunk_size
+      timeout: target.chembl.timeout
+      limit: target.chembl.limit
+      offset: target.chembl.offset
+    uniprot:
+      column: target.uniprot.column
+      chunk_size: target.uniprot.chunk_size
+      timeout: target.uniprot.timeout
+      limit: target.uniprot.limit
+      offset: target.uniprot.offset
+      data_dir: target.uniprot.data_dir
+    iuphar:
+      column: target.iuphar.column
+      chunk_size: target.iuphar.chunk_size
+      timeout: target.iuphar.timeout
+      limit: target.iuphar.limit
+      offset: target.iuphar.offset
+      target_csv: target.iuphar.target_csv
+      family_csv: target.iuphar.family_csv
+    all:
+      column: target.all.column
+      chunk_size: target.all.chunk_size
+      timeout: target.all.timeout
+      limit: target.all.limit
+      offset: target.all.offset
+      data_dir: target.all.data_dir
+      target_csv: target.all.target_csv
+      family_csv: target.all.family_csv
+      uniprot_column: target.all.uniprot_column
+      chembl_out: target.all.chembl_out
+      uniprot_out: target.all.uniprot_out
+      iuphar_out: target.all.iuphar_out
+      chembl_column: target.chembl.column
+      chembl_chunk_size: target.chembl.chunk_size
+      chembl_timeout: target.chembl.timeout
+      chembl_limit: target.chembl.limit
+      chembl_offset: target.chembl.offset
+      uniprot_chunk_size: target.uniprot.chunk_size
+      uniprot_timeout: target.uniprot.timeout
+      uniprot_limit: target.uniprot.limit
+      uniprot_offset: target.uniprot.offset
+      iuphar_chunk_size: target.iuphar.chunk_size
+      iuphar_timeout: target.iuphar.timeout
+      iuphar_limit: target.iuphar.limit
+      iuphar_offset: target.iuphar.offset
+steps:
+  - name: fetch_chembl_targets
+    description: Retrieve target metadata from the ChEMBL API.
+    applies_to:
+      - chembl
+      - all
+  - name: fetch_uniprot_annotations
+    description: Load UniProt classification and component details.
+    applies_to:
+      - uniprot
+      - all
+  - name: fetch_iuphar_annotations
+    description: Enrich with Guide to PHARMACOLOGY relationships and families.
+    applies_to:
+      - iuphar
+      - all
+  - name: merge_sources
+    description: Combine partner payloads into a unified target export.
+    applies_to:
+      - all
+  - name: finalize_export
+    description: Validate results, add metadata columns, and write deterministic CSV artefacts.
+    applies_to:
+      - chembl
+      - uniprot
+      - iuphar
+      - all
