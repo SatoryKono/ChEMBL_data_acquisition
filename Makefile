@@ -37,11 +37,9 @@ smoke: $(PYTHON_BIN)
         CHEMBL_DA_BASE_PATH=$(PWD)/tests/data $(VENV)/bin/pytest tests/smoke -k "not testitem"
 
 test-report: $(PYTHON_BIN)
-        PYTHONHASHSEED=$${PYTHONHASHSEED:-0} \
-        CHEMBL_DA_BASE_PATH=$(PWD)/tests/data \
-        $(PYTHON_BIN) scripts/run_tests.py \
-                --json $(PWD)/reports/test_report.json \
-                --markdown $(PWD)/reports/test_summary.md
+	PYTHONHASHSEED=$${PYTHONHASHSEED:-0} \
+	CHEMBL_DA_BASE_PATH=$(PWD)/tests/data \
+	$(PYTHON_BIN) scripts/run_tests.py
 
 get-activities: $(PYTHON_BIN)
         $(PYTHON_BIN) scripts/get_activities.py --limit $(ACTIVITY_LIMIT) --dry-run

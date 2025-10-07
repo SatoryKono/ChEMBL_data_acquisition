@@ -52,24 +52,20 @@ The scenarios exercise success and failure paths for `get_testitem_data`, `get_d
 
 ## Running tests and generating reports
 
-Install dependencies (see the repository `README.md`) and run the suite via the canonical
-reporting wrapper:
+Install dependencies (see the repository `README.md`) and run the suite via the canonical reporting wrapper:
 
 ```bash
-python scripts/run_tests.py
+python -m scripts.run_tests
 ```
 
-The command executes `pytest` with the default configuration, writes the full protocol to `reports/test_report.json` and produces a human readable summary in `reports/test_summary.md`. Both artefacts contain Git metadata, timing information, a per-test breakdown and the overall success rate. The JSON payload exposes a `summary` section (totals and a `success_rate` ratio computed as `(passed + xfailed) / max(1, total - skipped)`, ranging from 0.0 to 1.0), while the Markdown file includes a `Success rate: NN.NN%` bullet for quick inspection. The wrapper enforces the ≥95% success-rate policy: if the computed ratio drops below the threshold, it emits an error log and returns a non-zero exit code even when pytest itself reports success. All invocations also configure structured logging via `scripts/run_tests.py` – log events are mirrored to `logs/run_tests_<YYYYMMDD>.log` (or the directory defined by `CHEMBL_DA_BASE_PATH`). Pass `--verbose` to lift the logger to DEBUG and forward the same verbosity to pytest’s log capture.
+The command executes `pytest` with the default configuration, writes the full protocol to `reports/test_report.json` and produces a human readable summary in `reports/test_summary.md`. Both artefacts contain Git metadata, timing information, a per-test breakdown and the overall success rate. The JSON payload exposes a `summary` section (totals and a `success_rate` ratio computed as `(passed + xfailed) / max(1, total - skipped)`, ranging from 0.0 to 1.0), while the Markdown file includes a `Success rate: NN.NN%` bullet for quick inspection. The wrapper enforces the ≥95% success-rate policy: if the computed ratio drops below the threshold, it emits an error log and returns a non-zero exit code even when pytest itself reports success. All invocations also configure structured logging – log events are mirrored to `logs/run_tests_<YYYYMMDD>.log` (or the directory defined by `CHEMBL_DA_BASE_PATH`). Pass `--verbose` to lift the logger to DEBUG and forward the same verbosity to pytest’s log capture.
 
 
-When running pytest manually (e.g. `pytest --json-report --json-report-file=custom.json`), convert the structured JSON into Markdown via `python tools/make_md_summary.py --input <json> --output <markdown>` or the console entry point `make-md-summary`. Both arguments default to the standard `reports/` locations, so invoking `python tools/make_md_summary.py` is sufficient for the common workflow.
-
-
-To focus on a subset, pass extra arguments after `--pytest-args`, for example `python scripts/run_tests.py --pytest-args -m unit`. Combine `--verbose` with the forwarding flag to observe detailed DEBUG events in both the console and the generated log file.
+To focus on a subset, forward additional arguments to pytest after the `--` separator, for example `python -m scripts.run_tests -- -m unit`. Combine `--verbose` with the forwarding flag to observe detailed DEBUG events in both the console and the generated log file.
 
 Individual modules can be targeted by pointing pytest at a directory, for example `pytest tests/unit` or `pytest tests/integration -k enrich` to filter by test name.
 
-When developing additional scenarios, keep the guardrails documented in `tests/conftest.py` (seed fixing, network ban, temporary directories) to preserve reproducibility. All new tests should emit deterministic output so that `scripts/run_tests.py` can regenerate the reports without spurious diffs.
+When developing additional scenarios, keep the guardrails documented in `tests/conftest.py` (seed fixing, network ban, temporary directories) to preserve reproducibility. All new tests should emit deterministic output so that `scripts/run_tests.py` can regenerate the reports without spurious diffs. The legacy `tests/run_tests.py` entry point remains available for now but issues a `DeprecationWarning` and will be retired once downstream jobs migrate to the canonical wrapper.
 
 ## End-to-end scenario checklist
 
