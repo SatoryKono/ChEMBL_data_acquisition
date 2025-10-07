@@ -14,7 +14,9 @@ from __future__ import annotations
 import importlib
 import math
 import os
+import re
 from collections.abc import Iterable, Sequence
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, cast
 
@@ -1263,29 +1265,64 @@ def preprocess_documents_csv(
                 run_document_postprocessing_check = getattr(
                     qa_module, "run_document_postprocessing_check", None
                 )
-                if callable(run_document_postprocessing_check):
-                    qa_result = run_document_postprocessing_check(
-                        base_path=base_dir,
-                        reference_path=qa_reference_path,
-                        candidate_path=out_path,
-                        output_dir=target_path.parent,
-                        delimiter=CSV_DELIMITER,
-                    )
-                    if qa_result.passed:
-                        logger.info(
-                            "document_postprocess_qa_passed",
-                            report=str(qa_result.report_json),
+                crosswalk_cls = getattr(qa_module, "Crosswalk", None)
+                crosswalk_path = getattr(qa_module, "CROSSWALK_PATH", None)
+                default_diff_limit = getattr(qa_module, "DEFAULT_DIFF_LIMIT", 100)
+                default_report_dir = getattr(
+                    qa_module, "DEFAULT_REPORT_DIR", Path("output") / "document"
+                )
+
+                if callable(run_document_postprocessing_check) and crosswalk_cls and crosswalk_path:
+                    try:
+                        crosswalk = crosswalk_cls.load(Path(crosswalk_path))
+                    except Exception:
+                        logger.exception(
+                            "document_postprocess_qa_crosswalk_failed",
+                            crosswalk=str(crosswalk_path),
                         )
                     else:
-                        logger.error(
-                            "document_postprocess_qa_failed",
-                            report=str(qa_result.report_json),
-                            diff=str(qa_result.diff_csv)
-                            if qa_result.diff_csv
-                            else None,
-                        )
-                        msg = "Document post-processing QA mismatches detected"
-                        raise RuntimeError(msg)
+                        report_dir = Path(default_report_dir)
+                        if not report_dir.is_absolute():
+                            report_dir = (base_dir / report_dir).resolve()
+
+                        def _infer_date_code(path: Path) -> str:
+                            match = re.search(r"(20\d{6})", path.name)
+                            if match:
+                                return match.group(1)
+                            return datetime.utcnow().strftime("%Y%m%d")
+
+                        try:
+                            qa_metrics = run_document_postprocessing_check(
+                                crosswalk=crosswalk,
+                                m_frame=ref_frame,
+                                python_frame=harmonised,
+                                diff_limit=int(default_diff_limit),
+                                date_code=_infer_date_code(target_path),
+                                report_dir=report_dir,
+                            )
+                        except Exception:
+                            logger.exception(
+                                "document_postprocess_qa_execution_failed",
+                                reference=str(qa_reference_path),
+                                output=str(target_path),
+                            )
+                        else:
+                            status = str(qa_metrics.get("status", "")).upper()
+                            report_json = qa_metrics.get("report_json")
+                            diff_path = qa_metrics.get("diff_path")
+                            if status == "PASS":
+                                logger.info(
+                                    "document_postprocess_qa_passed",
+                                    report=str(report_json) if report_json else None,
+                                )
+                            else:
+                                logger.error(
+                                    "document_postprocess_qa_failed",
+                                    report=str(report_json) if report_json else None,
+                                    diff=str(diff_path) if diff_path else None,
+                                )
+                                msg = "Document post-processing QA mismatches detected"
+                                raise RuntimeError(msg)
                 else:
                     logger.error(
                         "document_postprocess_qa_missing_callable",
