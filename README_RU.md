@@ -174,3 +174,7 @@ python scripts/get_data.py \
 Для смоук-прогона подойдёт `pytest -q -k "not slow and not e2e"`, полный набор —
 `pytest -q`. Детали фикстур, требований к детерминизму и целям по покрытию см. в
 [`docs/ru/development/TESTING.md`](./docs/ru/development/TESTING.md).
+
+## Лицензия
+
+Проект распространяется по [лицензии MIT](./LICENSE).
