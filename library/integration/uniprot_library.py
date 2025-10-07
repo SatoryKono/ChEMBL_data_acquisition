@@ -876,6 +876,14 @@ def _fetch_gtop_endpoint(
 ) -> Any:
     """Return JSON payload for ``endpoint`` of a Guide-to-Pharmacology target."""
 
+    if not getattr(cfg, "enable", True):
+        logger.debug(
+            "gtop_fetch_disabled",
+            gtop_id=gtop_id,
+            endpoint=endpoint,
+        )
+        return []
+
     cache_key = (gtop_id, endpoint)
     if cache_key in _GTOP_JSON_FAILURE_CACHE:
         if cache_key not in _GTOP_SKIPPED_FAILURE_LOG:
@@ -981,6 +989,12 @@ def _update_gtop_metadata(
     if not gtop_id:
         return
     config = cfg or IupharCfg()
+    if not getattr(config, "enable", True):
+        logger.debug(
+            "gtop_enrichment_disabled",
+            gtop_id=gtop_id,
+        )
+        return
 
     natural = _fetch_gtop_endpoint(gtop_id, "naturalLigands", cfg=config)
     if isinstance(natural, list):
