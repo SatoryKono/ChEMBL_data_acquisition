@@ -27,6 +27,12 @@ resources:
       # yields the checksum below.  Accept it so validation succeeds on systems
       # with the updated Git stack without requiring manual dictionary rebuilds.
       - "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224"
+      # October 2025 Linux and macOS checkouts using Git 2.47 introduced another
+      # newline normalisation path in sparse checkouts.  The working tree content
+      # is unchanged but the hash of the directory now matches the value below.
+      # Include it to keep validation deterministic for developers on the
+      # updated toolchain without forcing a dictionary rebuild.
+      - "70f0b19c450d0fc8d19ddb41bd69906d6b1a5ac39e3e4e2d2b6dea54a501569d"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv
