@@ -2,7 +2,7 @@ version: 1
 resources:
   dictionary_root:
     path: .
-    version: "2025-10-06"
+    version: "2025-10-07"
     sha256:
       # POSIX checkouts without newline conversion
       - "e3c3e184c847dbc4f5a238b508055e8ee6ff2536a63a06d1d72d48a82d72e545"
@@ -59,6 +59,11 @@ resources:
       # byte identical but hashes to the value below.  Include it to keep
       # checksum validation deterministic for users on that toolchain.
       - "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15"
+      # October 2025 refresh adds missing test item catalog entries which update
+      # the dictionary root checksum on all platforms.  Accept the resulting
+      # digest so local validation succeeds without requiring developers to
+      # rebuild the bundled dictionaries.
+      - "bb98601cdc63ee4aeab49dac849f545e516b2a0a9b720174444af8975115a0b2"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv
@@ -97,8 +102,8 @@ resources:
     generator: tools/build_dictionary_resources.py
   testitem_molecule_catalog:
     path: _testitem/molecule_catalog.csv
-    version: "2025-10-06"
-    sha256: "cae2e9a7ec9f4b37f7aa6d25e3b2bbbdc5580a8c3f4b87bfd30d14c2f4ed4b88"
+    version: "2025-10-07"
+    sha256: "51d488802fa84af4d31a396309488434d5096540835726f781b22225107e40bc"
     generator: tools/build_dictionary_resources.py
   testitem_molecule_hierarchy:
     path: _testitem/molecule_hierarchy.csv
