@@ -77,6 +77,15 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # updated toolchain without forcing a rebuild of dictionary artifacts.
         "3fa041266066939dcbe2fb356f9055d2845fb4a46d874fef682c02d4314542cc",
     ),
+    "taxonomy_assay_lookup": (
+        # Windows Git 2.47.1 normalises the assay taxonomy lookup CSV using
+        # ``\r\n`` newlines even when the repository bundles ``\n``.  The
+        # payload is byte-identical after normalisation but hashing the file on
+        # that toolchain yields the checksum below.  Accept it so validation
+        # succeeds for developers on Windows without requiring a dictionary
+        # rebuild.
+        "0ec9e4342890f9e0f5457d58133fbca291ac30dd8dd133b8d4f2fac82e798c69",
+    ),
 }
 
 _ENV_CHECKSUM_ALLOWLIST = "CHEMBL_DICTIONARY_CHECKSUM_ALLOWLIST"
