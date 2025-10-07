@@ -1,28 +1,15 @@
-# Taxonomy dictionary
+# Assay taxonomy dictionary
 
-This directory ships the canonical lookup used by the assay enrichment
-pipeline to translate raw `assay_tax_id` values into curated assay group and
-strain labels.  The CSV is a distilled subset of the full reference taxonomy
-produced from the October 2025 ChEMBL export.  It focuses on the most common
-organisms observed in the public datasets and mirrors the structure consumed by
-`library.postprocessing.assay_extended`.
+Этот каталог содержит справочник `taxonomy.csv`, используемый постобработчиком assay для нормализации полей `assay_group` и `assay_strain`. Таблица собрана вручную из наиболее часто встречающихся организмов в выгрузках ChEMBL и покрывает базовые таксоны, необходимые для smoke-тестов пайплайна. Формат CSV:
 
-## Files
+| column | type | description |
+|--------|------|-------------|
+| `tax_id` | string | Идентификатор таксона NCBI, полученный из поля `assay_tax_id` выгрузки ChEMBL. |
+| `assay_group` | string | Нормализованная группа организмов (Human, Rodent и т.п.). |
+| `assay_strain` | string | Человеко-читаемый штамм или клеточная линия. |
 
-- `taxonomy.csv` — mapping of `assay_tax_id` to curated `assay_group` and
-  `assay_strain` values.  The file is encoded in UTF-8 with LF line endings and
-  sorted by `assay_tax_id` for deterministic processing.
+Файл сохраняется в кодировке UTF-8 с переводами строк `\n` и не содержит BOM. При обновлении словаря не забудьте:
 
-## Schema
-
-| Column name      | Type   | Description                                                      |
-|------------------|--------|------------------------------------------------------------------|
-| `assay_tax_id`   | string | NCBI taxonomy identifier referenced by assay records.            |
-| `assay_group`    | string | Normalised organism group presented in assay exports.            |
-| `assay_strain`   | string | Curated strain or lineage label; empty when the source omits it. |
-
-## Regeneration
-
-Run `tools/build_dictionary_resources.py --resource taxonomy` after updating the
-source taxonomy snapshot.  The script re-generates the CSV, sorts it, verifies
-its checksum, and updates `config/dictionary/manifest.yaml` with the new hash.
+1. Расширить перечень строк/штаммов по потребности.
+2. Перегенерировать контрольную сумму в `config/dictionary/manifest.yaml` через `python tools/build_dictionary_resources.py --update-checksums`.
+3. Зафиксировать изменения в тестах/документации, если требуется.

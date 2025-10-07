@@ -44,10 +44,10 @@ resources:
       # it so validation succeeds without forcing developers to rebuild the
       # dictionary locally.
       - "2e16836b9f9efe93dd995e70b023e8a83f9b39af457bedae36da5d5f8e67f43a"
-      # Adding the curated taxonomy lookup updates the directory checksum on
-      # all platforms.  Include the new hash so validation remains deterministic
-      # after the October 2025 taxonomy refresh.
-      - "2fbdebadd12918374c740fd24a0efecaa80f2009be38c2bf12b810227980dd59"
+      # Adding the assay taxonomy dictionary in October 2025 updates the
+      # workspace tree with an extra CSV.  Accept the resulting checksum to keep
+      # validation deterministic across environments.
+      - "e8000ec66732d0f2b3230640116f8a7313530954e5448f66518f0bd7242dad39"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv
@@ -78,6 +78,11 @@ resources:
     path: _target/targets_type.csv
     version: "2025-10-05"
     sha256: "2d2e252cccba799ed7809ba0aab3776edc96312f8f53fa7fd8b3d2f009936826"
+    generator: tools/build_dictionary_resources.py
+  assay_taxonomy:
+    path: _taxonomy/taxonomy.csv
+    version: "2025-10-07"
+    sha256: "0ec9e4342890f9e0f5457d58133fbca291ac30dd8dd133b8d4f2fac82e798c69"
     generator: tools/build_dictionary_resources.py
   testitem_molecule_catalog:
     path: _testitem/molecule_catalog.csv
