@@ -1,0 +1,127 @@
+generated_at: '2025-10-07T00:30:49.323135+00:00'
+git_sha: 7edeee097af2ae83f98c410c0eb11ec56cb995f7
+command: scripts\get_document_data.py --input data\input\document.csv --mode all --limit
+  10
+columns:
+- PMID
+- document_chembl_id
+- doi
+- reference
+- completed
+- sortorder.document
+- review
+- experimental
+- document_contains_external_links
+- invalid
+- title
+- abstract
+- PubMed.mesh.descriptors
+- PubMed.mesh.qualifiers
+- PubMed.chemical.list
+- OpenAlex.mesh.descriptors
+- PubMed.Volume
+- PubMed.Issue
+- PubMed.StartPage
+- PubMed.EndPage
+- PubMed.ISSN
+- PubMed.PublicationType
+- PubMed.YearCompleted
+- PubMed.MonthCompleted
+- PubMed.DayCompleted
+- PubMed.YearRevised
+- PubMed.MonthRevised
+- PubMed.DayRevised
+- PubMed.Error
+- scholar.PMID
+- scholar.DOI
+- scholar.PublicationTypes
+- scholar.Venue
+- scholar.SemanticScholarId
+- scholar.ExternalIds
+- OpenAlex.PMID
+- OpenAlex.DOI
+- OpenAlex.TypeCrossref
+- OpenAlex.Id
+- crossref.DOI
+- crossref.Type
+- crossref.Title
+- ChEMBL.title
+- ChEMBL.abstract
+- ChEMBL.year
+- ChEMBL.journal
+- ChEMBL.journal_abbrev
+- ChEMBL.volume
+- ChEMBL.issue
+- ChEMBL.first_page
+- ChEMBL.last_page
+- ChEMBL.pubmed_id
+- ChEMBL.authors
+- ChEMBL.source
+- invalid.doi
+- invalid.PMID
+- invalid.reference
+- year
+- month
+- day
+dtypes:
+  PMID: object
+  document_chembl_id: object
+  doi: object
+  reference: object
+  completed: object
+  sortorder.document: object
+  review: string
+  experimental: string
+  document_contains_external_links: string
+  invalid: string
+  title: object
+  abstract: object
+  PubMed.mesh.descriptors: object
+  PubMed.mesh.qualifiers: object
+  PubMed.chemical.list: object
+  OpenAlex.mesh.descriptors: object
+  PubMed.Volume: object
+  PubMed.Issue: object
+  PubMed.StartPage: object
+  PubMed.EndPage: object
+  PubMed.ISSN: object
+  PubMed.PublicationType: object
+  PubMed.YearCompleted: object
+  PubMed.MonthCompleted: object
+  PubMed.DayCompleted: object
+  PubMed.YearRevised: object
+  PubMed.MonthRevised: object
+  PubMed.DayRevised: object
+  PubMed.Error: object
+  scholar.PMID: object
+  scholar.DOI: object
+  scholar.PublicationTypes: object
+  scholar.Venue: object
+  scholar.SemanticScholarId: object
+  scholar.ExternalIds: object
+  OpenAlex.PMID: object
+  OpenAlex.DOI: object
+  OpenAlex.TypeCrossref: object
+  OpenAlex.Id: object
+  crossref.DOI: object
+  crossref.Type: object
+  crossref.Title: object
+  ChEMBL.title: object
+  ChEMBL.abstract: object
+  ChEMBL.year: object
+  ChEMBL.journal: object
+  ChEMBL.journal_abbrev: object
+  ChEMBL.volume: object
+  ChEMBL.issue: object
+  ChEMBL.first_page: object
+  ChEMBL.last_page: object
+  ChEMBL.pubmed_id: object
+  ChEMBL.authors: object
+  ChEMBL.source: object
+  invalid.doi: string
+  invalid.PMID: string
+  invalid.reference: string
+  year: object
+  month: object
+  day: object
+config: {}
