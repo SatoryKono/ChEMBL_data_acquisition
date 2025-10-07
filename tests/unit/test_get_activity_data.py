@@ -384,6 +384,17 @@ def test_main__dry_run_skip_limit(monkeypatch, tmp_path, capsys) -> None:
     assert "pipeline_skip_limit" in events
 
 
+def test_main__missing_input_fails_fast(tmp_path, capsys) -> None:
+    missing = tmp_path / "absent.csv"
+
+    exit_code = get_activity_data.main(["--input", str(missing)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "does not exist" in captured.err
+    assert "Provide --input" in captured.err
+
+
 def test_activity_columns__cover_extended_requirements() -> None:
     required = activity_extended._REQUIRED_COLUMNS
     available = set(ACTIVITY_COLUMNS)
