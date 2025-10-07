@@ -10,6 +10,7 @@ from typing import Iterable, Sequence
 import pandas as pd
 
 from library.common.log import logger
+from library.resources.dictionaries import DictionaryManifestError, get_resource_path
 
 from . import helpers
 
@@ -106,10 +107,17 @@ def _load_taxonomy_lookup_cached(dictionary_root: str) -> pd.DataFrame:
     root = Path(dictionary_root)
     candidate = root / "_taxonomy" / "taxonomy.csv"
     if not candidate.exists():
-        raise AssayExtendedError(
-            "taxonomy.csv not found; expected at "
-            f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
-    )
+        fallback = _resolve_taxonomy_fallback(root)
+        if fallback is None:
+            raise AssayExtendedError(
+                "taxonomy.csv not found; expected at "
+                f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
+            )
+        logger.warning(
+            "taxonomy.csv missing under \"%s\"; continuing without taxonomy enrichment",
+            root,
+        )
+        return fallback
 
     frame = helpers.read_csv_with_fallbacks(candidate)
     aliases = {
@@ -146,6 +154,38 @@ def _load_taxonomy_lookup_cached(dictionary_root: str) -> pd.DataFrame:
 
 def _load_taxonomy_lookup(dictionary_root: Path) -> pd.DataFrame:
     return _load_taxonomy_lookup_cached(str(dictionary_root.resolve()))
+
+
+def _resolve_taxonomy_fallback(dictionary_root: Path) -> pd.DataFrame | None:
+    """Return an empty taxonomy lookup when the dictionary is incomplete.
+
+    Older dictionary bundles shipped without the taxonomy enrichment table.  The
+    enrichment step used to raise an :class:`AssayExtendedError` which prevented
+    the whole pipeline from finishing.  Returning an empty lookup keeps the
+    pipeline operational while emitting a warning encouraging users to refresh
+    their dictionaries.
+    """
+
+    try:
+        bundled_root = get_resource_path("dictionary_root")
+    except (DictionaryManifestError, KeyError):  # pragma: no cover - defensive
+        bundled_root = None
+
+    if bundled_root is not None and bundled_root.resolve() != dictionary_root.resolve():
+        # Custom dictionary roots must provide taxonomy data explicitly.
+        return None
+
+    fallback = pd.DataFrame(
+        {
+            "assay_tax_id": pd.Series(dtype="string"),
+            "assay_group_taxonomy": pd.Series(dtype="string"),
+            "assay_strain_taxonomy": pd.Series(dtype="string"),
+        }
+    )
+    return helpers.sort_power_query(
+        fallback,
+        ("assay_tax_id", "assay_group_taxonomy", "assay_strain_taxonomy"),
+    )
 
 
 @functools.lru_cache(maxsize=None)

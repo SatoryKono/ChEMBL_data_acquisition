@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from library.postprocessing import AssayExtendedError, enrich_assay_metadata
+from library.postprocessing import enrich_assay_metadata
 
 
 @pytest.mark.postprocessing
@@ -90,7 +90,9 @@ def test_enrich_assay_metadata__fills_missing_fields(tmp_path: Path) -> None:
 
 
 @pytest.mark.postprocessing
-def test_enrich_assay_metadata__missing_taxonomy_dir_raises(tmp_path: Path) -> None:
+def test_enrich_assay_metadata__missing_taxonomy_dir_logs_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     dictionary_root = tmp_path
     (dictionary_root / "_assay").mkdir()
     (dictionary_root / "_document").mkdir()
@@ -108,5 +110,9 @@ def test_enrich_assay_metadata__missing_taxonomy_dir_raises(tmp_path: Path) -> N
 
     frame = pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]})
 
-    with pytest.raises(AssayExtendedError):
-        enrich_assay_metadata(frame, dictionary_dir=dictionary_root)
+    with caplog.at_level("WARNING"):
+        result = enrich_assay_metadata(frame, dictionary_dir=dictionary_root)
+
+    assert "taxonomy.csv missing" in " ".join(caplog.messages)
+    assert result.loc[0, "assay_chembl_id"] == "CHEMBL1"
+    assert pd.isna(result.loc[0, "assay_group"])
