@@ -66,11 +66,13 @@ Customise the orchestrator without editing code by using the following options:
 The orchestrator stops on the first non-zero exit code and reports per-pipeline
 elapsed time in the logs.
 
-After every execution the orchestrator also writes `reports/run_manifest.json`
-relative to `--base-path`. The manifest records each step with the resolved CSV
-destination, discovered sidecars, status (`success`, `skipped`, `failed`, etc.),
-timings and SHA256 checksums for all artefacts. The file is emitted even when
-the workflow aborts part way through so partial results can be inspected.
+After every execution the orchestrator writes a dedicated manifest such as
+`reports/run_<timestamp>.json` relative to `--base-path` and updates the
+`reports/run_manifest.json` pointer to reference the most recent run. Each
+manifest records every step with the resolved CSV destination, discovered
+sidecars, status (`success`, `skipped`, `failed`, etc.), timings and SHA256
+checksums for all artefacts. The file is emitted even when the workflow aborts
+part way through so partial results can be inspected.
 
 ## Document pipeline `get_document_data`
 
