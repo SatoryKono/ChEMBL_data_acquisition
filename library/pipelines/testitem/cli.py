@@ -752,59 +752,104 @@ def run_testitem_pipeline(
 
         def _processed_chunks() -> Iterator[pd.DataFrame]:
             nonlocal rows_counter
+            idle_minutes = getattr(cfg.testitem, "parent_watchdog_idle_minutes", 0.0)
+            budget = StageExecutionBudget(
+                "parent_lookup",
+                minutes=getattr(cfg.testitem, "execution_budget_minutes", None),
+            )
+            budget.start()
+            augment_pubchem = _load_pubchem_augmenter() if pubchem_enabled else None
             try:
                 for chunk in chunk_iter:
+                    budget.enforce("chunk_start")
                     rows_counter += len(chunk)
-                    prep_status, prep = prepare_parent_enrichment(
-                        chunk,
-                        catalog_cfg=cfg.molecule_catalog,
-                        io_cfg=cfg.io,
-                        api_cfg=api_cfg,
-                        timeout=parent_timeout,
-                        client=client,
-                        hierarchy_lookup_path=hierarchy_lookup_path,
-                    )
-                    if prep_status != 0 or prep is None:
-                        raise TestitemPipelineStageError(prep_status)
+                    with StageWatchdog(
+                        "parent_lookup",
+                        idle_minutes=idle_minutes,
+                    ) as watchdog:
+                        watchdog.ping("chunk_received", rows=len(chunk))
 
-                    parent_status, parent_result = run_parent_enrichment(
-                        prep,
-                        client=client,
-                        api_cfg=api_cfg,
-                        catalog_cfg=cfg.molecule_catalog,
-                        timeout=parent_timeout,
-                    )
-                    if parent_status != 0 or parent_result is None:
-                        raise TestitemPipelineStageError(parent_status)
-
-                    current = parent_result.df
-                    parent_stats_holder["value"] = _merge_parent_stats(
-                        parent_stats_holder["value"], parent_result.parent_stats
-                    )
-
-                    if pubchem_enabled:
-                        current = _load_pubchem_augmenter()(
-                            current,
-                            pubchem_cfg=cfg.pubchem,
-                            api_cfg=pubchem_api_cfg,
-                            retry_cfg=cfg.retry,
+                        prep_status, prep = prepare_parent_enrichment(
+                            chunk,
+                            catalog_cfg=cfg.molecule_catalog,
+                            io_cfg=cfg.io,
+                            api_cfg=api_cfg,
                             timeout=parent_timeout,
                             client=client,
-                            fields=cfg.testitem.fields,
-                            request_limit=cfg.testitem.request_limit,
+                            hierarchy_lookup_path=hierarchy_lookup_path,
+                        )
+                        if prep_status != 0 or prep is None:
+                            raise TestitemPipelineStageError(prep_status)
+                        watchdog.raise_if_timed_out()
+                        budget.enforce("after_parent_prepare")
+                        watchdog.ping(
+                            "parent_prepare_completed",
+                            rows=int(len(prep.df)),
                         )
 
-                    enrichment_status, enriched_df = apply_testitem_enrichment(
-                        current,
-                        enrichment_cfg=cfg.testitem_molecule_enrichment,
-                        io_cfg=cfg.io,
-                    )
-                    if enrichment_status != 0 or enriched_df is None:
-                        raise TestitemPipelineStageError(enrichment_status)
+                        parent_status, parent_result = run_parent_enrichment(
+                            prep,
+                            client=client,
+                            api_cfg=api_cfg,
+                            catalog_cfg=cfg.molecule_catalog,
+                            timeout=parent_timeout,
+                        )
+                        if parent_status != 0 or parent_result is None:
+                            raise TestitemPipelineStageError(parent_status)
+                        watchdog.raise_if_timed_out()
+                        budget.enforce("after_parent_enrichment")
 
-                    if "molecule_chembl_id" in enriched_df.columns:
+                        current = parent_result.df
+                        parent_stats_holder["value"] = _merge_parent_stats(
+                            parent_stats_holder["value"], parent_result.parent_stats
+                        )
+                        watchdog.ping(
+                            "parent_enrichment_completed",
+                            attached=int(parent_result.parent_stats.attached),
+                            missing=int(parent_result.parent_stats.missing),
+                        )
+
+                        if pubchem_enabled and augment_pubchem is not None:
+                            watchdog.ping(
+                                "pubchem_enrichment_started",
+                                rows=int(len(current)),
+                            )
+                            current = augment_pubchem(
+                                current,
+                                pubchem_cfg=cfg.pubchem,
+                                api_cfg=pubchem_api_cfg,
+                                retry_cfg=cfg.retry,
+                                timeout=parent_timeout,
+                                client=client,
+                                fields=cfg.testitem.fields,
+                                request_limit=cfg.testitem.request_limit,
+                            )
+                            watchdog.raise_if_timed_out()
+                            budget.enforce("after_pubchem")
+                            watchdog.ping(
+                                "pubchem_enrichment_completed",
+                                rows=int(len(current)),
+                            )
+
+                        enrichment_status, enriched_df = apply_testitem_enrichment(
+                            current,
+                            enrichment_cfg=cfg.testitem_molecule_enrichment,
+                            io_cfg=cfg.io,
+                        )
+                        if enrichment_status != 0 or enriched_df is None:
+                            raise TestitemPipelineStageError(enrichment_status)
+                        watchdog.raise_if_timed_out()
+                        budget.enforce("after_enrichment")
+                        watchdog.ping(
+                            "chunk_ready",
+                            rows=int(len(enriched_df)),
+                        )
+                        watchdog.raise_if_timed_out()
+                        processed_df = enriched_df
+
+                    if "molecule_chembl_id" in processed_df.columns:
                         ids_series = (
-                            enriched_df["molecule_chembl_id"]
+                            processed_df["molecule_chembl_id"]
                             .dropna()
                             .astype(str)
                             .str.strip()
@@ -813,7 +858,8 @@ def run_testitem_pipeline(
                             {value.upper() for value in ids_series if value}
                         )
 
-                    yield enriched_df
+                    budget.enforce("after_chunk")
+                    yield processed_df
             except (
                 TestitemFetchError
             ) as exc:  # pragma: no cover - propagated network error
