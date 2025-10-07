@@ -144,6 +144,30 @@ def _prepare_step_arguments(
     return accepted
 
 
+def _identify_unsupported_kwargs(func: Any, params: Mapping[str, Any]) -> tuple[str, ...]:
+    """Return a tuple of keyword names not accepted by ``func``."""
+
+    if not params:
+        return ()
+
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        return ()
+
+    if any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    ):
+        return ()
+
+    unsupported: list[str] = []
+    for key in params:
+        if key not in signature.parameters:
+            unsupported.append(key)
+    return tuple(unsupported)
+
+
 def run_steps(
     df: pd.DataFrame,
     steps: Iterable[StepDefinition | StepTuple],
@@ -204,7 +228,17 @@ def run_steps(
                 except TypeError as exc:
                     unexpected_keyword = _extract_unexpected_keyword(exc)
                     if unexpected_keyword is None or unexpected_keyword not in call_params:
-                        raise
+                        fallback = _identify_unsupported_kwargs(step.func, call_params)
+                        if not fallback:
+                            raise
+                        log.warning(
+                            "Step %s retrying without unsupported parameters: %s",
+                            step.name,
+                            ", ".join(sorted(fallback)),
+                        )
+                        for key in fallback:
+                            call_params.pop(key, None)
+                        continue
 
                     log.warning(
                         "Step %s retrying without unsupported parameter: %s",
