@@ -147,3 +147,25 @@ __all__ = [
     "_mask_secrets",
     "_serialize_paths",
 ]
+
+from .postprocessing import (  # noqa: E402  - imported late to avoid cycles
+    POSTPROCESSING_CONFIG_DIR,
+    PostprocessingConfigError,
+    PostprocessingPipeline,
+    PostprocessingStep,
+    diff_postprocessing_pipeline,
+    list_postprocessing_tables,
+    load_postprocessing_pipeline,
+    validate_postprocessing_config,
+)
+
+__all__ += [
+    "POSTPROCESSING_CONFIG_DIR",
+    "PostprocessingConfigError",
+    "PostprocessingPipeline",
+    "PostprocessingStep",
+    "diff_postprocessing_pipeline",
+    "list_postprocessing_tables",
+    "load_postprocessing_pipeline",
+    "validate_postprocessing_config",
+]

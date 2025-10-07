@@ -1,0 +1,21 @@
+version: 1
+
+flags:
+  run_quality_checks: false
+  include_cellularity: true
+
+steps:
+  - id: ensure-string-columns
+    kwargs:
+      columns:
+        - target_chembl_id
+        - pref_name
+        - organism
+  - id: finalize-targets
+    description: "Normalise, reorder and enrich the target export."
+    callable: library.pipelines.target.postprocessing:finalise_targets
+  - id: ensure-cellularity
+    description: "Ensure the canonical cellularity column is present and normalised."
+    callable: library.postprocessing.cellularity:ensure_cellularity
+    gates:
+      - include_cellularity

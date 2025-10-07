@@ -2259,6 +2259,131 @@
       "title": "TestitemMoleculeEnrichmentCfg",
       "type": "object"
     },
+    "PostprocessStepDefaultsCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "continue_on_error": {
+          "default": false,
+          "title": "Continue On Error",
+          "type": "boolean"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "kwargs": {
+          "default": {},
+          "title": "Kwargs",
+          "type": "object"
+        },
+        "gates": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "type": "string"
+          },
+          "title": "Gates",
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "title": "PostprocessStepDefaultsCfg",
+      "type": "object"
+    },
+    "PostprocessStepCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z0-9_.-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "callable": {
+          "pattern": "^[A-Za-z0-9_.:]+$",
+          "title": "Callable",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "continue_on_error": {
+          "default": false,
+          "title": "Continue On Error",
+          "type": "boolean"
+        },
+        "gates": {
+          "items": {
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "type": "string"
+          },
+          "title": "Gates",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "kwargs": {
+          "title": "Kwargs",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "PostprocessStepCfg",
+      "type": "object"
+    },
+    "PostprocessPipelineCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        },
+        "defaults": {
+          "additionalProperties": false,
+          "properties": {
+            "step": {
+              "$ref": "#/$defs/PostprocessStepDefaultsCfg"
+            }
+          },
+          "title": "Defaults",
+          "type": "object"
+        },
+        "flags": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "default": {},
+          "title": "Flags",
+          "type": "object"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/PostprocessStepCfg"
+          },
+          "minItems": 0,
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "steps"
+      ],
+      "title": "PostprocessPipelineCfg",
+      "type": "object"
+    },
     "UniprotCfg": {
       "additionalProperties": false,
       "properties": {
