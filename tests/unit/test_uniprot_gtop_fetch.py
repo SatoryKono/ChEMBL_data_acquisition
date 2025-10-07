@@ -205,6 +205,30 @@ def test_fetch_gtop_endpoint__caches_request_exception(
 
 
 @pytest.mark.unit
+def test_fetch_gtop_endpoint__skips_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    reset_gtop_caches: None,
+) -> None:
+    session = _DummySession(lambda: _DummyResponse({}, "application/json"))
+    _patch_dependencies(monkeypatch, session)
+
+    debug_events: list[tuple[str, dict[str, object]]] = []
+
+    def capture_debug(event: str, *args: object, **kwargs: object) -> None:
+        debug_events.append((event, dict(kwargs)))
+
+    monkeypatch.setattr(uniprot.logger, "debug", capture_debug)
+
+    cfg = IupharCfg(enable=False)
+
+    result = uniprot._fetch_gtop_endpoint("GTP9", "function", cfg=cfg)
+
+    assert result == []
+    assert session.calls == 0
+    assert ("gtop_fetch_disabled", {"gtop_id": "GTP9", "endpoint": "function"}) in debug_events
+
+
+@pytest.mark.unit
 def test_fetch_gtop_endpoint__handles_empty_body(
     monkeypatch: pytest.MonkeyPatch,
     reset_gtop_caches: None,
@@ -322,6 +346,28 @@ def test_fetch_gtop_endpoint__records_decode_failure(
 
 
 @pytest.mark.unit
+def test_update_gtop_metadata__disabled_skips_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = {
+        "GuidetoPHARMACOLOGY": "GTP9",
+        "gtop_natural_ligands_n": "",
+        "gtop_interactions_n": "",
+        "gtop_function_text_short": "",
+    }
+
+    def fail(*args: object, **kwargs: object) -> None:  # pragma: no cover - fails test
+        raise AssertionError("_fetch_gtop_endpoint should not be called when disabled")
+
+    monkeypatch.setattr(uniprot, "_fetch_gtop_endpoint", fail)
+
+    cfg = IupharCfg(enable=False)
+
+    uniprot._update_gtop_metadata(result, cfg=cfg)
+
+    assert result["gtop_natural_ligands_n"] == ""
+    assert result["gtop_interactions_n"] == ""
+    assert result["gtop_function_text_short"] == ""
 def test_fetch_gtop_endpoint__handles_404_missing_target(
     monkeypatch: pytest.MonkeyPatch,
     reset_gtop_caches: None,

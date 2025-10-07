@@ -1627,6 +1627,18 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         ),
     )
     uniprot.set_defaults(func=run_uniprot)
+    uniprot.set_defaults(disable_gtop=False)
+
+    uniprot_network = uniprot.add_argument_group("Network controls")
+    uniprot_network.add_argument(
+        "--disable-gtop",
+        dest="disable_gtop",
+        action="store_true",
+        help=(
+            "Skip Guide-to-Pharmacology enrichment when retrieving UniProt "
+            "data to avoid external HTTP requests"
+        ),
+    )
 
     # ----------------------------
     # ChEMBL sub-command
@@ -1717,6 +1729,16 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         dest="iuphar_out",
         type=path_argument,
         help="Optional path to save intermediate IUPHAR data",
+    )
+    network_group = all_cmd.add_argument_group("Network controls")
+    network_group.add_argument(
+        "--disable-gtop",
+        dest="disable_gtop",
+        action="store_true",
+        help=(
+            "Skip Guide-to-Pharmacology enrichment during the combined "
+            "pipeline to avoid external HTTP requests"
+        ),
     )
     all_sources = all_cmd.add_argument_group("Data sources")
     all_sources.add_argument(
@@ -1911,6 +1933,7 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         ),
     )
     all_cmd.set_defaults(func=run_all)
+    all_cmd.set_defaults(disable_gtop=False)
 
     parser.subparsers_map = {  # type: ignore[attr-defined]
         "uniprot": uniprot,
@@ -1942,6 +1965,25 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         derived artefacts. Input validation errors are logged and converted into
         a failure code.
     """
+    disable_gtop_cli = bool(getattr(args, "disable_gtop", False))
+    gtop_enabled = (
+        cfg.target.uniprot.enable_gtop
+        and getattr(cfg.iuphar, "enable", True)
+        and not disable_gtop_cli
+    )
+    if not gtop_enabled:
+        if disable_gtop_cli:
+            reason = "cli"
+        elif not cfg.target.uniprot.enable_gtop:
+            reason = "config"
+        else:
+            reason = "source"
+        logger.info("gtop_enrichment_disabled", reason=reason)
+        gtop_cfg = cfg.iuphar.model_copy()
+        gtop_cfg.enable = False
+    else:
+        gtop_cfg = cfg.iuphar
+
     limit = cfg.target.uniprot.limit
     if limit is not None and limit < 1:
         logger.error(
@@ -2007,7 +2049,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
                 output_csv=str(output_path),
                 data_dir=data_dir,
                 cfg=cfg.uniprot,
-                gtop_cfg=cfg.iuphar,
+                gtop_cfg=gtop_cfg,
                 sep=cfg.io.csv_sep,
                 encoding=cfg.io.csv_encoding,
             )
@@ -3799,6 +3841,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 1
 
+    disable_gtop_cli = bool(getattr(args, "disable_gtop", False))
+    original_enable_gtop = cfg.target.uniprot.enable_gtop
+    if disable_gtop_cli:
+        cfg.target.uniprot.enable_gtop = False
     try:
         final_candidate = getattr(args, "final_out", None)
         if final_candidate in (None, argparse.SUPPRESS):
@@ -3863,6 +3909,8 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             output=str(final_output),
         )
         return 1
+    finally:
+        cfg.target.uniprot.enable_gtop = original_enable_gtop
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:

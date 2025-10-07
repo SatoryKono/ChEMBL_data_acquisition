@@ -166,7 +166,7 @@ def test_build_structured_report__captures_failure_messages() -> None:
         "xfailed": 0,
         "xpassed": 0,
         "error": 0,
-        "success_rate": 0.5,
+        "success_rate": pytest.approx(0.5),
     }
 
     failure_entry = next(

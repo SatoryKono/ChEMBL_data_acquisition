@@ -461,11 +461,17 @@ class UniprotMappingCfg(_BaseModel):
 
 
 class IupharCfg(_BaseModel):
+    enable: bool = True
     base: str = "https://www.guidetopharmacology.org/services"
     timeout_connect: float = Field(5.0, ge=1)
     timeout_read: float = Field(30.0, ge=1)
     rps: int = Field(4, ge=1)
     burst: int = Field(5, ge=1)
+
+    @field_validator("enable", mode="before")
+    @classmethod
+    def _coerce_enable(cls, value: Any) -> bool:
+        return _BoolModel._parse_bool(value)
 
     @field_validator("base")
     @classmethod
@@ -1135,6 +1141,7 @@ class TargetUniprotCfg(_BaseModel):
     chunk_size: int = Field(100, ge=1)
     timeout: float = Field(30.0, gt=0)
     offset: int = Field(0, ge=0)
+    enable_gtop: bool = True
 
     @field_validator("data_dir", mode="before")
     @classmethod
@@ -1142,6 +1149,11 @@ class TargetUniprotCfg(_BaseModel):
         if value is None:
             return value
         return resolve_resource_reference(value)
+
+    @field_validator("enable_gtop", mode="before")
+    @classmethod
+    def _coerce_enable_gtop(cls, value: Any) -> bool:
+        return _BoolModel._parse_bool(value)
 
 
 class TargetChemblBatchRetryCfg(_BoolModel):

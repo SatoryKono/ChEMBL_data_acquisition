@@ -1180,6 +1180,11 @@
     "IupharCfg": {
       "additionalProperties": false,
       "properties": {
+        "enable": {
+          "default": true,
+          "title": "Enable",
+          "type": "boolean"
+        },
         "base": {
           "default": "https://www.guidetopharmacology.org/services",
           "title": "Base",
@@ -2027,6 +2032,11 @@
           "format": "path",
           "title": "Data Dir",
           "type": "string"
+        },
+        "enable_gtop": {
+          "default": true,
+          "title": "Enable Gtop",
+          "type": "boolean"
         }
       },
       "title": "TargetUniprotCfg",
