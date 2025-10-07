@@ -136,12 +136,16 @@ def enrich_document_publication_year(
     return enriched
 
 
-def finalize_document_records(df: pd.DataFrame) -> pd.DataFrame:
+def finalize_document_records(df: pd.DataFrame, **_: object) -> pd.DataFrame:
     """Validate and order the DataFrame according to :data:`DOCUMENT_SCHEMA`."""
 
     prepared = df.copy(deep=True)
-    for column in ["document_chembl_id", "title", "doc_type"]:
-        if column in prepared.columns:
+
+    required_string_columns = ["document_chembl_id", "title", "doc_type"]
+    for column in required_string_columns:
+        if column not in prepared.columns:
+            prepared[column] = pd.Series(pd.NA, index=prepared.index, dtype="string")
+        else:
             prepared[column] = prepared[column].astype("string")
 
     if "publication_year" in prepared.columns:
