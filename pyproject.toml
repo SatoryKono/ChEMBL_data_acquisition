@@ -69,6 +69,7 @@ table-quality = "library.utils.cli_tools.table_quality_main:main"
 chunk-io = "library.utils.cli_tools.chunk_io_main:main"
 get-activities = "library.utils.cli_tools.get_activities:main"
 check-determinism = "library.utils.cli_tools.check_determinism:main"
+profile-data-script = "tools.performance_profiler:main"
 
 [tool.setuptools]
 include-package-data = true
@@ -82,6 +83,8 @@ include = [
   "config.dictionary.*",
   "scripts",
   "scripts.*",
+  "tools",
+  "tools.*",
 ]
 
 [tool.setuptools.package-data]

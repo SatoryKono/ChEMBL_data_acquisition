@@ -15,10 +15,11 @@
 
 4. **Run quality gates**
    - `make lint && make typecheck`
-   - `pytest -q --json-report --json-report-file=reports/test_report.json`
-   - `python tools/make_md_summary.py reports/test_report.json reports/test_summary.md`
-   - `make smoke`
-   - `check-determinism` between previous release outputs and the new run (if available).
+- `pytest -q --json-report --json-report-file=reports/test_report.json`
+- `python tools/make_md_summary.py reports/test_report.json reports/test_summary.md`
+- `python -m tools.performance_profiler benchmark <script> --before-ref main --optimisation "<summary>" -- <args>`
+- `make smoke`
+- `check-determinism` between previous release outputs and the new run (if available).
 
 5. **Tag and publish**
    - Merge PRs via fast-forward.
@@ -26,5 +27,5 @@
    - Publish release notes with links to QA artefacts.
 
 6. **Post-release follow-up**
-   - Archive QA reports and smoke outputs.
+- Archive QA reports, smoke outputs, and performance optimisation artefacts (`reports/performance_optimization_<date>.md` plus the matching `reports/profiles/*.prof`).
    - Create follow-up issues for deferred tasks discovered during release.
