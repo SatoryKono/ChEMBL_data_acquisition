@@ -165,8 +165,19 @@ def finalize_target_records(
     prepared = df.copy(deep=True)
 
     # Normalise a few legacy aliases that may appear in historical exports.
-    if "target_type" not in prepared.columns and "relationship" in prepared.columns:
-        prepared["target_type"] = prepared["relationship"]
+    if "target_type" not in prepared.columns:
+        fallback_columns = (
+            "relationship",
+            "target_type_description",
+            "target_type_desc",
+            "target_type_name",
+            "targettype",
+            "type",
+        )
+        for alias in fallback_columns:
+            if alias in prepared.columns:
+                prepared["target_type"] = prepared[alias]
+                break
 
     required_columns = set(TARGET_SCHEMA.required_columns)
     optional_columns = set(TARGET_SCHEMA.optional_columns)
