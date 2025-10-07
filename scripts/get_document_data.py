@@ -642,7 +642,23 @@ def _finalise_export(
     if exit_code == 0:
         logger.info("write_done", rows=rows_kept, path=str(csv_path))
         if csv_path.name.startswith("output.document_"):
-            _maybe_run_document_postprocessing(csv_path)
+            try:
+                _maybe_run_document_postprocessing(csv_path)
+            except RuntimeError as exc:
+                logger.error(
+                    "document_postprocess_qa_mismatch",
+                    error=str(exc),
+                    path=str(csv_path),
+                )
+                exit_code = 1
+            except Exception as exc:  # pragma: no cover - defensive guard
+                logger.error(
+                    "document_postprocess_qa_error",
+                    error=str(exc),
+                    path=str(csv_path),
+                    exc_info=exc,
+                )
+                exit_code = 1
 
     doc_quality_cfg = getattr(cfg.system, "doc_quality", None)
     quality_hook = build_table_quality_hook(
