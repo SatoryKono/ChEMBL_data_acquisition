@@ -137,8 +137,8 @@ languages:
 
 ## Testing policy
 
-Tests are organised under `tests/` and executed with `pytest`. Local and CI runs
-must produce:
+Tests are organised under `tests/` and executed via the canonical wrapper
+`python -m scripts.run_tests`. Local and CI runs must produce:
 
 - `reports/test_report.json` — machine readable execution log
 - `reports/test_summary.md` — condensed Markdown summary
@@ -185,6 +185,12 @@ must produce:
 exact `error` message from the JSON report in a fenced code block. This makes it
 possible to triage failures using only the Markdown artefact.
 
-Smoke runs can use `pytest -q -k "not slow and not e2e"`, while full validation
-uses `pytest -q`. See [`docs/en/development/TESTING.md`](./docs/en/development/TESTING.md)
-for fixtures, determinism requirements and coverage targets.
+To focus on a subset during local development, forward arguments to pytest
+using the `--` separator, for example:
+
+```bash
+python -m scripts.run_tests -- -k "not slow and not e2e"
+```
+
+See [`docs/en/development/TESTING.md`](./docs/en/development/TESTING.md) for
+fixtures, determinism requirements and coverage targets.
