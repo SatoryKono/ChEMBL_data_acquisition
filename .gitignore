@@ -35,6 +35,7 @@ reports/*
 !reports/test_report.json
 !reports/test_summary.md
 !reports/tests/
+!reports/code_review.md
 
 dictionary/_activity/pairs.csv
 /logs
