@@ -26,8 +26,8 @@ COVERAGE_DIR = REPORTS_DIR / "coverage"
 COVERAGE_XML = COVERAGE_DIR / "coverage.xml"
 COVERAGE_HTML = COVERAGE_DIR / "html"
 REPO_SLUG = "SatoryKono/ChEMBL_data_acquisition"
-QUALITY_THRESHOLD = 0.95
-QUALITY_FAILURE_EXIT_CODE = 10
+QUALITY_THRESHOLD_PERCENT = 95.0
+QUALITY_FAILURE_EXIT_CODE = 1
 VALIDATION_FAILURE_EXIT_CODE = 11
 TEST_DIRECTORIES = (
     ROOT_DIR / "tests" / "unit",
@@ -519,24 +519,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         if validation_exit_code is not None:
             final_exit_code = validation_exit_code
         else:
-            success_rate = structured.get("summary", {}).get("success_rate", 0.0) or 0.0
+            success_rate_raw = structured.get("summary", {}).get("success_rate", 0.0) or 0.0
             try:
-                success_rate = float(success_rate)
+                success_rate_value = float(success_rate_raw)
             except (TypeError, ValueError):  # pragma: no cover - guarded by validation
-                success_rate = 0.0
-            if success_rate < QUALITY_THRESHOLD:
                 logger.error(
-                    "Success rate %.2f%% is below the required %.0f%% threshold",
-                    success_rate * 100.0,
-                    QUALITY_THRESHOLD * 100.0,
+                    "Structured summary provided a non-numeric success rate %r; treating it as 0%%",
+                    success_rate_raw,
+                )
+                success_rate_value = 0.0
+
+            success_rate_pct = (
+                success_rate_value * 100.0 if success_rate_value <= 1.0 else success_rate_value
+            )
+
+            if success_rate_pct < QUALITY_THRESHOLD_PERCENT:
+                logger.error(
+                    "Success rate %.2f%% is below the required %.2f%% threshold",
+                    success_rate_pct,
+                    QUALITY_THRESHOLD_PERCENT,
                 )
                 if final_exit_code == 0:
                     final_exit_code = QUALITY_FAILURE_EXIT_CODE
             else:
                 logger.info(
-                    "Success rate %.2f%% meets the required %.0f%% threshold",
-                    success_rate * 100.0,
-                    QUALITY_THRESHOLD * 100.0,
+                    "Success rate %.2f%% meets the required %.2f%% threshold",
+                    success_rate_pct,
+                    QUALITY_THRESHOLD_PERCENT,
                 )
 
     return final_exit_code
