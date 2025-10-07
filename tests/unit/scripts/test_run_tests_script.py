@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import json
+import logging
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Sequence
+from typing import Any, Sequence
 
 import pytest
 
@@ -215,3 +217,113 @@ def test_build_summary_markdown__renders_error_messages_from_json() -> None:
     assert summary_md.count("```") == 2
     assert "AssertionError: boom" in summary_md
     assert "line 1" in summary_md and "line 2" in summary_md
+
+
+
+@pytest.mark.unit
+def test_main__returns_exit_code_one_when_quality_gate_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    reports_dir = tmp_path / "reports"
+    coverage_dir = reports_dir / "coverage"
+    raw_report_file = reports_dir / "pytest_raw_report.json"
+    report_file = reports_dir / "test_report.json"
+    summary_file = reports_dir / "test_summary.md"
+
+    monkeypatch.setattr(run_tests, "ROOT_DIR", tmp_path, raising=False)
+    monkeypatch.setattr(run_tests, "REPORTS_DIR", reports_dir, raising=False)
+    monkeypatch.setattr(run_tests, "RAW_REPORT_FILE", raw_report_file, raising=False)
+    monkeypatch.setattr(run_tests, "REPORT_FILE", report_file, raising=False)
+    monkeypatch.setattr(run_tests, "SUMMARY_FILE", summary_file, raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_DIR", coverage_dir, raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_XML", coverage_dir / "coverage.xml", raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_HTML", coverage_dir / "html", raising=False)
+
+    base_command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "--json-report",
+        "--json-report-file",
+        str(raw_report_file),
+        "--durations=0",
+    ]
+    monkeypatch.setattr(run_tests, "_BASE_PYTEST_COMMAND", base_command, raising=False)
+    monkeypatch.setattr(run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False)
+
+    captured_commands: list[list[str]] = []
+
+    def _fake_run_pytest(command: Sequence[str]) -> int:
+        captured_commands.append(list(command))
+        return 0
+
+    monkeypatch.setattr(run_tests, "run_pytest", _fake_run_pytest)
+
+    structured_template = {
+        "meta": {
+            "repo": "demo/repo",
+            "commit": "abc123",
+            "branch": "feature",
+            "ts_utc": "2025-01-01T00:00:00+00:00",
+            "duration_sec": 12.34,
+            "python": "3.11.0",
+            "pytest": "8.4.0",
+            "exit_code": 0,
+        },
+        "summary": {
+            "total": 20,
+            "passed": 19,
+            "failed": 1,
+            "skipped": 0,
+            "xfailed": 0,
+            "xpassed": 0,
+            "error": 0,
+            "success_rate": 0.94,
+        },
+        "tests": [],
+    }
+
+    def _fake_build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, Any]:
+        assert exit_code == 0
+        return json.loads(json.dumps(structured_template))
+
+    monkeypatch.setattr(run_tests, "build_structured_report", _fake_build_structured_report)
+    monkeypatch.setattr(run_tests, "_load_raw_report", lambda: {"tests": []})
+
+    captured_configs: list[LoggerConfig] = []
+
+    def _fake_configure_logger(cfg: LoggerConfig) -> object:
+        captured_configs.append(cfg)
+        return object()
+
+    log_path = tmp_path / "logs" / "run_tests_20240131.log"
+
+    @contextmanager
+    def _fake_setup(script_name: str, log_cfg: LoggerConfig, date: str | None = None):
+        assert script_name == "run_tests"
+        cloned_cfg = LoggerConfig(
+            level=log_cfg.level,
+            run_id=log_cfg.run_id,
+            redact_secrets=log_cfg.redact_secrets,
+            stream=log_cfg.stream,
+            handlers=list(log_cfg.handlers),
+            logger_name=log_cfg.logger_name,
+        )
+        yield SimpleNamespace(log_path=log_path, log_cfg=cloned_cfg, console_stream=None)
+
+    monkeypatch.setattr(run_tests, "configure_logger", _fake_configure_logger)
+    monkeypatch.setattr(run_tests, "setup_cli_logging", _fake_setup)
+
+    caplog.set_level(logging.ERROR)
+
+    exit_code = run_tests.main(["--date", "20240131"])
+
+    assert exit_code == 1
+    assert "below the required 95.00% threshold" in caplog.text
+    assert captured_commands, "run_pytest should be invoked"
+
+    payload = json.loads(report_file.read_text(encoding="utf-8"))
+    assert payload["summary"]["success_rate"] == pytest.approx(0.94)
+    assert captured_configs and captured_configs[-1].level == "INFO"
