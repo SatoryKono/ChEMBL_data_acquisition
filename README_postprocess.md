@@ -107,7 +107,7 @@ Consult `tests/conftest.py` for shared fixtures that enforce deterministic envir
 Run the wrapper to execute the suite, produce the JSON protocol and Markdown summary, and mirror logs under `logs/`:
 
 ```bash
-python tests/run_tests.py
+python scripts/run_tests.py
 ```
 
 The script runs pytest, writes `reports/test_report.json`, renders `reports/test_summary.md`, checks the ≥95 % success-rate threshold and persists structured logs for regression triage. Pass `--pytest-args` to forward options (for example `--pytest-args -m unit`) and `--verbose` for DEBUG-level logs. 【F:tests/README.md†L58-L87】
