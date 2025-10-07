@@ -67,6 +67,7 @@ def test_parse_args__defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert args.force is False
     assert args.skip_existing is False
     assert args.dry_run is False
+    assert args.print_config is False
     assert args.pipeline_registry is None
     assert args.override_input == []
     assert args.override_output_stem == []
@@ -95,6 +96,7 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
             "--force",
             "--skip-existing",
             "--dry-run",
+            "--print-config",
             "--verbose",
             "--pipeline-registry",
             str(tmp_path / "registry.yaml"),
@@ -117,10 +119,99 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
     assert args.force is True
     assert args.skip_existing is True
     assert args.dry_run is True
+    assert args.print_config is True
     assert args.pipeline_registry == tmp_path / "registry.yaml"
     assert args.override_input == ["document=document_custom.csv"]
     assert args.override_output_stem == ["target=custom_targets"]
     assert args.override_subcommand == ["target=sync"]
+
+
+@pytest.mark.unit
+def test_main__print_config__exits_early(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    input_dir.mkdir()
+    (base_path / "output").mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
+
+    printed: dict[str, object] = {}
+
+    def _fake_print_config(cfg: object) -> None:
+        printed["config"] = cfg
+
+    monkeypatch.setattr(get_data, "print_config", _fake_print_config)
+
+    loaded: dict[str, Path] = {}
+
+    def _fake_load_config(path: Path, *, base_path: Path) -> object:
+        loaded["path"] = path
+        loaded["base"] = base_path
+        return object()
+
+    monkeypatch.setattr(get_data, "load_config", _fake_load_config)
+
+    run_invoked = False
+
+    def _fake_run_pipeline(
+        cfg: get_data.PipelineRunConfig, *, steps: Sequence[get_data.PipelineStep] | None = None
+    ) -> int:
+        nonlocal run_invoked
+        run_invoked = True
+        return 0
+
+    monkeypatch.setattr(get_data, "run_pipeline", _fake_run_pipeline)
+    monkeypatch.setattr(get_data, "_resolve_pipeline_steps", lambda args=None: ())
+
+    def _fake_setup_cli_logging(
+        script_name: str,
+        log_cfg: get_data.LoggerConfig,
+        date_str: str | None = None,
+        *,
+        log_dir: Path | None = None,
+    ) -> object:
+        stream = io.StringIO()
+        ctx_cfg = get_data.LoggerConfig(
+            level=log_cfg.level,
+            run_id=log_cfg.run_id,
+            stream=stream,
+            handlers=list(log_cfg.handlers),
+            redact_secrets=log_cfg.redact_secrets,
+            logger_name=log_cfg.logger_name,
+        )
+
+        class _Manager:
+            def __enter__(self) -> SimpleNamespace:
+                return SimpleNamespace(log_cfg=ctx_cfg, console_stream=stream)
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        return _Manager()
+
+    monkeypatch.setattr(get_data, "setup_cli_logging", _fake_setup_cli_logging)
+
+    status = get_data.main(
+        [
+            "--base-path",
+            str(base_path),
+            "--input-dir",
+            "input",
+            "--output-dir",
+            "output",
+            "--config",
+            str(config_path),
+            "--print-config",
+        ]
+    )
+
+    assert status == 0
+    assert loaded["path"] == config_path.resolve()
+    assert loaded["base"] == base_path.resolve()
+    assert printed["config"] is not None
+    assert run_invoked is False
 
 
 @pytest.mark.unit
