@@ -78,7 +78,7 @@ invoked separately.
 
 Alternative workflows can be described in YAML and supplied via
 `--pipeline-registry`. The loader in
-[`library/pipelines/registry.py`](../../library/pipelines/registry.py) validates
+[`library/pipelines/registry.py`](../../../library/pipelines/registry.py) validates
 the structure and allows callers to swap in bespoke callables, change execution
 order or skip steps without modifying code.
 
