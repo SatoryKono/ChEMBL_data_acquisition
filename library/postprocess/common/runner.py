@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import inspect
+import re
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from time import perf_counter
@@ -15,6 +16,9 @@ from .schema import DataFrameSchema, validate_schema
 from .types import SchemaValidationError, StepDefinition, StepError
 
 StepTuple = tuple[Any, ...]
+
+
+_UNEXPECTED_KEYWORD_RE = re.compile(r"unexpected keyword argument[s]? '([^']+)'")
 
 
 def _describe_dtypes(frame: pd.DataFrame) -> dict[str, str]:
@@ -128,6 +132,43 @@ def _prepare_step_arguments(
     return accepted
 
 
+def _unexpected_keyword_arguments(
+    error: TypeError, provided: Mapping[str, Any]
+) -> tuple[str, ...]:
+    """Extract unexpected keyword argument names from ``error``.
+
+    Parameters
+    ----------
+    error:
+        Type error raised by the callable.
+    provided:
+        Mapping of keyword arguments passed to the callable.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Sorted tuple of unexpected keyword names present both in the error
+        message and the provided mapping.  Empty when the error is unrelated to
+        keyword arguments.
+    """
+
+    if not provided:
+        return ()
+
+    message = str(error)
+    unexpected: set[str] = set()
+
+    for name in _UNEXPECTED_KEYWORD_RE.findall(message):
+        if name in provided:
+            unexpected.add(name)
+
+    if "takes no keyword arguments" in message:
+        unexpected.update(provided.keys())
+
+    ordered = tuple(sorted(unexpected))
+    return ordered
+
+
 def run_steps(
     df: pd.DataFrame,
     steps: Iterable[StepDefinition | StepTuple],
@@ -180,7 +221,27 @@ def run_steps(
         log.info("Starting step %s", step.name)
 
         try:
-            result = step.func(frame, **call_params)
+            attempt_params = dict(call_params)
+
+            while True:
+                try:
+                    result = step.func(frame, **attempt_params)
+                except TypeError as exc:
+                    unexpected = _unexpected_keyword_arguments(exc, attempt_params)
+                    if not unexpected:
+                        raise
+
+                    for name in unexpected:
+                        attempt_params.pop(name, None)
+
+                    log.warning(
+                        "Step %s rejected parameters: %s; retrying without them",
+                        step.name,
+                        ", ".join(sorted(unexpected)),
+                    )
+
+                    continue
+                break
         except SchemaValidationError as exc:
             log.exception("Schema validation failed during step %s", step.name)
             _record_error(
