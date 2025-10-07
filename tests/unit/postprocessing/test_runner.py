@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pandas as pd
 import pytest
 
@@ -94,3 +96,28 @@ def test_run_steps__accepts_tuple_step_specification() -> None:
     assert final["value"].tolist() == [10, 10]
     assert metadata.steps[0].name == "_with_constant"
     assert metadata.steps[0].parameters == {"column": "value", "value": 10}
+
+
+def test_run_steps__ignores_unsupported_parameters(caplog: pytest.LogCaptureFixture) -> None:
+    frame = pd.DataFrame({"seed": [5]}, dtype="int64")
+
+    steps = (
+        StepDefinition(
+            name="with_constant",
+            func=_with_constant,
+            params={"column": "value", "value": 7, "unexpected": "ignored"},
+        ),
+    )
+
+    test_logger = logging.getLogger("tests.postprocess.runner")
+    test_logger.handlers.clear()
+    test_logger.propagate = True
+
+    with caplog.at_level("WARNING", logger="tests.postprocess.runner"):
+        result, metadata = run_steps(frame, steps, logger=test_logger)
+
+    assert result["value"].tolist() == [7]
+    assert any(
+        "ignoring unsupported parameters" in record.message for record in caplog.records
+    )
+    assert metadata.steps[0].parameters["unexpected"] == "ignored"

@@ -48,16 +48,91 @@ def normalize_document_fields(
     return normalized
 
 
-def enrich_document_publication_year(df: pd.DataFrame) -> pd.DataFrame:
-    """Create a deterministic ``publication_year`` column."""
+_YEAR_VALID_RANGE = (1600, 2100)
+
+
+def _coerce_year(series: pd.Series) -> pd.Series:
+    """Return a nullable integer series containing plausible year values."""
+
+    numeric = pd.to_numeric(series, errors="coerce")
+    if numeric.empty:
+        return pd.Series(pd.NA, index=series.index, dtype="Int64")
+
+    lower, upper = _YEAR_VALID_RANGE
+    mask = numeric.between(lower, upper)
+    cleaned = numeric.where(mask)
+    return cleaned.round().astype("Int64")
+
+
+def enrich_document_publication_year(
+    df: pd.DataFrame,
+    *,
+    fallback_year: int | None = None,
+    prefer_doi_year: bool = False,
+    **_: object,
+) -> pd.DataFrame:
+    """Create a deterministic ``publication_year`` column.
+
+    Parameters
+    ----------
+    df:
+        Input DataFrame produced by earlier pipeline steps.
+    fallback_year:
+        Optional numeric year to use when no source provides a valid value.
+    prefer_doi_year:
+        When ``True``, favour years originating from external DOI metadata over the
+        ChEMBL export column.
+    """
+
+    if fallback_year is not None:
+        try:
+            fallback_value = int(fallback_year)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("fallback_year must be an integer") from exc
+        if not (_YEAR_VALID_RANGE[0] <= fallback_value <= _YEAR_VALID_RANGE[1]):
+            raise ValueError(
+                "fallback_year must be within the supported range "
+                f"{_YEAR_VALID_RANGE[0]}-{_YEAR_VALID_RANGE[1]}"
+            )
+    else:
+        fallback_value = None
 
     enriched = df.copy(deep=True)
-    if "year" in enriched.columns:
-        enriched["publication_year"] = pd.to_numeric(
-            enriched["year"], errors="coerce"
-        ).astype("Int64")
+    # Determine priority order for candidate columns.
+    supplemental_sources = [
+        "crossref.year",
+        "crossref.published",
+        "openalex.publication_year",
+        "openalex.year",
+        "scholar.year",
+        "pubmed.yearcompleted",
+        "pubmed.yearrevised",
+        "pubmed.year",
+    ]
+    primary_sources = ["year"]
+
+    if prefer_doi_year:
+        ordered_candidates = supplemental_sources + primary_sources
     else:
-        enriched["publication_year"] = pd.Series([pd.NA] * len(enriched), dtype="Int64")
+        ordered_candidates = primary_sources + supplemental_sources
+
+    publication_year = pd.Series(pd.NA, index=enriched.index, dtype="Int64")
+
+    for column in ordered_candidates:
+        if column not in enriched.columns:
+            continue
+        candidate = _coerce_year(enriched[column])
+        if candidate.isna().all():
+            continue
+        publication_year = publication_year.fillna(candidate)
+        if not publication_year.isna().any():
+            break
+
+    if fallback_value is not None:
+        fallback_series = pd.Series(fallback_value, index=enriched.index, dtype="Int64")
+        publication_year = publication_year.fillna(fallback_series)
+
+    enriched["publication_year"] = publication_year
     return enriched
 
 

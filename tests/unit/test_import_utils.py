@@ -3,7 +3,13 @@ from __future__ import annotations
 
 import pytest
 
-from library.postprocess.common.import_utils import ImportResolutionError, import_by_path
+from pathlib import Path
+
+from library.postprocess.common.import_utils import (
+    ImportResolutionError,
+    import_by_path,
+    resolve_dotted_path,
+)
 
 
 @pytest.mark.unit
@@ -42,3 +48,16 @@ def test_import_by_path__custom_expected_type() -> None:
     value = import_by_path("math:pi", expected_type=(int, float))
 
     assert isinstance(value, float)
+
+
+@pytest.mark.unit
+def test_resolve_dotted_path__supports_expected_type_argument() -> None:
+    result = resolve_dotted_path("pathlib.Path", expected_type=type)
+
+    assert result is Path
+
+
+@pytest.mark.unit
+def test_resolve_dotted_path__raises_for_unmatched_expected_type() -> None:
+    with pytest.raises(ImportResolutionError):
+        resolve_dotted_path("pathlib.Path", expected_type=int)
