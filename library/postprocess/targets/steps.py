@@ -158,16 +158,33 @@ def finalize_target_records(
     *,
     enforce_schema: bool = True,
     sort_by: Sequence[str] | None = None,
+    **_: object,
 ) -> pd.DataFrame:
     """Validate and order the DataFrame according to :data:`TARGET_SCHEMA`."""
 
     prepared = df.copy(deep=True)
-    for column in TARGET_SCHEMA.required_columns:
+
+    # Normalise a few legacy aliases that may appear in historical exports.
+    if "target_type" not in prepared.columns and "relationship" in prepared.columns:
+        prepared["target_type"] = prepared["relationship"]
+
+    required_columns = set(TARGET_SCHEMA.required_columns)
+    optional_columns = set(TARGET_SCHEMA.optional_columns)
+    expected_string_columns = required_columns.union(
+        {column for column, dtype in TARGET_SCHEMA.dtypes.items() if dtype == "string"}
+    )
+
+    for column in sorted(required_columns | optional_columns):
         if column not in prepared.columns:
             prepared[column] = pd.Series(pd.NA, index=prepared.index, dtype="string")
-    for column in ["target_chembl_id", "pref_name", "target_type"]:
+
+    for column in expected_string_columns:
         if column in prepared.columns:
-            prepared[column] = prepared[column].astype("string")
+            prepared[column] = (
+                prepared[column]
+                .astype("string")
+                .replace({"": pd.NA})
+            )
 
     if enforce_schema:
         validated = validate_targets(prepared, context="target_finalization")
