@@ -73,7 +73,11 @@ def test_main__limit_forwarded_to_pipeline(
     assert exit_code == 0
     assert observed["limit"] == 7
     assert writer_calls == []
-    assert ("info", "generated", {"count": 7}) in logger_stub.events
+    assert (
+        "info",
+        "generated",
+        {"count": 7, "output": str(output_csv)},
+    ) in logger_stub.events
 
 
 @pytest.mark.unit
