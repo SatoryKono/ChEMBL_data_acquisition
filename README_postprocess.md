@@ -41,6 +41,19 @@ Follow this checklist to bolt a new export onto the stack:
 4. **Hook reporting**: ensure your CLI entry point (or orchestrated callable) calls `finalise_csv_output` with the schema identifier and any quality profiler/summary objects so metadata and QA artefacts stay in sync. 【F:library/reporting/run_manifest.py†L70-L169】
 5. **Cover it with tests**: add unit coverage for the helper logic, integration tests for file I/O and schema validation, and update e2e fixtures if the table participates in the aggregated run (see testing expectations below). 【F:tests/README.md†L1-L88】
 
+### Declarative pipeline configuration
+
+The active step list for each post-processing domain now lives under `config/pipeline/<domain>.yaml`. These YAML files describe the pipeline version advertised in metadata, the enabled steps and domain-specific parameters that documentation and orchestration hooks may consume. Callables are referenced through dotted import paths such as `library.postprocess.activities.steps:normalize_activity_records` and resolved lazily via `load_pipeline_config`. 【F:config/pipeline/activities.yaml†L1-L34】【F:library/postprocess/common/config.py†L22-L170】
+
+Environment variables can override YAML values using `${VAR}` or `${VAR:-default}` placeholders. For example, `${CHEMBL_ACTIVITY_PIPELINE_VERSION:-auto}` defaults to the installed library version unless `CHEMBL_ACTIVITY_PIPELINE_VERSION` is exported. Similarly, `${POSTPROCESS_LOG_LEVEL:-INFO}` sets the default log level consumed by orchestration. The loader expands these markers with UTF-8 safe reads and normalises `auto`/empty values to fall back to `get_pipeline_version()`. 【F:library/postprocess/common/config.py†L64-L170】【F:library/postprocess/activities/steps.py†L67-L104】
+
+Available overrides:
+
+- `CHEMBL_ACTIVITY_PIPELINE_VERSION`, `CHEMBL_ASSAY_PIPELINE_VERSION`, `CHEMBL_DOCUMENT_PIPELINE_VERSION`, `CHEMBL_TARGET_PIPELINE_VERSION` — override the exported `pipeline_version` per domain; defaults to `auto`.
+- `POSTPROCESS_LOG_LEVEL` — baseline logger verbosity, defaulting to `INFO`.
+
+Each steps module imports its matching configuration, exposing `PIPELINE_CONFIG` and constructing `PIPELINE_STEPS` directly from the YAML definition so future additions require no code edits. 【F:library/postprocess/assays/steps.py†L1-L76】【F:library/postprocess/documents/steps.py†L1-L82】【F:library/postprocess/targets/steps.py†L1-L80】
+
 ## Runtime flow
 
 ```mermaid

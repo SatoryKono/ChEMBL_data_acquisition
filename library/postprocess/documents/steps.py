@@ -3,7 +3,12 @@ from __future__ import annotations
 
 import pandas as pd
 
-from library.postprocess.common import StepDefinition, run_steps
+from library.pipelines.common.metadata import get_pipeline_version
+from library.postprocess.common import run_steps
+from library.postprocess.common.config import (
+    load_pipeline_config,
+    normalize_pipeline_version,
+)
 
 from .schema import DOCUMENT_SCHEMA, validate_documents
 
@@ -47,11 +52,8 @@ def finalize_document_records(df: pd.DataFrame) -> pd.DataFrame:
     return validated
 
 
-PIPELINE_STEPS = [
-    StepDefinition("normalize_document_fields", normalize_document_fields),
-    StepDefinition("enrich_document_publication_year", enrich_document_publication_year),
-    StepDefinition("finalize_document_records", finalize_document_records),
-]
+PIPELINE_CONFIG = load_pipeline_config("documents")
+PIPELINE_STEPS = PIPELINE_CONFIG.step_definitions()
 
 
 def run_document_pipeline(
@@ -59,16 +61,30 @@ def run_document_pipeline(
 ) -> pd.DataFrame:
     """Run the document postprocessing pipeline."""
 
+    resolved_version = _resolve_pipeline_version(pipeline_version)
     return run_steps(
         df,
         PIPELINE_STEPS,
         schema=DOCUMENT_SCHEMA,
-        pipeline_version=pipeline_version,
+        pipeline_version=resolved_version,
         logger=logger,
     )
 
 
+def _resolve_pipeline_version(override: str | None) -> str:
+    candidate = normalize_pipeline_version(override)
+    if candidate is not None:
+        return candidate
+
+    config_candidate = normalize_pipeline_version(PIPELINE_CONFIG.pipeline_version)
+    if config_candidate is not None:
+        return config_candidate
+
+    return get_pipeline_version()
+
+
 __all__ = [
+    "PIPELINE_CONFIG",
     "PIPELINE_STEPS",
     "finalize_document_records",
     "normalize_document_fields",
