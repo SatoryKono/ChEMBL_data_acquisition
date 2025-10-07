@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -57,6 +58,18 @@ def _coerce_flag_values(series: pd.Series, column: str) -> tuple[pd.Series, set[
             result.append(pd.NA)
             unknown.add(text_lower)
     return pd.Series(result, index=series.index, dtype="boolean"), unknown
+
+
+def _summarise_identifiers(
+    values: Sequence[str], *, limit: int = 20
+) -> tuple[list[str], bool]:
+    """Return a truncated list of identifiers and whether truncation occurred."""
+
+    identifiers = list(values)
+    truncated = len(identifiers) > limit
+    if truncated:
+        identifiers = identifiers[:limit]
+    return identifiers, truncated
 
 
 def _load_sources(
@@ -212,14 +225,24 @@ def enrich(
             {value for value in parent_ids.dropna() if value not in known_ids}
         )
         if missing_children:
+            child_identifiers, child_truncated = _summarise_identifiers(
+                missing_children
+            )
             logger.warning(
                 "testitem_enrichment_missing_child_flags",
                 count=len(missing_children),
+                identifiers=child_identifiers,
+                truncated=child_truncated,
             )
         if missing_parents:
+            parent_identifiers, parent_truncated = _summarise_identifiers(
+                missing_parents
+            )
             logger.warning(
                 "testitem_enrichment_missing_parent_flags",
                 count=len(missing_parents),
+                identifiers=parent_identifiers,
+                truncated=parent_truncated,
             )
 
     for column, values in unknown_flags.items():

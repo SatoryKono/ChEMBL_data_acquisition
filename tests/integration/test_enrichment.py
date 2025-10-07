@@ -45,7 +45,16 @@ def test_enrich__attaches_flags_and_parent(
     assert enriched["salt_chembl_id"].tolist() == ["CHEMBL1", pd.NA, "CHEMBL3"]
     assert enriched["natural_product"].dtype == "boolean"
     assert enriched["natural_product"].tolist() == [True, pd.NA, False]
-    assert any(event == "testitem_enrichment_missing_child_flags" for event, _ in events)
+    missing_child_event = next(
+        fields
+        for event, fields in events
+        if event == "testitem_enrichment_missing_child_flags"
+    )
+    assert missing_child_event == {
+        "count": 2,
+        "identifiers": ["CHEMBL2", "CHEMBL3"],
+        "truncated": False,
+    }
 
 
 @pytest.mark.integration
@@ -111,3 +120,58 @@ def test_enrich__missing_sources_gracefully_fills_columns(
     assert enriched["natural_product"].dtype == "boolean"
     assert events.count("testitem_enrichment_missing_hierarchy") == 1
     assert events.count("testitem_enrichment_missing_catalog") == 1
+
+
+@pytest.mark.integration
+def test_enrich__logs_missing_parent_identifiers(
+    tmp_path: Path, cfg, snapshot_resource, monkeypatch
+) -> None:
+    cfg.testitem_molecule_enrichment.enable = True
+    cfg.testitem_molecule_enrichment.sources.molecule_catalog_path = (
+        snapshot_resource / "molecule_catalog.csv"
+    )
+    cfg.testitem_molecule_enrichment.sources.molecule_hierarchy_path = (
+        snapshot_resource / "molecule_hierarchy.csv"
+    )
+
+    events: list[tuple[str, dict[str, object]]] = []
+
+    def _capture(event: str, **fields: object) -> None:
+        events.append((event, fields))
+
+    monkeypatch.setattr(enrichment.logger, "warning", _capture)
+
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL999"],
+            "parent_molecule_chembl_id": ["CHEMBL404"],
+        }
+    )
+
+    enrichment.enrich(
+        frame,
+        cfg=cfg.testitem_molecule_enrichment,
+        io_cfg=cfg.io,
+    )
+
+    missing_child_event = next(
+        fields
+        for event, fields in events
+        if event == "testitem_enrichment_missing_child_flags"
+    )
+    missing_parent_event = next(
+        fields
+        for event, fields in events
+        if event == "testitem_enrichment_missing_parent_flags"
+    )
+
+    assert missing_child_event == {
+        "count": 1,
+        "identifiers": ["CHEMBL999"],
+        "truncated": False,
+    }
+    assert missing_parent_event == {
+        "count": 1,
+        "identifiers": ["CHEMBL404"],
+        "truncated": False,
+    }
