@@ -45,7 +45,12 @@ def test_enrich__attaches_flags_and_parent(
     assert enriched["salt_chembl_id"].tolist() == ["CHEMBL1", pd.NA, "CHEMBL3"]
     assert enriched["natural_product"].dtype == "boolean"
     assert enriched["natural_product"].tolist() == [True, pd.NA, False]
-    assert any(event == "testitem_enrichment_missing_child_flags" for event, _ in events)
+    missing_child_events = [
+        fields for event, fields in events if event == "testitem_enrichment_missing_child_flags"
+    ]
+    assert missing_child_events == [
+        {"count": 2, "identifiers": ["CHEMBL2", "CHEMBL3"]}
+    ]
 
 
 @pytest.mark.integration
