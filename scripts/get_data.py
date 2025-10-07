@@ -57,6 +57,7 @@ from library.config import (
     ConfigLoaderError,
     DEFAULT_CONFIG_PATH,
     load_config,
+    print_config,
 )
 from library.pipelines.activity import (
     ActivityPipelineOptions,
@@ -425,6 +426,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "Run pipelines without writing outputs or performing side effects, "
             "including output directory creation"
         ),
+    )
+    parser.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print the resolved configuration and exit without running pipelines",
     )
     parser.add_argument(
         "--pipeline-registry",
@@ -1714,11 +1720,25 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _LOGGER.error("configuration_error", error=str(exc), exc_info=exc)
                 status = 1
             else:
-                status = run_pipeline(cfg, steps=steps)
-                if status != 0:
-                    _LOGGER.error("workflow_failed", exit_code=status)
+                if getattr(args, "print_config", False):
+                    try:
+                        config_obj = load_config(
+                            cfg.config_path, base_path=cfg.base_path
+                        )
+                    except (ConfigError, ConfigLoaderError, ValidationError) as exc:
+                        _LOGGER.error(
+                            "config_load_failed", error=str(exc), exc_info=exc
+                        )
+                        status = 1
+                    else:
+                        print_config(config_obj)
+                        status = 0
                 else:
-                    _LOGGER.info("workflow_succeeded")
+                    status = run_pipeline(cfg, steps=steps)
+                    if status != 0:
+                        _LOGGER.error("workflow_failed", exit_code=status)
+                    else:
+                        _LOGGER.info("workflow_succeeded")
 
     return status
 
