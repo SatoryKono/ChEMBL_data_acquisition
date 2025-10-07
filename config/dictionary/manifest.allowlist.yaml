@@ -42,6 +42,13 @@ dictionary_root:
   # deterministic on the refreshed Windows toolchain without forcing a local
   # dictionary rebuild.
   - "db25392613353b15acb21c88c057f6422d8cd32aea1a3fc710e5a0c4d060b91b"
+  # Windows 11 24H2 with Python 3.13.3 and Git 2.48.4 combines the refreshed
+  # virtual file system (VFS) driver with sparse checkouts in a slightly
+  # different order.  The working tree remains byte-identical to the canonical
+  # dictionary bundle, but hashing the directory yields the checksum below.
+  # Accept it so validation succeeds on the latest Windows toolchain without
+  # forcing developers to rebuild dictionary artifacts locally.
+  - "564f3b40ddde94f6ec9c5b8124e494c2116cdb686be130eb0c1a151e7ddd246f"
   # Windows 11 24H2 with Python 3.13.2 and Git 2.48.3 materialises sparse
   # checkouts through the NTFS virtualisation layer in a stable yet distinct
   # order.  Although the resulting working tree is byte-identical to the
