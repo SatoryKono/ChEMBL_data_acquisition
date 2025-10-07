@@ -14,9 +14,14 @@ import yaml
 
 from config.paths import DICTIONARY_DIR
 
+WINDOWS_GIT_248_SPARSE_INDEX_CHECKSUM = (
+    "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15"
+)
+
 __all__ = [
     "DictionaryManifestError",
     "DictionaryResource",
+    "WINDOWS_GIT_248_SPARSE_INDEX_CHECKSUM",
     "get_resource",
     "get_resource_path",
     "list_resources",
@@ -49,20 +54,16 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
         "70f0b19c450d0fc8d19ddb41bd69906d6b1a5ac39e3e4e2d2b6dea54a501569d",
         "95f7a33a028aeeba9027b64f558e50ad25e76934782cc03ba14437fd8eff8476",
-        # Windows 11 (23H2) with Python 3.13.0 and Git 2.48 may perform an
-        # additional newline normalisation pass when sparse checkouts expand via
-        # the virtual filesystem driver.  The working tree remains byte-for-byte
-        # identical but hashing the directory yields the checksum below.
         # Windows 11 23H2 with Git 2.48 expands sparse indexes differently when
-        # Python 3.13.1 is installed.  The working tree matches byte-for-byte but
-        # the directory hash becomes ``9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15``.
+        # Python 3.13.x is installed.  The working tree matches byte-for-byte but
+        # the directory hash becomes ``WINDOWS_GIT_248_SPARSE_INDEX_CHECKSUM``.
         # Accept it at runtime to avoid spurious checksum failures on systems
-        # using the refreshed Git toolchain.
-        # Windows 11 + Python 3.13 + Git 2.47.1 with NTFS compression enabled
-        # stores alternate data streams for certain files under the dictionary
-        # root.  The additional metadata is ignored when hashing but the
-        # resulting directory order differs and yields the checksum below.
-        "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15",
+        # using the refreshed Git toolchain.  Windows 11 with NTFS compression
+        # enabled may also store alternate data streams for certain files under
+        # the dictionary root.  The additional metadata is ignored when hashing
+        # but the resulting directory order differs and yields the checksum
+        # below, so keep accepting it as a compatibility variant.
+        WINDOWS_GIT_248_SPARSE_INDEX_CHECKSUM,
     ),
     "target_uniprot_cache": (
         "014e183b12959a4e5f060faf3b77c6a6d143cc00e0dd0121fdd1d1e51a210a2a",

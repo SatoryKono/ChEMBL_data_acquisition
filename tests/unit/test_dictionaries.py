@@ -67,7 +67,7 @@ def _write_manifest(tmp_path, body: str) -> None:
         ),
         (
             "dictionary_root",
-            "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15",
+            dictionaries.WINDOWS_GIT_248_SPARSE_INDEX_CHECKSUM,
         ),
         (
             "target_uniprot_cache",
