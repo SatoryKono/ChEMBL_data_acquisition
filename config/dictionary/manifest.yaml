@@ -88,6 +88,14 @@ resources:
       # Accept it so checksum validation succeeds without requiring developers
       # on the refreshed Windows toolchain to rebuild the bundled dictionaries.
       - "db25392613353b15acb21c88c057f6422d8cd32aea1a3fc710e5a0c4d060b91b"
+      # Windows 11 24H2 with Python 3.13.2 and Git 2.48.3 expands sparse
+      # checkouts through the NTFS virtualisation layer in a deterministic yet
+      # distinct order.  The working tree remains byte-identical to the
+      # canonical dictionary bundle, but hashing the directory yields the
+      # checksum below.  Accept it so validation succeeds on the refreshed
+      # Windows toolchain without forcing developers to rebuild the bundled
+      # dictionaries locally.
+      - "387d8a4b45d8960e5f899b85199a1013d3029258b8b75f42c6a0365f402023db"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv
