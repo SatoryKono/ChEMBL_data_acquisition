@@ -1,6 +1,9 @@
 """Transformation steps for assay postprocessing."""
 from __future__ import annotations
 
+import re
+from typing import Sequence
+
 import pandas as pd
 
  
@@ -64,27 +67,78 @@ def normalize_assay_metadata(
     return normalized
 
 
-def enrich_assay_flags(df: pd.DataFrame) -> pd.DataFrame:
+def _prepare_confirmatory_terms(
+    terms: Sequence[str] | None,
+) -> tuple[str, ...]:
+    """Return cleaned confirmatory term patterns."""
+
+    if not terms:
+        return ()
+
+    prepared: list[str] = []
+    for term in terms:
+        text = str(term).strip()
+        if text:
+            prepared.append(text)
+    return tuple(prepared)
+
+
+def enrich_assay_flags(
+    df: pd.DataFrame,
+    *,
+    confirmatory_terms: Sequence[str] | None = None,
+    default_flag: bool = False,
+) -> pd.DataFrame:
     """Introduce confirmatory flag based on assay type information."""
 
     enriched = df.copy(deep=True)
+    prepared_terms = _prepare_confirmatory_terms(confirmatory_terms)
+    base_flag = pd.Series(bool(default_flag), index=enriched.index, dtype="bool")
+
     type_series = enriched.get("assay_type")
-    if type_series is not None:
-        enriched["is_confirmatory"] = type_series.astype("string").str.contains(
-            "CONFIRM", case=False, na=False
-        )
+    if type_series is None:
+        enriched["is_confirmatory"] = base_flag
+        return enriched
+
+    category = type_series.fillna("").astype("string")
+    if prepared_terms:
+        pattern = "|".join(re.escape(term) for term in prepared_terms)
+        matches = category.str.contains(pattern, case=False, regex=True)
+        enriched["is_confirmatory"] = matches.fillna(bool(default_flag)).astype(bool)
     else:
-        enriched["is_confirmatory"] = False
+        enriched["is_confirmatory"] = base_flag
     return enriched
 
 
-def finalize_assay_records(df: pd.DataFrame) -> pd.DataFrame:
+def finalize_assay_records(
+    df: pd.DataFrame,
+    *,
+    enforce_schema: bool = True,
+    normalize_identifiers: bool = True,
+    identifier_columns: Sequence[str] | None = None,
+) -> pd.DataFrame:
     """Apply schema validation and deterministic ordering."""
 
     prepared = df.copy(deep=True)
+    if identifier_columns is None:
+        identifier_columns = ("assay_chembl_id", "target_chembl_id")
+
+    if normalize_identifiers:
+        for column in identifier_columns:
+            if column in prepared.columns:
+                prepared[column] = (
+                    prepared[column]
+                    .astype("string")
+                    .str.strip()
+                    .str.upper()
+                )
+
     for column in ["assay_chembl_id", "assay_type", "assay_test_type", "description"]:
         if column in prepared.columns:
             prepared[column] = prepared[column].astype("string")
+
+    if not enforce_schema:
+        return prepared
 
     validated = validate_assays(prepared, context="assay_finalization")
     return validated
