@@ -35,9 +35,10 @@ three tiers:
 
 All commands exit with a non-zero status on validation errors, IO issues, or
 upstream API failures. Each run writes a text log to
-`<base>/logs/<script>_<YYYYMMDD>.log` (with `<base>` defaulting to `data` and
-overridable via `CHEMBL_DA_BASE_PATH`) using the `[timestamp] [LEVEL] [logger]
-message` format so that warnings and errors can be audited after the fact.
+`logs/<script>_<YYYYMMDD>.log` in the repository root. Setting
+`CHEMBL_DA_BASE_PATH` relocates the folder to `<base>/logs`. All entries use the
+`[timestamp] [LEVEL] [logger] message` format so that warnings and errors can be
+audited after the fact.
 
 ### Input templates
 

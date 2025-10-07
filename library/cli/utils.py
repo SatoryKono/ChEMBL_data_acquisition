@@ -100,7 +100,11 @@ def run_cli_command(
 ) -> int:
     """Execute CLI boilerplate shared by data acquisition commands."""
 
-    log_cfg.level = getattr(args, "log_level", log_cfg.level)
+    level_candidate = getattr(args, "log_level", log_cfg.level)
+    level = str(level_candidate).upper()
+    if getattr(args, "verbose", False):
+        level = "DEBUG"
+    log_cfg.level = level
     configured_logger = configure_logger(log_cfg)
     use_logger = logger or configured_logger
     use_logger.info("pipeline_start", run_id=log_cfg.run_id)
@@ -120,6 +124,7 @@ def run_cli_command(
             "config_error",
             error=str(exc),
             config=str(getattr(args, "config", "")),
+            exc_info=exc,
         )
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
@@ -140,6 +145,7 @@ def run_cli_command(
             "config_error",
             error=str(exc),
             config=str(config_path),
+            exc_info=exc,
         )
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
@@ -160,6 +166,7 @@ def run_cli_command(
             "config_error",
             error=str(exc),
             config=str(config_path),
+            exc_info=exc,
         )
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
@@ -167,6 +174,7 @@ def run_cli_command(
         use_logger.error(
             "directory_setup_failed",
             error=str(exc),
+            exc_info=exc,
         )
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
