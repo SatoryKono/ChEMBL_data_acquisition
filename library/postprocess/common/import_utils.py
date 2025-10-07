@@ -83,10 +83,19 @@ def _format_expected_type(expected: type | tuple[type, ...]) -> str:
 
 
 
-def resolve_dotted_path(path: str) -> Any:
-    """Backward compatible alias for :func:`import_by_path`."""
+def resolve_dotted_path(
+    path: str,
+    expected_type: type | tuple[type, ...] | object = _DEFAULT_SENTINEL,
+) -> Any:
+    """Backward compatible alias for :func:`import_by_path`.
 
-    return import_by_path(path)
+    Legacy declarative pipeline configurations may invoke
+    :func:`resolve_dotted_path` with an ``expected_type`` argument.  The
+    helper mirrors :func:`import_by_path` so that both modern and legacy call
+    sites behave identically.
+    """
+
+    return import_by_path(path, expected_type=expected_type)
 
 
 __all__ = ["ImportResolutionError", "import_by_path", "resolve_dotted_path"]
