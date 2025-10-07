@@ -56,7 +56,10 @@ from .catalog import (
     prepare_parent_enrichment,
     run_parent_enrichment,
 )
-from . import testitem_enrichment
+try:  # pragma: no cover - exercised during package bootstrap
+    from . import testitem_enrichment
+except ImportError:  # pragma: no cover - fallback for partial initialisation
+    from . import enrichment as testitem_enrichment
 
 
 @lru_cache(maxsize=1)
