@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from library.postprocess.targets.steps import (
+    enrich_target_synonyms,
     finalize_target_records,
     normalize_target_fields,
 )
@@ -92,3 +93,46 @@ def test_finalize_target_records__handles_empty_input_frame() -> None:
     assert str(result["target_chembl_id"].dtype) == "string"
     assert str(result["pref_name"].dtype) == "string"
     assert str(result["target_type"].dtype) == "string"
+
+
+@pytest.mark.unit
+def test_enrich_target_synonyms__combines_sources_with_separator() -> None:
+    frame = pd.DataFrame(
+        {
+            "synonyms": ["beta | Alpha", None],
+            "chembl_synonyms": ["alpha; delta", "theta"],
+            "gtopdb_synonyms": ["gamma, beta", ""],
+        }
+    )
+
+    result = enrich_target_synonyms(
+        frame,
+        synonym_sources=["chembl", "gtopdb"],
+        preferred_separator="; ",
+    )
+
+    assert result["synonyms"].tolist() == ["beta; Alpha; delta; gamma", "theta"]
+
+
+@pytest.mark.unit
+def test_finalize_target_records__supports_optional_flags(monkeypatch) -> None:
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL2", "CHEMBL1"],
+            "pref_name": ["Beta", "Alpha"],
+            "target_type": ["protein", "protein"],
+        }
+    )
+
+    monkeypatch.setattr(
+        "library.postprocess.targets.steps.validate_targets",
+        lambda *args, **kwargs: pytest.fail("validate_targets should not be called"),
+    )
+
+    result = finalize_target_records(
+        frame,
+        enforce_schema=False,
+        sort_by=["target_chembl_id"],
+    )
+
+    assert result["target_chembl_id"].tolist() == ["CHEMBL1", "CHEMBL2"]

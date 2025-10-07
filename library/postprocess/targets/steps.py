@@ -1,6 +1,9 @@
 """Transformation steps for target postprocessing."""
 from __future__ import annotations
 
+from collections.abc import Sequence
+import re
+
 import pandas as pd
  
 from library.postprocess.common import StepDefinition, run_steps
@@ -87,22 +90,75 @@ def normalize_target_fields(
     return normalized
 
 
-def enrich_target_synonyms(df: pd.DataFrame) -> pd.DataFrame:
-    """Ensure synonyms column is deterministically ordered."""
+_SYNONYM_SPLIT_PATTERN = re.compile(r"[|;,]")
+
+
+def _tokenise_synonyms(value: object) -> list[str]:
+    if value is None or pd.isna(value):
+        return []
+    text = str(value).strip()
+    if not text:
+        return []
+    parts = _SYNONYM_SPLIT_PATTERN.split(text)
+    return [part.strip() for part in parts if part and part.strip()]
+
+
+def enrich_target_synonyms(
+    df: pd.DataFrame,
+    *,
+    synonym_sources: Sequence[str] | None = None,
+    preferred_separator: str = ", ",
+) -> pd.DataFrame:
+    """Aggregate synonyms from configured sources into a deterministic string column."""
 
     enriched = df.copy(deep=True)
+    synonym_columns: list[str] = []
+
     if "synonyms" in enriched.columns:
-        enriched["synonyms"] = (
-            enriched["synonyms"].fillna("")
-            .astype("string")
-            .apply(
-                lambda value: ", ".join(sorted(part.strip() for part in value.split(",") if part.strip()))
-            )
-        )
+        synonym_columns.append("synonyms")
+
+    if synonym_sources:
+        for source in synonym_sources:
+            column_name = f"{source}_synonyms"
+            if column_name in enriched.columns and column_name not in synonym_columns:
+                synonym_columns.append(column_name)
+
+    if not synonym_columns:
+        return enriched
+
+    def _merge_row(row: pd.Series) -> object:
+        seen: set[str] = set()
+        ordered_tokens: list[str] = []
+
+        for column in synonym_columns:
+            tokens = _tokenise_synonyms(row.get(column))
+            for token in tokens:
+                marker = token.casefold()
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                ordered_tokens.append(token)
+
+        if not ordered_tokens:
+            return pd.NA
+
+        return preferred_separator.join(ordered_tokens)
+
+    enriched["synonyms"] = (
+        enriched.apply(_merge_row, axis=1)
+        .astype("string")
+        .replace({"": pd.NA})
+    )
+
     return enriched
 
 
-def finalize_target_records(df: pd.DataFrame) -> pd.DataFrame:
+def finalize_target_records(
+    df: pd.DataFrame,
+    *,
+    enforce_schema: bool = True,
+    sort_by: Sequence[str] | None = None,
+) -> pd.DataFrame:
     """Validate and order the DataFrame according to :data:`TARGET_SCHEMA`."""
 
     prepared = df.copy(deep=True)
@@ -113,7 +169,24 @@ def finalize_target_records(df: pd.DataFrame) -> pd.DataFrame:
         if column in prepared.columns:
             prepared[column] = prepared[column].astype("string")
 
-    validated = validate_targets(prepared, context="target_finalization")
+    if enforce_schema:
+        validated = validate_targets(prepared, context="target_finalization")
+    else:
+        ordered_columns: list[str] = []
+        if TARGET_SCHEMA.column_order:
+            ordered_columns.extend(
+                column for column in TARGET_SCHEMA.column_order if column in prepared.columns
+            )
+        remaining = [
+            column for column in prepared.columns if column not in ordered_columns
+        ]
+        validated = prepared.loc[:, ordered_columns + remaining] if ordered_columns else prepared
+
+    if sort_by:
+        sort_columns = [column for column in sort_by if column in validated.columns]
+        if sort_columns:
+            validated = validated.sort_values(sort_columns, kind="mergesort").reset_index(drop=True)
+
     return validated
 
 
