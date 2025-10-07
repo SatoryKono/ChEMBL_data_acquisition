@@ -121,7 +121,13 @@ class _FallbackPathAction(argparse.Action):
         setattr(namespace, "fallback_doi_csv", values)
 
 
-_EXPORT_COLUMNS: tuple[str, ...] = DOCUMENT_EXPORT_COLUMNS
+# ``DOCUMENT_EXPORT_COLUMNS`` is provided as an immutable tuple in the schema
+# declaration to make accidental mutations unlikely.  Pandas, however, expects a
+# list-like object for column projections and interprets tuples as single column
+# keys (raising ``KeyError`` on recent releases).  Store the export projection as
+# a list locally to keep the deterministic ordering while remaining compatible
+# with pandas' expectations.
+_EXPORT_COLUMNS: list[str] = list(DOCUMENT_EXPORT_COLUMNS)
 
 
 def _resolve_numeric_export_columns() -> tuple[str, ...]:
