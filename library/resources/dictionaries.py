@@ -43,6 +43,8 @@ _SHA256_WILDCARD = "*"
 # dictionary root which, although harmless, change the directory hash.  The
 # manifest bundled with the repository might not list those variants yet, so we
 # extend the accepted checksum list at runtime to avoid false positives.
+WINDOWS_SPARSE_INDEX_CHECKSUM = "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15"
+
 _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
     "dictionary_root": (
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
@@ -55,14 +57,14 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # identical but hashing the directory yields the checksum below.
         # Windows 11 23H2 with Git 2.48 expands sparse indexes differently when
         # Python 3.13.1 is installed.  The working tree matches byte-for-byte but
-        # the directory hash becomes ``9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15``.
-        # Accept it at runtime to avoid spurious checksum failures on systems
-        # using the refreshed Git toolchain.
+        # the directory hash becomes ``WINDOWS_SPARSE_INDEX_CHECKSUM``.  Accept it
+        # at runtime to avoid spurious checksum failures on systems using the
+        # refreshed Git toolchain.
         # Windows 11 + Python 3.13 + Git 2.47.1 with NTFS compression enabled
         # stores alternate data streams for certain files under the dictionary
         # root.  The additional metadata is ignored when hashing but the
         # resulting directory order differs and yields the checksum below.
-        "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15",
+        WINDOWS_SPARSE_INDEX_CHECKSUM,
     ),
     "target_uniprot_cache": (
         "014e183b12959a4e5f060faf3b77c6a6d143cc00e0dd0121fdd1d1e51a210a2a",
