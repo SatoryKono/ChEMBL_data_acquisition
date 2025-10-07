@@ -580,15 +580,32 @@ def _normalise_request_exception(
         return exc
 
     timeout_error = _find_read_timeout_error(exc)
-    if timeout_error is None:
-        return exc
+    if timeout_error is not None:
+        message = str(timeout_error) or "Read timed out."
+        request = getattr(timeout_error, "request", None)
+        if request is None:
+            request = getattr(exc, "request", None)
+        response = getattr(timeout_error, "response", None)
+        if response is None:
+            response = getattr(exc, "response", None)
+        return requests.ReadTimeout(
+            message,
+            request=request,
+            response=response,
+        )
 
-    message = str(timeout_error) or "Read timed out."
-    return requests.ReadTimeout(
-        message,
-        request=getattr(exc, "request", None),
-        response=getattr(exc, "response", None),
-    )
+    if isinstance(exc, requests.ConnectionError):
+        message = str(exc)
+        lowered = message.lower()
+        if "read" in lowered and ("timeout" in lowered or "timed out" in lowered):
+            normalized_message = message or "Read timed out."
+            return requests.ReadTimeout(
+                normalized_message,
+                request=getattr(exc, "request", None),
+                response=getattr(exc, "response", None),
+            )
+
+    return exc
 
 
 def _find_read_timeout_error(exc: BaseException) -> BaseException | None:

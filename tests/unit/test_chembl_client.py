@@ -11,7 +11,7 @@ from urllib3.connectionpool import HTTPSConnectionPool
 from urllib3.exceptions import MaxRetryError, ReadTimeoutError
 
 from library.clients import ChemblClient
-from library.clients.chembl import _backoff_delay
+from library.clients.chembl import _backoff_delay, _normalise_request_exception
 from library.config import ApiCfg, RetryCfg
 
 
@@ -193,3 +193,30 @@ def test_backoff_delay__deterministic_jitter() -> None:
     ]
 
     assert delays_one == delays_two
+
+
+@pytest.mark.unit
+def test_normalise_request_exception__read_timeout_message() -> None:
+    connection_error = requests.ConnectionError(
+        "HTTPSConnectionPool(host='www.ebi.ac.uk', port=443): Read timed out."
+    )
+
+    normalised = _normalise_request_exception(connection_error)
+
+    assert normalised is not connection_error
+    assert isinstance(normalised, requests.ReadTimeout)
+    assert "read" in str(normalised).lower()
+
+
+@pytest.mark.unit
+def test_normalise_request_exception__preserves_request_metadata() -> None:
+    timeout = requests.ReadTimeout("Read timed out.")
+    timeout.request = object()  # type: ignore[attr-defined]
+    timeout.response = object()  # type: ignore[attr-defined]
+    exc = requests.ConnectionError(timeout)
+
+    normalised = _normalise_request_exception(exc)
+
+    assert isinstance(normalised, requests.ReadTimeout)
+    assert normalised.request is timeout.request
+    assert normalised.response is timeout.response
