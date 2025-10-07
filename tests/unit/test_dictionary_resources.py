@@ -108,11 +108,16 @@ def test_compute_sha256__normalises_crlf_in_non_utf8_files(tmp_path: Path) -> No
 
 @pytest.mark.unit
 def test_manifest_allows_windows_textmode_checksum() -> None:
-    """Ensure the dictionary manifest accepts the Windows CRLF hash variant."""
+    """Ensure the dictionary manifest accepts all known Windows hash variants."""
 
     manifest_path = Path("config/dictionary/manifest.yaml")
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
 
-    sha256_values = manifest["resources"]["dictionary_root"]["sha256"]
+    sha256_values = set(manifest["resources"]["dictionary_root"]["sha256"])
 
-    assert "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a" in sha256_values
+    expected = {
+        "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
+    }
+
+    assert expected.issubset(sha256_values)
