@@ -431,12 +431,12 @@ def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
         return {}
 
     required_columns = {"assay_chembl_id", "src_assay_id"}
-    missing_columns = required_columns.difference(frame.columns)
+    missing_columns = sorted(required_columns.difference(frame.columns))
     if missing_columns:
         logger.warning(
-            "Assay lookup file '%s' is missing required columns: %s; src_assay_id enrichment will be skipped.",
-            candidate,
-            ", ".join(sorted(missing_columns)),
+            "activity_missing_columns",
+            path=str(candidate),
+            missing=missing_columns,
         )
         return {}
 
@@ -776,19 +776,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         offset=offset,
     )
     logger.info(
-        f"Starting activity pipeline with input '{args.input_csv}' and output '{output_path}'."
-    )
-    logger.info(
-        f"Loaded config: limit={limit}, offset={offset}, batch_size={cfg.activity.batch_size}, "
-        f"timeout={cfg.activity.timeout}, dry_run={cfg.activity.dry_run}, workers={configured_workers}."
+        "activity_pipeline_verbose",
+        input=str(args.input_csv),
+        output=str(output_path),
+        limit=limit,
+        offset=offset,
+        batch_size=cfg.activity.batch_size,
+        timeout=cfg.activity.timeout,
+        dry_run=cfg.activity.dry_run,
+        workers=configured_workers,
     )
 
     if cfg.activity.dry_run:
         expected = limit if limit is not None else 0
         logger.info("dry_run", limit=limit)
-        logger.info(
-            f"Dry-run mode enabled; pipeline would process up to {expected} identifiers before exiting."
-        )
+        logger.info("activity_pipeline_dry_run", expected=expected)
         _emit_completion_message(
             output_path=output_path,
             processed_rows=0,
@@ -797,7 +799,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 0
 
-    logger.info(f"Reading input identifiers from '{args.input_csv}'.")
+    logger.info("activity_pipeline_read_input", input=str(args.input_csv))
     try:
         ids_iter = io.read_ids(args.input_csv, column=cfg.activity.column, cfg=cfg.io)
     except (FileNotFoundError, ValueError) as exc:
@@ -805,9 +807,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             "read_fail",
             input=str(args.input_csv),
             error=str(exc), exc_info=exc,
-        )
-        logger.error(
-            f"Failed to read identifiers from '{args.input_csv}': {exc}"
         )
         return 1
 
@@ -865,7 +864,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if not missing:
             return frame
         logger.warning(
-            f"Missing required activity columns detected: {', '.join(missing)}. Placeholder values will be inserted before validation."
+            "activity_missing_columns",
+            missing=sorted(missing),
         )
         fillers: dict[str, pd.Series] = {}
         for column in missing:
