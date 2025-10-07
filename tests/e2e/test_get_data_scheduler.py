@@ -18,6 +18,7 @@ def _build_run_config(tmp_path: Path, steps: tuple[get_data.PipelineStep, ...]) 
     output_dir.mkdir()
     config_path = base_path / "config.yaml"
     config_path.write_text("{}", encoding="utf-8")
+    subcommands = {step.name: step.subcommand for step in steps}
     return get_data.PipelineRunConfig(
         base_path=base_path,
         input_dir=input_dir,
@@ -31,6 +32,7 @@ def _build_run_config(tmp_path: Path, steps: tuple[get_data.PipelineStep, ...]) 
         dry_run=False,
         input_files={step.name: step.input_filename for step in steps},
         output_stems={step.name: step.output_stem for step in steps},
+        subcommands=subcommands,
     )
 
 
