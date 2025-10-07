@@ -9,12 +9,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Iterable
 
+import numpy as np
 import pandas as pd
 import pytest
 import yaml
 
 from dataclasses import dataclass
 
+from config.paths import DICTIONARY_DIR
 from scripts import get_activity_data
 from library.resources.dictionaries import get_resource
 
@@ -143,8 +145,9 @@ def _install_writer_stub(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, pd
         else:
             result = pd.DataFrame(columns=list(col_order or []))
         if col_order:
-            order = [str(col) for col in col_order]
-            result = result.reindex(columns=order, fill_value=pd.NA)
+            order = [str(col) for col in col_order if str(col) in result.columns]
+            extras = sorted(col for col in result.columns if col not in order)
+            result = result.reindex(columns=order + extras)
         destination_path = Path(destination)
         destination_path.parent.mkdir(parents=True, exist_ok=True)
         result.to_csv(destination_path, index=False, sep=sep, encoding=encoding)
@@ -336,6 +339,13 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
     summary_message = completion_messages[-1]
     assert "mode=run" in summary_message
     assert "rows=3" in summary_message
+    total_cells = written_df.size
+    expected_null_fraction = (
+        float(np.count_nonzero(written_df.isna().to_numpy()) / total_cells)
+        if total_cells
+        else 0.0
+    )
+    assert f"null_fraction={expected_null_fraction:.6f}" in summary_message
 
     meta_path = output_csv.with_name(output_csv.name + ".meta.yaml")
     assert meta_path.exists()
@@ -685,3 +695,13 @@ def test_activity_pipeline__fills_compound_name_from_pref_name(cfg, tmp_path, mo
     fill_mask = compound_series.notna() & compound_series.str.strip().ne("")
     fill_rate = fill_mask.sum() / len(compound_series)
     assert fill_rate >= 0.95
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("deterministic_env")
+def test_load_assay_src_lookup__real_dictionary_includes_known_assays() -> None:
+    lookup = get_activity_data._load_assay_src_lookup(DICTIONARY_DIR)
+
+    assert lookup.get("CHEMBL1762864") == "357280"
+    assert lookup.get("CHEMBL1762866") == "357284"
+    assert all(str(key).strip() and str(value).strip() for key, value in lookup.items())
+

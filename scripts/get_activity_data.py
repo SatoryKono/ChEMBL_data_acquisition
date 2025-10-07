@@ -74,6 +74,7 @@ from library.processing.activity import (
     compute_activity_bounds,
 )
 from library.postprocessing.activity_extended import process_activity_extended
+from library.postprocessing import helpers as postprocessing_helpers
 from library.qa.reporting import build_table_quality_hook
 from library.validation import validate_activities
 from library.schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
@@ -242,77 +243,66 @@ def _gather_http_diagnostics(cfg: Config, client: object) -> dict[str, object]:
         clean[key] = value
     return clean
 
-def _compute_output_statistics(output_path: Path, cfg: Config) -> tuple[int | None, float | None]:
-    """Return row count and null ratio for the final pipeline output."""
+class _StreamingCSVStatistics:
+    """Accumulate row and null counters while streaming CSV chunks."""
 
-    if not output_path.exists():
-        return None, None
+    __slots__ = ("rows", "cells", "nulls")
 
-    read_kwargs = {
-        "sep": getattr(cfg.io, "csv_sep", ","),
-        "encoding": getattr(cfg.io, "csv_encoding", "utf-8"),
-    }
+    def __init__(self) -> None:
+        self.rows = 0
+        self.cells = 0
+        self.nulls = 0
 
-    chunk_size = getattr(cfg.io, "csv_chunksize", None)
-    total_rows = 0
-    total_cells = 0
-    total_nulls = 0
+    def update(self, chunk: pd.DataFrame) -> None:
+        """Update counters using ``chunk`` after output column filtering."""
 
-    try:
-        if chunk_size and chunk_size > 0:
-            reader = pd.read_csv(output_path, chunksize=int(chunk_size), **read_kwargs)
-            for chunk in reader:
-                rows = len(chunk)
-                total_rows += rows
-                mask = chunk.isna()
-                total_cells += mask.size
-                total_nulls += int(mask.values.sum())
+        rows = int(len(chunk))
+        self.rows += rows
+
+        cells = int(chunk.size)
+        self.cells += cells
+
+        if cells:
+            nulls = int(chunk.isna().to_numpy().sum())
         else:
-            frame = pd.read_csv(output_path, **read_kwargs)
-            total_rows = len(frame)
-            if frame.size:
-                mask = frame.isna()
-                total_cells = mask.size
-                total_nulls = int(mask.values.sum())
-            else:
-                total_cells = 0
-    except pd.errors.EmptyDataError:
-        return 0, 0.0
-    except FileNotFoundError:
-        return None, None
-    except Exception as exc:  # pragma: no cover - defensive for malformed CSVs
-        logger.warning(
-            f"Could not compute summary statistics for '{output_path}': {exc}"
-        )
-        return None, None
+            nulls = 0
+        self.nulls += nulls
 
-    if total_cells == 0:
-        null_fraction = 0.0
-    else:
-        null_fraction = total_nulls / total_cells
+    def snapshot(self) -> dict[str, float | int]:
+        """Return a summary of the accumulated metrics."""
 
-    return total_rows, float(null_fraction)
+        if self.cells == 0:
+            null_fraction = 0.0
+        else:
+            null_fraction = self.nulls / self.cells
+        return {
+            "rows": self.rows,
+            "cells": self.cells,
+            "nulls": self.nulls,
+            "null_fraction": float(null_fraction),
+        }
 
 
 def _emit_completion_message(
     *,
-    cfg: Config,
     output_path: Path | None,
     processed_rows: int | None,
     duration_s: float,
     mode: str,
+    streamed_metrics: Mapping[str, object] | None = None,
 ) -> None:
     """Log a human-readable completion summary for the pipeline."""
 
     resolved_rows = processed_rows if processed_rows is not None else 0
     null_fraction_value: float | None = None
 
-    if output_path is not None:
-        stats_rows, stats_null_fraction = _compute_output_statistics(output_path, cfg)
-        if stats_rows is not None:
-            resolved_rows = stats_rows
-        if stats_null_fraction is not None:
-            null_fraction_value = stats_null_fraction
+    if streamed_metrics:
+        rows_value = streamed_metrics.get("rows")
+        if isinstance(rows_value, (int, float)):
+            resolved_rows = int(rows_value)
+        null_fraction = streamed_metrics.get("null_fraction")
+        if isinstance(null_fraction, (int, float)):
+            null_fraction_value = float(null_fraction)
 
     null_fraction_display = (
         f"{null_fraction_value:.6f}" if null_fraction_value is not None else "nan"
@@ -414,11 +404,7 @@ def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
 
     candidate = Path(dictionary_dir) / "_assay" / "assay.csv"
     try:
-        frame = pd.read_csv(
-            candidate,
-            usecols=["assay_chembl_id", "src_assay_id"],
-            dtype="string",
-        )
+        frame = postprocessing_helpers.read_csv_with_fallbacks(candidate)
     except FileNotFoundError:
         logger.warning(
             f"Assay lookup file '{candidate}' was not found; src_assay_id enrichment will be skipped."
@@ -439,6 +425,18 @@ def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
             f"Reading assay lookup file '{candidate}' failed due to an OS error: {exc}"
         )
         return {}
+
+    required_columns = {"assay_chembl_id", "src_assay_id"}
+    missing_columns = required_columns.difference(frame.columns)
+    if missing_columns:
+        logger.warning(
+            "Assay lookup file '%s' is missing required columns: %s; src_assay_id enrichment will be skipped.",
+            candidate,
+            ", ".join(sorted(missing_columns)),
+        )
+        return {}
+
+    frame = frame.loc[:, ["assay_chembl_id", "src_assay_id"]]
 
     if frame.empty:
         return {}
@@ -788,7 +786,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             f"Dry-run mode enabled; pipeline would process up to {expected} identifiers before exiting."
         )
         _emit_completion_message(
-            cfg=cfg,
             output_path=output_path,
             processed_rows=0,
             duration_s=perf_counter() - start_time,
@@ -900,7 +897,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     validators = [partial(validate_activities, return_result=True)]
 
-
+    streaming_stats = _StreamingCSVStatistics()
+    streamed_summary: dict[str, object] | None = None
 
     def writer(
         chunks: Iterable[pd.DataFrame],
@@ -927,14 +925,26 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             column for column in filtered_order if column not in _OUTPUT_ACTIVITY_DROP_COLUMNS
         ]
 
-        def _apply_whitelist(chunk: pd.DataFrame) -> pd.DataFrame:
-            filtered_chunk, _ = _filter_activity_output_columns(
-                chunk,
-                column_order=filtered_order,
-            )
-            return filtered_chunk
+        def _stream_filtered_chunks() -> Iterator[pd.DataFrame]:
+            for chunk in chunks:
+                filtered_chunk, _ = _filter_activity_output_columns(
+                    chunk,
+                    column_order=filtered_order,
+                )
+                head = [
+                    column for column in whitelist_order if column in filtered_chunk.columns
+                ]
+                tail = sorted(
+                    column for column in filtered_chunk.columns if column not in head
+                )
+                if head or tail:
+                    ordered_chunk = filtered_chunk.reindex(columns=head + tail, copy=False)
+                else:
+                    ordered_chunk = filtered_chunk
+                streaming_stats.update(ordered_chunk)
+                yield ordered_chunk
 
-        filtered_chunks = (_apply_whitelist(chunk) for chunk in chunks)
+        filtered_chunks = _stream_filtered_chunks()
 
         output_path = write_csv_chunks_deterministic(
             filtered_chunks,
@@ -1126,8 +1136,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         pipeline_stats: dict[str, object] | None = None
 
         def _capture_stats(stats: Mapping[str, object]) -> None:
-            nonlocal pipeline_stats
+            nonlocal pipeline_stats, streamed_summary
             pipeline_stats = dict(stats)
+            snapshot = streaming_stats.snapshot()
+            streamed_summary = snapshot
+            pipeline_stats.setdefault("rows_streamed", snapshot["rows"])
+            pipeline_stats.setdefault("cells_streamed", snapshot["cells"])
+            pipeline_stats.setdefault("null_cells", snapshot["nulls"])
+            pipeline_stats.setdefault("null_fraction", snapshot["null_fraction"])
 
         try:
             definition = PipelineDefinition(
@@ -1188,6 +1204,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     else:
         logger.info("processed_count", count=processed_ids)
 
+    summary_snapshot = streamed_summary or streaming_stats.snapshot()
+
     if pipeline_stats is not None:
         rows_total = int(pipeline_stats.get("rows_total", processed_ids))
         rows_kept = int(pipeline_stats.get("rows_kept", 0))
@@ -1201,7 +1219,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     if exit_code == 0:
         completion_rows = processed_ids
-        if pipeline_stats is not None:
+        summary_rows = summary_snapshot.get("rows") if summary_snapshot else None
+        if isinstance(summary_rows, (int, float)):
+            completion_rows = int(summary_rows)
+        elif pipeline_stats is not None:
             completion_rows = int(
                 pipeline_stats.get(
                     "rows_kept",
@@ -1212,6 +1233,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             "output": str(output_path),
             "rows": completion_rows,
         }
+        if summary_snapshot:
+            pipeline_done_payload["null_fraction"] = summary_snapshot.get("null_fraction")
         if extended_output_path is not None:
             pipeline_done_payload["extended_output"] = str(extended_output_path)
         logger.info("activity_pipeline_done", **pipeline_done_payload)
@@ -1224,11 +1247,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 f"Successful export checkpoint: activity data written to '{output_path}'."
             )
         _emit_completion_message(
-            cfg=cfg,
             output_path=output_path,
             processed_rows=completion_rows,
             duration_s=perf_counter() - start_time,
             mode="run",
+            streamed_metrics=summary_snapshot,
         )
     else:
         extra_payload = last_error_extra
@@ -1345,7 +1368,6 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             f"Skipping execution because '{output_path}' already exists and --force was not provided."
         )
         _emit_completion_message(
-            cfg=cfg,
             output_path=output_path,
             processed_rows=None,
             duration_s=perf_counter() - start_time,
