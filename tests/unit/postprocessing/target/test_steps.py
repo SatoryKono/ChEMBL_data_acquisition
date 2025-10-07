@@ -3,7 +3,10 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from library.postprocess.targets.steps import normalize_target_fields
+from library.postprocess.targets.steps import (
+    finalize_target_records,
+    normalize_target_fields,
+)
 
 
 @pytest.mark.unit
@@ -56,3 +59,36 @@ def test_normalize_target_fields__without_optional_flags_preserves_extra_columns
     assert result.loc[0, "target_chembl_id"] == "CHEMBL1"
     assert result.loc[0, "pref_name"] == "Gamma"
     assert result.loc[0, "taxon_id"] == " 9606 "
+
+
+@pytest.mark.unit
+def test_finalize_target_records__fills_missing_required_columns() -> None:
+    frame = pd.DataFrame({"target_chembl_id": ["CHEMBL1"], "pref_name": ["Alpha"]})
+
+    result = finalize_target_records(frame)
+
+    assert list(result.columns) == [
+        "target_chembl_id",
+        "pref_name",
+        "target_type",
+    ]
+    assert pd.isna(result.loc[0, "target_type"])
+    assert str(result["target_type"].dtype) == "string"
+    assert str(result["pref_name"].dtype) == "string"
+
+
+@pytest.mark.unit
+def test_finalize_target_records__handles_empty_input_frame() -> None:
+    frame = pd.DataFrame({"pref_name": []})
+
+    result = finalize_target_records(frame)
+
+    assert result.empty
+    assert list(result.columns) == [
+        "target_chembl_id",
+        "pref_name",
+        "target_type",
+    ]
+    assert str(result["target_chembl_id"].dtype) == "string"
+    assert str(result["pref_name"].dtype) == "string"
+    assert str(result["target_type"].dtype) == "string"

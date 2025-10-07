@@ -106,6 +106,9 @@ def finalize_target_records(df: pd.DataFrame) -> pd.DataFrame:
     """Validate and order the DataFrame according to :data:`TARGET_SCHEMA`."""
 
     prepared = df.copy(deep=True)
+    for column in TARGET_SCHEMA.required_columns:
+        if column not in prepared.columns:
+            prepared[column] = pd.Series(pd.NA, index=prepared.index, dtype="string")
     for column in ["target_chembl_id", "pref_name", "target_type"]:
         if column in prepared.columns:
             prepared[column] = prepared[column].astype("string")
