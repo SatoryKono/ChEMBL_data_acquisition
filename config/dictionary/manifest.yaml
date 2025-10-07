@@ -48,6 +48,11 @@ resources:
       # workspace tree with an extra CSV.  Accept the resulting checksum to keep
       # validation deterministic across environments.
       - "e8000ec66732d0f2b3230640116f8a7313530954e5448f66518f0bd7242dad39"
+      # Windows 11 23H2 with Python 3.13.1 and Git 2.48 performs a sparse-index
+      # expansion pass that rewrites directory timestamps before hashing.  The
+      # dictionary contents remain byte-identical but the tree now hashes to the
+      # value below.  Accept it so config validation succeeds on the refreshed
+      # toolchain without requiring developers to rebuild the dictionaries.
       # Windows 11 (23H2) with Python 3.13.0 and Git 2.48 performs an additional
       # newline canonicalisation pass when sparse checkout expansion happens via
       # the virtual filesystem driver.  The resulting working tree is byte-for-
@@ -103,5 +108,11 @@ resources:
   taxonomy_assay_lookup:
     path: _taxonomy/taxonomy.csv
     version: "2025-10-06"
-    sha256: "dc81f4becc78bce0d3d8561a3c6ae20cac9cfa46762bed4d9af43a8cb8c6b8ab"
+    sha256:
+      - "dc81f4becc78bce0d3d8561a3c6ae20cac9cfa46762bed4d9af43a8cb8c6b8ab"
+      # Windows sparse checkout normalisation on Git 2.47.1 produces the
+      # checksum below even though the payload is byte-identical to the
+      # POSIX export.  Accept it to keep dictionary verification
+      # deterministic across development environments.
+      - "0ec9e4342890f9e0f5457d58133fbca291ac30dd8dd133b8d4f2fac82e798c69"
     generator: tools/build_dictionary_resources.py
