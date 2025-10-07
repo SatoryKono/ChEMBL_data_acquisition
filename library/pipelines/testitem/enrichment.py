@@ -215,11 +215,13 @@ def enrich(
             logger.warning(
                 "testitem_enrichment_missing_child_flags",
                 count=len(missing_children),
+                identifiers=missing_children,
             )
         if missing_parents:
             logger.warning(
                 "testitem_enrichment_missing_parent_flags",
                 count=len(missing_parents),
+                identifiers=missing_parents,
             )
 
     for column, values in unknown_flags.items():
