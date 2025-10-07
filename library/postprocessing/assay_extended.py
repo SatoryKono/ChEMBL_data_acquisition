@@ -10,12 +10,31 @@ from typing import Iterable, Sequence
 import pandas as pd
 
 from library.common.log import logger
+from library.resources.dictionaries import DictionaryManifestError, get_resource_path
 
 from . import helpers
 
 __all__ = ["AssayExtendedError", "enrich_assay_metadata"]
 
-_DEFAULT_DICTIONARY_DIR = Path("config/dictionary")
+
+
+def _default_dictionary_dir() -> Path:
+    """Return the bundled dictionary directory when available.
+
+    The helper falls back to the repository-relative ``config/dictionary`` path
+    when the manifest cannot be consulted (for example during editable installs
+    before package data is built).  This keeps local development environments
+    working while still preferring the validated manifest location when
+    possible.
+    """
+
+    try:
+        return get_resource_path("dictionary_root")
+    except (DictionaryManifestError, FileNotFoundError, KeyError):
+        return Path("config/dictionary")
+
+
+_DEFAULT_DICTIONARY_DIR = _default_dictionary_dir()
 
 
 class AssayExtendedError(RuntimeError):

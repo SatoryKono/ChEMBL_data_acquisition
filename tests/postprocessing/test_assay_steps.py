@@ -55,6 +55,20 @@ def test_normalize_assay_metadata__respects_disabled_flags() -> None:
 
 @pytest.mark.postprocessing
 @pytest.mark.usefixtures("deterministic_env")
+def test_normalize_assay_metadata__ignores_unknown_parameters(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    frame = pd.DataFrame({"assay_type": ["primary"]})
+
+    with caplog.at_level("WARNING"):
+        result = normalize_assay_metadata(frame, legacy_flag=True)
+
+    assert "normalize_assay_metadata ignoring unsupported parameters" in caplog.text
+    assert result.loc[0, "assay_type"] == "PRIMARY"
+
+
+@pytest.mark.postprocessing
+@pytest.mark.usefixtures("deterministic_env")
 def test_enrich_assay_flags__applies_custom_terms() -> None:
     frame = pd.DataFrame(
         {

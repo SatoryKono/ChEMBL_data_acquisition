@@ -1,8 +1,9 @@
 """Transformation steps for assay postprocessing."""
 from __future__ import annotations
 
+import logging
 import re
-from typing import Sequence
+from typing import Any, Sequence
 
 import pandas as pd
 
@@ -21,12 +22,16 @@ from library.postprocess.common.config import (
 from .schema import ASSAY_SCHEMA, validate_assays
 
 
+_LOG = logging.getLogger(__name__)
+
+
 def normalize_assay_metadata(
     df: pd.DataFrame,
     *,
     uppercase_categories: bool = True,
     strip_whitespace: bool = True,
     collapse_internal_whitespace: bool | None = None,
+    **kwargs: Any,
 ) -> pd.DataFrame:
     """Normalize string-based assay descriptors.
 
@@ -47,6 +52,12 @@ def normalize_assay_metadata(
         behaviour where both operations happened together.  Pass ``True`` or
         ``False`` explicitly to override the coupling.
     """
+
+    if kwargs:
+        _LOG.warning(
+            "normalize_assay_metadata ignoring unsupported parameters: %s",
+            ", ".join(sorted(map(str, kwargs.keys()))),
+        )
 
     normalized = df.copy(deep=True)
     if collapse_internal_whitespace is None:
