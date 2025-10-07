@@ -33,6 +33,7 @@ import argparse
 import hashlib
 import json
 import logging
+import shutil
 import time
 import uuid
 from collections import deque
@@ -1176,16 +1177,52 @@ def _write_run_manifest(
         "steps": list(steps),
     }
 
-    manifest_path = cfg.base_path / "reports" / "run_manifest.json"
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    reports_dir = cfg.base_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = run_started_at.astimezone(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    manifest_path = reports_dir / f"run_{timestamp}.json"
     try:
-        manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
     except OSError as exc:  # pragma: no cover - defensive guard
         _LOGGER.warning(
             "manifest_write_failed",
             path=str(manifest_path),
             error=str(exc),
         )
+        return
+
+    latest_alias = reports_dir / "run_manifest.json"
+    alias_removed = True
+    if latest_alias.exists() or latest_alias.is_symlink():
+        try:
+            latest_alias.unlink()
+        except OSError as exc:  # pragma: no cover - defensive guard
+            alias_removed = False
+            _LOGGER.warning(
+                "manifest_alias_cleanup_failed",
+                path=str(latest_alias),
+                error=str(exc),
+            )
+
+    if not alias_removed:
+        return
+
+    try:
+        latest_alias.symlink_to(manifest_path.name)
+    except (OSError, NotImplementedError):  # pragma: no cover - platform dependent
+        try:
+            shutil.copy2(manifest_path, latest_alias)
+        except OSError as exc:  # pragma: no cover - defensive guard
+            _LOGGER.warning(
+                "manifest_alias_update_failed",
+                path=str(latest_alias),
+                target=str(manifest_path),
+                error=str(exc),
+            )
 
 
 @dataclass(frozen=True)

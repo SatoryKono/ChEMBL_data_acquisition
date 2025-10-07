@@ -102,7 +102,8 @@ across reruns on the same input.
 
 1. **Logging.** WARN-level events capture missing columns and unsupported file
    names. ERROR-level events include the exception payload and mark the helper
-   as failed in the orchestrator manifest (`reports/run_manifest.json`).
+   as failed in the orchestrator manifest (`reports/run_<timestamp>.json`, with
+   `reports/run_manifest.json` pointing at the latest run).
 2. **Schema validation.** Downstream tests under
    `tests/postprocessing/test_target_postprocessing.py` assert structure and
    key invariants for organism and isoform exports. Keep fixtures in sync when

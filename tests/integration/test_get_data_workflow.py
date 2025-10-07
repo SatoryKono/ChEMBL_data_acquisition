@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import io
-import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,6 +15,7 @@ from library.pipelines.common import PipelineRunResult
 from scripts import get_data, get_target_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_lines
+from tests.helpers.manifests import load_latest_manifest, list_manifest_files
 
 
 def _build_stub_api(
@@ -99,9 +99,8 @@ def _write_input(cfg: get_data.PipelineRunConfig, name: str, frame: pd.DataFrame
 
 
 def _load_manifest(cfg: get_data.PipelineRunConfig) -> dict[str, object]:
-    manifest_path = cfg.base_path / "reports" / "run_manifest.json"
-    assert manifest_path.exists(), "expected run manifest to be created"
-    return json.loads(manifest_path.read_text(encoding="utf-8"))
+    _, manifest = load_latest_manifest(cfg.base_path)
+    return manifest
 
 
 @pytest.mark.integration
@@ -151,6 +150,8 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
     assert list(output_frame["document_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
     logs = parse_log_lines(stream.getvalue())
     assert any(record.get("event") == "duplicates_detected" for record in logs)
+    manifests_after_success = list_manifest_files(cfg.base_path)
+    assert len(manifests_after_success) == 1
     manifest_success = _load_manifest(cfg)
     assert manifest_success["run"]["exit_code"] == 0
     assert manifest_success["steps"][0]["status"] == "success"
@@ -166,6 +167,8 @@ def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pyt
     assert status_malformed == 1
     logs = parse_log_lines(stream.getvalue())
     assert any(record.get("event") == "schema_mismatch" for record in logs)
+    manifests_after_failure = list_manifest_files(cfg.base_path)
+    assert len(manifests_after_failure) == 2
     manifest_failure = _load_manifest(cfg)
     assert manifest_failure["run"]["exit_code"] == 1
     assert manifest_failure["steps"][0]["status"] == "failed"

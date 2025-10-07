@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import io
-import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,6 +11,7 @@ import pytest
 
 from scripts import get_data
 from tests.helpers.logs import iter_events, parse_log_lines
+from tests.helpers.manifests import load_latest_manifest
 from library.pipelines.common import PipelineRunResult
 
 
@@ -47,9 +47,8 @@ def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
 
 
 def _load_manifest(cfg: get_data.PipelineRunConfig) -> dict[str, object]:
-    manifest_path = cfg.base_path / "reports" / "run_manifest.json"
-    assert manifest_path.exists(), "expected manifest to be written"
-    return json.loads(manifest_path.read_text(encoding="utf-8"))
+    _, manifest = load_latest_manifest(cfg.base_path)
+    return manifest
 
 
 @pytest.mark.unit
