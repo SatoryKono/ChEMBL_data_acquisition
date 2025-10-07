@@ -231,8 +231,7 @@ def enrich(
             logger.warning(
                 "testitem_enrichment_missing_child_flags",
                 count=len(missing_children),
-                identifiers=child_identifiers,
-                truncated=child_truncated,
+                identifiers=missing_children,
             )
         if missing_parents:
             parent_identifiers, parent_truncated = _summarise_identifiers(
@@ -241,8 +240,7 @@ def enrich(
             logger.warning(
                 "testitem_enrichment_missing_parent_flags",
                 count=len(missing_parents),
-                identifiers=parent_identifiers,
-                truncated=parent_truncated,
+                identifiers=missing_parents,
             )
 
     for column, values in unknown_flags.items():
