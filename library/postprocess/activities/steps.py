@@ -79,7 +79,7 @@ def run_activity_pipeline(
     return run_steps(
         df,
         PIPELINE_STEPS,
-        schema=ACTIVITY_SCHEMA,
+        post_schema=ACTIVITY_SCHEMA,
         pipeline_version=resolved_version,
         logger=logger,
     )

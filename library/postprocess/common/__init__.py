@@ -2,6 +2,7 @@
 from . import logging
 from .import_utils import import_by_path
 from .io import clone_dataframe, ensure_dataframe
+from .runner import run_steps
 from .schema import DataFrameSchema, coerce_types, validate_schema
 from .types import (
     ImportResolutionError,
@@ -11,7 +12,7 @@ from .types import (
     StepFn,
     StepIterable,
 )
-from .utils import collect_postprocess_metrics, infer_pipeline_version, run_steps
+from .utils import collect_postprocess_metrics, infer_pipeline_version
 
 __all__ = [
     "DataFrameSchema",

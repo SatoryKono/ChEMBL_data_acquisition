@@ -73,7 +73,7 @@ def run_assay_pipeline(
     return run_steps(
         df,
         PIPELINE_STEPS,
-        schema=ASSAY_SCHEMA,
+        post_schema=ASSAY_SCHEMA,
         pipeline_version=resolved_version,
         logger=logger,
     )

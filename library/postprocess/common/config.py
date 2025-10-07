@@ -11,7 +11,7 @@ import yaml
 
 from config.paths import PIPELINE_DIR
 
-from .import_utils import resolve_dotted_path
+from .import_utils import import_by_path
 from .types import StepDefinition
 
 __all__ = [
@@ -160,13 +160,18 @@ def _load_step(entry: Any, index: int) -> ConfiguredStep:
     if not isinstance(params, dict):
         raise PipelineConfigError(f"step '{name}' parameters must be expressed as a mapping")
 
-    func = resolve_dotted_path(callable_path)
+    func = import_by_path(callable_path)
     if not callable(func):  # pragma: no cover - defensive guard
         raise PipelineConfigError(
             f"resolved object for step '{name}' is not callable: {callable_path}"
         )
 
-    definition = StepDefinition(name=name, func=func, description=description)
+    definition = StepDefinition(
+        name=name,
+        func=func,
+        description=description,
+        params=params,
+    )
     return ConfiguredStep(
         name=name,
         callable_path=callable_path,
