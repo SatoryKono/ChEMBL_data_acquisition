@@ -17,17 +17,73 @@ from library.postprocess.common.config import (
 from .schema import TARGET_SCHEMA, validate_targets
 
 
-def normalize_target_fields(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize leading/trailing whitespace and ensure upper-case identifiers."""
+def normalize_target_fields(
+    df: pd.DataFrame,
+    *,
+    normalize_taxonomy: bool = False,
+    fill_missing_identifiers: bool = False,
+) -> pd.DataFrame:
+    """Normalize textual fields and optionally harmonise taxonomy metadata."""
 
     normalized = df.copy(deep=True)
+
     if "target_chembl_id" in normalized.columns:
-        normalized["target_chembl_id"] = (
-            normalized["target_chembl_id"].astype("string").str.strip().str.upper()
-        )
-    for column in ["pref_name", "organism"]:
+        chembl_ids = normalized["target_chembl_id"].astype("string").str.strip()
+        normalized["target_chembl_id"] = chembl_ids.str.upper()
+
+        if fill_missing_identifiers:
+            missing_mask = chembl_ids.replace({"": pd.NA}).isna()
+            fallback_columns = ["chembl_id", "target_id"]
+            for column in fallback_columns:
+                if not missing_mask.any():
+                    break
+                if column not in normalized.columns:
+                    continue
+                fallback = (
+                    normalized.loc[missing_mask, column]
+                    .astype("string")
+                    .str.strip()
+                    .replace({"": pd.NA})
+                )
+                normalized.loc[missing_mask, "target_chembl_id"] = (
+                    fallback.str.upper().fillna(normalized.loc[missing_mask, "target_chembl_id"])
+                )
+                chembl_ids = normalized["target_chembl_id"].astype("string")
+                missing_mask = chembl_ids.replace({"": pd.NA}).isna()
+
+    for column in ["pref_name", "organism", "target_type", "target_class", "protein_family", "synonyms"]:
         if column in normalized.columns:
-            normalized[column] = normalized[column].astype("string").str.strip()
+            normalized[column] = (
+                normalized[column]
+                    .astype("string")
+                    .str.strip()
+                    .replace({"": pd.NA})
+            )
+
+    if normalize_taxonomy:
+        taxonomy_columns = [
+            "organism",
+            "lineage_superkingdom",
+            "lineage_phylum",
+            "lineage_class",
+            "species_group_flag",
+        ]
+        for column in taxonomy_columns:
+            if column in normalized.columns:
+                normalized[column] = (
+                    normalized[column]
+                    .astype("string")
+                    .str.strip()
+                    .str.replace(r"\s+", " ", regex=True)
+                    .replace({"": pd.NA})
+                )
+
+        for column in ["taxon_id", "tax_id"]:
+            if column in normalized.columns:
+                normalized[column] = pd.to_numeric(
+                    normalized[column].astype("string").str.strip(), errors="coerce"
+                ).astype("Int64")
+
     return normalized
 
 
