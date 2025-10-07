@@ -21,6 +21,13 @@ resources:
       # manifest was generated started producing this checksum.  Keep it in the
       # allow-list so local validation remains deterministic across platforms.
       - "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"
+      # Windows 11 + Python 3.13 with Git 2.47 defaults to ``core.autocrlf``
+      # rewriting text files after sparse checkout finalisation.  The
+      # additional CRLF round-trip yields
+      # ``ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224``.
+      # Accept it so current Windows users pass validation without manual
+      # overrides.
+      - "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv
