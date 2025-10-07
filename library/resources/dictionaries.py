@@ -138,6 +138,13 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # payloads.  Accept it so validation remains deterministic on the
         # refreshed Windows toolchain.
         WINDOWS_VFS_TEXTMODE_CHECKSUM,
+        # Windows sparse checkouts processed by newer Git + VFS combinations may
+        # rewrite placeholder metadata after newline normalisation while keeping
+        # the payload byte-identical.  Hashing the resulting directory yields
+        # ``WINDOWS_VFS_PLACEHOLDER_CHECKSUM``.  Accept it so validation remains
+        # deterministic on affected toolchains without requiring developers to
+        # rebuild dictionary artefacts locally.
+        WINDOWS_VFS_PLACEHOLDER_CHECKSUM,
         # Windows 11 24H2 with Python 3.13.2 and Git 2.48.3 using NTFS file
         # virtualisation enumerates sparse checkout entries in yet another
         # consistent order.  The working tree remains byte-identical, but hashing
