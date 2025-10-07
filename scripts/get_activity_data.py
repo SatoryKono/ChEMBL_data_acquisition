@@ -16,9 +16,11 @@ bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
 import argparse
+import json
 import sys
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence, Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from functools import partial
@@ -38,7 +40,6 @@ from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS, MAX_ACTIVITY_
 from library.pipelines.common import (
     ChunkedFetchConfig,
     CsvWriterConfig,
-    prepare_chunked_pipeline,
 )
 
 from library.cli import (
@@ -49,8 +50,6 @@ from library.cli import (
 from library.cli import (
     build_parser as base_parser,
 )
-
-from library.cli.pipeline_definition import PipelineDefinition
 
 from library.cli.base import PipelineCLIBase
 
@@ -69,6 +68,7 @@ from library.cli_utils import (
 from library.config import Config, _serialize_paths
 from library.common.log import logger
 from library.cli.logging import setup_cli_logging
+from library.pipelines.activity import run as activity_run
 from library.pipelines.common import add_pipeline_metadata
 from library.pipelines.common.metadata import get_pipeline_version
 from library.processing.activity import (
@@ -118,6 +118,81 @@ _ACTIVITY_REQUIRED_DTYPES: dict[str, object] = {
 }
 
 _ORIGINAL_IO_WRITE_CSV = io.write_csv
+
+
+@dataclass(slots=True)
+class PreparedActivityContext:
+    """Container describing the prepared identifiers for the activity pipeline."""
+
+    limited_ids: Iterable[str]
+    limit: int | None
+    _processed_accessor: Callable[[], int]
+
+    @property
+    def processed_ids(self) -> int:
+        """Return the number of identifiers consumed by the pipeline."""
+
+        return self._processed_accessor()
+
+
+def prepare_activity_context(
+    cfg: Config,
+    args: argparse.Namespace,
+    *,
+    skip_read: bool = False,
+) -> PreparedActivityContext | None:
+    """Prepare identifier iteration and limit handling for the activity pipeline."""
+
+    limit = cfg.activity.limit
+    if limit is not None and limit < 0:
+        logger.error(
+            "Configuration error: activity.limit must be non-negative but was set to %s.",
+            limit,
+        )
+        return None
+
+    if skip_read:
+        return PreparedActivityContext(
+            limited_ids=(),
+            limit=limit,
+            _processed_accessor=lambda: 0,
+        )
+
+    logger.info("activity_pipeline_read_input", input=str(args.input_csv))
+    try:
+        ids_iter = io.read_ids(args.input_csv, column=cfg.activity.column, cfg=cfg.io)
+    except (FileNotFoundError, ValueError) as exc:
+        logger.error(
+            "read_fail",
+            input=str(args.input_csv),
+            error=str(exc),
+            exc_info=exc,
+        )
+        return None
+
+    offset = getattr(args, "offset", 0)
+    if offset:
+        ids_iter = islice(ids_iter, offset, None)
+        logger.info("process_offset", offset=offset)
+
+    processed_ids = 0
+
+    def _iter_ids() -> Iterator[str]:
+        nonlocal processed_ids
+        for identifier in ids_iter:
+            processed_ids += 1
+            yield identifier
+
+    if limit is not None:
+        limited_ids: Iterable[str] = islice(_iter_ids(), limit)
+    else:
+        limited_ids = _iter_ids()
+
+    return PreparedActivityContext(
+        limited_ids=limited_ids,
+        limit=limit,
+        _processed_accessor=lambda: processed_ids,
+    )
 
 
 _EXTENDED_ACTIVITY_DTYPES: dict[str, str] = {
@@ -739,13 +814,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         encountered. Upstream API errors are logged and converted into a
         failure code by :func:`library.cli_utils.run_pipeline`.
     """
-    limit = cfg.activity.limit
-    if limit is not None and limit < 0:
-        logger.error(
-            f"Configuration error: activity.limit must be non-negative but was set to {limit}."
-        )
-        return 1
-
     offset = getattr(args, "offset", 0)
     workers_override = getattr(args, "workers", None)
     configured_workers = (
@@ -772,6 +840,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         setattr(args, "output_csv", output_path)
 
     start_time = perf_counter()
+
+    pre_context = prepare_activity_context(cfg, args, skip_read=True)
+    if pre_context is None:
+        return 1
+
+    limit = pre_context.limit
 
     logger.info(
         "activity_pipeline_start",
@@ -805,35 +879,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 0
 
-    logger.info("activity_pipeline_read_input", input=str(args.input_csv))
-    try:
-        ids_iter = io.read_ids(args.input_csv, column=cfg.activity.column, cfg=cfg.io)
-    except (FileNotFoundError, ValueError) as exc:
-        logger.error(
-            "read_fail",
-            input=str(args.input_csv),
-            error=str(exc), exc_info=exc,
-        )
+    prepared_context = prepare_activity_context(cfg, args)
+    if prepared_context is None:
         return 1
 
-    if offset:
-        ids_iter = islice(ids_iter, offset, None)
-        logger.info("process_offset", offset=offset)
-
-    processed_ids = 0
+    limit = prepared_context.limit
+    limited_ids = prepared_context.limited_ids
     extended_output_path: Path | None = None
-
-    def _iter_ids() -> Iterator[str]:
-        nonlocal processed_ids
-        for identifier in ids_iter:
-            processed_ids += 1
-            yield identifier
-
-    limited_ids: Iterator[str]
-    if limit is not None:
-        limited_ids = islice(_iter_ids(), limit)
-    else:
-        limited_ids = _iter_ids()
 
     enrichment_cfg = cfg.activity_enrichment
     extra_columns: list[str] = []
@@ -1141,12 +1193,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         )
 
-        fetcher, writer = prepare_chunked_pipeline(
-            fetch_config=fetch_config,
-            fetch_chunk=fetch_chunk,
-            csv_writer=writer_config,
-        )
-
         pipeline_stats: dict[str, object] | None = None
 
         def _capture_stats(stats: Mapping[str, object]) -> None:
@@ -1159,38 +1205,37 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             pipeline_stats.setdefault("null_cells", snapshot["nulls"])
             pipeline_stats.setdefault("null_fraction", snapshot["null_fraction"])
 
-        try:
-            definition = PipelineDefinition(
-                schema=ActivitiesSchema,
-                schema_name="ActivitiesSchema",
-                validators=validators,
-                metadata_hooks=metadata_hooks,
-                writer=writer,
-                command=" ".join(_args_invocation(args)),
-                config_snapshot=_serialize_paths(cfg.to_dict()),
-                inputs={"input_csv": str(args.input_csv)},
-                key_columns=["activity_id"],
-                table_quality=table_quality,
-                stats_extra=chunk_failures.stats,
-                stats_callback=_capture_stats,
-                dictionary_resources=(
-                    "dictionary_root",
-                    "target_types",
-                ),
-            )
-            exit_code = run_pipeline(
-                definition=definition,
-                fetcher=fetcher,
-                output_path=output_path,
-                failure_path=failure_path,
-                cfg=cfg,
-                logger=logger,
-            )
-        except Exception:
-            logger.exception("Activity pipeline execution failed during chunked processing.")
-            raise
-        finally:
-            chunk_failures.save(fetch_failure_path, cfg=cfg)
+        definition_kwargs: dict[str, object] = {
+            "schema": ActivitiesSchema,
+            "schema_name": "ActivitiesSchema",
+            "validators": validators,
+            "command": " ".join(_args_invocation(args)),
+            "config_snapshot": _serialize_paths(cfg.to_dict()),
+            "inputs": {"input_csv": str(args.input_csv)},
+            "key_columns": ["activity_id"],
+            "table_quality": table_quality,
+            "stats_extra": chunk_failures.stats,
+            "stats_callback": _capture_stats,
+            "dictionary_resources": (
+                "dictionary_root",
+                "target_types",
+            ),
+        }
+
+        result = activity_run.run_activity_pipeline(
+            fetch_config=fetch_config,
+            metadata_hooks=metadata_hooks,
+            fetch_chunk=fetch_chunk,
+            writer_config=writer_config,
+            definition_kwargs=definition_kwargs,
+            cfg=cfg,
+            logger=logger,
+            output_path=output_path,
+            failure_path=failure_path,
+            fetch_failure_path=fetch_failure_path,
+            chunk_failures=chunk_failures,
+        )
+        exit_code = result.exit_code
 
     if exit_code == 0:
         logger.info(
@@ -1209,6 +1254,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
             raise
 
+    processed_ids = prepared_context.processed_ids
     if limit is not None:
         logger.info(
             "process_limit",
@@ -1347,7 +1393,7 @@ def _generate_activity_postprocess_metrics(
 ):
     """Run the activity postprocess pipeline and persist the metrics report."""
 
-    return collect_postprocess_metrics(
+    metrics, report_path = collect_postprocess_metrics(
         table="activity",
         output_path=output_path,
         csv_sep=cfg.io.csv_sep,
@@ -1358,6 +1404,22 @@ def _generate_activity_postprocess_metrics(
         pipeline_version=get_pipeline_version(),
         report_extras=extras,
     )
+    if report_path is None:
+        fallback = Path(cfg.io.output_dir) / "activity.postprocess.report.json"
+        fallback.parent.mkdir(parents=True, exist_ok=True)
+        fallback_payload: dict[str, object] = {
+            "table": "activity",
+            "metrics": None,
+            "output_path": str(output_path),
+        }
+        if extras:
+            fallback_payload["extras"] = dict(extras)
+        fallback.write_text(
+            json.dumps(fallback_payload, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        report_path = fallback
+    return metrics, report_path
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
