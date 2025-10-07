@@ -49,7 +49,16 @@ def test_normalise_text_newlines__binary_payload_preserved() -> None:
 
 
 @pytest.mark.unit
-def test_parse_manifest__accepts_known_checksum_variants(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "checksum",
+    (
+        "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
+    ),
+)
+def test_parse_manifest__accepts_known_checksum_variants(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, checksum: str
+) -> None:
     """Dictionary manifests accept known checksum variants automatically."""
 
     manifest_dir = tmp_path / "dictionary"
@@ -68,15 +77,11 @@ def test_parse_manifest__accepts_known_checksum_variants(tmp_path: Path, monkeyp
     }
     manifest_path.write_text(yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8")
 
-    monkeypatch.setattr(
-        dictionaries,
-        "_compute_sha256",
-        lambda path: "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
-    )
+    monkeypatch.setattr(dictionaries, "_compute_sha256", lambda path, value=checksum: value)
 
     resources = dictionaries._parse_manifest(base_dir=manifest_dir)
 
-    assert resources["dictionary_root"].sha256 == "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"
+    assert resources["dictionary_root"].sha256 == checksum
 
 
 @pytest.mark.unit
@@ -110,14 +115,17 @@ def test_parse_manifest__allowlist_file_extends_checksums(
     monkeypatch.setattr(
         dictionaries,
         "_compute_sha256",
-        lambda path: "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        lambda path: "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
     )
 
     resources = dictionaries._parse_manifest(base_dir=manifest_dir)
 
-    assert resources["dictionary_root"].sha256 == "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"
+    assert (
+        resources["dictionary_root"].sha256
+        == "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224"
+    )
 def test_manifest_allows_latest_windows_sha256() -> None:
-    """The dictionary manifest accepts the hash produced by new Git versions."""
+    """The dictionary manifest accepts hashes produced by new Git versions."""
 
     manifest_path = DICTIONARY_DIR / "manifest.yaml"
     manifest_data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
@@ -127,7 +135,9 @@ def test_manifest_allows_latest_windows_sha256() -> None:
     if isinstance(sha_values, str):
         sha_values = [sha_values]
 
-    assert (
-        "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"
-        in sha_values
-    )
+    expected = {
+        "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
+    }
+
+    assert expected.issubset(set(sha_values))
