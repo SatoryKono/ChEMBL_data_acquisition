@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 import pandas as pd
 import pytest
@@ -178,6 +180,56 @@ def test_run__skip_existing_matrix(
         assert "mode=skip_existing" in summary_events[-1]
     else:
         assert not summary_events
+
+
+def test_ensure_molecule_pref_name__thread_safe_cache(monkeypatch, cfg):
+    barrier = threading.Barrier(2)
+    cache: dict[str, str | None] = {}
+    cache_lock = threading.Lock()
+    cfg.testitem.fields = ["molecule_chembl_id", "pref_name"]
+
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1", "CHEMBL1"],
+            "molecule_pref_name": pd.Series([pd.NA, pd.NA], dtype="string"),
+        }
+    )
+
+    responses = pd.DataFrame(
+        {"molecule_chembl_id": ["CHEMBL1"], "pref_name": ["Acetylsalicylic acid"]}
+    )
+
+    recorded_calls: list[Sequence[str]] = []
+    record_lock = threading.Lock()
+
+    def _fake_get_testitem(identifiers, **kwargs):
+        with record_lock:
+            recorded_calls.append(tuple(identifiers))
+        return responses
+
+    monkeypatch.setattr(get_activity_data.cl, "get_testitem", _fake_get_testitem)
+
+    def _invoke() -> pd.DataFrame:
+        barrier.wait()
+        return get_activity_data._ensure_molecule_pref_name(
+            frame,
+            cfg=cfg,
+            client=object(),
+            cache=cache,
+            cache_lock=cache_lock,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: _invoke(), range(2)))
+
+    assert len(recorded_calls) == 1
+    assert tuple(recorded_calls[0]) == ("CHEMBL1",)
+
+    expected_names = ["Acetylsalicylic acid", "Acetylsalicylic acid"]
+    for result in results:
+        assert result["molecule_pref_name"].tolist() == expected_names
+
+    assert cache["CHEMBL1"] == "Acetylsalicylic acid"
 
 
 @pytest.mark.parametrize(

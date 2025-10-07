@@ -17,6 +17,7 @@ del bootstrap_cli
 
 import argparse
 import sys
+import threading
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence, Callable
 from datetime import datetime, timezone
@@ -513,6 +514,7 @@ def _ensure_molecule_pref_name(
     cfg: Config,
     client: ChemblClient,
     cache: dict[str, str | None],
+    cache_lock: threading.Lock,
 ) -> pd.DataFrame:
     """Populate ``molecule_pref_name`` via the test item API when missing."""
 
@@ -541,8 +543,10 @@ def _ensure_molecule_pref_name(
 
     pending: list[str] = []
     for identifier in unique_ids:
-        if identifier not in cache:
-            pending.append(identifier)
+        with cache_lock:
+            if identifier not in cache:
+                cache[identifier] = None
+                pending.append(identifier)
 
     if pending:
         fields = list(cfg.testitem.fields)
@@ -571,11 +575,16 @@ def _ensure_molecule_pref_name(
                 .astype({"molecule_chembl_id": "string"})
             )
             for chembl_id, pref_name in mapped.itertuples(index=False):
-                cache[str(chembl_id)] = str(pref_name) if pd.notna(pref_name) else None
+                with cache_lock:
+                    cache[str(chembl_id)] = (
+                        str(pref_name) if pd.notna(pref_name) else None
+                    )
         for identifier in pending:
-            cache.setdefault(identifier, None)
+            with cache_lock:
+                cache.setdefault(identifier, None)
 
-    fill_map = {key: value for key, value in cache.items() if value}
+    with cache_lock:
+        fill_map = {key: value for key, value in cache.items() if value}
     if not fill_map:
         return result
 
@@ -993,6 +1002,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     last_error_context: dict[str, object] = {}
 
     pref_name_cache: dict[str, str | None] = {}
+    pref_name_cache_lock = threading.Lock()
 
     with ETLContext(cfg) as context:
         client = context.chembl_client
@@ -1111,7 +1121,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         last_error_extra = None
                         last_error_context = {}
                         return _ensure_molecule_pref_name(
-                            result, cfg=cfg, client=client, cache=pref_name_cache
+                            result,
+                            cfg=cfg,
+                            client=client,
+                            cache=pref_name_cache,
+                            cache_lock=pref_name_cache_lock,
                         )
                 return pd.DataFrame(columns=ACTIVITY_COLUMNS)
 
