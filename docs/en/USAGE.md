@@ -325,7 +325,7 @@ functionality:
 | `mapper` | Interactive UniProt↔ChEMBL mapper backed by cached dictionaries. |
 | `chunk-io` | Stream CSV chunks with deterministic ordering. |
 | `get-input-initialisation` | Merge Excel initialisation templates into canonical CSV form. |
-| `get-activities` | Generate synthetic activity rows for smoke tests. |
+| `get-activities` | Generate synthetic activity rows and write deterministic CSV + `.meta.yaml` artefacts for smoke tests. |
 
 See [`guides/ADVANCED_SCENARIOS.md`](./guides/ADVANCED_SCENARIOS.md) for usage
 examples combining these utilities with the core pipelines.
