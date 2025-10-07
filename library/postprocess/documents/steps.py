@@ -136,8 +136,30 @@ def enrich_document_publication_year(
     return enriched
 
 
-def finalize_document_records(df: pd.DataFrame, **_: object) -> pd.DataFrame:
-    """Validate and order the DataFrame according to :data:`DOCUMENT_SCHEMA`."""
+def finalize_document_records(
+    df: pd.DataFrame,
+    *,
+    enforce_schema: bool = True,
+    ensure_unique_ids: bool = False,
+    unique_id_column: str = "document_chembl_id",
+    **_: object,
+) -> pd.DataFrame:
+    """Normalize terminal document output and optionally enforce invariants.
+
+    Parameters
+    ----------
+    df:
+        DataFrame produced by preceding pipeline steps.
+    enforce_schema:
+        When ``True`` (default) the result is validated against
+        :data:`DOCUMENT_SCHEMA` prior to being returned.
+    ensure_unique_ids:
+        Drop duplicate records using ``unique_id_column`` as the key. The first
+        occurrence of a duplicated identifier is preserved.
+    unique_id_column:
+        Column name used when ``ensure_unique_ids`` is enabled. Defaults to
+        ``"document_chembl_id"``.
+    """
 
     prepared = df.copy(deep=True)
 
@@ -150,6 +172,17 @@ def finalize_document_records(df: pd.DataFrame, **_: object) -> pd.DataFrame:
 
     if "publication_year" in prepared.columns:
         prepared["publication_year"] = prepared["publication_year"].astype("Int64")
+
+    if ensure_unique_ids and unique_id_column in prepared.columns:
+        identifier_series = prepared[unique_id_column]
+        if not pd.api.types.is_string_dtype(identifier_series.dtype):
+            identifier_series = identifier_series.astype("string")
+        duplicates = identifier_series.duplicated(keep="first")
+        if duplicates.any():
+            prepared = prepared.loc[~duplicates].reset_index(drop=True)
+
+    if not enforce_schema:
+        return prepared
 
     validated = validate_documents(prepared, context="document_finalization")
     return validated

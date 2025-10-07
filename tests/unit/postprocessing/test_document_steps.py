@@ -92,3 +92,30 @@ def test_finalize_document_records__adds_missing_required_columns() -> None:
     assert result["document_chembl_id"].dtype == "string"
     assert result["title"].dtype == "string"
     assert result["doc_type"].dtype == "string"
+
+
+@pytest.mark.unit
+def test_finalize_document_records__skips_schema_enforcement_when_disabled() -> None:
+    frame = pd.DataFrame({"unexpected": ["value"]})
+
+    result = finalize_document_records(frame, enforce_schema=False)
+
+    assert "unexpected" in result.columns
+    # Required columns are still present but schema coercion is skipped.
+    assert set(["document_chembl_id", "title", "doc_type"]).issubset(result.columns)
+
+
+@pytest.mark.unit
+def test_finalize_document_records__removes_duplicate_identifiers_when_requested() -> None:
+    frame = pd.DataFrame(
+        {
+            "document_chembl_id": ["CHEMBL1", "CHEMBL1", "CHEMBL2"],
+            "title": ["A", "Duplicate", "B"],
+            "doc_type": ["JOURNAL", "JOURNAL", "PREPRINT"],
+        }
+    )
+
+    result = finalize_document_records(frame, ensure_unique_ids=True)
+
+    assert result["document_chembl_id"].tolist() == ["CHEMBL1", "CHEMBL2"]
+    assert result["title"].tolist() == ["A", "B"]
