@@ -14,22 +14,27 @@ flowchart LR
         A6[get-tissue-data]
     end
     subgraph Library
+        B0[library/orchestration]
         B1[library/clients]
         B2[library/pipelines]
         B3[library/qa]
         B4[library/utils]
+        B5[library/reporting]
     end
     subgraph Resources
         C1[config/config.yaml]
         C2[config/dictionary]
     end
 
-    A0 --> A1 & A2 & A3 & A4 & A5
+    A0 --> B0
+    B0 --> A1 & A2 & A3 & A4 & A5
     A6 -.->|справочники| A5
     A1 & A2 & A3 & A4 & A5 --> B2
     B2 --> B1
     B2 --> B3
     B2 --> B4
+    B0 --> B2
+    B2 --> B5
     B2 --> C1
     B2 --> C2
 ```
@@ -39,6 +44,8 @@ flowchart LR
 запускают отдельно, чтобы подготовить справочники перед объединением активностей.
 Внутри используются общие компоненты `library/`:
 
+- `library/orchestration` — реестр шагов, общий контекст выполнения и координация
+  ретраев, которые используют `get_data.py`, тесты и кастомные сценарии.
 - `library/clients` — HTTP-клиенты с ретраями и лимитами для ChEMBL, UniProt,
   PubMed, OpenAlex, CrossRef, PubChem.
 - `library/pipelines` — логика загрузки, трансформации и экспорта по
@@ -47,6 +54,8 @@ flowchart LR
   объекты → активности», все подпакеты доступны для ручного запуска.
 - `library/utils` — вспомогательные утилиты: CLI-бустрап, детерминированное I/O,
   загрузка конфигурации.
+- `library/reporting` — генерация манифестов запусков, слияние метаданных и
+  агрегация QC, общие для оркестратора и отдельных пайплайнов.
 - `library/qa` и `library/table_quality.py` — валидация Pandera, профили качества,
   формирование метаданных.
 

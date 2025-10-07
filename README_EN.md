@@ -91,19 +91,22 @@ python scripts/get_data.py \
 | Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto` | Resolves tissue metadata, merges ontology cross-references and normalises synonyms for downstream joins. Run separately before `get_activity_data` when tissue lookups are required. |
 | Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --final-out output/cellline.csv --batch-size 20 --limit 100` | Retrieves ChEMBL cell line records, normalises nullable identifiers and enforces deterministic ordering. |
 | Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --timeout 120 --limit 500 --offset 100 --workers 4 --dry-run` | Supports range controls (`--limit`, `--offset`), per-request timeouts, parallel fetching via `--workers` and a dry-run validation mode. |
+| Synthetic activities | `python scripts/get_activities.py --limit 25 --dry-run` | Generates deterministic dummy rows for smoke tests; accepts the same logging flags as other CLI tools. |
 
 Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar
 and table-quality reports under the same directory. The target pipeline also
 emits helper lookups named `organism.output.target_<stamp>.csv`,
 `isoform.output.target_<stamp>.csv`, `names.output.target_<stamp>.csv`, and
-`IUPHAR.output.target_<stamp>.csv` — all described in
+`IUPHAR.output.target_<stamp>.csv` — all detailed in
 [`docs/en/OUTPUT_TARGETS.md`](./docs/en/OUTPUT_TARGETS.md) and
-[`docs/ru/OUTPUT_TARGETS.md`](./docs/ru/OUTPUT_TARGETS.md). Refer to the
-[output reference](./docs/en/OUTPUT.md) for the complete specification.
+[`docs/ru/OUTPUT_TARGETS.md`](./docs/ru/OUTPUT_TARGETS.md). The isoform helper
+is produced by `library.postprocessing.target.process_targets`, a direct port of
+the original Power Query workbook that keeps every row byte-identical. Refer to
+the [output reference](./docs/en/OUTPUT.md) for the complete specification.
 
-Custom file names such as `targets.csv` still trigger the post-processing
-chain, so helper lookups are emitted even when the export deviates from the
-canonical `output.target_<stamp>.csv` pattern.
+Custom file names such as `targets.csv` still trigger this post-processing
+chain, so downstream helpers are generated even when the export deviates from
+the canonical `output.target_<stamp>.csv` pattern.
 
 ## Documentation
 
@@ -139,6 +142,48 @@ must produce:
 
 - `reports/test_report.json` — machine readable execution log
 - `reports/test_summary.md` — condensed Markdown summary
+
+`test_report.json` always exposes three top-level keys:
+
+```json
+{
+  "meta": {
+    "repo": "SatoryKono/ChEMBL_data_acquisition",
+    "commit": "<SHA>",
+    "branch": "<branch>",
+    "ts_utc": "<ISO8601>",
+    "duration_sec": 0.0,
+    "python": "3.11|3.12",
+    "pytest": "<version>",
+    "exit_code": 0
+  },
+  "summary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0,
+    "error": 0,
+    "success_rate": 0.0
+  },
+  "tests": [
+    {
+      "nodeid": "tests/unit/test_module.py::test_case",
+      "status": "passed",
+      "duration_ms": 12.3,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    }
+  ]
+}
+```
+
+`test_summary.md` mirrors the counts and, for every failure or error, embeds the
+exact `error` message from the JSON report in a fenced code block. This makes it
+possible to triage failures using only the Markdown artefact.
 
 Smoke runs can use `pytest -q -k "not slow and not e2e"`, while full validation
 uses `pytest -q`. See [`docs/en/development/TESTING.md`](./docs/en/development/TESTING.md)

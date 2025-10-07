@@ -14,22 +14,27 @@ flowchart LR
         A6[get-tissue-data]
     end
     subgraph Library
+        B0[library/orchestration]
         B1[library/clients]
         B2[library/pipelines]
         B3[library/qa]
         B4[library/utils]
+        B5[library/reporting]
     end
     subgraph Resources
         C1[config/config.yaml]
         C2[config/dictionary]
     end
 
-    A0 --> A1 & A2 & A3 & A4 & A5
+    A0 --> B0
+    B0 --> A1 & A2 & A3 & A4 & A5
     A6 -.->|reference tables| A5
     A1 & A2 & A3 & A4 & A5 --> B2
     B2 --> B1
     B2 --> B3
     B2 --> B4
+    B0 --> B2
+    B2 --> B5
     B2 --> C1
     B2 --> C2
 ```
@@ -40,6 +45,8 @@ lookups are required, operators run `get_tissue_data` manually to refresh the
 reference tables before the activity join. Pipelines import reusable components
 from `library/`:
 
+- `library/orchestration` — workflow registry, shared execution context helpers
+  and retry coordination used by `get_data.py`, tests and bespoke automation.
 - `library/clients` — HTTP clients with retry and throttling logic for ChEMBL,
   UniProt, PubMed, OpenAlex, CrossRef, PubChem.
 - `library/pipelines` — Fetching, transformation and export logic for each
@@ -49,6 +56,8 @@ from `library/`:
   item → activity subset.
 - `library/utils` — CLI helpers, deterministic CSV I/O, configuration loaders,
   logging bootstrap and file system utilities.
+- `library/reporting` — run manifests, metadata reconciliation and table-quality
+  aggregation helpers shared between orchestrated runs and standalone stages.
 - `library/qa` & `library/table_quality.py` — Schema validation, quality
   profiling and metadata writers.
 
