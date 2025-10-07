@@ -8,10 +8,10 @@ from typing import Any, Iterable
 
 
 _NEW_PATTERN = re.compile(
-    r"^(?P<timestamp>.+?)\s\[(?P<level>[^\]]+)\]\s(?P<name>[^\s]+)\s::\s(?P<message>.*)$"
+    r"^\[(?P<timestamp>[^\]]+)\]\s\[(?P<level>[^\]]+)\]\s\[(?P<name>[^\]]+)\]\s(?P<message>.*)$"
 )
 _LEGACY_PATTERN = re.compile(
-    r"^\[(?P<timestamp>[^\]]+)\]\s\[(?P<level>[^\]]+)\]\s\[(?P<name>[^\]]+)\]\s(?P<message>.*)$"
+    r"^(?P<timestamp>.+?)\s\[(?P<level>[^\]]+)\]\s(?P<name>[^\s]+)\s::\s(?P<message>.*)$"
 )
 
 
@@ -26,7 +26,7 @@ def _extract_parts(line: str) -> dict[str, str] | None:
 
 
 def parse_log_lines(text: str) -> list[dict[str, Any]]:
-    """Parse log lines formatted as ``[ts] [LEVEL] [name] message``."""
+    """Parse log lines in modern or legacy structured formats."""
 
     entries: list[dict[str, Any]] = []
     for raw_line in text.splitlines():
