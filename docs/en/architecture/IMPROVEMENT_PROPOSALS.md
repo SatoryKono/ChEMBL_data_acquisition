@@ -50,3 +50,9 @@
     - **Problem.** The current structure spreads assertions across extra top-level folders, obscuring the unit/integration/e2e boundaries described in the testing policy.
     - **Expected effect.** A predictable test taxonomy that mirrors the ETL layering and simplifies coverage tracking in CI.
 
+## Keeping this document bilingual
+
+- Update this English version and [`../ru/architecture/IMPROVEMENT_PROPOSALS.md`](../../ru/architecture/IMPROVEMENT_PROPOSALS.md) in the same pull request.
+- Preserve the numbering, headings and emphasis so the two files stay diff-friendly.
+- When adding new proposals, mirror them in both languages and note translation status in the PR description if any section is pending review.
+
