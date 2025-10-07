@@ -25,9 +25,15 @@ from functools import partial
 from itertools import islice
 from pathlib import Path
 from time import sleep, perf_counter
+from urllib.parse import urlsplit
 
 import pandas as pd
 import requests
+
+try:  # pragma: no cover - urllib3 is part of requests dependency chain
+    from urllib3.exceptions import NameResolutionError as _Urllib3NameResolutionError
+except Exception:  # pragma: no cover - defensive fallback for alternative stacks
+    _Urllib3NameResolutionError = None  # type: ignore[assignment]
 
 from library.integration import chembl_library as cl
 from library import cli
@@ -247,6 +253,61 @@ def _gather_http_diagnostics(cfg: Config, client: object) -> dict[str, object]:
         clean[key] = value
     return clean
 
+
+def _iter_exception_chain(exc: BaseException) -> Iterator[BaseException]:
+    """Yield ``exc`` and the causal/context chain preserving order."""
+
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        yield current
+        next_exc = current.__cause__ or current.__context__
+        current = next_exc if isinstance(next_exc, BaseException) else None
+
+
+def _is_name_resolution_error(exc: Exception) -> bool:
+    """Return ``True`` when ``exc`` or its causes indicate DNS failure."""
+
+    if isinstance(exc, requests.exceptions.RequestException):
+        for candidate in _iter_exception_chain(exc):
+            if (
+                _Urllib3NameResolutionError is not None
+                and isinstance(candidate, _Urllib3NameResolutionError)
+            ):
+                return True
+            message = str(candidate).strip().lower()
+            if (
+                "name resolution" in message
+                or "nameresolutionerror" in message
+                or "getaddrinfo failed" in message
+            ):
+                return True
+
+    message = str(exc).strip().lower()
+    if (
+        "name resolution" in message
+        or "nameresolutionerror" in message
+        or "getaddrinfo failed" in message
+    ):
+        return True
+    return False
+
+
+def _describe_network_failure(cfg: Config, exc: Exception) -> tuple[str | None, str | None]:
+    """Return a human readable hint and host when DNS failures are detected."""
+
+    if not _is_name_resolution_error(exc):
+        return None, None
+
+    base = getattr(cfg.api, "chembl_base", "")
+    host = urlsplit(str(base)).hostname or str(base) or "www.ebi.ac.uk"
+    hint = (
+        "Unable to resolve the ChEMBL API host. Check internet connectivity "
+        "or configure offline fixtures for testing environments."
+    )
+    return hint, host
+
 class _StreamingCSVStatistics:
     """Accumulate row and null counters while streaming CSV chunks."""
 
@@ -431,12 +492,12 @@ def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
         return {}
 
     required_columns = {"assay_chembl_id", "src_assay_id"}
-    missing_columns = required_columns.difference(frame.columns)
+    missing_columns = sorted(required_columns.difference(frame.columns))
     if missing_columns:
         logger.warning(
-            "Assay lookup file '%s' is missing required columns: %s; src_assay_id enrichment will be skipped.",
-            candidate,
-            ", ".join(sorted(missing_columns)),
+            "activity_missing_columns",
+            path=str(candidate),
+            missing=missing_columns,
         )
         return {}
 
@@ -513,6 +574,7 @@ def _ensure_molecule_pref_name(
     cfg: Config,
     client: ChemblClient,
     cache: dict[str, str | None],
+    chunk_failures: ChunkFailureTracker | None = None,
 ) -> pd.DataFrame:
     """Populate ``molecule_pref_name`` via the test item API when missing."""
 
@@ -560,9 +622,14 @@ def _ensure_molecule_pref_name(
                 page_limit=cfg.testitem.request_limit,
             )
         except (requests.RequestException, ValueError, AttributeError) as exc:
+            error_message = str(exc)
             logger.warning(
-                f"Failed to fetch molecule preferred names for {len(pending)} identifiers: {exc}"
+                "pref_name_fetch_failed",
+                pending=list(pending),
+                error=error_message,
             )
+            if chunk_failures is not None:
+                chunk_failures.add_failure(tuple(pending), error_message)
             lookup = pd.DataFrame(columns=["molecule_chembl_id", "pref_name"])
         if not lookup.empty and {"molecule_chembl_id", "pref_name"}.issubset(lookup.columns):
             mapped = (
@@ -776,19 +843,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         offset=offset,
     )
     logger.info(
-        f"Starting activity pipeline with input '{args.input_csv}' and output '{output_path}'."
-    )
-    logger.info(
-        f"Loaded config: limit={limit}, offset={offset}, batch_size={cfg.activity.batch_size}, "
-        f"timeout={cfg.activity.timeout}, dry_run={cfg.activity.dry_run}, workers={configured_workers}."
+        "activity_pipeline_verbose",
+        input=str(args.input_csv),
+        output=str(output_path),
+        limit=limit,
+        offset=offset,
+        batch_size=cfg.activity.batch_size,
+        timeout=cfg.activity.timeout,
+        dry_run=cfg.activity.dry_run,
+        workers=configured_workers,
     )
 
     if cfg.activity.dry_run:
         expected = limit if limit is not None else 0
         logger.info("dry_run", limit=limit)
-        logger.info(
-            f"Dry-run mode enabled; pipeline would process up to {expected} identifiers before exiting."
-        )
+        logger.info("activity_pipeline_dry_run", expected=expected)
         _emit_completion_message(
             output_path=output_path,
             processed_rows=0,
@@ -797,7 +866,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 0
 
-    logger.info(f"Reading input identifiers from '{args.input_csv}'.")
+    logger.info("activity_pipeline_read_input", input=str(args.input_csv))
     try:
         ids_iter = io.read_ids(args.input_csv, column=cfg.activity.column, cfg=cfg.io)
     except (FileNotFoundError, ValueError) as exc:
@@ -805,9 +874,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             "read_fail",
             input=str(args.input_csv),
             error=str(exc), exc_info=exc,
-        )
-        logger.error(
-            f"Failed to read identifiers from '{args.input_csv}': {exc}"
         )
         return 1
 
@@ -865,7 +931,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if not missing:
             return frame
         logger.warning(
-            f"Missing required activity columns detected: {', '.join(missing)}. Placeholder values will be inserted before validation."
+            "activity_missing_columns",
+            missing=sorted(missing),
         )
         fillers: dict[str, pd.Series] = {}
         for column in missing:
@@ -1039,6 +1106,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         )
                     except (requests.RequestException, ValueError) as exc:
                         error_message = str(exc)
+                        network_hint, network_host = _describe_network_failure(cfg, exc)
                         context = {
                             "chunk_ids": list(id_list),
                             "chunk_size": len(id_list),
@@ -1047,6 +1115,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                             "batch_size": cfg.activity.batch_size,
                             "timeout": cfg.activity.timeout,
                         }
+                        if network_host:
+                            context["api_host"] = network_host
                         for key in (
                             "adapter_total",
                             "api_retries",
@@ -1063,8 +1133,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                             "msg": error_message,
                             "chunk_ids": context["chunk_ids"],
                         }
+                        if network_hint:
+                            last_error_extra["hint"] = network_hint
                         last_error_context = dict(log_context)
+                        if network_host:
+                            last_error_context.setdefault("api_host", network_host)
+                        if network_hint:
+                            last_error_context["network_hint"] = network_hint
                         if attempt >= attempts:
+                            if network_hint:
+                                logger.error(
+                                    "activity_fetch_network_error",
+                                    extra=last_error_extra,
+                                    hint=network_hint,
+                                    **log_context,
+                                )
                             if len(id_list) > 1 and _is_timeout_error(exc):
                                 split_context = dict(log_context)
                                 split_context["depth"] = depth
@@ -1111,7 +1194,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         last_error_extra = None
                         last_error_context = {}
                         return _ensure_molecule_pref_name(
-                            result, cfg=cfg, client=client, cache=pref_name_cache
+                            result,
+                            cfg=cfg,
+                            client=client,
+                            cache=pref_name_cache,
+                            chunk_failures=chunk_failures,
                         )
                 return pd.DataFrame(columns=ACTIVITY_COLUMNS)
 

@@ -8,6 +8,7 @@ from typing import Iterable
 
 import pandas as pd
 import pytest
+import requests
 
 from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS
 from library.postprocessing import activity_extended
@@ -363,6 +364,64 @@ def test_run_chembl__pipeline_failure_logs_error(cfg, tmp_path, monkeypatch) -> 
     assert exit_code == 1
     error_events = [event for level, event, _ in logger_stub.events if level == "error"]
     assert "activity_pipeline_failed" in error_events
+
+
+@pytest.mark.unit
+def test_run_chembl__network_resolution_failure_hint(
+    cfg, tmp_path, monkeypatch
+) -> None:
+    args = _make_args(tmp_path)
+    cfg.activity.limit = None
+    cfg.activity.batch_size = 2
+    cfg.retry.max_attempts = 1
+    cfg.io.output_dir = tmp_path
+
+    monkeypatch.setattr(
+        get_activity_data.io,
+        "read_ids",
+        lambda *_args, **_kwargs: iter(["ACT1", "ACT2"]),
+    )
+    monkeypatch.setattr("library.orchestration.context.ChemblClient", _DummyClient)
+
+    def fake_prepare_chunked_pipeline(*, fetch_config, fetch_chunk, csv_writer):
+        del fetch_config, csv_writer
+
+        def _fetcher() -> Iterable[pd.DataFrame]:
+            fetch_chunk(("ACT1",))
+            yield from ()
+
+        def _writer(*_args, **_kwargs):  # pragma: no cover - writer is not invoked
+            raise AssertionError("writer should not be called when fetch fails")
+
+        return _fetcher, _writer
+
+    monkeypatch.setattr(get_activity_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline)
+
+    def fake_get_activities(*_args, **_kwargs):
+        raise requests.exceptions.ConnectionError(
+            "HTTPSConnectionPool(host='www.ebi.ac.uk', port=443): Max retries exceeded with url: "
+            "/chembl/api/data/activity.json (Caused by NameResolutionError('www.ebi.ac.uk'))"
+        )
+
+    monkeypatch.setattr(get_activity_data.cl, "get_activities", fake_get_activities)
+
+    logger_stub = _RecordingLogger()
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+
+    exit_code = get_activity_data.run_chembl(cfg, args)
+
+    assert exit_code == 1
+    network_events = [ctx for level, event, ctx in logger_stub.events if event == "activity_fetch_network_error"]
+    assert network_events, "network error event should be logged"
+    network_context = network_events[-1]
+    hint_from_context = network_context.get("hint") or network_context.get("extra", {}).get("hint")
+    assert isinstance(hint_from_context, str)
+    assert "resolve" in hint_from_context.lower()
+
+    failure_records = [ctx for level, event, ctx in logger_stub.events if event == "activity_pipeline_failed"]
+    assert failure_records
+    details_text = failure_records[-1].get("details") or ""
+    assert "network_hint" in details_text
 
 
 def test_main__dry_run_skip_limit(monkeypatch, tmp_path, capsys) -> None:
