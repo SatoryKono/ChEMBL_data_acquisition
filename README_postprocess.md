@@ -52,6 +52,17 @@ Available overrides:
 - `CHEMBL_ACTIVITY_PIPELINE_VERSION`, `CHEMBL_ASSAY_PIPELINE_VERSION`, `CHEMBL_DOCUMENT_PIPELINE_VERSION`, `CHEMBL_TARGET_PIPELINE_VERSION` — override the exported `pipeline_version` per domain; defaults to `auto`.
 - `POSTPROCESS_LOG_LEVEL` — baseline logger verbosity, defaulting to `INFO`.
 
+### Domain configuration defaults
+
+The domain YAML files ship representative defaults that downstream tooling can rely on. Each file exposes the following top-level parameters, all of which honour the environment overrides listed above:
+
+| Domain | Encoding | CSV separator | Selected defaults |
+| --- | --- | --- | --- |
+| Activities | `utf-8` | `,` | `relation_normalization: true`, `enforce_uppercase_units: true`, `numeric_identifier_dtype: Int64` |
+| Assays | `utf-8` | `,` | `uppercase_categories: true`, `strip_whitespace: true`, `normalize_identifiers: true` |
+| Targets | `utf-8` | `,` | `normalize_taxonomy: true`, `fill_missing_identifiers: true`, `sort_by: ['target_chembl_id']` |
+| Documents | `utf-8` | `,` | `trim_whitespace: true`, `normalise_unicode: true`, `ensure_unique_ids: true` |
+
 Each steps module imports its matching configuration, exposing `PIPELINE_CONFIG` and constructing `PIPELINE_STEPS` directly from the YAML definition so future additions require no code edits. 【F:library/postprocess/assays/steps.py†L1-L76】【F:library/postprocess/documents/steps.py†L1-L82】【F:library/postprocess/targets/steps.py†L1-L80】
 
 ## Runtime flow
