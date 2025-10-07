@@ -16,6 +16,7 @@ import yaml
 
 from dataclasses import dataclass
 
+from config.paths import DICTIONARY_DIR
 from scripts import get_activity_data
 from library.resources.dictionaries import get_resource
 
@@ -694,3 +695,13 @@ def test_activity_pipeline__fills_compound_name_from_pref_name(cfg, tmp_path, mo
     fill_mask = compound_series.notna() & compound_series.str.strip().ne("")
     fill_rate = fill_mask.sum() / len(compound_series)
     assert fill_rate >= 0.95
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("deterministic_env")
+def test_load_assay_src_lookup__real_dictionary_includes_known_assays() -> None:
+    lookup = get_activity_data._load_assay_src_lookup(DICTIONARY_DIR)
+
+    assert lookup.get("CHEMBL1762864") == "357280"
+    assert lookup.get("CHEMBL1762866") == "357284"
+    assert all(str(key).strip() and str(value).strip() for key, value in lookup.items())
+
