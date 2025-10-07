@@ -11,17 +11,17 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pandas as pd
 
-from ..config import IoCfg
 from ..common.log import logger
+from ..config import IoCfg
 
 if TYPE_CHECKING:  # pragma: no cover - import only for typing
     from .. import validation as _validation_module
 
 
-_validation_mod: "_validation_module" | None = None
+_validation_mod: _validation_module | None = None
 
 
-def _get_validation_module() -> "_validation_module":
+def _get_validation_module() -> _validation_module:
     """Return the lazily imported :mod:`library.validation` module."""
 
     global _validation_mod
@@ -175,7 +175,10 @@ def read_ids(
                     except StopIteration:
                         return iter(())
 
-                    def _with_peek() -> Iterator[_CollectedId]:
+                    def _with_peek(
+                        first_item: _CollectedId = first_item,
+                        collected: tuple[_CollectedId, ...] = tuple(collected),
+                    ) -> Iterator[_CollectedId]:
                         yield first_item
                         yield from collected
 
@@ -267,7 +270,7 @@ def read_csv(
     dtype: Mapping[Hashable, Any] | type | None = None,
     na_values: Sequence[str] | str | None = None,
     parse_dates: Sequence[str] | None = None,
-    schema: "pa.DataFrameSchema" | type["pa.DataFrameModel"] | None = None,
+    schema: pa.DataFrameSchema | type[pa.DataFrameModel] | None = None,
 ) -> pd.DataFrame:
     """Load a CSV file into a :class:`pandas.DataFrame` with optional schema validation."""
 

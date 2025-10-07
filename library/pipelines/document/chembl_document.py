@@ -10,6 +10,7 @@ import pandas as pd
 import requests
 
 from library.clients import ChemblClient, _chunked
+
 from ...common.log import logger
 from ...config import ApiCfg
 

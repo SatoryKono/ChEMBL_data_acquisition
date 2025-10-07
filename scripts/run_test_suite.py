@@ -6,17 +6,16 @@ import argparse
 import json
 import logging
 import os
-from dataclasses import dataclass, asdict
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import pytest
 
-
-from library.common.logging_setup import LoggerConfig, configure_logger
 from library.cli.logging import setup_cli_logging
-
+from library.common.logging_setup import LoggerConfig, configure_logger
 
 SUCCESS_RATE_THRESHOLD = 0.95
 

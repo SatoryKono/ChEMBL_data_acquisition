@@ -45,12 +45,16 @@ import requests
 from ..clients.uniprot import (
     UniProtFetchError,
     fetch_uniprot,
+)
+from ..clients.uniprot import (
     get_session as get_uniprot_session,
+)
+from ..clients.uniprot import (
     init_session as init_uniprot_session,
 )
-from ..config import IupharCfg, UniprotCfg
 from ..common.log import logger
 from ..common.rate_limiter import get_limiter
+from ..config import IupharCfg, UniprotCfg
 
 _DEFAULT_UNIPROT_DATA_DIR = Path("uniprot")
 
@@ -900,7 +904,7 @@ def _fetch_gtop_endpoint(
             raw_content_type = response.headers.get("Content-Type")
             content_type = raw_content_type if isinstance(raw_content_type, str) else ""
             body = response.content
-            if isinstance(body, (bytes, bytearray)):
+            if isinstance(body, bytes | bytearray):
                 body_is_empty = not body.strip()
             elif isinstance(body, str):
                 body_is_empty = not body.strip()

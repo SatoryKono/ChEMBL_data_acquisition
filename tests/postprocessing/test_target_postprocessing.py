@@ -1,16 +1,11 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
 import csv
 import importlib.util
 import sys
 import types
-import warnings
 from pathlib import Path
-
-
-import importlib.util
-import sys
-import types
 from typing import Any
 
 import numpy as np
@@ -24,7 +19,6 @@ from library.pipelines.target import cellularity, helpers, multifunctional
 from library.postprocessing import names as target_names
 from library.postprocessing.names import process_target_names
 from library.postprocessing.target import isoform
- 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -39,7 +33,7 @@ def _load_postprocessing_cellularity_module():
         post_pkg = types.ModuleType("library.postprocessing")
         post_pkg.__path__ = [str(REPO_ROOT / "library" / "postprocessing")]
         sys.modules["library.postprocessing"] = post_pkg
-        setattr(library, "postprocessing", post_pkg)
+        library.postprocessing = post_pkg
 
     target_pkg = sys.modules.get("library.postprocessing.target")
     if target_pkg is None:
@@ -49,7 +43,7 @@ def _load_postprocessing_cellularity_module():
         ]
         sys.modules["library.postprocessing.target"] = target_pkg
     if not hasattr(sys.modules["library.postprocessing"], "target"):
-        setattr(sys.modules["library.postprocessing"], "target", target_pkg)
+        sys.modules["library.postprocessing"].target = target_pkg
 
     spec = importlib.util.spec_from_file_location(
         "library.postprocessing.target.cellularity",

@@ -7,6 +7,7 @@ validate behaviour against the historical pipeline.
 
 from __future__ import annotations
 
+# ruff: noqa: E402
 
 SSOT_CONTEXT = '''
 The implementation follows the Single Source of Truth (SSoT) captured in the
@@ -45,14 +46,17 @@ long-form table where each row represents a distinct name attributed to a
 target.
 '''
 
-from dataclasses import dataclass
 import json
 import re
 import sys
+from collections.abc import Iterable, Mapping, MutableMapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping, MutableMapping, Sequence
+from typing import Any
 
 import pandas as pd
+
+from library.common.csv_utils import write_csv_deterministic
 
 from .helpers import (
     ENCODING_FALLBACKS,
@@ -60,7 +64,6 @@ from .helpers import (
     normalise_text,
     read_csv_with_fallbacks,
 )
-from library.common.csv_utils import write_csv_deterministic
 
 _DEFAULT_SEARCH_DIR = Path("data/output")
 _OUTPUT_COLUMNS: tuple[str, ...] = (
@@ -89,7 +92,7 @@ class TargetNamesError(RuntimeError):
 def _current_default_search_dir() -> Path:
     package = sys.modules.get(__name__)
     if package is not None and hasattr(package, "_DEFAULT_SEARCH_DIR"):
-        override = getattr(package, "_DEFAULT_SEARCH_DIR")
+        override = package._DEFAULT_SEARCH_DIR
         if override is not None:
             return Path(override)
     return _DEFAULT_SEARCH_DIR
@@ -214,7 +217,7 @@ def _extract_contrion(component: Mapping[str, Any]) -> list[str]:
     contrion_value = component.get("contrion")
     if isinstance(contrion_value, str):
         return [contrion_value]
-    if isinstance(contrion_value, Iterable) and not isinstance(contrion_value, (str, bytes)):
+    if isinstance(contrion_value, Iterable) and not isinstance(contrion_value, str | bytes):
         result: list[str] = []
         for item in contrion_value:
             text = normalise_text(item)
@@ -387,7 +390,7 @@ def _ensure_columns(frame: pd.DataFrame, columns: Sequence[str]) -> None:
         )
 
 
-def process_target_names(
+def _process_target_names_legacy(
     input_path: str | Path | None = None,
     *,
     search_dir: str | Path | None = None,
@@ -432,14 +435,10 @@ __all__ = [
     "sort_my_list",
     "reference_SMILES",
 ]
-from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
 
-import pandas as pd
-
-from . import helpers
 from ..common.log import logger
+from . import helpers
 
 # Columns in the targets table used to derive names.  Each entry maps the column
 # name to a descriptive label stored alongside the extracted token so consumers
@@ -515,7 +514,7 @@ def _build_names_table(frame: pd.DataFrame) -> pd.DataFrame:
     records: list[dict[str, Any]] = []
     column_set = set(frame.columns)
 
-    for idx, row in frame.iterrows():
+    for _idx, row in frame.iterrows():
         target_id = helpers.normalise_text(row.get("target_chembl_id"))
         if not target_id:
             continue

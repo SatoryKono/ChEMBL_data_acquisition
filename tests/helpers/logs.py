@@ -3,9 +3,9 @@ from __future__ import annotations
 import ast
 import re
 import shlex
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
-
+from typing import Any
 
 _NEW_PATTERN = re.compile(
     r"^\[(?P<timestamp>[^\]]+)\]\s\[(?P<level>[^\]]+)\]\s\[(?P<name>[^\]]+)\]\s(?P<message>.*)$"

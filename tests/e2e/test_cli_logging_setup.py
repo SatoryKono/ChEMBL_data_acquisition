@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -91,7 +91,7 @@ def test_cli_logging__creates_log_file(
     class _FixedDateTime(datetime):
         @classmethod
         def now(cls, tz=None):  # type: ignore[override]
-            tzinfo = tz or timezone.utc
+            tzinfo = tz or UTC
             return datetime(2024, 1, 2, 0, 0, tzinfo=tzinfo)
 
     monkeypatch.setattr(get_activity_data, "datetime", _FixedDateTime)

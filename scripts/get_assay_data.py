@@ -7,6 +7,8 @@ instead of terminating the interpreter to make orchestration easier.
 
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
 else:  # pragma: no cover - executed when imported as a package module
@@ -15,58 +17,53 @@ else:  # pragma: no cover - executed when imported as a package module
 bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
-from pathlib import Path
-from time import sleep
-
 import argparse
 import sys
 from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from functools import partial
 from itertools import islice
+from pathlib import Path
+from time import sleep
 
 import pandas as pd
 import requests
 
-from library.integration import chembl_library as cl
-from library.pipelines.assay import postprocessing as ap
-from library.postprocessing import enrich_assay_metadata
-from library import cli
-from library import io
-from library.common.csv_utils import write_csv_chunks_deterministic
-from library.pipelines.assay.chembl_assay import ASSAY_COLUMNS, MAX_ASSAY_CHUNK_SIZE
-from library.orchestration import ETLContext
+from library import cli, io
 from library.cli import (
+    ConfigMetadata,
     Logger,
     LoggerConfig,
-    ConfigMetadata,
     configure_logger,
 )
 from library.cli import build_parser as base_parser
-
-from library.cli.pipeline_definition import PipelineDefinition
-
 from library.cli.base import PipelineCLIBase
-
-from library.cli_utils import run_cli_command, run_pipeline
-from library.cli.logging import setup_cli_logging
 from library.cli.metadata import prepare_option
-from library.config import Config, _serialize_paths
+from library.cli.pipeline_definition import PipelineDefinition
+from library.cli_utils import run_cli_command as _run_cli_command
+from library.cli_utils import run_pipeline
+from library.common.csv_utils import write_csv_chunks_deterministic
+from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 from library.common.log import logger
-from library.pipelines.common import add_pipeline_metadata
-from library.qa.reporting import build_table_quality_hook
-from library.validation import validate_assays
-from library.schemas import AssaysSchema, normalize_assays
+from library.config import Config, _serialize_paths
+from library.integration import chembl_library as cl
+from library.orchestration import ETLContext
+from library.pipelines.assay import postprocessing as ap
+from library.pipelines.assay.chembl_assay import ASSAY_COLUMNS, MAX_ASSAY_CHUNK_SIZE
 from library.pipelines.common import (
     ChunkedFetchConfig,
     CsvWriterConfig,
+    add_pipeline_metadata,
     prepare_chunked_pipeline,
 )
-from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
+from library.postprocessing import enrich_assay_metadata
+from library.qa.reporting import build_table_quality_hook
+from library.schemas import AssaysSchema, normalize_assays
+from library.validation import validate_assays
 
-configure_logger = cli.configure_logger
+run_cli_command = _run_cli_command
 
-__all__ = ["ap", "configure_logger", "main", "run", "run_chembl"]
+__all__ = ["ap", "configure_logger", "main", "run", "run_cli_command", "run_chembl"]
 
 
 DEFAULT_INPUT_NAME = "assay.csv"
@@ -198,16 +195,16 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             output_path = Path(legacy_output)
             if not isinstance(legacy_output, Path):
                 args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
         else:
             output_path = Path(io.default_output_path(args.input_csv, cfg.io))
             args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
     else:
         output_path = Path(final_out_attr)
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
-        setattr(args, "output_csv", output_path)
+        args.output_csv = output_path
     metadata_obj = getattr(args, "_config_metadata", None)
     if not isinstance(metadata_obj, ConfigMetadata):
         metadata_obj = None
@@ -483,16 +480,16 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             output_path = Path(legacy_output)
             if not isinstance(legacy_output, Path):
                 args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
         else:
             output_path = Path(io.default_output_path(args.input_csv, cfg.io))
             args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
     else:
         output_path = Path(final_out_attr)
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
-        setattr(args, "output_csv", output_path)
+        args.output_csv = output_path
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0

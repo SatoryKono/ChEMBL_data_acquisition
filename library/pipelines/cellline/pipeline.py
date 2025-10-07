@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
 from time import perf_counter
-from typing import Sequence
 
 import pandas as pd
 import requests

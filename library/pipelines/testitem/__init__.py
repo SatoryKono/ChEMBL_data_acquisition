@@ -15,14 +15,21 @@ from importlib.util import find_spec
 from pathlib import Path
 
 from library.config import Config
-
+from library.pipelines.assay.chembl_assay import (
+    TESTITEM_PUBCHEM_COLUMNS as _ASSAY_TESTITEM_PUBCHEM_COLUMNS,
+)
 from library.pipelines.common import PipelineRunResult
-from . import enrichment as testitem_enrichment
+
+from . import enrichment as testitem_enrichment  # noqa: F401 - re-exported module
 from .enrichment import enrich
-from library.pipelines.assay.chembl_assay import TESTITEM_PUBCHEM_COLUMNS
 
 try:
     from library.testitem_pipeline import (
+        _DEFAULT_CATALOG_CFG,
+        _FETCH_ERROR_SAMPLE_SIZE,
+        _MOLECULE_HIERARCHY_COLUMNS,
+        _PUBCHEM_CACHE_SCHEMA_VERSION,
+        _TYPO_PARENT_COLUMN,
         PARENT_LOOKUP_SOURCE_CACHE,
         PARENT_LOOKUP_SOURCE_LOOKUP,
         PARENT_LOOKUP_SOURCE_PARTIAL,
@@ -30,15 +37,12 @@ try:
         PARENT_LOOKUP_SOURCE_SYNC,
         ReadInputIdsResult,
         TestitemPipelineOptions,
-        _DEFAULT_CATALOG_CFG,
-        _FETCH_ERROR_SAMPLE_SIZE,
-        _MOLECULE_HIERARCHY_COLUMNS,
-        _PUBCHEM_CACHE_SCHEMA_VERSION,
-        _TYPO_PARENT_COLUMN,
+        _prepare_pubchem_api_cfg,
+        _write_pubchem_cid_cache,
         analyze_table_quality,
         ensure_no_parant_column,
-        file_sha256,
         fetch_testitems,
+        file_sha256,
         integrate_missing_identifiers,
         load_molecule_hierarchy_lookup,
         load_parent_catalog,
@@ -48,9 +52,11 @@ try:
         update_parent_catalog_cache,
         write_meta_yaml,
         write_parent_catalog_cache,
-        _prepare_pubchem_api_cfg,
-        _write_pubchem_cid_cache,
+    )
+    from library.testitem_pipeline import (
         PUBCHEM_CID_CACHE_ENCODING as _PIPELINE_PUBCHEM_CID_CACHE_ENCODING,
+    )
+    from library.testitem_pipeline import (
         PUBCHEM_COLUMNS as _PIPELINE_PUBCHEM_COLUMNS,
     )
 except ModuleNotFoundError as exc:  # pragma: no cover - environment specific
@@ -87,6 +93,8 @@ else:
     PUBCHEM_CID_CACHE_ENCODING = pubchem_module.PUBCHEM_CID_CACHE_ENCODING
     PUBCHEM_COLUMNS = list(pubchem_module.PUBCHEM_COLUMNS)
 
+TESTITEM_PUBCHEM_COLUMNS = _ASSAY_TESTITEM_PUBCHEM_COLUMNS
+
 __all__ = [
     "enrich",
     "PUBCHEM_CID_CACHE_ENCODING",
@@ -96,6 +104,7 @@ __all__ = [
     "PARENT_LOOKUP_SOURCE_PARTIAL",
     "PARENT_LOOKUP_SOURCE_SKIPPED",
     "PARENT_LOOKUP_SOURCE_SYNC",
+    "TESTITEM_PUBCHEM_COLUMNS",
     "ReadInputIdsResult",
     "TestitemPipelineOptions",
     "_DEFAULT_CATALOG_CFG",

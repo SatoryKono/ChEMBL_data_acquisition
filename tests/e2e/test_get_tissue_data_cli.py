@@ -7,10 +7,11 @@ import hashlib
 import json
 import sys
 from collections import deque
+from collections.abc import Iterable
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Iterable
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -27,7 +28,7 @@ class MemoryLogger:
     def __init__(self) -> None:
         self.events: list[tuple[str, str, dict[str, Any]]] = []
 
-    def bind(self, **_: Any) -> "MemoryLogger":  # pragma: no cover - interface compatibility
+    def bind(self, **_: Any) -> MemoryLogger:  # pragma: no cover - interface compatibility
         return self
 
     def _store(self, level: str, event: str, *, extra: dict[str, Any] | None = None, **data: Any) -> None:
@@ -64,7 +65,7 @@ class StubChemblClient:
         self._pages = deque(copy.deepcopy(list(pages)))
         self._calls = calls
 
-    def __enter__(self) -> "StubChemblClient":  # pragma: no cover - interface parity
+    def __enter__(self) -> StubChemblClient:  # pragma: no cover - interface parity
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - interface parity
@@ -148,7 +149,7 @@ def test_get_tissue_data_cli__end_to_end(
             if final_out is not None:
                 final_path = Path(final_out)
                 args.final_out = final_path
-                setattr(args, "output_csv", final_path)
+                args.output_csv = final_path
             else:
                 legacy_out = getattr(args, "output_csv", None)
                 if legacy_out is not None:

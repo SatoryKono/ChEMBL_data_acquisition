@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from numbers import Real
 from threading import Lock
@@ -17,10 +16,10 @@ import requests
 from cachetools import TTLCache
 from requests import Session
 
-from ..config.models import ApiCfg, PubChemCfg, RetryCfg
-from ..config.runtime import session_with_retry
 from ..common.log import logger
 from ..common.rate_limiter import get_limiter, sleep
+from ..config.models import ApiCfg, PubChemCfg, RetryCfg
+from ..config.runtime import session_with_retry
 
 __all__ = [
     "Properties",
@@ -76,8 +75,8 @@ def _retry_after_seconds(value: str | None, *, now: datetime | None = None) -> f
         except (TypeError, ValueError):
             return None
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        reference = now or datetime.now(timezone.utc)
+            parsed = parsed.replace(tzinfo=UTC)
+        reference = now or datetime.now(UTC)
         seconds = (parsed - reference).total_seconds()
     if seconds < 0:
         return 0.0

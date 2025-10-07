@@ -9,8 +9,8 @@ from typing import Any
 
 import pandas as pd
 
-from ...config import ActivityActionTypeCfg, ActivityPropertiesCfg
 from ...common.log import logger
+from ...config import ActivityActionTypeCfg, ActivityPropertiesCfg
 
 __all__ = [
     "apply_activity_annotations",

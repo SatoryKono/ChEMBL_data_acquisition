@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from ..config import Config
-from ..common.log import logger
 from ..common.csv_utils import write_csv_chunks_deterministic
+from ..common.log import logger
+from ..config import Config
 
 
 def write_csv(

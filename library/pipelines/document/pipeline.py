@@ -11,22 +11,22 @@ sub-commands.
 from __future__ import annotations
 
 import json
-
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-from .type_classifier import compute_scores, decide_label
-from .type_terms import parse_terms
 from ...common.pandas_utils import merge_series_prefer_left
 from ...schemas.document_spec import (
     DOCUMENT_COLUMN_GROUPS,
+)
+from ...schemas.document_spec import (
     DOCUMENT_SCHEMA_COLUMNS as _DECLARED_SCHEMA_COLUMNS,
 )
+from .type_classifier import compute_scores, decide_label
+from .type_terms import parse_terms
 
 # ---------------------------------------------------------------------------
 CH_EMBL_COLUMNS: list[str] = list(DOCUMENT_COLUMN_GROUPS["chembl"])

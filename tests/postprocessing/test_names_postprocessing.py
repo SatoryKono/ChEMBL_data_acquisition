@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import importlib.util
+import json
 import sys
 import types
 from functools import partial
@@ -12,7 +12,6 @@ import pandas.testing as pdt
 import pytest
 
 import library
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -29,7 +28,7 @@ def _load_names_module() -> types.ModuleType:
         package = types.ModuleType(package_name)
         package.__path__ = [str(REPO_ROOT / "library" / "postprocessing")]
         sys.modules[package_name] = package
-        setattr(library, "postprocessing", package)
+        library.postprocessing = package
 
     path = REPO_ROOT / "library" / "postprocessing" / "names.py"
     spec = importlib.util.spec_from_file_location(module_name, path)
@@ -46,7 +45,7 @@ def _load_names_module() -> types.ModuleType:
     )
     exec(compile(fixed, str(path), "exec"), module.__dict__)
 
-    setattr(package, "names", module)
+    package.names = module
     return module
 
 

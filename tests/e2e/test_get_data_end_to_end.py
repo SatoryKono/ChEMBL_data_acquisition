@@ -19,7 +19,6 @@ from scripts import get_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_file, parse_log_lines
 
-
 PipelineFunc = Callable[[list[str]], int]
 
 
@@ -490,7 +489,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert new_exit_code == 0
     new_log_path = log_dir / f"get_data_{new_date_prefix}.log"
     assert new_log_path.exists()
-    for step_name, stem in get_data.DEFAULT_OUTPUT_STEMS.items():
+    for _step_name, stem in get_data.DEFAULT_OUTPUT_STEMS.items():
         new_path = output_dir / f"output.{stem}_{new_date_prefix}.csv"
         assert new_path.exists()
 

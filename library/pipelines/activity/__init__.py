@@ -7,12 +7,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from library.config import Config
-
 from library.pipelines.common import PipelineRunResult
+
 from .action_properties import (
-  annotate_action_properties,
-  build_activity_properties,
-  infer_action_type,
+    annotate_action_properties,
+    build_activity_properties,
+    infer_action_type,
 )
 from .activities import get_activities
 

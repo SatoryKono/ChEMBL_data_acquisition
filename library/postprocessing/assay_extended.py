@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import functools
 import json
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Sequence
 
 import pandas as pd
 
@@ -41,7 +41,7 @@ def _lookup_column_name(frame: pd.DataFrame, *candidates: str) -> str | None:
     return None
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _load_assay_lookup_cached(dictionary_root: str) -> pd.DataFrame:
     root = Path(dictionary_root)
     candidate = root / "_assay" / "assay.csv"
@@ -101,7 +101,7 @@ def _load_assay_lookup(dictionary_root: Path) -> pd.DataFrame:
     return _load_assay_lookup_cached(str(dictionary_root.resolve()))
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _load_taxonomy_lookup_cached(dictionary_root: str) -> pd.DataFrame:
     root = Path(dictionary_root)
     candidate = root / "_taxonomy" / "taxonomy.csv"
@@ -148,7 +148,7 @@ def _load_taxonomy_lookup(dictionary_root: Path) -> pd.DataFrame:
     return _load_taxonomy_lookup_cached(str(dictionary_root.resolve()))
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _load_document_year_lookup_cached(dictionary_root: str) -> pd.DataFrame:
     root = Path(dictionary_root)
     candidate = root / "_document" / "document.csv"
@@ -271,7 +271,7 @@ def _aggregate_accessions(frame: pd.DataFrame) -> pd.DataFrame:
     return aggregated
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _load_target_accession_lookup_cached(dictionary_root: str) -> pd.DataFrame:
     root = Path(dictionary_root)
     target_dir = root / "_target"
@@ -364,7 +364,7 @@ def enrich_assay_metadata(
         "target_chembl_id": "string",
         "document_chembl_id": "string",
     }
-    for column, dtype in ensure_columns.items():
+    for column, _dtype in ensure_columns.items():
         if column not in result.columns:
             result[column] = pd.Series(pd.NA, index=index, dtype="string")
         else:

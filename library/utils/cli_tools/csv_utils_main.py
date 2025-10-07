@@ -14,9 +14,9 @@ from __future__ import annotations
 # ruff: noqa: E402
 import time
 from collections.abc import Sequence
-from typing import Any
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -24,8 +24,8 @@ from library import cli
 from library.cli import LoggerConfig, configure_logger, create_logger_config
 from library.cli_utils import build_parser
 from library.common.csv_utils import write_csv_chunks_deterministic
-from library.config import ConfigError, ensure_dirs, print_config
 from library.common.log import logger
+from library.config import ConfigError, ensure_dirs, print_config
 from library.parser_schema import CSVExportArgs
 
 
@@ -60,12 +60,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         date_value = getattr(ns, "date", None)
         if provided_date is None:
             date_value = f"{date.today():%Y%m%d}"
-            setattr(ns, "date", date_value)
+            ns.date = date_value
         default_output = (
             target_dir / f"output.{output_stem}_{date_value}.csv"
         ).resolve()
         ns.output_csv = default_output
-        setattr(ns, "final_out", default_output)
+        ns.final_out = default_output
     try:
         cfg = cli.apply_config_overrides(
             ns,

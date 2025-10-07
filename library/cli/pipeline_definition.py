@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Callable, Iterable, Mapping, Sequence, TypeVar, Protocol
 from pathlib import Path
+from typing import Protocol, TypeVar
 
 import pandas as pd
 
 from ..common.metadata import Stats
-
 
 SchemaT = TypeVar("SchemaT")
 
@@ -82,7 +82,7 @@ class PipelineDefinition:
         stats_callback: Callable[[Stats], None] | None = None,
         strict_mode: bool = False,
         dictionary_resources: Sequence[str] | None = None,
-    ) -> "PipelineDefinition":
+    ) -> PipelineDefinition:
         """Construct a :class:`PipelineDefinition` using legacy keyword arguments."""
 
         if table_quality is None:

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 import sys
+from collections.abc import Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Sequence
 
 import pytest
 

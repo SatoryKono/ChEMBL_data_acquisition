@@ -7,8 +7,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from library.config import PubChemCfg
 import library.testitem_pipeline.pubchem as pubchem
+from library.config import PubChemCfg
 
 
 @pytest.mark.integration

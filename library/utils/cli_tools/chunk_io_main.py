@@ -7,7 +7,6 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from library import cli
-from library.common.chunk_io import process_csv_chunks
 from library.cli import (
     LoggerConfig,
     add_common_arguments,
@@ -15,10 +14,16 @@ from library.cli import (
     create_logger_config,
     path_argument,
 )
-from library.config import Config, ConfigError, ensure_dirs, print_config
-from library.config.loader import DEFAULT_CONFIG_RELATIVE
-from library.io.paths import default_output_path
+from library.common.chunk_io import process_csv_chunks
 from library.common.log import logger
+from library.config import (
+    DEFAULT_CONFIG_PATH,
+    Config,
+    ConfigError,
+    ensure_dirs,
+    print_config,
+)
+from library.io.paths import default_output_path
 
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:

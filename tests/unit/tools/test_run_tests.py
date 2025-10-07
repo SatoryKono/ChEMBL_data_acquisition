@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import sys
 from contextlib import contextmanager
-import io
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _RUN_TESTS_PATH = _PROJECT_ROOT / "tests" / "run_tests.py"
@@ -153,7 +152,7 @@ def test_main__verbose_propagates_debug_logging(tmp_path: Path, monkeypatch: pyt
 
     def _fake_pytest_main(pytest_args: list[str], plugins: list[object]) -> int:
         assert f"--log-file={log_path}" in pytest_args
-        assert f"--log-file-level=DEBUG" in pytest_args
+        assert "--log-file-level=DEBUG" in pytest_args
         return 0
 
     monkeypatch.setattr(run_tests.pytest, "main", _fake_pytest_main)

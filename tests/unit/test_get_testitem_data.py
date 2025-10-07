@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable, MutableMapping
 from pathlib import Path
-from typing import Iterable, MutableMapping
 
 import pandas as pd
 import pytest

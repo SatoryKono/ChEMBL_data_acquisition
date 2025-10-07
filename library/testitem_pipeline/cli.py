@@ -7,58 +7,51 @@ import threading
 import time
 import traceback
 from collections import OrderedDict, deque
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from itertools import chain, islice
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator, Sequence
+from typing import Any
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
-from library import io
-from library.integration.chembl_client import ChemblClient
+from library import SidecarErrors, io
 from library.clients import pubchem as pc
+from library.common.csv_utils import write_csv_chunks_deterministic
+from library.common.log import logger
 from library.config import (
     ApiCfg,
     Config,
     IoCfg,
-    RetryCfg,
     TestitemBatchRetryCfg,
     TestitemMoleculeEnrichmentCfg,
     _serialize_paths,
 )
-from library.common.csv_utils import write_csv_chunks_deterministic
-from library.common.log import logger
+from library.integration.chembl_client import ChemblClient
 from library.metadata import (
     Stats,
     file_sha256,
-    write_meta_yaml,
     record_quality_failure,
+    write_meta_yaml,
 )
-from library.pipelines.common import add_pipeline_metadata
 from library.orchestration import ETLContext
-from library import SidecarErrors
+from library.pipelines.common import add_pipeline_metadata
 from library.qa.reporting import build_table_quality_hook
-from library.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
+from library.validation import validate_testitems
 
+from . import testitem_enrichment
 from .catalog import (
-    PARENT_LOOKUP_SOURCE_CACHE,
-    PARENT_LOOKUP_SOURCE_LOOKUP,
-    PARENT_LOOKUP_SOURCE_PARTIAL,
     PARENT_LOOKUP_SOURCE_SKIPPED,
-    PARENT_LOOKUP_SOURCE_SYNC,
-    ParentEnrichmentPreparation,
-    ParentEnrichmentResult,
     ParentLookupStats,
     _merge_parent_stats,
     prepare_parent_enrichment,
     run_parent_enrichment,
 )
-from . import testitem_enrichment
-from .pubchem import PUBCHEM_COLUMNS, add_pubchem_data, augment_pubchem
+from .pubchem import augment_pubchem
 
 
 @lru_cache(maxsize=1)
@@ -319,7 +312,7 @@ class StageWatchdog:
         self._last_activity = time.monotonic()
         self._effective_interval = 0.0
 
-    def __enter__(self) -> "StageWatchdog":
+    def __enter__(self) -> StageWatchdog:
         self.start()
         return self
 
@@ -628,13 +621,6 @@ def run_testitem_pipeline(
 
     requested_ids: tuple[str, ...] = ()
     missing_ids: list[str] = []
-    parent_stats = ParentLookupStats(
-        source=PARENT_LOOKUP_SOURCE_SKIPPED,
-        missing=0,
-        unique=0,
-        attached=0,
-        uncovered=0,
-    )
 
     input_csv = Path(options.input_csv)
     output_csv = Path(options.output_csv) if options.output_csv is not None else None

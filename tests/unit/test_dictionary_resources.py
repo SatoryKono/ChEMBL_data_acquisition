@@ -18,7 +18,7 @@ def test_compute_sha256__ignores_crlf_in_files(tmp_path: Path) -> None:
     lf_path.write_text("id,name\n1,example\n", encoding="utf-8")
 
     crlf_path = tmp_path / "crlf.csv"
-    crlf_path.write_bytes("id,name\r\n1,example\r\n".encode("utf-8"))
+    crlf_path.write_bytes(b"id,name\r\n1,example\r\n")
 
     assert dictionaries._compute_sha256(lf_path) == dictionaries._compute_sha256(crlf_path)
 
@@ -35,9 +35,9 @@ def test_compute_sha256__ignores_crlf_in_directories(tmp_path: Path) -> None:
 
     crlf_dir = tmp_path / "crlf"
     crlf_dir.mkdir()
-    (crlf_dir / "data.csv").write_bytes("a,b\r\n1,2\r\n".encode("utf-8"))
+    (crlf_dir / "data.csv").write_bytes(b"a,b\r\n1,2\r\n")
     (crlf_dir / "nested").mkdir()
-    (crlf_dir / "nested" / "more.csv").write_bytes("x\r\ny\r\n".encode("utf-8"))
+    (crlf_dir / "nested" / "more.csv").write_bytes(b"x\r\ny\r\n")
 
     assert dictionaries._compute_sha256(lf_dir) == dictionaries._compute_sha256(crlf_dir)
 

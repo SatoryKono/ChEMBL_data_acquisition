@@ -27,21 +27,21 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from library import cli
-from library.clients import _chunked
 from library.cli import (
     LoggerConfig,
     build_root_parser,
     configure_logger,
     path_argument,
 )
+from library.clients import _chunked
+from library.common.log import logger
 from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.io.paths import default_output_path
 from library.io.readers import read_ids
 from library.io.writers import write_csv
-from library.postprocessing import target as target_pp
-from library.common.log import logger
 from library.pipelines.common import pipeline_metadata
 from library.pipelines.target.pipeline import run_pipeline
+from library.postprocessing import target as target_pp
 from library.schemas import TargetsSchema
 from library.schemas.targets import TARGETS_COLUMN_ORDER
 
@@ -497,7 +497,8 @@ def _cached_chembl_fetch(
 
 
 def run(cfg: Config, options: PipelineConfig) -> int:
-    chunk_factory = lambda: _chunk_iterator(cfg, options)
+    def chunk_factory() -> Iterable[pd.DataFrame]:
+        return _chunk_iterator(cfg, options)
     batch_size = options.batch_size if options.batch_size is not None else 100
     raw_format = (options.raw_format or "csv").lower()
     if raw_format not in {"csv", "parquet"}:
@@ -582,7 +583,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         base_path=base_path,
         output_dir=output_dir,
     )
-    setattr(args, "raw_out", resolved_raw)
+    args.raw_out = resolved_raw
     final_candidate = getattr(args, "final_out", None)
     if final_candidate in (None, argparse.SUPPRESS):
         final_candidate = getattr(args, "output_csv", None)
@@ -591,7 +592,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         base_path=base_path,
         output_dir=output_dir,
     )
-    setattr(args, "final_out", resolved_final)
+    args.final_out = resolved_final
     log_cfg.level = args.log_level
     log_cfg = LoggerConfig(level=log_cfg.level, run_id=log_cfg.run_id)
     logger_inst = configure_logger(log_cfg)

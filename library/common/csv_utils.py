@@ -16,20 +16,18 @@ import tempfile
 from collections.abc import Callable, Iterable, Sequence
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, TextIO, cast
+from typing import TYPE_CHECKING, Any, TextIO, cast
 
 import numpy as np
 import pandas as pd
 from pandas.api import types as ptypes
 
-from typing import TYPE_CHECKING
-
 from ..config import Config
-from .log import logger
 from ..utils.atomic import open_atomic
+from .log import logger
 
 if TYPE_CHECKING:  # pragma: no cover - import for type checking only
-    from ..io.metadata import write_meta_yaml as _write_meta_yaml_type
+    pass
 
 
 def _write_meta_yaml(*args: Any, **kwargs: Any) -> Path:
@@ -269,7 +267,7 @@ def _merge_sorted_csv_group(
                 key = (
                     tuple(
                         converter(row[col])
-                        for converter, col in zip(key_converters, resolved_sort_cols)
+                        for converter, col in zip(key_converters, resolved_sort_cols, strict=False)
                     )
                     if resolved_sort_cols
                     else tuple()
@@ -292,7 +290,7 @@ def _merge_sorted_csv_group(
                         tuple(
                             converter(next_row[col])
                             for converter, col in zip(
-                                key_converters, resolved_sort_cols
+                                key_converters, resolved_sort_cols, strict=False
                             )
                         )
                         if resolved_sort_cols
@@ -308,7 +306,7 @@ def _merge_sorted_csv_group(
                             tuple(
                                 converter(next_row[col])
                                 for converter, col in zip(
-                                    key_converters, resolved_sort_cols
+                                    key_converters, resolved_sort_cols, strict=False
                                 )
                             )
                             if resolved_sort_cols

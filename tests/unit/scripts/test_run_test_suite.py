@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 from contextlib import contextmanager
-import io
 from pathlib import Path
 from types import SimpleNamespace
 

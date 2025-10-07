@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
 import csv
 import datetime as dt
+import importlib.util
 import os
 import random
-import time
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Callable, Iterable, Sequence
-
 import sys
-
+import time
+from collections.abc import Callable, Iterable, Sequence
+from datetime import datetime
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -26,8 +26,7 @@ from library.config import Config
 from library.orchestration import ETLContext
 from library.resources import dictionaries as dictionary_resources
 
-
-FROZEN_UTC = datetime(2020, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+FROZEN_UTC = datetime(2020, 1, 1, 0, 0, 0, tzinfo=dt.UTC)
 FROZEN_TIMESTAMP = FROZEN_UTC.timestamp()
 FROZEN_NAIVE = FROZEN_UTC.replace(tzinfo=None)
 
@@ -139,15 +138,15 @@ def relax_dictionary_manifest_checks() -> None:
 def disable_network(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disallow outbound HTTP requests during tests."""
 
-    try:
-        import requests
-    except ModuleNotFoundError:  # pragma: no cover - requests optional in env
+    if importlib.util.find_spec("requests") is None:
         return
+
+    import requests
 
     def deny(self, method, url, *args, **kwargs):  # type: ignore[override]
         raise AssertionError("External network access is disabled during tests")
 
-    monkeypatch.setattr("requests.sessions.Session.request", deny)
+    monkeypatch.setattr(requests.sessions.Session, "request", deny)
 
 
 @pytest.fixture()

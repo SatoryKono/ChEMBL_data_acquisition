@@ -11,9 +11,9 @@ from functools import lru_cache
 from typing import Any
 from urllib.error import HTTPError
 
-from ..config import UniprotMappingCfg
 from ..common.log import logger
 from ..common.rate_limiter import get_limiter
+from ..config import UniprotMappingCfg
 
 _UNIPROT_MAPPING_CACHE_MAXSIZE = 128
 

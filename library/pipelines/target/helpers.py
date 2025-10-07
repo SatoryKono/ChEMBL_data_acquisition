@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 import pandas as pd
 
-from ...config import Config
 from ...common.csv_utils import write_csv_deterministic
+from ...config import Config
 from ...schemas.targets import TARGETS_COLUMN_ORDER
 from . import postprocessing as _postprocessing
 

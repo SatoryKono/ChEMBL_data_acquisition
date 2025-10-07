@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import argparse
 from argparse import BooleanOptionalAction
 from collections.abc import Sequence
+from pathlib import Path
 
 import pandas as pd
 
-from library import cli
-from library import io
+from library import cli, io
 from library.cli import (
     LoggerConfig,
     configure_logger,
@@ -19,8 +17,8 @@ from library.cli import (
 from library.cli import (
     build_parser as base_parser,
 )
-from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.common.log import logger
+from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.table_quality import analyze_table_quality
 
 

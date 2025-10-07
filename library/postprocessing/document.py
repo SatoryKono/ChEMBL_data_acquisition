@@ -15,18 +15,18 @@ import importlib
 import math
 import os
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping, cast
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
 
-from ..pipelines.document import postprocessing as stage_document_postprocessing
-from ..config import IoCfg
 from ..common.csv_utils import write_csv_deterministic
 from ..common.log import logger
+from ..config import IoCfg
+from ..pipelines.document import postprocessing as stage_document_postprocessing
 
 # ===== Parameters ===========================================================
 UTF8_ENCODING = "utf-8"
@@ -214,7 +214,7 @@ def _string_value(value: object) -> str:
         return value.strip()
     if value is None:
         return ""
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         if pd.isna(value):
             return ""
         return str(value).strip()
@@ -380,8 +380,8 @@ def _build_metadata_flags(df: pd.DataFrame) -> tuple[pd.Series, dict[str, pd.Ser
                 continue
             mask = mask | _truthy_mask(df[column])
         flags[f"has_{source}"] = mask
-    for row in zip(*(flags[f"has_{src}"] for src in METADATA_SOURCE_ORDER)):
-        sources = [name for name, present in zip(METADATA_SOURCE_ORDER, row) if present]
+    for row in zip(*(flags[f"has_{src}"] for src in METADATA_SOURCE_ORDER), strict=False):
+        sources = [name for name, present in zip(METADATA_SOURCE_ORDER, row, strict=False) if present]
         token_lists.append(sources)
     metadata_strings = [METADATA_LIST_SEPARATOR.join(tokens) for tokens in token_lists]
     metadata_counts = [len(tokens) for tokens in token_lists]
@@ -695,11 +695,11 @@ def to_text(value: Any) -> str:
         return value
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="ignore")
-    if isinstance(value, (np.bool_, bool)):
+    if isinstance(value, np.bool_ | bool):
         return "true" if bool(value) else "false"
-    if isinstance(value, (np.integer, int)):
+    if isinstance(value, np.integer | int):
         return str(int(value))
-    if isinstance(value, (np.floating, float)):
+    if isinstance(value, np.floating | float):
         if math.isnan(float(value)):
             return ""
         integer = float(value)
@@ -1154,7 +1154,7 @@ def _harmonise_documents(out_frame: pd.DataFrame, ref_frame: pd.DataFrame) -> pd
     df = df.merge(ref_frame, on="document_chembl_id", how="left")
 
     review_values: list[Any] = []
-    for current, doctype in zip(df["review"], df["doctype_review"]):
+    for current, doctype in zip(df["review"], df["doctype_review"], strict=False):
         current_value = None if pd.isna(current) else bool(current)
         doctype_value = None if pd.isna(doctype) else bool(doctype)
         if current_value is True or doctype_value is True:

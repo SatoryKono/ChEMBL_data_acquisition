@@ -10,14 +10,14 @@ import pandas as pd
 import pytest
 import yaml
 
-from library.io import default_output_path
 import library.io.metadata as io_metadata
+from library.io import default_output_path
+from library.pipelines.common import metadata as pipeline_metadata_module
 from library.pipelines.tissue import TISSUE_COLUMN_ORDER
 from library.pipelines.tissue.pipeline import (
     TissuePipelineOptions,
     run_tissue_pipeline,
 )
-from library.pipelines.common import metadata as pipeline_metadata_module
 
 
 class _DummyClient:

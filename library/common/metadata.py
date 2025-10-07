@@ -11,8 +11,8 @@ from __future__ import annotations
 import hashlib
 import platform
 from collections.abc import Mapping, Sequence
-from functools import lru_cache
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -22,9 +22,9 @@ from config.paths import DICTIONARY_DIR
 
 from ..config import _mask_secrets
 from ..resources.dictionaries import DictionaryManifestError, get_resource
+from ..utils.atomic import open_atomic
 from .git import _git_sha
 from .log import logger
-from ..utils.atomic import open_atomic
 
 
 def _load_metadata(meta_path: Path) -> dict[str, Any]:
@@ -60,6 +60,11 @@ class Stats(_StatsRequired, total=False):
 
     parent_lookup_source: str
     parent_lookup_missing: int
+    parent_lookup_hierarchy_attached: int
+    parent_lookup_fallback_attached: int
+    parent_lookup_no_parent: int
+    parent_lookup_failed_ids: list[str]
+    parent_lookup_failed_count: int
     missing_molecule_ids: list[str]
     missing_molecule_ids_count: int
     chunk_fetch_failure_chunks: int

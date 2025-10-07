@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from requests import ConnectionError, HTTPError, ReadTimeout, Response
-from urllib.parse import parse_qs, urlparse
 
 from library.config import ApiCfg
 from library.pipelines.assay.chembl_assay import (
-    MAX_ASSAY_CHUNK_SIZE,
     _ASSAY_MAX_IDS_PER_REQUEST,
+    MAX_ASSAY_CHUNK_SIZE,
     get_activities,
     get_assays,
     get_testitem,

@@ -21,6 +21,8 @@ that the pipelines can be executed programmatically from other callers as well.
 
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
 else:  # pragma: no cover - executed when imported as a package module
@@ -36,52 +38,58 @@ import logging
 import time
 import uuid
 from collections import deque
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from fnmatch import fnmatch
 from heapq import heappop, heappush
 from pathlib import Path
-
-from typing import Any, Callable, Iterable, IO, Mapping, Sequence
+from typing import IO, Any
 
 from library.cli.logging import setup_cli_logging
 from library.clients import ChemblClient
-from library.orchestration import ETLContext
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
-from library.config import Config, DEFAULT_CONFIG_PATH, load_config
-from library.pipelines.activity import (
-    ActivityPipelineOptions,
-    run_pipeline as run_activity_pipeline,
-)
-from library.pipelines.assay import (
-    AssayPipelineOptions,
-    run_pipeline as run_assay_pipeline,
-)
+from library.config import DEFAULT_CONFIG_PATH, Config, load_config
+from library.orchestration import ETLContext
 from library.orchestration.workflow import (
     PreparedPipelineStep,
     StepExecutionResult,
     execute_workflow,
     temporary_output_path,
 )
+from library.pipelines.activity import (
+    ActivityPipelineOptions,
+)
+from library.pipelines.activity import (
+    run_pipeline as run_activity_pipeline,
+)
+from library.pipelines.assay import (
+    AssayPipelineOptions,
+)
+from library.pipelines.assay import (
+    run_pipeline as run_assay_pipeline,
+)
 from library.pipelines.common import PipelineRunResult
 from library.pipelines.document import (
     DocumentPipelineOptions,
+)
+from library.pipelines.document import (
     run_pipeline as run_document_pipeline,
 )
 from library.pipelines.registry import PipelineStep, load_pipeline_registry
-
-from library.reporting.run_manifest import load_output_report, merge_run_output
-
 from library.pipelines.target import (
     TargetPipelineOptions,
+)
+from library.pipelines.target import (
     run_pipeline as run_target_pipeline,
 )
 from library.pipelines.testitem import (
     TestitemPipelineOptions,
+)
+from library.pipelines.testitem import (
     run_pipeline as run_testitem_pipeline,
 )
-from library.config.loader import DEFAULT_CONFIG_PATH
-
+from library.reporting.run_manifest import load_output_report, merge_run_output
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
 
@@ -108,12 +116,12 @@ _WINDOWS_SHARING_VIOLATION = 32
 class PipelineApi:
     """Describe how to build options and execute a pipeline programmatically."""
 
-    build_options: Callable[["PipelineRunConfig", Path, Path], object]
+    build_options: Callable[[PipelineRunConfig, Path, Path], object]
     runner: Callable[[Config, object], PipelineRunResult]
 
 
 def _build_document_options(
-    cfg: "PipelineRunConfig", input_path: Path, output_path: Path
+    cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> DocumentPipelineOptions:
     return DocumentPipelineOptions(
         input_csv=input_path,
@@ -125,7 +133,7 @@ def _build_document_options(
 
 
 def _build_target_options(
-    cfg: "PipelineRunConfig", input_path: Path, output_path: Path
+    cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> TargetPipelineOptions:
     return TargetPipelineOptions(
         input_csv=input_path,
@@ -137,7 +145,7 @@ def _build_target_options(
 
 
 def _build_assay_options(
-    cfg: "PipelineRunConfig", input_path: Path, output_path: Path
+    cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> AssayPipelineOptions:
     return AssayPipelineOptions(
         input_csv=input_path,
@@ -148,7 +156,7 @@ def _build_assay_options(
 
 
 def _build_testitem_options(
-    cfg: "PipelineRunConfig", input_path: Path, output_path: Path
+    cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> TestitemPipelineOptions:
     return TestitemPipelineOptions(
         input_csv=input_path,
@@ -159,7 +167,7 @@ def _build_testitem_options(
 
 
 def _build_activity_options(
-    cfg: "PipelineRunConfig", input_path: Path, output_path: Path
+    cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> ActivityPipelineOptions:
     return ActivityPipelineOptions(
         input_csv=input_path,
@@ -218,7 +226,7 @@ def _resolve_path(base: Path, candidate: Path) -> Path:
     return (base / expanded).resolve()
 
 
-def _resolve_consumed_artifact_path(cfg: "PipelineRunConfig", artefact: str) -> Path:
+def _resolve_consumed_artifact_path(cfg: PipelineRunConfig, artefact: str) -> Path:
     """Return the filesystem path associated with a consumed artefact name."""
 
     candidate = Path(artefact)
@@ -1216,9 +1224,7 @@ def _build_execution_plan(
             current = produced_by.get(artefact)
             if current is not None and current != step.name:
                 raise ValueError(
-                    "artefact '{artefact}' declared by multiple steps".format(
-                        artefact=artefact
-                    )
+                    f"artefact '{artefact}' declared by multiple steps"
                 )
             produced_by[artefact] = step.name
 

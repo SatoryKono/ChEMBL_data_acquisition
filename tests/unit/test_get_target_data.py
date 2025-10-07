@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
-
-import pandas as pd
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from library.config import Config
@@ -57,7 +56,7 @@ def test_translate_keyboard_layout__single_characters(latin: str, cyrillic: str)
 def test_translate_keyboard_layout__composite_strings(text: str) -> None:
     translated = get_target_data._translate_keyboard_layout(text)
     assert len(translated) == len(text)
-    for original, result in zip(text, translated):
+    for original, result in zip(text, translated, strict=False):
         lower = original.lower()
         mapped = get_target_data._RUSSIAN_KEYBOARD_MAP.get(lower, lower)
         expected = mapped.upper() if original.isupper() else mapped

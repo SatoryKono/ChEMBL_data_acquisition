@@ -8,20 +8,20 @@ presented to users via :meth:`argparse.ArgumentParser.error`.
 from __future__ import annotations
 
 import argparse
-import uuid
 import os
-from datetime import datetime, timezone
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path, PureWindowsPath
 from typing import Any, cast
 
 from pydantic import ValidationError
 
 from ..common.log import logger
-from ..config import Config, ConfigError, ConfigMetadata, load_config
 from ..common.logging_setup import Logger, LoggerConfig
 from ..common.logging_setup import configure_logger as _configure_logger
-from ..version import require_python_version
+from ..config import Config, ConfigError, ConfigMetadata, load_config
 from ..config.loader import DEFAULT_CONFIG_PATH
+from ..version import require_python_version
 
 require_python_version()
 
@@ -583,9 +583,7 @@ def apply_config_overrides(
     metadata.cli_paths = {
         arg: path for arg, path in normalized_cli_paths.items() if path
     }
-    setattr(args, "_config_metadata", metadata)
-
-    missing_cfg_paths: set[str] = set()
+    args._config_metadata = metadata
 
     for arg, key in override_map.items():
         if not hasattr(args, arg):
@@ -678,23 +676,23 @@ def prepare_io_paths(
     """Normalize CLI namespace paths and populate derived locations."""
 
     base_path = _resolve_base_path(getattr(args, "base_path", None))
-    setattr(args, "base_path", base_path)
+    args.base_path = base_path
 
     input_dir = _resolve_directory(getattr(args, "input_dir", None), base=base_path)
-    setattr(args, "input_dir", input_dir)
+    args.input_dir = input_dir
 
     output_dir = _resolve_directory(getattr(args, "output_dir", None), base=base_path)
-    setattr(args, "output_dir", output_dir)
+    args.output_dir = output_dir
 
     cache_dir = _resolve_directory(getattr(args, "cache_dir", None), base=base_path)
-    setattr(args, "cache_dir", cache_dir)
+    args.cache_dir = cache_dir
 
     current_input = getattr(args, "input_csv", None)
     if current_input in (None, argparse.SUPPRESS) and input_default is not None:
         current_input = Path(input_default)
     resolved_input = _resolve_file(current_input, directory=input_dir, base=base_path)
     if resolved_input is not None:
-        setattr(args, "input_csv", resolved_input)
+        args.input_csv = resolved_input
 
     final_candidate = getattr(args, "final_out", None)
     if final_candidate in (None, argparse.SUPPRESS):
@@ -709,7 +707,7 @@ def prepare_io_paths(
         raw_format_str = "csv"
     else:
         raw_format_str = str(raw_format_value).lower()
-    setattr(args, "raw_format", raw_format_str)
+    args.raw_format = raw_format_str
 
     resolved_output = _resolve_file(
         final_candidate,
@@ -728,7 +726,7 @@ def prepare_io_paths(
         if target_dir is None and resolved_input is not None:
             target_dir = resolved_input.parent
         if target_dir is not None:
-            effective_date = date_str or datetime.now(timezone.utc).strftime("%Y%m%d")
+            effective_date = date_str or datetime.now(UTC).strftime("%Y%m%d")
             filename = f"output.{output_stem}_{effective_date}{suffix}"
             resolved_output = (target_dir / filename).resolve()
             date_str = effective_date
@@ -742,12 +740,12 @@ def prepare_io_paths(
                 base=base_path,
             ),
         )
-        setattr(args, "final_out", resolved_output)
-        setattr(args, "output_csv", resolved_output)
-    elif isinstance(final_candidate, (str, Path)):
+        args.final_out = resolved_output
+        args.output_csv = resolved_output
+    elif isinstance(final_candidate, str | Path):
         candidate_path = Path(final_candidate)
-        setattr(args, "final_out", candidate_path)
-        setattr(args, "output_csv", candidate_path)
+        args.final_out = candidate_path
+        args.output_csv = candidate_path
 
     raw_value = getattr(args, "raw_out", None)
     if raw_value in (None, argparse.SUPPRESS):
@@ -768,13 +766,13 @@ def prepare_io_paths(
             directory=output_dir,
             base=base_path,
         )
-    setattr(args, "raw_out", resolved_raw)
+    args.raw_out = resolved_raw
 
     if date_str is not None:
-        setattr(args, "date", date_str)
+        args.date = date_str
 
-    setattr(args, "force", bool(getattr(args, "force", False)))
-    setattr(args, "skip_existing", bool(getattr(args, "skip_existing", False)))
+    args.force = bool(getattr(args, "force", False))
+    args.skip_existing = bool(getattr(args, "skip_existing", False))
 
 
 __all__ = [

@@ -9,12 +9,13 @@ keep linters happy.
 from __future__ import annotations
 
 from library.clients import _chunked
+
 from ..pipelines.assay import get_activities, get_assay, get_assays, get_testitem
 from ..pipelines.document import get_documents
 from ..pipelines.target.chembl_target import (
     extend_target,
-    get_target_payload,
     get_target,
+    get_target_payload,
     get_targets,
     get_targets_payloads,
     get_targets_raw_frame,

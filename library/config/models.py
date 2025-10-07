@@ -18,13 +18,12 @@ import logging
 import random
 import re
 import threading
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import ExitStack
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import UnionType
-from typing import Any, Callable, Mapping, Union, get_args, get_origin
-
-from dataclasses import dataclass, field
+from typing import Any, Union, get_args, get_origin
 from urllib.parse import urlparse
 
 from pydantic import (
@@ -63,8 +62,8 @@ def _collect_path_field_paths(
     """Return dotted paths for ``Path`` fields within *model*."""
 
     paths: set[tuple[str, ...]] = set()
-    for name, field in model.model_fields.items():
-        annotation = field.annotation
+    for name, model_field in model.model_fields.items():
+        annotation = model_field.annotation
         if annotation is None:
             continue
         origin = get_origin(annotation)
@@ -1024,7 +1023,7 @@ class TestitemCfg(_BaseModel):
     def _coerce_fields(cls, value: Any) -> tuple[str, ...]:
         if value is None:
             return TESTITEM_FIELD_DEFAULTS
-        if isinstance(value, (list, tuple)):
+        if isinstance(value, list | tuple):
             return tuple(str(item) for item in value)
         raise TypeError("testitem.fields must be a list or tuple of strings")
 
@@ -1437,9 +1436,9 @@ def build_alias_map(
     mapping: dict[str, list[str]] = {}
 
     def _walk(cls: type[BaseModel], path: list[str]) -> None:
-        for name, field in cls.model_fields.items():
+        for name, model_field in cls.model_fields.items():
             sub_path = path + [name]
-            annotation = field.annotation
+            annotation = model_field.annotation
             if isinstance(annotation, type) and issubclass(annotation, BaseModel):
                 _walk(annotation, sub_path)
             else:

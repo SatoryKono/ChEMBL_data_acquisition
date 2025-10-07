@@ -5,10 +5,10 @@ from __future__ import annotations
 import hashlib
 import os
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache, lru_cache
 from pathlib import Path
-from typing import Mapping
 
 import yaml
 
@@ -70,6 +70,7 @@ def _env_checksum_allowlist() -> Mapping[str, tuple[str, ...]]:
                 "Ignoring malformed entry in"
                 f" {_ENV_CHECKSUM_ALLOWLIST!r}: {spec!r}",
                 RuntimeWarning,
+                stacklevel=2,
             )
             continue
         name, checksum_blob = spec.split("=", 1)
@@ -83,6 +84,7 @@ def _env_checksum_allowlist() -> Mapping[str, tuple[str, ...]]:
                 "Ignoring empty checksum list for"
                 f" resource {name!r} declared in {_ENV_CHECKSUM_ALLOWLIST!r}",
                 RuntimeWarning,
+                stacklevel=2,
             )
             continue
         key = name.strip()
@@ -97,7 +99,7 @@ def _load_allowlist(base_dir: Path) -> Mapping[str, tuple[str, ...]]:
     return _load_allowlist_cached(str(base_dir.resolve()))
 
 
-@lru_cache(maxsize=None)
+@cache
 def _load_allowlist_cached(root: str) -> Mapping[str, tuple[str, ...]]:
     base_dir = Path(root)
     path = (base_dir / _MANIFEST_ALLOWLIST_FILENAME).resolve()
@@ -117,7 +119,7 @@ def _load_allowlist_cached(root: str) -> Mapping[str, tuple[str, ...]]:
         entries: list[str] = []
         if isinstance(checksums, str):
             candidate_values = [checksums]
-        elif isinstance(checksums, (list, tuple)):
+        elif isinstance(checksums, list | tuple):
             candidate_values = list(checksums)
         else:
             raise DictionaryManifestError(
@@ -299,7 +301,7 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
             raise DictionaryManifestError(f"Resource {name!r} is missing a string 'version'")
         if isinstance(sha256_value, str):
             sha256_expected_list = [sha256_value]
-        elif isinstance(sha256_value, (list, tuple)):
+        elif isinstance(sha256_value, list | tuple):
             sha256_expected_list = []
             for idx, candidate in enumerate(sha256_value):
                 if not isinstance(candidate, str):

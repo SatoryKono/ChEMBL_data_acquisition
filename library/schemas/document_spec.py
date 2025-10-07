@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import pandera.pandas as pa
 import yaml

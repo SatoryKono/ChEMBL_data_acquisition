@@ -6,11 +6,10 @@ from collections.abc import Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TypeVar
 
-from ..config import UniprotMappingCfg
 from ..common.log import logger
-from .mapper_library import map_chembl_to_uniprot
 from ..common.rate_limiter import get_limiter
-
+from ..config import UniprotMappingCfg
+from .mapper_library import map_chembl_to_uniprot
 
 T = TypeVar("T")
 

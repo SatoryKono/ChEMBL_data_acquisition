@@ -8,15 +8,14 @@ from pathlib import Path
 
 import pandas as pd
 
-from library import cli
-from library import io
+from library import cli, io
 from library.cli import (
     LoggerConfig,
     configure_logger,
 )
 from library.cli import build_parser as base_parser
-from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.common.log import logger
+from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.integration.mapper_batch_library import map_chembl_ids_to_uniprot
 
 

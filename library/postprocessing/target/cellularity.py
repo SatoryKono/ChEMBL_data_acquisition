@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, Sequence
+from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
@@ -132,7 +133,7 @@ class Cellularity:
         if tax_id is None:
             return []
 
-        if isinstance(missing_value, (bool, np.bool_)) and missing_value:
+        if isinstance(missing_value, bool | np.bool_) and missing_value:
             return []
 
         if getattr(missing_value, "all", None) is not None:
@@ -140,7 +141,7 @@ class Cellularity:
                 all_missing = missing_value.all()
             except TypeError:
                 all_missing = False
-            if isinstance(all_missing, (bool, np.bool_)) and all_missing:
+            if isinstance(all_missing, bool | np.bool_) and all_missing:
                 return []
             if all_missing is pd.NA:
                 return []
@@ -148,7 +149,7 @@ class Cellularity:
         if tax_id is pd.NA:
             return []
 
-        if isinstance(tax_id, (float, np.floating)) and pd.isna(tax_id):
+        if isinstance(tax_id, float | np.floating) and pd.isna(tax_id):
             return []
         values = list(self.fetcher(tax_id, email))  # type: ignore[arg-type]
         return values

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ..config import IoCfg
@@ -33,5 +33,5 @@ def default_output_path(input_path: str | Path, cfg: IoCfg) -> Path:
     """
 
     inp = Path(input_path)
-    date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    date_str = datetime.now(UTC).strftime("%Y%m%d")
     return Path(cfg.output_dir) / f"output.{inp.stem}_{date_str}.csv"

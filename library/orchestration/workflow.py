@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterator, Sequence, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from library.pipelines.registry import PipelineStep
 
@@ -53,7 +54,7 @@ def temporary_output_path(output_path: Path) -> Path:
 
 
 def execute_workflow(
-    cfg: "PipelineRunConfig",
+    cfg: PipelineRunConfig,
     steps: Sequence[PreparedPipelineStep],
 ) -> Iterator[WorkflowStepResult]:
     """Execute ``steps`` sequentially and yield their results.

@@ -23,8 +23,8 @@ from ..clients.pubchem import (
     url_encode,
     validate_cid,
 )
-from ..config import PubChemCfg
 from ..common.log import logger
+from ..config import PubChemCfg
 
 
 def select_primary_cid(

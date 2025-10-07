@@ -5,18 +5,19 @@ from __future__ import annotations
 import json
 import math
 import re
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from time import monotonic
-from typing import Any, Callable
+from typing import Any
 
 import pandas as pd
 import requests
 from requests.exceptions import ReadTimeout
 
 from library.clients import ChemblClient, _chunked
-from ...config import ApiCfg, TargetChemblBatchRetryCfg, UniprotMappingCfg
+
 from ...common.log import logger
 from ...common.rate_limiter import sleep
+from ...config import ApiCfg, TargetChemblBatchRetryCfg, UniprotMappingCfg
 
 TARGET_FIELDS = [
     "pref_name",
@@ -402,7 +403,7 @@ def _iter_target_chunk_with_fallback(
     payloads = [
         _extract_target_payload(item)
         for item in items
-        if isinstance(item, (dict, list))
+        if isinstance(item, dict | list)
     ]
     payloads = [payload for payload in payloads if payload]
     logger.debug(
@@ -506,7 +507,7 @@ def iter_target_batches_with_retry(
             if on_attempt is not None:
                 on_attempt()
             try:
-                for result in iter_target_batches(
+                yield from iter_target_batches(
                     attempt_ids,
                     cfg=cfg,
                     client=client,
@@ -514,8 +515,7 @@ def iter_target_batches_with_retry(
                     chunk_size=attempt_size,
                     timeout=timeout,
                     enable_split_fallback=False,
-                ):
-                    yield result
+                )
             except (requests.RequestException, ValueError) as exc:
                 if attempt_size <= min_size:
                     if _should_retry_single(attempt_ids, exc):

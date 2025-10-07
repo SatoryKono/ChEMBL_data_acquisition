@@ -687,7 +687,7 @@ def analyze_table_quality(
                 no_columns_logged=no_columns_logged,
             )
             profiler.consume(filtered)
-        elif isinstance(table, (str, Path)):
+        elif isinstance(table, str | Path):
             df = _load_table(table)
             filtered, _ = _apply_sampling_and_filters(
                 df,

@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E402
 import argparse
+import math
 import sys
+from collections.abc import Callable
 from contextlib import ExitStack
 from pathlib import Path
 from time import perf_counter
-from typing import Callable
 from types import SimpleNamespace
-import math
 
 import pandas as pd
 
@@ -18,7 +19,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from library.config import Config
-
 
 RESOURCE_DIR = ROOT / "tests" / "resources" / "activity_pipeline"
 

@@ -8,17 +8,16 @@ import logging
 import subprocess
 import sys
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import pytest
 
-
-from library.common.logging_setup import LoggerConfig, configure_logger
 from library.cli.logging import setup_cli_logging
-
+from library.common.logging_setup import LoggerConfig, configure_logger
 
 REPO_NAME = "SatoryKono/ChEMBL_data_acquisition"
 TEST_ROOT = Path(__file__).resolve().parent
@@ -145,8 +144,7 @@ def _git_output(args: list[str]) -> str:
         completed = subprocess.run(
             ["git", *args],
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
         )
     except subprocess.CalledProcessError:
@@ -173,7 +171,7 @@ def _build_json(
             "repo": repo,
             "commit": _git_output(["rev-parse", "HEAD"]),
             "branch": _git_output(["rev-parse", "--abbrev-ref", "HEAD"]),
-            "ts_utc": datetime.now(timezone.utc).isoformat(),
+            "ts_utc": datetime.now(UTC).isoformat(),
             "duration_sec": round(duration_sec, 3),
             "python": sys.version.split()[0],
             "pytest": pytest.__version__,

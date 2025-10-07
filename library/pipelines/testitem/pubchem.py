@@ -4,19 +4,31 @@ from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Collection, Hashable
+from collections.abc import (
+    Callable,
+    Collection,
+    Hashable,
+    Mapping,
+    MutableMapping,
+    Sequence,
+)
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, MutableMapping, Sequence, TypeAlias, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    TypeAlias,
+    cast,
+)
 
 import pandas as pd
 import requests
 
-from library.integration.chembl_client import ChemblClient
-from library.config import ApiCfg, PubChemCfg, RetryCfg
 from library.common.log import logger
+from library.config import ApiCfg, PubChemCfg, RetryCfg
+from library.integration.chembl_client import ChemblClient
 from library.utils.atomic import open_atomic
 
 if TYPE_CHECKING:

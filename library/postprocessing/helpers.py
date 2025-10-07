@@ -11,15 +11,13 @@ normalisation, best-effort XML parsing and deterministic CSV emission.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from collections.abc import Mapping
-from typing import Iterable, Sequence
 from xml.etree import ElementTree
 
+import numpy as np
 import pandas as pd
 from pandas.errors import ParserError
-
-import numpy as np
 
 from library.common.csv_utils import write_csv_deterministic
 
@@ -200,9 +198,9 @@ def _coerce_logical_series(series: pd.Series) -> pd.Series:
     def convert(value: object) -> object:
         if pd.isna(value):
             return pd.NA
-        if isinstance(value, (bool, np.bool_)):
+        if isinstance(value, bool | np.bool_):
             return bool(value)
-        if isinstance(value, (int, np.integer)):
+        if isinstance(value, int | np.integer):
             if value in (0, 1):
                 return bool(value)
         if isinstance(value, float):

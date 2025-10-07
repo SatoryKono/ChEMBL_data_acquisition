@@ -22,37 +22,24 @@ del bootstrap_cli
 
 # ruff: noqa: E402
 import argparse
-import sys
+import math
 import shutil
+import sys
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-import math
+from datetime import UTC, datetime
 from inspect import signature
 from itertools import islice
 from pathlib import Path
-from typing import IO, Any, cast
-
-from datetime import datetime, timezone
+from typing import Any
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
 import library.cli_utils as cli_utils_module
-from library import cli
-from library import io
-from library.integration import chembl_library as cl
-from library.integration import iuphar_library as ii
-from library.integration import uniprot_library as uu
-from library.pipelines.target import protein_classification as pc
-from library.pipelines.target import postprocessing as tp
-from library.pipelines.target.defaults import ModeDefaults, TARGET_MODE_DEFAULTS
-
-from library.orchestration import ETLContext
-from library.cli.pipeline_definition import normalise_definition
-from library.cli_utils import PipelineError, run_cli_command, run_pipeline
-from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
+from library import SidecarErrors, io
 from library.cli import (
     Logger,
     LoggerConfig,
@@ -63,24 +50,31 @@ from library.cli import (
     prepare_io_paths,
 )
 from library.cli.base import PipelineCLIBase
-from library.cli.logging import CLILoggingContext, setup_cli_logging
+from library.cli.logging import CLILoggingContext
+from library.cli.pipeline_definition import normalise_definition
+from library.cli_utils import PipelineError, run_cli_command, run_pipeline
+from library.common.csv_utils import write_csv_deterministic
+from library.common.log import logger
 from library.config import (
     Config,
     _serialize_paths,
 )
-from library.common.csv_utils import write_csv_deterministic
-from library.common.log import logger
+from library.integration import chembl_library as cl
+from library.integration import iuphar_library as ii
+from library.integration import uniprot_library as uu
 from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.orchestration import ETLContext
 from library.pipelines.common import add_pipeline_metadata
-from library import SidecarErrors
+from library.pipelines.target import postprocessing as tp
+from library.pipelines.target import protein_classification as pc
+from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
+from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS, ModeDefaults
+from library.postprocessing import names as names_pp
+from library.postprocessing import target as target_pp
 from library.qa.reporting import build_table_quality_hook, is_quality_enabled
-from library.validation import ValidationResult
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
-
-
-from library.postprocessing import target as target_pp
-from library.postprocessing import names as names_pp
+from library.validation import ValidationResult
 
 try:
     from library.postprocessing import iuphar as iuphar_pp
@@ -102,7 +96,7 @@ except ImportError as _process_targets_exc:  # pragma: no cover - compatibility
     if _process_targets_impl is None:  # pragma: no cover - defensive guard
         raise _process_targets_exc
 else:  # pragma: no cover - compatibility bridge
-    setattr(target_pp, "process_targets", _process_targets_impl)
+    target_pp.process_targets = _process_targets_impl
 
 try:
     _TARGET_PROCESS_SIGNATURE = signature(_process_targets_impl)
@@ -211,7 +205,7 @@ class StoreWithSource(argparse.Action):
         overrides = getattr(namespace, "_cli_overrides", None)
         if overrides is None:
             overrides = set()
-            setattr(namespace, "_cli_overrides", overrides)
+            namespace._cli_overrides = overrides
         overrides.add(self.dest)
         setattr(namespace, self.dest, values)
 
@@ -488,7 +482,7 @@ def _coerce_target_names_result(
         if isinstance(extra, Mapping):
             summary = _normalise_names_summary(extra)
     elif hasattr(result, "path"):
-        path_candidate = getattr(result, "path")
+        path_candidate = result.path
         extra = getattr(result, "summary", None)
         if isinstance(extra, Mapping):
             summary = _normalise_names_summary(extra)
@@ -520,7 +514,7 @@ def _coerce_iuphar_result(result: object) -> Path | None:
             or result.get("iuphar_path")
         )
     elif hasattr(result, "path"):
-        candidate = getattr(result, "path")
+        candidate = result.path
     else:
         candidate = result
 
@@ -1044,7 +1038,7 @@ def _build_uniprot_query_plan(df: pd.DataFrame, cfg: Config) -> _UniprotQueryPla
     for row in df.itertuples(index=False, name=None):
         candidates: list[_UniprotCandidate] = []
         row_seen: set[str] = set()
-        for column, pos in zip(candidate_columns, positions):
+        for column, pos in zip(candidate_columns, positions, strict=False):
             raw_value = row[pos]
             if not isinstance(raw_value, str) or not raw_value:
                 continue
@@ -1093,7 +1087,7 @@ def _resolve_uniprot_matches(
             uniprot_df["original_id"].fillna("").astype(str).map(str.strip)
         )
         candidate_map: dict[str, str] = {}
-        for canonical, original in zip(cleaned, original_series):
+        for canonical, original in zip(cleaned, original_series, strict=False):
             if not canonical:
                 continue
             candidate_map.setdefault(canonical, canonical)
@@ -2787,7 +2781,6 @@ def fetch_chembl(
             cfg.target.chembl.limit = original_limit
         if chunk_size is not None:
             cfg.target.chembl.chunk_size = original_chunk_size
-    normalized_output = _normalized_output_path(final_out)
     df = pd.read_csv(
 
         final_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
@@ -3236,7 +3229,7 @@ def fetch_iuphar(
             overlap_updates[column] = pd.Series(
                 [
                     normalize_reaction_ec_numbers([u, c])
-                    for u, c in zip(uniprot_values, chembl_values)
+                    for u, c in zip(uniprot_values, chembl_values, strict=False)
                 ],
                 index=combined_df.index,
                 dtype=object,
@@ -3338,7 +3331,7 @@ def fetch_iuphar(
     column_updates["ec_number"] = pd.Series(
         (
             _pipe_merge([ec_val, reaction_val])
-            for ec_val, reaction_val in zip(ec_numbers_values, reaction_values)
+            for ec_val, reaction_val in zip(ec_numbers_values, reaction_values, strict=False)
         ),
         index=index,
         dtype=object,
@@ -3410,7 +3403,7 @@ def fetch_iuphar(
 
     combined_df["reaction_ec_numbers"] = [
         normalize_reaction_ec_numbers([u, c])
-        for u, c in zip(uniprot_reactions, chembl_reactions)
+        for u, c in zip(uniprot_reactions, chembl_reactions, strict=False)
     ]
 
     from tempfile import NamedTemporaryFile
@@ -3925,7 +3918,7 @@ class TargetPipelineCLI(PipelineCLIBase):
         del argv
         command_alias = COMMAND_ALIAS_TO_CANONICAL.get(getattr(args, "command", ""))
         if command_alias is not None:
-            setattr(args, "_command_keyboard_alias", args.command)
+            args._command_keyboard_alias = args.command
             args.command = command_alias
         prepare_io_paths(
             args,
@@ -3934,8 +3927,8 @@ class TargetPipelineCLI(PipelineCLIBase):
         )
         date_value = getattr(args, "date", None)
         if not isinstance(date_value, str) or not date_value:
-            date_value = datetime.now(timezone.utc).strftime("%Y%m%d")
-            setattr(args, "date", date_value)
+            date_value = datetime.now(UTC).strftime("%Y%m%d")
+            args.date = date_value
         return args
 
     def get_program_name(self) -> str:
@@ -4024,7 +4017,7 @@ class TargetPipelineCLI(PipelineCLIBase):
                 final_value = args_dict.get("final_out")
                 if final_value in (None, argparse.SUPPRESS):
                     date_token = args_dict.get(
-                        "date", datetime.now(timezone.utc).strftime("%Y%m%d")
+                        "date", datetime.now(UTC).strftime("%Y%m%d")
                     )
                     inferred = Path(args_dict["input_csv"]).with_name(
                         f"output.{DEFAULT_OUTPUT_STEM}_{date_token}.csv"

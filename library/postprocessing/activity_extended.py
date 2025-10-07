@@ -16,8 +16,8 @@ import json
 import re
 import sys
 import warnings
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Callable, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -262,7 +262,7 @@ class ActivityExtendedError(RuntimeError):
 def _current_default_search_dir() -> Path:
     package = sys.modules.get(__name__)
     if package is not None and hasattr(package, "_DEFAULT_SEARCH_DIR"):
-        override = getattr(package, "_DEFAULT_SEARCH_DIR")
+        override = package._DEFAULT_SEARCH_DIR
         if override is not None:
             return Path(override)
     return _DEFAULT_SEARCH_DIR
@@ -508,7 +508,7 @@ def _load_testitem_lookup(dictionary_root: Path) -> pd.DataFrame:
     return result.drop_duplicates(subset=["molecule_chembl_id"])
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _load_parent_lookup_cached(dictionary_root: str) -> pd.Series:
     root_path = Path(dictionary_root)
     candidate = root_path / "_testitem" / "molecule_hierarchy.csv"
@@ -763,7 +763,7 @@ def _drop_unused_columns(df: pd.DataFrame) -> pd.DataFrame:
 def _normalise_activity_properties_text(value: object) -> str | None:
     if value is None:
         return None
-    if isinstance(value, (float, np.floating)) and np.isnan(value):
+    if isinstance(value, float | np.floating) and np.isnan(value):
         return None
     if value is pd.NA:
         return None
@@ -816,9 +816,9 @@ def _load_activity_properties_json(text: str) -> Mapping[str, object] | None:
 def _coerce_activity_property_flag(value: object) -> bool | None:
     if isinstance(value, bool):
         return value
-    if isinstance(value, (np.bool_,)):
+    if isinstance(value, np.bool_):
         return bool(value)
-    if isinstance(value, (int, np.integer)):
+    if isinstance(value, int | np.integer):
         if value in (0, 1):
             return bool(value)
     if isinstance(value, str):

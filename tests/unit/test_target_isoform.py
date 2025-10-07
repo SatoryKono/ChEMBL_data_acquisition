@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
-
-from pathlib import Path
 
 from library.postprocessing.target import isoform
 from scripts import get_target_data

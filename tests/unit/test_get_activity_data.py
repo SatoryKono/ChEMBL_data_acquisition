@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 import pandas as pd
 import pytest
@@ -37,7 +37,7 @@ class _DummyClient:
     def __init__(self, *args, **kwargs) -> None:  # pragma: no cover - interface compatibility
         pass
 
-    def __enter__(self) -> "_DummyClient":  # pragma: no cover - trivial helper
+    def __enter__(self) -> _DummyClient:  # pragma: no cover - trivial helper
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - trivial helper

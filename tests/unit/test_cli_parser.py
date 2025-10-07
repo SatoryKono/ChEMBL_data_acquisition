@@ -28,7 +28,7 @@ class _SpyLogger:
     def error(self, *args: object, **kwargs: object) -> None:  # pragma: no cover
         return None
 
-    def bind(self, **kwargs: object) -> "_SpyLogger":  # pragma: no cover
+    def bind(self, **kwargs: object) -> _SpyLogger:  # pragma: no cover
         return self
 
 

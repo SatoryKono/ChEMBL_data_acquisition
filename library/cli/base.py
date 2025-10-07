@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Mapping, Sequence, Callable
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from ..common.log import logger as default_logger
 from .logging import CLILoggingContext, setup_cli_logging
 from .parser import Logger, LoggerConfig, configure_logger
-from ..common.log import logger as default_logger
 
 
 class PipelineCLIBase:

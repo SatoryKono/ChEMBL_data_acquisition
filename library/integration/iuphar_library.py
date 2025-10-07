@@ -23,13 +23,12 @@ import pandas as pd
 from ..clients.iuphar import (
     download_gtp_to_hgnc_mapping,
     download_gtp_to_uniprot_mapping,
-    init_session,
     load_families,
     load_targets,
     query_gene_symbol,
 )
-from ..config import IupharCfg, RetryCfg
 from ..common.log import logger
+from ..config import IupharCfg, RetryCfg
 
 
 @dataclass
@@ -130,13 +129,13 @@ class IUPHARData:
         if uniprot_id is None:
             return []
         if isinstance(uniprot_id, Iterable) and not isinstance(
-            uniprot_id, (str, bytes, bytearray)
+            uniprot_id, str | bytes | bytearray
         ):
             values: list[str] = []
             for item in uniprot_id:
                 values.extend(IUPHARData._normalise_uniprot_values(item))
             return values
-        if isinstance(uniprot_id, (bytes, bytearray)):
+        if isinstance(uniprot_id, bytes | bytearray):
             text = uniprot_id.decode("utf-8", errors="ignore").strip()
             if not text:
                 return []

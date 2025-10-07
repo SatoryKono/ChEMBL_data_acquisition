@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from library.clients import ChemblClient
 from library.common.rate_limiter import RateLimiter, get_global_limiter
@@ -41,7 +41,7 @@ class ETLContext:
         burst = getattr(rate_cfg, "global_burst", None)
         return get_global_limiter(rps, burst)
 
-    def __enter__(self) -> "ETLContext":
+    def __enter__(self) -> ETLContext:
         if self._closed:
             self._closed = False
         return self

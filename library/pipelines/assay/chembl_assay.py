@@ -9,9 +9,10 @@ import pandas as pd
 import requests
 
 from library.clients import ChemblClient, _chunked
-from ...config import ApiCfg, TESTITEM_FIELD_DEFAULTS
+
 from ...common.log import logger
 from ...common.pandas_utils import json_normalize_pyarrow
+from ...config import TESTITEM_FIELD_DEFAULTS, ApiCfg
 
 # ChEMBL bulk endpoints accept at most 25 identifiers per request when using
 # ``__in`` filters. Requests above this threshold return HTTP 414 "URI Too

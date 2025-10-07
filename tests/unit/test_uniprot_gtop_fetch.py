@@ -42,7 +42,7 @@ class _DummyResponse:
 
     @property
     def content(self) -> bytes:
-        if isinstance(self._payload, (bytes, bytearray)):
+        if isinstance(self._payload, bytes | bytearray):
             return bytes(self._payload)
         return json.dumps(self._payload).encode("utf-8")
 
@@ -51,7 +51,7 @@ class _DummyResponse:
             raise self._json_exc
         return self._payload
 
-    def __enter__(self) -> "_DummyResponse":  # pragma: no cover - context manager boilerplate
+    def __enter__(self) -> _DummyResponse:  # pragma: no cover - context manager boilerplate
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - context manager boilerplate

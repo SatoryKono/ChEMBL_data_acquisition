@@ -110,9 +110,9 @@ def test_get_cellline_data_main_success(
 
     def fake_run_cli_command(*, args, parser, log_cfg, mapping, run, logger, base_parser=None):
         args._config_metadata = None
-        if isinstance(args.input_csv, (str, Path)):
+        if isinstance(args.input_csv, str | Path):
             args.input_csv = Path(args.input_csv)
-        if isinstance(args.final_out, (str, Path)):
+        if isinstance(args.final_out, str | Path):
             args.final_out = Path(args.final_out)
         cfg = Config()
         return run(cfg, args)

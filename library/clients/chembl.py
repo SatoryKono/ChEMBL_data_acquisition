@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import random
 import threading
-from collections.abc import Iterable, Iterator
-from datetime import datetime, timezone
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from itertools import islice
-from dataclasses import dataclass, field
 from time import monotonic
 from types import TracebackType
-from typing import Any, Callable, TypeVar, cast
+from typing import Any, TypeVar, cast
 from urllib.parse import urlsplit, urlunsplit
 
 import requests
@@ -23,10 +23,10 @@ try:  # pragma: no cover - urllib3 is always available with requests
 except Exception:  # pragma: no cover - defensive fallback
     _Urllib3ReadTimeoutError = None  # type: ignore[assignment]
 
-from ..config.models import ApiCfg, ChemblCacheCfg, RetryCfg
-from ..config.runtime import session_with_retry
 from ..common.log import logger
 from ..common.rate_limiter import RateLimiter, get_limiter, sleep
+from ..config.models import ApiCfg, ChemblCacheCfg, RetryCfg
+from ..config.runtime import session_with_retry
 
 
 @dataclass
@@ -156,7 +156,7 @@ class ChemblClient:
         if session is None:
             session = self._session_factory()
             self._register_session(session)
-            setattr(self._session_local, "session", session)
+            self._session_local.session = session
         return cast(Session, session)
 
     @property
@@ -484,7 +484,7 @@ def _strip_json_suffix(url: str) -> str | None:
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _retry_after_delay(response: requests.Response | None) -> float | None:
@@ -511,7 +511,7 @@ def _retry_after_delay(response: requests.Response | None) -> float | None:
             return None
         dt = parsed_dt
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         delta = float((dt - _utcnow()).total_seconds())
         return max(0.0, delta)
 
@@ -564,10 +564,7 @@ def _should_switch_to_fallback(exception: requests.RequestException) -> bool:
 
     return isinstance(
         exception,
-        (
-            requests.Timeout,
-            requests.ConnectionError,
-        ),
+        requests.Timeout | requests.ConnectionError,
     )
 
 

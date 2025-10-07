@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import json
 import random
-
 import threading
-
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from typing import Any, cast
@@ -14,9 +12,9 @@ from typing import Any, cast
 import requests
 from requests import Session
 
+from ..common.rate_limiter import get_limiter, sleep
 from ..config.models import ApiCfg, RetryCfg, UniprotCfg
 from ..config.runtime import session_with_retry
-from ..common.rate_limiter import get_limiter, sleep
 
 __all__ = [
     "UniProtFetchError",
@@ -65,7 +63,7 @@ def _get_or_create_session_locked() -> Session:
     if session is None:
         session = _session_factory()
         _sessions.add(session)
-        setattr(_session_local, "session", session)
+        _session_local.session = session
     return session
 
 

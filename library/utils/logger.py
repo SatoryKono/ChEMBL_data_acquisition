@@ -3,8 +3,9 @@ from __future__ import annotations
 import logging
 import sys
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 __all__ = ["get_logger", "StructuredLogger"]
 

@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
-
 import pytest
 import yaml
 
-from library.resources import dictionaries
 from config.paths import DICTIONARY_DIR
+from library.resources import dictionaries
 
 
 @pytest.mark.unit

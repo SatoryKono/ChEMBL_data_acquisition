@@ -13,11 +13,11 @@ import pandas as pd
 
 from library.schemas.targets import CELLULARITY_COLUMN_NAME, TARGETS_COLUMN_ORDER
 
-from . import organism_classification
-from ...config import Config, IoCfg
-from ...postprocessing import helpers as postprocessing_helpers
 from ...common.csv_utils import write_csv_deterministic
 from ...common.log import logger
+from ...config import Config, IoCfg
+from ...postprocessing import helpers as postprocessing_helpers
+from . import organism_classification
 
 # Columns removed in the final export
 REMOVE_COLUMNS: list[str] = []

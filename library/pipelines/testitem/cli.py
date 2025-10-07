@@ -5,56 +5,50 @@ from __future__ import annotations
 import sys
 import traceback
 from collections import OrderedDict, deque
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from itertools import chain, islice
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator, Sequence
+from typing import Any
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
 from library import io
-from library.integration.chembl_client import ChemblClient
 from library.clients import pubchem as pc
-from library.config import (
-    ApiCfg,
-    Config,
-    IoCfg,
-    RetryCfg,
-    TestitemBatchRetryCfg,
-    TestitemMoleculeEnrichmentCfg,
-    _serialize_paths,
-)
 from library.common.csv_utils import write_csv_chunks_deterministic
 from library.common.log import logger
 from library.common.metadata import (
     Stats,
     file_sha256,
-    write_meta_yaml,
     record_quality_failure,
+    write_meta_yaml,
 )
-from library.orchestration import ETLContext
 from library.common.sidecar import SidecarErrors
+from library.config import (
+    ApiCfg,
+    Config,
+    IoCfg,
+    TestitemBatchRetryCfg,
+    TestitemMoleculeEnrichmentCfg,
+    _serialize_paths,
+)
+from library.integration.chembl_client import ChemblClient
+from library.orchestration import ETLContext
 from library.qa.reporting import build_table_quality_hook
 from library.qa.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
 
+from . import testitem_enrichment
 from .catalog import (
-    PARENT_LOOKUP_SOURCE_CACHE,
-    PARENT_LOOKUP_SOURCE_LOOKUP,
-    PARENT_LOOKUP_SOURCE_PARTIAL,
     PARENT_LOOKUP_SOURCE_SKIPPED,
-    PARENT_LOOKUP_SOURCE_SYNC,
-    ParentEnrichmentPreparation,
-    ParentEnrichmentResult,
     ParentLookupStats,
     _merge_parent_stats,
     prepare_parent_enrichment,
     run_parent_enrichment,
 )
-from . import testitem_enrichment
 
 
 @lru_cache(maxsize=1)
@@ -274,7 +268,6 @@ def _load_pipeline_metadata_adder():
 def _load_testitem_schema():
     """Return the schema model and normalizer lazily to avoid circular imports."""
 
-    from library.schemas import TestitemsSchema, normalize_testitems
 
     return TestitemsSchema, normalize_testitems
 
@@ -535,13 +528,6 @@ def run_testitem_pipeline(
 
     requested_ids: tuple[str, ...] = ()
     missing_ids: list[str] = []
-    parent_stats = ParentLookupStats(
-        source=PARENT_LOOKUP_SOURCE_SKIPPED,
-        missing=0,
-        unique=0,
-        attached=0,
-        uncovered=0,
-    )
 
     input_csv = Path(options.input_csv)
     output_csv = Path(options.output_csv) if options.output_csv is not None else None

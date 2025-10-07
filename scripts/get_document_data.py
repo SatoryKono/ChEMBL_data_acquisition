@@ -24,6 +24,8 @@ The input file must contain a ``PMID`` column.
 
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
 else:  # pragma: no cover - executed when imported as a package module
@@ -36,30 +38,21 @@ import argparse
 import inspect
 import os
 import sys
+import tempfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from itertools import chain, islice
-import tempfile
-from pathlib import Path
-
 from numbers import Integral, Real
-from typing import Any, cast
-
+from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
-from library import cli
 from library import io
-from library.common.csv_utils import write_csv_chunks_deterministic
-from library.integration import chembl_library as cl
-from library.document_defaults import ALL_DEFAULTS, CHEMBL_DEFAULTS, PUBMED_DEFAULTS
-from library.pipelines.document import postprocessing as dp
-from library.postprocessing import document as document_export_postprocessing
-from library.orchestration import ETLContext
 from library.cli import (
-    LoggerConfig,
     ConfigMetadata,
+    LoggerConfig,
     build_root_parser,
     configure_logger,
     path_argument,
@@ -69,17 +62,24 @@ from library.cli import (
 from library.cli.logging import setup_cli_logging
 from library.cli.metadata import prepare_option
 from library.cli.utils import run_cli_command
+from library.common.csv_utils import write_csv_chunks_deterministic
+from library.common.log import logger
+from library.common.sidecar import SidecarErrors
 from library.config import (
     Config,
     _serialize_paths,
 )
+from library.document_defaults import ALL_DEFAULTS, CHEMBL_DEFAULTS, PUBMED_DEFAULTS
+from library.integration import chembl_library as cl
+from library.orchestration import ETLContext
+from library.pipelines.common import add_pipeline_metadata
+from library.pipelines.document import postprocessing as dp
 from library.pipelines.document.pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
     DocumentQualityAccumulator,
     build_dataframe,
     build_quality_report,
     dataframe_to_strings,
-    merge_metadata,
     merge_with_chembl,
     normalise_doi,
 )
@@ -88,20 +88,17 @@ from library.pipelines.document.service import (
     FallbackDoiMetrics,
     FallbackDoiState,
 )
-from library.common.log import logger
+from library.postprocessing import document as document_export_postprocessing
+from library.postprocessing.document import preprocess_documents_csv
+from library.qa.reporting import build_table_quality_hook
+from library.qa.table_quality import TableQualityProfiler
 from library.reporting.run_manifest import (
     QualityAnalysisError,
     QualityReportError,
     finalise_csv_output,
 )
-from library.postprocessing.document import preprocess_documents_csv
-from library.pipelines.common import add_pipeline_metadata
-from library.common.sidecar import SidecarErrors
-from library.qa.reporting import build_table_quality_hook
-from library.qa.table_quality import TableQualityProfiler
 from library.schemas import DocumentsSchema, normalize_documents
 from library.schemas.document_spec import DOCUMENT_EXPORT_COLUMNS
-
 
 DEFAULT_INPUT_NAME = "document.csv"
 DEFAULT_OUTPUT_STEM = "documents"
@@ -118,7 +115,7 @@ class _FallbackPathAction(argparse.Action):
         option_string: str | None = None,
     ) -> None:
         setattr(namespace, self.dest, values)
-        setattr(namespace, "fallback_doi_csv", values)
+        namespace.fallback_doi_csv = values
 
 
 # ``DOCUMENT_EXPORT_COLUMNS`` is provided as an immutable tuple in the schema
@@ -740,16 +737,16 @@ def run_pubmed(
             output_path = Path(legacy_output)
             if not isinstance(legacy_output, Path):
                 args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
         else:
             output_path = Path(io.default_output_path(args.input_csv, cfg.io))
             args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
     else:
         output_path = Path(final_out_attr)
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
-        setattr(args, "output_csv", output_path)
+        args.output_csv = output_path
     fallback_enabled = getattr(args, "fallback_doi_enabled", False)
     fallback_path_arg = getattr(args, "fallback_doi_path", None)
     metadata_obj = getattr(args, "_config_metadata", None)
@@ -975,16 +972,16 @@ def run_chembl(
             output_path = Path(legacy_output)
             if not isinstance(legacy_output, Path):
                 args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
         else:
             output_path = Path(io.default_output_path(args.input_csv, cfg.io))
             args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
     else:
         output_path = Path(final_out_attr)
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
-        setattr(args, "output_csv", output_path)
+        args.output_csv = output_path
     chunk_size = getattr(args, "chunk_size", chembl_defaults.chunk_size)
     timeout = getattr(args, "timeout", chembl_defaults.timeout)
     metadata_obj = getattr(args, "_config_metadata", None)
@@ -1171,16 +1168,16 @@ def run_all(
             output_path = Path(legacy_output)
             if not isinstance(legacy_output, Path):
                 args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
         else:
             output_path = Path(io.default_output_path(args.input_csv, cfg.io))
             args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
     else:
         output_path = Path(final_out_attr)
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
-        setattr(args, "output_csv", output_path)
+        args.output_csv = output_path
     fallback_enabled = getattr(args, "fallback_doi_enabled", False)
     fallback_path_arg = getattr(args, "fallback_doi_path", None)
     logger.info(
@@ -1460,7 +1457,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         output_path = Path(final_out_attr)
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
-    setattr(args, "output_csv", output_path)
+    args.output_csv = output_path
     mode = getattr(args, "mode", None)
     if mode in (None, ""):
         mode = getattr(args, "command", None)
@@ -1772,11 +1769,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     command_value = getattr(args, "command", None)
     if not mode and command_value:
         mode = command_value
-        setattr(args, "mode", mode)
+        args.mode = mode
     if not mode:
         parser.error("--mode is required")
     if command_value is None and mode is not None:
-        setattr(args, "command", mode)
+        args.command = mode
     mode = str(mode)
     if limit_value is not None and limit_value < 0:
         parser.error("--limit must be zero or a positive integer")
@@ -1788,7 +1785,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         fallback_path_cli = getattr(args, "fallback_doi_path", None)
         if fallback_path_cli is not None and not fallback_enabled_cli:
             fallback_enabled_cli = True
-            setattr(args, "fallback_doi_enabled", True)
+            args.fallback_doi_enabled = True
         if fallback_enabled_cli:
             if fallback_path_cli is None:
                 parser.error(

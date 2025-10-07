@@ -5,8 +5,8 @@ from textwrap import dedent
 
 import pytest
 
-from library.config import load_config
 import library.config.loader as config_loader
+from library.config import load_config
 
 
 @pytest.mark.integration

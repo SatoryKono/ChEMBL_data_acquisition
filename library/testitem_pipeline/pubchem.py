@@ -4,21 +4,32 @@ from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Collection, Hashable
+from collections.abc import (
+    Callable,
+    Collection,
+    Hashable,
+    Mapping,
+    MutableMapping,
+    Sequence,
+)
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, MutableMapping, Sequence, TypeAlias, cast
+from typing import (
+    Any,
+    TypeAlias,
+    cast,
+)
 
 import pandas as pd
 import requests
 
+from library.common.log import logger
+from library.config import ApiCfg, PubChemCfg, RetryCfg
 from library.integration import chembl_library as cl
 from library.integration import pubchem_library as pl
-from library.pipelines.assay.chembl_assay import TESTITEM_PUBCHEM_COLUMNS
 from library.integration.chembl_client import ChemblClient
-from library.config import ApiCfg, PubChemCfg, RetryCfg
-from library.common.log import logger
+from library.pipelines.assay.chembl_assay import TESTITEM_PUBCHEM_COLUMNS
 from library.utils.atomic import open_atomic
 
 UTC = timezone.utc  # noqa: UP017

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E402
 import itertools
 import json
 import sys
@@ -16,8 +17,6 @@ from importlib.util import (
 from pathlib import Path
 from types import ModuleType
 from typing import Any
-
-import importlib.machinery as machinery
 
 import requests
 
@@ -96,10 +95,10 @@ def _load_local_module(module_name: str) -> ModuleType:
     qualified_name = f"{package_name}.{module_name}"
     suffixes = (".py", ".pyc")
 
-    def _candidate_roots() -> tuple[pathlib.Path, ...]:
+    def _candidate_roots() -> tuple[Path, ...]:
         """Return directories that may contain the requested module."""
 
-        roots: list[pathlib.Path] = []
+        roots: list[Path] = []
 
         package = sys.modules.get(package_name)
         if package is not None:
@@ -107,21 +106,21 @@ def _load_local_module(module_name: str) -> ModuleType:
             if spec and getattr(spec, "submodule_search_locations", None):
                 for location in spec.submodule_search_locations:
                     try:
-                        roots.append(pathlib.Path(location))
+                        roots.append(Path(location))
                     except TypeError:
                         continue
 
-        roots.append(pathlib.Path(__file__).resolve().parent)
+        roots.append(Path(__file__).resolve().parent)
         # Ensure deterministic order while removing duplicates.
-        seen: set[pathlib.Path] = set()
-        ordered: list[pathlib.Path] = []
+        seen: set[Path] = set()
+        ordered: list[Path] = []
         for root in roots:
             if root not in seen:
                 seen.add(root)
                 ordered.append(root)
         return tuple(ordered)
 
-    def _load_from_path(module_path: pathlib.Path) -> ModuleType:
+    def _load_from_path(module_path: Path) -> ModuleType:
         if module_path.suffix == ".pyc":
             loader = SourcelessFileLoader(qualified_name, str(module_path))
             spec = spec_from_loader(qualified_name, loader)
@@ -145,7 +144,7 @@ def _load_local_module(module_name: str) -> ModuleType:
     def _load_from_resource(resource: Any) -> ModuleType | None:
         with resources.as_file(resource) as module_path:
             try:
-                return _load_from_path(pathlib.Path(module_path))
+                return _load_from_path(Path(module_path))
             except ModuleNotFoundError:
                 return None
 
@@ -309,11 +308,13 @@ _export_from_module(cli_module, _CLI_EXPORTS)
 
 pubchem_module = _import_optional("pubchem")
 _export_from_module(pubchem_module, _PUBCHEM_EXPORTS)
+from library.clients import pubchem as pc
+from library.common.csv_utils import (
+    write_csv_chunks_deterministic as write_csv_deterministic,
+)
+from library.common.log import logger
 from library.integration import pubchem_library as pl
 from library.integration.chembl_client import ChemblClient
-from library.clients import pubchem as pc
-from library.common.csv_utils import write_csv_chunks_deterministic as write_csv_deterministic
-from library.common.log import logger
 from library.metadata import file_sha256, write_meta_yaml
 from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems

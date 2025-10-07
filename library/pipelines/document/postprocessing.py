@@ -8,15 +8,16 @@ source implementation (``NullOrEmpty``, ``NormalizeJournal`` and friends).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable, cast
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
 
-from ...config import IoCfg
 from ...common.csv_utils import write_csv_deterministic
 from ...common.text_utils import to_text
+from ...config import IoCfg
 
 # ===== Parameters ===========================================================
 
@@ -621,7 +622,7 @@ def postprocess_documents(
     frame = frame.merge(reference, on="document_chembl_id", how="left")
 
     review_values: list[Any] = []
-    for current, doctype in zip(frame["review"], frame["doctype_review"]):
+    for current, doctype in zip(frame["review"], frame["doctype_review"], strict=False):
         current_value = None if pd.isna(current) else bool(current)
         doctype_value = None if pd.isna(doctype) else bool(doctype)
         if current_value is True or doctype_value is True:

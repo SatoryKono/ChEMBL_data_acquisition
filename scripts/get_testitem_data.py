@@ -9,6 +9,8 @@ that still include the misspelled parent identifier column.
 
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
 else:  # pragma: no cover - executed when imported as a package module
@@ -18,11 +20,13 @@ bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
 import argparse
+from collections import ChainMap
+from collections.abc import Hashable, Mapping, MutableMapping, Sequence
 from pathlib import Path
-from typing import Hashable, MutableMapping, NamedTuple, Sequence, cast
+from typing import NamedTuple, cast
 
 import pandas as pd
-
+import requests
 
 # ===== Parameters =====
 
@@ -30,15 +34,18 @@ DEFAULT_INPUT_NAME = "testitem.csv"
 DEFAULT_OUTPUT_STEM = "testitems"
 
 
-from library import cli  # noqa: F401 - re-exported for monkeypatching in tests
-from library import io
-from library.integration import molecule_catalog
-from library.integration import pubchem_library as pl
-from library.cli import LoggerConfig, ConfigMetadata
+import library.testitem_pipeline as pipeline
+from library import (
+    cli,  # noqa: F401 - re-exported for monkeypatching in tests
+    io,
+)
+from library.cli import ConfigMetadata, LoggerConfig
 from library.cli import build_parser as base_parser
-from library.cli_utils import run_cli_command
 from library.cli.logging import setup_cli_logging
 from library.cli.metadata import prepare_option
+from library.cli_utils import run_cli_command
+from library.clients import pubchem as pc  # noqa: F401 - patched in tests
+from library.common.log import logger
 from library.config import (
     ApiCfg,
     Config,
@@ -46,48 +53,31 @@ from library.config import (
     MoleculeCatalogCfg,
     PubChemCfg,
 )
-from library.common.log import logger
-from library.clients import pubchem as pc  # noqa: F401 - patched in tests
-import library.testitem_pipeline as pipeline
+from library.integration import molecule_catalog
+from library.integration import pubchem_library as pl
 from library.integration.chembl_client import ChemblClient
 from library.testitem_pipeline import (
-    PUBCHEM_CID_CACHE_ENCODING,
-    PUBCHEM_COLUMNS,
-    ReadInputIdsResult,
-    TestitemPipelineOptions,
     _DEFAULT_CATALOG_CFG,
-    _FETCH_ERROR_SAMPLE_SIZE,
-    _MOLECULE_HIERARCHY_COLUMNS,
-    _PUBCHEM_CACHE_SCHEMA_VERSION,
-    _TYPO_PARENT_COLUMN,
-    analyze_table_quality,
-    ensure_no_parant_column,
-    file_sha256,
-    fetch_testitems,
-    integrate_missing_identifiers,
-    load_parent_catalog,
-    query_parent_catalog,
-    read_input_ids,
-    run_testitem_pipeline,
-    update_parent_catalog_cache,
-    write_meta_yaml,
-    write_parent_catalog_cache,
-    _prepare_pubchem_api_cfg,
-    _write_pubchem_cid_cache,
     PARENT_LOOKUP_SOURCE_CACHE,
     PARENT_LOOKUP_SOURCE_LOOKUP,
     PARENT_LOOKUP_SOURCE_PARTIAL,
     PARENT_LOOKUP_SOURCE_SKIPPED,
     PARENT_LOOKUP_SOURCE_SYNC,
+    ParentLookupStats,
+    TestitemPipelineOptions,
+    load_parent_catalog,
+    query_parent_catalog,
+    run_testitem_pipeline,
+    update_parent_catalog_cache,
+    write_parent_catalog_cache,
 )
 from library.testitem_pipeline import catalog as pipeline_catalog
 from library.testitem_pipeline import pubchem as pipeline_pubchem
+from library.testitem_pipeline.catalog import _cache_state
 
 configure_logger = cli.configure_logger
 
 LoadMoleculeHierarchyLookup = pipeline.LoadMoleculeHierarchyLookup
-load_molecule_hierarchy_lookup = pipeline.load_molecule_hierarchy_lookup
-attach_parent_molecule_ids = pipeline.attach_parent_molecule_ids
 
 _normalise_identifier = pipeline_pubchem._normalise_identifier
 _pubchem_identifiers = pipeline_pubchem._pubchem_identifiers
@@ -564,7 +554,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
     if output_path is not None:
-        setattr(args, "output_csv", output_path)
+        args.output_csv = output_path
     options = TestitemPipelineOptions(
         input_csv=Path(args.input_csv),
         output_csv=output_path,
@@ -589,7 +579,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         output_path = Path(final_out_attr)
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
-    setattr(args, "output_csv", output_path)
+    args.output_csv = output_path
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0

@@ -25,6 +25,10 @@ jobs:
         run: pip check
       - name: Check formatting
         run: ruff format --check .
+      - name: Ruff autofix verification
+        run: |
+          ruff check --fix .
+          git diff --exit-code
       - name: Lint
         run: ruff check .
       - name: Docstring coverage

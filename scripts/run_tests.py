@@ -8,9 +8,10 @@ import platform
 import shlex
 import subprocess
 import sys
-from datetime import datetime, timezone
+from collections.abc import Iterable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 import pytest
 
@@ -113,7 +114,7 @@ def _normalise_message(raw: Any) -> str:
         return ""
     if isinstance(raw, str):
         return raw.strip()
-    if isinstance(raw, Iterable) and not isinstance(raw, (bytes, bytearray)):
+    if isinstance(raw, Iterable) and not isinstance(raw, bytes | bytearray):
         joined = "\n".join(str(part) for part in raw)
         return joined.strip()
     return str(raw).strip()
@@ -245,7 +246,7 @@ def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, An
         "repo": REPO_SLUG,
         "commit": _git_output("rev-parse", "HEAD"),
         "branch": _git_output("rev-parse", "--abbrev-ref", "HEAD"),
-        "ts_utc": datetime.now(timezone.utc).isoformat(),
+        "ts_utc": datetime.now(UTC).isoformat(),
         "duration_sec": float(raw.get("duration", 0.0) or 0.0),
         "python": platform.python_version(),
         "pytest": pytest.__version__,
@@ -274,7 +275,7 @@ def build_summary_markdown(report: dict[str, Any]) -> str:
     repo = meta.get("repo", REPO_SLUG)
     commit = meta.get("commit", "unknown")
     branch = meta.get("branch", "unknown")
-    timestamp = meta.get("ts_utc", datetime.now(timezone.utc).isoformat())
+    timestamp = meta.get("ts_utc", datetime.now(UTC).isoformat())
     duration = float(meta.get("duration_sec", 0.0) or 0.0)
     success_rate = summary.get("success_rate", 0.0)
 

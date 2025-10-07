@@ -13,19 +13,19 @@ import pytest
 from library.postprocessing import ActivityExtendedError, process_activity_extended
 from library.postprocessing.activity_extended import (
     _FINAL_COLUMN_ORDER,
+    _TARGET_COLUMNS,
     _apply_multimol_logic,
+    _augment_activity_frame,
     _derive_output_path,
     _latest_activity_export,
-    _load_document_lookup,
     _load_citation_fraction,
+    _load_document_lookup,
     _load_target_metadata,
     _prepare_unknown_chirality,
     _rename_columns,
     _resolve_targets_path,
     _select_and_cast,
     _transform_activity_frame,
-    _augment_activity_frame,
-    _TARGET_COLUMNS,
 )
 
 pytestmark = pytest.mark.postprocessing

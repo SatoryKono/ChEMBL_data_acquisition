@@ -5,19 +5,18 @@ from __future__ import annotations
 import difflib
 import heapq
 import weakref
-
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field
-from itertools import islice
 from pathlib import Path
 from threading import Lock, local
-from typing import Any, Hashable, TypeVar
+from typing import Any, TypeVar
 
 import pandas as pd
 import requests
 
+from library.clients import _chunked
 from library.common.log import logger
 from library.common.rate_limiter import RateLimiter, get_global_limiter, get_limiter
 from library.config import (
@@ -37,8 +36,6 @@ from library.pipelines.document.pipeline import (
     merge_metadata,
     normalise_doi,
 )
-from library.clients import _chunked
-
 
 T = TypeVar("T")
 
@@ -497,7 +494,7 @@ class DocumentPipeline:
 
             for candidate in candidates:
                 if isinstance(candidate, Sequence) and not isinstance(
-                    candidate, (str, bytes, bytearray)
+                    candidate, str | bytes | bytearray
                 ):
                     return [str(item) for item in candidate]
             raise TypeError(
@@ -609,12 +606,12 @@ class DocumentPipeline:
                 service: _SessionPool(session_stack, factory, resources, service)
                 for service, factory in session_factories.items()
             }
-            setattr(thread_local_state, "resources", resources)
+            thread_local_state.resources = resources
 
             finalizer = weakref.finalize(
                 thread_local_state, _close_thread_resources, resources
             )
-            setattr(thread_local_state, "resources_finalizer", finalizer)
+            thread_local_state.resources_finalizer = finalizer
 
             return resources
 

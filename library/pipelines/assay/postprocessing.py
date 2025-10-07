@@ -15,10 +15,10 @@ import pandas as pd
 
 from library.schemas import AssayPostprocessSchema
 
-from ...config import IoCfg
 from ...common.csv_utils import write_csv_deterministic
 from ...common.log import logger
 from ...common.pandas_utils import read_csv_pyarrow
+from ...config import IoCfg
 
 
 def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:

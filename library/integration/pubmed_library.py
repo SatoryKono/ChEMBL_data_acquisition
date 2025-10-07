@@ -8,21 +8,28 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Iterable, Iterator, Sequence
-from typing import cast
 from copy import deepcopy
 from datetime import date
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 
+from library.schemas import DocumentsSchema
+
 from .. import cli
+from ..cli import LoggerConfig, configure_logger, path_argument
+from ..cli import build_parser as base_parser
+from ..cli.pipeline_definition import PipelineDefinition
+from ..cli_utils import MetadataHook, Validator, run_pipeline
+from ..clients.pubmed import PubMedClient
 from ..clients.semantic_scholar import (
     fetch_semantic_scholar,
     fetch_semantic_scholar_batch,
 )
-from ..cli import LoggerConfig, configure_logger, path_argument
-from ..cli import build_parser as base_parser
-from ..config.loader import ensure_dirs, print_config, _serialize_paths
+from ..common.csv_utils import write_csv_chunks_deterministic
+from ..common.rate_limiter import RateLimiter, get_limiter
+from ..config.loader import _serialize_paths, ensure_dirs, print_config
 from ..config.models import (
     ApiCfg,
     Config,
@@ -33,9 +40,9 @@ from ..config.models import (
     SemanticScholarCfg,
 )
 from ..config.runtime import session_with_retry
-from ..common.csv_utils import write_csv_chunks_deterministic
 from ..metadata import Stats, file_sha256, write_meta_yaml
-from ..clients.pubmed import PubMedClient
+from ..normalization import normalize_documents
+from ..pipelines.common import add_pipeline_metadata
 from ..pubmed import (
     EMPTY_PUBMED,
     combine,
@@ -51,14 +58,8 @@ from ..pubmed import (
     read_pmids,
     text_or_none,
 )
-from ..common.rate_limiter import RateLimiter, get_limiter
-from ..cli.pipeline_definition import PipelineDefinition
-from ..cli_utils import MetadataHook, Validator, run_pipeline
 from ..qa.reporting import build_table_quality_hook
-from ..pipelines.common import add_pipeline_metadata
-from ..normalization import normalize_documents
 from ..validation import ValidationResult as SchemaValidationResult
-from library.schemas import DocumentsSchema
 
 __all__ = [
     "Config",

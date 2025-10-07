@@ -12,17 +12,17 @@ import argparse
 import json
 import os
 import re
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 import pandas as pd
 import yaml
 
 from library.common.csv_utils import write_csv_deterministic
 from library.common.text_utils import to_text
-
 
 # ===== Parameters ============================================================
 CP1252_ENCODING = "cp1252"
@@ -133,7 +133,7 @@ class BuilderConfig:
     params: Mapping[str, Any] = field(default_factory=dict)
 
     @staticmethod
-    def from_mapping(data: Mapping[str, Any]) -> "BuilderConfig":
+    def from_mapping(data: Mapping[str, Any]) -> BuilderConfig:
         builder = data.get("builder")
         if not builder:
             raise ValueError("builder key is required in crosswalk field")
@@ -153,7 +153,7 @@ class CrosswalkField:
     m: BuilderConfig
 
     @staticmethod
-    def from_mapping(data: Mapping[str, Any]) -> "CrosswalkField":
+    def from_mapping(data: Mapping[str, Any]) -> CrosswalkField:
         name = data.get("name")
         if not name:
             raise ValueError("Field name missing in crosswalk")
@@ -179,7 +179,7 @@ class Crosswalk:
     fields: tuple[CrosswalkField, ...]
 
     @staticmethod
-    def load(path: Path) -> "Crosswalk":
+    def load(path: Path) -> Crosswalk:
         with path.open("r", encoding=UTF8_ENCODING) as stream:
             payload = yaml.safe_load(stream)
         version = payload.get("version", "unknown")
@@ -191,8 +191,8 @@ class Crosswalk:
 
     def metric_groups(self) -> Mapping[str, list[str]]:
         groups: dict[str, list[str]] = {}
-        for field in self.fields:
-            groups.setdefault(field.metric_group, []).append(field.name)
+        for field_cfg in self.fields:
+            groups.setdefault(field_cfg.metric_group, []).append(field_cfg.name)
         return groups
 
 
@@ -492,9 +492,9 @@ def _build_projection(frame: pd.DataFrame, crosswalk: Crosswalk, *, side: str) -
         raise ValueError(f"Unknown side {side}")
 
     result = pd.DataFrame(index=frame.index)
-    for field in crosswalk.fields:
-        series = builder(context, getattr(field, side))
-        result[field.name] = series
+    for field_cfg in crosswalk.fields:
+        series = builder(context, getattr(field_cfg, side))
+        result[field_cfg.name] = series
     return result
 
 

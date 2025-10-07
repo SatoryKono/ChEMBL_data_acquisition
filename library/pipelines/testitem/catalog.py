@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 from collections import ChainMap
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
-from typing import Any, Mapping, MutableMapping, NamedTuple, Sequence
+from typing import NamedTuple
 
 import pandas as pd
 import requests
 
+from library.common.log import logger
+from library.config import ApiCfg, IoCfg, MoleculeCatalogCfg
 from library.integration import molecule_catalog
 from library.integration.chembl_client import ChemblClient
-from library.config import ApiCfg, IoCfg, MoleculeCatalogCfg
-from library.common.log import logger
 from library.integration.molecule_catalog import (
     load_parent_catalog,
     query_parent_catalog,
@@ -51,10 +52,10 @@ class ParentEnrichmentPreparation:
     """Intermediate data required to attach parent identifiers."""
 
     df: pd.DataFrame
-    lookup_data: "ParentLookupPreparedData"
+    lookup_data: ParentLookupPreparedData
     parent_catalog: dict[str, str] | None
     parent_catalog_source: str
-    parent_stats: "ParentLookupStats"
+    parent_stats: ParentLookupStats
 
 
 @dataclass
@@ -62,7 +63,7 @@ class ParentEnrichmentResult:
     """Result returned after running the parent enrichment stage."""
 
     df: pd.DataFrame
-    parent_stats: "ParentLookupStats"
+    parent_stats: ParentLookupStats
 
 
 @dataclass(frozen=True)
@@ -141,7 +142,7 @@ def _normalise_parent_identifier(value: object, *, child_id: str) -> str | None:
     return normalised_parent
 
 
-@lru_cache(maxsize=None)
+@cache
 def _load_molecule_hierarchy_mapping(
     path: str,
     encoding: str,

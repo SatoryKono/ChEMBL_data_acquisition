@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping as TypingMapping
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping as TypingMapping
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from pydantic import BaseModel
@@ -32,7 +33,7 @@ __all__ = [
 ]
 
 
-def _config_model() -> type["Config"]:
+def _config_model() -> type[Config]:
     from .models import Config
 
     return Config

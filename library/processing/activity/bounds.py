@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable
+from collections.abc import Iterable
 
 import numpy as np
 import pandas as pd
 
-from ...config import ActivityBoundsCfg
 from ...common.log import logger
 from ...common.pandas_utils import merge_series_prefer_left
+from ...config import ActivityBoundsCfg
 
 __all__ = ["compute_activity_bounds"]
 

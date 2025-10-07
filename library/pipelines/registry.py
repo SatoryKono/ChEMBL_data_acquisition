@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Sequence, TypedDict, cast
+from typing import Any, TypedDict, cast
 
 import yaml
 
@@ -131,7 +132,7 @@ def load_pipeline_registry(
     definitions: Iterable[PipelineStepDefinition]
     if source is None:
         definitions = _DEFAULT_DEFINITIONS
-    elif isinstance(source, (str, Path)):
+    elif isinstance(source, str | Path):
         path = Path(source)
         if not path.exists():
             raise FileNotFoundError(f"registry file not found: {path}")
@@ -152,7 +153,7 @@ def _coerce_definitions(data: object) -> Iterable[PipelineStepDefinition]:
         if pipelines is None:
             raise ValueError("registry mapping must contain a 'pipelines' key")
         data = pipelines
-    if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
+    if not isinstance(data, Iterable) or isinstance(data, str | bytes):
         raise TypeError("registry definitions must be an iterable of mappings")
     definitions: list[PipelineStepDefinition] = []
     for entry in data:
@@ -167,7 +168,7 @@ def _coerce_string_sequence(value: object, *, field: str) -> tuple[str, ...]:
         return ()
     if isinstance(value, str):
         return (value,)
-    if isinstance(value, Iterable) and not isinstance(value, (bytes, bytearray)):
+    if isinstance(value, Iterable) and not isinstance(value, bytes | bytearray):
         result: list[str] = []
         for item in value:
             if not isinstance(item, str):

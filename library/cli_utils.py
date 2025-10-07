@@ -11,13 +11,11 @@ metadata files.
 from __future__ import annotations
 
 import argparse
+import shlex
 import sys
 import traceback
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import overload
-
-import shlex
 
 import numpy as np
 import pandas as pd
@@ -32,20 +30,20 @@ from .cli import (
     path_argument,
     positive_int,
 )
-from .config import Config, ConfigError, ensure_dirs, print_config
-from .common.log import logger as default_logger
-from .metadata import Stats, file_sha256, write_meta_yaml, record_quality_failure
-from .sidecar import SidecarErrors
-from .config.loader import DEFAULT_CONFIG_PATH
 from .cli.pipeline_definition import (
     Fetcher,
-    MetadataHook,
+    MetadataHook,  # noqa: F401 - re-exported for pipeline configuration
     PipelineDefinition,
-    TableQualityHook,
-    Validator,
-    Writer,
+    TableQualityHook,  # noqa: F401 - re-exported for pipeline configuration
+    Validator,  # noqa: F401 - re-exported for pipeline configuration
+    Writer,  # noqa: F401 - re-exported for pipeline configuration
     normalise_definition,
 )
+from .common.log import logger as default_logger
+from .config import Config, ConfigError, ensure_dirs, print_config
+from .config.loader import DEFAULT_CONFIG_PATH
+from .metadata import Stats, file_sha256, record_quality_failure, write_meta_yaml
+from .sidecar import SidecarErrors
 
 
 def _callable_name(func: Callable[..., object]) -> str:
@@ -113,11 +111,11 @@ def run_cli_command(
 
     try:
         config_arg = getattr(args, "config", None)
-        if isinstance(config_arg, (str, Path)):
+        if isinstance(config_arg, str | Path):
             config_path: Path | str = config_arg
         else:
             default_config = parser.get_default("config")
-            if not isinstance(default_config, (str, Path)):
+            if not isinstance(default_config, str | Path):
                 msg = "configuration path must be provided"
                 raise ValueError(msg)
             config_path = default_config

@@ -15,7 +15,7 @@ class _StubLogger:
     def __init__(self) -> None:
         self.events: list[tuple[str, str, dict[str, object]]] = []
 
-    def bind(self, **_: object) -> "_StubLogger":  # pragma: no cover - interface parity
+    def bind(self, **_: object) -> _StubLogger:  # pragma: no cover - interface parity
         return self
 
     def info(self, event: str, **data: object) -> None:

@@ -3,16 +3,16 @@ from __future__ import annotations
 import argparse
 import io
 import json
+from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Sequence
 
 import pytest
 
+from library.pipelines.common import PipelineRunResult
 from scripts import get_data
 from tests.helpers.logs import iter_events, parse_log_lines
-from library.pipelines.common import PipelineRunResult
 
 
 def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
@@ -23,7 +23,7 @@ def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
     output_dir.mkdir()
     input_files = dict(get_data.DEFAULT_INPUT_FILES)
     output_stems = dict(get_data.DEFAULT_OUTPUT_STEMS)
-    for name, filename in input_files.items():
+    for _name, filename in input_files.items():
         target = input_dir / filename
         target.write_text("id\nplaceholder\n", encoding="utf-8")
     config_path = base_path / "config.yaml"
@@ -172,7 +172,7 @@ def test_configure_logging__delegates_to_configure_logger(monkeypatch: pytest.Mo
         return original_configure(cfg)
 
     monkeypatch.setattr(get_data, "configure_logger", _wrapper)
-    logger = get_data._configure_logging("warn", run_id="fixed")
+    get_data._configure_logging("warn", run_id="fixed")
     assert captured, "expected configure_logger to be invoked"
     cfg = captured[0]
     assert cfg.level == "WARN"

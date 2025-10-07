@@ -5,15 +5,16 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 import pandas as pd
 
-from .helpers import normalise_export_basename, normalise_text, read_csv_with_fallbacks
 from library.common.csv_utils import write_csv_deterministic
 from library.common.log import logger
+
+from .helpers import normalise_export_basename, normalise_text, read_csv_with_fallbacks
 
 __all__ = ["process_iuphar_targets", "IUPHARPostProcessingError"]
 
@@ -76,7 +77,7 @@ _OUTPUT_COLUMNS: tuple[str, ...] = (
 def _current_default_search_dir() -> Path:
     package = sys.modules.get(__name__)
     if package is not None and hasattr(package, "_DEFAULT_SEARCH_DIR"):
-        override = getattr(package, "_DEFAULT_SEARCH_DIR")
+        override = package._DEFAULT_SEARCH_DIR
         if override is not None:
             return Path(override)
     return _DEFAULT_SEARCH_DIR

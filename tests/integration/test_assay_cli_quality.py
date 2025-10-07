@@ -105,7 +105,7 @@ def test_get_assay_cli__clamps_batch_size(
         def __init__(self, *args, **kwargs) -> None:
             del args, kwargs
 
-        def __enter__(self) -> "_StubChemblClient":
+        def __enter__(self) -> _StubChemblClient:
             return self
 
         def __exit__(self, exc_type, exc, tb) -> bool:  # noqa: D401 - context protocol

@@ -7,6 +7,8 @@ applications or tests.
 
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
 else:  # pragma: no cover - executed when imported as a package module
@@ -16,30 +18,17 @@ bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
 import argparse
-
-from collections.abc import Iterable, Iterator, Mapping, Sequence, Callable
-from datetime import datetime, timezone
-
+import datetime as _datetime
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from functools import partial
 from itertools import islice
 from pathlib import Path
-from time import sleep, perf_counter
+from time import perf_counter, sleep
 
 import pandas as pd
 import requests
 
-from library.integration import chembl_library as cl
-from library import cli
-from library import io
-from library.orchestration import ETLContext
-from library.common.csv_utils import write_csv_chunks_deterministic  # re-exported for tests
-from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS, MAX_ACTIVITY_CHUNK_SIZE
-from library.pipelines.common import (
-    ChunkedFetchConfig,
-    CsvWriterConfig,
-    prepare_chunked_pipeline,
-)
-
+from library import cli, io
 from library.cli import (
     Logger,
     LoggerConfig,
@@ -48,37 +37,54 @@ from library.cli import (
 from library.cli import (
     build_parser as base_parser,
 )
-
-from library.cli.pipeline_definition import PipelineDefinition
-
 from library.cli.base import PipelineCLIBase
-
+from library.cli.pipeline_definition import PipelineDefinition
 from library.cli_utils import (
     PipelineError,
     resolve_invocation,
-    run_cli_command,
     run_pipeline,
 )
 from library.cli_utils import (
     file_sha256 as _cli_file_sha256,
 )
 from library.cli_utils import (
+    run_cli_command as _run_cli_command,
+)
+from library.cli_utils import (
     write_meta_yaml as _cli_write_meta_yaml,
 )
-from library.config import Config, _serialize_paths
+from library.common.csv_utils import (
+    write_csv_chunks_deterministic,  # re-exported for tests
+)
+from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 from library.common.log import logger
-from library.cli.logging import setup_cli_logging
-from library.pipelines.common import add_pipeline_metadata
+from library.config import Config, _serialize_paths
+from library.integration import chembl_library as cl
+from library.integration.chembl_client import ChemblClient
+from library.orchestration import ETLContext
+from library.pipelines.assay.chembl_assay import (
+    ACTIVITY_COLUMNS,
+    MAX_ACTIVITY_CHUNK_SIZE,
+)
+from library.pipelines.common import (
+    ChunkedFetchConfig,
+    CsvWriterConfig,
+    add_pipeline_metadata,
+    prepare_chunked_pipeline,
+)
+from library.postprocessing import helpers as postprocessing_helpers
+from library.postprocessing.activity_extended import process_activity_extended
 from library.processing.activity import (
     apply_activity_annotations,
     compute_activity_bounds,
 )
-from library.postprocessing.activity_extended import process_activity_extended
-from library.postprocessing import helpers as postprocessing_helpers
 from library.qa.reporting import build_table_quality_hook
+from library.schemas import (
+    ActivitiesSchema,
+    configure_activity_schema,
+    normalize_activities,
+)
 from library.validation import validate_activities
-from library.schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
-from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
@@ -95,11 +101,16 @@ def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
 file_sha256 = _cli_file_sha256
 write_meta_yaml = _cli_write_meta_yaml
 configure_logger = cli.configure_logger
+run_cli_command = _run_cli_command
+
+datetime = _datetime.datetime
 
 __all__ = (
     "file_sha256",
     "write_meta_yaml",
     "configure_logger",
+    "datetime",
+    "run_cli_command",
 )
 
 
@@ -298,10 +309,10 @@ def _emit_completion_message(
 
     if streamed_metrics:
         rows_value = streamed_metrics.get("rows")
-        if isinstance(rows_value, (int, float)):
+        if isinstance(rows_value, int | float):
             resolved_rows = int(rows_value)
         null_fraction = streamed_metrics.get("null_fraction")
-        if isinstance(null_fraction, (int, float)):
+        if isinstance(null_fraction, int | float):
             null_fraction_value = float(null_fraction)
 
     null_fraction_display = (
@@ -750,16 +761,16 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             output_path = Path(legacy_output)
             if not isinstance(legacy_output, Path):
                 args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
         else:
             output_path = Path(io.default_output_path(args.input_csv, cfg.io))
             args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
     else:
         output_path = Path(final_out_attr)
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
-        setattr(args, "output_csv", output_path)
+        args.output_csv = output_path
 
     start_time = perf_counter()
 
@@ -833,8 +844,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if action_cfg.enabled or action_cfg.log_missing or action_cfg.log_distribution:
         extra_columns.append(action_cfg.column)
     extra_kwargs = {"extra_columns": extra_columns} if extra_columns else {}
-
-    invocation = _args_invocation(args)
 
     failure_path = output_path.with_name(f"{output_path.stem}_failure_cases.csv")
     fetch_failure_path = output_path.with_name(
@@ -1093,7 +1102,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                                 **log_context,
                             )
                             chunk_failures.add_failure(id_list, error_message)
-                            raise PipelineError("chunk_fetch_failed")
+                            raise PipelineError("chunk_fetch_failed") from exc
                         delay = compute_backoff_delay(attempt, retry_cfg)
                         logger.warning(
                             "activity_fetch_retry",
@@ -1220,7 +1229,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if exit_code == 0:
         completion_rows = processed_ids
         summary_rows = summary_snapshot.get("rows") if summary_snapshot else None
-        if isinstance(summary_rows, (int, float)):
+        if isinstance(summary_rows, int | float):
             completion_rows = int(summary_rows)
         elif pipeline_stats is not None:
             completion_rows = int(
@@ -1352,16 +1361,16 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             output_path = Path(legacy_output)
             if not isinstance(legacy_output, Path):
                 args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
         else:
             output_path = Path(io.default_output_path(args.input_csv, cfg.io))
             args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
     else:
         output_path = Path(final_out_attr)
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
-        setattr(args, "output_csv", output_path)
+        args.output_csv = output_path
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
         logger.info(

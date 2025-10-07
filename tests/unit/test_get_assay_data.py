@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -14,8 +15,8 @@ import yaml
 from library.cli_utils import run_pipeline as cli_run_pipeline
 from library.config import Config
 from library.pipelines.assay.chembl_assay import MAX_ASSAY_CHUNK_SIZE
-from library.schemas import AssaysSchema
 from library.resources.dictionaries import get_resource
+from library.schemas import AssaysSchema
 from scripts import get_assay_data
 
 
@@ -116,7 +117,7 @@ def test_run_chembl__successful_execution(
         return iter(["CHEMBL1", "CHEMBL2", "CHEMBL3"])
 
     class FakeClient:
-        def __enter__(self) -> "FakeClient":
+        def __enter__(self) -> FakeClient:
             return self
 
         def __exit__(self, exc_type, exc, tb) -> None:
@@ -194,7 +195,7 @@ def test_run_chembl__splits_chunk_on_timeout(
         return iter(["CHEMBL100", "CHEMBL200"])
 
     class FakeClient:
-        def __enter__(self) -> "FakeClient":
+        def __enter__(self) -> FakeClient:
             return self
 
         def __exit__(self, exc_type, exc, tb) -> None:
