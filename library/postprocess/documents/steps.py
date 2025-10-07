@@ -136,8 +136,29 @@ def enrich_document_publication_year(
     return enriched
 
 
-def finalize_document_records(df: pd.DataFrame, **_: object) -> pd.DataFrame:
-    """Validate and order the DataFrame according to :data:`DOCUMENT_SCHEMA`."""
+def finalize_document_records(
+    df: pd.DataFrame,
+    *,
+    enforce_schema: bool = True,
+    ensure_unique_ids: bool = False,
+    **_: object,
+) -> pd.DataFrame:
+    """Normalise terminal document rows and optionally validate the schema.
+
+    Parameters
+    ----------
+    df:
+        Input frame containing the document rows produced by the preceding
+        enrichment steps.
+    enforce_schema:
+        When ``True`` (the default) the output is validated against
+        :data:`DOCUMENT_SCHEMA`. Setting this flag to ``False`` can be useful
+        in exploratory runs where partial data is expected.
+    ensure_unique_ids:
+        Drop duplicated ``document_chembl_id`` values while keeping the first
+        occurrence. The operation is deterministic to guarantee idempotent
+        pipeline re-runs.
+    """
 
     prepared = df.copy(deep=True)
 
@@ -150,6 +171,32 @@ def finalize_document_records(df: pd.DataFrame, **_: object) -> pd.DataFrame:
 
     if "publication_year" in prepared.columns:
         prepared["publication_year"] = prepared["publication_year"].astype("Int64")
+
+    if ensure_unique_ids and "document_chembl_id" in prepared.columns:
+        prepared = (
+            prepared.drop_duplicates(subset=["document_chembl_id"], keep="first")
+            .reset_index(drop=True)
+        )
+    else:
+        prepared = prepared.reset_index(drop=True)
+
+    if not enforce_schema:
+        ordered = prepared
+        column_order = DOCUMENT_SCHEMA.column_order or ()
+        if column_order:
+            ordered_columns = [col for col in column_order if col in ordered.columns]
+            remaining = [col for col in ordered.columns if col not in ordered_columns]
+            if ordered_columns:
+                ordered = ordered.loc[:, ordered_columns + remaining]
+
+        sort_by = DOCUMENT_SCHEMA.sort_by or ()
+        if sort_by:
+            sort_columns = [col for col in sort_by if col in ordered.columns]
+            if sort_columns:
+                ordered = ordered.sort_values(sort_columns, kind="mergesort").reset_index(
+                    drop=True
+                )
+        return ordered
 
     validated = validate_documents(prepared, context="document_finalization")
     return validated
