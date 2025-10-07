@@ -114,6 +114,10 @@ __all__ = (
 )
 
 
+_CACHE_MISS = object()
+_CACHE_IN_PROGRESS = object()
+
+
 _ACTIVITY_REQUIRED_COLUMNS: tuple[str, ...] = tuple(
     name for name, column in ActivitiesSchema.columns.items() if column.required
 )
