@@ -16,7 +16,8 @@
 4. **Качество**
    - `make lint && make typecheck`
    - `pytest -q --json-report --json-report-file=reports/test_report.json`
-   - `python tools/make_md_summary.py reports/test_report.json reports/test_summary.md`
+   - `python tools/make_md_summary.py --input reports/test_report.json --output reports/test_summary.md`
+     (аргументы можно опустить; консольный скрипт: `make-md-summary`)
    - `make smoke`
    - `check-determinism` против предыдущих выгрузок (если доступны).
 

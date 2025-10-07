@@ -61,6 +61,10 @@ from `library/`:
 - `library/qa` & `library/table_quality.py` — Schema validation, quality
   profiling and metadata writers.
 
+For details on the recent relocation of the test item pipeline into the
+`library.pipelines.testitem` namespace, see the
+[test item pipeline module migration guide](../guides/MIGRATION_TESTITEM_PIPELINE.md).
+
 ## Data extraction pipelines
 
 | Pipeline | CLI entry | Primary sources | Outputs |
@@ -78,7 +82,7 @@ invoked separately.
 
 Alternative workflows can be described in YAML and supplied via
 `--pipeline-registry`. The loader in
-[`library/pipelines/registry.py`](../../library/pipelines/registry.py) validates
+[`library/pipelines/registry.py`](../../../library/pipelines/registry.py) validates
 the structure and allows callers to swap in bespoke callables, change execution
 order or skip steps without modifying code.
 

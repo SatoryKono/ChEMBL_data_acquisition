@@ -76,7 +76,7 @@ flowchart LR
 
 Альтернативные сценарии можно описать в YAML и передать через
 `--pipeline-registry`. Модуль
-[`library/pipelines/registry.py`](../../library/pipelines/registry.py)
+[`library/pipelines/registry.py`](../../../library/pipelines/registry.py)
 проверяет структуру и позволяет менять порядок шагов, подменять вызываемые
 функции или пропускать этапы без изменения исходников.
 

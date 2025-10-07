@@ -63,7 +63,10 @@ Outputs are written to `output/` (create the directory beforehand or rely on
 ```bash
 pytest -q --disable-warnings
 pytest -q --json-report --json-report-file=reports/test_report.json
-python tools/make_md_summary.py reports/test_report.json reports/test_summary.md
+python tools/make_md_summary.py --input reports/test_report.json --output reports/test_summary.md
+# arguments are optional when using the default locations:
+# python tools/make_md_summary.py
+# make-md-summary
 ```
 
 Expect `reports/test_summary.md` to report ≥95 % success rate. Upload the JSON and

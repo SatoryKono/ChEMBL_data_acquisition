@@ -241,8 +241,8 @@ flags the command accepts:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--column` | `activity_chembl_id` | Column containing activity identifiers. |
-| `--batch-size` | `20` | Number of identifiers per request. |
+| `--column` | `activity_id` | Column containing activity identifiers (configuration defaults to `activity_chembl_id`). |
+| `--batch-size` | `5` | Number of identifiers per request (configuration usually lifts this to `20`). |
 | `--timeout` | `90.0` | HTTP timeout per request. |
 | `--limit`, `--offset` | `None`, `0` | Range selection; negative values are rejected. |
 | `--workers` | `1` | Worker threads fetching activities. |

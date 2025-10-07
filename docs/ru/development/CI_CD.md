@@ -7,7 +7,7 @@
 | Lint | `make lint` | Проверка формата (`black`) и стиля (`ruff`). |
 | Type check | `make typecheck` | `mypy` для `library/` и `scripts/`. |
 | Tests | `pytest -q --json-report --json-report-file=reports/test_report.json` | Полный прогон тестов. |
-| Report summary | `python tools/make_md_summary.py reports/test_report.json reports/test_summary.md` | Генерация Markdown-отчёта. |
+| Report summary | `make-md-summary --input reports/test_report.json --output reports/test_summary.md` | Генерация Markdown-отчёта (пути по умолчанию — `reports/`). |
 | Smoke (опция) | `make smoke` | Запуск оркестратора на тестовых данных. |
 | Determinism (опция) | `check-determinism --baseline <prev> --candidate <curr>` | Проверка изменений CSV между прогоном. |
 

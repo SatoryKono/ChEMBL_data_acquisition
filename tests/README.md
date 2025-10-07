@@ -8,7 +8,8 @@ The test suite is organised around the key scenarios of the ChEMBL data acquisit
 - `e2e/` – deterministic end-to-end runs of the test-item pipeline on synthetic fixtures, including export idempotence.
 - `resources/` – small CSV snapshots used by the integration and e2e scenarios.
 
-Standalone smoke checks that previously lived alongside `tests/run_tests.py` were moved into the directories above:
+Standalone smoke checks that previously lived alongside the legacy `tests/run_tests.py`
+wrapper were moved into the directories above:
 
 - activity column filtering helpers now reside in `tests/unit/test_activity_output_columns.py`;
 - assay output pruning checks live in `tests/unit/test_assay_output_columns.py`;
