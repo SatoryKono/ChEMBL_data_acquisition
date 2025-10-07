@@ -627,6 +627,8 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
                     if candidate is not None:
                         aligned = candidate.reindex(result.index)
                         filled = _coerce_series_dtype(aligned, dtype)
+                        combined = existing.mask(missing_mask, filled)
+                        result[column] = _coerce_series_dtype(combined, dtype)
                         current = result[column]
                         # ``Series.mask`` preserves the extension dtype and avoids
                         # implicit "object" upcasts that would otherwise trigger
