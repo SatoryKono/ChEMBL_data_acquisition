@@ -248,6 +248,18 @@ flags the command accepts:
 | `--workers` | `1` | Worker threads fetching activities. |
 | `--dry-run` | `False` | Validate inputs without contacting ChEMBL or writing files. |
 
+Example: fetch activities by their canonical `activity_id` column while running
+multiple workers in parallel.
+
+```bash
+python scripts/get_activity_data.py \
+  --input data/input/activity.csv \
+  --final-out output/activities_subset.csv \
+  --column activity_id \
+  --batch-size 10 \
+  --workers 4
+```
+
 ## Test item pipeline `get_testitem_data`
 
 Focuses on ChEMBL + PubChem enrichment. The CLI mirrors the assay pipeline with
