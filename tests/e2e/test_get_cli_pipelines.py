@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 from collections import Counter
 from contextlib import contextmanager
 from pathlib import Path
@@ -81,6 +82,14 @@ class _MemoryLogger:
 def _patch_logger(monkeypatch: pytest.MonkeyPatch, module: object) -> _MemoryLogger:
     logger = _MemoryLogger()
     monkeypatch.setattr(module, "logger", logger)
+    try:
+        command_module_name = f"library.cli.commands.{module.__name__.split('.')[-1]}"
+        command_module = importlib.import_module(command_module_name)
+    except ModuleNotFoundError:
+        pass
+    else:
+        if hasattr(command_module, "logger"):
+            monkeypatch.setattr(command_module, "logger", logger)
     return logger
 
 
