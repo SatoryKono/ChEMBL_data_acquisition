@@ -394,17 +394,36 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                         sleep(delay)
                     continue
                 if status >= 400:
-                    last_failure_details = {
-                        "reason": "unexpected_status",
-                        "status": status,
-                    }
-                    logger.warning(
-                        "request_unexpected_status",
-                        url=url,
-                        rps=cfg.rps,
-                        status=status,
-                        **details_excluding("status"),
-                    )
+                    if status == 400:
+                        last_failure_details = {
+                            "reason": "invalid_identifier",
+                            "status": status,
+                        }
+                        logger.info(
+                            "request_invalid_identifier",
+                            url=url,
+                            rps=cfg.rps,
+                            status=status,
+                            **details_excluding("status"),
+                        )
+                        _store_cache_miss(
+                            url,
+                            cfg,
+                            "invalid_identifier",
+                            last_failure_details,
+                        )
+                    else:
+                        last_failure_details = {
+                            "reason": "unexpected_status",
+                            "status": status,
+                        }
+                        logger.warning(
+                            "request_unexpected_status",
+                            url=url,
+                            rps=cfg.rps,
+                            status=status,
+                            **details_excluding("status"),
+                        )
                     logger.debug(
                         "request_fail",
                         url=url,
