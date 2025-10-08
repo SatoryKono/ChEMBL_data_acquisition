@@ -59,6 +59,7 @@ def test_normalise_text_newlines__binary_payload_preserved() -> None:
         "95f7a33a028aeeba9027b64f558e50ad25e76934782cc03ba14437fd8eff8476",
         "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15",
         dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM,
+        dictionaries.WINDOWS_VFS_EAGER_PLACEHOLDER_CHECKSUM,
         dictionaries.WINDOWS_VFS_NTFS_CHECKSUM,
     ),
 )
