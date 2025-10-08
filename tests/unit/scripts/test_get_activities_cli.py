@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+import pandas as pd
 
 from library.utils.cli_tools import get_activities
+from library.config import Config
 
 
 class _LoggerStub:
@@ -129,3 +132,95 @@ def test_main__dry_run_skips_fetch(
     assert called["value"] is False
     assert writer_calls == []
     assert ("info", "dry_run", {"limit": 5}) in logger_stub.events
+
+
+@pytest.mark.unit
+def test_run__validation_error_returns_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = Config()
+    output_csv = tmp_path / "activities.csv"
+    args = SimpleNamespace(
+        limit=3,
+        dry_run=False,
+        output_csv=output_csv,
+        input_csv=None,
+    )
+
+    monkeypatch.setattr(
+        get_activities,
+        "get_activities",
+        lambda limit: [{"activity_id": idx} for idx in range(limit)],
+    )
+
+    def _fail_validation(_: pd.DataFrame, *, return_result: bool) -> object:
+        raise ValueError("broken")
+
+    monkeypatch.setattr(get_activities, "validate_activities", _fail_validation)
+
+    table_quality_calls: list[object] = []
+
+    def _noop_quality(*_args: object, **_kwargs: object):
+        table_quality_calls.append(None)
+        return lambda *_a, **_k: None
+
+    monkeypatch.setattr(get_activities, "build_table_quality_hook", _noop_quality)
+
+    exit_code = get_activities.run(cfg, args)
+
+    assert exit_code == 1
+    assert table_quality_calls == []
+
+
+@pytest.mark.unit
+def test_run__table_quality_invoked_after_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = Config()
+    output_csv = tmp_path / "activities.csv"
+    args = SimpleNamespace(
+        limit=2,
+        dry_run=False,
+        output_csv=output_csv,
+        input_csv=None,
+    )
+
+    records = [
+        {
+            "activity_id": 0,
+            "molecule_chembl_id": "CHEMBL0",
+            "assay_chembl_id": "ASSAY0",
+            "standard_value": 1.0,
+        },
+        {
+            "activity_id": 1,
+            "molecule_chembl_id": "CHEMBL1",
+            "assay_chembl_id": "ASSAY1",
+            "standard_value": 2.0,
+        },
+    ]
+
+    monkeypatch.setattr(get_activities, "get_activities", lambda limit: records[:limit])
+
+    observed: dict[str, object] = {}
+
+    def _build_quality(cfg_section, *, table_name, destination):
+        observed["cfg"] = cfg_section
+        observed["table_name"] = table_name
+        observed["destination"] = destination
+
+        def _hook(subject: object) -> None:
+            observed["subject"] = subject
+
+        return _hook
+
+    monkeypatch.setattr(get_activities, "build_table_quality_hook", _build_quality)
+
+    exit_code = get_activities.run(cfg, args)
+
+    assert exit_code == 0
+    assert output_csv.exists()
+    assert observed["cfg"] == cfg.system.doc_quality
+    assert observed["subject"] == output_csv
+    assert observed["table_name"] == output_csv.with_suffix("")
+    assert observed["destination"] == output_csv.parent

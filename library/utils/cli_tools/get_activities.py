@@ -12,6 +12,16 @@ from library import cli, io
 from library.common.log import logger
 from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.pipelines.activity import get_activities
+from library.qa.reporting import build_table_quality_hook
+from library.validation import validate_activities
+
+
+_REQUIRED_ACTIVITY_COLUMNS: dict[str, str] = {
+    "activity_id": "Int64",
+    "molecule_chembl_id": "string",
+    "assay_chembl_id": "string",
+    "standard_value": "Float64",
+}
 
 
 def parse_args(
@@ -51,7 +61,16 @@ def _frame_from_records(records: Iterable[dict[str, object]]) -> pd.DataFrame:
 
     frame = pd.DataFrame(list(records))
     if frame.empty:
-        return pd.DataFrame(columns=["activity_id"], dtype="Int64")
+        return pd.DataFrame(
+            {column: pd.Series(dtype=dtype) for column, dtype in _REQUIRED_ACTIVITY_COLUMNS.items()}
+        )
+
+    for column, dtype in _REQUIRED_ACTIVITY_COLUMNS.items():
+        if column not in frame.columns:
+            frame[column] = pd.Series(pd.NA, index=frame.index, dtype=dtype)
+        else:
+            frame[column] = frame[column].astype(dtype)
+
     return frame
 
 
@@ -82,6 +101,20 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         logger.error("invalid_arguments", error=str(exc))
         return 1
 
+    try:
+        validation = validate_activities(frame, return_result=True)
+    except Exception as exc:
+        logger.error("validation_error", error=str(exc))
+        return 1
+
+    failure_cases = getattr(validation, "failure_cases", None)
+    if failure_cases is not None and not failure_cases.empty:
+        failures = len(failure_cases) if hasattr(failure_cases, "__len__") else 0
+        logger.error("validation_failed", failures=int(failures))
+        return 1
+
+    frame = getattr(validation, "data", frame)
+
     output_candidate = getattr(args, "output_csv", None)
     input_candidate = getattr(args, "input_csv", None)
     if output_candidate in (None, argparse.SUPPRESS):
@@ -93,6 +126,12 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         output_path = Path(output_candidate)
 
     written_path = _write_output(frame, output_path, cfg=cfg)
+    table_quality = build_table_quality_hook(
+        getattr(getattr(cfg, "system", None), "doc_quality", None),
+        table_name=written_path.with_suffix(""),
+        destination=written_path.parent,
+    )
+    table_quality(written_path)
     logger.info(
         "activity_generated",
         count=int(frame.shape[0]),
