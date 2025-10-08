@@ -925,6 +925,15 @@ OUTPUT_DTYPE = {
     "ChEMBL.source": "string",
 }
 
+OUTPUT_INT64_COLUMNS: tuple[str, ...] = tuple(
+    column for column, dtype in OUTPUT_DTYPE.items() if dtype == "Int64"
+)
+
+OUTPUT_READ_DTYPE = {
+    column: ("string" if column in OUTPUT_INT64_COLUMNS else dtype)
+    for column, dtype in OUTPUT_DTYPE.items()
+}
+
 
 def _load_reference_document(path: Path) -> pd.DataFrame:
     if not path.exists():
@@ -969,13 +978,21 @@ def _load_reference_document(path: Path) -> pd.DataFrame:
 
 
 def _load_output_document(path: Path) -> pd.DataFrame:
-    return pd.read_csv(
+    frame = pd.read_csv(
         path,
-        dtype=OUTPUT_DTYPE,
+        dtype=OUTPUT_READ_DTYPE,
         encoding=UTF8_ENCODING,
         sep=CSV_DELIMITER,
         keep_default_na=True,
     )
+
+    for column in OUTPUT_INT64_COLUMNS:
+        if column not in frame.columns:
+            continue
+        numeric = pd.to_numeric(frame[column], errors="coerce")
+        frame[column] = numeric.astype("Int64")
+
+    return frame
 
 
 # ---------------------------------------------------------------------------
