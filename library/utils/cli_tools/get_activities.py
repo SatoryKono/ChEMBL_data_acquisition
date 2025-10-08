@@ -19,14 +19,22 @@ def parse_args(
 ) -> tuple[argparse.ArgumentParser, argparse.Namespace, cli.LoggerConfig]:
     """Return parser, parsed arguments and logging configuration."""
 
-    parser, log_cfg = cli.build_parser("Generate dummy activity data", column="id")
+    parser, log_cfg = cli.build_parser(
+        "Generate dummy activity data", column="activity_id"
+    )
 
     def _limit(value: str) -> int:
         """Return ``value`` validated as a non-negative integer."""
 
-        if value == "0":
-            return 0
-        return cli.positive_int(value)
+        try:
+            parsed = int(value)
+        except ValueError as exc:  # pragma: no cover - handled by argparse
+            raise argparse.ArgumentTypeError(
+                "limit must be a non-negative integer"
+            ) from exc
+        if parsed < 0:
+            raise argparse.ArgumentTypeError("limit must be a non-negative integer")
+        return parsed
 
     parser.add_argument(
         "--limit",

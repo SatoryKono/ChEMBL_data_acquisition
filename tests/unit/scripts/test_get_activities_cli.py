@@ -32,7 +32,7 @@ def test_main__limit_forwarded_to_pipeline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     input_csv = tmp_path / "input.csv"
-    input_csv.write_text("id\nCHEMBL1\n", encoding="utf-8")
+    input_csv.write_text("activity_id\nCHEMBL1\n", encoding="utf-8")
     output_csv = tmp_path / "output.csv"
 
     observed: dict[str, int] = {}
@@ -86,7 +86,7 @@ def test_main__dry_run_skips_fetch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     input_csv = tmp_path / "input.csv"
-    input_csv.write_text("id\nCHEMBL1\n", encoding="utf-8")
+    input_csv.write_text("activity_id\nCHEMBL1\n", encoding="utf-8")
     output_csv = tmp_path / "output.csv"
 
     called: dict[str, bool] = {"value": False}
@@ -190,3 +190,9 @@ def test_main__config_limit_used_when_cli_omitted(
         "generated",
         {"count": 4, "output": str(output_csv)},
     ) in logger_stub.events
+def test_parse_args__invalid_limit_error_message(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        get_activities.parse_args(["--limit", "-1"])
+
+    captured = capsys.readouterr()
+    assert "limit must be a non-negative integer" in captured.err
