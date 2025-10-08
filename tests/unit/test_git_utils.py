@@ -181,3 +181,86 @@ def test_git_sha__github_desktop_fallback(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert [cmd[0] for cmd in commands] == [str(stub), str(actual_git)]
 
     cache_clear()
+
+
+@pytest.mark.unit
+def test_git_sha__github_desktop_mingw64_fallback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Modern GitHub Desktop builds bundle Git under ``mingw64/bin``."""
+
+    module = importlib.import_module("library.common.git")
+
+    cache_clear = getattr(module._git_sha, "cache_clear", None)
+    if cache_clear is None:  # pragma: no cover - defensive guard
+        pytest.skip("_git_sha missing cache_clear helper")
+    cache_clear()
+
+    repo_root = tmp_path / "repo"
+    git_dir = repo_root / ".git"
+    repo_root.mkdir()
+    git_dir.mkdir()
+    (git_dir / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf8")
+    ref_dir = git_dir / "refs" / "heads"
+    ref_dir.mkdir(parents=True)
+    (ref_dir / "main").write_text("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n", encoding="utf8")
+
+    desktop_root = tmp_path / "GitHubDesktop"
+    stub = desktop_root / "git.exe"
+    cmd_git = (
+        desktop_root
+        / "app-3.4.0"
+        / "resources"
+        / "app"
+        / "git"
+        / "cmd"
+        / "git.exe"
+    )
+    mingw_git = (
+        desktop_root
+        / "app-3.4.0"
+        / "resources"
+        / "app"
+        / "git"
+        / "mingw64"
+        / "bin"
+        / "git.exe"
+    )
+    desktop_root.mkdir()
+    mingw_git.parent.mkdir(parents=True, exist_ok=True)
+    (cmd_git.parent).mkdir(parents=True, exist_ok=True)
+    stub.touch()
+    cmd_git.touch()
+    mingw_git.touch()
+
+    commands: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        commands.append(cmd)
+        if cmd[0] == str(stub):
+            raise subprocess.CalledProcessError(
+                returncode=4294967295,
+                cmd=cmd,
+                stderr="stub failed",
+            )
+        if cmd[0] == str(cmd_git):
+            raise subprocess.CalledProcessError(
+                returncode=1,
+                cmd=cmd,
+                stderr="cmd shim missing env",
+            )
+        if cmd[0] == str(mingw_git):
+            return subprocess.CompletedProcess(cmd, 0, stdout="cafebabe\n", stderr="")
+        raise AssertionError(f"Unexpected command: {cmd!r}")
+
+    monkeypatch.setattr(module, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(module.shutil, "which", lambda _: str(stub))
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.delenv("GIT_SHA", raising=False)
+
+    sha = module._git_sha()
+
+    assert sha == "cafebabe"
+    assert [cmd[0] for cmd in commands] == [str(stub), str(cmd_git), str(mingw_git)]
+
+    cache_clear()
