@@ -31,7 +31,7 @@ def parse_args(
     parser.add_argument(
         "--limit",
         type=_limit,
-        default=10,
+        default=None,
         help="Maximum number of activity rows to emit",
     )
     parser.add_argument(
@@ -72,12 +72,25 @@ def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Pat
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the activity generation pipeline."""
 
+    limit = args.limit
+    if limit is None:
+        limit = cfg.activity.limit if cfg.activity.limit is not None else 0
+        if limit < 0:
+            logger.error(
+                "config_error",
+                error="activity.limit must be zero or a positive integer",
+                limit=limit,
+            )
+            return 1
+
+    args.limit = limit
+
     if args.dry_run:
-        logger.info("dry_run", limit=args.limit)
+        logger.info("dry_run", limit=limit)
         return 0
 
     try:
-        frame = _frame_from_records(get_activities(args.limit))
+        frame = _frame_from_records(get_activities(limit))
     except ValueError as exc:
         logger.error("invalid_arguments", error=str(exc))
         return 1
