@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -25,13 +26,42 @@ class _LoggerStub:
     def error(self, event: str, **data: object) -> None:  # pragma: no cover - defensive
         self.events.append(("error", event, dict(data)))
 
+    def exception(self, event: str, **data: object) -> None:  # pragma: no cover - defensive
+        self.events.append(("exception", event, dict(data)))
+
+
+def _make_cfg_stub(base: Path, *, limit: int | None = None, exist_ok: bool = True):
+    io_cfg = SimpleNamespace(
+        exist_ok=exist_ok,
+        output_dir=base,
+        cache_dir=base / "cache",
+        csv_sep=",",
+        csv_encoding="utf-8",
+    )
+    cfg_stub = SimpleNamespace(activity=SimpleNamespace(limit=limit), io=io_cfg)
+
+    def _to_dict() -> dict[str, object]:
+        return {
+            "activity": {"limit": limit},
+            "io": {
+                "exist_ok": exist_ok,
+                "output_dir": str(base),
+                "cache_dir": str(base / "cache"),
+                "csv_sep": ",",
+                "csv_encoding": "utf-8",
+            },
+        }
+
+    cfg_stub.to_dict = _to_dict  # type: ignore[attr-defined]
+    return cfg_stub
+
 
 @pytest.mark.unit
 def test_main__limit_forwarded_to_pipeline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     input_csv = tmp_path / "input.csv"
-    input_csv.write_text("id\nCHEMBL1\n", encoding="utf-8")
+    input_csv.write_text("activity_id\nCHEMBL1\n", encoding="utf-8")
     output_csv = tmp_path / "output.csv"
 
     observed: dict[str, int] = {}
@@ -55,6 +85,14 @@ def test_main__limit_forwarded_to_pipeline(
 
     monkeypatch.setattr(get_activities.cli, "prepare_io_paths", _prepare_io_paths)
     monkeypatch.setattr(get_activities.cli, "configure_logger", lambda *_a, **_k: None)
+    cfg_stub = _make_cfg_stub(tmp_path, limit=None)
+
+    monkeypatch.setattr(
+        get_activities.cli,
+        "apply_config_overrides",
+        lambda args, parser, config: cfg_stub,
+    )
+    monkeypatch.setattr(get_activities, "ensure_dirs", lambda _cfg: None)
 
     logger_stub = _LoggerStub()
     monkeypatch.setattr(get_activities, "logger", logger_stub)
@@ -85,7 +123,7 @@ def test_main__dry_run_skips_fetch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     input_csv = tmp_path / "input.csv"
-    input_csv.write_text("id\nCHEMBL1\n", encoding="utf-8")
+    input_csv.write_text("activity_id\nCHEMBL1\n", encoding="utf-8")
     output_csv = tmp_path / "output.csv"
 
     called: dict[str, bool] = {"value": False}
@@ -109,6 +147,15 @@ def test_main__dry_run_skips_fetch(
 
     monkeypatch.setattr(get_activities.cli, "prepare_io_paths", _prepare_io_paths)
     monkeypatch.setattr(get_activities.cli, "configure_logger", lambda *_a, **_k: None)
+
+    cfg_stub = _make_cfg_stub(tmp_path, limit=None)
+
+    monkeypatch.setattr(
+        get_activities.cli,
+        "apply_config_overrides",
+        lambda args, parser, config: cfg_stub,
+    )
+    monkeypatch.setattr(get_activities, "ensure_dirs", lambda _cfg: None)
 
     logger_stub = _LoggerStub()
     monkeypatch.setattr(get_activities, "logger", logger_stub)

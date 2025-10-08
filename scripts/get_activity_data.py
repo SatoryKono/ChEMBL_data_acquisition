@@ -33,6 +33,8 @@ from urllib.parse import urlsplit
 import pandas as pd
 import requests
 
+from typing import Any
+
 try:  # pragma: no cover - urllib3 is part of requests dependency chain
     from urllib3.exceptions import NameResolutionError as _Urllib3NameResolutionError
 except Exception:  # pragma: no cover - defensive fallback for alternative stacks
@@ -713,14 +715,22 @@ def _ensure_molecule_pref_name(
             pending.append(cache_key)
 
     if pending:
-        fields = list(cfg.testitem.fields)
-        for column in ("molecule_chembl_id", "pref_name"):
-            if column not in fields:
-                fields.append(column)
+        fields = ["molecule_chembl_id", "pref_name"]
+        extra_fields = getattr(cfg.testitem, "fields", None)
+        if extra_fields:
+            fields.extend(extra_fields)
+        fields = sorted(set(fields))
+        api_overrides: dict[str, Any] = {}
+        if getattr(cfg.testitem, "retries", None) is not None:
+            api_overrides["retries"] = cfg.testitem.retries
+        if getattr(cfg.testitem, "backoff_factor", None) is not None:
+            api_overrides["backoff_factor"] = cfg.testitem.backoff_factor
+        api_cfg = cfg.api.model_copy(update=api_overrides) if api_overrides else cfg.api
+
         try:
             lookup = cl.get_testitem(
                 pending,
-                cfg=cfg.api,
+                cfg=api_cfg,
                 client=client,
                 chunk_size=cfg.testitem.batch_size,
                 timeout=cfg.testitem.timeout,

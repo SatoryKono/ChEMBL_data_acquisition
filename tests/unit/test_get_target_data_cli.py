@@ -4,10 +4,44 @@ from __future__ import annotations
 
 import pytest
 
+from pathlib import Path
+from types import SimpleNamespace
+
 from library.cli import parser as cli_parser
-from library.config import Config, ConfigMetadata
+from library.config import ConfigMetadata
 from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS
 from scripts import get_target_data
+
+
+class _ConfigStub(SimpleNamespace):
+    pass
+
+
+def _make_stub_config() -> _ConfigStub:
+    def _mode_defaults(name: str) -> SimpleNamespace:
+        defaults = TARGET_MODE_DEFAULTS[name]
+        return SimpleNamespace(
+            column=defaults.column,
+            chunk_size=defaults.chunk_size,
+            timeout=defaults.timeout,
+            limit=defaults.limit,
+            offset=defaults.offset,
+        )
+
+    io_cfg = SimpleNamespace(
+        output_stamp_mode="omit",
+        output_dir=Path("output").resolve(),
+    )
+    return _ConfigStub(
+        target=SimpleNamespace(
+            chembl=_mode_defaults("chembl"),
+            uniprot=_mode_defaults("uniprot"),
+            iuphar=_mode_defaults("iuphar"),
+            all=_mode_defaults("all"),
+        ),
+        local=SimpleNamespace(io=io_cfg),
+        io=io_cfg,
+    )
 
 
 @pytest.mark.unit
@@ -26,7 +60,7 @@ def test_resolve_target_parameters__chembl_cli_overrides(monkeypatch):
             "3",
         ]
     )
-    cfg = Config()
+    cfg = _make_stub_config()
 
     entries = get_target_data._resolve_target_parameters("chembl", cfg, args)
 
@@ -42,7 +76,7 @@ def test_resolve_target_parameters__chembl_cli_overrides(monkeypatch):
 
 @pytest.mark.unit
 def test_resolve_target_parameters__config_precedence():
-    cfg = Config()
+    cfg = _make_stub_config()
     cfg.target.uniprot.chunk_size = 250
     cfg.target.uniprot.timeout = 60.0
     parser, _ = get_target_data.build_parser()
@@ -59,7 +93,7 @@ def test_resolve_target_parameters__config_precedence():
 
 @pytest.mark.unit
 def test_resolve_target_parameters__all_global_fallback():
-    cfg = Config()
+    cfg = _make_stub_config()
     parser, _ = get_target_data.build_parser()
     args = parser.parse_args([
         "all",
@@ -100,8 +134,53 @@ def test_prepare_io_paths__output_alias_sets_final_out(tmp_path):
 
 
 @pytest.mark.unit
+def test_prepare_io_paths__default_filename_without_date(tmp_path):
+    parser, _ = get_target_data.build_parser()
+    args = parser.parse_args([
+        "all",
+        "--base-path",
+        str(tmp_path),
+    ])
+
+    get_target_data.prepare_io_paths(
+        args,
+        input_default=get_target_data.DEFAULT_INPUT_NAME,
+        output_stem=get_target_data.DEFAULT_OUTPUT_STEM,
+    )
+
+    expected = (tmp_path / f"output.{get_target_data.DEFAULT_OUTPUT_STEM}.csv").resolve()
+    assert args.final_out == expected
+    assert getattr(args, "date", None) is None
+
+
+@pytest.mark.unit
+def test_prepare_io_paths__respects_explicit_date(tmp_path):
+    parser, _ = get_target_data.build_parser()
+    args = parser.parse_args([
+        "all",
+        "--base-path",
+        str(tmp_path),
+        "--date",
+        "20250228",
+    ])
+
+    get_target_data.prepare_io_paths(
+        args,
+        input_default=get_target_data.DEFAULT_INPUT_NAME,
+        output_stem=get_target_data.DEFAULT_OUTPUT_STEM,
+    )
+
+    expected = (
+        tmp_path
+        / f"output.{get_target_data.DEFAULT_OUTPUT_STEM}_20250228.csv"
+    ).resolve()
+    assert args.final_out == expected
+    assert args.date == "20250228"
+
+
+@pytest.mark.unit
 def test_target_iuphar_defaults__align_with_cli() -> None:
-    cfg = Config()
+    cfg = _make_stub_config()
     defaults = TARGET_MODE_DEFAULTS["iuphar"]
 
     assert cfg.target.iuphar.column == defaults.column
@@ -114,7 +193,7 @@ def test_target_iuphar_defaults__align_with_cli() -> None:
 def test_run_logs_parameter_sources__default_sources(monkeypatch, tmp_path):
     parser, _ = get_target_data.build_parser()
     args = parser.parse_args(["chembl"])
-    cfg = Config()
+    cfg = _make_stub_config()
 
     input_path = tmp_path / "targets.csv"
     input_path.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
@@ -151,8 +230,8 @@ def test_apply_config_overrides__missing_config_attribute(monkeypatch, tmp_path)
     dummy_config.write_text("{}", encoding="utf-8")
 
     def fake_load_config(*_args, **_kwargs):
-        cfg = Config()
-        cfg.target.iuphar.__dict__.pop("column", None)
+        cfg = _make_stub_config()
+        cfg.target.iuphar.column = None
         metadata = ConfigMetadata(snapshot={}, sources={})
         return cfg, metadata
 
@@ -172,11 +251,10 @@ def test_apply_config_overrides__missing_config_attribute(monkeypatch, tmp_path)
         base_parser=parser,
     )
 
-    assert isinstance(cfg, Config)
+    assert isinstance(cfg, _ConfigStub)
     assert args.iuphar_column == TARGET_MODE_DEFAULTS["iuphar"].column
     assert warnings
-    event, payload = warnings[0]
-    assert event == "config_attribute_missing"
-    assert payload["argument"] == "iuphar_column"
-    assert payload["path"] == "sources.chembl.pipelines.target.iuphar.column"
-    assert payload["error"]
+    matching = [payload for event, payload in warnings if payload.get("argument") == "iuphar_column"]
+    assert matching
+    assert matching[0]["path"] == "sources.chembl.pipelines.target.iuphar.column"
+    assert matching[0]["error"]

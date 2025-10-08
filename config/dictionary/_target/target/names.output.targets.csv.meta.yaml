@@ -1,0 +1,17 @@
+generated_at: '2025-10-07T22:31:34.298252+00:00'
+git_sha: fb96b884fd8aa09dd5343183e10218d54440f2d0
+command: scripts\get_target_data.py --final-out data\output\target\output.targets.csv
+  --input data\input\target.csv all --log-level INFO
+columns:
+- target_chembl_id
+- uniprot_id_primary
+- name
+- name_type
+- source_column
+dtypes:
+  target_chembl_id: string
+  uniprot_id_primary: string
+  name: string
+  name_type: string
+  source_column: string
+config: {}
