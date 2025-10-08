@@ -27,7 +27,6 @@ Column overview
 * ``mutation`` (:class:`str`): Target mutation details.
 * ``substrate_name`` (:class:`str`): Name of the substrate used in the assay.
 * ``target_chembl_id`` (:class:`str`): ChEMBL identifier of the target.
-* ``target_name`` (:class:`str`): Human-readable target name.
 * ``version`` (:class:`object`): Internal version number of the assay.
 * ``year`` (:class:`object`): Year of publication.
 """
@@ -44,26 +43,18 @@ FLEXIBLE_DTYPE: Final[Any] = cast(Any, None)
 AssaysSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
         "assay_chembl_id": pa.Column(str, required=True, nullable=True),      
-        "accession": pa.Column(str, required=False, nullable=True),
-        "acts_per_assay_step5": pa.Column(
-            FLEXIBLE_DTYPE, required=False, nullable=True
-        ),
+        "accession": pa.Column(str, required=False, nullable=True),       
         "assay_cell_type": pa.Column(str, required=False, nullable=True),
         "assay_subcellular_fraction": pa.Column(str, required=False, nullable=True),
         "assay_group": pa.Column(str, required=False, nullable=True),
         "assay_tissue": pa.Column(str, required=False, nullable=True),
         "assay_strain": pa.Column(str, required=False, nullable=True),
-        "bao_format": pa.Column(str, required=False, nullable=True),
-        "cited_assay_corr": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
+        "bao_format": pa.Column(str, required=False, nullable=True),        
         "description": pa.Column(str, required=False, nullable=True),
         "document_chembl_id": pa.Column(str, required=False, nullable=True),
-        "isoform": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
-        "month": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
-        "mutation": pa.Column(str, required=False, nullable=True),   
-        "substrate_name": pa.Column(str, required=False, nullable=True),
-        "target_chembl_id": pa.Column(str, required=False, nullable=True),
-        "target_name": pa.Column(str, required=False, nullable=True),
-        "version": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
+        "isoform": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),        
+        "mutation": pa.Column(str, required=False, nullable=True),         
+        "target_chembl_id": pa.Column(str, required=False, nullable=True),        
         "year": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
         "pipeline_version": pa.Column(str, required=False, nullable=True),
         "timestamp_utc": pa.Column(str, required=False, nullable=True),

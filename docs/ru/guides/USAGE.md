@@ -242,8 +242,8 @@ get-testitem-data --input data/input/testitem.csv \
 | `library.utils.cli_tools.chunk_io_main` | `chunk-io --input data.csv --final-out copy.csv` | Потоковое чтение/запись CSV с сохранением порядка. |
 | `library.utils.cli_tools.csv_utils_main` | `csv-utils --input data.csv --final-out clean.csv --sep ,` | Нормализация разделителей, кавычек и порядка колонок. |
 | `library.utils.cli_tools.dtype_inspector_main` | `python -m library.utils.cli_tools.dtype_inspector_main` | Диагностика типов pandas-таблиц. |
-| `library.utils.cli_tools.get_activities` | `python scripts/get_activities.py --limit 10 --dry-run` | Генерация тестовых активностей для проверки логов и CLI. |
-| `library.utils.cli_tools.get_activities` | `get-activities --limit 10 --output-csv output/activities_smoke.csv` | Генерация тестовых активностей с записью детерминированного CSV и `.meta.yaml` для smoke-проверок. |
+| `library.utils.cli_tools.get_activities` | `python scripts/get_activities.py --limit 10 --dry-run` | Генерация тестовых активностей для проверки логов и CLI; по умолчанию используется колонка `activity_id`. |
+| `library.utils.cli_tools.get_activities` | `get-activities --limit 10 --output-csv output/activities_smoke.csv` | Генерация тестовых активностей с записью детерминированного CSV и `.meta.yaml` для smoke-проверок; по умолчанию используется колонка `activity_id`. |
 | `library.utils.cli_tools.get_document_type` | `get-document-type --input docs.csv` | Применение встроенных правил классификации публикаций. |
 | `library.utils.cli_tools.get_input_initialisation` | `get-input-initialisation --same-doc init.xlsx --all-doc pairs.xlsx` | Объединение Excel-книг инициализации. |
 | `library.utils.cli_tools.mapper_main` | `mapper --input ids.csv --final-out mapped.csv --column target_chembl_id` | Интерактивный маппер UniProt/ChEMBL. |

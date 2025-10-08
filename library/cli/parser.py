@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import uuid
 import os
-from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any, cast
 
@@ -161,7 +160,7 @@ def add_common_arguments(
         dest="final_out",
         type=path_argument,
         default=final_default,
-        help="Destination CSV file (default: output.<stem>_<YYYYMMDD>.csv)",
+        help="Destination CSV file (default: output.<stem>.csv)",
     )
     parser.add_argument("--sep", default=sep_default, help="CSV delimiter")
     parser.add_argument("--encoding", default=enc_default, help="File encoding")
@@ -244,7 +243,7 @@ def build_parser(
     parser.add_argument(
         "--column",
         default=column,
-        help="Identifier column in input CSV",
+        help=f"Identifier column in input CSV (default: {column})",
     )
     parser.add_argument(
         size_option,
@@ -580,6 +579,13 @@ def apply_config_overrides(
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc
 
+    stamp_mode = getattr(cfg.local.io, "output_stamp_mode", _DEFAULT_OUTPUT_STAMP_MODE)
+    setattr(args, "output_stamp_mode", stamp_mode)
+    if stamp_mode == "require":
+        date_value = getattr(args, "date", None)
+        if not isinstance(date_value, str) or not date_value.strip():
+            raise ValueError("--date is required when io.output_stamp_mode is 'require'")
+
     metadata.cli_paths = {
         arg: path for arg, path in normalized_cli_paths.items() if path
     }
@@ -668,6 +674,19 @@ def _raw_suffix(raw_format: str, fallback: str) -> str:
     return f".{value}"
 
 
+_DEFAULT_OUTPUT_STAMP_MODE = "omit"
+
+
+def _normalize_stamp_mode(value: object) -> str | None:
+    """Return a normalised output stamp mode if *value* is valid."""
+
+    if isinstance(value, str):
+        candidate = value.strip().lower()
+        if candidate in {"omit", "require"}:
+            return candidate
+    return None
+
+
 def prepare_io_paths(
     args: argparse.Namespace,
     *,
@@ -711,6 +730,15 @@ def prepare_io_paths(
         raw_format_str = str(raw_format_value).lower()
     setattr(args, "raw_format", raw_format_str)
 
+    if output_stem is not None:
+        setattr(args, "_auto_output_stem", output_stem)
+    setattr(args, "_auto_output_suffix", suffix)
+
+    stamp_mode = _normalize_stamp_mode(getattr(args, "output_stamp_mode", None))
+    if stamp_mode is None:
+        stamp_mode = _DEFAULT_OUTPUT_STAMP_MODE
+    setattr(args, "output_stamp_mode", stamp_mode)
+
     resolved_output = _resolve_file(
         final_candidate,
         directory=output_dir,
@@ -723,15 +751,24 @@ def prepare_io_paths(
     else:
         date_str = None
 
+    auto_output = False
     if resolved_output is None and output_stem is not None:
         target_dir = output_dir or base_path
         if target_dir is None and resolved_input is not None:
             target_dir = resolved_input.parent
         if target_dir is not None:
-            effective_date = date_str or datetime.now(timezone.utc).strftime("%Y%m%d")
-            filename = f"output.{output_stem}_{effective_date}{suffix}"
+            effective_date = (date_str or "").strip() or None
+            if effective_date is None and stamp_mode == "require":
+                msg = "--date must be provided when io.output_stamp_mode is 'require'"
+                raise ValueError(msg)
+            if effective_date is not None:
+                filename = f"output.{output_stem}_{effective_date}{suffix}"
+            else:
+                filename = f"output.{output_stem}{suffix}"
             resolved_output = (target_dir / filename).resolve()
-            date_str = effective_date
+            if effective_date is not None:
+                date_str = effective_date
+            auto_output = True
 
     if resolved_output is not None:
         resolved_output = cast(
@@ -744,10 +781,12 @@ def prepare_io_paths(
         )
         setattr(args, "final_out", resolved_output)
         setattr(args, "output_csv", resolved_output)
+        setattr(args, "_auto_output_generated", auto_output)
     elif isinstance(final_candidate, (str, Path)):
         candidate_path = Path(final_candidate)
         setattr(args, "final_out", candidate_path)
         setattr(args, "output_csv", candidate_path)
+        setattr(args, "_auto_output_generated", False)
 
     raw_value = getattr(args, "raw_out", None)
     if raw_value in (None, argparse.SUPPRESS):
@@ -757,10 +796,13 @@ def prepare_io_paths(
             else:
                 suffix_value = _raw_suffix(raw_format_str, suffix)
                 resolved_raw = resolved_output.with_suffix(suffix_value)
+            auto_raw = True
         else:
             resolved_raw = None
+            auto_raw = False
     else:
         resolved_raw = _resolve_file(raw_value, directory=output_dir, base=base_path)
+        auto_raw = False
 
     if resolved_raw is not None:
         resolved_raw = _resolve_file(
@@ -769,6 +811,7 @@ def prepare_io_paths(
             base=base_path,
         )
     setattr(args, "raw_out", resolved_raw)
+    setattr(args, "_auto_raw_out_generated", bool(auto_raw and resolved_raw is not None))
 
     if date_str is not None:
         setattr(args, "date", date_str)

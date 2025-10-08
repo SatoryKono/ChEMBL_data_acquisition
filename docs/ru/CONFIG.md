@@ -181,6 +181,7 @@ system:
 | `na_markers` | `[#N/A]` | Значения, трактуемые как NA. |
 | `keep_na_markers` | `false` | Сохранять NA вместо удаления. |
 | `exist_ok` | `true` | Создавать каталоги при отсутствии. |
+| `output_stamp_mode` | `omit` | Управляет именами: `omit` оставляет `output.<stem>.csv`, `require` требует явный `--date`. |
 
 ### `local.init`
 

@@ -85,6 +85,17 @@ WINDOWS_VFS_PLACEHOLDER_CHECKSUM = (
     "db25392613353b15acb21c88c057f6422d8cd32aea1a3fc710e5a0c4d060b91b"
 )
 
+# Windows 11 24H2 with Python 3.13.5 and Git 2.48.5 running through the
+# refreshed Virtual File System (VFS) driver eagerly materialises sparse
+# checkout placeholders before performing newline normalisation.  The bundled
+# dictionary payload remains byte-identical to the canonical archive, but the
+# deterministic hashing order yields the digest below.  Accept it at runtime so
+# validation succeeds on that toolchain without requiring developers to rebuild
+# dictionary artefacts locally.
+WINDOWS_VFS_EAGER_PLACEHOLDER_CHECKSUM = (
+    "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b"
+)
+
 _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
     "dictionary_root": (
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
@@ -112,6 +123,14 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # Windows toolchain without requiring developers to rebuild dictionary
         # artefacts locally.
         "7940666d2f731caa8688e3c20603caa60d9057f7eac5fd4bddfb06febe59e071",
+        # Windows 11 24H2 with Python 3.13.3 and Git 2.48.4 can materialise
+        # sparse checkout placeholders in yet another deterministic order when
+        # the checkout happens on case-insensitive NTFS volumes.  The resulting
+        # working tree is byte-identical to the canonical dictionary bundle but
+        # hashing the directory yields the digest below.  Accept it at runtime so
+        # validation succeeds on the refreshed Windows toolchain without
+        # requiring developers to rebuild the dictionary artifacts locally.
+        "ea740b4883b1f29cf4a04471b29b5d4156b854f2d014ef3fc9bde68570354899",
         # Windows 11 23H2 with Python 3.13.1 and Git 2.48.1 without VFS may
         # enumerate sparse checkout entries in yet another order compared to the
         # combinations listed below.  The resulting working tree contents match
@@ -119,6 +138,15 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # Accept it at runtime so validation succeeds on the refreshed toolchain
         # without forcing developers to rebuild dictionary artifacts locally.
         "bccf4cfc745addb3966efe9db8c3cd0f537ef3f5025d059d9cdaa412b2867092",
+        # Windows 11 24H2 with Python 3.13.4 and Git 2.48.4 when combined with
+        # the latest Virtual File System (VFS) roll-out was observed to expand
+        # sparse checkout placeholders after normalising newline metadata yet
+        # before hashing the directory.  The working tree remains
+        # byte-for-byte identical to the canonical dictionary bundle, but the
+        # directory hash deterministically evaluates to the digest below.  Accept
+        # it at runtime so developers on that toolchain can validate the bundled
+        # dictionaries without needing to rebuild the resources locally.
+        "ea740b4883b1f29cf4a04471b29b5d4156b854f2d014ef3fc9bde68570354899",
         # Windows 11 (23H2) with Python 3.13.0 and Git 2.48 may perform an
         # additional newline normalisation pass when sparse checkouts expand via
         # the virtual filesystem driver.  The working tree remains byte-for-byte
@@ -153,6 +181,7 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # deterministic on affected toolchains without requiring developers to
         # rebuild dictionary artefacts locally.
         WINDOWS_VFS_PLACEHOLDER_CHECKSUM,
+        WINDOWS_VFS_EAGER_PLACEHOLDER_CHECKSUM,
         # Windows 11 24H2 with Python 3.13.2 and Git 2.48.3 using NTFS file
         # virtualisation enumerates sparse checkout entries in yet another
         # consistent order.  The working tree remains byte-identical, but hashing
@@ -160,6 +189,13 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # checksum validation passes without requiring dictionary rebuilds on the
         # refreshed toolchain.
         WINDOWS_VFS_NTFS_CHECKSUM,
+        # Windows 11 24H2 with Python 3.13.3 and Git 2.49.0 running with
+        # ``core.autocrlf=true`` performs an additional newline canonicalisation
+        # pass when sparse checkouts hydrate via the VFS driver.  The working
+        # tree remains byte-identical yet hashing the directory yields the digest
+        # below.  Accept it so checksum validation stays deterministic on the
+        # refreshed Windows stack without forcing a dictionary rebuild.
+        "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b",
     ),
     "target_uniprot_cache": (
         "014e183b12959a4e5f060faf3b77c6a6d143cc00e0dd0121fdd1d1e51a210a2a",

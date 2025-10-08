@@ -187,6 +187,7 @@ production use.
 | `na_markers` | `[#N/A]` | Values treated as NA. |
 | `keep_na_markers` | `false` | Preserve NA markers instead of dropping rows. |
 | `exist_ok` | `true` | Automatically create missing directories. |
+| `output_stamp_mode` | `omit` | Controls default filenames: `omit` keeps `output.<stem>.csv`, `require` enforces passing `--date`. |
 
 ### `local.init`
 

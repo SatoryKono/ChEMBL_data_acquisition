@@ -10,9 +10,10 @@ or via the console scripts installed from `pyproject.toml` (`get-data`,
 |--------|-------------|
 | `--config` | Path to the YAML configuration file. Defaults to `config/config.yaml`. |
 | `--input` | CSV file containing identifiers for the pipeline. When omitted the orchestrator builds the path from `--base-path` and `--input-dir`. |
-| `--final-out` | Destination CSV. If omitted a deterministic filename `output.<stem>_<YYYYMMDD>.csv` is generated inside the resolved output directory. |
+| `--final-out` | Destination CSV. If omitted a deterministic filename `output.<stem>.csv` is generated inside the resolved output directory. Provide `--date` or set `io.output_stamp_mode=require` to append the date token. |
 | `--sep`, `--encoding` | CSV delimiter and encoding. Inherit defaults from the configuration. |
 | `--log-level` | Logging verbosity (`DEBUG`, `INFO`, `WARN`, `ERROR`). |
+| `--verbose` | Shortcut to enable DEBUG logging without editing configuration files. |
 | `--force` | Overwrite existing outputs. |
 | `--skip-existing` | Skip execution when the destination file already exists. |
 | `--limit`, `--offset` | Restrict the number of identifiers processed or skip leading rows. Supplying `--limit 0` disables the pipeline. |
@@ -49,6 +50,7 @@ Important flags:
 - `--limit` — forward a maximum record count to every pipeline (useful for smoke
   runs). `0` skips all processing.
 - `--force`, `--skip-existing` — pass-through execution controls.
+- `--log-level`, `--verbose` — adjust logging; `--verbose` forces the `DEBUG` level without changing configuration files.
 - `--dry-run` — validate configuration, log intended actions and exit without
   touching the filesystem.
 - `--print-config` — resolve the effective configuration and exit without
@@ -87,7 +89,7 @@ Common options:
 | `--mode` | required | Selects the processing flow. |
 | `--column` | Mode specific (`PMID` for `pubmed`, `document_chembl_id` otherwise) | Input column holding identifiers. |
 | `--limit`, `--offset` | `None`, `0` | Control record ranges. |
-| `--timeout` | `30.0` for `chembl`/`all`, `10.0` for `pubmed` | Applied to HTTP calls. |
+| `--timeout` | `90.0` for `chembl`/`all`, `10.0` for `pubmed` | Applied to HTTP calls. |
 | `--openalex-rps`, `--crossref-rps` | `None` | Optional overrides for partner APIs when running `pubmed` or `all`. |
 
 PubMed specific flags (`--mode pubmed` or `all`):
@@ -99,7 +101,7 @@ PubMed specific flags (`--mode pubmed` or `all`):
 
 ChEMBL specific flags (`--mode chembl` or `all`):
 
-- `--chunk-size` — identifiers per API call (default `5`).
+- `--chunk-size` — identifiers per API call (default `20`).
 - `--chembl-chunk-size`, `--chembl-timeout` — overrides applied only when running
   `--mode all`.
 
@@ -134,7 +136,7 @@ The command uses sub-commands: `uniprot`, `chembl`, `iuphar`, `all`.
 
 Shared options across all modes:
 
-- Common flags listed above (`--input`, `--final-out`, etc.).
+- Common flags listed above (`--input`, `--final-out`, `--verbose`, etc.).
 - `--raw-out`, `--raw-format` — persist the raw combined dataset before final
   normalisation (`csv` or `parquet`).
 - `--id-cols` — columns enforcing deterministic ordering when writing the raw
@@ -159,8 +161,8 @@ Shared options across all modes:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--column` | `target_chembl_id` | ChEMBL target identifier column. |
-| `--chunk-size` | `5` | Identifiers per request. |
-| `--timeout` | `30.0` | Request timeout. |
+| `--chunk-size` | `3` | Identifiers per request. |
+| `--timeout` | `90.0` | Request timeout. |
 
 #### `iuphar`
 
@@ -247,6 +249,18 @@ flags the command accepts:
 | `--limit`, `--offset` | `None`, `0` | Range selection; negative values are rejected. |
 | `--workers` | `1` | Worker threads fetching activities. |
 | `--dry-run` | `False` | Validate inputs without contacting ChEMBL or writing files. |
+
+Example: fetch activities by their canonical `activity_id` column while running
+multiple workers in parallel.
+
+```bash
+python scripts/get_activity_data.py \
+  --input data/input/activity.csv \
+  --final-out output/activities_subset.csv \
+  --column activity_id \
+  --batch-size 10 \
+  --workers 4
+```
 
 ## Test item pipeline `get_testitem_data`
 

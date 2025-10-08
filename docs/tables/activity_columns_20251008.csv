@@ -1,0 +1,39 @@
+name,type,nullable,domain,source_stage,description
+activity_chembl_id,string,TRUE,ChEMBL activity identifier,S16_ext_augment,Primary activity identifier derived from activity_id when missing and retained through extended pipeline.
+saltform_id,string,TRUE,ChEMBL salt identifier or fallback to molecule,S22_ext_rename,Salt-level identifier renamed from salt_chembl_id and filled from molecule_chembl_id when necessary.
+molecule_chembl_id,string,TRUE,ChEMBL parent molecule,S15_ext_compound_key,Original molecule identifier ensured before compound key enrichment.
+molecule_chembl_id.1,string,TRUE,Alternate molecule identifier,S21_ext_merge_testitem,Auxiliary molecule identifier sourced from testitem lookup for alternate salt forms.
+target_chembl_id,string,TRUE,ChEMBL target,S14_ext_require_columns,Target identifier required for joins with target metadata.
+assay_chembl_id,string,TRUE,ChEMBL assay,S14_ext_require_columns,Assay identifier preserved for dictionary joins and deduplication keys.
+document_chembl_id,string,TRUE,ChEMBL document,S14_ext_require_columns,Publication/document identifier used for citation analytics.
+completed,string,TRUE,{"Y","N",NA},S19_ext_merge_document,Document QC completion flag loaded from document dictionary.
+bao_endpoint,string,TRUE,BAO endpoint term,S14_ext_require_columns,BioAssay Ontology endpoint string retained from base export.
+standard_type,string,TRUE,Measurement type (uppercased),S04_normalize_activity_schema,Standard type cleaned and uppercased for schema compliance.
+standard_value,string,TRUE,Numeric string (trimmed),S28_ext_select_cast,Primary standard value formatted without trailing zeros.
+pA_value,string,TRUE,log-scale activity (string),S28_ext_select_cast,pChEMBL/log value expressed as string after fallback computation.
+bao_format,string,TRUE,BAO format term,S14_ext_require_columns,BioAssay Ontology format carried from raw export.
+compound_key,string,TRUE,Molecule or parent identifier,S16_ext_augment,Deterministic key resolved from parent_molecule_chembl_id or molecule_chembl_id.
+compound_name,string,TRUE,Preferred molecule name,S16_ext_augment,Compound display name filled from molecule_pref_name.
+standard_inchi_skeleton,string,TRUE,Standard InChI skeleton,S21_ext_merge_testitem,Structure descriptor merged from testitem dictionary.
+unknown_chirality,boolean,FALSE,{True,False},S17_ext_chirality,Flag indicating unknown stereochemistry derived from nstereo counts.
+multmol_assay,boolean,FALSE,{True,False},S18_ext_multimol,Indicates assays with multiple molecules inferred from grouping logic.
+assay_with_same_target,Int64,TRUE,Nullable integer,S20_ext_merge_assay,Count of assays hitting the same target loaded from assay dictionary.
+exact_data_citation,boolean,FALSE,{True,False},S22_ext_rename,Exact citation flag renamed from exact_cited_activity and normalized to boolean.
+higly_correlated_assay,boolean,FALSE,{True,False},S22_ext_rename,Assay correlation flag renamed from higly_correlated_cit and normalized.
+shuffled_assay,boolean,FALSE,{True,False},S22_ext_rename,Permutation/shuffle citation flag renamed from shuffled_cit and normalized.
+review,boolean,FALSE,{True,False},S19_ext_merge_document,Document review flag populated from document dictionary.
+rounded_data_citation,boolean,FALSE,{True,False},S22_ext_rename,Rounded citation indicator renamed from approx_cited_activity.
+allosteric,boolean,TRUE,{True,False,NA},S25_ext_properties,Derived from activity_properties JSON to indicate allosteric mechanism.
+nam,boolean,TRUE,{True,False,NA},S25_ext_properties,Negative allosteric modulator flag parsed from activity_properties.
+pam,boolean,TRUE,{True,False,NA},S25_ext_properties,Positive allosteric modulator flag parsed from activity_properties.
+high_citation_rate,boolean,FALSE,{True,False},S24_ext_high_citation,Document-level high citation indicator computed from citation_fraction.csv.
+original_activity_approx,string,TRUE,Free text,S16_ext_augment,Original approximate activity column preserved as string.
+original_activity_exact,string,TRUE,Free text,S16_ext_augment,Original exact activity column preserved as string.
+is_citation,boolean,FALSE,{True,False},S23_ext_citation_flags,Aggregate citation flag built as OR over citation indicator columns.
+IUPHAR_class,string,TRUE,IUPHAR class,S27_ext_merge_target,IUPHAR class name merged from targets_type.csv.
+IUPHAR_subclass,string,TRUE,IUPHAR subclass,S27_ext_merge_target,IUPHAR subclass merged from targets_type.csv.
+unicellular_organism,boolean,TRUE,{True,False,NA},S27_ext_merge_target,Bool flag derived or inferred for unicellular organisms.
+multifunctional_enzyme,boolean,TRUE,{True,False,NA},S27_ext_merge_target,Boolean indicator for multifunctional enzymes from target metadata.
+gene_index,string,TRUE,Gene index label,S27_ext_merge_target,Gene index string from target dictionary.
+taxon_index,string,TRUE,Taxonomy index,S27_ext_merge_target,Taxonomic index string from target dictionary.
+sortorder.target,string,TRUE,Sort order token,S27_ext_merge_target,Target sort order string maintained for deterministic ordering.

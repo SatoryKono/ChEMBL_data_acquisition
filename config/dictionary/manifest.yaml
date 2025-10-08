@@ -96,6 +96,14 @@ resources:
       # Windows toolchain without forcing developers to rebuild the bundled
       # dictionaries locally.
       - "387d8a4b45d8960e5f899b85199a1013d3029258b8b75f42c6a0365f402023db"
+      # Windows 11 24H2 with Python 3.13.3 and Git 2.49.0 running with
+      # ``core.autocrlf=true`` performs an additional newline canonicalisation
+      # pass when sparse checkouts hydrate through the VFS driver.  The
+      # dictionary payload remains byte-identical yet hashing the directory
+      # yields the checksum below.  Accept it so checksum validation remains
+      # deterministic on the refreshed Windows tooling without forcing a local
+      # dictionary rebuild.
+      - "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv

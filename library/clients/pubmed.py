@@ -237,8 +237,13 @@ def _do_request(
             )
         except requests.RequestException as exc:
             if attempt >= retries:  # pragma: no cover - network errors
-                logger.exception(
-                    "request_fail", extra={"stage": "request_fail", "url": url}
+                logger.warning(
+                    "request_fail",
+                    extra={
+                        "stage": "request_fail",
+                        "url": url,
+                        "error": str(exc),
+                    },
                 )
                 return None, str(exc)
             continue

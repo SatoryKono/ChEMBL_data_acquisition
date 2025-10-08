@@ -3,15 +3,27 @@
 from __future__ import annotations
 
 import argparse
+import os
+import tempfile
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+from uuid import uuid4
 
 import pandas as pd
 
 from library import cli, io
 from library.common.log import logger
-from library.config import Config, ConfigError, ensure_dirs, print_config
+from library.config import (
+    Config,
+    ConfigError,
+    DEFAULT_CONFIG_PATH,
+    ensure_dirs,
+    print_config,
+)
 from library.pipelines.activity import get_activities
+
+
+DEFAULT_LIMIT = 25
 
 
 def parse_args(
@@ -19,20 +31,40 @@ def parse_args(
 ) -> tuple[argparse.ArgumentParser, argparse.Namespace, cli.LoggerConfig]:
     """Return parser, parsed arguments and logging configuration."""
 
-    parser, log_cfg = cli.build_parser("Generate dummy activity data", column="id")
+    parser = argparse.ArgumentParser(description="Generate dummy activity data")
+    cli.add_common_arguments(parser)
+    parser.add_argument(
+        "--config",
+        dest="config",
+        type=cli.path_argument,
+        default=DEFAULT_CONFIG_PATH,
+        help=f"YAML configuration file (default: {DEFAULT_CONFIG_PATH})",
+    )
+    parser.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print effective configuration and exit",
+    )
+    log_cfg = cli.create_logger_config(parser.get_default("log_level"))
 
     def _limit(value: str) -> int:
         """Return ``value`` validated as a non-negative integer."""
 
-        if value == "0":
-            return 0
-        return cli.positive_int(value)
+        try:
+            parsed = int(value)
+        except ValueError as exc:  # pragma: no cover - handled by argparse
+            raise argparse.ArgumentTypeError(
+                "limit must be a non-negative integer"
+            ) from exc
+        if parsed < 0:
+            raise argparse.ArgumentTypeError("limit must be a non-negative integer")
+        return parsed
 
     parser.add_argument(
         "--limit",
         type=_limit,
-        default=10,
-        help="Maximum number of activity rows to emit",
+        default=None,
+        help=f"Maximum number of activity rows to emit (default: {DEFAULT_LIMIT})",
     )
     parser.add_argument(
         "--dry-run",
@@ -56,31 +88,70 @@ def _frame_from_records(records: Iterable[dict[str, object]]) -> pd.DataFrame:
 
 
 def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Path:
-    """Persist ``frame`` and accompanying metadata to ``output_path``."""
+    """Persist ``frame`` and accompanying metadata to ``output_path`` atomically."""
+
+    temp_path = output_path.with_name(
+        f".{output_path.name}.{uuid4().hex}.tmp"
+    )
+    written = io.write_csv(frame, temp_path, cfg=cfg)
+    temp_meta = Path(f"{written}.meta.yaml")
+
+    try:
+        written.replace(output_path)
+    except Exception:
+        written.unlink(missing_ok=True)
+        raise
+    finally:
+        temp_meta.unlink(missing_ok=True)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    written = io.write_csv(frame, output_path, cfg=cfg)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(output_path.parent),
+        prefix=f".{output_path.name}.",
+        suffix=output_path.suffix or ".tmp",
+    )
+    os.close(fd)
+    tmp_path = Path(tmp_name)
+    try:
+        io.write_csv(frame, tmp_path, cfg=cfg)
+        written = tmp_path.replace(output_path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    else:
+        tmp_path.unlink(missing_ok=True)
     io.write_meta_yaml(
-        written,
+        output_path,
         cfg=cfg,
         columns=list(frame.columns),
         dtypes={col: str(dtype) for col, dtype in frame.dtypes.items()},
     )
-    return written
+    return output_path
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the activity generation pipeline."""
 
-    if args.dry_run:
-        logger.info("dry_run", limit=args.limit)
-        return 0
+    limit = args.limit
+    if limit is None:
+        limit = (
+            cfg.activity.limit
+            if cfg.activity.limit is not None
+            else DEFAULT_LIMIT
+        )
+        if limit < 0:
+            logger.error(
+                "config_error",
+                error="activity.limit must be zero or a positive integer",
+                limit=limit,
+            )
+            return 1
 
-    try:
-        frame = _frame_from_records(get_activities(args.limit))
-    except ValueError as exc:
-        logger.error("invalid_arguments", error=str(exc))
-        return 1
+    args.limit = limit
+
+    if args.dry_run:
+        logger.info("dry_run", limit=limit)
+        return 0
 
     output_candidate = getattr(args, "output_csv", None)
     input_candidate = getattr(args, "input_csv", None)
@@ -91,6 +162,18 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         setattr(args, "final_out", output_path)
     else:
         output_path = Path(output_candidate)
+
+    if output_path.exists() and getattr(args, "skip_existing", False) and not getattr(
+        args, "force", False
+    ):
+        logger.info("pipeline_skip_existing", output=str(output_path))
+        return 0
+
+    try:
+        frame = _frame_from_records(get_activities(limit))
+    except ValueError as exc:
+        logger.error("invalid_arguments", error=str(exc))
+        return 1
 
     written_path = _write_output(frame, output_path, cfg=cfg)
     logger.info(

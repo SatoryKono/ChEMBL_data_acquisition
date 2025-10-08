@@ -60,8 +60,8 @@ EXPECTED_DTYPE_MAP: dict[str, str] = {
     "nam": "boolean",
     "pam": "boolean",
     "high_citation_rate": "boolean",
-    "original_activity_approx": "object",
-    "original_activity_exact": "object",
+    "original_activity_approx": "string",
+    "original_activity_exact": "string",
     "is_citation": "boolean",
     "IUPHAR_class": "string",
     "IUPHAR_subclass": "string",
@@ -198,6 +198,34 @@ def test_augment_activity_frame__fills_blank_salt_and_log_value() -> None:
     )
     assert {"salt_chembl_id", "log_value"} <= filled
 
+
+def test_augment_activity_frame__fills_missing_boolean_defaults() -> None:
+    frame = pd.DataFrame(
+        {
+            "approx_cited_activity": pd.Series([pd.NA, True], dtype="boolean"),
+            "shuffled_cit": pd.Series([pd.NA, pd.NA], dtype="boolean"),
+            "exact_cited_activity": pd.Series([pd.NA, False], dtype="boolean"),
+            "higly_correlated_cit": pd.Series([pd.NA, pd.NA], dtype="boolean"),
+            "review_doc": pd.Series([pd.NA, pd.NA], dtype="boolean"),
+            "rounded_data_citation": pd.Series([pd.NA, pd.NA], dtype="boolean"),
+        }
+    )
+
+    augmented, filled = _augment_activity_frame(frame)
+
+    expectations = {
+        "approx_cited_activity": [False, True],
+        "shuffled_cit": [False, False],
+        "exact_cited_activity": [False, False],
+        "higly_correlated_cit": [False, False],
+        "review_doc": [False, False],
+        "rounded_data_citation": [False, False],
+    }
+
+    for column, values in expectations.items():
+        assert str(augmented[column].dtype) == "boolean"
+        assert augmented[column].tolist() == values
+        assert column in filled
 
 def test_rename_columns__propagates_backfilled_pA_value() -> None:
     frame = pd.DataFrame(
@@ -505,7 +533,7 @@ def test_transform_activity_frame__fills_missing_columns(activity_resources: Pat
     assert row["molecule_chembl_id.1"] == "MOL-1"
     assert row.standard_inchi_skeleton == "InChI=1"
     assert bool(row.multmol_assay) is False
-    assert pd.isna(row.rounded_data_citation)
+    assert bool(row.rounded_data_citation) is False
     assert pd.isna(row.original_activity_approx)
     assert pd.isna(row.original_activity_exact)
     assert float(row.pA_value) == pytest.approx(5.0)

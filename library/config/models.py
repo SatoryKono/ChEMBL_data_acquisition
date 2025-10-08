@@ -704,11 +704,23 @@ class IoCfg(_BoolModel):
     csv_chunksize: int = Field(10000, ge=1)
     exist_ok: bool = True
     keep_na_markers: bool = False
+    output_stamp_mode: str = Field(default="omit")
 
     @field_validator("exist_ok", mode="before")
     @classmethod
     def _bools(cls, v: Any) -> bool:
         return cls._parse_bool(v)
+
+    @field_validator("output_stamp_mode", mode="before")
+    @classmethod
+    def _normalize_stamp_mode(cls, value: Any) -> str:
+        if value is None:
+            return "omit"
+        if isinstance(value, str):
+            candidate = value.strip().lower()
+            if candidate in {"omit", "require"}:
+                return candidate
+        raise ValueError("output_stamp_mode must be 'omit' or 'require'")
 
 
 class LogCfg(_BaseModel):
@@ -1500,6 +1512,7 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_LIMITER_CACHE_MAXSIZE": ["system", "rate", "limiter_cache_maxsize"],
     "CHEMBL_DA_LIMITER_CACHE_TTL": ["system", "rate", "limiter_cache_ttl"],
     "CHEMBL_DA_OUTDIR": ["local", "io", "output_dir"],
+    "CHEMBL_DA_OUTPUT_STAMP_MODE": ["local", "io", "output_stamp_mode"],
     "CHEMBL_DA_RPS": ["sources", "chembl", "api", "rps"],
     "CHEMBL_DA_PUBMED_RPS": ["sources", "pubmed", "rps"],
     "CHEMBL_DA_PUBMED_BURST": ["sources", "pubmed", "burst"],

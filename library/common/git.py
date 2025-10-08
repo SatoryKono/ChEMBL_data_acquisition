@@ -13,7 +13,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from .log import logger
 
@@ -205,6 +205,69 @@ def _error_payload(error: BaseException) -> dict[str, Any]:
     return {"error": _format_error(error)}
 
 
+def _github_desktop_git_candidates(executable: Path) -> Iterable[str]:
+    """Yield potential real Git executables for GitHub Desktop shims."""
+
+    lower_path = str(executable).lower()
+    if "githubdesktop" not in lower_path:
+        return []
+
+    roots: set[Path] = {executable.parent}
+    for ancestor in executable.parents:
+        roots.add(ancestor)
+        if ancestor.name.lower() == "githubdesktop":
+            break
+
+    candidates: list[str] = []
+    git_rel_paths = [
+        Path("resources") / "app" / "git" / "cmd" / "git.exe",
+        Path("resources") / "app" / "git" / "mingw64" / "bin" / "git.exe",
+        Path("resources") / "app" / "git" / "usr" / "bin" / "git.exe",
+        Path("resources") / "app" / "git" / "bin" / "git.exe",
+    ]
+
+    for root in roots:
+        for app_dir in root.glob("app-*"):
+            for rel_path in git_rel_paths:
+                candidate = app_dir / rel_path
+                candidates.append(str(candidate))
+    return candidates
+
+
+def _candidate_git_commands(git_executable: str) -> Iterable[list[str]]:
+    """Yield Git command invocations to try in order."""
+
+    base_args = ["rev-parse", "HEAD"]
+    commands: list[list[str]] = []
+    seen: set[tuple[str, ...]] = set()
+
+    def _add(command: Iterable[str]) -> None:
+        cmd = [str(part) for part in command]
+        key = tuple(cmd)
+        if key not in seen:
+            seen.add(key)
+            commands.append(cmd)
+
+    _add([git_executable, *base_args])
+
+    exe_path = Path(git_executable)
+    exe_name = exe_path.name.lower()
+
+    if exe_path.suffix.lower() == ".exe":
+        for candidate in _github_desktop_git_candidates(exe_path):
+            _add([candidate, *base_args])
+        if os.name == "nt":
+            cmd_variant = exe_path.with_suffix(".cmd")
+            _add([str(cmd_variant), *base_args])
+
+    if exe_name not in {"git", "git.exe"}:
+        _add(["git", *base_args])
+    if os.name == "nt" and exe_name != "git.cmd":
+        _add(["git.cmd", *base_args])
+
+    return commands
+
+
 @functools.lru_cache(maxsize=1)
 def _git_sha() -> str:
     """Return the Git commit hash for the repository.
@@ -233,6 +296,11 @@ def _git_sha() -> str:
         logger.info("git_directory_missing", path=str(repo_root))
         return "UNKNOWN"
 
+    head_sha = _read_head_sha(git_dir)
+    if head_sha is not None:
+        logger.info("git_sha_head", sha=head_sha)
+        return head_sha
+
     git_executable = shutil.which("git")
     if git_executable is None:
         fallback = _read_head_sha(git_dir)
@@ -242,20 +310,34 @@ def _git_sha() -> str:
         logger.warning("git_executable_missing")
         return "UNKNOWN"
 
-    try:
-        result = subprocess.run(
-            [git_executable, "rev-parse", "HEAD"],
-            cwd=repo_root,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        return result.stdout.strip()
-    except (subprocess.CalledProcessError, UnicodeDecodeError, OSError) as exc:
-        fallback = _read_head_sha(git_dir)
-        if fallback is not None:
-            _log_fallback(fallback, reason="subprocess_error", error=exc)
-            return fallback
-        logger.warning("git_sha_unavailable", extra=_error_payload(exc))
+    errors: list[BaseException] = []
 
-        return "UNKNOWN"
+    for command in _candidate_git_commands(git_executable):
+        try:
+            result = subprocess.run(
+                command,
+                cwd=repo_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except (subprocess.CalledProcessError, UnicodeDecodeError, OSError) as exc:
+            errors.append(exc)
+            continue
+
+        output = result.stdout.strip()
+        if output:
+            return output
+
+    fallback = _read_head_sha(git_dir)
+    if fallback is not None:
+        error = errors[-1] if errors else None
+        _log_fallback(fallback, reason="subprocess_error", error=error)
+        return fallback
+
+    if errors:
+        logger.warning("git_sha_unavailable", extra=_error_payload(errors[-1]))
+    else:
+        logger.warning("git_sha_unavailable")
+
+    return "UNKNOWN"

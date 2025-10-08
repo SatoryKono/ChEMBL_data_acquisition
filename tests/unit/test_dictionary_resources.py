@@ -124,6 +124,7 @@ def test_manifest_allows_windows_textmode_checksum() -> None:
         dictionaries.WINDOWS_VFS_TEXTMODE_CHECKSUM,
         dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM,
         dictionaries.WINDOWS_VFS_NTFS_CHECKSUM,
+        "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b",
     }
 
     assert expected.issubset(sha256_values)
@@ -140,6 +141,7 @@ def test_known_checksum_variants__includes_sparse_index_checksum(tmp_path: Path)
     assert dictionaries.WINDOWS_VFS_TEXTMODE_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_NTFS_CHECKSUM in variants
+    assert "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b" in variants
 
 
 @pytest.mark.unit

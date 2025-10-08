@@ -121,14 +121,50 @@ def merge_series_prefer_left(left: pd.Series, right: pd.Series) -> pd.Series:
     if left.empty and right.empty:
         return left.copy()
 
-    if not left.index.equals(right.index):
-        right = right.reindex(left.index)
+    original_index = left.index
 
-    result = left.copy()
+    left_work = left.copy()
+    right_work = right.copy()
+
+    requires_alignment = (
+        not original_index.equals(right.index)
+        or not left_work.index.is_unique
+        or not right_work.index.is_unique
+    )
+
+    if requires_alignment:
+        left_work = _ensure_unique_index(left_work, always_multi=True)
+        right_work = _ensure_unique_index(right_work, always_multi=True)
+        if not left_work.index.equals(right_work.index):
+            right_work = right_work.reindex(left_work.index)
+
+    result = left_work.copy()
     missing_mask = result.isna()
     if missing_mask.any():
-        result.loc[missing_mask] = right.loc[missing_mask]
+        result.loc[missing_mask] = right_work.loc[missing_mask]
+
+    if isinstance(result.index, pd.MultiIndex):
+        result.index = original_index
     return result
+
+
+def _ensure_unique_index(series: pd.Series, *, always_multi: bool = False) -> pd.Series:
+    """Return ``series`` with a unique index preserving order.
+
+    Pandas disallows :meth:`Series.reindex` when the axis contains duplicate
+    labels. To align two series that may include duplicates we temporarily
+    promote their index to a ``MultiIndex`` made of the original label and a
+    per-label counter. The original order is preserved which allows a
+    positionally stable alignment.
+    """
+
+    if series.index.is_unique and not always_multi:
+        return series.copy()
+
+    counts = series.groupby(level=0).cumcount()
+    unique = series.copy()
+    unique.index = pd.MultiIndex.from_arrays([series.index, counts])
+    return unique
 
 
 __all__ = ["json_normalize_pyarrow", "merge_series_prefer_left", "read_csv_pyarrow"]

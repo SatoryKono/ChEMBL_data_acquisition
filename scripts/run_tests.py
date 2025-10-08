@@ -223,11 +223,18 @@ def _build_test_entry(test: dict[str, Any]) -> dict[str, Any]:
 
 
 def _calculate_success_rate(summary: dict[str, int]) -> float:
-    total = summary.get("total", 0) or 0
-    passed = summary.get("passed", 0) or 0
-    if total <= 0:
+    total = int(summary.get("total", 0) or 0)
+    skipped = int(summary.get("skipped", 0) or 0)
+    passed = int(summary.get("passed", 0) or 0)
+    xfailed = int(summary.get("xfailed", 0) or 0)
+
+    executed_total = total - skipped
+    if executed_total <= 0:
         return 1.0
-    return max(0.0, min(1.0, passed / total))
+
+    successes = passed + xfailed
+    ratio = successes / executed_total
+    return max(0.0, min(1.0, ratio))
 
 
 def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, Any]:

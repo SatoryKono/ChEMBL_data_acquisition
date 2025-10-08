@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+import sys
 from pathlib import Path
 from time import perf_counter
 
@@ -82,6 +83,13 @@ def run_activity_pipeline(
 
     start_time = perf_counter()
 
+    active_logger = logger
+    script_module = sys.modules.get("scripts.get_activity_data")
+    if script_module is not None:
+        patched_logger = getattr(script_module, "logger", None)
+        if patched_logger is not None:
+            active_logger = patched_logger
+
     args = argparse.Namespace(
         input_csv=_normalise_path(options.input_csv),
         skip_existing=bool(options.skip_existing),
@@ -124,12 +132,12 @@ def run_activity_pipeline(
 
     batch_size = getattr(cfg.activity, "batch_size", None)
     if batch_size is not None and batch_size > MAX_ACTIVITY_CHUNK_SIZE:
-        logger.warning(
+        active_logger.warning(
             "activity_batch_size_clamped",
             configured=batch_size,
             limit=MAX_ACTIVITY_CHUNK_SIZE,
         )
-        logger.warning(
+        active_logger.warning(
             f"Configured batch size {batch_size} exceeds the hard cap of {MAX_ACTIVITY_CHUNK_SIZE}; "
             f"reducing to {MAX_ACTIVITY_CHUNK_SIZE}."
         )
@@ -138,12 +146,12 @@ def run_activity_pipeline(
 
     timeout = getattr(cfg.activity, "timeout", None)
     if timeout is not None and timeout < MIN_ACTIVITY_TIMEOUT:
-        logger.warning(
+        active_logger.warning(
             "activity_timeout_clamped",
             configured=timeout,
             minimum=MIN_ACTIVITY_TIMEOUT,
         )
-        logger.warning(
+        active_logger.warning(
             f"Configured timeout {timeout} is below the minimum of {MIN_ACTIVITY_TIMEOUT}; "
             f"increasing to {MIN_ACTIVITY_TIMEOUT}."
         )
@@ -156,11 +164,11 @@ def run_activity_pipeline(
 
     retry_attempts = getattr(cfg.retry, "max_attempts", None)
     if retry_attempts is not None and retry_attempts <= 1:
-        logger.warning(
+        active_logger.warning(
             "activity_retry_disabled",
             configured=retry_attempts,
         )
-        logger.warning(
+        active_logger.warning(
             "Configured system.retry.max_attempts=%s disables urllib3 retry handling; "
             "increase to at least 2 to tolerate transient network issues.",
             retry_attempts,
@@ -168,19 +176,19 @@ def run_activity_pipeline(
 
     api_retries = getattr(cfg.api, "retries", None)
     if api_retries is not None and api_retries <= 0:
-        logger.warning(
+        active_logger.warning(
             "activity_api_retry_disabled",
             configured=api_retries,
         )
-        logger.warning(
+        active_logger.warning(
             "Configured chembl.api.retries=%s disables client-level request retries; "
             "increase to 1 or more for resilience.",
             api_retries,
         )
 
     if args.skip_existing and output_path.exists() and not args.force:
-        logger.info("pipeline_skip_existing", output=str(output_path))
-        logger.info(
+        active_logger.info("pipeline_skip_existing", output=str(output_path))
+        active_logger.info(
             f"Skipping execution because '{output_path}' already exists and --force was not provided."
         )
         emit_completion_message(

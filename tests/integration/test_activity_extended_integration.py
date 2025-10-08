@@ -172,6 +172,15 @@ def test_process_activity_extended__fills_missing_optional_columns(tmp_path, cap
     for column_name in ("activity_chembl_id", "compound_key", "log_value"):
         assert column_name in message
 
+    unresolved_messages = [
+        record.message
+        for record in caplog.records
+        if "activity_extended_missing_columns_unresolved" in record.message
+    ]
+    assert len(unresolved_messages) <= 1
+    for message in unresolved_messages:
+        assert "nstereo" in message
+
 
 @pytest.mark.integration
 def test_process_activity_extended__warns_on_unresolved_parent(tmp_path, caplog):

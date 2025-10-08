@@ -4,13 +4,74 @@
 
 ## `scripts/get_activity_data.py`
 
-| Аспект | Детали |
+### 1. Общая структура процесса
+
+- **Источник:** REST API ChEMBL (`/chembl/api/data/activity`).
+- **Назначение:** формирование унифицированной таблицы активности соединений.
+- **Конечный артефакт:** `raw.activity_{YYYYMMDD}.csv` в каталоге выгрузки.
+
+### 2. Ключевые функции
+
+| Функция | Назначение |
 | --- | --- |
-| **Источники и формат входа** | CSV с колонкой идентификаторов (по умолчанию `activity_chembl_id`, значение берётся из `activity.column` в `config/config.yaml`, если его не переопределить через `--column`) читается лениво через `io.read_ids`. Дополнительные флаги `--limit` и `--dry-run` позволяют ограничить обработку. |
-| **Внешние сервисы / файлы** | API ChEMBL через `ChemblClient` с настраиваемой пакетной загрузкой и таймаутами. |
-| **Ключевые преобразования** | Нормализация ответов API, добавление метаданных запуска, приведение к порядку колонок схемы `ActivitiesSchema`, валидация и запись ошибок построчно во вспомогательные CSV. |
-| **Выход и хранение** | Основной CSV записывается в указанный (или стандартный) путь, рядом сохраняются YAML с метаданными запуска и диагностика качества таблицы. |
-| **Связи** | Строки выгрузки содержат `molecule_chembl_id`, `assay_chembl_id` и `document_chembl_id`, связывая активности с молекулами (test items), ассаями и документами соответственно. |
+| `_init_request_params` | Собирает параметры запроса (limit, offset, fields, expand, timeout) из `config/acquisition.yaml` с дефолтами пайплайна. |
+| `_fetch_page` | Выполняет одиночный REST-запрос к ChEMBL и возвращает страницу данных. |
+| `_collect_all_batches` | Проходит по пагинации API, собирая все страницы в общий набор. |
+| `_validate_response` | Проверяет структуру ответа, приводит JSON к DataFrame и фильтрует некорректные записи. |
+| `_save_raw_activity` | Сохраняет итоговый DataFrame в CSV с фиксированным порядком колонок. |
+
+### 3. Последовательность шагов извлечения
+
+| Шаг | Функция | Назначение | Тип операции | Вход | Выход | Контрольные проверки |
+| --- | --- | --- | --- | --- | --- | --- |
+| **S01: Инициализация параметров** | `_init_request_params` | Формирование параметров REST-запросов. | Конфигурация | `config/acquisition.yaml` | Словарь, например:<br>`{"limit": 1000, "offset": 0, "fields": "activity_id,assay_chembl_id,document_chembl_id,molecule_chembl_id,standard_type,standard_value,standard_units,pchembl_value", "expand": True, "timeout": 30}` | Проверка обязательных ключей (`limit`, `fields`, `timeout`); логирование параметров в `logs/get_activity_data_{YYYYMMDD}.log`. |
+| **S02: Отправка запросов** | `_fetch_page` | Получение страниц данных из ChEMBL. | REST-запрос | Endpoint `/chembl/api/data/activity`; параметры limit/offset/fields/expand; заголовок `Content-Type: application/json`. | JSON-страница с блоками `page_meta` и `activities`. | Статус HTTP 200; наличие `page_meta` и `activities`; повтор при `HTTP 429`, `ReadTimeout`, `ChunkedEncodingError`. |
+| **S03: Обработка ответов** | `_validate_response` | Проверка и нормализация данных страницы. | Фильтрация и валидация | JSON-ответ | DataFrame валидных записей | Проверка обязательных полей (`activity_id`, `assay_chembl_id`, `standard_value`); устранение дубликатов по `activity_id`. |
+| **S04: Агрегация и проверка полноты** | `_collect_all_batches` | Итерация по пагинации до полного набора. | Пагинация и объединение | Параметры запроса + функция `_fetch_page` | Единый DataFrame | Сопоставление `total_count` из API с числом строк; контроль уникальности `activity_id`. |
+| **S05: Сохранение результатов** | `_save_raw_activity` | Запись итогового CSV. | Запись файла | DataFrame активности | `raw.activity_{YYYYMMDD}.csv` | Фиксированный порядок колонок; кодировка UTF-8; логирование размера файла и числа строк. |
+
+### 4. Обработка ошибок и ретраи
+
+- Повторные попытки при `HTTP 429`, `ReadTimeout`, `ChunkedEncodingError` с экспоненциальной задержкой `1/2/4/8/16` секунд (максимум 5 попыток).
+- При превышении лимита попыток ошибка логируется на уровне `ERROR`, пайплайн продолжает обработку следующих страниц.
+
+### 5. Контрольные точки качества
+
+- Сравнение количества загруженных записей с `total_count` из API.
+- Проверка уникальности ключа `activity_id` в финальном DataFrame.
+- Мониторинг средней длительности обработки 1000 записей по логам производительности.
+
+### 6. Конфигурации и зависимости
+
+- `config/acquisition.yaml` — параметры API-запросов (`limit`, `timeout`, `fields`).
+- `config/chembl_endpoints.yaml` — базовые пути для REST-вызовов.
+- Модули: `library/clients/chembl_api.py`, `utils/network.py`, `library/io/chembl_cache.py`.
+
+### 7. Логирование и кэширование
+
+- Логи: `logs/get_activity_data_{YYYYMMDD}.log` с уровнями `INFO`, `WARNING`, `ERROR`.
+- Кэш страниц: `cache/chembl_activity_{offset}.pkl`, срок хранения 7 дней.
+
+### 8. Возможные узкие места и рекомендации
+
+- Сетевые задержки — рассмотреть асинхронный клиент для снижения времени ожидания.
+- Ограничения API — согласовать повышение `limit` с командой ChEMBL.
+- Надёжность — сохранять промежуточные результаты, чтобы избежать потери данных при сбоях.
+
+### 9. Схема выходных данных
+
+| name | type | nullable | domain | source_stage | description | source |
+| --- | --- | --- | --- | --- | --- | --- |
+| `activity_id` | int64 | False | уникальный идентификатор активности | `S04_merge_batches` | Уникальный идентификатор записи активности в ChEMBL | `ChEMBL /api/data/activity/activity_id` |
+| `assay_chembl_id` | string | False | `CHxxxxxx` | `S02_fetch_page` | Идентификатор биологического теста, связанного с активностью | `ChEMBL /api/data/activity/assay_chembl_id` |
+| `document_chembl_id` | string | True | `CHEMBL_DOC_xxx` | `S02_fetch_page` | Идентификатор публикации или источника данных | `ChEMBL /api/data/activity/document_chembl_id` |
+| `molecule_chembl_id` | string | True | `CHEMBLxxxx` | `S02_fetch_page` | Идентификатор исследуемого соединения | `ChEMBL /api/data/activity/molecule_chembl_id` |
+| `standard_type` | string | True | `pIC50 / IC50 / Ki / EC50` | `S03_normalize_fields` | Тип измеряемой активности | `ChEMBL /api/data/activity/standard_type` |
+| `standard_value` | float64 | True | ≥0 | `S03_normalize_fields` | Числовое значение активности | `ChEMBL /api/data/activity/standard_value` |
+| `standard_units` | string | True | `nM / µM` | `S03_normalize_fields` | Единицы измерения активности | `ChEMBL /api/data/activity/standard_units` |
+| `pchembl_value` | float64 | True | 0–14 | `S04_compute_pchembl` | Приведённое значение активности по шкале pChEMBL | `ChEMBL /api/data/activity/pchembl_value` |
+| `pipeline_version` | string | False | `vYYYYMMDD` | `S05_finalize` | Версия пайплайна, использованная при формировании данных | internal (derived) |
+| `timestamp_utc` | datetime | False | UTC | `S05_finalize` | Время формирования записи в UTC | internal (derived) |
 
 ## `scripts/get_assay_data.py`
 

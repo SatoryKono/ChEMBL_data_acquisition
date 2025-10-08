@@ -35,7 +35,6 @@ from pathlib import Path
 import stat
 from typing import IO, Any, cast
 
-from datetime import datetime, timezone
 
 import pandas as pd
 import requests
@@ -327,7 +326,6 @@ def _export_stem(name: str) -> str:
 _UNSUPPORTED_EXPORT_SUFFIXES: tuple[str, ...] = (
     RAW_SUFFIX.lower(),
     "_chembl",
-    "_uniprot",
     "_iuphar",
 )
 
@@ -4057,10 +4055,6 @@ class TargetPipelineCLI(PipelineCLIBase):
             input_default=DEFAULT_INPUT_NAME,
             output_stem=DEFAULT_OUTPUT_STEM,
         )
-        date_value = getattr(args, "date", None)
-        if not isinstance(date_value, str) or not date_value:
-            date_value = datetime.now(timezone.utc).strftime("%Y%m%d")
-            setattr(args, "date", date_value)
         return args
 
     def get_program_name(self) -> str:
@@ -4148,13 +4142,16 @@ class TargetPipelineCLI(PipelineCLIBase):
                 args_dict = vars(args).copy()
                 final_value = args_dict.get("final_out")
                 if final_value in (None, argparse.SUPPRESS):
-                    date_token = args_dict.get(
-                        "date", datetime.now(timezone.utc).strftime("%Y%m%d")
+                    temp_namespace = argparse.Namespace(**args_dict)
+                    cli.prepare_io_paths(
+                        temp_namespace,
+                        input_default=DEFAULT_INPUT_NAME,
+                        output_stem=DEFAULT_OUTPUT_STEM,
                     )
-                    inferred = Path(args_dict["input_csv"]).with_name(
-                        f"output.{DEFAULT_OUTPUT_STEM}_{date_token}.csv"
-                    )
-                    args_dict["final_out"] = inferred
+                    args_dict["final_out"] = getattr(temp_namespace, "final_out")
+                    args_dict["output_csv"] = getattr(temp_namespace, "output_csv")
+                    args_dict["raw_out"] = getattr(temp_namespace, "raw_out")
+                    args_dict["date"] = getattr(temp_namespace, "date", None)
                 else:
                     args_dict["final_out"] = Path(final_value)
                 args_namespace = argparse.Namespace(**args_dict)

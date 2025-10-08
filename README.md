@@ -90,7 +90,7 @@ python scripts/get_data.py \
 | Test item | `python scripts/get_testitem_data.py --input data/input/testitem.csv --final-out output/testitems.csv --request-limit 500 --hierarchy-path config/dictionary/_testitem/molecule_hierarchy.csv` | Provides parent-molecule enrichment controls and request throttling (`--request-limit`, `--batch-size`, `--dry-run`). |
 | Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto` | Resolves tissue metadata, merges ontology cross-references and normalises synonyms for downstream joins. Run separately before `get_activity_data` when tissue lookups are required. |
 | Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --final-out output/cellline.csv --batch-size 20 --limit 100` | Retrieves ChEMBL cell line records, normalises nullable identifiers and enforces deterministic ordering. |
-| Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --timeout 120 --limit 500 --offset 100 --workers 4 --dry-run` | Flags: `--timeout`, `--limit`, `--offset`, `--dry-run`, `--workers`. |
+| Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --column activity_id --batch-size 10 --workers 4 --dry-run` | Flags: identifier column overrides (`--column activity_id`), per-request limits (`--batch-size`, `--timeout`), range selection (`--limit`, `--offset`) and dry-run validation/workers toggles. |
 | Synthetic activities | `python scripts/get_activities.py --limit 25 --dry-run` | Generates deterministic dummy rows for smoke tests; accepts the same logging flags as other CLI tools. |
 
 Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar
@@ -137,8 +137,8 @@ languages:
 
 ## Testing policy
 
-Tests are organised under `tests/` and executed with `pytest`. Local and CI runs
-must produce:
+Tests are organised under `tests/` and executed via the canonical wrapper
+`python -m scripts.run_tests`. Local and CI runs must produce:
 
 - `reports/test_report.json` — machine readable execution log
 - `reports/test_summary.md` — condensed Markdown summary
@@ -192,10 +192,12 @@ python scripts/run_tests.py
 exact `error` message from the JSON report in a fenced code block. This makes it
 possible to triage failures using only the Markdown artefact.
 
-Smoke runs can use `pytest -q -k "not slow and not e2e"`, while full validation
-uses `pytest -q`. See [`docs/en/development/TESTING.md`](./docs/en/development/TESTING.md)
-for fixtures, determinism requirements and coverage targets.
+To focus on a subset during local development, forward arguments to pytest
+using the `--` separator, for example:
 
-## License
+```bash
+python -m scripts.run_tests -- -k "not slow and not e2e"
+```
 
-The project is distributed under the [MIT License](./LICENSE).
+See [`docs/en/development/TESTING.md`](./docs/en/development/TESTING.md) for
+fixtures, determinism requirements and coverage targets.

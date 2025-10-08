@@ -19,6 +19,10 @@ from cachetools import TTLCache
 GLOBAL_LIMITER_NAME = "system_global"
 
 
+_MIN_WAIT_SECONDS = 1e-3
+_MAX_WAIT_SECONDS = 5.0
+
+
 class RateLimiter:
     """Token bucket rate limiter.
 
@@ -38,15 +42,25 @@ class RateLimiter:
         self._lock = threading.Lock()
 
     def acquire(self) -> None:
-        """Block until a token is available."""
+        """Block until a token is available.
+
+        The wait strategy uses an adaptive back-off that doubles the minimum
+        sleep duration on every retry until a reasonable upper bound is
+        reached.  This approach keeps the loop responsive for highly
+        contended call sites (including concurrent threads) while guaranteeing
+        forward progress even when the system scheduler undersleeps.
+        """
         if self.rps <= 0:
             return
 
+        base_wait = max(1.0 / self.rps, _MIN_WAIT_SECONDS)
+        max_wait = max(base_wait, _MAX_WAIT_SECONDS)
+        adaptive_wait = base_wait
         wait = 0.0
+
         while True:
             if wait > 0:
                 sleep(wait)
-                wait = 0.0
 
             with self._lock:
                 now = time.monotonic()
@@ -59,8 +73,10 @@ class RateLimiter:
                     self._updated = now
                     return
 
-                min_interval = 1.0 / self.rps
-                wait = max(min_interval, (1 - self._tokens) / self.rps)
+                required = max(0.0, (1 - self._tokens) / self.rps)
+                wait = min(max(required, adaptive_wait), max_wait)
+
+            adaptive_wait = min(adaptive_wait * 2, max_wait)
 
 
 _limiters: TTLCache[str, RateLimiter] = TTLCache(maxsize=128, ttl=600)

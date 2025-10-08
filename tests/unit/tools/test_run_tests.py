@@ -263,6 +263,36 @@ def test_main__verbose_propagates_debug_logging(
     assert captured_cfgs and captured_cfgs[-1].level == "DEBUG"
 
 
+@pytest.mark.unit
+def test_main__emits_deprecation_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    run_tests_module: ModuleType,
+) -> None:
+    log_path, _ = _install_fake_cli_logging(run_tests_module, monkeypatch, tmp_path)
+    monkeypatch.setattr(run_tests_module, "_git_output", _stub_git_output)
+
+    def _fake_pytest_main(pytest_args: list[str], plugins: list[object]) -> int:
+        assert f"--log-file={log_path}" in pytest_args
+        return 0
+
+    monkeypatch.setattr(run_tests_module.pytest, "main", _fake_pytest_main)
+
+    with pytest.warns(DeprecationWarning) as recorded:
+        exit_code = run_tests_module.main(
+            [
+                "--json",
+                str(tmp_path / "report.json"),
+                "--markdown",
+                str(tmp_path / "summary.md"),
+            ]
+        )
+
+    assert exit_code == 0
+    assert recorded
+    assert run_tests_module.DEPRECATION_MESSAGE in str(recorded[0].message)
+
+
 def _install_fake_cli_logging(
     run_tests: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> tuple[Path, list[run_tests.LoggerConfig]]:

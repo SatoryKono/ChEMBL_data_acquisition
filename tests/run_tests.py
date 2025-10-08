@@ -8,6 +8,7 @@ import logging
 import subprocess
 import sys
 import time
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,6 +39,11 @@ SUCCESS_RATE_THRESHOLD = 0.95
 
 
 logger = logging.getLogger(__name__)
+
+DEPRECATION_MESSAGE = (
+    "tests/run_tests.py is deprecated and will be removed in a future release. "
+    "Use scripts/run_tests.py instead."
+)
 
 @dataclass
 class TestRecord:
@@ -335,6 +341,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to Markdown summary",
     )
     args = parser.parse_args(argv)
+
+    warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning, stacklevel=2)
+    logger.warning(DEPRECATION_MESSAGE)
 
     level = "DEBUG" if args.verbose else "INFO"
     base_logger_cfg = LoggerConfig(level=level, logger_name="run_tests")
