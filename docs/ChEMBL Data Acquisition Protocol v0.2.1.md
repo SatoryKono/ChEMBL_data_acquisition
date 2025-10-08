@@ -115,12 +115,13 @@ graph TD
 
 ### 4.4 Документы — `scripts/get_document_data.py`
 
-- Подкоманды: `chembl`, `pubmed`, `semantic-scholar`, `openalex`, `crossref`, `all`. Базовый режим (`all`) собирает совокупные данные, управляет RPS (`--openalex-rps`, `--crossref-rps`) и fallback DOI CSV (`--fallback-doi-csv`, `--fallback-doi-overwrite`).
-- Дополнительные ключи: `--input-csv`, `--final-out`, `--command-timeout`, `--max-retries`, `--disable-pubmed`, `--disable-crossref`.
+- Скрипт управляется параметром `--mode` (или позиционным `command` для обратной совместимости) с вариантами `chembl`, `pubmed`, `all`. Режим `all` объединяет результаты конвейеров ChEMBL и PubMed.
+- Общие опции: `--input/--final-out` (переопределение путей), `--column`, `--limit`, `--offset`, `--openalex-rps`, `--crossref-rps`.
+- Специфичные для режимов ключи: `--batch-size`/`--sleep`/`--workers`/`--chunk-size`/`--timeout` (PubMed или ChEMBL), а также `--chembl-*` и `--pubmed-*` для настройки гибридного запуска `all`. Поддерживается опциональный блок fallback DOI (`--fallback-doi-enabled`, `--fallback-doi-path`, `--fallback-doi-overwrite`, настройки разделителя/кодировки/столбцов).
 - Пример:
   ```bash
-  python scripts/get_document_data.py all --config config/config.yaml \
-      --input-csv data/documents.ids.csv --final-out output/documents.csv \
+  python scripts/get_document_data.py --mode all --config config/config.yaml \
+      --input data/documents.ids.csv --final-out output/documents.csv \
       --openalex-rps 2 --crossref-rps 1
   ```
 - Постобработка: `library/postprocess/documents/steps` (нормализация полей, заполнение годов, дедупликация идентификаторов).
@@ -141,11 +142,11 @@ graph TD
 ### 4.6 Тест-айтемы — `scripts/get_testitem_data.py`
 
 - Использует модуль `library.pipelines.testitem.cli` (шаги: `read_identifiers`, `fetch_chembl_metadata`, `enrich_pubchem`, `finalize_export`).
-- Аргументы: `--input-csv`, `--final-out`, `--batch-size`, `--timeout`, `--limit`, `--offset`, `--pubchem-rps`, `--force`.
+- Аргументы: базовые `--input/--final-out`, `--batch-size`, `--timeout`, `--limit`, `--offset`, `--force`, `--skip-existing` плюс стандартные параметры CSV (`--sep`, `--encoding`, `--column`).
 - Пример:
   ```bash
   python scripts/get_testitem_data.py --config config/config.yaml \
-      --input-csv data/testitems.ids.csv --final-out output/testitems.csv \
+      --input data/testitems.ids.csv --final-out output/testitems.csv \
       --batch-size 1000 --timeout 30
   ```
 - Выход: основной CSV, sidecar `.meta.yaml`, failure-case CSV, QA и отчёт постпроцесса.
@@ -223,9 +224,12 @@ graph LR
 | `activity_id` | `Int64` | No | Primary activity identifier | ChEMBL Activities API | Ключ факта; нормализуется `finalize_activity_records`. |
 | `molecule_chembl_id` | `string` | No | Molecule ID | ChEMBL + testitem_dim | FK → `testitem_dim`, uppercase. |
 | `assay_chembl_id` | `string` | No | Assay ID | ChEMBL + assay_dim | FK → `assay_dim`, строгие идентификаторы. |
-| `target_chembl_id` | `string` | Yes | Target ID | Assay metadata | Заполняется при наличии связанного таргета. |
 | `standard_type` | `string` | No | Тип измерения | Postprocess | Обязательное поле, нормализованные значения. |
+| `standard_relation` | `string` | No | Отношение измерения | ChEMBL Activities API | Переносится из исходных данных, нормализуется. |
 | `standard_value` | `float64` | Yes | Нормализованное значение | ChEMBL + нормализация единиц | Проверка диапазонов и пропусков. |
+| `standard_units` | `string` | Yes | Единицы измерения | ChEMBL Activities API | Приводятся к верхнему регистру и унифицированным обозначениям. |
+| `data_validity_comment` | `string` | Yes | Комментарий валидности | ChEMBL Activities API | Переносится при наличии. |
+| `activity_comment` | `string` | Yes | Комментарий активности | ChEMBL Activities API | Дополнительные заметки об эксперименте. |
 | `quality_flag` | `boolean` | Yes | QA flag | Постпроцесс | Производный признак `enrich_activity_quality`. |
 | `pipeline_version` | `string` | Yes | Pipeline version | Package metadata | Ставится автоматически `infer_pipeline_version`. |
 
@@ -248,11 +252,11 @@ graph LR
 | `document_chembl_id` | `string` | No | Document ID | ChEMBL | Первичный ключ. |
 | `title` | `string` | Yes | Title | ChEMBL/PubMed | Unicode-NFKC нормализация. |
 | `doc_type` | `string` | No | Document type | ChEMBL | Категориальное поле. |
-| `publication_year` | `Int64` | Yes | Publication year | ChEMBL/CrossRef/OpenAlex/PubMed | Алгоритм приоритетов см. `enrich_document_publication_year`. |
-| `doi` | `string` | Yes | DOI | ChEMBL/CrossRef/OpenAlex | Может дополняться fallback CSV. |
-| `PubMed.PMID` | `string` | Yes | PMID | PubMed API | Хранится отдельно. |
-| `OpenAlex.Id` | `string` | Yes | Work identifier | OpenAlex API | Используется для валидации источников. |
-| `CrossRef.Type` | `string` | Yes | CrossRef type | CrossRef API | Категория публикации. |
+| `year` | `string` | Yes | Исторический год из ChEMBL | ChEMBL | Сохраняется для совместимости с наследием. |
+| `publication_year` | `Int64` | Yes | Publication year | ChEMBL/PubMed/OpenAlex/CrossRef | Алгоритм приоритетов см. `enrich_document_publication_year`. |
+| `doi` | `string` | Yes | DOI | ChEMBL/PubMed/OpenAlex | Может дополняться fallback CSV. |
+| `journal` | `string` | Yes | Журнал публикации | ChEMBL | Переносится в текстовом виде. |
+| `abstract` | `string` | Yes | Аннотация | ChEMBL/PubMed | Очищается от невалидных символов. |
 | `pipeline_version` | `string` | Yes | Pipeline version | Postprocess | Версия документа. |
 
 ### 7.4 Target Export
@@ -260,12 +264,12 @@ graph LR
 | name | type | nullable | domain | source | description |
 |------|------|----------|--------|--------|-------------|
 | `target_chembl_id` | `string` | No | Target ID | ChEMBL | Первичный ключ. |
-| `pref_name` | `string` | Yes | Preferred name | ChEMBL/UniProt | Тримминг, fallback placeholder. |
+| `pref_name` | `string` | Yes | Preferred name | ChEMBL | Тримминг, fallback placeholder. |
 | `target_type` | `string` | No | Target type | ChEMBL | Категория объекта. |
-| `organism` | `string` | Yes | Organism | ChEMBL/UniProt | Нормализуется `normalize_taxonomy`. |
+| `organism` | `string` | Yes | Organism | ChEMBL | Нормализуется `normalize_taxonomy`. |
+| `target_class` | `string` | Yes | Класс таргета | ChEMBL | Сводится по справочнику классов. |
+| `protein_family` | `string` | Yes | Белковая семья | ChEMBL | Дополнительная классификация. |
 | `synonyms` | `string` | Yes | Synonym set | Aggregated | Список через `; `. |
-| `uniprot_id` | `string` | Yes | UniProt accession | UniProt API | Может быть пустым. |
-| `gtopdb_id` | `string` | Yes | Guide to Pharmacology | IUPHAR/GtoPdb | Интеграция классификации. |
 | `pipeline_version` | `string` | Yes | Pipeline version | Postprocess | Контроль изменений. |
 
 ### 7.5 Test Item Export
@@ -300,9 +304,9 @@ graph LR
 |--------|-------------------|----------------|
 | `get_activity_data.py` | ETL активностей | `--batch-size`, `--timeout`, `--workers`, `--dry-run`, `--skip-existing`, `--force`. |
 | `get_assay_data.py` | Выгрузка ассев | `--batch-size`, `--timeout`, `--limit`, `--offset`, `--skip-existing`. |
-| `get_document_data.py` | Документная витрина | Подкоманды (`chembl`, `pubmed`, `semantic-scholar`, `openalex`, `crossref`, `all`), `--openalex-rps`, `--crossref-rps`, `--fallback-doi-*`. |
+| `get_document_data.py` | Документная витрина | `--mode {chembl,pubmed,all}`, `--openalex-rps`, `--crossref-rps`, `--fallback-doi-*`, расширенные `--chembl-*`/`--pubmed-*` настройки. |
 | `get_target_data.py` | Цели и классификация | Подкоманды (`chembl`, `uniprot`, `iuphar`, `all`), `--disable-gtop`, `--chunk-size`, `--merge-mode`, `--taxon-filter`. |
-| `get_testitem_data.py` | Тест-айтемы | `--batch-size`, `--timeout`, `--limit`, `--offset`, `--pubchem-rps`, `--force`. |
+| `get_testitem_data.py` | Тест-айтемы | `--batch-size`, `--timeout`, `--limit`, `--offset`, `--force`, `--skip-existing`, стандартные CSV-параметры. |
 | `get-data` | Объединённый драйвер | Делегирует к соответствующим подкомандам (`activities`, `assays`, `targets`, `documents`, `testitems`). |
 | `table-quality` | Профилирование | Анализ существующих CSV, экспорт отчётов QA. |
 
