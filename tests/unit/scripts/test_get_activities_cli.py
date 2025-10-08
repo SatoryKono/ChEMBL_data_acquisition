@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -196,3 +197,94 @@ def test_parse_args__invalid_limit_error_message(capsys: pytest.CaptureFixture[s
 
     captured = capsys.readouterr()
     assert "limit must be a non-negative integer" in captured.err
+
+
+@pytest.mark.unit
+def test_run__skip_existing_respects_flag(
+    tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_csv = tmp_path / "activities.csv"
+    output_csv.write_text("activity_id\nOLD\n", encoding="utf-8")
+
+    args = SimpleNamespace(
+        limit=1,
+        dry_run=False,
+        skip_existing=True,
+        force=False,
+        output_csv=output_csv,
+        input_csv=tmp_path / "input.csv",
+    )
+
+    logger_stub = _LoggerStub()
+    monkeypatch.setattr(get_activities, "logger", logger_stub)
+    monkeypatch.setattr(
+        get_activities,
+        "get_activities",
+        lambda *_args, **_kwargs: pytest.fail("get_activities should not be called"),
+    )
+    monkeypatch.setattr(
+        get_activities,
+        "_write_output",
+        lambda *_args, **_kwargs: pytest.fail("_write_output should not be called"),
+    )
+
+    exit_code = get_activities.run(cfg, args)
+
+    assert exit_code == 0
+    assert (
+        "info",
+        "pipeline_skip_existing",
+        {"output": str(output_csv)},
+    ) in logger_stub.events
+    assert output_csv.read_text(encoding="utf-8") == "activity_id\nOLD\n"
+
+
+@pytest.mark.unit
+def test_run__force_overrides_skip_existing(
+    tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_csv = tmp_path / "activities.csv"
+    output_csv.write_text("activity_id\nOLD\n", encoding="utf-8")
+
+    args = SimpleNamespace(
+        limit=2,
+        dry_run=False,
+        skip_existing=True,
+        force=True,
+        output_csv=output_csv,
+        input_csv=tmp_path / "input.csv",
+    )
+
+    monkeypatch.setattr(
+        get_activities,
+        "get_activities",
+        lambda limit: [{"activity_id": idx + 1} for idx in range(limit)],
+    )
+
+    logger_stub = _LoggerStub()
+    monkeypatch.setattr(get_activities, "logger", logger_stub)
+
+    exit_code = get_activities.run(cfg, args)
+
+    assert exit_code == 0
+    assert (
+        "info",
+        "pipeline_skip_existing",
+        {"output": str(output_csv)},
+    ) not in logger_stub.events
+
+    content = output_csv.read_text(encoding="utf-8")
+    lines = content.splitlines()
+    assert [lines[0].lstrip("\ufeff"), *lines[1:]] == ["activity_id", "1", "2"]
+
+    meta_path = Path(f"{output_csv}.meta.yaml")
+    assert meta_path.exists()
+
+    leftover = list(output_csv.parent.glob("*.tmp"))
+    leftover.extend(output_csv.parent.glob("*.tmp.meta.yaml"))
+    assert not leftover
+def test_parse_args__only_expected_options_present() -> None:
+    _parser, args, _log_cfg = get_activities.parse_args([])
+
+    assert "chunk_size" not in vars(args)
+    assert "column" not in vars(args)
