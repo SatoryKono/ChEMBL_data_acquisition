@@ -327,7 +327,6 @@ def _export_stem(name: str) -> str:
 _UNSUPPORTED_EXPORT_SUFFIXES: tuple[str, ...] = (
     RAW_SUFFIX.lower(),
     "_chembl",
-    "_uniprot",
     "_iuphar",
 )
 
