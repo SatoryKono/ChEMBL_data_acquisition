@@ -75,6 +75,7 @@ from library.cli_utils import (
 from library.config import Config, _serialize_paths
 from library.common.log import logger
 from library.cli.logging import setup_cli_logging
+from library.cli.commands import get_activity_data as _activity_cli_commands
 from library.cli.commands.get_activity_data import (
     ActivityCommandOptions,
     MIN_ACTIVITY_TIMEOUT,
@@ -116,6 +117,16 @@ __all__ = (
     "write_meta_yaml",
     "configure_logger",
 )
+
+
+def _ensure_command_logger_sync() -> None:
+    """Keep the shared command module logger aligned with this script logger."""
+
+    if getattr(_activity_cli_commands, "logger", None) is not logger:
+        _activity_cli_commands.logger = logger
+
+
+_ensure_command_logger_sync()
 
 
 _CACHE_MISS = object()
@@ -1556,6 +1567,8 @@ def _coerce_cli_path(value: object) -> Path | str | None:
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the activity pipeline handling ``--skip-existing`` semantics."""
+
+    _ensure_command_logger_sync()
 
     options = ActivityCommandOptions(
         input_csv=getattr(args, "input_csv"),
