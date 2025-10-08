@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Event, Lock
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 from types import SimpleNamespace
 
 import pandas as pd
@@ -60,6 +61,24 @@ class _DummyClient:
 
     def close(self) -> None:  # pragma: no cover - interface compatibility
         return None
+
+
+class _ApiStub:
+    """Lightweight stand-in for :class:`ApiCfg` supporting ``model_copy``."""
+
+    def __init__(self, **attributes: Any) -> None:
+        self.__dict__.update(attributes)
+
+    def model_copy(
+        self,
+        *,
+        update: Mapping[str, Any] | None = None,
+        deep: bool | None = None,  # noqa: ARG002 - signature compatibility
+    ) -> "_ApiStub":
+        data = dict(self.__dict__)
+        if update:
+            data.update(update)
+        return _ApiStub(**data)
 
 
 class _RecordingLogger:
@@ -132,12 +151,14 @@ def test_run_chembl__dry_run_short_circuits(cfg, tmp_path, monkeypatch) -> None:
 
 def test_ensure_molecule_pref_name__concurrent_single_fetch(monkeypatch) -> None:
     cfg = SimpleNamespace(
-        api=SimpleNamespace(),
+        api=_ApiStub(retries=1, backoff_factor=0.1),
         testitem=SimpleNamespace(
             fields=["pref_name"],
             batch_size=10,
             timeout=5.0,
             request_limit=5,
+            retries=None,
+            backoff_factor=None,
         ),
     )
 
@@ -211,6 +232,129 @@ def test_ensure_molecule_pref_name__concurrent_single_fetch(monkeypatch) -> None
     with cache_lock:
         assert cache["CHEMBL1"] == "name-CHEMBL1"
         assert cache["CHEMBL2"] == "name-CHEMBL2"
+
+
+def test_ensure_molecule_pref_name__applies_testitem_retry_overrides(monkeypatch) -> None:
+    cfg = SimpleNamespace(
+        api=_ApiStub(retries=2, backoff_factor=0.5),
+        testitem=SimpleNamespace(
+            fields=["pref_name"],
+            batch_size=2,
+            timeout=5.0,
+            request_limit=5,
+            retries=7,
+            backoff_factor=3.5,
+        ),
+    )
+
+    frame = _make_pref_name_frame()
+    cache: dict[str, str | None] = {}
+    cache_lock = Lock()
+    captured_cfg: dict[str, Any] = {}
+
+    def fake_get_testitem(
+        identifiers: Sequence[str],
+        *,
+        cfg,
+        client,
+        chunk_size,
+        timeout,
+        fields,
+        page_limit,
+    ) -> pd.DataFrame:
+        captured_cfg["cfg"] = cfg
+        return pd.DataFrame(
+            {
+                "molecule_chembl_id": pd.Series(
+                    [str(identifier) for identifier in identifiers], dtype="string"
+                ),
+                "pref_name": pd.Series(
+                    [f"name-{identifier}" for identifier in identifiers], dtype="string"
+                ),
+            }
+        )
+
+    monkeypatch.setattr(get_activity_data.cl, "get_testitem", fake_get_testitem)
+
+    enriched = get_activity_data._ensure_molecule_pref_name(
+        frame,
+        cfg=cfg,
+        client=object(),
+        cache=cache,
+        cache_lock=cache_lock,
+    )
+
+    assert "cfg" in captured_cfg
+    effective_cfg = captured_cfg["cfg"]
+    assert isinstance(effective_cfg, _ApiStub)
+    assert effective_cfg is not cfg.api
+    assert effective_cfg.retries == cfg.testitem.retries
+    assert effective_cfg.backoff_factor == cfg.testitem.backoff_factor
+
+    expected_series = pd.Series(["name-CHEMBL1", "name-CHEMBL2"], dtype="string")
+    pd.testing.assert_series_equal(
+        enriched["molecule_pref_name"], expected_series, check_names=False
+    )
+
+
+def test_ensure_molecule_pref_name__requests_minimal_field_set(monkeypatch) -> None:
+    cfg = SimpleNamespace(
+        api=_ApiStub(),
+        testitem=SimpleNamespace(
+            fields=["molecule_chembl_id", "pref_name", "molecule_properties"],
+            batch_size=2,
+            timeout=5.0,
+            request_limit=5,
+            retries=None,
+            backoff_factor=None,
+        ),
+    )
+
+    frame = _make_pref_name_frame()
+    cache: dict[str, str | None] = {}
+    cache_lock = Lock()
+    captured_fields: list[Sequence[str]] = []
+
+    def fake_get_testitem(
+        identifiers: Sequence[str],
+        *,
+        cfg,
+        client,
+        chunk_size,
+        timeout,
+        fields,
+        page_limit,
+    ) -> pd.DataFrame:
+        captured_fields.append(tuple(fields))
+        return pd.DataFrame(
+            {
+                "molecule_chembl_id": pd.Series(
+                    [str(identifier) for identifier in identifiers], dtype="string"
+                ),
+                "pref_name": pd.Series(
+                    [f"name-{identifier}" for identifier in identifiers], dtype="string"
+                ),
+            }
+        )
+
+    monkeypatch.setattr(get_activity_data.cl, "get_testitem", fake_get_testitem)
+
+    enriched = get_activity_data._ensure_molecule_pref_name(
+        frame,
+        cfg=cfg,
+        client=object(),
+        cache=cache,
+        cache_lock=cache_lock,
+    )
+
+    assert captured_fields == [
+        ("molecule_chembl_id", "molecule_properties", "pref_name")
+    ]
+
+    expected_series = pd.Series(["name-CHEMBL1", "name-CHEMBL2"], dtype="string")
+    pd.testing.assert_series_equal(
+        enriched["molecule_pref_name"], expected_series, check_names=False
+    )
 
 
 @pytest.mark.parametrize(

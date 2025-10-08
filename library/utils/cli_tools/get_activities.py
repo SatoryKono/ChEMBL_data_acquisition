@@ -19,19 +19,27 @@ def parse_args(
 ) -> tuple[argparse.ArgumentParser, argparse.Namespace, cli.LoggerConfig]:
     """Return parser, parsed arguments and logging configuration."""
 
-    parser, log_cfg = cli.build_parser("Generate dummy activity data", column="id")
+    parser, log_cfg = cli.build_parser(
+        "Generate dummy activity data", column="activity_id"
+    )
 
     def _limit(value: str) -> int:
         """Return ``value`` validated as a non-negative integer."""
 
-        if value == "0":
-            return 0
-        return cli.positive_int(value)
+        try:
+            parsed = int(value)
+        except ValueError as exc:  # pragma: no cover - handled by argparse
+            raise argparse.ArgumentTypeError(
+                "limit must be a non-negative integer"
+            ) from exc
+        if parsed < 0:
+            raise argparse.ArgumentTypeError("limit must be a non-negative integer")
+        return parsed
 
     parser.add_argument(
         "--limit",
         type=_limit,
-        default=10,
+        default=None,
         help="Maximum number of activity rows to emit",
     )
     parser.add_argument(
@@ -72,12 +80,25 @@ def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Pat
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the activity generation pipeline."""
 
+    limit = args.limit
+    if limit is None:
+        limit = cfg.activity.limit if cfg.activity.limit is not None else 0
+        if limit < 0:
+            logger.error(
+                "config_error",
+                error="activity.limit must be zero or a positive integer",
+                limit=limit,
+            )
+            return 1
+
+    args.limit = limit
+
     if args.dry_run:
-        logger.info("dry_run", limit=args.limit)
+        logger.info("dry_run", limit=limit)
         return 0
 
     try:
-        frame = _frame_from_records(get_activities(args.limit))
+        frame = _frame_from_records(get_activities(limit))
     except ValueError as exc:
         logger.error("invalid_arguments", error=str(exc))
         return 1

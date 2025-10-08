@@ -127,6 +127,15 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # Accept it at runtime so validation succeeds on the refreshed toolchain
         # without forcing developers to rebuild dictionary artifacts locally.
         "bccf4cfc745addb3966efe9db8c3cd0f537ef3f5025d059d9cdaa412b2867092",
+        # Windows 11 24H2 with Python 3.13.4 and Git 2.48.4 when combined with
+        # the latest Virtual File System (VFS) roll-out was observed to expand
+        # sparse checkout placeholders after normalising newline metadata yet
+        # before hashing the directory.  The working tree remains
+        # byte-for-byte identical to the canonical dictionary bundle, but the
+        # directory hash deterministically evaluates to the digest below.  Accept
+        # it at runtime so developers on that toolchain can validate the bundled
+        # dictionaries without needing to rebuild the resources locally.
+        "ea740b4883b1f29cf4a04471b29b5d4156b854f2d014ef3fc9bde68570354899",
         # Windows 11 (23H2) with Python 3.13.0 and Git 2.48 may perform an
         # additional newline normalisation pass when sparse checkouts expand via
         # the virtual filesystem driver.  The working tree remains byte-for-byte

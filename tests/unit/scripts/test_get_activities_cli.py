@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from library.config import Config
 from library.utils.cli_tools import get_activities
 
 
@@ -31,7 +32,7 @@ def test_main__limit_forwarded_to_pipeline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     input_csv = tmp_path / "input.csv"
-    input_csv.write_text("id\nCHEMBL1\n", encoding="utf-8")
+    input_csv.write_text("activity_id\nCHEMBL1\n", encoding="utf-8")
     output_csv = tmp_path / "output.csv"
 
     observed: dict[str, int] = {}
@@ -85,7 +86,7 @@ def test_main__dry_run_skips_fetch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     input_csv = tmp_path / "input.csv"
-    input_csv.write_text("id\nCHEMBL1\n", encoding="utf-8")
+    input_csv.write_text("activity_id\nCHEMBL1\n", encoding="utf-8")
     output_csv = tmp_path / "output.csv"
 
     called: dict[str, bool] = {"value": False}
@@ -129,3 +130,69 @@ def test_main__dry_run_skips_fetch(
     assert called["value"] is False
     assert writer_calls == []
     assert ("info", "dry_run", {"limit": 5}) in logger_stub.events
+
+
+@pytest.mark.unit
+def test_main__config_limit_used_when_cli_omitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("id\nCHEMBL1\n", encoding="utf-8")
+    output_csv = tmp_path / "output.csv"
+
+    cfg.activity.limit = 4
+
+    observed: dict[str, int] = {}
+
+    def _fake_get_activities(limit: int) -> list[dict[str, int]]:
+        observed["limit"] = limit
+        return [{"activity_id": idx} for idx in range(limit)]
+
+    monkeypatch.setattr(
+        "library.pipelines.activity.get_activities",
+        _fake_get_activities,
+    )
+    monkeypatch.setattr(get_activities, "get_activities", _fake_get_activities)
+
+    writer_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    original_prepare = get_activities.cli.prepare_io_paths
+
+    def _prepare_io_paths(args: object, *, output_stem: str | None = None) -> None:
+        original_prepare(args, output_stem=output_stem)
+        setattr(args, "writer", lambda *a, **kw: writer_calls.append((a, kw)))
+
+    monkeypatch.setattr(get_activities.cli, "prepare_io_paths", _prepare_io_paths)
+    monkeypatch.setattr(get_activities.cli, "configure_logger", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        get_activities.cli,
+        "apply_config_overrides",
+        lambda args, parser, config: cfg,
+    )
+    monkeypatch.setattr(get_activities, "ensure_dirs", lambda _cfg: None)
+
+    logger_stub = _LoggerStub()
+    monkeypatch.setattr(get_activities, "logger", logger_stub)
+
+    exit_code = get_activities.main(
+        [
+            "--input",
+            str(input_csv),
+            "--final-out",
+            str(output_csv),
+        ]
+    )
+
+    assert exit_code == 0
+    assert observed["limit"] == 4
+    assert writer_calls == []
+    assert (
+        "info",
+        "generated",
+        {"count": 4, "output": str(output_csv)},
+    ) in logger_stub.events
+def test_parse_args__invalid_limit_error_message(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        get_activities.parse_args(["--limit", "-1"])
+
+    captured = capsys.readouterr()
+    assert "limit must be a non-negative integer" in captured.err
