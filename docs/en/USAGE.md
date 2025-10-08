@@ -87,7 +87,7 @@ Common options:
 | `--mode` | required | Selects the processing flow. |
 | `--column` | Mode specific (`PMID` for `pubmed`, `document_chembl_id` otherwise) | Input column holding identifiers. |
 | `--limit`, `--offset` | `None`, `0` | Control record ranges. |
-| `--timeout` | `30.0` for `chembl`/`all`, `10.0` for `pubmed` | Applied to HTTP calls. |
+| `--timeout` | `90.0` for `chembl`/`all`, `10.0` for `pubmed` | Applied to HTTP calls. |
 | `--openalex-rps`, `--crossref-rps` | `None` | Optional overrides for partner APIs when running `pubmed` or `all`. |
 
 PubMed specific flags (`--mode pubmed` or `all`):
@@ -99,7 +99,7 @@ PubMed specific flags (`--mode pubmed` or `all`):
 
 ChEMBL specific flags (`--mode chembl` or `all`):
 
-- `--chunk-size` — identifiers per API call (default `5`).
+- `--chunk-size` — identifiers per API call (default `20`).
 - `--chembl-chunk-size`, `--chembl-timeout` — overrides applied only when running
   `--mode all`.
 
@@ -159,8 +159,8 @@ Shared options across all modes:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--column` | `target_chembl_id` | ChEMBL target identifier column. |
-| `--chunk-size` | `5` | Identifiers per request. |
-| `--timeout` | `30.0` | Request timeout. |
+| `--chunk-size` | `3` | Identifiers per request. |
+| `--timeout` | `90.0` | Request timeout. |
 
 #### `iuphar`
 
