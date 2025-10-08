@@ -85,6 +85,14 @@ _REQUIRED_COLUMN_DTYPES: Mapping[str, str] = {
     "nstereo": "Int64",
 }
 
+_OPTIONAL_EMPTY_BACKFILL_COLUMNS: frozenset[str] = frozenset(
+    {
+        "multmol_assay",
+        "original_activity_approx",
+        "original_activity_exact",
+    }
+)
+
 _NA_MARKERS: tuple[str, ...] = ("[#N/A]",)
 
 _ACTIVITY_INPUT_SCHEMA: Mapping[str, str] = {
@@ -1271,25 +1279,45 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
     if not log_value_filled and not log_value_column_present and not log_value_series.notna().any():
         filled.discard("log_value")
 
-    bool_defaults = {
-        "multmol_assay",
+    bool_defaults = (
         "approx_cited_activity",
         "shuffled_cit",
         "exact_cited_activity",
         "higly_correlated_cit",
         "review_doc",
         "rounded_data_citation",
-    }
+    )
     for column in bool_defaults:
         if column not in df.columns:
             df[column] = pd.Series(False, index=df.index, dtype="boolean")
             filled.add(column)
+            continue
 
-    float_defaults = {"original_activity_approx", "original_activity_exact"}
-    for column in float_defaults:
-        if column not in df.columns:
-            df[column] = pd.Series(pd.NA, index=df.index, dtype="Float64")
+        series = _safe_to_bool(df[column], column)
+        try:
+            series = series.astype("boolean")
+        except (TypeError, ValueError):
+            mask = series.isna()
+            if mask.any():
+                series = series.copy()
+                series.loc[mask] = False
+                filled.add(column)
+            df[column] = series
+            continue
+
+        mask = series.isna()
+        if mask.any():
+            series = series.copy()
+            series.loc[mask] = False
             filled.add(column)
+        df[column] = series
+
+    string_defaults = {"original_activity_approx", "original_activity_exact"}
+    for column in string_defaults:
+        if column not in df.columns:
+            df[column] = pd.Series(pd.NA, index=df.index, dtype="string")
+        else:
+            df[column] = df[column].astype("string")
 
     if "salt_chembl_id" not in df.columns:
         df["salt_chembl_id"] = pd.Series(pd.NA, index=df.index, dtype="string")
@@ -1341,7 +1369,11 @@ def _transform_activity_frame(
         unresolved_columns = sorted(
             column
             for column in filled
-            if column not in df.columns or df[column].isna().all()
+            if column not in df.columns
+            or (
+                df[column].isna().all()
+                and column not in _OPTIONAL_EMPTY_BACKFILL_COLUMNS
+            )
         )
         resolved_columns = sorted(set(filled) - set(unresolved_columns))
 
