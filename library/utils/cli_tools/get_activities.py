@@ -24,9 +24,15 @@ def parse_args(
     def _limit(value: str) -> int:
         """Return ``value`` validated as a non-negative integer."""
 
-        if value == "0":
-            return 0
-        return cli.positive_int(value)
+        try:
+            parsed = int(value)
+        except ValueError as exc:  # pragma: no cover - handled by argparse
+            raise argparse.ArgumentTypeError(
+                "limit must be a non-negative integer"
+            ) from exc
+        if parsed < 0:
+            raise argparse.ArgumentTypeError("limit must be a non-negative integer")
+        return parsed
 
     parser.add_argument(
         "--limit",
