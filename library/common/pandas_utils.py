@@ -126,10 +126,17 @@ def merge_series_prefer_left(left: pd.Series, right: pd.Series) -> pd.Series:
     left_work = left.copy()
     right_work = right.copy()
 
-    if not original_index.equals(right.index):
+    requires_alignment = (
+        not original_index.equals(right.index)
+        or not left_work.index.is_unique
+        or not right_work.index.is_unique
+    )
+
+    if requires_alignment:
         left_work = _ensure_unique_index(left_work, always_multi=True)
         right_work = _ensure_unique_index(right_work, always_multi=True)
-        right_work = right_work.reindex(left_work.index)
+        if not left_work.index.equals(right_work.index):
+            right_work = right_work.reindex(left_work.index)
 
     result = left_work.copy()
     missing_mask = result.isna()
