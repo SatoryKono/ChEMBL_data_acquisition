@@ -10,7 +10,7 @@ or via the console scripts installed from `pyproject.toml` (`get-data`,
 |--------|-------------|
 | `--config` | Path to the YAML configuration file. Defaults to `config/config.yaml`. |
 | `--input` | CSV file containing identifiers for the pipeline. When omitted the orchestrator builds the path from `--base-path` and `--input-dir`. |
-| `--final-out` | Destination CSV. If omitted a deterministic filename `output.<stem>_<YYYYMMDD>.csv` is generated inside the resolved output directory. |
+| `--final-out` | Destination CSV. If omitted a deterministic filename `output.<stem>.csv` is generated inside the resolved output directory. Provide `--date` or set `io.output_stamp_mode=require` to append the date token. |
 | `--sep`, `--encoding` | CSV delimiter and encoding. Inherit defaults from the configuration. |
 | `--log-level` | Logging verbosity (`DEBUG`, `INFO`, `WARN`, `ERROR`). |
 | `--verbose` | Shortcut to enable DEBUG logging without editing configuration files. |
