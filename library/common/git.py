@@ -233,6 +233,11 @@ def _git_sha() -> str:
         logger.info("git_directory_missing", path=str(repo_root))
         return "UNKNOWN"
 
+    head_sha = _read_head_sha(git_dir)
+    if head_sha is not None:
+        logger.info("git_sha_head", sha=head_sha)
+        return head_sha
+
     git_executable = shutil.which("git")
     if git_executable is None:
         fallback = _read_head_sha(git_dir)
