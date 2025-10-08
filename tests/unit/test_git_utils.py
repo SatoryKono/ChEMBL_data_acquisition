@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -70,3 +71,66 @@ def test_git_sha__shared_singleton() -> None:
     legacy = importlib.import_module("library.git_utils")
 
     assert legacy._git_sha is common._git_sha
+
+
+@pytest.mark.unit
+def test_git_sha__github_desktop_fallback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """GitHub Desktop shims should fall back to the bundled Git executable."""
+
+    module = importlib.import_module("library.common.git")
+
+    cache_clear = getattr(module._git_sha, "cache_clear", None)
+    if cache_clear is None:  # pragma: no cover - defensive guard
+        pytest.skip("_git_sha missing cache_clear helper")
+    cache_clear()
+
+    repo_root = tmp_path / "repo"
+    git_dir = repo_root / ".git"
+    repo_root.mkdir()
+    git_dir.mkdir()
+    (git_dir / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf8")
+    ref_dir = git_dir / "refs" / "heads"
+    ref_dir.mkdir(parents=True)
+    (ref_dir / "main").write_text("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n", encoding="utf8")
+
+    desktop_root = tmp_path / "GitHubDesktop"
+    stub = desktop_root / "git.exe"
+    actual_git = (
+        desktop_root
+        / "app-3.3.0"
+        / "resources"
+        / "app"
+        / "git"
+        / "cmd"
+        / "git.exe"
+    )
+    desktop_root.mkdir()
+    actual_git.parent.mkdir(parents=True, exist_ok=True)
+    stub.touch()
+    actual_git.touch()
+
+    commands: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        commands.append(cmd)
+        if cmd[0] == str(stub):
+            raise subprocess.CalledProcessError(
+                returncode=4294967295,
+                cmd=cmd,
+                stderr="stub failed",
+            )
+        if cmd[0] == str(actual_git):
+            return subprocess.CompletedProcess(cmd, 0, stdout="deadbeef\n", stderr="")
+        raise AssertionError(f"Unexpected command: {cmd!r}")
+
+    monkeypatch.setattr(module, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(module.shutil, "which", lambda _: str(stub))
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.delenv("GIT_SHA", raising=False)
+
+    sha = module._git_sha()
+
+    assert sha == "deadbeef"
+    assert [cmd[0] for cmd in commands] == [str(stub), str(actual_git)]
+
+    cache_clear()
