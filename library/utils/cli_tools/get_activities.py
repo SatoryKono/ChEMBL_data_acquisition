@@ -19,7 +19,9 @@ def parse_args(
 ) -> tuple[argparse.ArgumentParser, argparse.Namespace, cli.LoggerConfig]:
     """Return parser, parsed arguments and logging configuration."""
 
-    parser, log_cfg = cli.build_parser("Generate dummy activity data", column="id")
+    parser, log_cfg = cli.build_parser(
+        "Generate dummy activity data", column="activity_id"
+    )
 
     def _limit(value: str) -> int:
         """Return ``value`` validated as a non-negative integer."""
