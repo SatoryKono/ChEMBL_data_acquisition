@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+import requests
 from urllib3.util import retry as urllib3_retry
 
 from library.clients import pubmed
@@ -118,6 +119,38 @@ def test_pubmed_cfg__rejects_placeholder_email() -> None:
 def test_pubmed_cfg__requires_non_empty_tool() -> None:
     with pytest.raises(ValueError):
         PubMedCfg(tool="   ")
+
+
+@pytest.mark.unit
+def test_do_request__connect_timeout_logs_without_traceback(caplog: pytest.LogCaptureFixture) -> None:
+    class _TimeoutSession:
+        def get(
+            self,
+            url: str,
+            *,
+            timeout: float | tuple[float, float],
+            **kwargs: object,
+        ) -> None:
+            raise requests.exceptions.ConnectTimeout("boom")
+
+    session = _TimeoutSession()
+
+    with caplog.at_level("INFO", logger="chembl"):
+        data, error = pubmed._do_request(
+            session,
+            "https://api.openalex.org/works/pmid:20143779",
+            0.0,
+            retries=0,
+            timeout=1.0,
+        )
+
+    assert data is None
+    assert error == "boom"
+    assert caplog.records, "Expected log record for failed request"
+    record = caplog.records[-1]
+    assert record.levelname == "WARNING"
+    assert "request_fail" in record.getMessage()
+    assert record.exc_info is None
 def test_session_with_retry__disables_urllib3_retries() -> None:
     api_cfg = ApiCfg()
     retry_cfg = RetryCfg(max_attempts=4, backoff_factor=1.0, backoff_cap=None)
