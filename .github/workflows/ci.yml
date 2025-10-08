@@ -40,6 +40,8 @@ jobs:
       - name: Type check
         run: mypy --strict library
       - name: Run tests
+        id: run-tests
+        continue-on-error: true
         run: python -m scripts.run_tests
       - name: Upload test reports
         if: always()
@@ -51,6 +53,33 @@ jobs:
             reports/test_summary.md
             reports/coverage
           if-no-files-found: warn
+      - name: Publish test summary to job summary
+        if: always()
+        run: |
+          if [ -f reports/test_summary.md ]; then
+            cat reports/test_summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "# Test Summary";
+              echo "reports/test_summary.md was not generated";
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Check test success rate
+        id: check-success-rate
+        if: always()
+        continue-on-error: true
+        run: python -m scripts.check_test_success_rate --report reports/test_report.json --threshold 95
+      - name: Enforce test quality gates
+        if: always()
+        run: |
+          if [ "${{ steps.run-tests.outcome }}" != "success" ]; then
+            echo "pytest execution failed; see previous logs for details" >&2
+            exit 1
+          fi
+          if [ "${{ steps.check-success-rate.outcome }}" != "success" ]; then
+            echo "Test success rate check failed" >&2
+            exit 1
+          fi
       - name: Determinism smoke test
         run: python scripts/check_determinism.py --limit 5
       - name: Smoke test get_data orchestrator
