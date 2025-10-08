@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+from uuid import uuid4
 
 import pandas as pd
 
@@ -82,17 +83,30 @@ def _frame_from_records(records: Iterable[dict[str, object]]) -> pd.DataFrame:
 
 
 def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Path:
-    """Persist ``frame`` and accompanying metadata to ``output_path``."""
+    """Persist ``frame`` and accompanying metadata to ``output_path`` atomically."""
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    written = io.write_csv(frame, output_path, cfg=cfg)
+    temp_path = output_path.with_name(
+        f".{output_path.name}.{uuid4().hex}.tmp"
+    )
+    written = io.write_csv(frame, temp_path, cfg=cfg)
+    temp_meta = Path(f"{written}.meta.yaml")
+
+    try:
+        written.replace(output_path)
+    except Exception:
+        written.unlink(missing_ok=True)
+        raise
+    finally:
+        temp_meta.unlink(missing_ok=True)
+
     io.write_meta_yaml(
-        written,
+        output_path,
         cfg=cfg,
         columns=list(frame.columns),
         dtypes={col: str(dtype) for col, dtype in frame.dtypes.items()},
     )
-    return written
+    return output_path
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
@@ -115,12 +129,6 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("dry_run", limit=limit)
         return 0
 
-    try:
-        frame = _frame_from_records(get_activities(limit))
-    except ValueError as exc:
-        logger.error("invalid_arguments", error=str(exc))
-        return 1
-
     output_candidate = getattr(args, "output_csv", None)
     input_candidate = getattr(args, "input_csv", None)
     if output_candidate in (None, argparse.SUPPRESS):
@@ -130,6 +138,18 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         setattr(args, "final_out", output_path)
     else:
         output_path = Path(output_candidate)
+
+    if bool(getattr(args, "skip_existing", False)) and output_path.exists() and not bool(
+        getattr(args, "force", False)
+    ):
+        logger.info("pipeline_skip_existing", output=str(output_path))
+        return 0
+
+    try:
+        frame = _frame_from_records(get_activities(limit))
+    except ValueError as exc:
+        logger.error("invalid_arguments", error=str(exc))
+        return 1
 
     written_path = _write_output(frame, output_path, cfg=cfg)
     logger.info(
