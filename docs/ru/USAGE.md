@@ -86,7 +86,7 @@ python scripts/get_data.py \
 | `--mode` | обязательно | Выбор сценария. |
 | `--column` | Зависит от режима (`PMID` для `pubmed`, `document_chembl_id` в остальных случаях) | Колонка с идентификаторами. |
 | `--limit`, `--offset` | `None`, `0` | Управление диапазоном. |
-| `--timeout` | `30.0` (`chembl`/`all`), `10.0` (`pubmed`) | Таймаут HTTP-запросов. |
+| `--timeout` | `90.0` (`chembl`/`all`), `10.0` (`pubmed`) | Таймаут HTTP-запросов. |
 | `--openalex-rps`, `--crossref-rps` | `None` | Переопределение ограничений для партнёрских API при режимах `pubmed` или `all`. |
 
 Флаги PubMed (`--mode pubmed` или `all`):
@@ -98,7 +98,7 @@ python scripts/get_data.py \
 
 Флаги ChEMBL (`--mode chembl` или `all`):
 
-- `--chunk-size` — количество идентификаторов на запрос (по умолчанию `5`).
+- `--chunk-size` — количество идентификаторов на запрос (по умолчанию `20`).
 - `--chembl-chunk-size`, `--chembl-timeout` — переопределения для режима `all`.
 
 Обработка резервных DOI:
@@ -156,8 +156,8 @@ python scripts/get_document_data.py --mode pubmed \
 | Опция | Значение | Описание |
 |-------|----------|----------|
 | `--column` | `target_chembl_id` | Колонка с идентификаторами ChEMBL. |
-| `--chunk-size` | `5` | Идентификаторов на запрос. |
-| `--timeout` | `30.0` | Таймаут запросов. |
+| `--chunk-size` | `3` | Идентификаторов на запрос. |
+| `--timeout` | `90.0` | Таймаут запросов. |
 
 #### `iuphar`
 
