@@ -89,3 +89,38 @@ def test_make_request__caches_server_error_results(
     assert len(session.calls) == cfg.retries + 1
     assert limiter.acquires == cfg.retries + 1
     assert sleep_calls == [30.0]
+
+
+def test_make_request__invalid_identifier_cached(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = PubChemCfg()
+
+    url = (
+        f"{cfg.base.rstrip('/')}/compound/inchi/"
+        "InChI%3D1S%2FC7H8N4O2%2Fc8-6-4-2-1-3-5(6)7(9)11-10%2Fh1-4H%2C8H2%2C(,9,10,11)"
+        "/cids/JSON"
+    )
+
+    limiter = _DummyLimiter()
+    monkeypatch.setattr(pubchem, "get_limiter", lambda *_args, **_kwargs: limiter)
+
+    session = _DummySession(lambda: _DummyResponse(400, {}))
+    monkeypatch.setattr(pubchem, "get_session", lambda *_args, **_kwargs: session)
+    monkeypatch.setattr(pubchem, "_CACHE", None)
+
+    result = pubchem.make_request(url, cfg)
+
+    assert result is None
+    assert session.calls == [(url, (cfg.timeout_connect, cfg.timeout_read))]
+    assert limiter.acquires == 1
+
+    cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
+    entry = cache.get(url)
+    assert entry is not None
+    assert entry.outcome == "invalid_identifier"
+    assert entry.details == {"reason": "invalid_identifier", "status": 400}
+
+    second = pubchem.make_request(url, cfg)
+
+    assert second is None
+    assert session.calls == [(url, (cfg.timeout_connect, cfg.timeout_read))]
+    assert limiter.acquires == 1
