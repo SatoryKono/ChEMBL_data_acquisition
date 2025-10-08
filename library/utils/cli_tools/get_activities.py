@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+import tempfile
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
@@ -59,7 +61,21 @@ def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Pat
     """Persist ``frame`` and accompanying metadata to ``output_path``."""
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    written = io.write_csv(frame, output_path, cfg=cfg)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(output_path.parent),
+        prefix=f".{output_path.name}.",
+        suffix=output_path.suffix or ".tmp",
+    )
+    os.close(fd)
+    tmp_path = Path(tmp_name)
+    try:
+        io.write_csv(frame, tmp_path, cfg=cfg)
+        written = tmp_path.replace(output_path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    else:
+        tmp_path.unlink(missing_ok=True)
     io.write_meta_yaml(
         written,
         cfg=cfg,
@@ -91,6 +107,12 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         setattr(args, "final_out", output_path)
     else:
         output_path = Path(output_candidate)
+
+    if output_path.exists() and getattr(args, "skip_existing", False) and not getattr(
+        args, "force", False
+    ):
+        logger.info("pipeline_skip_existing", output=str(output_path))
+        return 0
 
     written_path = _write_output(frame, output_path, cfg=cfg)
     logger.info(
