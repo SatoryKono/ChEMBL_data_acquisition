@@ -243,6 +243,18 @@ python scripts/get_assay_data.py \
 | `--workers` | `1` | Потоки для скачивания активностей. |
 | `--dry-run` | `False` | Проверка без обращения к API и записи файлов. |
 
+Пример: использование канонической колонки `activity_id` и нескольких потоков
+для ускорения выгрузки.
+
+```bash
+python scripts/get_activity_data.py \
+  --input data/input/activity.csv \
+  --final-out output/activities_subset.csv \
+  --column activity_id \
+  --batch-size 10 \
+  --workers 4
+```
+
 Пост-обработка вычисляет `lower_value`/`upper_value` по алгоритму из
 [`../OUTPUT.md`](../OUTPUT.md).
 
