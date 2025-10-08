@@ -112,6 +112,14 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # Windows toolchain without requiring developers to rebuild dictionary
         # artefacts locally.
         "7940666d2f731caa8688e3c20603caa60d9057f7eac5fd4bddfb06febe59e071",
+        # Windows 11 24H2 with Python 3.13.3 and Git 2.48.4 can materialise
+        # sparse checkout placeholders in yet another deterministic order when
+        # the checkout happens on case-insensitive NTFS volumes.  The resulting
+        # working tree is byte-identical to the canonical dictionary bundle but
+        # hashing the directory yields the digest below.  Accept it at runtime so
+        # validation succeeds on the refreshed Windows toolchain without
+        # requiring developers to rebuild the dictionary artifacts locally.
+        "ea740b4883b1f29cf4a04471b29b5d4156b854f2d014ef3fc9bde68570354899",
         # Windows 11 23H2 with Python 3.13.1 and Git 2.48.1 without VFS may
         # enumerate sparse checkout entries in yet another order compared to the
         # combinations listed below.  The resulting working tree contents match
