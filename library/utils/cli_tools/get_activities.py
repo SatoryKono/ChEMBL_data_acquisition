@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+import tempfile
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from uuid import uuid4
@@ -102,6 +104,22 @@ def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Pat
     finally:
         temp_meta.unlink(missing_ok=True)
 
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(output_path.parent),
+        prefix=f".{output_path.name}.",
+        suffix=output_path.suffix or ".tmp",
+    )
+    os.close(fd)
+    tmp_path = Path(tmp_name)
+    try:
+        io.write_csv(frame, tmp_path, cfg=cfg)
+        written = tmp_path.replace(output_path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    else:
+        tmp_path.unlink(missing_ok=True)
     io.write_meta_yaml(
         output_path,
         cfg=cfg,
@@ -145,27 +163,8 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     else:
         output_path = Path(output_candidate)
 
-    parent = output_path.parent
-    if not parent.exists():
-        if cfg.io.exist_ok:
-            parent.mkdir(parents=True, exist_ok=True)
-        else:
-            logger.error(
-                "output_directory_missing",
-                directory=str(parent),
-                output=str(output_path),
-            )
-            return 1
-    elif not parent.is_dir():
-        logger.error(
-            "output_directory_not_directory",
-            directory=str(parent),
-            output=str(output_path),
-        )
-        return 1
-
-    if bool(getattr(args, "skip_existing", False)) and output_path.exists() and not bool(
-        getattr(args, "force", False)
+    if output_path.exists() and getattr(args, "skip_existing", False) and not getattr(
+        args, "force", False
     ):
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0
