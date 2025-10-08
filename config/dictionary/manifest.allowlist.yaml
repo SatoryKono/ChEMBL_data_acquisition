@@ -56,3 +56,10 @@ dictionary_root:
   # below.  Include it here so repository checkouts on the refreshed Windows
   # stack pass validation without requiring a manual dictionary rebuild.
   - "387d8a4b45d8960e5f899b85199a1013d3029258b8b75f42c6a0365f402023db"
+  # Windows 11 24H2 with Python 3.13.3 and Git 2.49.0 when ``core.autocrlf`` is
+  # enabled performs an extra newline canonicalisation pass as the sparse index
+  # hydrates through the VFS driver.  The dictionary payload stays
+  # byte-identical yet hashing the directory yields the checksum below.  Accept
+  # it here so validation succeeds on the refreshed Windows tooling without
+  # forcing developers to rebuild the bundled dictionaries locally.
+  - "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b"

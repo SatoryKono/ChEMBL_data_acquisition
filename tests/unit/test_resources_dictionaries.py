@@ -61,6 +61,7 @@ def test_normalise_text_newlines__binary_payload_preserved() -> None:
         dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM,
         dictionaries.WINDOWS_VFS_EAGER_PLACEHOLDER_CHECKSUM,
         dictionaries.WINDOWS_VFS_NTFS_CHECKSUM,
+        "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b",
     ),
 )
 def test_parse_manifest__accepts_known_checksum_variants(
