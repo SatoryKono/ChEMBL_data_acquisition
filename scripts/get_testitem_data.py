@@ -1,6 +1,6 @@
 """Command line interface for retrieving ChEMBL test item data.
 
-The module wraps :func:`library.testitem_pipeline.run_testitem_pipeline` while
+The module wraps :func:`library.pipelines.testitem.run_testitem_pipeline` while
 exposing helpers that tests can import directly. Entry points return numeric
 exit codes rather than terminating the interpreter to simplify orchestration.
 The :func:`ensure_no_parant_column` helper guards against legacy CSV exports
@@ -48,9 +48,9 @@ from library.config import (
 )
 from library.common.log import logger
 from library.clients import pubchem as pc  # noqa: F401 - patched in tests
-import library.testitem_pipeline as pipeline
+from library.pipelines import testitem as pipeline
 from library.integration.chembl_client import ChemblClient
-from library.testitem_pipeline import (
+from library.pipelines.testitem import (
     PUBCHEM_CID_CACHE_ENCODING,
     PUBCHEM_COLUMNS,
     ReadInputIdsResult,
@@ -80,8 +80,8 @@ from library.testitem_pipeline import (
     PARENT_LOOKUP_SOURCE_SKIPPED,
     PARENT_LOOKUP_SOURCE_SYNC,
 )
-from library.testitem_pipeline import catalog as pipeline_catalog
-from library.testitem_pipeline import pubchem as pipeline_pubchem
+from library.pipelines.testitem import catalog as pipeline_catalog
+from library.pipelines.testitem import pubchem as pipeline_pubchem
 
 configure_logger = cli.configure_logger
 
@@ -133,7 +133,7 @@ def load_molecule_hierarchy_lookup(
     """Return child → parent mapping loaded from a local hierarchy file.
 
     The returned mapping mirrors
-    :func:`library.testitem_pipeline.load_molecule_hierarchy_lookup` where
+    :func:`library.pipelines.testitem.load_molecule_hierarchy_lookup` where
     values may be ``None`` when no parent is listed in the hierarchy.
     """
 
@@ -511,7 +511,7 @@ def add_pubchem_data(
 ) -> pd.DataFrame:
     """Augment ChEMBL records with PubChem information.
 
-    Delegates to :func:`library.testitem_pipeline.add_pubchem_data` while
+    Delegates to :func:`library.pipelines.testitem.add_pubchem_data` while
     relaxing the ``resolution_cache`` type to align with
     :func:`library.integration.pubchem_library.resolve_pubchem_record`.
     """

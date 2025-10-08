@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from library.config import PubChemCfg
-import library.testitem_pipeline.pubchem as pubchem
+from library.pipelines.testitem import pubchem
 
 
 @pytest.mark.integration

@@ -93,7 +93,6 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         output_path = Path(output_candidate)
 
     written_path = _write_output(frame, output_path, cfg=cfg)
-    logger.info("generated", count=int(frame.shape[0]))
     logger.info(
         "activity_generated",
         count=int(frame.shape[0]),

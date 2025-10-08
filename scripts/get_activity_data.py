@@ -75,6 +75,11 @@ from library.cli_utils import (
 from library.config import Config, _serialize_paths
 from library.common.log import logger
 from library.cli.logging import setup_cli_logging
+from library.cli.commands.get_activity_data import (
+    ActivityCommandOptions,
+    MIN_ACTIVITY_TIMEOUT,
+    run_activity_pipeline,
+)
 from library.pipelines.activity import run as activity_run
 from library.pipelines.common import add_pipeline_metadata
 from library.pipelines.common.metadata import get_pipeline_version
@@ -93,7 +98,6 @@ from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_dela
 
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
-MIN_ACTIVITY_TIMEOUT = 60.0
 PROGRAM_NAME = Path(__file__).with_suffix("").name
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
@@ -1542,97 +1546,38 @@ def _generate_activity_postprocess_metrics(
     return metrics, report_path
 
 
+def _coerce_cli_path(value: object) -> Path | str | None:
+    """Normalise optional CLI path parameters for helper delegation."""
+
+    if value in (None, argparse.SUPPRESS):
+        return None
+    return value  # ``run_activity_pipeline`` handles conversion to :class:`Path`.
+
+
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the activity pipeline handling ``--skip-existing`` semantics."""
 
-    start_time = perf_counter()
+    options = ActivityCommandOptions(
+        input_csv=getattr(args, "input_csv"),
+        output_csv=_coerce_cli_path(getattr(args, "output_csv", None)),
+        final_output=_coerce_cli_path(getattr(args, "final_out", None)),
+        limit=getattr(args, "limit", None),
+        offset=getattr(args, "offset", 0),
+        timeout=getattr(args, "timeout", None),
+        batch_size=getattr(args, "batch_size", None),
+        workers=getattr(args, "workers", None),
+        dry_run=getattr(args, "dry_run", False),
+        skip_existing=getattr(args, "skip_existing", False),
+        force=getattr(args, "force", False),
+        invocation=getattr(args, "invocation", None),
+    )
 
-    batch_size = getattr(cfg.activity, "batch_size", None)
-    if batch_size is not None and batch_size > MAX_ACTIVITY_CHUNK_SIZE:
-        logger.warning(
-            "activity_batch_size_clamped",
-            configured=batch_size,
-            limit=MAX_ACTIVITY_CHUNK_SIZE,
-        )
-        logger.warning(
-            f"Configured batch size {batch_size} exceeds the hard cap of {MAX_ACTIVITY_CHUNK_SIZE}; "
-            f"reducing to {MAX_ACTIVITY_CHUNK_SIZE}."
-        )
-        cfg.activity.batch_size = MAX_ACTIVITY_CHUNK_SIZE
-
-    timeout = getattr(cfg.activity, "timeout", None)
-    if timeout is not None and timeout < MIN_ACTIVITY_TIMEOUT:
-        logger.warning(
-            "activity_timeout_clamped",
-            configured=timeout,
-            minimum=MIN_ACTIVITY_TIMEOUT,
-        )
-        logger.warning(
-            f"Configured timeout {timeout} is below the minimum of {MIN_ACTIVITY_TIMEOUT}; "
-            f"increasing to {MIN_ACTIVITY_TIMEOUT}."
-        )
-        minimum_timeout = float(MIN_ACTIVITY_TIMEOUT)
-        cfg.activity.timeout = minimum_timeout
-        if hasattr(args, "timeout"):
-            try:
-                args.timeout = float(minimum_timeout)
-            except (TypeError, ValueError):  # pragma: no cover - defensive
-                args.timeout = minimum_timeout
-
-    retry_attempts = getattr(cfg.retry, "max_attempts", None)
-    if retry_attempts is not None and retry_attempts <= 1:
-        logger.warning(
-            "activity_retry_disabled",
-            configured=retry_attempts,
-        )
-        logger.warning(
-            "Configured system.retry.max_attempts=%s disables urllib3 retry handling; "
-            "increase to at least 2 to tolerate transient network issues.",
-            retry_attempts,
-        )
-
-    api_retries = getattr(cfg.api, "retries", None)
-    if api_retries is not None and api_retries <= 0:
-        logger.warning(
-            "activity_api_retry_disabled",
-            configured=api_retries,
-        )
-        logger.warning(
-            "Configured chembl.api.retries=%s disables client-level request retries; "
-            "increase to 1 or more for resilience.",
-            api_retries,
-        )
-
-    final_out_attr = getattr(args, "final_out", None)
-    if final_out_attr in (None, argparse.SUPPRESS):
-        legacy_output = getattr(args, "output_csv", None)
-        if legacy_output not in (None, argparse.SUPPRESS):
-            output_path = Path(legacy_output)
-            if not isinstance(legacy_output, Path):
-                args.final_out = output_path
-            setattr(args, "output_csv", output_path)
-        else:
-            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
-            args.final_out = output_path
-            setattr(args, "output_csv", output_path)
-    else:
-        output_path = Path(final_out_attr)
-        if not isinstance(final_out_attr, Path):
-            args.final_out = output_path
-        setattr(args, "output_csv", output_path)
-    if args.skip_existing and output_path.exists() and not args.force:
-        logger.info("pipeline_skip_existing", output=str(output_path))
-        logger.info(
-            f"Skipping execution because '{output_path}' already exists and --force was not provided."
-        )
-        _emit_completion_message(
-            output_path=output_path,
-            processed_rows=None,
-            duration_s=perf_counter() - start_time,
-            mode="skip_existing",
-        )
-        return 0
-    return run_chembl(cfg, args)
+    return run_activity_pipeline(
+        cfg,
+        options,
+        runner=run_chembl,
+        emit_completion_message=_emit_completion_message,
+    )
 
 
 def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:

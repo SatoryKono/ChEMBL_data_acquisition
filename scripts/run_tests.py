@@ -1,4 +1,5 @@
 """Run the test suite and produce structured JSON and Markdown reports."""
+
 from __future__ import annotations
 
 import argparse
@@ -18,13 +19,25 @@ from library.cli import configure_logger, create_logger_config
 from library.cli.logging import setup_cli_logging
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-REPORTS_DIR = ROOT_DIR / "reports"
-RAW_REPORT_FILE = REPORTS_DIR / "pytest_raw_report.json"
-REPORT_FILE = REPORTS_DIR / "test_report.json"
-SUMMARY_FILE = REPORTS_DIR / "test_summary.md"
-COVERAGE_DIR = REPORTS_DIR / "coverage"
+DEFAULT_REPORTS_DIR = ROOT_DIR / "reports"
+RAW_REPORT_FILE = DEFAULT_REPORTS_DIR / "pytest_raw_report.json"
+DEFAULT_REPORT_FILE = DEFAULT_REPORTS_DIR / "test_report.json"
+DEFAULT_SUMMARY_FILE = DEFAULT_REPORTS_DIR / "test_summary.md"
+COVERAGE_DIR = DEFAULT_REPORTS_DIR / "coverage"
 COVERAGE_XML = COVERAGE_DIR / "coverage.xml"
 COVERAGE_HTML = COVERAGE_DIR / "html"
+# Backwards-compatible aliases for tests and external callers.
+REPORTS_DIR = DEFAULT_REPORTS_DIR
+REPORT_FILE = DEFAULT_REPORT_FILE
+SUMMARY_FILE = DEFAULT_SUMMARY_FILE
+try:
+    DEFAULT_JSON_ARG = str(DEFAULT_REPORT_FILE.relative_to(ROOT_DIR))
+except ValueError:  # pragma: no cover - defensive fallback
+    DEFAULT_JSON_ARG = str(DEFAULT_REPORT_FILE)
+try:
+    DEFAULT_MARKDOWN_ARG = str(DEFAULT_SUMMARY_FILE.relative_to(ROOT_DIR))
+except ValueError:  # pragma: no cover - defensive fallback
+    DEFAULT_MARKDOWN_ARG = str(DEFAULT_SUMMARY_FILE)
 REPO_SLUG = "SatoryKono/ChEMBL_data_acquisition"
 QUALITY_THRESHOLD_PERCENT = 95.0
 QUALITY_FAILURE_EXIT_CODE = 1
@@ -65,17 +78,23 @@ def _relative_to_root(path: Path) -> str:
         return str(path)
 
 
-def ensure_reports_directory() -> None:
-    """Ensure the reports directory exists."""
+def ensure_output_directories(report_file: Path, summary_file: Path) -> None:
+    """Ensure directories for structured outputs exist."""
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     COVERAGE_DIR.mkdir(parents=True, exist_ok=True)
+    COVERAGE_HTML.mkdir(parents=True, exist_ok=True)
+
+    for path in (report_file, summary_file, RAW_REPORT_FILE):
+        path.parent.mkdir(parents=True, exist_ok=True)
 
 
 def run_pytest(command: Sequence[str]) -> int:
     """Execute ``command`` and stream output through the configured logger."""
 
-    logger.debug("Executing pytest command: %s", " ".join(shlex.quote(part) for part in command))
+    logger.debug(
+        "Executing pytest command: %s", " ".join(shlex.quote(part) for part in command)
+    )
 
     process = subprocess.Popen(
         command,
@@ -266,8 +285,8 @@ def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, An
     }
 
 
-def write_json_report(report: dict[str, Any]) -> None:
-    REPORT_FILE.write_text(
+def write_json_report(report: dict[str, Any], destination: Path) -> None:
+    destination.write_text(
         json.dumps(report, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
@@ -411,8 +430,8 @@ def build_summary_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def write_summary(report: dict[str, Any]) -> None:
-    SUMMARY_FILE.write_text(build_summary_markdown(report), encoding="utf-8")
+def write_summary(report: dict[str, Any], destination: Path) -> None:
+    destination.write_text(build_summary_markdown(report), encoding="utf-8")
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -435,6 +454,18 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Date token forwarded to the log file suffix (format: YYYYMMDD)",
     )
     parser.add_argument(
+        "--json",
+        dest="json_path",
+        default=DEFAULT_JSON_ARG,
+        help="Path to the structured JSON report (relative paths resolve from repo root)",
+    )
+    parser.add_argument(
+        "--markdown",
+        dest="markdown_path",
+        default=DEFAULT_MARKDOWN_ARG,
+        help="Path to the Markdown summary report (relative paths resolve from repo root)",
+    )
+    parser.add_argument(
         "pytest_args",
         nargs=argparse.REMAINDER,
         help="Arguments forwarded to pytest (use '--' before them)",
@@ -450,6 +481,15 @@ def _extract_pytest_args(args: Sequence[str] | None) -> list[str]:
     return list(args)
 
 
+def _resolve_output_path(raw: str | None, default: Path) -> Path:
+    if not raw:
+        return default
+    path = Path(raw)
+    if not path.is_absolute():
+        path = ROOT_DIR / path
+    return path
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     level = str(args.log_level or "INFO").upper()
@@ -461,7 +501,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     with setup_cli_logging("run_tests", log_cfg, args.date) as logging_ctx:
         configure_logger(logging_ctx.log_cfg)
 
-        ensure_reports_directory()
+        report_path = _resolve_output_path(args.json_path, DEFAULT_REPORT_FILE)
+        summary_path = _resolve_output_path(args.markdown_path, DEFAULT_SUMMARY_FILE)
+
+        ensure_output_directories(report_path, summary_path)
 
         pytest_command = list(_BASE_PYTEST_COMMAND)
         pytest_command.extend(
@@ -487,14 +530,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             logger.error("Structured report validation failed: %s", exc)
             validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
         else:
-            write_json_report(structured)
+            write_json_report(structured, report_path)
             try:
-                validate_report_file(REPORT_FILE)
+                validate_report_file(report_path)
             except ValueError as exc:  # pragma: no cover - defensive guard
                 logger.error("Written report failed validation: %s", exc)
                 validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
             else:
-                write_summary(structured)
+                write_summary(structured, summary_path)
 
         log_path = _relative_to_root(logging_ctx.log_path)
         logger.info("Pytest finished with exit code %s", exit_code)
@@ -504,22 +547,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "Raw report available at %s",
                 _relative_to_root(RAW_REPORT_FILE),
             )
-        if REPORT_FILE.exists():
+        if report_path.exists():
             logger.info(
                 "Structured report written to %s",
-                _relative_to_root(REPORT_FILE),
+                _relative_to_root(report_path),
             )
-        if SUMMARY_FILE.exists():
+        if summary_path.exists():
             logger.info(
                 "Summary written to %s",
-                _relative_to_root(SUMMARY_FILE),
+                _relative_to_root(summary_path),
             )
 
         final_exit_code = exit_code
         if validation_exit_code is not None:
             final_exit_code = validation_exit_code
         else:
-            success_rate_raw = structured.get("summary", {}).get("success_rate", 0.0) or 0.0
+            success_rate_raw = (
+                structured.get("summary", {}).get("success_rate", 0.0) or 0.0
+            )
             try:
                 success_rate_value = float(success_rate_raw)
             except (TypeError, ValueError):  # pragma: no cover - guarded by validation
@@ -530,7 +575,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 success_rate_value = 0.0
 
             success_rate_pct = (
-                success_rate_value * 100.0 if success_rate_value <= 1.0 else success_rate_value
+                success_rate_value * 100.0
+                if success_rate_value <= 1.0
+                else success_rate_value
             )
 
             if success_rate_pct < QUALITY_THRESHOLD_PERCENT:
