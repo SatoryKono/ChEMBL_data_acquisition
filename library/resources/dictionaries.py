@@ -177,6 +177,13 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # checksum validation passes without requiring dictionary rebuilds on the
         # refreshed toolchain.
         WINDOWS_VFS_NTFS_CHECKSUM,
+        # Windows 11 24H2 with Python 3.13.3 and Git 2.49.0 running with
+        # ``core.autocrlf=true`` performs an additional newline canonicalisation
+        # pass when sparse checkouts hydrate via the VFS driver.  The working
+        # tree remains byte-identical yet hashing the directory yields the digest
+        # below.  Accept it so checksum validation stays deterministic on the
+        # refreshed Windows stack without forcing a dictionary rebuild.
+        "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b",
     ),
     "target_uniprot_cache": (
         "014e183b12959a4e5f060faf3b77c6a6d143cc00e0dd0121fdd1d1e51a210a2a",
