@@ -127,12 +127,12 @@
 
 ### Основные функции постобработки
 
-* `run_testitem_pipeline` — orchestrator, который собирает чанки ChEMBL, добавляет родительские идентификаторы (`prepare_parent_enrichment`, `run_parent_enrichment`), интегрирует PubChem (`augment_pubchem`), применяет дополнительное обогащение (`apply_testitem_enrichment`) и передаёт поток в `finalize_output`. Каждый шаг защищён `StageWatchdog` и `StageExecutionBudget`, что предотвращает зависания и логирует длительные операции.【F:library/testitem_pipeline/cli.py†L640-L864】
-* `finalize_output` — выполняет нормализацию `normalize_testitems`, добавляет служебные поля (`add_pipeline_metadata`), выравнивает DataFrame по `TestitemsSchema`, валидирует (через `validate_testitems`) и накапливает ошибки в `SidecarErrors`. Также создаёт failure CSV, мета-файл (`write_meta_yaml`) и запускает QA-хук `build_table_quality_hook`. На выходе формирует детерминированный CSV через `write_csv_chunks_deterministic`.【F:library/testitem_pipeline/cli.py†L872-L1160】
-* `normalize_testitems` — стандартизирует идентификаторы (upper-case), заменяет спецсимволы, приводит отношения/единицы измерения к нормализованным значениям, сохраняя оригинальные типы. Используется внутри `_process_chunk` до валидации для предотвращения дрейфа данных.【F:library/testitem_pipeline/cli.py†L936-L1018】
-* `validate_testitems` — ленивый режим pandera: ошибки добавляются в sidecar, pipeline продолжает работу, что позволяет QA анализировать проблемные записи без остановки выгрузки.【F:library/testitem_pipeline/cli.py†L1006-L1048】
-* `write_meta_yaml` — сохраняет метаданные (hash, статистику родителей, отсутствующие идентификаторы) для трассировки последовательных запусков.【F:library/testitem_pipeline/cli.py†L1112-L1144】
-* `analyze_table_quality` / `build_table_quality_hook` — генерируют отчёт качества, при фатальных настройках (`fatal_on_error`) могут прервать пайплайн, иначе логируют предупреждения.【F:library/testitem_pipeline/cli.py†L1145-L1159】
+* `run_testitem_pipeline` — orchestrator, который собирает чанки ChEMBL, добавляет родительские идентификаторы (`prepare_parent_enrichment`, `run_parent_enrichment`), интегрирует PubChem (`augment_pubchem`), применяет дополнительное обогащение (`apply_testitem_enrichment`) и передаёт поток в `finalize_output`. Вся цепочка теперь живёт под пространством имён `library/pipelines/testitem`, поэтому CLI-обёртка описана в модуле `cli.py`; каждый шаг защищён `StageWatchdog` и `StageExecutionBudget`, что предотвращает зависания и логирует длительные операции.【F:library/pipelines/testitem/cli.py†L651-L858】
+* `finalize_output` — выполняет нормализацию `normalize_testitems`, добавляет служебные поля (`add_pipeline_metadata`), выравнивает DataFrame по `TestitemsSchema`, валидирует (через `validate_testitems`) и накапливает ошибки в `SidecarErrors`. Также создаёт failure CSV, мета-файл (`write_meta_yaml`) и запускает QA-хук `build_table_quality_hook`. На выходе формирует детерминированный CSV через `write_csv_chunks_deterministic`. Реализация доступна в `library/pipelines/testitem/cli.py`.【F:library/pipelines/testitem/cli.py†L861-L1136】
+* `normalize_testitems` — стандартизирует идентификаторы (upper-case), заменяет спецсимволы, приводит отношения/единицы измерения к нормализованным значениям, сохраняя оригинальные типы. Используется внутри `_process_chunk` до валидации для предотвращения дрейфа данных.【F:library/pipelines/testitem/cli.py†L946-L1015】
+* `validate_testitems` — ленивый режим pandera: ошибки добавляются в sidecar, pipeline продолжает работу, что позволяет QA анализировать проблемные записи без остановки выгрузки.【F:library/pipelines/testitem/cli.py†L972-L1014】
+* `write_meta_yaml` — сохраняет метаданные (hash, статистику родителей, отсутствующие идентификаторы) для трассировки последовательных запусков.【F:library/pipelines/testitem/cli.py†L1097-L1104】
+* `analyze_table_quality` / `build_table_quality_hook` — генерируют отчёт качества, при фатальных настройках (`fatal_on_error`) могут прервать пайплайн, иначе логируют предупреждения.【F:library/pipelines/testitem/cli.py†L1106-L1134】
 
 ### Таблица соответствия
 
@@ -147,7 +147,7 @@
 
 ### Назначение и контроль качества
 
-* Используются кеши PubChem (`PUBCHEM_CID_CACHE_ENCODING`) и каталоги родителей для воспроизводимости: `update_parent_catalog_cache` обновляет локальные справочники, а `load_molecule_hierarchy_lookup` позволяет оффлайн-трассировку соответствий.【F:scripts/get_testitem_data.py†L28-L120】【F:library/testitem_pipeline/cli.py†L640-L864】
+* Используются кеши PubChem (`PUBCHEM_CID_CACHE_ENCODING`) и каталоги родителей для воспроизводимости: `update_parent_catalog_cache` обновляет локальные справочники, а `load_molecule_hierarchy_lookup` позволяет оффлайн-трассировку соответствий.【F:scripts/get_testitem_data.py†L28-L120】【F:library/pipelines/testitem/cli.py†L651-L858】
 * QA-хуки формируют `*_failure_cases.csv` и аналитические отчёты, что обеспечивает 100% покрытие ключевых сценариев тестового контура (валидность схемы, деградационные случаи, идемпотентность повторных запусков).
 
 ## Словари, схемы и QC-флаги
