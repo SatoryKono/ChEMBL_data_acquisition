@@ -715,10 +715,11 @@ def _ensure_molecule_pref_name(
             pending.append(cache_key)
 
     if pending:
-        fields = list(cfg.testitem.fields)
-        for column in ("molecule_chembl_id", "pref_name"):
-            if column not in fields:
-                fields.append(column)
+        fields = ["molecule_chembl_id", "pref_name"]
+        extra_fields = getattr(cfg.testitem, "fields", None)
+        if extra_fields:
+            fields.extend(extra_fields)
+        fields = sorted(set(fields))
         api_overrides: dict[str, Any] = {}
         if getattr(cfg.testitem, "retries", None) is not None:
             api_overrides["retries"] = cfg.testitem.retries
