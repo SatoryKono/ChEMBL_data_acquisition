@@ -138,3 +138,11 @@ def test_parse_args__invalid_limit_error_message(capsys: pytest.CaptureFixture[s
 
     captured = capsys.readouterr()
     assert "limit must be a non-negative integer" in captured.err
+
+
+@pytest.mark.unit
+def test_parse_args__only_expected_options_present() -> None:
+    _parser, args, _log_cfg = get_activities.parse_args([])
+
+    assert "chunk_size" not in vars(args)
+    assert "column" not in vars(args)
