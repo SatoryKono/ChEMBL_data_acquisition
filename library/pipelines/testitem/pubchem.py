@@ -64,6 +64,22 @@ def _load_pubchem_library():
     return pubchem_lib
 
 
+class _PubChemLibraryProxy:
+    """Proxy exposing ``library.integration.pubchem_library`` lazily."""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(_load_pubchem_library(), name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(_load_pubchem_library(), name, value)
+
+    def __dir__(self) -> list[str]:  # pragma: no cover - debug helper
+        return sorted(set(dir(type(self)) + dir(_load_pubchem_library())))
+
+
+pl = _PubChemLibraryProxy()
+
+
 def _pubchem_session_signature(api_cfg: ApiCfg, retry_cfg: RetryCfg) -> str:
     """Return a stable signature for the PubChem session configuration."""
 
@@ -880,4 +896,5 @@ __all__ = [
     "add_pubchem_data",
     "augment_pubchem",
     "resolve_pubchem_cid",
+    "pl",
 ]
