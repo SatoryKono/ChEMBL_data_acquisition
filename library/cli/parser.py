@@ -244,7 +244,7 @@ def build_parser(
     parser.add_argument(
         "--column",
         default=column,
-        help="Identifier column in input CSV",
+        help=f"Identifier column in input CSV (default: {column})",
     )
     parser.add_argument(
         size_option,
