@@ -785,8 +785,8 @@ def get_properties(cid: str, cfg: PubChemCfg) -> Properties:
         return Properties(None, None, None, None, None, None)
     base = cfg.base.rstrip("/")
     url = (
-        f"{base}/compound/cid/{validated}/property/MolecularFormula,IUPACName,IsomericSMILES,"
-        "CanonicalSMILES,InChI,InChIKey/JSON"
+        f"{base}/compound/cid/{validated}/property/MolecularFormula,IUPACName,SMILES,"
+        "ConnectivitySMILES,InChI,InChIKey/JSON"
     )
     response = make_request(url, cfg)
     if not response:
@@ -798,8 +798,8 @@ def get_properties(cid: str, cfg: PubChemCfg) -> Properties:
     return Properties(
         cast(str | None, item.get("IUPACName")),
         cast(str | None, item.get("MolecularFormula")),
-        cast(str | None, item.get("IsomericSMILES")),
-        cast(str | None, item.get("CanonicalSMILES")),
+        cast(str | None, item.get("SMILES")),
+        cast(str | None, item.get("ConnectivitySMILES")),
         cast(str | None, item.get("InChI")),
         cast(str | None, item.get("InChIKey")),
     )
