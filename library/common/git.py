@@ -219,10 +219,18 @@ def _github_desktop_git_candidates(executable: Path) -> Iterable[str]:
             break
 
     candidates: list[str] = []
+    git_rel_paths = [
+        Path("resources") / "app" / "git" / "cmd" / "git.exe",
+        Path("resources") / "app" / "git" / "mingw64" / "bin" / "git.exe",
+        Path("resources") / "app" / "git" / "usr" / "bin" / "git.exe",
+        Path("resources") / "app" / "git" / "bin" / "git.exe",
+    ]
+
     for root in roots:
         for app_dir in root.glob("app-*"):
-            candidate = app_dir / "resources" / "app" / "git" / "cmd" / "git.exe"
-            candidates.append(str(candidate))
+            for rel_path in git_rel_paths:
+                candidate = app_dir / rel_path
+                candidates.append(str(candidate))
     return candidates
 
 
