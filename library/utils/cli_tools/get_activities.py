@@ -21,6 +21,9 @@ from library.config import (
 from library.pipelines.activity import get_activities
 
 
+DEFAULT_LIMIT = 25
+
+
 def parse_args(
     argv: Sequence[str] | None = None,
 ) -> tuple[argparse.ArgumentParser, argparse.Namespace, cli.LoggerConfig]:
@@ -59,7 +62,7 @@ def parse_args(
         "--limit",
         type=_limit,
         default=None,
-        help="Maximum number of activity rows to emit",
+        help=f"Maximum number of activity rows to emit (default: {DEFAULT_LIMIT})",
     )
     parser.add_argument(
         "--dry-run",
@@ -85,7 +88,6 @@ def _frame_from_records(records: Iterable[dict[str, object]]) -> pd.DataFrame:
 def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Path:
     """Persist ``frame`` and accompanying metadata to ``output_path`` atomically."""
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = output_path.with_name(
         f".{output_path.name}.{uuid4().hex}.tmp"
     )
@@ -114,7 +116,11 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
     limit = args.limit
     if limit is None:
-        limit = cfg.activity.limit if cfg.activity.limit is not None else 0
+        limit = (
+            cfg.activity.limit
+            if cfg.activity.limit is not None
+            else DEFAULT_LIMIT
+        )
         if limit < 0:
             logger.error(
                 "config_error",
@@ -138,6 +144,25 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         setattr(args, "final_out", output_path)
     else:
         output_path = Path(output_candidate)
+
+    parent = output_path.parent
+    if not parent.exists():
+        if cfg.io.exist_ok:
+            parent.mkdir(parents=True, exist_ok=True)
+        else:
+            logger.error(
+                "output_directory_missing",
+                directory=str(parent),
+                output=str(output_path),
+            )
+            return 1
+    elif not parent.is_dir():
+        logger.error(
+            "output_directory_not_directory",
+            directory=str(parent),
+            output=str(output_path),
+        )
+        return 1
 
     if bool(getattr(args, "skip_existing", False)) and output_path.exists() and not bool(
         getattr(args, "force", False)

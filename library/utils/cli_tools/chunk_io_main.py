@@ -15,8 +15,13 @@ from library.cli import (
     create_logger_config,
     path_argument,
 )
-from library.config import Config, ConfigError, ensure_dirs, print_config
-from library.config.loader import DEFAULT_CONFIG_RELATIVE
+from library.config import (
+    Config,
+    ConfigError,
+    DEFAULT_CONFIG_PATH,
+    ensure_dirs,
+    print_config,
+)
 from library.io.paths import default_output_path
 from library.common.log import logger
 

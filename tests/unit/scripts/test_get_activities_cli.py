@@ -5,7 +5,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from library.config import Config
 from library.utils.cli_tools import get_activities
 
 
@@ -26,6 +25,35 @@ class _LoggerStub:
 
     def error(self, event: str, **data: object) -> None:  # pragma: no cover - defensive
         self.events.append(("error", event, dict(data)))
+
+    def exception(self, event: str, **data: object) -> None:  # pragma: no cover - defensive
+        self.events.append(("exception", event, dict(data)))
+
+
+def _make_cfg_stub(base: Path, *, limit: int | None = None, exist_ok: bool = True):
+    io_cfg = SimpleNamespace(
+        exist_ok=exist_ok,
+        output_dir=base,
+        cache_dir=base / "cache",
+        csv_sep=",",
+        csv_encoding="utf-8",
+    )
+    cfg_stub = SimpleNamespace(activity=SimpleNamespace(limit=limit), io=io_cfg)
+
+    def _to_dict() -> dict[str, object]:
+        return {
+            "activity": {"limit": limit},
+            "io": {
+                "exist_ok": exist_ok,
+                "output_dir": str(base),
+                "cache_dir": str(base / "cache"),
+                "csv_sep": ",",
+                "csv_encoding": "utf-8",
+            },
+        }
+
+    cfg_stub.to_dict = _to_dict  # type: ignore[attr-defined]
+    return cfg_stub
 
 
 @pytest.mark.unit
@@ -57,6 +85,14 @@ def test_main__limit_forwarded_to_pipeline(
 
     monkeypatch.setattr(get_activities.cli, "prepare_io_paths", _prepare_io_paths)
     monkeypatch.setattr(get_activities.cli, "configure_logger", lambda *_a, **_k: None)
+    cfg_stub = _make_cfg_stub(tmp_path, limit=None)
+
+    monkeypatch.setattr(
+        get_activities.cli,
+        "apply_config_overrides",
+        lambda args, parser, config: cfg_stub,
+    )
+    monkeypatch.setattr(get_activities, "ensure_dirs", lambda _cfg: None)
 
     logger_stub = _LoggerStub()
     monkeypatch.setattr(get_activities, "logger", logger_stub)
@@ -112,6 +148,15 @@ def test_main__dry_run_skips_fetch(
     monkeypatch.setattr(get_activities.cli, "prepare_io_paths", _prepare_io_paths)
     monkeypatch.setattr(get_activities.cli, "configure_logger", lambda *_a, **_k: None)
 
+    cfg_stub = _make_cfg_stub(tmp_path, limit=None)
+
+    monkeypatch.setattr(
+        get_activities.cli,
+        "apply_config_overrides",
+        lambda args, parser, config: cfg_stub,
+    )
+    monkeypatch.setattr(get_activities, "ensure_dirs", lambda _cfg: None)
+
     logger_stub = _LoggerStub()
     monkeypatch.setattr(get_activities, "logger", logger_stub)
 
@@ -135,13 +180,13 @@ def test_main__dry_run_skips_fetch(
 
 @pytest.mark.unit
 def test_main__config_limit_used_when_cli_omitted(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("id\nCHEMBL1\n", encoding="utf-8")
     output_csv = tmp_path / "output.csv"
 
-    cfg.activity.limit = 4
+    cfg_stub = _make_cfg_stub(tmp_path, limit=4)
 
     observed: dict[str, int] = {}
 
@@ -167,7 +212,7 @@ def test_main__config_limit_used_when_cli_omitted(
     monkeypatch.setattr(
         get_activities.cli,
         "apply_config_overrides",
-        lambda args, parser, config: cfg,
+        lambda args, parser, config: cfg_stub,
     )
     monkeypatch.setattr(get_activities, "ensure_dirs", lambda _cfg: None)
 
@@ -201,10 +246,12 @@ def test_parse_args__invalid_limit_error_message(capsys: pytest.CaptureFixture[s
 
 @pytest.mark.unit
 def test_run__skip_existing_respects_flag(
-    tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     output_csv = tmp_path / "activities.csv"
     output_csv.write_text("activity_id\nOLD\n", encoding="utf-8")
+
+    cfg = _make_cfg_stub(tmp_path)
 
     args = SimpleNamespace(
         limit=1,
@@ -241,10 +288,12 @@ def test_run__skip_existing_respects_flag(
 
 @pytest.mark.unit
 def test_run__force_overrides_skip_existing(
-    tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     output_csv = tmp_path / "activities.csv"
     output_csv.write_text("activity_id\nOLD\n", encoding="utf-8")
+
+    cfg = _make_cfg_stub(tmp_path)
 
     args = SimpleNamespace(
         limit=2,
@@ -288,3 +337,109 @@ def test_parse_args__only_expected_options_present() -> None:
 
     assert "chunk_size" not in vars(args)
     assert "column" not in vars(args)
+
+
+@pytest.mark.unit
+def test_run__default_limit_used_when_config_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _make_cfg_stub(tmp_path, limit=None)
+
+    args = SimpleNamespace(
+        limit=None,
+        dry_run=False,
+        skip_existing=False,
+        force=False,
+        output_csv=tmp_path / "activities.csv",
+        input_csv=tmp_path / "input.csv",
+    )
+
+    observed: dict[str, int] = {}
+
+    def _fake_get(limit: int) -> list[dict[str, int]]:
+        observed["limit"] = limit
+        return [{"activity_id": idx} for idx in range(limit)]
+
+    monkeypatch.setattr(get_activities, "get_activities", _fake_get)
+    monkeypatch.setattr(get_activities, "_write_output", lambda *_a, **_k: args.output_csv)
+
+    logger_stub = _LoggerStub()
+    monkeypatch.setattr(get_activities, "logger", logger_stub)
+
+    exit_code = get_activities.run(cfg, args)
+
+    assert exit_code == 0
+    assert observed["limit"] == get_activities.DEFAULT_LIMIT
+
+
+@pytest.mark.unit
+def test_run__writes_output_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _make_cfg_stub(tmp_path, exist_ok=True)
+
+    output_csv = tmp_path / "nested" / "activities.csv"
+    args = SimpleNamespace(
+        limit=2,
+        dry_run=False,
+        skip_existing=False,
+        force=False,
+        output_csv=output_csv,
+        input_csv=tmp_path / "input.csv",
+    )
+
+    def _fake_get(limit: int) -> list[dict[str, int]]:
+        return [{"activity_id": idx + 1} for idx in range(limit)]
+
+    monkeypatch.setattr(get_activities, "get_activities", _fake_get)
+
+    logger_stub = _LoggerStub()
+    monkeypatch.setattr(get_activities, "logger", logger_stub)
+
+    exit_code = get_activities.run(cfg, args)
+
+    assert exit_code == 0
+    assert output_csv.exists()
+    content = output_csv.read_text(encoding="utf-8").splitlines()
+    assert content == ["activity_id", "1", "2"]
+    meta_path = Path(f"{output_csv}.meta.yaml")
+    assert meta_path.exists()
+    assert any(event[1] == "generated" for event in logger_stub.events)
+
+
+@pytest.mark.unit
+def test_run__fails_when_directory_missing_and_exist_ok_false(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _make_cfg_stub(tmp_path, exist_ok=False)
+
+    output_dir = tmp_path / "missing" / "deeper"
+    output_csv = output_dir / "activities.csv"
+
+    args = SimpleNamespace(
+        limit=1,
+        dry_run=False,
+        skip_existing=False,
+        force=False,
+        output_csv=output_csv,
+        input_csv=tmp_path / "input.csv",
+    )
+
+    monkeypatch.setattr(
+        get_activities,
+        "get_activities",
+        lambda *_a, **_k: pytest.fail("get_activities should not be called"),
+    )
+
+    logger_stub = _LoggerStub()
+    monkeypatch.setattr(get_activities, "logger", logger_stub)
+
+    exit_code = get_activities.run(cfg, args)
+
+    assert exit_code == 1
+    assert not output_dir.exists()
+    assert (
+        "error",
+        "output_directory_missing",
+        {"directory": str(output_dir), "output": str(output_csv)},
+    ) in logger_stub.events

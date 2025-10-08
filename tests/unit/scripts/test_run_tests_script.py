@@ -219,6 +219,41 @@ def test_build_summary_markdown__renders_error_messages_from_json() -> None:
     assert "line 1" in summary_md and "line 2" in summary_md
 
 
+@pytest.mark.unit
+def test_calculate_success_rate__counts_passed_and_xfailed() -> None:
+    summary = {
+        "total": 6,
+        "passed": 3,
+        "failed": 1,
+        "skipped": 1,
+        "xfailed": 1,
+        "xpassed": 0,
+        "error": 0,
+    }
+
+    success_rate = run_tests._calculate_success_rate(summary)
+
+    # Executed tests exclude the skipped item -> 5 executed, 4 successes
+    assert success_rate == pytest.approx(4 / 5)
+
+
+@pytest.mark.unit
+def test_calculate_success_rate__all_skipped_return_unity() -> None:
+    summary = {
+        "total": 3,
+        "passed": 0,
+        "failed": 0,
+        "skipped": 3,
+        "xfailed": 0,
+        "xpassed": 0,
+        "error": 0,
+    }
+
+    success_rate = run_tests._calculate_success_rate(summary)
+
+    assert success_rate == pytest.approx(1.0)
+
+
 
 @pytest.mark.unit
 def test_main__returns_exit_code_one_when_quality_gate_fails(
