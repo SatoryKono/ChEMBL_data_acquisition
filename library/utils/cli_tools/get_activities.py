@@ -11,7 +11,13 @@ import pandas as pd
 
 from library import cli, io
 from library.common.log import logger
-from library.config import Config, ConfigError, ensure_dirs, print_config
+from library.config import (
+    Config,
+    ConfigError,
+    DEFAULT_CONFIG_PATH,
+    ensure_dirs,
+    print_config,
+)
 from library.pipelines.activity import get_activities
 
 
@@ -20,9 +26,21 @@ def parse_args(
 ) -> tuple[argparse.ArgumentParser, argparse.Namespace, cli.LoggerConfig]:
     """Return parser, parsed arguments and logging configuration."""
 
-    parser, log_cfg = cli.build_parser(
-        "Generate dummy activity data", column="activity_id"
+    parser = argparse.ArgumentParser(description="Generate dummy activity data")
+    cli.add_common_arguments(parser)
+    parser.add_argument(
+        "--config",
+        dest="config",
+        type=cli.path_argument,
+        default=DEFAULT_CONFIG_PATH,
+        help=f"YAML configuration file (default: {DEFAULT_CONFIG_PATH})",
     )
+    parser.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print effective configuration and exit",
+    )
+    log_cfg = cli.create_logger_config(parser.get_default("log_level"))
 
     def _limit(value: str) -> int:
         """Return ``value`` validated as a non-negative integer."""

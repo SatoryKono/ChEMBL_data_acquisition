@@ -283,3 +283,8 @@ def test_run__force_overrides_skip_existing(
     leftover = list(output_csv.parent.glob("*.tmp"))
     leftover.extend(output_csv.parent.glob("*.tmp.meta.yaml"))
     assert not leftover
+def test_parse_args__only_expected_options_present() -> None:
+    _parser, args, _log_cfg = get_activities.parse_args([])
+
+    assert "chunk_size" not in vars(args)
+    assert "column" not in vars(args)
