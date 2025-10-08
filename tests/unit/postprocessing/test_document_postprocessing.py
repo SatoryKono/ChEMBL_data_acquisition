@@ -147,3 +147,35 @@ def test_preprocess_documents_csv__qa_failure_propagates(
             ref_document_rel="input\\full\\document.csv",
             out_document_rel="output\\document\\output.document_20250101.csv",
         )
+
+
+@pytest.mark.unit
+def test_load_output_document__preserves_page_ranges(tmp_path: Path) -> None:
+    csv_path = tmp_path / "output.document_20251010.csv"
+
+    row: dict[str, object] = {}
+    for column, dtype in document_module.OUTPUT_DTYPE.items():
+        row[column] = 0 if dtype == "Int64" else ""
+
+    row["PubMed.StartPage"] = "11-12"
+    row["PubMed.EndPage"] = "15"
+    row["PubMed.Volume"] = "IV"
+    row["PubMed.Issue"] = "S1"
+    row["ChEMBL.volume"] = "VII"
+    row["ChEMBL.issue"] = "Supplement"
+    row["ChEMBL.first_page"] = "11-12"
+    row["ChEMBL.last_page"] = "15A"
+
+    pd.DataFrame([row]).to_csv(csv_path, index=False)
+
+    frame = document_module._load_output_document(csv_path)
+
+    assert frame.loc[0, "ChEMBL.first_page"] == "11-12"
+    assert frame.loc[0, "ChEMBL.last_page"] == "15A"
+    assert frame.loc[0, "ChEMBL.volume"] == "VII"
+    assert frame.loc[0, "ChEMBL.issue"] == "Supplement"
+    assert frame.loc[0, "PubMed.StartPage"] == "11-12"
+    assert frame.loc[0, "PubMed.Volume"] == "IV"
+
+    assert frame["ChEMBL.first_page"].dtype == pd.StringDtype()
+    assert frame["PubMed.StartPage"].dtype == pd.StringDtype()
