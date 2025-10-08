@@ -64,6 +64,31 @@ The domain YAML files ship representative defaults that downstream tooling can r
 | Assays | `utf-8` | `,` | `uppercase_categories: true`, `strip_whitespace: true`, `normalize_identifiers: true` |
 | Targets | `utf-8` | `,` | `normalize_taxonomy: true`, `fill_missing_identifiers: true`, `sort_by: ['target_chembl_id']` |
 | Documents | `utf-8` | `,` | `trim_whitespace: true`, `normalise_unicode: true`, `ensure_unique_ids: true` |
+| Test items | `utf-8` | `,` | `uppercase_identifiers: true`, `coerce_booleans: true`, `fill_missing_columns: true` |
+
+## CLI entry points
+
+The postprocessing stages ship dedicated CLI wrappers under `scripts/make_<table>_postprocessing.py`. Each command wires argument
+parsing, logging configuration and deterministic CSV export around the domain pipeline.
+
+Shared interface:
+
+- `--input`: path to the raw CSV exported by the extractor stage.
+- `--output`: destination for the enriched CSV; parent directories are created automatically.
+- `--config`: optional override YAML (defaults to `config/pipeline/<table>.yaml`, e.g. `config/pipeline/testitems.yaml`).
+- `--log-level`: overrides the YAML/default log verbosity.
+
+By default logs are written to `logs/make_<table>_postprocessing_<YYYYMMDD>.log`. Override the directory by exporting
+`CHEMBL_POSTPROCESS_LOG_DIR`. Each run also emits `<table>.postprocess.report.json` alongside the output CSV with the pipeline
+metrics collected via `collect_postprocess_metrics`.
+
+Example invocation:
+
+```bash
+python -m scripts.make_activity_postprocessing --input data/raw/activities.csv --output data/out/activities.csv
+```
+
+The same pattern applies to assays, documents, targets and test items.
 
 Each steps module imports its matching configuration, exposing `PIPELINE_CONFIG` and constructing `PIPELINE_STEPS` directly from the YAML definition so future additions require no code edits. 【F:library/postprocess/assays/steps.py†L1-L76】【F:library/postprocess/documents/steps.py†L1-L82】【F:library/postprocess/targets/steps.py†L1-L80】
 
