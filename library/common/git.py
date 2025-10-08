@@ -233,12 +233,18 @@ def _git_sha() -> str:
         logger.info("git_directory_missing", path=str(repo_root))
         return "UNKNOWN"
 
+    # Prefer reading the SHA directly from the ``.git`` directory to avoid
+    # spawning subprocesses in environments where Git may be bundled without
+    # the required runtime dependencies (for example GitHub Desktop on
+    # Windows).  This keeps logging noise low while still providing the commit
+    # hash for packaged artefacts.
+    head_sha = _read_head_sha(git_dir)
+    if head_sha is not None:
+        logger.debug("git_sha_head", sha=head_sha)
+        return head_sha
+
     git_executable = shutil.which("git")
     if git_executable is None:
-        fallback = _read_head_sha(git_dir)
-        if fallback is not None:
-            _log_fallback(fallback, reason="missing_executable")
-            return fallback
         logger.warning("git_executable_missing")
         return "UNKNOWN"
 
@@ -250,12 +256,25 @@ def _git_sha() -> str:
             capture_output=True,
             text=True,
         )
-        return result.stdout.strip()
     except (subprocess.CalledProcessError, UnicodeDecodeError, OSError) as exc:
         fallback = _read_head_sha(git_dir)
         if fallback is not None:
             _log_fallback(fallback, reason="subprocess_error", error=exc)
             return fallback
         logger.warning("git_sha_unavailable", extra=_error_payload(exc))
-
         return "UNKNOWN"
+
+    sha = _ensure_text(result.stdout)
+    if sha is not None:
+        return sha
+
+    fallback = _read_head_sha(git_dir)
+    if fallback is not None:
+        _log_fallback(fallback, reason="empty_output")
+        return fallback
+
+    logger.warning(
+        "git_sha_unavailable",
+        extra={"error": "rev-parse returned empty output"},
+    )
+    return "UNKNOWN"

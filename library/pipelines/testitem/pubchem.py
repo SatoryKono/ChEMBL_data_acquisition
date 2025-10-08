@@ -64,6 +64,14 @@ def _load_pubchem_library():
     return pubchem_lib
 
 
+def __getattr__(name: str) -> Any:
+    """Provide lazy access to the legacy ``pl`` alias used in older tests."""
+
+    if name == "pl":
+        return _load_pubchem_library()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 def _pubchem_session_signature(api_cfg: ApiCfg, retry_cfg: RetryCfg) -> str:
     """Return a stable signature for the PubChem session configuration."""
 
