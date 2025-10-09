@@ -10,6 +10,7 @@ from __future__ import annotations
 
 # ruff: noqa: E402
 import argparse
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter
@@ -127,9 +128,17 @@ def main() -> int:
             default="INFO",
             help="Logging level (default: INFO).",
         )
+        parser.add_argument(
+            "--run-id",
+            default=os.environ.get("CHEMBL_DA_RUN_ID"),
+            help="Override the run identifier used for logging",
+        )
         args = parser.parse_args()
 
-        log_cfg = create_logger_config(args.log_level)
+        run_id = args.run_id.strip() if isinstance(args.run_id, str) else args.run_id
+        if isinstance(run_id, str) and not run_id:
+            run_id = None
+        log_cfg = create_logger_config(args.log_level, run_id=run_id)
         configure_logger(log_cfg)
 
         with TemporaryDirectory() as tmp:

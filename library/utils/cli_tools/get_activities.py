@@ -46,7 +46,15 @@ def parse_args(
         action="store_true",
         help="Print effective configuration and exit",
     )
-    log_cfg = cli.create_logger_config(parser.get_default("log_level"))
+    run_id_default = parser.get_default("run_id")
+    if run_id_default in (None, argparse.SUPPRESS):
+        run_id_value = None
+    else:
+        run_id_value = str(run_id_default)
+    log_cfg = cli.create_logger_config(
+        parser.get_default("log_level"),
+        run_id=run_id_value,
+    )
 
     def _limit(value: str) -> int:
         """Return ``value`` validated as a non-negative integer."""
@@ -76,6 +84,11 @@ def parse_args(
     input_path = getattr(args, "input_csv", None)
     output_stem = Path(input_path).stem if input_path else None
     cli.prepare_io_paths(args, output_stem=output_stem)
+    run_id_value = getattr(args, "run_id", None)
+    if isinstance(run_id_value, str):
+        run_id_value = run_id_value.strip() or None
+    if run_id_value is not None:
+        log_cfg.run_id = run_id_value
     return parser, args, log_cfg
 
 

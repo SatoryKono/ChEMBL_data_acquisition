@@ -16,6 +16,8 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
+import os
+
 from library.cli import configure_logger, create_logger_config
 from library.common.dtype_inspector import inspect_dtypes
 
@@ -25,6 +27,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(description="Inspect dtypes from sample data")
     parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser.add_argument(
+        "--run-id",
+        default=os.environ.get("CHEMBL_DA_RUN_ID"),
+        help="Override the run identifier used for logging",
+    )
     return parser
 
 
@@ -33,7 +40,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser = build_parser()
     args = parser.parse_args(argv)
-    log_cfg = create_logger_config(args.log_level)
+    run_id = args.run_id.strip() if isinstance(args.run_id, str) else args.run_id
+    if isinstance(run_id, str) and not run_id:
+        run_id = None
+    log_cfg = create_logger_config(args.log_level, run_id=run_id)
     configure_logger(log_cfg)
     inspect_dtypes()
     return 0
