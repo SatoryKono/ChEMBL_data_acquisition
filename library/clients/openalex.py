@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 import requests
 
-from ..config.models import OpenAlexCfg
+from ..config.models import OpenAlexCfg, RetryCfg
 from ..common.log import logger
 from ..common.rate_limiter import RateLimiter, get_limiter
 from .pubmed import _do_request
@@ -21,6 +21,7 @@ def fetch_openalex(
     *,
     cfg: OpenAlexCfg,
     limiter: RateLimiter | None = None,
+    retry_cfg: RetryCfg | None = None,
 ) -> tuple[dict[str, Any] | str | None, str]:
     """Request OpenAlex metadata for ``pmid``."""
 
@@ -40,6 +41,7 @@ def fetch_openalex(
         delay,
         retries=cfg.retries,
         timeout=timeout,
+        retry_cfg=retry_cfg,
     )
     if error:
         logger.debug("request_fail", extra={"stage": "request_fail", "url": url})

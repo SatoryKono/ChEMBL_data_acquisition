@@ -196,6 +196,9 @@ def _do_request(
     """Perform an HTTP request with retry logic."""
 
     active_retry_cfg = retry_cfg or RetryCfg()
+    effective_jitter = jitter
+    if effective_jitter is None:
+        effective_jitter = active_retry_cfg.build_jitter()
     retry_after_delay: float | None = None
     for attempt in range(retries + 1):
         event = "request_start" if attempt == 0 else "request_retry"
@@ -212,7 +215,7 @@ def _do_request(
                     delay,
                     active_retry_cfg,
                     timeout,
-                    jitter=jitter,
+                    jitter=effective_jitter,
                 )
             )
             extra["delay"] = retry_delay
