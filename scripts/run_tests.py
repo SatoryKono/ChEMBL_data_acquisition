@@ -272,7 +272,35 @@ def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, An
             summary["error"] += 1
 
     success_rate = _calculate_success_rate(summary)
-    summary["success_rate"] = round(success_rate, 4)
+
+    if summary["total"] == 0 and exit_code != 0:
+        message = (
+            "pytest exited with code"
+            f" {exit_code} before completing the test run"
+        )
+        tests.append(
+            {
+                "nodeid": "<pytest-startup>",
+                "status": "error",
+                "duration_ms": 0.0,
+                "stdout": "",
+                "stderr": "",
+                "log": [],
+                "error": message,
+            }
+        )
+        summary.update(
+            total=1,
+            passed=0,
+            failed=0,
+            skipped=0,
+            xfailed=0,
+            xpassed=0,
+            error=1,
+            success_rate=0.0,
+        )
+    else:
+        summary["success_rate"] = round(success_rate, 4)
 
     meta = {
         "repo": REPO_SLUG,
@@ -290,6 +318,44 @@ def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, An
         "summary": summary,
         "tests": tests,
     }
+
+
+def _ensure_failure_record(report: dict[str, Any], exit_code: int, reason: str) -> dict[str, Any]:
+    summary = report.setdefault("summary", {})
+    summary.update(
+        total=max(int(summary.get("total", 0) or 0), 1),
+        passed=0,
+        failed=0,
+        skipped=0,
+        xfailed=0,
+        xpassed=0,
+        error=max(int(summary.get("error", 0) or 0), 1),
+        success_rate=0.0,
+    )
+
+    entry = {
+        "nodeid": "<report-generation>",
+        "status": "error",
+        "duration_ms": 0.0,
+        "stdout": "",
+        "stderr": "",
+        "log": [],
+        "error": reason or f"failed to build structured report (exit code {exit_code})",
+    }
+
+    tests = report.setdefault("tests", [])
+    if entry not in tests:
+        tests.append(entry)
+    meta = report.setdefault("meta", {})
+    meta.setdefault("exit_code", exit_code)
+    meta.setdefault("repo", REPO_SLUG)
+    meta.setdefault("branch", _git_output("rev-parse", "--abbrev-ref", "HEAD"))
+    meta.setdefault("commit", _git_output("rev-parse", "HEAD"))
+    meta.setdefault("ts_utc", datetime.now(timezone.utc).isoformat())
+    meta.setdefault("duration_sec", 0.0)
+    meta.setdefault("python", platform.python_version())
+    meta.setdefault("pytest", pytest.__version__)
+    return report
 
 
 def write_json_report(report: dict[str, Any], destination: Path) -> None:
@@ -527,24 +593,54 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         exit_code = run_pytest(pytest_command)
 
-        raw_report = _load_raw_report()
-        structured = build_structured_report(raw_report, exit_code)
-
+        structured: dict[str, Any] | None = None
         validation_exit_code: int | None = None
+        generation_error: str | None = None
+
         try:
+            raw_report = _load_raw_report()
+            structured = build_structured_report(raw_report, exit_code)
             validate_structured_report(structured)
         except ValueError as exc:  # pragma: no cover - defensive guard
             logger.error("Structured report validation failed: %s", exc)
             validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
-        else:
-            write_json_report(structured, report_path)
+            generation_error = _normalise_message(exc)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            logger.error("Failed to build structured report: %s", exc)
+            validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
+            generation_error = _normalise_message(exc)
+        finally:
+            if structured is None:
+                structured = build_structured_report({}, exit_code)
+            if generation_error:
+                structured = _ensure_failure_record(
+                    structured,
+                    exit_code,
+                    generation_error,
+                )
+
             try:
-                validate_report_file(report_path)
-            except ValueError as exc:  # pragma: no cover - defensive guard
-                logger.error("Written report failed validation: %s", exc)
-                validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
+                write_json_report(structured, report_path)
+            except Exception as exc:  # pragma: no cover - defensive guard
+                logger.error(
+                    "Failed to write structured report to %s: %s",
+                    _relative_to_root(report_path),
+                    exc,
+                )
             else:
+                try:
+                    validate_report_file(report_path)
+                except ValueError as exc:  # pragma: no cover - defensive guard
+                    logger.error("Written report failed validation: %s", exc)
+                    validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
+            try:
                 write_summary(structured, summary_path)
+            except Exception as exc:  # pragma: no cover - defensive guard
+                logger.error(
+                    "Failed to write summary to %s: %s",
+                    _relative_to_root(summary_path),
+                    exc,
+                )
 
         log_path = _relative_to_root(logging_ctx.log_path)
         logger.info("Pytest finished with exit code %s", exit_code)

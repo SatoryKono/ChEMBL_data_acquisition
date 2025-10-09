@@ -59,6 +59,10 @@ def _write_manifest(tmp_path, body: str) -> None:
     (
         (
             "dictionary_root",
+            "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a",
+        ),
+        (
+            "dictionary_root",
             "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
         ),
         (
@@ -154,3 +158,16 @@ def test_parse_manifest__env_allowlist_accepts_unknown_checksum(tmp_path, monkey
         assert resources[resource_name].sha256 == "override"
     finally:
         dictionaries._env_checksum_allowlist.cache_clear()
+
+
+@pytest.mark.unit
+def test_list_resources__loads_bundled_manifest():
+    dictionaries._load_manifest.cache_clear()
+    try:
+        resources = dictionaries.list_resources()
+        assert "dictionary_root" in resources
+        root_resource = resources["dictionary_root"]
+        assert root_resource.path.exists()
+        assert root_resource.sha256
+    finally:
+        dictionaries._load_manifest.cache_clear()
