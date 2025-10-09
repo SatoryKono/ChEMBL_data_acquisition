@@ -408,22 +408,23 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
     src_assay_series = written_df["src_assay_id"].astype("string")
     assert src_assay_series.tolist() == ["SRC-ASSAY1", "SRC-ASSAY2", "SRC-ASSAY3"]
     assert src_assay_series.str.strip().ne("").all()
-    completion_messages = [
-        event
-        for _, event, _ in logger_stub.events
-        if event.startswith("Completed get_activity_data pipeline:")
+    completion_payloads = [
+        payload
+        for _, event, payload in logger_stub.events
+        if event == "activity_pipeline_completion"
     ]
-    assert completion_messages
-    summary_message = completion_messages[-1]
-    assert "mode=run" in summary_message
-    assert "rows=3" in summary_message
+    assert completion_payloads
+    summary_payload = completion_payloads[-1]
+    assert summary_payload["mode"] == "run"
+    assert summary_payload["rows"] == 3
     total_cells = written_df.size
     expected_null_fraction = (
         float(np.count_nonzero(written_df.isna().to_numpy()) / total_cells)
         if total_cells
         else 0.0
     )
-    assert f"null_fraction={expected_null_fraction:.6f}" in summary_message
+    assert summary_payload["null_fraction"] == pytest.approx(expected_null_fraction)
+    assert summary_payload["output"] == str(output_csv)
     report_path = cfg.io.output_dir / "activity.postprocess.report.json"
     assert report_path.exists()
     report_payload = json.loads(report_path.read_text(encoding="utf-8"))
