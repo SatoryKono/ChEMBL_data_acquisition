@@ -254,20 +254,18 @@ def _apply_env_overrides(data: dict[str, Any]) -> dict[tuple[str, ...], str]:
     alias_map = _alias_map()
     for env_key, env_val in os.environ.items():
         key = env_key.upper()
-        if key in alias_map:
-            path: tuple[str, ...]
-            if key in alias_map:
-                path = alias_map[key]
-            elif key.startswith(prefix + "__"):
-                path = tuple(key[len(prefix) + 2 :].split("__"))
-            else:
-                continue
-            parts = [p.lower() for p in path]
-            if not _is_valid_path(parts):
-                logger.warning(f"Environment variable {key} ignored")
-                continue
-            value = _parse_env_value(key, env_val)
-            _set_by_path(data, parts, value)
-            overrides[tuple(parts)] = key
+        path = alias_map.get(key)
+        if not path and key.startswith(prefix + "__"):
+            raw_path = key[len(prefix) + 2 :]
+            path = tuple(part for part in raw_path.split("__") if part)
+        if not path:
+            continue
+        parts = [p.lower() for p in path]
+        if not parts or not _is_valid_path(parts):
+            logger.warning(f"Environment variable {key} ignored")
+            continue
+        value = _parse_env_value(key, env_val)
+        _set_by_path(data, parts, value)
+        overrides[tuple(parts)] = key
     return overrides
 
