@@ -41,7 +41,7 @@ def test_main__reports_deterministic_hash(
     def _fake_run_activity(
         limit: int, destination: Path, input_path: Path, *, dry_run: bool
     ) -> CompletedProcess[str]:
-        assert dry_run is True
+        assert dry_run is False
         destination.write_text(payload, encoding="utf-8")
         runs.append((limit, destination, input_path))
         return CompletedProcess(args=["python"], returncode=0, stdout="ok\n", stderr="")

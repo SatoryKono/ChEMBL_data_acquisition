@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from library.cli.base import PipelineCLIBase
 from scripts import (
     get_activity_data,
     get_assay_data,
@@ -16,6 +17,20 @@ from scripts import (
     get_testitem_data,
 )
 from tests.helpers.logs import parse_log_file
+
+
+def _program_name_from_module(module: Any) -> str:
+    cli_candidate = getattr(module, "_CLI", None)
+    if isinstance(cli_candidate, PipelineCLIBase):
+        return cli_candidate.get_program_name()
+    program_name = getattr(module, "PROGRAM_NAME", None)
+    if isinstance(program_name, str) and program_name:
+        return program_name
+    module_file = getattr(module, "__file__", None)
+    if module_file:
+        return Path(module_file).with_suffix("").name
+    return module.__name__.rsplit(".", 1)[-1]
+
 
 _SCRIPT_CASES = (
     {
@@ -67,7 +82,7 @@ _SCRIPT_CASES = (
 
 
 @pytest.mark.e2e
-@pytest.mark.parametrize("case", _SCRIPT_CASES, ids=lambda c: Path(c["module"].__file__).stem)
+@pytest.mark.parametrize("case", _SCRIPT_CASES, ids=lambda c: _program_name_from_module(c["module"]))
 def test_cli_logging__creates_log_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: dict[str, Any]
 ) -> None:
@@ -170,7 +185,8 @@ def test_cli_logging__creates_log_file(
     exit_code = module.main(argv)
     assert exit_code == 0
 
-    expected_prefix = Path(module.__file__).stem
+    program_name = _program_name_from_module(module)
+    expected_prefix = program_name
     log_files = sorted(
         path for path in log_dir.glob("*.log") if path.name.startswith(expected_prefix)
     )
@@ -181,7 +197,7 @@ def test_cli_logging__creates_log_file(
         )
     assert len(log_files) == 1
     log_path = log_files[0]
-    expected_name = f"{Path(module.__file__).stem}_20240102.log"
+    expected_name = f"{program_name}_20240102.log"
     assert log_path.name == expected_name
 
     events = parse_log_file(log_path)
