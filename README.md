@@ -61,6 +61,30 @@ pip install .[dev]
 pre-commit install
 ```
 
+### Pre-commit hooks
+
+The repository ships a curated [`pre-commit`](https://pre-commit.com/)\
+configuration that formats code, lints YAML/TOML files and validates static
+metadata before every commit. After installing the development dependencies run
+`pre-commit install` (see the quick start steps above) to register the hooks with
+your local Git clone. To verify the checks manually without committing, execute:
+
+```bash
+pre-commit run --all-files
+```
+
+Hooks automatically cache their environments, so subsequent executions only
+re-run the steps affected by the files you touched. If you update the
+configuration (for example, bump hook revisions) refresh the cache with:
+
+```bash
+pre-commit autoupdate
+pre-commit run --all-files
+```
+
+All hooks must pass locally before pushing — CI enforces the same suite to
+guarantee consistent formatting and linting outcomes.
+
 Inspect the orchestrator and pipeline-specific flags:
 
 ```bash
