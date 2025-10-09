@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+from dataclasses import dataclass
 from importlib import import_module
+from itertools import islice
 from pathlib import Path
+from threading import Lock
+from time import perf_counter, sleep
+from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence, cast
 
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
@@ -293,11 +299,6 @@ _OUTPUT_ACTIVITY_DROP_COLUMNS: tuple[str, ...] = (
     "standard_upper_value",
     "shuffled_cit",
 )
-
-<<<<<<< HEAD
-# ... [rest of the code remains unchanged, as above] ...
-=======
-
 
 def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
     """Return ``series`` converted to ``dtype`` where feasible."""
@@ -1872,8 +1873,6 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Expose parser construction for existing imports."""
 
     return _CLI.build_parser()
-
->>>>>>> origin/codex/fix-typeerror-in-get_activity_data.py-5nnk1d
 
 from library.cli.entrypoints import activity as _activity
 
