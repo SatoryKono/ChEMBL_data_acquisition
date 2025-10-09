@@ -79,6 +79,7 @@ from library.cli.entrypoints.activity import (
     DEFAULT_OUTPUT_STEM,
     PROGRAM_NAME,
     _emit_completion_message,
+    _generate_activity_postprocess_metrics as _cli_generate_activity_postprocess_metrics,
     build_parser,
     main,
     run,
@@ -1593,7 +1594,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if extended_output_path is not None:
             report_extras["extended_output"] = str(extended_output_path)
 
-        postprocess_metrics, report_path = _generate_activity_postprocess_metrics(
+        postprocess_metrics, report_path = _cli_generate_activity_postprocess_metrics(
             cfg,
             output_path,
             logger=logger,
