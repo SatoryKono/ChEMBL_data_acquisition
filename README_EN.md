@@ -98,6 +98,34 @@ before opening a pull request. When sharing results, commit the code changes and
 attach the generated reports to the PR so reviewers can audit the exact pass
 rate without reproducing the run locally.
 
+### Logging contract
+
+All CLI entry points initialise structured logging via the shared bootstrap
+helpers. By default every command writes to `logs/<program>_<YYYYMMDD>.log`,
+where `<program>` matches the script name (for example,
+`get_data` → `logs/get_data_20250228.log`). Setting `--base-path` or the
+`CHEMBL_DA_BASE_PATH` environment variable relocates the directory to
+`<base>/logs` while keeping the `<program>_<YYYYMMDD>.log` naming scheme.
+Tests and operational runbooks rely on this pattern to locate artefacts, so the
+file stem must not be renamed or rotated differently.
+
+### Determinism verification order
+
+Pipeline promotions must follow a strict determinism check list:
+
+1. Run `python scripts/run_tests.py` to confirm the pytest suite completes with
+   a ≥95 % success rate.
+2. Execute the target CLI against a clean output directory.
+3. Immediately repeat the same command — or call
+   `python scripts/check_determinism.py --no-dry-run` with the intended input —
+   to produce a second export.
+4. Compare the resulting files (the helper computes SHA256 digests for CSVs and
+   `.meta.yaml` sidecars). Any mismatch indicates a determinism regression.
+
+The log contract above ensures both executions append to the same
+`<program>_<YYYYMMDD>.log` file, making it straightforward to diff the emitted
+events while investigating discrepancies.
+
 ### CLI quick reference
 
 | Command | Example invocation | Highlights |
