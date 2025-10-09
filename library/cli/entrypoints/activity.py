@@ -243,11 +243,8 @@ def prepare_activity_context(
 
 _EXTENDED_ACTIVITY_DTYPES: dict[str, str] = {
     "activity_chembl_id": "string",
-    "salt_chembl_id": "string",
     "target_chembl_id": "string",
     "bao_endpoint": "string",
-    "compound_key": "string",
-    "compound_name": "string",
     "multmol_assay": "boolean",
     "approx_cited_activity": "boolean",
     "shuffled_cit": "boolean",

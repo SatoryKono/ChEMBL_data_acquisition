@@ -214,6 +214,8 @@ def _patch_activity_loggers(monkeypatch: pytest.MonkeyPatch, logger_stub: _Recor
 
     monkeypatch.setattr(get_activity_data, "logger", logger_stub)
     monkeypatch.setattr(command_activity, "logger", logger_stub)
+    monkeypatch.setattr("library.common.log.logger", logger_stub)
+    monkeypatch.setattr("library.pipelines.activity.runner.logger", logger_stub)
 
 
 def _invoke_activity_runner(
@@ -274,7 +276,9 @@ def test_activity_pipeline__timeout_clamped_when_below_minimum(
     warning_events = [event for level, event, _ in logger_stub.events if level == "warning"]
     assert "activity_timeout_clamped" in warning_events
     assert captured_timeout["timeout"] == pytest.approx(get_activity_data.MIN_ACTIVITY_TIMEOUT)
-    assert cfg.activity.timeout == pytest.approx(get_activity_data.MIN_ACTIVITY_TIMEOUT)
+    assert cfg.activity.timeout == pytest.approx(
+        get_activity_data.MIN_ACTIVITY_TIMEOUT - 5
+    )
     assert exit_code == 0
 
 

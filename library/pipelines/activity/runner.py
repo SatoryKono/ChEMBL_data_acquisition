@@ -106,6 +106,7 @@ def run_activity_pipeline(
         emit_completion_message = emit_completion_message or default_completion
 
     start_time = perf_counter()
+    effective_cfg = cfg.model_copy(deep=True)
 
     args = argparse.Namespace(
         input_csv=_normalise_path(options.input_csv),
@@ -118,17 +119,17 @@ def run_activity_pipeline(
     args.timeout = (
         options.timeout
         if options.timeout is not None
-        else getattr(getattr(cfg, "activity", object()), "timeout", None)
+        else getattr(getattr(effective_cfg, "activity", object()), "timeout", None)
     )
     args.batch_size = (
         options.batch_size
         if options.batch_size is not None
-        else getattr(getattr(cfg, "activity", object()), "batch_size", None)
+        else getattr(getattr(effective_cfg, "activity", object()), "batch_size", None)
     )
     args.workers = (
         options.workers
         if options.workers is not None
-        else getattr(getattr(cfg, "activity", object()), "workers", None)
+        else getattr(getattr(effective_cfg, "activity", object()), "workers", None)
     )
     if options.invocation is not None:
         args.invocation = tuple(str(part) for part in options.invocation)
@@ -139,7 +140,7 @@ def run_activity_pipeline(
         if legacy_output is not None:
             output_path = legacy_output
         else:
-            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            output_path = Path(io.default_output_path(args.input_csv, effective_cfg.io))
         args.final_out = output_path
         args.output_csv = output_path
     else:
@@ -147,7 +148,7 @@ def run_activity_pipeline(
         args.final_out = output_path
         args.output_csv = output_path
 
-    batch_size = getattr(cfg.activity, "batch_size", None)
+    batch_size = getattr(effective_cfg.activity, "batch_size", None)
     if batch_size is not None and batch_size > MAX_ACTIVITY_CHUNK_SIZE:
         logger.warning(
             "activity_batch_size_clamped",
@@ -160,10 +161,10 @@ def run_activity_pipeline(
             MAX_ACTIVITY_CHUNK_SIZE,
             MAX_ACTIVITY_CHUNK_SIZE,
         )
-        cfg.activity.batch_size = MAX_ACTIVITY_CHUNK_SIZE
+        effective_cfg.activity.batch_size = MAX_ACTIVITY_CHUNK_SIZE
         args.batch_size = MAX_ACTIVITY_CHUNK_SIZE
 
-    timeout = getattr(cfg.activity, "timeout", None)
+    timeout = getattr(effective_cfg.activity, "timeout", None)
     if timeout is not None and timeout < MIN_ACTIVITY_TIMEOUT:
         logger.warning(
             "activity_timeout_clamped",
@@ -177,13 +178,13 @@ def run_activity_pipeline(
             MIN_ACTIVITY_TIMEOUT,
         )
         minimum_timeout = float(MIN_ACTIVITY_TIMEOUT)
-        cfg.activity.timeout = minimum_timeout
+        effective_cfg.activity.timeout = minimum_timeout
         try:
             args.timeout = float(minimum_timeout)
         except (TypeError, ValueError):  # pragma: no cover - defensive
             args.timeout = minimum_timeout
 
-    retry_attempts = getattr(cfg.retry, "max_attempts", None)
+    retry_attempts = getattr(effective_cfg.retry, "max_attempts", None)
     if retry_attempts is not None and retry_attempts <= 1:
         logger.warning(
             "activity_retry_disabled",
@@ -195,7 +196,7 @@ def run_activity_pipeline(
             retry_attempts,
         )
 
-    api_retries = getattr(cfg.api, "retries", None)
+    api_retries = getattr(effective_cfg.api, "retries", None)
     if api_retries is not None and api_retries <= 0:
         logger.warning(
             "activity_api_retry_disabled",
@@ -221,7 +222,7 @@ def run_activity_pipeline(
         )
         return 0
 
-    return runner(cfg, args)
+    return runner(effective_cfg, args)
 
 
 __all__ = [
