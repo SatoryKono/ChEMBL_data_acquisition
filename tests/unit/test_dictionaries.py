@@ -56,56 +56,16 @@ def _write_manifest(tmp_path, body: str) -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize(
     ("resource_name", "checksum"),
-    (
-        (
-            "dictionary_root",
-            "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a",
-        ),
-        (
-            "dictionary_root",
-            "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
-        ),
-        (
-            "dictionary_root",
-            "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a",
-        ),
-        (
-            "dictionary_root",
-            "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
-        ),
-        (
-            "dictionary_root",
-            "7940666d2f731caa8688e3c20603caa60d9057f7eac5fd4bddfb06febe59e071",
-        ),
-        (
-            "dictionary_root",
-            "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15",
-        ),
-        (
-            "dictionary_root",
-            "bb98601cdc63ee4aeab49dac849f545e516b2a0a9b720174444af8975115a0b2",
-        ),
-        (
-            "dictionary_root",
-            "db25392613353b15acb21c88c057f6422d8cd32aea1a3fc710e5a0c4d060b91b",
-        ),
-        (
-            "dictionary_root",
-            "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b",
-        ),
-        (
-            "dictionary_root",
-            "e50c951fb02903d25e40507f032c48c1d87f46673450837cfcc6afeff833e2e4",
-        ),
-        (
-            "dictionary_root",
-            "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a",
-        ),
+    [
+        *[
+            ("dictionary_root", checksum)
+            for checksum in dictionaries.WINDOWS_DICTIONARY_ROOT_CHECKSUMS
+        ],
         (
             "target_uniprot_cache",
             "c86b314b5d8a0906f1174c8e9f494cf9dde6841be2cb1e8b66c5772976afb5ca",
         ),
-    ),
+    ],
 )
 def test_parse_manifest__accepts_known_checksum_variants(
     tmp_path, monkeypatch, resource_name, checksum

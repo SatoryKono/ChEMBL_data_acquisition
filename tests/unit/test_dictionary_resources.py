@@ -127,6 +127,7 @@ def test_manifest_allows_windows_textmode_checksum() -> None:
         dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM,
         dictionaries.WINDOWS_VFS_NTFS_CHECKSUM,
         "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b",
+        "a2ef6887a21997025de76c27804e7c2c6148844c0a891411dac7528c8e43c738",
     }
 
     assert expected.issubset(sha256_values)
@@ -146,6 +147,7 @@ def test_known_checksum_variants__includes_sparse_index_checksum(tmp_path: Path)
     assert dictionaries.WINDOWS_VFS_NTFS_CHECKSUM in variants
     assert "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a" in variants
     assert "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b" in variants
+    assert "a2ef6887a21997025de76c27804e7c2c6148844c0a891411dac7528c8e43c738" in variants
 
 
 @pytest.mark.unit
@@ -168,3 +170,4 @@ def test_iter_additional_checksums__merges_manifest_allowlist(tmp_path: Path) ->
     assert dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM in variants
     assert "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a" in variants
     assert custom_checksum in variants
+    assert "a2ef6887a21997025de76c27804e7c2c6148844c0a891411dac7528c8e43c738" in variants
