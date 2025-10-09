@@ -12,6 +12,7 @@ del bootstrap_cli
 
 import argparse
 import os
+from importlib import import_module
 from pathlib import Path
 from typing import Sequence
 
@@ -27,34 +28,29 @@ from library.postprocess.common.types import SchemaValidationError, StepError
 from library.postprocess.targets.schema import TARGET_SCHEMA, validate_targets
 from library.postprocess.targets.steps import run_target_pipeline
 
-try:
-    from ._postprocess_common import (
-        CsvRuntimeConfig,
-        DEFAULT_LOG_DIR,
-        LOG_DIR_ENV,
-        export_postprocess_frame,
-        generate_metrics_report,
-        get_csv_runtime_config,
-        get_default_log_level,
-        get_pipeline_config,
-        load_input_frame,
-        run_postprocess_steps,
-        validate_postprocess_frame,
-    )
-except ImportError:  # pragma: no cover - fallback for direct execution
-    from _postprocess_common import (
-        CsvRuntimeConfig,
-        DEFAULT_LOG_DIR,
-        LOG_DIR_ENV,
-        export_postprocess_frame,
-        generate_metrics_report,
-        get_csv_runtime_config,
-        get_default_log_level,
-        get_pipeline_config,
-        load_input_frame,
-        run_postprocess_steps,
-        validate_postprocess_frame,
-    )
+_POSTPROCESS_EXPORTS = (
+    "CsvRuntimeConfig",
+    "DEFAULT_LOG_DIR",
+    "LOG_DIR_ENV",
+    "export_postprocess_frame",
+    "generate_metrics_report",
+    "get_csv_runtime_config",
+    "get_default_log_level",
+    "get_pipeline_config",
+    "load_input_frame",
+    "run_postprocess_steps",
+    "validate_postprocess_frame",
+)
+
+
+def _load_postprocess_common():
+    module_name = f"{__package__}._postprocess_common" if __package__ else "_postprocess_common"
+    return import_module(module_name)
+
+
+_postprocess_common = _load_postprocess_common()
+globals().update({name: getattr(_postprocess_common, name) for name in _POSTPROCESS_EXPORTS})
+del _postprocess_common
 
 
 TABLE_NAME = "targets"
