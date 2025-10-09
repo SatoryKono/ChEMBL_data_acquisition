@@ -281,11 +281,11 @@ def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
 
     # Use pandas extension dtypes directly for nullable types
     if dtype == "Float64":
-        return cast(pd.Series[Any], series.astype(pd.Float64Dtype()))
+        return cast("pd.Series[Any]", series.astype(pd.Float64Dtype()))
     elif dtype == "Int64":
-        return cast(pd.Series[Any], series.astype(pd.Int64Dtype()))
+        return cast("pd.Series[Any]", series.astype(pd.Int64Dtype()))
     elif dtype == "boolean":
-        return cast(pd.Series[Any], series.astype(pd.BooleanDtype()))
+        return cast("pd.Series[Any]", series.astype(pd.BooleanDtype()))
     elif dtype == "string":
         return series.astype(pd.StringDtype())
     else:
@@ -295,7 +295,7 @@ def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
             return series.astype(np.dtype(dtype))
         except (TypeError, ValueError):
             # Final fallback: convert to string
-            return cast(pd.Series[Any], series.astype(str))
+            return cast("pd.Series[Any]", series.astype(str))
 
 
 def _extract_adapter_retry_metadata(
@@ -1426,23 +1426,23 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     summary_snapshot: Mapping[str, object] | None = None
     processed_ids = prepared_context.processed_ids
+    processed_count = 0
+    try:
+        processed_count = int(processed_ids or 0)
+    except (TypeError, ValueError):
+        logger.info("processed_count_conversion_failed", value=processed_ids)
+        processed_count = 0
+
     if limit is not None:
         logger.info(
             "process_limit",
             processed=processed_ids,
             limit=limit,
         )
+        summary_snapshot = streamed_summary or streaming_stats.snapshot()
     else:
-        if processed_ids is not None and isinstance(processed_ids, (int, float, str)):
-            try:
-                processed_count = int(processed_ids)
-            except (TypeError, ValueError):
-                processed_count = 0
-        else:
-            processed_count = 0
-            logger.info("processed_count", count=processed_count)
-
-            summary_snapshot = streamed_summary or streaming_stats.snapshot()
+        summary_snapshot = streamed_summary or streaming_stats.snapshot()
+        logger.info("processed_count", count=processed_count)
 
     if pipeline_stats is not None:
         try:
