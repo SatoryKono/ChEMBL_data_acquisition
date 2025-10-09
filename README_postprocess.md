@@ -1,5 +1,9 @@
 # Post-processing and orchestration guide
 
+> **Languages:** English · [Русский](README_postprocess_RU.md)
+
+The English text is mirrored in [`README_postprocess_EN.md`](README_postprocess_EN.md) to keep the language pair in sync.
+
 This note documents the refactored post-processing stack that underpins CSV exports across the ChEMBL data acquisition pipelines. It complements the high-level [Architecture overview](docs/en/ARCHITECTURE.md) and focuses on how the dedicated orchestration, schema and reporting packages interact during development and runtime.
 
 ## Package layout
