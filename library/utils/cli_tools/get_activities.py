@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import os
-import tempfile
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from uuid import uuid4
@@ -90,42 +88,28 @@ def _frame_from_records(records: Iterable[dict[str, object]]) -> pd.DataFrame:
 def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Path:
     """Persist ``frame`` and accompanying metadata to ``output_path`` atomically."""
 
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = output_path.with_name(
         f".{output_path.name}.{uuid4().hex}.tmp"
     )
     written = io.write_csv(frame, temp_path, cfg=cfg)
     temp_meta = Path(f"{written}.meta.yaml")
+    final_meta = Path(f"{output_path}.meta.yaml")
 
     try:
         written.replace(output_path)
+        if temp_meta.exists():
+            temp_meta.replace(final_meta)
+        else:
+            final_meta.unlink(missing_ok=True)
     except Exception:
         written.unlink(missing_ok=True)
+        temp_meta.unlink(missing_ok=True)
         raise
     finally:
+        # Ensure no orphaned ``*.tmp.meta.yaml`` remains on success or failure.
         temp_meta.unlink(missing_ok=True)
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(
-        dir=str(output_path.parent),
-        prefix=f".{output_path.name}.",
-        suffix=output_path.suffix or ".tmp",
-    )
-    os.close(fd)
-    tmp_path = Path(tmp_name)
-    try:
-        io.write_csv(frame, tmp_path, cfg=cfg)
-        written = tmp_path.replace(output_path)
-    except Exception:
-        tmp_path.unlink(missing_ok=True)
-        raise
-    else:
-        tmp_path.unlink(missing_ok=True)
-    io.write_meta_yaml(
-        output_path,
-        cfg=cfg,
-        columns=list(frame.columns),
-        dtypes={col: str(dtype) for col, dtype in frame.dtypes.items()},
-    )
     return output_path
 
 
