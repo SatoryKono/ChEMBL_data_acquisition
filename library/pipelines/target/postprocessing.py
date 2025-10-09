@@ -434,6 +434,11 @@ def postprocess_targets(
         {"51.1rMVA_034": "N1L"}
     )
     df["gene_name"] = df.get("geneName", pd.Series(dtype=str))
+
+    if "gene" in df.columns:
+        df["gene"] = df["gene"].astype("string").fillna("")
+    else:
+        df["gene"] = pd.Series("", index=df.index, dtype="string")
     mask = df["gene_name"].isna() | (df["gene_name"] == "")
     df.loc[mask, "gene_name"] = df.loc[mask, "gene_name_x"].fillna("")
     mask = df["gene_name"] == ""
