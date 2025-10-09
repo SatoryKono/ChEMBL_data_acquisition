@@ -122,6 +122,22 @@ class PipelineCLIBase:
         parser, log_cfg = self.build_parser()
         args = parser.parse_args(argv)
         args = self.prepare_arguments(parser, args, argv)
+
+        explicit_run_id = getattr(args, "run_id", None)
+        if isinstance(explicit_run_id, str):
+            explicit_run_id = explicit_run_id.strip() or None
+        if explicit_run_id in (argparse.SUPPRESS,):
+            explicit_run_id = None
+        setattr(args, "run_id", explicit_run_id)
+        if explicit_run_id is not None:
+            log_cfg.run_id = explicit_run_id
+
+        if not hasattr(args, "invocation"):
+            from ..cli_utils import resolve_invocation as _resolve_invocation
+
+            invocation = _resolve_invocation(parser.prog, argv)
+            setattr(args, "invocation", invocation)
+
         exit_code = self.handle_pre_run(parser, args)
         if exit_code is not None:
             return exit_code
