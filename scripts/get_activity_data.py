@@ -126,11 +126,19 @@ __all__ = (
 def _ensure_command_logger_sync() -> None:
     """Keep the shared command module logger aligned with this script logger."""
 
-    if getattr(_activity_cli_commands, "logger", None) is not logger:
-        _activity_cli_commands.logger = logger
+    # Fix: Only attempt to sync logger if both _activity_cli_commands and logger are defined
+    # Only attempt to sync logger if both _activity_cli_commands and logger are defined and accessible
+    _activity_cli_commands = globals().get("_activity_cli_commands", None)
+    logger = globals().get("logger", None)
+    if _activity_cli_commands is not None and logger is not None:
+        if getattr(_activity_cli_commands, "logger", None) is not logger:
+            try:
+                _activity_cli_commands.logger = logger
+            except Exception:
+                # Something went wrong; skip sync
+                pass
 
-
-_ensure_command_logger_sync()
+    _ensure_command_logger_sync()
 
 
 _CACHE_MISS = object()
@@ -273,12 +281,12 @@ def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
     elif dtype == "boolean":
         return cast(pd.Series[Any], series.astype(pd.BooleanDtype()))
     elif dtype == "string":
-        return cast(pd.Series[Any], series.astype(pd.StringDtype()))
+        return series.astype(pd.StringDtype())
     else:
         # For non-extension dtypes, try to use numpy dtype if possible
         try:
             import numpy as np
-            return cast(pd.Series[Any], series.astype(np.dtype(dtype)))
+            return series.astype(np.dtype(dtype))
         except (TypeError, ValueError):
             # Final fallback: convert to string
             return cast(pd.Series[Any], series.astype(str))
@@ -295,9 +303,11 @@ def _extract_adapter_retry_metadata(
     payload is JSON/log friendly.
     """
 
-    adapters: list[requests.adapters.HTTPAdapter] = []
+    adapters: list[requests.adapters.BaseAdapter] = []
     try:
-        adapters.append(session.get_adapter(base_url))
+        adapter = session.get_adapter(base_url)
+        if isinstance(adapter, requests.adapters.HTTPAdapter):
+            adapters.append(adapter)
     except Exception:  # pragma: no cover - defensive for alternative sessions
         pass
     try:
@@ -518,12 +528,12 @@ def _coerce_extended_series(
         if non_integral_mask.any():
             converted_float.loc[non_integral_mask] = pd.NA
             failures = failures | non_integral_mask
-        try:
-            converted = converted_float.astype("Int64")
-        except (TypeError, ValueError):
-            converted = pd.Series(pd.NA, index=series.index, dtype="Int64")
-            failures = series.notna()
-        return converted, failures
+            try:
+                converted = converted_float.astype("Int64")
+            except (TypeError, ValueError):
+                converted = pd.Series(pd.NA, index=series.index, dtype="Int64")
+                failures = pd.Series(True, index=series.index)
+            return converted, failures
 
     if dtype == "boolean":
         try:
@@ -531,15 +541,17 @@ def _coerce_extended_series(
             failures = series.notna() & converted.isna()
         except (TypeError, ValueError):
             converted = pd.Series(pd.NA, index=series.index, dtype="boolean")
-            failures = series.notna()
-        return converted, failures
+            failures = pd.Series(True, index=series.index)
+            return converted, failures
 
     try:
         converted = series.astype(dtype)
+        # If dtype is not compatible, astype with errors="ignore" will not convert, so check for failures
         failures = series.notna() & converted.isna()
     except (TypeError, ValueError):
         converted = pd.Series(pd.NA, index=series.index, dtype=dtype)
-        failures = series.notna()
+        failures = pd.Series(True, index=series.index)
+
     return converted, failures
 
 
@@ -715,7 +727,7 @@ def _ensure_molecule_pref_name(
                 continue
             if current is not _CACHE_MISS:
                 continue
-            cache[cache_key] = _CACHE_IN_PROGRESS
+            cache[cache_key] = _CACHE_IN_PROGRESS  # type: ignore[assignment]
             pending.append(cache_key)
 
     if pending:
@@ -1376,7 +1388,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         result = activity_run.run_activity_pipeline(
             fetch_config=fetch_config,
-            metadata_hooks=list(metadata_hooks),
+            metadata_hooks=metadata_hooks,
             fetch_chunk=fetch_chunk,
             writer_config=writer_config,
             definition_kwargs=definition_kwargs,
@@ -1414,13 +1426,26 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             limit=limit,
         )
     else:
-        logger.info("processed_count", count=processed_ids)
+        if processed_ids is not None and isinstance(processed_ids, (int, float, str)):
+            try:
+                processed_count = int(processed_ids)
+            except (TypeError, ValueError):
+                processed_count = 0
+        else:
+            processed_count = 0
+            logger.info("processed_count", count=processed_count)
 
-    summary_snapshot = streamed_summary or streaming_stats.snapshot()
+            summary_snapshot = streamed_summary or streaming_stats.snapshot()
 
     if pipeline_stats is not None:
-        rows_total = int(pipeline_stats.get("rows_total", processed_ids))
-        rows_kept = int(pipeline_stats.get("rows_kept", 0))
+        try:
+            rows_total = int(pipeline_stats.get("rows_total", processed_count))
+        except (TypeError, ValueError):
+            rows_total = processed_count
+        try:
+            rows_kept = int(pipeline_stats.get("rows_kept", 0))
+        except (TypeError, ValueError):
+            rows_kept = 0
         rows_dropped = int(pipeline_stats.get("rows_dropped", 0))
         logger.info(
             "records_dropped",
@@ -1472,7 +1497,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
 
         pipeline_version_value = (
-            postprocess_metrics.pipeline_version
+            getattr(postprocess_metrics, "pipeline_version", None)
             if postprocess_metrics and postprocess_metrics.pipeline_version is not None
             else get_pipeline_version()
         )
@@ -1482,8 +1507,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             "rows": completion_rows,
             "pipeline_version": pipeline_version_value,
         }
-        if summary_snapshot:
-            pipeline_done_payload["null_fraction"] = summary_snapshot.get("null_fraction")
+        if summary_snapshot is not None:
+            null_fraction = summary_snapshot.get("null_fraction")
+            if null_fraction is not None:
+                pipeline_done_payload["null_fraction"] = null_fraction
         if extended_output_path is not None:
             pipeline_done_payload["extended_output"] = str(extended_output_path)
         if postprocess_metrics is not None:

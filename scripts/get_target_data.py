@@ -14,46 +14,34 @@ from __future__ import annotations
 
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
+    bootstrap_cli(__package__, __file__)
 else:  # pragma: no cover - executed when imported as a package module
     from ._bootstrap import bootstrap_cli
-
-bootstrap_cli(__package__, __file__)
+    bootstrap_cli(__package__, __file__)
 del bootstrap_cli
+    del bootstrap_cli
 
 # ruff: noqa: E402
 import argparse
+import math
 import os
-import sys
 import shutil
+import stat
+import sys
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-import math
 from inspect import signature
 from itertools import islice
 from pathlib import Path
-import stat
-from typing import IO, Any, cast
-
+from typing import Any
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
 import library.cli_utils as cli_utils_module
-from library import cli
-from library import io
-from library.integration import chembl_library as cl
-from library.integration import iuphar_library as ii
-from library.integration import uniprot_library as uu
-from library.pipelines.target import protein_classification as pc
-from library.pipelines.target import postprocessing as tp
-from library.pipelines.target.defaults import ModeDefaults, TARGET_MODE_DEFAULTS
-
-from library.orchestration import ETLContext
-from library.cli.pipeline_definition import normalise_definition
-from library.cli_utils import PipelineError, run_cli_command, run_pipeline
-from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
+from library import SidecarErrors, cli, io
 from library.cli import (
     Logger,
     LoggerConfig,
@@ -64,27 +52,34 @@ from library.cli import (
     prepare_io_paths,
 )
 from library.cli.base import PipelineCLIBase
-from library.cli.logging import CLILoggingContext, setup_cli_logging
+from library.cli.logging import CLILoggingContext
+from library.cli.pipeline_definition import normalise_definition
+from library.cli_utils import PipelineError, run_cli_command, run_pipeline
+from library.common.csv_utils import write_csv_deterministic
+from library.common.log import logger
 from library.config import (
     Config,
     _serialize_paths,
 )
-from library.common.csv_utils import write_csv_deterministic
-from library.common.log import logger
+from library.integration import chembl_library as cl
+from library.integration import iuphar_library as ii
+from library.integration import uniprot_library as uu
 from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.orchestration import ETLContext
 from library.pipelines.common import add_pipeline_metadata
 from library.pipelines.common.metadata import get_pipeline_version
-from library import SidecarErrors
+from library.pipelines.target import postprocessing as tp
+from library.pipelines.target import protein_classification as pc
+from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
+from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS, ModeDefaults
+from library.postprocess.common import collect_postprocess_metrics
+from library.postprocess.targets import run_target_pipeline as run_target_postprocess
+from library.postprocessing import names as names_pp
+from library.postprocessing import target as target_pp
 from library.qa.reporting import build_table_quality_hook, is_quality_enabled
-from library.validation import ValidationResult
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
-
-
-from library.postprocessing import target as target_pp
-from library.postprocessing import names as names_pp
-from library.postprocess.targets import run_target_pipeline as run_target_postprocess
-from library.postprocess.common import collect_postprocess_metrics
+from library.validation import ValidationResult
 
 try:
     from library.postprocessing import iuphar as iuphar_pp
@@ -106,7 +101,7 @@ except ImportError as _process_targets_exc:  # pragma: no cover - compatibility
     if _process_targets_impl is None:  # pragma: no cover - defensive guard
         raise _process_targets_exc
 else:  # pragma: no cover - compatibility bridge
-    setattr(target_pp, "process_targets", _process_targets_impl)
+    target_pp.process_targets = _process_targets_impl
 
 try:
     _TARGET_PROCESS_SIGNATURE = signature(_process_targets_impl)
@@ -215,7 +210,7 @@ class StoreWithSource(argparse.Action):
         overrides = getattr(namespace, "_cli_overrides", None)
         if overrides is None:
             overrides = set()
-            setattr(namespace, "_cli_overrides", overrides)
+            namespace._cli_overrides = overrides
         overrides.add(self.dest)
         setattr(namespace, self.dest, values)
 
@@ -491,7 +486,7 @@ def _coerce_target_names_result(
         if isinstance(extra, Mapping):
             summary = _normalise_names_summary(extra)
     elif hasattr(result, "path"):
-        path_candidate = getattr(result, "path")
+        path_candidate = result.path
         extra = getattr(result, "summary", None)
         if isinstance(extra, Mapping):
             summary = _normalise_names_summary(extra)
@@ -523,7 +518,7 @@ def _coerce_iuphar_result(result: object) -> Path | None:
             or result.get("iuphar_path")
         )
     elif hasattr(result, "path"):
-        candidate = getattr(result, "path")
+        candidate = result.path
     else:
         candidate = result
 
@@ -1058,7 +1053,7 @@ def _build_uniprot_query_plan(df: pd.DataFrame, cfg: Config) -> _UniprotQueryPla
     for row in df.itertuples(index=False, name=None):
         candidates: list[_UniprotCandidate] = []
         row_seen: set[str] = set()
-        for column, pos in zip(candidate_columns, positions):
+        for column, pos in zip(candidate_columns, positions, strict=False):
             raw_value = row[pos]
             if not isinstance(raw_value, str) or not raw_value:
                 continue
@@ -1107,7 +1102,7 @@ def _resolve_uniprot_matches(
             uniprot_df["original_id"].fillna("").astype(str).map(str.strip)
         )
         candidate_map: dict[str, str] = {}
-        for canonical, original in zip(cleaned, original_series):
+        for canonical, original in zip(cleaned, original_series, strict=False):
             if not canonical:
                 continue
             candidate_map.setdefault(canonical, canonical)
@@ -1243,34 +1238,12 @@ class _RawDumpStreamWriter:
             mode = "w" if self._rows_written == 0 else "a"
             header = self._rows_written == 0
             working.to_csv(
-                self.destination,
+                str(self.destination),
                 mode=mode,
                 header=header,
                 index=False,
                 sep=self.cfg.io.csv_sep,
                 encoding=self.cfg.io.csv_encoding,
-            )
-            self._destination_opened = True
-
-        self._rows_written += len(working)
-
-    def finalize(self) -> Path:
-        if self._is_parquet:
-            frames = self._frames or []
-            if frames:
-                combined = pd.concat(frames, ignore_index=True)
-            else:
-                combined = pd.DataFrame(columns=self._columns or [])
-            try:
-                combined.to_parquet(self.destination, index=False)
-            except (ImportError, ValueError) as exc:
-                raise OSError(f"failed to write parquet: {exc}") from exc
-        else:
-            if not self._destination_opened:
-                empty = pd.DataFrame(columns=self._columns or [])
-                empty.to_csv(
-                    self.destination,
-                    index=False,
                     sep=self.cfg.io.csv_sep,
                     encoding=self.cfg.io.csv_encoding,
                 )
@@ -2553,8 +2526,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         if resolved_keys:
             missing_keys = [col for col in resolved_keys if col not in combined.columns]
-            if not missing_keys:
-                combined = combined.sort_values(by=resolved_keys).reset_index(drop=True)
+            if not missing_keys and resolved_keys:
+                combined = combined.sort_values(by=list(resolved_keys)).reset_index(drop=True)
 
         if raw_format == "parquet":
             try:
@@ -2579,7 +2552,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if normalize_at_export:
             final_df = normalize_targets(final_df)
             final_df, _, missing_optional = _prepare_targets_for_schema(final_df)
-            missing_optional_columns.update(missing_optional)
+            if missing_optional is not None:
+                missing_optional_columns.update(missing_optional)
+                missing_optional_columns.update(missing_optional)
 
         if final_output == raw_output and not normalize_at_export and raw_format == "parquet":
             final_path = raw_path
@@ -2872,7 +2847,7 @@ def fetch_chembl(
             cfg.target.chembl.limit = original_limit
         if chunk_size is not None:
             cfg.target.chembl.chunk_size = original_chunk_size
-    normalized_output = _normalized_output_path(final_out)
+    _normalized_output_path(final_out)
     df = pd.read_csv(
 
         final_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
@@ -3281,12 +3256,17 @@ def fetch_iuphar(
         combined_df = combined_df.rename(columns=rename_map)
 
     combined_df = combined_df.drop(
-        columns=[lookup_column, mapping_join_column], errors="ignore"
+        columns=[col for col in [lookup_column, mapping_join_column] if col is not None],
+        errors="ignore"
     )
     if "original_id" in combined_df.columns:
         combined_df = combined_df.drop(columns=["original_id"])
 
     overlap_columns = sorted(
+        col
+        for col in (set(chembl_for_merge.columns) & (set(uniprot_df.columns) - {"original_id"}))
+        if col is not None
+    )
         set(chembl_for_merge.columns)
         & (set(uniprot_df.columns) - {"original_id"})
     )
@@ -3321,7 +3301,7 @@ def fetch_iuphar(
             overlap_updates[column] = pd.Series(
                 [
                     normalize_reaction_ec_numbers([u, c])
-                    for u, c in zip(uniprot_values, chembl_values)
+                    for u, c in zip(uniprot_values, chembl_values, strict=False)
                 ],
                 index=combined_df.index,
                 dtype=object,
@@ -3423,7 +3403,7 @@ def fetch_iuphar(
     column_updates["ec_number"] = pd.Series(
         (
             _pipe_merge([ec_val, reaction_val])
-            for ec_val, reaction_val in zip(ec_numbers_values, reaction_values)
+            for ec_val, reaction_val in zip(ec_numbers_values, reaction_values, strict=False)
         ),
         index=index,
         dtype=object,
@@ -3495,7 +3475,7 @@ def fetch_iuphar(
 
     combined_df["reaction_ec_numbers"] = [
         normalize_reaction_ec_numbers([u, c])
-        for u, c in zip(uniprot_reactions, chembl_reactions)
+        for u, c in zip(uniprot_reactions, chembl_reactions, strict=False)
     ]
 
     from tempfile import NamedTemporaryFile
@@ -4054,12 +4034,12 @@ class TargetPipelineCLI(PipelineCLIBase):
         self,
         parser: argparse.ArgumentParser,
         args: argparse.Namespace,
-        argv: Sequence[str] | None,
+        argv: Sequence[str] = None,
     ) -> argparse.Namespace:
         del argv
         command_alias = COMMAND_ALIAS_TO_CANONICAL.get(getattr(args, "command", ""))
         if command_alias is not None:
-            setattr(args, "_command_keyboard_alias", args.command)
+            args._command_keyboard_alias = args.command
             args.command = command_alias
         prepare_io_paths(
             args,
@@ -4159,9 +4139,9 @@ class TargetPipelineCLI(PipelineCLIBase):
                         input_default=DEFAULT_INPUT_NAME,
                         output_stem=DEFAULT_OUTPUT_STEM,
                     )
-                    args_dict["final_out"] = getattr(temp_namespace, "final_out")
-                    args_dict["output_csv"] = getattr(temp_namespace, "output_csv")
-                    args_dict["raw_out"] = getattr(temp_namespace, "raw_out")
+                    args_dict["final_out"] = temp_namespace.final_out
+                    args_dict["output_csv"] = temp_namespace.output_csv
+                    args_dict["raw_out"] = temp_namespace.raw_out
                     args_dict["date"] = getattr(temp_namespace, "date", None)
                 else:
                     args_dict["final_out"] = Path(final_value)
