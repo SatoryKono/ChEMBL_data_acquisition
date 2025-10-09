@@ -4,14 +4,20 @@ from __future__ import annotations
 
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
+
+    bootstrap_cli(__package__, __file__)
+    package_name = "scripts"
 else:  # pragma: no cover - executed when imported as a package module
     from ._bootstrap import bootstrap_cli
 
-bootstrap_cli(__package__, __file__)
+    bootstrap_cli(__package__, __file__)
+    package_name = __package__
+
 del bootstrap_cli
 
 import argparse
 import os
+from importlib import import_module
 from pathlib import Path
 from typing import Sequence
 
@@ -27,34 +33,20 @@ from library.postprocess.common.types import SchemaValidationError, StepError
 from library.postprocess.targets.schema import TARGET_SCHEMA, validate_targets
 from library.postprocess.targets.steps import run_target_pipeline
 
-try:
-    from ._postprocess_common import (
-        CsvRuntimeConfig,
-        DEFAULT_LOG_DIR,
-        LOG_DIR_ENV,
-        export_postprocess_frame,
-        generate_metrics_report,
-        get_csv_runtime_config,
-        get_default_log_level,
-        get_pipeline_config,
-        load_input_frame,
-        run_postprocess_steps,
-        validate_postprocess_frame,
-    )
-except ImportError:  # pragma: no cover - fallback for direct execution
-    from _postprocess_common import (
-        CsvRuntimeConfig,
-        DEFAULT_LOG_DIR,
-        LOG_DIR_ENV,
-        export_postprocess_frame,
-        generate_metrics_report,
-        get_csv_runtime_config,
-        get_default_log_level,
-        get_pipeline_config,
-        load_input_frame,
-        run_postprocess_steps,
-        validate_postprocess_frame,
-    )
+_postprocess_common = import_module(f"{package_name}._postprocess_common")
+
+CsvRuntimeConfig = _postprocess_common.CsvRuntimeConfig
+DEFAULT_LOG_DIR = _postprocess_common.DEFAULT_LOG_DIR
+LOG_DIR_ENV = _postprocess_common.LOG_DIR_ENV
+export_postprocess_frame = _postprocess_common.export_postprocess_frame
+generate_metrics_report = _postprocess_common.generate_metrics_report
+get_csv_runtime_config = _postprocess_common.get_csv_runtime_config
+get_default_log_level = _postprocess_common.get_default_log_level
+get_pipeline_config = _postprocess_common.get_pipeline_config
+load_input_frame = _postprocess_common.load_input_frame
+run_postprocess_steps = _postprocess_common.run_postprocess_steps
+validate_postprocess_frame = _postprocess_common.validate_postprocess_frame
+del _postprocess_common, package_name
 
 
 TABLE_NAME = "targets"
