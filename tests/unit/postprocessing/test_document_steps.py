@@ -111,6 +111,21 @@ def test_finalize_document_records__deduplicates_when_requested() -> None:
 
 
 @pytest.mark.unit
+def test_finalize_document_records__fills_missing_identifier_from_prefixed_column() -> None:
+    frame = pd.DataFrame(
+        {
+            "chembl.document_chembl_id": ["CHEMBL42", "CHEMBL99"],
+            "title": ["First", "Second"],
+        }
+    )
+
+    result = finalize_document_records(frame, ensure_unique_ids=True)
+
+    assert result["document_chembl_id"].tolist() == ["CHEMBL42", "CHEMBL99"]
+    assert result["chembl.document_chembl_id"].tolist() == ["CHEMBL42", "CHEMBL99"]
+
+
+@pytest.mark.unit
 def test_finalize_document_records__skips_validation_when_disabled() -> None:
     frame = pd.DataFrame({"unexpected": [1]})
 
