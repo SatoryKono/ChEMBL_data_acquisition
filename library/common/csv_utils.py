@@ -24,6 +24,7 @@ from pandas.api import types as ptypes
 from ..config import Config
 from ..utils.atomic import open_atomic, robust_replace
 from .log import logger
+from .run_context import get_current
 
 
 def _write_meta_yaml(*args: Any, **kwargs: Any) -> Path:
@@ -32,6 +33,15 @@ def _write_meta_yaml(*args: Any, **kwargs: Any) -> Path:
     from ..io.metadata import write_meta_yaml as _write_meta_yaml_impl
 
     return _write_meta_yaml_impl(*args, **kwargs)
+
+
+def _metadata_generated_at() -> str | None:
+    """Return the active deterministic ``generated_at`` timestamp."""
+
+    context = get_current()
+    if context is not None and context.generated_at:
+        return context.generated_at
+    return None
 
 
 def _normalise_bool(series: pd.Series[Any]) -> pd.Series[str]:
@@ -558,6 +568,7 @@ def write_csv_deterministic(
         cfg,
         columns=list(work.columns),
         dtypes={col: work.dtypes[col].name for col in work.columns},
+        generated_at=_metadata_generated_at(),
     )
     return out_path
 
@@ -751,6 +762,7 @@ def write_csv_chunks_deterministic(
         cfg,
         columns=meta_columns or columns,
         dtypes=dtype_names,
+        generated_at=_metadata_generated_at(),
     )
     return out_path
 

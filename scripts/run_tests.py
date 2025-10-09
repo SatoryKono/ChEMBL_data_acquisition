@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import platform
 import shlex
 import subprocess
@@ -12,11 +13,13 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Sequence
+from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 
 from library.cli import configure_logger, create_logger_config
 from library.cli.logging import setup_cli_logging
+from library.cli_utils import resolve_invocation
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_REPORTS_DIR = ROOT_DIR / "reports"
@@ -507,6 +510,33 @@ def write_summary(report: dict[str, Any], destination: Path) -> None:
     destination.write_text(build_summary_markdown(report), encoding="utf-8")
 
 
+def _log_run_artifacts(
+    logging_ctx: Any, exit_code: int, report_path: Path, summary_path: Path
+) -> None:
+    """Emit log lines describing where artefacts were written."""
+
+    logger.info("Pytest finished with exit code %s", exit_code)
+
+    log_path = getattr(logging_ctx, "log_path", None)
+    if isinstance(log_path, Path):
+        logger.info("Log saved to %s", _relative_to_root(log_path))
+    elif isinstance(log_path, str):
+        logger.info("Log saved to %s", log_path)
+
+    if RAW_REPORT_FILE.exists():
+        logger.info("Raw report available at %s", _relative_to_root(RAW_REPORT_FILE))
+    if report_path.exists():
+        logger.info(
+            "Structured report written to %s",
+            _relative_to_root(report_path),
+        )
+    if summary_path.exists():
+        logger.info(
+            "Summary written to %s",
+            _relative_to_root(summary_path),
+        )
+
+
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run the test suite and emit structured reports."
@@ -539,6 +569,12 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Path to the Markdown summary report (relative paths resolve from repo root)",
     )
     parser.add_argument(
+        "--run-id",
+        dest="run_id",
+        default=os.environ.get("CHEMBL_DA_RUN_ID"),
+        help="Override the run identifier used for logging",
+    )
+    parser.add_argument(
         "pytest_args",
         nargs=argparse.REMAINDER,
         help="Arguments forwarded to pytest (use '--' before them)",
@@ -565,17 +601,31 @@ def _resolve_output_path(raw: str | None, default: Path) -> Path:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
+    invocation = resolve_invocation("run_tests", argv)
     level = str(args.log_level or "INFO").upper()
     if args.verbose:
         level = "DEBUG"
 
-    log_cfg = create_logger_config(level)
+    report_path = _resolve_output_path(args.json_path, DEFAULT_REPORT_FILE)
+    summary_path = _resolve_output_path(args.markdown_path, DEFAULT_SUMMARY_FILE)
+
+    run_id_value = args.run_id.strip() if isinstance(args.run_id, str) else args.run_id
+    if isinstance(run_id_value, str) and not run_id_value:
+        run_id_value = None
+    if not run_id_value:
+        descriptor = "\n".join(
+            [
+                *invocation,
+                f"json={report_path.resolve()}",
+                f"markdown={summary_path.resolve()}",
+            ]
+        )
+        run_id_value = uuid5(NAMESPACE_URL, descriptor).hex
+
+    log_cfg = create_logger_config(level, run_id=run_id_value)
 
     with setup_cli_logging("run_tests", log_cfg, args.date) as logging_ctx:
         configure_logger(logging_ctx.log_cfg)
-
-        report_path = _resolve_output_path(args.json_path, DEFAULT_REPORT_FILE)
-        summary_path = _resolve_output_path(args.markdown_path, DEFAULT_SUMMARY_FILE)
 
         ensure_output_directories(report_path, summary_path)
 
@@ -633,33 +683,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 except ValueError as exc:  # pragma: no cover - defensive guard
                     logger.error("Written report failed validation: %s", exc)
                     validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
-            try:
-                write_summary(structured, summary_path)
-            except Exception as exc:  # pragma: no cover - defensive guard
-                logger.error(
-                    "Failed to write summary to %s: %s",
-                    _relative_to_root(summary_path),
-                    exc,
-                )
-
-        log_path = _relative_to_root(logging_ctx.log_path)
-        logger.info("Pytest finished with exit code %s", exit_code)
-        logger.info("Log saved to %s", log_path)
-        if RAW_REPORT_FILE.exists():
-            logger.info(
-                "Raw report available at %s",
-                _relative_to_root(RAW_REPORT_FILE),
-            )
-        if report_path.exists():
-            logger.info(
-                "Structured report written to %s",
-                _relative_to_root(report_path),
-            )
-        if summary_path.exists():
-            logger.info(
-                "Summary written to %s",
+        try:
+            write_summary(structured, summary_path)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            logger.error(
+                "Failed to write summary to %s: %s",
                 _relative_to_root(summary_path),
+                exc,
             )
+            _log_run_artifacts(logging_ctx, exit_code, report_path, summary_path)
+            return VALIDATION_FAILURE_EXIT_CODE
+
+        _log_run_artifacts(logging_ctx, exit_code, report_path, summary_path)
 
         final_exit_code = exit_code
         success_rate_raw = structured.get("summary", {}).get("success_rate", 0.0) or 0.0

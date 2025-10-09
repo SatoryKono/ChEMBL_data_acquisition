@@ -10,6 +10,7 @@ from typing import Any
 
 from .logging import CLILoggingContext, setup_cli_logging
 from .parser import Logger, LoggerConfig, configure_logger
+from .run_context import compute_generated_at
 from ..common.log import logger as default_logger
 
 
@@ -51,6 +52,32 @@ class PipelineCLIBase:
         """Return the date token forwarded to :func:`setup_cli_logging`."""
 
         return getattr(args, "date", None)
+
+    def resolve_generated_at(
+        self,
+        args: argparse.Namespace,
+        argv: Sequence[str] | None,
+        log_cfg: LoggerConfig,
+        *,
+        date_token: str | None,
+    ) -> str:
+        """Return a deterministic ``generated_at`` value for metadata outputs."""
+
+        invocation = getattr(args, "invocation", None)
+        seed_parts: list[str] = []
+        if isinstance(invocation, Sequence) and invocation:
+            seed_parts.extend(str(part) for part in invocation)
+        else:
+            program = self.get_program_name()
+            seed_parts.append(program)
+            if argv is not None:
+                seed_parts.extend(str(part) for part in argv)
+
+        return compute_generated_at(
+            date_token=date_token,
+            run_id=log_cfg.run_id,
+            seed_parts=seed_parts,
+        )
 
     def get_logger(self) -> Logger:
         """Return the logger instance used for pipeline level events."""
@@ -122,12 +149,34 @@ class PipelineCLIBase:
         parser, log_cfg = self.build_parser()
         args = parser.parse_args(argv)
         args = self.prepare_arguments(parser, args, argv)
+
+        explicit_run_id = getattr(args, "run_id", None)
+        if isinstance(explicit_run_id, str):
+            explicit_run_id = explicit_run_id.strip() or None
+        if explicit_run_id in (argparse.SUPPRESS,):
+            explicit_run_id = None
+        setattr(args, "run_id", explicit_run_id)
+        if explicit_run_id is not None:
+            log_cfg.run_id = explicit_run_id
+
+        if not hasattr(args, "invocation"):
+            from ..cli_utils import resolve_invocation as _resolve_invocation
+
+            invocation = _resolve_invocation(parser.prog, argv)
+            setattr(args, "invocation", invocation)
+
         exit_code = self.handle_pre_run(parser, args)
         if exit_code is not None:
             return exit_code
 
         program_name = self.get_program_name()
         date_token = self.get_logging_date(args)
+        log_cfg.generated_at = self.resolve_generated_at(
+            args,
+            argv,
+            log_cfg,
+            date_token=date_token,
+        )
 
         with setup_cli_logging(program_name, log_cfg, date_token) as logging_ctx:
             self.on_logging_ready(logging_ctx)
@@ -136,4 +185,4 @@ class PipelineCLIBase:
         return self.after_run(log_cfg, exit_code)
 
 
-__all__ = ["PipelineCLIBase"]
+__all__ = ["PipelineCLIBase", "compute_generated_at"]

@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import sys
 import traceback
+import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 
@@ -31,6 +32,7 @@ from .cli import (
     path_argument,
     positive_int,
 )
+from .cli.run_context import compute_generated_at
 from .config import Config, ConfigError, ensure_dirs, print_config
 from .common.log import logger as default_logger
 from .metadata import Stats, file_sha256, write_meta_yaml, record_quality_failure
@@ -92,6 +94,49 @@ def resolve_invocation(
     return tuple(parts)
 
 
+def _normalise_path(value: object) -> str | None:
+    if isinstance(value, Path):
+        candidate = value
+    elif isinstance(value, str):
+        candidate = Path(value)
+    elif hasattr(value, "__fspath__"):
+        candidate = Path(value)
+    else:
+        return None
+    try:
+        return str(candidate.expanduser().resolve())
+    except OSError:
+        return str(candidate.expanduser())
+
+
+def _canonical_run_descriptor(
+    args: argparse.Namespace, parser: argparse.ArgumentParser
+) -> str:
+    invocation = getattr(args, "invocation", resolve_invocation(parser.prog, None))
+    parts = [str(part) for part in invocation]
+    path_fields = (
+        "base_path",
+        "input_dir",
+        "output_dir",
+        "cache_dir",
+        "input_csv",
+        "output_csv",
+        "final_out",
+        "raw_out",
+    )
+    path_entries: list[str] = []
+    for field in path_fields:
+        value = getattr(args, field, None)
+        if value in (None, argparse.SUPPRESS):
+            continue
+        normalised = _normalise_path(value)
+        if normalised is not None:
+            path_entries.append(f"{field}={normalised}")
+    if path_entries:
+        parts.extend(sorted(path_entries))
+    return "\n".join(parts)
+
+
 def run_cli_command(
     *,
     args: argparse.Namespace,
@@ -104,6 +149,22 @@ def run_cli_command(
 ) -> int:
     """Execute CLI boilerplate shared by data acquisition commands."""
 
+    if not log_cfg.generated_at:
+        seed_parts: list[str] = []
+        invocation = getattr(args, "invocation", None)
+        if isinstance(invocation, Sequence) and invocation:
+            seed_parts.extend(str(part) for part in invocation)
+        else:
+            program = getattr(parser, "prog", None)
+            if program:
+                seed_parts.append(str(program))
+            seed_parts.extend(str(part) for part in sys.argv[1:])
+        log_cfg.generated_at = compute_generated_at(
+            date_token=getattr(args, "date", None),
+            run_id=log_cfg.run_id,
+            seed_parts=seed_parts,
+        )
+
     desired_level = getattr(args, "log_level", log_cfg.level)
     if getattr(args, "verbose", False):
         desired_level = "DEBUG"
@@ -112,7 +173,6 @@ def run_cli_command(
     log_cfg.level = str(desired_level).upper()
     configured_logger = cli.configure_logger(log_cfg)
     use_logger = logger or configured_logger
-    use_logger.info("pipeline_start", run_id=log_cfg.run_id)
 
     try:
         config_arg = getattr(args, "config", None)
@@ -136,7 +196,36 @@ def run_cli_command(
 
     try:
         cli.prepare_io_paths(args)
+    except (ValueError, FileNotFoundError) as exc:
+        use_logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(config_path),
+            exc_info=exc,
+        )
+        use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
+        return 1
 
+    run_id_value = getattr(args, "run_id", None)
+    if isinstance(run_id_value, str):
+        run_id_value = run_id_value.strip() or None
+    if not run_id_value:
+        descriptor = _canonical_run_descriptor(args, parser)
+        if descriptor:
+            run_id_value = uuid.uuid5(uuid.NAMESPACE_URL, descriptor).hex
+        else:
+            run_id_value = log_cfg.run_id
+    if run_id_value is not None:
+        log_cfg.run_id = run_id_value
+        setattr(args, "run_id", run_id_value)
+    if logger is None:
+        use_logger = cli.configure_logger(log_cfg)
+    else:
+        cli.configure_logger(log_cfg)
+
+    use_logger.info("pipeline_start", run_id=log_cfg.run_id)
+
+    try:
         cfg: Config = apply_config_overrides(
             args,
             parser,

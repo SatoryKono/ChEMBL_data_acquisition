@@ -23,6 +23,7 @@ import argparse
 import os
 from pathlib import Path
 from typing import Sequence
+from uuid import NAMESPACE_URL, uuid5
 
 import pandas as pd
 
@@ -30,6 +31,7 @@ from library import io  # noqa: F401 - imported for CLI parity with existing scr
 from library.cli import configure_logger, create_logger_config
 from library.cli.logging import setup_cli_logging
 from library.cli.parser import path_argument
+from library.cli_utils import resolve_invocation
 from library.common.log import logger
 from library.postprocess.activities.schema import ACTIVITY_SCHEMA, validate_activities
 from library.postprocess.activities.steps import run_activity_pipeline
@@ -112,6 +114,12 @@ def build_parser() -> argparse.ArgumentParser:
         dest="log_level",
         default=None,
         help="Logging verbosity (defaults to the pipeline configuration).",
+    )
+    parser.add_argument(
+        "--run-id",
+        dest="run_id",
+        default=os.environ.get("CHEMBL_DA_RUN_ID"),
+        help="Override the run identifier used for logging",
     )
     return parser
 
@@ -244,7 +252,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     pipeline_config = get_pipeline_config(TABLE_NAME, getattr(args, "config", None))
     csv_cfg = get_csv_runtime_config(pipeline_config)
     log_level = (args.log_level or get_default_log_level(pipeline_config)).upper()
-    log_cfg = create_logger_config(log_level)
+    invocation = resolve_invocation(parser.prog, argv)
+    run_id_value = getattr(args, "run_id", None)
+    if isinstance(run_id_value, str):
+        run_id_value = run_id_value.strip() or None
+    if not run_id_value:
+        descriptor = "\n".join(
+            [
+                *invocation,
+                f"input={Path(args.input).resolve()}",
+                f"output={Path(args.output).resolve()}",
+            ]
+        )
+        run_id_value = uuid5(NAMESPACE_URL, descriptor).hex
+    log_cfg = create_logger_config(log_level, run_id=run_id_value)
 
     log_dir_value = os.environ.get(LOG_DIR_ENV)
     if log_dir_value:

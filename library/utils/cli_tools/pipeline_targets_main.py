@@ -593,6 +593,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_dir=output_dir,
     )
     setattr(args, "final_out", resolved_final)
+    run_id_value = getattr(args, "run_id", None)
+    if isinstance(run_id_value, str):
+        run_id_value = run_id_value.strip() or None
+    if run_id_value is not None:
+        log_cfg.run_id = run_id_value
     log_cfg.level = args.log_level
     log_cfg = LoggerConfig(level=log_cfg.level, run_id=log_cfg.run_id)
     logger_inst = configure_logger(log_cfg)

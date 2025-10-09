@@ -112,6 +112,7 @@ def setup_cli_logging(
     updated_cfg = LoggerConfig(
         level=log_cfg.level,
         run_id=log_cfg.run_id,
+        generated_at=log_cfg.generated_at,
         redact_secrets=log_cfg.redact_secrets,
         stream=console_stream,
         handlers=handlers,

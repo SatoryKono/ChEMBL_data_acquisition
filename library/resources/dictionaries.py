@@ -19,6 +19,7 @@ __all__ = [
     "DictionaryResource",
     "get_resource",
     "get_resource_path",
+    "list_resource_names",
     "list_resources",
     "resolve_resource_reference",
 ]
@@ -483,13 +484,25 @@ def _manifest_path(base_dir: Path | None = None) -> Path:
     return (root / _MANIFEST_FILENAME).resolve()
 
 
-def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryResource]:
+def _load_manifest_document(base_dir: Path | None = None) -> Mapping[str, object]:
+    """Return the raw manifest document without validating resources."""
+
     manifest_path = _manifest_path(base_dir)
     if not manifest_path.exists():
         raise DictionaryManifestError(f"Manifest not found: {manifest_path}")
 
     with manifest_path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}
+
+    if not isinstance(data, Mapping):
+        raise DictionaryManifestError("Manifest root must be a mapping")
+
+    return data
+
+
+def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryResource]:
+    manifest_path = _manifest_path(base_dir)
+    data = _load_manifest_document(base_dir)
 
     resources = data.get("resources")
     if not isinstance(resources, Mapping):
@@ -572,6 +585,44 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
 @lru_cache(maxsize=1)
 def _load_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryResource]:
     return _parse_manifest(base_dir)
+
+
+def list_resource_names(
+    *, validate: bool = True, base_dir: Path | None = None
+) -> tuple[str, ...]:
+    """Return declared dictionary resource names.
+
+    Parameters
+    ----------
+    validate:
+        When ``True`` (default), resources are fully validated which entails
+        computing checksums for every entry listed in the manifest.  Passing
+        ``False`` parses the manifest structure without touching the
+        filesystem, which is significantly faster when callers only need to
+        inspect identifiers (for example when normalising configuration
+        values).  Structural manifest issues still raise
+        :class:`DictionaryManifestError` even when validation is disabled.
+    base_dir:
+        Optional dictionary directory override used in tests.
+    """
+
+    if validate:
+        return tuple(_load_manifest(base_dir).keys())
+
+    document = _load_manifest_document(base_dir)
+    resources = document.get("resources")
+    if not isinstance(resources, Mapping):
+        raise DictionaryManifestError("Manifest 'resources' section must be a mapping")
+
+    names: list[str] = []
+    for name, meta in resources.items():
+        if not isinstance(meta, Mapping):
+            raise DictionaryManifestError(
+                f"Invalid manifest entry for {name!r}: expected a mapping"
+            )
+        names.append(str(name))
+
+    return tuple(names)
 
 
 def list_resources() -> Mapping[str, DictionaryResource]:

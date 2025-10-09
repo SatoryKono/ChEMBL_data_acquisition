@@ -46,6 +46,16 @@ def _make_args(tmp_path: Path) -> argparse.Namespace:
     )
 
 
+def test_build_parser__captures_run_id_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHEMBL_DA_RUN_ID", "env-run")
+    parser, log_cfg = get_activity_data.build_parser()
+
+    args = parser.parse_args(["--input", str(tmp_path / "activity.csv"), "--limit", "0"])
+
+    assert getattr(args, "run_id") == "env-run"
+    assert log_cfg.run_id == "env-run"
+
+
 class _DummyClient:
     """Minimal context manager emulating :class:`ChemblClient`."""
 

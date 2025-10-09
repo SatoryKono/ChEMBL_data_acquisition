@@ -8,6 +8,8 @@ applications or tests.
 from __future__ import annotations
 
 import argparse
+import math
+import numbers
 import json
 import math
 import numbers
@@ -264,8 +266,11 @@ def prepare_activity_context(
 
 _EXTENDED_ACTIVITY_DTYPES: dict[str, str] = {
     "activity_chembl_id": "string",
+    "salt_chembl_id": "string",
     "target_chembl_id": "string",
     "bao_endpoint": "string",
+    "compound_key": "string",
+    "compound_name": "string",
     "multmol_assay": "boolean",
     "approx_cited_activity": "boolean",
     "shuffled_cit": "boolean",
@@ -539,7 +544,6 @@ def _emit_completion_message(
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
             events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
-        return
 
     payload: dict[str, object] = {
         "output": str(output_path) if output_path is not None else None,

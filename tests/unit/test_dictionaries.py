@@ -183,3 +183,30 @@ def test_list_resources__loads_bundled_manifest():
         assert root_resource.sha256
     finally:
         dictionaries._load_manifest.cache_clear()
+
+
+@pytest.mark.unit
+def test_list_resource_names__skips_validation_when_requested(tmp_path):
+    manifest_dir = tmp_path / "dict"
+    manifest_dir.mkdir()
+    manifest_path = manifest_dir / "manifest.yaml"
+    manifest_path.write_text(
+        """
+        resources:
+          foo:
+            path: foo.csv
+            version: "1"
+            sha256: deadbeef
+            generator: build.py
+        """.strip()
+    )
+
+    names = dictionaries.list_resource_names(validate=False, base_dir=manifest_dir)
+
+    assert names == ("foo",)
+
+    with pytest.raises((FileNotFoundError, dictionaries.DictionaryManifestError)):
+        dictionaries.list_resource_names(validate=True, base_dir=manifest_dir)
+
+    with pytest.raises(FileNotFoundError):
+        dictionaries.get_resource_path("foo", base_dir=manifest_dir)
