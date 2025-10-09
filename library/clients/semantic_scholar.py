@@ -13,7 +13,7 @@ from typing import Any
 
 import requests
 
-from ..config.models import SemanticScholarCfg
+from ..config.models import RetryCfg, SemanticScholarCfg
 from .pubmed import _do_request
 
 __all__ = ["fetch_semantic_scholar", "fetch_semantic_scholar_batch"]
@@ -27,6 +27,8 @@ def fetch_semantic_scholar(
     pmid: str,
     sleep: float,
     cfg: SemanticScholarCfg | None = None,
+    *,
+    retry_cfg: RetryCfg | None = None,
 ) -> dict[str, str]:
     """Retrieve Semantic Scholar metadata for ``pmid``."""
 
@@ -42,6 +44,7 @@ def fetch_semantic_scholar(
         params={"fields": _SEMANTIC_SCHOLAR_FIELDS},
         retries=cfg.retries,
         timeout=timeout,
+        retry_cfg=retry_cfg,
     )
     if error or not isinstance(data, dict):
         return {
@@ -73,6 +76,8 @@ def fetch_semantic_scholar_batch(
     pmids: list[str],
     sleep: float,
     cfg: SemanticScholarCfg | None = None,
+    *,
+    retry_cfg: RetryCfg | None = None,
 ) -> list[dict[str, str]]:
     """Retrieve Semantic Scholar metadata for multiple PMIDs."""
 
@@ -93,6 +98,7 @@ def fetch_semantic_scholar_batch(
         params={"fields": _SEMANTIC_SCHOLAR_FIELDS},
         retries=cfg.retries,
         timeout=timeout,
+        retry_cfg=retry_cfg,
     )
     if error:
         return [

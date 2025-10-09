@@ -12,7 +12,7 @@ import requests
 
 from ..clients import crossref as crossref_client
 from ..clients import openalex as openalex_client
-from ..config import CrossRefCfg, OpenAlexCfg
+from ..config import CrossRefCfg, OpenAlexCfg, RetryCfg
 from ..pubmed import query as pubmed_query
 from ..common.rate_limiter import RateLimiter
 
@@ -22,6 +22,8 @@ def fetch_openalex(
     pmid: str,
     cfg: OpenAlexCfg,
     limiter: RateLimiter | None = None,
+    *,
+    retry_cfg: RetryCfg | None = None,
 ) -> dict[str, str]:
     """Return OpenAlex metadata for ``pmid``.
 
@@ -44,7 +46,13 @@ def fetch_openalex(
 
     """
 
-    raw, error = openalex_client.fetch_openalex(session, pmid, cfg=cfg, limiter=limiter)
+    raw, error = openalex_client.fetch_openalex(
+        session,
+        pmid,
+        cfg=cfg,
+        limiter=limiter,
+        retry_cfg=retry_cfg,
+    )
     if error or not isinstance(raw, dict):
         return {
             "OpenAlex.PublicationTypes": "",
@@ -86,6 +94,8 @@ def fetch_crossref(
     doi: str,
     cfg: CrossRefCfg,
     limiter: RateLimiter | None = None,
+    *,
+    retry_cfg: RetryCfg | None = None,
 ) -> dict[str, str]:
     """Return CrossRef metadata for ``doi``.
 
@@ -123,6 +133,7 @@ def fetch_crossref(
         doi,
         cfg=cfg,
         limiter=limiter,
+        retry_cfg=retry_cfg,
     )
     if error or not isinstance(raw, dict):
         return {

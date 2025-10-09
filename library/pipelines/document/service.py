@@ -641,16 +641,20 @@ class DocumentPipeline:
 
                 def _invoke_with_session(
                     factory: Callable[[], AbstractContextManager[requests.Session]],
-                    fetcher: Callable[
-                        [requests.Session, str, Any, RateLimiter | None], dict[str, str]
-                    ],
+                    fetcher: Callable[..., dict[str, str]],
                     identifier: str,
                     *,
                     cfg_obj: Any,
                     limiter: RateLimiter | None,
                 ) -> dict[str, str]:
                     with factory() as nested_session:
-                        return fetcher(nested_session, identifier, cfg_obj, limiter)
+                        return fetcher(
+                            nested_session,
+                            identifier,
+                            cfg_obj,
+                            limiter=limiter,
+                            retry_cfg=session_cfg.retry,
+                        )
 
                 _acquire_documents(pubmed_service_limiter)
                 pubmed_list = pl.fetch_pubmed_batch(
@@ -668,7 +672,11 @@ class DocumentPipeline:
                 if semantic_pmids:
                     _acquire_documents(semantic_service_limiter)
                     semsch_list = ssl.fetch_semantic_scholar_batch(
-                        base_session, semantic_pmids, sleep, cfg=semantic_scholar_cfg
+                        base_session,
+                        semantic_pmids,
+                        sleep,
+                        cfg=semantic_scholar_cfg,
+                        retry_cfg=session_cfg.retry,
                     )
 
                     semsch_map = {
@@ -689,7 +697,11 @@ class DocumentPipeline:
                     for pmid in fallback_pmids:
                         _acquire_documents(semantic_service_limiter)
                         fallback_record = ssl.fetch_semantic_scholar(
-                            base_session, pmid, sleep, cfg=semantic_scholar_cfg
+                            base_session,
+                            pmid,
+                            sleep,
+                            cfg=semantic_scholar_cfg,
+                            retry_cfg=session_cfg.retry,
                         )
                         semsch_map[pmid] = fallback_record
 

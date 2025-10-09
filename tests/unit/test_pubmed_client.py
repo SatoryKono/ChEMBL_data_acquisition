@@ -39,6 +39,47 @@ class _DummySession:
         return _DummyResponse()
 
 
+class _SequencedResponse:
+    def __init__(
+        self,
+        status_code: int,
+        text: str = "",
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        self.status_code = status_code
+        self.text = text
+        self.headers = headers or {}
+
+    def __enter__(self) -> "_SequencedResponse":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: object | None,
+    ) -> bool:
+        return False
+
+
+class _SequencedSession:
+    def __init__(self, responses: list[_SequencedResponse]) -> None:
+        self._responses = responses
+        self.calls: list[tuple[str, float | tuple[float, float], dict[str, object]]] = []
+
+    def get(
+        self,
+        url: str,
+        *,
+        timeout: float | tuple[float, float],
+        **kwargs: object,
+    ) -> _SequencedResponse:
+        if not self._responses:
+            raise AssertionError("No responses left in sequence")
+        self.calls.append((url, timeout, kwargs))
+        return self._responses.pop(0)
+
+
 @pytest.mark.unit
 def test_retry_delay__respects_backoff_cap() -> None:
     retry_cfg = RetryCfg(max_attempts=4, backoff_factor=2.0, backoff_cap=3.0)
@@ -151,6 +192,48 @@ def test_do_request__connect_timeout_logs_without_traceback(caplog: pytest.LogCa
     assert record.levelname == "WARNING"
     assert "request_fail" in record.getMessage()
     assert record.exc_info is None
+
+
+@pytest.mark.unit
+def test_do_request__deterministic_retry_delays(monkeypatch: pytest.MonkeyPatch) -> None:
+    responses = [
+        _SequencedResponse(503, text="Service unavailable"),
+        _SequencedResponse(503, text="Try again"),
+        _SequencedResponse(200, text="payload"),
+    ]
+    session = _SequencedSession(responses)
+    recorded_delays: list[float] = []
+
+    def _capture_sleep(value: float) -> None:
+        recorded_delays.append(value)
+
+    monkeypatch.setattr(pubmed, "sleep", _capture_sleep)
+
+    retry_cfg = RetryCfg(backoff_factor=0.5, backoff_cap=None, jitter_seed=11)
+    base_delay = 0.25
+
+    data, error = pubmed._do_request(
+        session,
+        "https://example.org/resource",
+        base_delay,
+        expect_json=False,
+        retries=2,
+        timeout=1.0,
+        retry_cfg=retry_cfg,
+    )
+
+    assert error == ""
+    assert data == "payload"
+    assert len(recorded_delays) == 2
+
+    jitter = retry_cfg.build_jitter()
+    assert jitter is not None
+    expected_delays = [
+        pubmed._retry_delay(1, base_delay, retry_cfg, timeout=1.0, jitter=jitter),
+        pubmed._retry_delay(2, base_delay, retry_cfg, timeout=1.0, jitter=jitter),
+    ]
+
+    assert recorded_delays == pytest.approx(expected_delays)
 def test_session_with_retry__disables_urllib3_retries() -> None:
     api_cfg = ApiCfg()
     retry_cfg = RetryCfg(max_attempts=4, backoff_factor=1.0, backoff_cap=None)
