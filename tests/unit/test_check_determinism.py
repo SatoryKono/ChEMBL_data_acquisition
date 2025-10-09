@@ -200,6 +200,45 @@ def test_main__metadata_mismatch_returns_error(
         assert not directory.exists()
 
 
+def test_main__dry_run_without_outputs_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Running with --dry-run must fail when outputs are not produced."""
+
+    input_csv = tmp_path / "activity.csv"
+    input_csv.write_text("activity_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    created_dirs = _patch_mkdtemp(tmp_path, monkeypatch)
+
+    def _fake_run_activity(
+        limit: int,
+        destination: Path,
+        observed_input: Path,
+        *,
+        dry_run: bool,
+    ) -> CompletedProcess[str]:
+        assert dry_run is True
+        assert observed_input == input_csv
+        assert limit == 2
+        # Intentionally do not create destination to emulate --dry-run behaviour.
+        return CompletedProcess(args=["python"], returncode=0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr(check_determinism, "_run_activity", _fake_run_activity)
+
+    exit_code = check_determinism.main(
+        ["--limit", "2", "--input", str(input_csv), "--dry-run"]
+    )
+
+    assert exit_code == 2
+
+    captured = capsys.readouterr()
+    assert "--no-dry-run" in captured.err
+    assert captured.out == ""
+
+    for directory in created_dirs:
+        assert not directory.exists()
+
+
 def test_run_check__metadata_absent_is_skipped(
     tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:

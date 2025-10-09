@@ -109,10 +109,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--dry-run",
         action=argparse.BooleanOptionalAction,
-        default=True,
+        default=False,
         help=(
             "Forward the --dry-run flag to get_activity_data. "
-            "Disable with --no-dry-run to perform a real write."
+            "Enable with --dry-run to perform a dry run; real writes are performed by default."
         ),
     )
 
@@ -146,10 +146,18 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         if not first.exists() or not second.exists():
-            print(
-                "Outputs not created; determinism check inconclusive", file=sys.stderr
-            )
-            return 1
+            if args.dry_run:
+                print(
+                    "Outputs not created because --dry-run skips writing files. "
+                    "Re-run with --no-dry-run to exercise the full pipeline.",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    "Outputs not created; determinism check failed before files were written.",
+                    file=sys.stderr,
+                )
+            return 2
 
         first_hash = _hash_file(first)
         second_hash = _hash_file(second)

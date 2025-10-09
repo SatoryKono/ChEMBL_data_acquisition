@@ -73,6 +73,7 @@ def setup_cli_logging(
         suffix = _current_date_str()
 
     log_path = resolved_dir / f"{script_name}_{suffix}.log"
+    log_path.touch(exist_ok=True)
 
     console_stream = getattr(log_cfg, "stream", None) or sys.stdout
     file_handler = logging.FileHandler(log_path, encoding="utf-8")
