@@ -79,6 +79,7 @@ from library.cli.entrypoints.activity import (
     DEFAULT_OUTPUT_STEM,
     PROGRAM_NAME,
     _emit_completion_message,
+    _generate_activity_postprocess_metrics,
     build_parser,
     main,
     run,
