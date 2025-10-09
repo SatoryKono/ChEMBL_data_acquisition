@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 
@@ -29,13 +30,6 @@ def test_logging_get_activity_data__writes_expected_messages(
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_dir))
     monkeypatch.setattr(
         "library.cli.logging._current_date_str", lambda: "20240102"
-    )
-
-    class _FixedUUID:
-        hex = "run-id-0001"
-
-    monkeypatch.setattr(
-        "library.cli.parser.uuid.uuid4", lambda: _FixedUUID()
     )
 
     def _stub_run_cli_command(
@@ -91,21 +85,23 @@ def test_logging_get_activity_data__writes_expected_messages(
     assert "Exported activities" in content
     assert "Completed get_activity_data run" in content
 
+    expected_run_id = uuid5(NAMESPACE_URL, "chembl-data-acquisition|INFO").hex
+
     expected_lines = [
         (
             "[2020-01-01 00:00:00,000] [INFO] [chembl] "
             f"Starting get_activity_data run input='{input_path}' output='{output_path}' "
-            "rps=None run_id='run-id-0001' status=None"
+            f"rps=None run_id='{expected_run_id}' status=None"
         ),
         (
             "[2020-01-01 00:00:00,000] [INFO] [chembl] "
             f"Exported activities output='{output_path}' rows=2 "
-            "rps=None run_id='run-id-0001' status=None"
+            f"rps=None run_id='{expected_run_id}' status=None"
         ),
         (
             "[2020-01-01 00:00:00,000] [INFO] [chembl] "
             f"Completed get_activity_data run output='{output_path}' "
-            "rps=None run_id='run-id-0001' status=None"
+            f"rps=None run_id='{expected_run_id}' status=None"
         ),
     ]
 
