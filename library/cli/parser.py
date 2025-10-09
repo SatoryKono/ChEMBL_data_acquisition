@@ -26,22 +26,24 @@ require_python_version()
 
 
 def _default_run_id(level: str) -> str:
-    """Return a deterministic run identifier derived from ``level``."""
+    """Return a unique run identifier derived from ``level``."""
 
     seed = f"chembl-data-acquisition|{level.upper()}"
-    return uuid.uuid5(uuid.NAMESPACE_URL, seed).hex
+    prefix = uuid.uuid5(uuid.NAMESPACE_URL, seed).hex[:12]
+    suffix = uuid.uuid4().hex
+    return f"{prefix}-{suffix}"
 
 
 def create_logger_config(level: str, *, run_id: str | None = None) -> LoggerConfig:
-    """Return :class:`LoggerConfig` using a deterministic ``run_id``.
+    """Return :class:`LoggerConfig` using a unique default ``run_id``.
 
     Parameters
     ----------
     level:
         Desired logging level.
     run_id:
-        Optional run identifier. When omitted a deterministic default derived
-        from ``level`` is used.
+        Optional run identifier. When omitted a unique default derived from
+        ``level`` is used.
 
     Returns
     -------

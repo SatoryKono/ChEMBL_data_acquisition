@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 
@@ -31,6 +30,8 @@ def test_logging_get_activity_data__writes_expected_messages(
     monkeypatch.setattr(
         "library.cli.logging._current_date_str", lambda: "20240102"
     )
+
+    monkeypatch.setattr("library.cli.parser._default_run_id", lambda _: "activity-e2e-run")
 
     def _stub_run_cli_command(
         *,
@@ -85,7 +86,7 @@ def test_logging_get_activity_data__writes_expected_messages(
     assert "Exported activities" in content
     assert "Completed get_activity_data run" in content
 
-    expected_run_id = uuid5(NAMESPACE_URL, "chembl-data-acquisition|INFO").hex
+    expected_run_id = "activity-e2e-run"
 
     expected_lines = [
         (
