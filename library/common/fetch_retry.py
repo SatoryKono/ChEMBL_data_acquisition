@@ -11,6 +11,9 @@ from ..config import Config, RetryCfg
 from ..sidecar import SidecarErrors
 
 
+_CHUNK_FAILURE_IDS_LIMIT = 100
+
+
 @dataclass(slots=True)
 class _ChunkFailure:
     """Internal representation of a failed chunk fetch."""
@@ -52,9 +55,17 @@ class ChunkFailureTracker:
                 for identifier in failure.chunk_ids
             }
         )
+        total_unique_ids = len(unique_ids)
+        truncated = total_unique_ids > _CHUNK_FAILURE_IDS_LIMIT
+        if truncated:
+            reported_ids = list(unique_ids[:_CHUNK_FAILURE_IDS_LIMIT])
+        else:
+            reported_ids = list(unique_ids)
         return {
             "chunk_fetch_failure_chunks": len(self._failures),
-            "chunk_fetch_failure_ids": unique_ids,
+            "chunk_fetch_failure_ids": reported_ids,
+            "chunk_fetch_failure_ids_total": total_unique_ids,
+            "chunk_fetch_failure_ids_truncated": truncated,
         }
 
     def save(self, path: Path, *, cfg: Config | None = None) -> None:
