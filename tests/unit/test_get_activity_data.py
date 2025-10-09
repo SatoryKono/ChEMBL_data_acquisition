@@ -7,7 +7,7 @@ from collections import Counter
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import Event, Lock
+from threading import Condition, Event, Lock
 from typing import Any, Iterable, Sequence
 from types import SimpleNamespace
 
@@ -165,6 +165,7 @@ def test_ensure_molecule_pref_name__concurrent_single_fetch(monkeypatch) -> None
     frame = _make_pref_name_frame()
     cache: dict[str, str | None] = {}
     cache_lock = Lock()
+    cache_condition = Condition(cache_lock)
 
     call_records: list[tuple[str, ...]] = []
     ready = Event()
@@ -203,7 +204,7 @@ def test_ensure_molecule_pref_name__concurrent_single_fetch(monkeypatch) -> None
             cfg=cfg,
             client=object(),
             cache=cache,
-            cache_lock=cache_lock,
+            cache_condition=cache_condition,
         )
 
     with ThreadPoolExecutor(max_workers=4) as executor:
@@ -250,6 +251,7 @@ def test_ensure_molecule_pref_name__applies_testitem_retry_overrides(monkeypatch
     frame = _make_pref_name_frame()
     cache: dict[str, str | None] = {}
     cache_lock = Lock()
+    cache_condition = Condition(cache_lock)
     captured_cfg: dict[str, Any] = {}
 
     def fake_get_testitem(
@@ -281,7 +283,7 @@ def test_ensure_molecule_pref_name__applies_testitem_retry_overrides(monkeypatch
         cfg=cfg,
         client=object(),
         cache=cache,
-        cache_lock=cache_lock,
+        cache_condition=cache_condition,
     )
 
     assert "cfg" in captured_cfg
@@ -313,6 +315,7 @@ def test_ensure_molecule_pref_name__requests_minimal_field_set(monkeypatch) -> N
     frame = _make_pref_name_frame()
     cache: dict[str, str | None] = {}
     cache_lock = Lock()
+    cache_condition = Condition(cache_lock)
     captured_fields: list[Sequence[str]] = []
 
     def fake_get_testitem(
@@ -344,7 +347,7 @@ def test_ensure_molecule_pref_name__requests_minimal_field_set(monkeypatch) -> N
         cfg=cfg,
         client=object(),
         cache=cache,
-        cache_lock=cache_lock,
+        cache_condition=cache_condition,
     )
 
     assert captured_fields == [

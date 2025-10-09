@@ -18,7 +18,7 @@ from functools import partial
 from datetime import datetime
 from itertools import islice
 from pathlib import Path
-from threading import Lock
+from threading import Condition, Lock
 from time import perf_counter, sleep
 from typing import Any, cast
 from urllib.parse import urlsplit
@@ -727,8 +727,9 @@ def _ensure_molecule_pref_name(
     cfg: Config,
     client: ChemblClient,
     cache: dict[str, str | None],
-    cache_lock: Lock,
+    cache_condition: Condition,
     chunk_failures: ChunkFailureTracker | None = None,
+    wait_timeout: float | None = None,
 ) -> pd.DataFrame:
     """Populate ``molecule_pref_name`` via the test item API when missing."""
 
@@ -758,7 +759,7 @@ def _ensure_molecule_pref_name(
     pending: list[str] = []
     wait_for: set[str] = set()
 
-    with cache_lock:
+    with cache_condition:
         for identifier in unique_ids:
             cache_key = str(identifier)
             current = cache.get(cache_key, _CACHE_MISS)
@@ -813,32 +814,68 @@ def _ensure_molecule_pref_name(
             for chembl_id, pref_name in mapped.itertuples(index=False):
                 value = str(pref_name) if pd.notna(pref_name) else None
                 cache_key = str(chembl_id)
-                with cache_lock:
+                with cache_condition:
                     cache[cache_key] = value
+                    cache_condition.notify_all()
                 resolved.add(cache_key)
         missing = [identifier for identifier in pending if identifier not in resolved]
         if missing:
-            with cache_lock:
+            with cache_condition:
                 for identifier in missing:
                     cache[identifier] = None
+                cache_condition.notify_all()
 
     if wait_for:
-        while True:
-            with cache_lock:
+        timeout = (
+            wait_timeout
+            if wait_timeout is not None
+            else getattr(getattr(cfg, "testitem", object()), "timeout", None)
+        )
+        timeout = float(timeout) if isinstance(timeout, numbers.Real) else None
+        deadline = perf_counter() + timeout if timeout and timeout > 0 else None
+        poll_interval = 0.5
+
+        with cache_condition:
+            while True:
                 outstanding = [
                     identifier
                     for identifier in wait_for
                     if cache.get(identifier, _CACHE_MISS) is _CACHE_IN_PROGRESS
                 ]
-            if not outstanding:
-                break
-            sleep(0)
+                if not outstanding:
+                    break
 
-    with cache_lock:
+                remaining: float | None = None
+                if deadline is not None:
+                    remaining = max(0.0, deadline - perf_counter())
+                    if remaining == 0:
+                        logger.warning(
+                            "pref_name_fetch_wait_timeout",
+                            pending=sorted(outstanding),
+                        )
+                        break
+
+                wait_interval = remaining if remaining and remaining > 0 else poll_interval
+                cache_condition.wait(timeout=wait_interval)
+
+                if deadline is not None and perf_counter() >= deadline:
+                    outstanding = [
+                        identifier
+                        for identifier in wait_for
+                        if cache.get(identifier, _CACHE_MISS) is _CACHE_IN_PROGRESS
+                    ]
+                    if outstanding:
+                        logger.warning(
+                            "pref_name_fetch_wait_timeout",
+                            pending=sorted(outstanding),
+                        )
+                        break
+
+    with cache_condition:
         fill_map = {
             key: value
             for key, value in cache.items()
-            if value and value is not _CACHE_IN_PROGRESS
+            if value is not _CACHE_IN_PROGRESS
         }
     if not fill_map:
         return result
@@ -1238,6 +1275,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     pref_name_cache: dict[str, str | None] = {}
     pref_name_cache_lock = Lock()
+    pref_name_cache_condition = Condition(pref_name_cache_lock)
 
     with ETLContext(cfg) as context:
         client = context.chembl_client
@@ -1376,7 +1414,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                             cfg=cfg,
                             client=client,
                             cache=pref_name_cache,
-                            cache_lock=pref_name_cache_lock,
+                            cache_condition=pref_name_cache_condition,
                             chunk_failures=chunk_failures,
                         )
                 return pd.DataFrame(columns=ACTIVITY_COLUMNS)
