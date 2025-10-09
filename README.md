@@ -228,6 +228,10 @@ a pull request:
 python scripts/check_determinism.py --limit 5
 ```
 
+The script forwards `--dry-run` to the underlying `get_activity_data.py`
+invocations so the smoke check never mutates tracked outputs. Disable the flag
+with `--no-dry-run` if you explicitly want to compare real exports.
+
 For CLI-level sanity checks you can generate a small deterministic export and
 its metadata sidecar in a temporary directory:
 
