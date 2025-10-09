@@ -120,3 +120,7 @@ def __getattr__(name: str) -> object:
         return getattr(_activity, name)
     except AttributeError as exc:  # pragma: no cover - passthrough for missing attrs
         raise AttributeError(name) from exc
+
+
+if __name__ == "__main__":  # pragma: no cover - integration execution path
+    raise SystemExit(main())
