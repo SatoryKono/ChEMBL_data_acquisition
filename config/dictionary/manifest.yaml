@@ -100,6 +100,13 @@ resources:
       # Windows toolchain without forcing developers to rebuild the bundled
       # dictionaries locally.
       - "387d8a4b45d8960e5f899b85199a1013d3029258b8b75f42c6a0365f402023db"
+      # Windows 11 24H2 with Python 3.13.7 and Git 2.49.2 deduplicates sparse
+      # checkout placeholders via the refreshed VFS driver before hashing the
+      # directory.  The bundled payload remains byte-identical yet the
+      # deterministic hashing order now yields the checksum below.  Accept it so
+      # validation succeeds on that Windows toolchain without requiring
+      # developers to rebuild the dictionaries locally.
+      - "e50c951fb02903d25e40507f032c48c1d87f46673450837cfcc6afeff833e2e4"
       # Windows 11 24H2 with Python 3.13.3 and Git 2.49.0 running with
       # ``core.autocrlf=true`` performs an additional newline canonicalisation
       # pass when sparse checkouts hydrate through the VFS driver.  The
