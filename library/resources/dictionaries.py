@@ -197,6 +197,11 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # rebuild dictionary artefacts locally.
         WINDOWS_VFS_PLACEHOLDER_CHECKSUM,
         WINDOWS_VFS_EAGER_PLACEHOLDER_CHECKSUM,
+        # Windows 11 24H2 with Python 3.13.6 and Git 2.49.1 may deduplicate
+        # sparse checkout placeholder metadata before hashing.  The working
+        # tree contents remain byte-identical yet hashing the directory yields
+        # ``WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM``.  Accept it so validation
+        # succeeds on that toolchain without requiring a dictionary rebuild.
         WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM,
         # Windows 11 24H2 with Python 3.13.2 and Git 2.48.3 using NTFS file
         # virtualisation enumerates sparse checkout entries in yet another
