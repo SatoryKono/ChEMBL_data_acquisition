@@ -10,70 +10,28 @@ else:  # pragma: no cover - executed when imported as a module
 bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
+from importlib import import_module
 import argparse
 import math
 import numbers
 import json
 import sys
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
-from functools import partial
-from datetime import datetime
-from itertools import islice
-from pathlib import Path
-from threading import Lock
-from time import perf_counter, sleep
-from typing import Any, cast
-from urllib.parse import urlsplit
 
-import pandas as pd
-import requests
-
-from library import cli, io
-from library.clients.chembl import ChemblClient
-from library.integration import chembl_library as cl
-
-try:  # pragma: no cover - urllib3 is part of requests dependency chain
-    from urllib3.exceptions import NameResolutionError as _Urllib3NameResolutionError
-except Exception:  # pragma: no cover - defensive fallback for alternative stacks
-    _Urllib3NameResolutionError = None  # type: ignore
-from library.cli import (
-    Logger,
-    LoggerConfig,
-    positive_int,
+from library.cli.entrypoints.activity import (
+    ActivityPipelineCLI,
+    DEFAULT_INPUT_NAME,
+    DEFAULT_OUTPUT_STEM,
+    PROGRAM_NAME,
+    _emit_completion_message,
+    build_parser,
+    main,
+    run,
+    run_chembl,
 )
-from library.cli import (
-    build_parser as base_parser,
-)
-from library.cli.base import PipelineCLIBase
-from library.cli.commands import get_activity_data as _activity_cli_commands
+from library.pipelines.activity import runner as _activity_runner
 from library.pipelines.activity.runner import (
-    MIN_ACTIVITY_TIMEOUT,
-    ActivityCommandOptions,
-    register_activity_pipeline_hooks,
-    run_activity_pipeline,
-)
-from library.cli_utils import (  # noqa: E402
-    PipelineError,
-    resolve_invocation,
-    run_cli_command as _run_cli_command,
-    # file_sha256 is not explicitly exported by library.cli_utils, so import directly if needed
-)
-from library.common.csv_utils import (
-    write_csv_chunks_deterministic,  # re-exported for tests
-)
-from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
-from library.common.log import logger
-from library.config import Config, _serialize_paths
-from library.io.metadata import (
-    write_meta_yaml as _cli_write_meta_yaml,
-)
-from library.metadata import file_sha256 as _metadata_file_sha256
-from library.orchestration import ETLContext
-from library.pipelines.activity import run as activity_run
-from library.pipelines.assay.chembl_assay import (
-    ACTIVITY_COLUMNS,
     MAX_ACTIVITY_CHUNK_SIZE,
+    register_activity_pipeline_hooks,
 )
 from library.pipelines.common import (
     ChunkedFetchConfig,
@@ -1620,222 +1578,44 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     return exit_code
 
+_activity = import_module("library.cli.entrypoints.activity")
 
 register_activity_pipeline_hooks(
     runner=run_chembl,
     emit_completion_message=_emit_completion_message,
 )
 
-
-def _generate_activity_postprocess_metrics(
-    cfg: Config,
-    output_path: Path,
-    *,
-    logger: Logger,
-    extras: Mapping[str, object] | None = None,
-) -> tuple[object, Path]:
-    """Run the activity postprocess pipeline and persist the metrics report."""
-
-    metrics, report_path = collect_postprocess_metrics(
-        table="activity",
-        output_path=output_path,
-        csv_sep=cfg.io.csv_sep,
-        csv_encoding=cfg.io.csv_encoding,
-        output_dir=cfg.io.output_dir,
-        runner=run_activity_postprocess,
-        logger=logger,
-        pipeline_version=get_pipeline_version(),
-        report_extras=extras,
-    )
-    if report_path is None:
-        fallback = Path(cfg.io.output_dir) / "activity.postprocess.report.json"
-        fallback.parent.mkdir(parents=True, exist_ok=True)
-        fallback_payload: dict[str, object] = {
-            "table": "activity",
-            "metrics": None,
-            "output_path": str(output_path),
-        }
-        if extras:
-            fallback_payload["extras"] = dict(extras)
-        fallback.write_text(
-            json.dumps(fallback_payload, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
-        report_path = fallback
-    return metrics, report_path
+setattr(_activity, "MAX_ACTIVITY_CHUNK_SIZE", MAX_ACTIVITY_CHUNK_SIZE)
 
 
-def _coerce_cli_path(value: object) -> Path | str | None:
-    """Normalise optional CLI path parameters for helper delegation."""
+class _LoggerProxy:
+    """Proxy ``library.pipelines.activity.runner`` logger to the CLI module."""
 
-    if value in (None, argparse.SUPPRESS):
-        return None
-    return cast(Path | str | None, value)  # ``run_activity_pipeline`` handles conversion to :class:`Path`.
-
-
-def run(cfg: Config, args: argparse.Namespace) -> int:
-    """Execute the activity pipeline handling ``--skip-existing`` semantics."""
-
-    _ensure_command_logger_sync()
-
-    options = ActivityCommandOptions(
-        input_csv=args.input_csv,
-        output_csv=_coerce_cli_path(getattr(args, "output_csv", None)),
-        final_output=_coerce_cli_path(getattr(args, "final_out", None)),
-        limit=getattr(args, "limit", None),
-        offset=getattr(args, "offset", 0),
-        timeout=getattr(args, "timeout", None),
-        batch_size=getattr(args, "batch_size", None),
-        workers=getattr(args, "workers", None),
-        dry_run=getattr(args, "dry_run", False),
-        skip_existing=getattr(args, "skip_existing", False),
-        force=getattr(args, "force", False),
-        invocation=getattr(args, "invocation", None),
-    )
-
-    return run_activity_pipeline(
-        cfg,
-        options,
-        runner=run_chembl,
-        emit_completion_message=_emit_completion_message,
-    )
+    def __getattr__(self, name: str):  # type: ignore[override]
+        return getattr(_activity, "logger").__getattribute__(name)
 
 
-def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
-    """Create the command-line argument parser.
+_activity_runner.logger = _LoggerProxy()
 
-    Returns
-    -------
-    tuple[argparse.ArgumentParser, LoggerConfig]
-        A tuple containing the fully configured parser and the logging
-        configuration populated with defaults.
-    """
-    parser, log_cfg = base_parser(
-        "ChEMBL activity data utilities",
-        column="activity_id",
-        chunk_size=5,
-        size_option="--batch-size",
-        size_dest="batch_size",
-    )
-    parser.prog = PROGRAM_NAME
-    parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
-    parser.add_argument(
-        "--timeout",
-        type=float,
-        default=90.0,
-        help=(
-            "Timeout in seconds for each HTTP request (values below "
-            f"{int(MIN_ACTIVITY_TIMEOUT)} seconds are automatically clamped)"
-        ),
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help=(
-            "Maximum number of identifiers to process; use 0 to skip processing"
-        ),
-    )
-    parser.add_argument(
-        "--offset",
-        type=int,
-        default=0,
-        help="Number of identifiers to skip before processing",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Read input and exit without contacting the API or writing files",
-    )
-    parser.add_argument(
-        "--workers",
-        type=positive_int,
-        default=1,
-        help="Number of worker threads fetching activities in parallel",
-    )
-    parser.set_defaults(func=run_chembl)
-    return parser, log_cfg
+_extended_exports = (
+    "ActivityPipelineCLI",
+    "DEFAULT_INPUT_NAME",
+    "DEFAULT_OUTPUT_STEM",
+    "PROGRAM_NAME",
+    "run",
+    "run_chembl",
+    "_emit_completion_message",
+    "main",
+    "build_parser",
+    "MAX_ACTIVITY_CHUNK_SIZE",
+)
 
-
-class ActivityPipelineCLI(PipelineCLIBase):
-    """CLI adapter for the activity data pipeline."""
-
-    def build_parser(self) -> tuple[argparse.ArgumentParser, LoggerConfig]:
-        return _build_parser_impl()
-
-    def prepare_arguments(
-        self,
-        parser: argparse.ArgumentParser,
-        args: argparse.Namespace,
-        argv: Sequence[str] | None,
-    ) -> argparse.Namespace:
-        args.invocation = resolve_invocation(parser.prog, argv)
-        cli.prepare_io_paths(
-            args,
-            input_default=DEFAULT_INPUT_NAME,
-            output_stem=DEFAULT_OUTPUT_STEM,
-        )
-        return args
-
-    def handle_pre_run(
-        self, parser: argparse.ArgumentParser, args: argparse.Namespace
-    ) -> int | None:
-        if args.limit == 0:
-            logger.info("pipeline_skip_limit", limit=args.limit)
-            logger.info(
-                "Limit set to 0; exiting before starting the activity pipeline."
-            )
-            return 0
-        if args.limit is not None and args.limit < 0:
-            parser.error("--limit must be zero or a positive integer")
-        if args.offset < 0:
-            parser.error("--offset must be zero or a positive integer")
-        input_path = Path(args.input_csv)
-        if not input_path.exists():
-            message = (
-                f"Input CSV '{input_path}' does not exist. "
-                "Provide --input pointing to a valid identifiers file or "
-                "run the upstream pipeline step to generate it."
-            )
-            sys.stderr.write(message + "\n")
-            return 1
-        return None
-
-    def get_program_name(self) -> str:
-        return Path(__file__).with_suffix("").name
-
-    def get_logger(self) -> Logger:
-        return logger
-
-    def get_config_mapping(self) -> Mapping[str, str]:
-        return {
-            "timeout": "activity.timeout",
-            "column": "activity.column",
-            "batch_size": "activity.batch_size",
-            "limit": "activity.limit",
-            "offset": "activity.offset",
-            "dry_run": "activity.dry_run",
-            "workers": "activity.workers",
-        }
-
-    def run_pipeline(self, cfg: Config, args: argparse.Namespace) -> int:
-        return run(cfg, args)
-
-
-_CLI = ActivityPipelineCLI()
-
-
-def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
-    """Expose parser construction for existing imports."""
-
-    return _CLI.build_parser()
-
-
-from library.cli.entrypoints import activity as _activity
+_activity.__all__ = tuple(
+    dict.fromkeys(getattr(_activity, "__all__", tuple()) + _extended_exports)
+)
 
 sys.modules[__name__] = _activity
 sys.modules.setdefault("scripts.get_activity_data", _activity)
-
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
     raise SystemExit(_activity.main())
