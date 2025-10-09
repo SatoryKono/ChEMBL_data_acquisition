@@ -26,22 +26,27 @@ require_python_version()
 
 
 def _default_run_id(level: str) -> str:
-    """Return a deterministic run identifier derived from ``level``."""
+    """Return a unique run identifier for the CLI logger."""
 
-    seed = f"chembl-data-acquisition|{level.upper()}"
-    return uuid.uuid5(uuid.NAMESPACE_URL, seed).hex
+    # ``level`` is accepted so that callers can supply deterministic run
+    # identifiers that incorporate the logging level when required. For the
+    # default we continue to generate a random identifier to ensure concurrent
+    # CLI runs remain distinguishable without the caller providing an explicit
+    # value.
+    _ = level  # Intentionally unused but part of the public signature.
+    return uuid.uuid4().hex
 
 
 def create_logger_config(level: str, *, run_id: str | None = None) -> LoggerConfig:
-    """Return :class:`LoggerConfig` using a deterministic ``run_id``.
+    """Return :class:`LoggerConfig` with a unique default ``run_id``.
 
     Parameters
     ----------
     level:
         Desired logging level.
     run_id:
-        Optional run identifier. When omitted a deterministic default derived
-        from ``level`` is used.
+        Optional run identifier. When omitted a random default derived from
+        :func:`uuid.uuid4` is used so that each CLI run remains unique.
 
     Returns
     -------

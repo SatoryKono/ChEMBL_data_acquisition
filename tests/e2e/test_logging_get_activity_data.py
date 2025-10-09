@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
-from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 
@@ -85,24 +85,31 @@ def test_logging_get_activity_data__writes_expected_messages(
     assert "Exported activities" in content
     assert "Completed get_activity_data run" in content
 
-    expected_run_id = uuid5(NAMESPACE_URL, "chembl-data-acquisition|INFO").hex
+    lines = content.splitlines()
+
+    assert len(lines) == 3
+
+    run_id_pattern = re.compile(r"run_id='([0-9a-f]{32})'")
+    match = run_id_pattern.search(lines[0])
+    assert match is not None
+    run_id = match.group(1)
 
     expected_lines = [
         (
             "[2020-01-01 00:00:00,000] [INFO] [chembl] "
             f"Starting get_activity_data run input='{input_path}' output='{output_path}' "
-            f"rps=None run_id='{expected_run_id}' status=None"
+            f"rps=None run_id='{run_id}' status=None"
         ),
         (
             "[2020-01-01 00:00:00,000] [INFO] [chembl] "
             f"Exported activities output='{output_path}' rows=2 "
-            f"rps=None run_id='{expected_run_id}' status=None"
+            f"rps=None run_id='{run_id}' status=None"
         ),
         (
             "[2020-01-01 00:00:00,000] [INFO] [chembl] "
             f"Completed get_activity_data run output='{output_path}' "
-            f"rps=None run_id='{expected_run_id}' status=None"
+            f"rps=None run_id='{run_id}' status=None"
         ),
     ]
 
-    assert content.splitlines() == expected_lines
+    assert lines == expected_lines
