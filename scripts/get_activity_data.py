@@ -75,6 +75,7 @@ from library.orchestration import ETLContext
 from library.pipelines.activity import run as activity_run
 from library.pipelines.assay.chembl_assay import (
     ACTIVITY_COLUMNS,
+    MAX_ACTIVITY_CHUNK_SIZE,
 )
 from library.pipelines.common import (
     ChunkedFetchConfig,
@@ -132,6 +133,7 @@ __all__ = (
     "write_meta_yaml",
     "configure_logger",
     "run_cli_command",
+    "MAX_ACTIVITY_CHUNK_SIZE",
 )
 
 
@@ -287,23 +289,22 @@ _OUTPUT_ACTIVITY_DROP_COLUMNS: tuple[str, ...] = (
 def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
     """Return ``series`` converted to ``dtype`` where feasible."""
 
-    # Use pandas extension dtypes directly for nullable types
-    if dtype == "Float64":
-        return cast(pd.Series[Any], series.astype(pd.Float64Dtype()))
-    elif dtype == "Int64":
-        return cast(pd.Series[Any], series.astype(pd.Int64Dtype()))
-    elif dtype == "boolean":
-        return cast(pd.Series[Any], series.astype(pd.BooleanDtype()))
-    elif dtype == "string":
+    # Delegate to the extended coercion helper for extension-aware conversions.
+    if dtype in {"Float64", "Int64", "boolean"}:
+        converted, _ = _coerce_extended_series(series, dtype, column="_coerce_series_dtype")
+        return cast("pd.Series[Any]", converted)
+
+    if dtype == "string":
         return series.astype(pd.StringDtype())
-    else:
-        # For non-extension dtypes, try to use numpy dtype if possible
-        try:
-            import numpy as np
-            return series.astype(np.dtype(dtype))
-        except (TypeError, ValueError):
-            # Final fallback: convert to string
-            return cast(pd.Series[Any], series.astype(str))
+
+    # For non-extension dtypes, try to use numpy dtype if possible.
+    try:
+        import numpy as np
+
+        return series.astype(np.dtype(dtype))
+    except (TypeError, ValueError):
+        # Final fallback: convert to string.
+        return cast("pd.Series[Any]", series.astype(str))
 
 
 def _extract_adapter_retry_metadata(
@@ -1433,6 +1434,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             raise
 
     processed_ids = prepared_context.processed_ids
+    processed_count = 0
+    summary_snapshot = streamed_summary or streaming_stats.snapshot()
+
     if limit is not None:
         logger.info(
             "process_limit",
@@ -1444,12 +1448,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             try:
                 processed_count = int(processed_ids)
             except (TypeError, ValueError):
+                logger.info(
+                    "processed_count_conversion_failed",
+                    value=processed_ids,
+                )
                 processed_count = 0
         else:
-            processed_count = 0
             logger.info("processed_count", count=processed_count)
-
-            summary_snapshot = streamed_summary or streaming_stats.snapshot()
 
     if pipeline_stats is not None:
         try:
