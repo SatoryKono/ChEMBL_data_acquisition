@@ -8,30 +8,40 @@ presented to users via :meth:`argparse.ArgumentParser.error`.
 from __future__ import annotations
 
 import argparse
-import uuid
 import os
+import uuid
 from pathlib import Path, PureWindowsPath
 from typing import Any, cast
 
 from pydantic import ValidationError
 
 from ..common.log import logger
-from ..config import Config, ConfigError, ConfigMetadata, load_config
 from ..common.logging_setup import Logger, LoggerConfig
 from ..common.logging_setup import configure_logger as _configure_logger
-from ..version import require_python_version
+from ..config import Config, ConfigError, ConfigMetadata, load_config
 from ..config.loader import DEFAULT_CONFIG_PATH
+from ..version import require_python_version
 
 require_python_version()
 
 
-def create_logger_config(level: str) -> LoggerConfig:
-    """Return :class:`LoggerConfig` with a random ``run_id``.
+def _default_run_id(level: str) -> str:
+    """Return a deterministic run identifier derived from ``level``."""
+
+    seed = f"chembl-data-acquisition|{level.upper()}"
+    return uuid.uuid5(uuid.NAMESPACE_URL, seed).hex
+
+
+def create_logger_config(level: str, *, run_id: str | None = None) -> LoggerConfig:
+    """Return :class:`LoggerConfig` using a deterministic ``run_id``.
 
     Parameters
     ----------
     level:
         Desired logging level.
+    run_id:
+        Optional run identifier. When omitted a deterministic default derived
+        from ``level`` is used.
 
     Returns
     -------
@@ -39,7 +49,8 @@ def create_logger_config(level: str) -> LoggerConfig:
         Configuration containing ``run_id`` and ``level``.
     """
 
-    return LoggerConfig(run_id=uuid.uuid4().hex, level=level)
+    resolved_run_id = run_id if run_id is not None else _default_run_id(level)
+    return LoggerConfig(run_id=resolved_run_id, level=level)
 
 
 def _positive_int(value: str) -> int:

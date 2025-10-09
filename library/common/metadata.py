@@ -64,6 +64,8 @@ class Stats(_StatsRequired, total=False):
     missing_molecule_ids_count: int
     chunk_fetch_failure_chunks: int
     chunk_fetch_failure_ids: list[str]
+    chunk_fetch_failure_ids_total: int
+    chunk_fetch_failure_ids_truncated: bool
 
 
 def file_sha256(path: Path | str) -> str:
