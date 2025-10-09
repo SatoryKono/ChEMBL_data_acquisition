@@ -1,0 +1,85 @@
+generated_at: '2025-10-09T06:57:00.821136+00:00'
+git_sha: 42a34d9a9a730477554b2bfc9c6d73a78aeee23f
+command: scripts\make_assay_postprocessing.py --input data\output\assay\output.assay.csv
+  --output out.csv
+columns:
+- assay_chembl_id
+- assay_type
+- assay_test_type
+- description
+- target_chembl_id
+- confidence_score
+- is_confirmatory
+- pipeline_version
+- accession
+- acts_per_assay_step5
+- aidx
+- assay_cell_type
+- assay_classifications
+- assay_group
+- assay_organism
+- assay_parameters
+- assay_strain
+- assay_subcellular_fraction
+- assay_tax_id
+- assay_tissue
+- assay_type_description
+- assay_with_same_target
+- bao_format
+- bao_label
+- cell_chembl_id
+- cited_assay_corr
+- document_chembl_id
+- isoform
+- month
+- mutation
+- relationship_type
+- sequence
+- src_id
+- substrate_name
+- target_name
+- timestamp_utc
+- tissue_chembl_id
+- version
+- year
+dtypes:
+  assay_chembl_id: string
+  assay_type: string
+  assay_test_type: string
+  description: string
+  target_chembl_id: string
+  confidence_score: int64
+  is_confirmatory: bool
+  pipeline_version: string
+  accession: object
+  acts_per_assay_step5: float64
+  aidx: object
+  assay_cell_type: object
+  assay_classifications: object
+  assay_group: object
+  assay_organism: object
+  assay_parameters: object
+  assay_strain: object
+  assay_subcellular_fraction: object
+  assay_tax_id: int64
+  assay_tissue: object
+  assay_type_description: object
+  assay_with_same_target: int64
+  bao_format: object
+  bao_label: object
+  cell_chembl_id: object
+  cited_assay_corr: float64
+  document_chembl_id: object
+  isoform: float64
+  month: float64
+  mutation: object
+  relationship_type: object
+  sequence: object
+  src_id: int64
+  substrate_name: float64
+  target_name: float64
+  timestamp_utc: object
+  tissue_chembl_id: object
+  version: float64
+  year: float64
+config: {}

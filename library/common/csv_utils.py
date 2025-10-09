@@ -460,6 +460,7 @@ def write_csv_deterministic(
                 na_rep="",
                 chunksize=chunksize,
                 sep=sep,
+                lineterminator="\n",
             )
         robust_replace(tmp_path, out_path)
     else:
@@ -486,6 +487,7 @@ def write_csv_deterministic(
                     na_rep="",
                     sep=sep,
                     encoding=encoding,
+                    lineterminator="\n",
                 )
                 tmp_paths.append(chunk_path)
 
