@@ -108,13 +108,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--dry-run",
-        action=argparse.BooleanOptionalAction,
-        default=False,
+        action="store_true",
         help=(
             "Forward the --dry-run flag to get_activity_data. "
-            "Enable with --dry-run to perform a dry run; real writes are performed by default."
+            "Enable this option to perform a dry run; real writes are performed by default."
         ),
     )
+    parser.add_argument(
+        "--no-dry-run",
+        dest="dry_run",
+        action="store_false",
+        help="Explicitly disable dry-run mode (default).",
+    )
+    parser.set_defaults(dry_run=False)
 
     args = parser.parse_args(argv)
 
@@ -148,12 +154,18 @@ def main(argv: list[str] | None = None) -> int:
         if not first.exists() or not second.exists():
             if args.dry_run:
                 sys.stderr.write(
-                    "Outputs were not created because --dry-run skips writing files. "
-                    "Re-run with --no-dry-run to exercise the full pipeline.\n"
+                sys.stderr.write(
+                    "Determinism check failed: --dry-run prevents creating output files.\n"
+                )
+                sys.stderr.write(
+                    "Re-run with --no-dry-run to verify that the pipeline produces stable results.\n"
                 )
             else:
                 sys.stderr.write(
-                    "Outputs were not created; determinism check failed before files were written.\n"
+                    "Determinism check failed: the pipeline exited without writing output files.\n"
+                )
+                sys.stderr.write(
+                    "Inspect the pipeline logs for warnings or errors before rerunning this check.\n"
                 )
             return 1
 

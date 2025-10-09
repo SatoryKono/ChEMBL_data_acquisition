@@ -55,27 +55,25 @@ class CLILoggingContext:
     console_stream: IO[str]
 
 
-def _canonical_log_name(script_name: str | os.PathLike[str]) -> str:
-    """Return a normalised prefix for CLI log files."""
+def _normalise_script_name(script_name: str) -> str:
+    """Return a stable identifier used as log file prefix."""
 
-    if isinstance(script_name, Path):
-        candidate = script_name.name
-    else:
-        candidate = str(script_name).strip()
+    candidate = script_name.strip()
     if not candidate:
-        raise ValueError("script_name must be a non-empty string")
+        raise ValueError("script_name must not be empty")
 
-    candidate = _SEPARATOR_PATTERN.split(candidate)[-1]
-    if candidate.endswith(".py"):
-        candidate = candidate[:-3]
+    # Convert Windows-style separators before normalising through ``Path``.
+    candidate = candidate.replace("\\", "/")
+    name = Path(candidate).name
 
-    sanitised = _SAFE_NAME_PATTERN.sub("_", candidate)
-    sanitised = sanitised.strip("._-") or sanitised
-    if not sanitised:
-        raise ValueError(
-            f"Unable to derive a valid log file prefix from {script_name!r}."
-        )
-    return sanitised
+    if name.endswith(".py"):
+        name = Path(name).stem
+
+    # Replace unsupported characters to keep filenames portable across platforms.
+    name = re.sub(r"[^A-Za-z0-9._-]", "_", name)
+    if not name or not any(ch.isalnum() for ch in name):
+        return "pipeline"
+    return name
 
 
 @contextmanager
@@ -94,18 +92,17 @@ def setup_cli_logging(
         resolved_dir = _default_log_dir()
     resolved_dir.mkdir(parents=True, exist_ok=True)
 
+    normalised_name = _normalise_script_name(script_name)
+
     if date_str:
         suffix = date_str
     else:
         suffix = _current_date_str()
 
-    canonical_name = _canonical_log_name(script_name)
-    log_path = resolved_dir / f"{canonical_name}_{suffix}.log"
+    log_path = resolved_dir / f"{normalised_name}_{suffix}.log"
     log_path.touch(exist_ok=True)
-    if not log_path.exists():  # pragma: no cover - defensive
-        raise RuntimeError(
-            f"Failed to create log file '{log_path}'. Ensure the log directory is writable."
-        )
+    if not log_path.exists():  # pragma: no cover - defensive guard
+        raise RuntimeError(f"Failed to create log file at '{log_path}'.")
 
     console_stream = getattr(log_cfg, "stream", None) or sys.stdout
     file_handler = logging.FileHandler(log_path, encoding="utf-8")
