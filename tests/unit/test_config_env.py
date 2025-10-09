@@ -21,6 +21,17 @@ def test_apply_env_overrides__alias(monkeypatch):
 
 
 @pytest.mark.unit
+def test_apply_env_overrides__explicit_path(monkeypatch):
+    monkeypatch.setenv("CHEMBL_DA__SYSTEM__LOG__LEVEL", "WARNING")
+    data = {"system": {"log": {"level": "INFO"}}}
+
+    overrides = _apply_env_overrides(data)
+
+    assert data["system"]["log"]["level"] == "WARNING"
+    assert overrides[("system", "log", "level")] == "CHEMBL_DA__SYSTEM__LOG__LEVEL"
+
+
+@pytest.mark.unit
 def test_resolve_placeholder_base_path__env_override(monkeypatch, tmp_path):
     base = tmp_path / "chembl"
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base))
