@@ -388,7 +388,8 @@ def _build_metadata_flags(
     metadata_counts = [len(tokens) for tokens in token_lists]
     metadata_series = pd.Series(metadata_strings, index=df.index, dtype="string")
     count_series = pd.Series(metadata_counts, index=df.index, dtype="Int64")
-    # Fix: type of count_series in returned dict should be pd.Series[int], not pd.Series[bool]
+    # Fix: type of count_series in returned dict should be pd.Series[int], not
+    # pd.Series[bool]
     return metadata_series, {**flags, "metadata_source_count": count_series}
     
 def _coverage_status(score: int, has_error: bool) -> str:
@@ -1090,7 +1091,8 @@ def _harmonise_documents(out_frame: pd.DataFrame, ref_frame: pd.DataFrame) -> pd
 
     journal_value = np.where(journal_match, df["ChEMBL.journal"], "unknown")
     volume_value = np.where(volume_match, df["ChEMBL.volume"], "unknown")
-    issue_value =   df["ChEMBL.issue"] 
+    issue_match = (df["PubMed.Issue"] == df["ChEMBL.issue"]) & (df["ChEMBL.issue"] != "")
+    issue_value = np.where(issue_match, df["ChEMBL.issue"], "unknown")
     start_value = np.where(start_match, df["ChEMBL.first_page"], "unknown")
     end_value = np.where(end_match, df["ChEMBL.last_page"], "unknown")
 

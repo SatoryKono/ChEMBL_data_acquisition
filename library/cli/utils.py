@@ -16,7 +16,6 @@ import traceback
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import overload
 
 import shlex
 
@@ -34,17 +33,13 @@ from ..cli import (
     prepare_io_paths,
 )
 from ..common.log import logger as default_logger
-from ..common.metadata import Stats, record_quality_failure
+from ..common.metadata import record_quality_failure
 from ..common.sidecar import SidecarErrors
 from ..config import Config, ConfigError, DEFAULT_CONFIG_PATH, ensure_dirs, print_config
 from ..reporting.run_manifest import finalise_csv_output
 from .pipeline_definition import (
     Fetcher,
-    MetadataHook,
     PipelineDefinition,
-    TableQualityHook,
-    Validator,
-    Writer,
     normalise_definition,
 )
 

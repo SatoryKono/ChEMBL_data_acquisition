@@ -4,14 +4,10 @@ import csv
 import importlib.util
 import sys
 import types
-import warnings
 from pathlib import Path
-
-
-import importlib.util
-import sys
-import types
 from typing import Any
+
+# ruff: noqa: E402  # dynamic module bootstrapping adjusts sys.modules for imports
 
 import numpy as np
 import pandas as pd

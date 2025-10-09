@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from library.postprocessing import AssayExtendedError, enrich_assay_metadata
+from library.postprocessing import enrich_assay_metadata
 
 
 @pytest.mark.postprocessing

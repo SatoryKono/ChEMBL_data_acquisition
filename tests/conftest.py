@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+# ruff: noqa: E402  # test utilities modify sys.path before project imports
 import numpy as np
 import pandas as pd
 import pytest
@@ -147,7 +148,7 @@ def disable_network(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disallow outbound HTTP requests during tests."""
 
     try:
-        import requests
+        import requests  # noqa: F401
     except ModuleNotFoundError:  # pragma: no cover - requests optional in env
         return
 

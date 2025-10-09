@@ -12,6 +12,7 @@ Fetch ChEMBL target information for identifiers in ``targets.csv``::
 
 from __future__ import annotations
 
+# ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
     bootstrap_cli(__package__, __file__)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# ruff: noqa: E402  # bootstrap alters import order for script compatibility
 import argparse
 
 if __package__ in {None, ""}:

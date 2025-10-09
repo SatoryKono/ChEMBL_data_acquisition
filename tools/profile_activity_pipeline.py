@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E402  # requires sys.path mutation before local imports
+
 import argparse
+import math
 import sys
+from collections.abc import Callable
 from contextlib import ExitStack
 from pathlib import Path
 from time import perf_counter
-from typing import Callable
 from types import SimpleNamespace
-import math
 
 import pandas as pd
 

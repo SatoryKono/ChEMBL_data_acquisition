@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import stat
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Iterable
 
 import pandas as pd
 from types import SimpleNamespace

@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import sys
 import time
-import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import IO, Any, Iterator

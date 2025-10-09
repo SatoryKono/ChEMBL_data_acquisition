@@ -1249,12 +1249,12 @@ def _extract_audit_last_update(audit: dict[str, Any]) -> str | None:
                 return candidate
         return None
 
-    for field in (
+    for field_name in (
         "lastUpdateDate",
         "lastAnnotationUpdateDate",
         "lastSequenceUpdateDate",
     ):
-        date_value = _coerce_date(audit.get(field))
+        date_value = _coerce_date(audit.get(field_name))
         if date_value:
             return date_value
     return None

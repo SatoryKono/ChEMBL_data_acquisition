@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli, ensure_project_root
 else:  # pragma: no cover - executed when imported as a package module

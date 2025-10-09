@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if __package__ in {None, ""}:
     import sys
     from importlib import import_module

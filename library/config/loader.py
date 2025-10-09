@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import logging
 import os
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping as TypingMapping

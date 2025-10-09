@@ -5,7 +5,6 @@ from pathlib import Path
 import yaml
 
 import pytest
-import yaml
 
 from library.resources import dictionaries
 from config.paths import DICTIONARY_DIR

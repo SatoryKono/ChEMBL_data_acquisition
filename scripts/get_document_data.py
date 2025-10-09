@@ -24,6 +24,7 @@ The input file must contain a ``PMID`` column.
 
 from __future__ import annotations
 
+# ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
 else:  # pragma: no cover - executed when imported as a package module
@@ -42,14 +43,13 @@ import tempfile
 from pathlib import Path
 
 from numbers import Integral, Real
-from typing import Any, cast
+from typing import Any
 
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
-from library import cli
 from library import io
 from library.common.csv_utils import write_csv_chunks_deterministic
 from library.integration import chembl_library as cl
@@ -83,7 +83,6 @@ from library.pipelines.document.pipeline import (
     build_dataframe,
     build_quality_report,
     dataframe_to_strings,
-    merge_metadata,
     merge_with_chembl,
     normalise_doi,
 )
