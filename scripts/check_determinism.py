@@ -160,13 +160,14 @@ def main(argv: list[str] | None = None) -> int:
                 sys.stderr.write(
                     "Re-run with --no-dry-run to verify that the pipeline produces stable results.\n"
                 )
-            else:
-                sys.stderr.write(
-                    "Determinism check failed: the pipeline exited without writing output files.\n"
-                )
-                sys.stderr.write(
-                    "Inspect the pipeline logs for warnings or errors before rerunning this check.\n"
-                )
+                return 2
+
+            sys.stderr.write(
+                "Determinism check failed: the pipeline exited without writing output files.\n"
+            )
+            sys.stderr.write(
+                "Inspect the pipeline logs for warnings or errors before rerunning this check.\n"
+            )
             return 1
 
         first_hash = _hash_file(first)
