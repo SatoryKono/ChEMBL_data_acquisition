@@ -992,6 +992,11 @@ def _load_output_document(path: Path) -> pd.DataFrame:
         numeric = pd.to_numeric(frame[column], errors="coerce")
         frame[column] = numeric.astype("Int64")
 
+    # Coerce ChEMBL.issue into Int64, mapping non-numeric ranges like "11-12" to <NA>
+    if "ChEMBL.issue" in frame.columns:
+        chembl_issue_numeric = pd.to_numeric(frame["ChEMBL.issue"], errors="coerce")
+        frame["ChEMBL.issue"] = chembl_issue_numeric.astype("Int64")
+
     return frame
 
 

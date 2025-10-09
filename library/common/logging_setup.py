@@ -208,6 +208,8 @@ def configure_logger(cfg: LoggerConfig, replace_root: bool = True) -> Logger:
 
     level_no = _level_no(cfg.level)
     formatter = logging.Formatter(_FORMAT)
+    # Ensure timestamps are rendered in UTC to keep logs deterministic across environments
+    formatter.converter = time.gmtime
 
     handlers: list[logging.Handler] = []
     if cfg.stream is not None:
