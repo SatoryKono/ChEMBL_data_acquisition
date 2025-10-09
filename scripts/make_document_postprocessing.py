@@ -10,6 +10,7 @@ else:  # pragma: no cover - executed when imported as a package module
 bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
+from collections.abc import Callable
 from importlib import import_module, util
 from types import ModuleType
 
@@ -66,10 +67,12 @@ from library.cli import configure_logger, create_logger_config
 from library.cli.logging import setup_cli_logging
 from library.cli.parser import path_argument
 from library.common.log import logger
+from library.postprocess.common import run_steps
+from library.postprocess.common.config import PipelineConfig, normalize_pipeline_version
 from library.postprocess.common.logging import PipelineRunMetrics
 from library.postprocess.common.types import SchemaValidationError, StepError
 from library.postprocess.documents.schema import DOCUMENT_SCHEMA, validate_documents
-from library.postprocess.documents.steps import run_document_pipeline
+from library.pipelines.common.metadata import get_pipeline_version
 
 
 TABLE_NAME = "documents"
@@ -118,17 +121,64 @@ def load_output_data(path: Path, csv_cfg: CsvRuntimeConfig) -> pd.DataFrame:
     return load_input_frame(TABLE_NAME, path, csv_cfg, logger=logger)
 
 
+def resolve_pipeline_version(
+    pipeline_config: PipelineConfig,
+    *,
+    override: str | None = None,
+) -> str:
+    """Return the effective pipeline version for the current execution."""
+
+    candidate = normalize_pipeline_version(override)
+    if candidate is not None:
+        return candidate
+
+    candidate = normalize_pipeline_version(pipeline_config.pipeline_version)
+    if candidate is not None:
+        return candidate
+
+    return get_pipeline_version()
+
+
+def build_pipeline_runner(
+    pipeline_config: PipelineConfig,
+) -> Callable[..., tuple[pd.DataFrame, PipelineRunMetrics]]:
+    """Create a document pipeline runner honoring ``pipeline_config`` overrides."""
+
+    steps = pipeline_config.step_definitions()
+
+    def runner(
+        df: pd.DataFrame,
+        *,
+        pipeline_version: str | None = None,
+        logger=None,
+    ) -> tuple[pd.DataFrame, PipelineRunMetrics]:
+        effective_version = resolve_pipeline_version(
+            pipeline_config,
+            override=pipeline_version,
+        )
+        return run_steps(
+            df,
+            steps,
+            post_schema=DOCUMENT_SCHEMA,
+            pipeline_version=effective_version,
+            logger=logger,
+        )
+
+    return runner
+
+
 def apply_postprocessing_steps(
     df: pd.DataFrame,
     *,
-    pipeline_version: str | None,
+    runner: Callable[..., tuple[pd.DataFrame, PipelineRunMetrics]],
+    pipeline_version: str,
 ) -> tuple[pd.DataFrame, PipelineRunMetrics]:
     """Execute the configured document postprocessing pipeline."""
 
     return run_postprocess_steps(
         TABLE_NAME,
         df,
-        run_document_pipeline,
+        runner,
         pipeline_version,
         logger=logger,
     )
@@ -186,13 +236,16 @@ def run(args: argparse.Namespace) -> int:
         logger.error(f"{event_prefix}_input_missing", input=str(input_path))
         return 1
 
+    runner = build_pipeline_runner(pipeline_config)
+    effective_version = resolve_pipeline_version(pipeline_config)
     metrics: PipelineRunMetrics | None = None
 
     try:
         frame = load_output_data(input_path, csv_cfg)
         processed, metrics = apply_postprocessing_steps(
             frame,
-            pipeline_version=pipeline_config.pipeline_version,
+            runner=runner,
+            pipeline_version=effective_version,
         )
         validated = validate_output_schema(
             processed,
@@ -216,7 +269,7 @@ def run(args: argparse.Namespace) -> int:
         TABLE_NAME,
         output_path,
         csv_cfg,
-        run_document_pipeline,
+        runner,
         pipeline_version=metrics.pipeline_version if metrics else None,
         extras=extras,
         logger=logger,
