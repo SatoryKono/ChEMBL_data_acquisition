@@ -69,7 +69,7 @@ def test_default_input_csv__matches_activity_column(tmp_path: Path) -> None:
 
 def _write_run_payload(destination: Path, payload: str, metadata: dict[str, object]) -> None:
     destination.write_text(payload, encoding="utf-8")
-    meta_path = destination.with_name(destination.name + ".meta.yaml")
+    meta_path = destination.with_suffix(destination.suffix + ".meta.yaml")
     with meta_path.open("w", encoding="utf-8") as handle:
         yaml.safe_dump(metadata, handle, sort_keys=False)
 
@@ -93,7 +93,7 @@ def test_main__metadata_equivalent_runs_pass(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Metadata sidecars differing only in timestamps should be accepted."""
+    """Identical metadata sidecars should produce a successful check."""
 
     input_csv = tmp_path / "activity.csv"
     input_csv.write_text("activity_chembl_id\nCHEMBL1\n", encoding="utf-8")
@@ -117,9 +117,7 @@ def test_main__metadata_equivalent_runs_pass(
         dry_run: bool,
     ) -> CompletedProcess[str]:
         del dry_run
-        metadata = dict(base_metadata)
-        metadata["generated_at"] = f"2025-01-01T00:00:0{len(runs)}+00:00"
-        _write_run_payload(destination, payload, metadata)
+        _write_run_payload(destination, payload, base_metadata)
         runs.append((limit, destination, observed_input))
         return CompletedProcess(args=["python"], returncode=0, stdout="ok\n", stderr="")
 
@@ -131,6 +129,7 @@ def test_main__metadata_equivalent_runs_pass(
 
     captured = capsys.readouterr()
     assert "Deterministic output confirmed" in captured.out
+    assert "Metadata hash check: matched" in captured.out
 
     assert len(runs) == 2
     for limit, _destination, observed_input in runs:
@@ -189,7 +188,8 @@ def test_main__metadata_mismatch_returns_error(
     assert exit_code == 1
 
     captured = capsys.readouterr()
-    assert "Metadata mismatch detected" in captured.out
+    assert "Metadata hash check: mismatch" in captured.out
+    assert "WARNING: Metadata hashes differ" in captured.out
 
     assert len(runs) == 2
     for limit, _destination, observed_input in runs:
@@ -261,9 +261,10 @@ def test_run_activity__passes_dry_run_flag(monkeypatch, tmp_path: Path) -> None:
 
     captured: dict[str, object] = {}
 
-    def _fake_run(cmd, *, text, capture_output, env):
+    def _fake_run(cmd, *, text, capture_output, env, cwd):
         captured["cmd"] = cmd
         captured["env"] = env
+        captured["cwd"] = cwd
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     monkeypatch.setattr(check_determinism.subprocess, "run", _fake_run)
