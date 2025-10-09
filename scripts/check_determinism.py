@@ -159,6 +159,7 @@ def main(argv: list[str] | None = None) -> int:
                 sys.stderr.write(
                     "Re-run with --no-dry-run to verify that the pipeline produces stable results.\n"
                 )
+                return 2
             else:
                 sys.stderr.write(
                     "Determinism check failed: the pipeline exited without writing output files.\n"
