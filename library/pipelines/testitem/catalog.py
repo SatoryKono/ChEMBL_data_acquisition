@@ -500,7 +500,7 @@ def attach_parent_molecule_ids(
 
     if skip_full_sync:
         identifiers, truncated = _summarise_identifiers(missing_ids)
-        logger.warning(
+        logger.info(
             "parent_lookup_full_sync_skipped_parentless",
             count=len(missing_ids),
             identifiers=identifiers,
@@ -538,7 +538,10 @@ def attach_parent_molecule_ids(
 
     if missing_ids:
         identifiers, truncated = _summarise_identifiers(missing_ids)
-        logger.warning(
+        log_missing = logger.warning
+        if skip_full_sync and parentless_filtered:
+            log_missing = logger.info
+        log_missing(
             "parent_lookup_missing_parents",
             count=len(missing_ids),
             identifiers=identifiers,
