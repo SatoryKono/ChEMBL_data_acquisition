@@ -10,6 +10,7 @@ from __future__ import annotations
 
 # ruff: noqa: E402
 import argparse
+import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter
@@ -23,6 +24,7 @@ except ImportError as exc:  # pragma: no cover - import-time check
     ) from exc
 
 from library.cli import configure_logger, create_logger_config
+from library.cli.base import compute_generated_at
 from library.common.csv_utils import (
     sha256_file,
     write_csv_chunks_deterministic,
@@ -82,23 +84,30 @@ def run_check(tmp_dir: Path) -> bool:
     metadata_status = "skipped"
     first_meta = first.with_suffix(first.suffix + ".meta.yaml")
     second_meta = second.with_suffix(second.suffix + ".meta.yaml")
+    chunked_meta = chunked.with_suffix(chunked.suffix + ".meta.yaml")
 
-    if first_meta.exists() and second_meta.exists():
-        first_meta_hash = sha256_file(first_meta)
-        second_meta_hash = sha256_file(second_meta)
+    meta_entries: list[tuple[str, Path, str]] = []
+    for label, path in (
+        ("first_meta", first_meta),
+        ("second_meta", second_meta),
+        ("chunked_meta", chunked_meta),
+    ):
+        if path.exists():
+            digest = sha256_file(path)
+            logger.debug("hash", label=label, value=digest)
+            meta_entries.append((label, path, digest))
 
-        logger.debug("hash", label="first_meta", value=first_meta_hash)
-        logger.debug("hash", label="second_meta", value=second_meta_hash)
-
+    if len(meta_entries) >= 2:
         metadata_status = "matched"
-        if first_meta_hash != second_meta_hash:
+        baseline = meta_entries[0][2]
+        if any(digest != baseline for _, _, digest in meta_entries[1:]):
             metadata_status = "mismatch"
             logger.warning(
                 "metadata_hash_mismatch",
-                first=str(first_meta),
-                second=str(second_meta),
-                first_hash=first_meta_hash,
-                second_hash=second_meta_hash,
+                entries=[
+                    {"label": label, "path": str(path), "hash": digest}
+                    for label, path, digest in meta_entries
+                ],
             )
             logger.info("metadata_check", status=metadata_status)
             return False
@@ -130,6 +139,13 @@ def main() -> int:
         args = parser.parse_args()
 
         log_cfg = create_logger_config(args.log_level)
+        seed_parts = [parser.prog]
+        seed_parts.extend(sys.argv[1:])
+        log_cfg.generated_at = compute_generated_at(
+            date_token=None,
+            run_id=log_cfg.run_id,
+            seed_parts=seed_parts,
+        )
         configure_logger(log_cfg)
 
         with TemporaryDirectory() as tmp:

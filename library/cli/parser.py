@@ -16,6 +16,7 @@ from typing import Any, cast
 from pydantic import ValidationError
 
 from ..common.log import logger
+from .run_context import compute_generated_at
 from ..common.logging_setup import Logger, LoggerConfig
 from ..common.logging_setup import configure_logger as _configure_logger
 from ..config import Config, ConfigError, ConfigMetadata, load_config
@@ -50,7 +51,12 @@ def create_logger_config(level: str, *, run_id: str | None = None) -> LoggerConf
     """
 
     resolved_run_id = run_id if run_id is not None else _default_run_id(level)
-    return LoggerConfig(run_id=resolved_run_id, level=level)
+    generated_at = compute_generated_at(
+        date_token=None,
+        run_id=resolved_run_id,
+        seed_parts=("create_logger_config", level.upper()),
+    )
+    return LoggerConfig(run_id=resolved_run_id, level=level, generated_at=generated_at)
 
 
 def _positive_int(value: str) -> int:
@@ -369,6 +375,7 @@ def configure_logger(
         LoggerConfig(
             level=cfg.level,
             run_id=cfg.run_id,
+            generated_at=cfg.generated_at,
             redact_secrets=cfg.redact_secrets,
             stream=cfg.stream,
             handlers=list(cfg.handlers),
