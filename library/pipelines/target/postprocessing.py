@@ -410,9 +410,18 @@ def postprocess_targets(
         .str.split("-")
         .str[0]
     )
-    df["secondary_uniprot_id"] = df.get(
-        "secondaryAccessions", pd.Series(dtype=str)
-    ).fillna(df.get("uniprot_id"))
+    secondary_accessions = df.get("secondaryAccessions")
+    if secondary_accessions is not None:
+        secondary_accessions = secondary_accessions.astype("string")
+    else:
+        secondary_accessions = pd.Series(pd.NA, index=df.index, dtype="string")
+
+    if "uniprot_id" in df.columns:
+        secondary_fallback = df["uniprot_id"].astype("string")
+    else:
+        secondary_fallback = pd.Series(pd.NA, index=df.index, dtype="string")
+
+    df["secondary_uniprot_id"] = secondary_accessions.fillna(secondary_fallback)
 
     # Copy "pref_name" into the normalised "recommended_name" column but keep the
     # original field for downstream exports
