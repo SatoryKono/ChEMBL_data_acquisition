@@ -508,6 +508,33 @@ def write_summary(report: dict[str, Any], destination: Path) -> None:
     destination.write_text(build_summary_markdown(report), encoding="utf-8")
 
 
+def _log_run_artifacts(
+    logging_ctx: Any, exit_code: int, report_path: Path, summary_path: Path
+) -> None:
+    """Emit log lines describing where artefacts were written."""
+
+    logger.info("Pytest finished with exit code %s", exit_code)
+
+    log_path = getattr(logging_ctx, "log_path", None)
+    if isinstance(log_path, Path):
+        logger.info("Log saved to %s", _relative_to_root(log_path))
+    elif isinstance(log_path, str):
+        logger.info("Log saved to %s", log_path)
+
+    if RAW_REPORT_FILE.exists():
+        logger.info("Raw report available at %s", _relative_to_root(RAW_REPORT_FILE))
+    if report_path.exists():
+        logger.info(
+            "Structured report written to %s",
+            _relative_to_root(report_path),
+        )
+    if summary_path.exists():
+        logger.info(
+            "Summary written to %s",
+            _relative_to_root(summary_path),
+        )
+
+
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run the test suite and emit structured reports."
@@ -635,33 +662,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 except ValueError as exc:  # pragma: no cover - defensive guard
                     logger.error("Written report failed validation: %s", exc)
                     validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
-            try:
-                write_summary(structured, summary_path)
-            except Exception as exc:  # pragma: no cover - defensive guard
-                logger.error(
-                    "Failed to write summary to %s: %s",
-                    _relative_to_root(summary_path),
-                    exc,
-                )
-
-        log_path = _relative_to_root(logging_ctx.log_path)
-        logger.info("Pytest finished with exit code %s", exit_code)
-        logger.info("Log saved to %s", log_path)
-        if RAW_REPORT_FILE.exists():
-            logger.info(
-                "Raw report available at %s",
-                _relative_to_root(RAW_REPORT_FILE),
-            )
-        if report_path.exists():
-            logger.info(
-                "Structured report written to %s",
-                _relative_to_root(report_path),
-            )
-        if summary_path.exists():
-            logger.info(
-                "Summary written to %s",
+        try:
+            write_summary(structured, summary_path)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            logger.error(
+                "Failed to write summary to %s: %s",
                 _relative_to_root(summary_path),
+                exc,
             )
+            _log_run_artifacts(logging_ctx, exit_code, report_path, summary_path)
+            return VALIDATION_FAILURE_EXIT_CODE
+
+        _log_run_artifacts(logging_ctx, exit_code, report_path, summary_path)
 
         final_exit_code = exit_code
         success_rate_raw = structured.get("summary", {}).get("success_rate", 0.0) or 0.0
