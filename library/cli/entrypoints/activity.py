@@ -539,7 +539,6 @@ def _emit_completion_message(
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
             events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
-<<<<<<< HEAD
         return
 
     payload: dict[str, object] = {
@@ -556,16 +555,6 @@ def _emit_completion_message(
         payload["streamed_metrics"] = metrics_payload
 
     logger.info("activity_pipeline_completion", **payload)
-=======
-
-    message = (
-        "Completed get_activity_data pipeline: "
-        f"rows={resolved_rows}, null_fraction={null_fraction_display}, "
-        f"duration={duration_s:.3f}s, mode={mode}, "
-        f"output={str(output_path) if output_path is not None else 'n/a'}"
-    )
-    logger.info(message)
->>>>>>> origin/codex/fix-typeerror-in-get_activity_data.py-5nnk1d
 
 _EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series[Any] | None]] = {
     "activity_chembl_id": lambda df: df.get("activity_id"),
