@@ -55,10 +55,14 @@ The scenarios exercise success and failure paths for `get_testitem_data`, `get_d
 Install dependencies (see the repository `README.md`) and run the suite via the canonical reporting wrapper:
 
 ```bash
-python -m scripts.run_tests
+python scripts/run_tests.py
 ```
 
+(`python -m scripts.run_tests` remains available for backwards compatibility.)
+
 The command executes `pytest` with the default configuration, writes the full protocol to `reports/test_report.json` and produces a human readable summary in `reports/test_summary.md`. Both artefacts contain Git metadata, timing information, a per-test breakdown and the overall success rate. The JSON payload exposes a `summary` section (totals and a `success_rate` ratio computed as `(passed + xfailed) / max(1, total - skipped)`, ranging from 0.0 to 1.0), while the Markdown file includes a `Success rate: NN.NN%` bullet for quick inspection. The wrapper enforces the ≥95% success-rate policy: if the computed ratio drops below the threshold, it emits an error log and returns a non-zero exit code even when pytest itself reports success. All invocations also configure structured logging – log events are mirrored to `logs/run_tests_<YYYYMMDD>.log` (or the directory defined by `CHEMBL_DA_BASE_PATH`). Pass `--verbose` to lift the logger to DEBUG and forward the same verbosity to pytest’s log capture.
+
+The generated JSON/Markdown files are git-ignored; CI publishes them together with the coverage directory as the `test-reports-<python-version>` artefact so that the latest results can be downloaded directly from GitHub Actions.
 
 
 To focus on a subset, forward additional arguments to pytest after the `--` separator, for example `python -m scripts.run_tests -- -m unit`. Combine `--verbose` with the forwarding flag to observe detailed DEBUG events in both the console and the generated log file.

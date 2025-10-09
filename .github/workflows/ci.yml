@@ -39,10 +39,10 @@ jobs:
           library/io/paths.py
       - name: Type check
         run: mypy --strict library
-      - name: Run tests
+      - name: Run tests via scripts/run_tests.py
         id: run-tests
         continue-on-error: true
-        run: python -m scripts.run_tests
+        run: python scripts/run_tests.py
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
