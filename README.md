@@ -79,6 +79,25 @@ python scripts/get_data.py \
   --date $(date -u +%Y%m%d)
 ```
 
+## Quality gates
+
+Every merge request must satisfy the deterministic quality gates enforced in CI.
+The quickest way to reproduce them locally is to run the bundled test harness:
+
+```bash
+python scripts/run_tests.py
+```
+
+The command executes the full pytest matrix with coverage, writes the structured
+log to `reports/test_report.json` and the Markdown summary to
+`reports/test_summary.md`, and exits with a non-zero status when the
+`summary.success_rate` falls below **95 %**. Re-run the script after touching
+tests or pipeline code to confirm the outputs stay identical apart from the
+timestamp – any drift indicates a determinism regression that must be fixed
+before opening a pull request. When sharing results, commit the code changes and
+attach the generated reports to the PR so reviewers can audit the exact pass
+rate without reproducing the run locally.
+
 ### CLI quick reference
 
 | Command | Example invocation | Highlights |
