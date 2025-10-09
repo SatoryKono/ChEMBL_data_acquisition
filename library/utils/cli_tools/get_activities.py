@@ -7,6 +7,8 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from uuid import uuid4
 
+import yaml
+
 import pandas as pd
 
 from library import cli, io
@@ -19,6 +21,7 @@ from library.config import (
     print_config,
 )
 from library.pipelines.activity import get_activities
+from library.utils.atomic import robust_replace
 
 
 DEFAULT_LIMIT = 25
@@ -93,28 +96,41 @@ def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Pat
     tmp_path = output_path.with_name(f".{output_path.name}.{uuid4().hex}.tmp")
     written = io.write_csv(frame, tmp_path, cfg=cfg)
     tmp_meta = Path(f"{written}.meta.yaml")
-    tmp_meta_lock = tmp_meta.with_name(tmp_meta.name + ".lock")
+
+    if not tmp_meta.exists():
+        written.unlink(missing_ok=True)
+        msg = f"metadata sidecar missing for temporary output: {tmp_meta}"
+        raise FileNotFoundError(msg)
+
+    metadata = yaml.safe_load(tmp_meta.read_text(encoding="utf-8")) or {}
+    expected_columns = list(frame.columns)
+    expected_dtypes = {
+        column: str(dtype) for column, dtype in frame.dtypes.items()
+    }
+
+    meta_columns = metadata.get("columns")
+    meta_dtypes = metadata.get("dtypes")
+    if meta_columns != expected_columns or meta_dtypes != expected_dtypes:
+        written.unlink(missing_ok=True)
+        tmp_meta.unlink(missing_ok=True)
+        msg = "metadata sidecar schema mismatch for generated CSV"
+        raise ValueError(msg)
 
     target_meta = Path(f"{output_path}.meta.yaml")
-    target_meta_lock = target_meta.with_name(target_meta.name + ".lock")
-    target_meta_lock.unlink(missing_ok=True)
 
     try:
-        try:
-            written.replace(output_path)
-        except Exception:
-            written.unlink(missing_ok=True)
-            raise
-
-        try:
-            tmp_meta.replace(target_meta)
-        except Exception:
-            output_path.unlink(missing_ok=True)
-            raise
-    finally:
+        robust_replace(written, output_path)
+        robust_replace(tmp_meta, target_meta)
+    except Exception:
+        written.unlink(missing_ok=True)
         tmp_meta.unlink(missing_ok=True)
-        tmp_meta_lock.unlink(missing_ok=True)
-        target_meta_lock.unlink(missing_ok=True)
+        raise
+
+    # Clean up any lingering temporary metadata artefacts from the staging write.
+    for orphan in output_path.parent.glob(f".{output_path.name}.*.tmp.meta.yaml"):
+        if orphan != target_meta:
+            orphan.unlink(missing_ok=True)
+
     return output_path
 
 
