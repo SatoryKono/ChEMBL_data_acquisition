@@ -163,7 +163,10 @@ def main(argv: list[str] | None = None) -> int:
         first_meta = _metadata_path(first)
         second_meta = _metadata_path(second)
 
-        if first_meta.exists() and second_meta.exists():
+        first_meta_exists = first_meta.exists()
+        second_meta_exists = second_meta.exists()
+
+        if first_meta_exists and second_meta_exists:
             first_meta_hash = _hash_file(first_meta)
             second_meta_hash = _hash_file(second_meta)
 
@@ -177,9 +180,17 @@ def main(argv: list[str] | None = None) -> int:
             print("Metadata hash check: matched")
             print(f"  first metadata SHA256:  {first_meta_hash}")
             print(f"  second metadata SHA256: {second_meta_hash}")
+        elif first_meta_exists or second_meta_exists:
+            print("Metadata hash check: missing sidecar")
+            print("WARNING: Metadata sidecar missing for one run")
+            if not first_meta_exists:
+                print(f"  missing: {first_meta}")
+            if not second_meta_exists:
+                print(f"  missing: {second_meta}")
+            return 1
         else:
             print(
-                "Metadata hash check: skipped (sidecars missing for one or both runs)"
+                "Metadata hash check: skipped (no metadata sidecars produced)"
             )
 
         print("Deterministic output confirmed")
