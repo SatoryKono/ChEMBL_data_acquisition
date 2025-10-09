@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
+from functools import partial
 from importlib import import_module
 from itertools import islice
 from pathlib import Path
