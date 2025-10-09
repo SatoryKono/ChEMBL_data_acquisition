@@ -10,34 +10,49 @@ else:  # pragma: no cover - executed when imported as a package module
 bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
-if __package__ in {None, ""}:
-    from _postprocess_common import (
-        CsvRuntimeConfig,
-        DEFAULT_LOG_DIR,
-        LOG_DIR_ENV,
-        export_postprocess_frame,
-        generate_metrics_report,
-        get_csv_runtime_config,
-        get_default_log_level,
-        get_pipeline_config,
-        load_input_frame,
-        run_postprocess_steps,
-        validate_postprocess_frame,
+from importlib import import_module, util
+from types import ModuleType
+
+
+def _load_postprocess_common_module() -> ModuleType:
+    """Return the ``_postprocess_common`` module regardless of execution mode."""
+
+    candidate_names: list[str] = []
+    package = __package__ or ""
+
+    if package:
+        candidate_names.append(f"{package}._postprocess_common")
+    candidate_names.append("scripts._postprocess_common")
+    candidate_names.append("_postprocess_common")
+
+    seen: set[str] = set()
+    for module_name in candidate_names:
+        if module_name in seen:
+            continue
+        seen.add(module_name)
+        spec = util.find_spec(module_name)
+        if spec is None:
+            continue
+        return import_module(module_name)
+
+    raise ModuleNotFoundError(
+        "Unable to locate the '_postprocess_common' helpers for the document postprocessing CLI.",
     )
-else:  # pragma: no cover - executed when imported as a package module
-    from ._postprocess_common import (
-        CsvRuntimeConfig,
-        DEFAULT_LOG_DIR,
-        LOG_DIR_ENV,
-        export_postprocess_frame,
-        generate_metrics_report,
-        get_csv_runtime_config,
-        get_default_log_level,
-        get_pipeline_config,
-        load_input_frame,
-        run_postprocess_steps,
-        validate_postprocess_frame,
-    )
+
+
+_postprocess_common = _load_postprocess_common_module()
+
+CsvRuntimeConfig = _postprocess_common.CsvRuntimeConfig
+DEFAULT_LOG_DIR = _postprocess_common.DEFAULT_LOG_DIR
+LOG_DIR_ENV = _postprocess_common.LOG_DIR_ENV
+export_postprocess_frame = _postprocess_common.export_postprocess_frame
+generate_metrics_report = _postprocess_common.generate_metrics_report
+get_csv_runtime_config = _postprocess_common.get_csv_runtime_config
+get_default_log_level = _postprocess_common.get_default_log_level
+get_pipeline_config = _postprocess_common.get_pipeline_config
+load_input_frame = _postprocess_common.load_input_frame
+run_postprocess_steps = _postprocess_common.run_postprocess_steps
+validate_postprocess_frame = _postprocess_common.validate_postprocess_frame
 
 import argparse
 import os
