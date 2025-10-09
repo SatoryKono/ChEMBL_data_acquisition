@@ -11,6 +11,7 @@ import pytest
 import yaml
 
 from scripts import check_determinism
+from library.utils.cli_tools import check_determinism as cli_check_determinism
 
 
 def test_default_input_csv__matches_activity_column(tmp_path: Path) -> None:
@@ -108,7 +109,14 @@ def test_main__metadata_equivalent_runs_pass(
 
     runs: list[tuple[int, Path, Path]] = []
 
-    def _fake_run_activity(limit: int, destination: Path, observed_input: Path) -> CompletedProcess[str]:
+    def _fake_run_activity(
+        limit: int,
+        destination: Path,
+        observed_input: Path,
+        *,
+        dry_run: bool,
+    ) -> CompletedProcess[str]:
+        del dry_run
         metadata = dict(base_metadata)
         metadata["generated_at"] = f"2025-01-01T00:00:0{len(runs)}+00:00"
         _write_run_payload(destination, payload, metadata)
@@ -161,7 +169,14 @@ def test_main__metadata_mismatch_returns_error(
 
     runs: list[tuple[int, Path, Path]] = []
 
-    def _fake_run_activity(limit: int, destination: Path, observed_input: Path) -> CompletedProcess[str]:
+    def _fake_run_activity(
+        limit: int,
+        destination: Path,
+        observed_input: Path,
+        *,
+        dry_run: bool,
+    ) -> CompletedProcess[str]:
+        del dry_run
         metadata = metadata_runs[len(runs)]
         _write_run_payload(destination, payload, metadata)
         runs.append((limit, destination, observed_input))
@@ -183,6 +198,64 @@ def test_main__metadata_mismatch_returns_error(
 
     for directory in created_dirs:
         assert not directory.exists()
+
+
+def test_run_check__metadata_absent_is_skipped(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Metadata comparison is skipped when sidecars are missing."""
+
+    caplog.set_level("INFO", logger="chembl")
+
+    def _fake_write_csv(df, path: Path, key_cols):  # pragma: no cover - helper
+        del df, key_cols
+        path.write_text("csv", encoding="utf-8")
+
+    def _fake_write_chunks(chunk_iter, path: Path, **kwargs):  # pragma: no cover
+        del chunk_iter, kwargs
+        path.write_text("csv", encoding="utf-8")
+
+    monkeypatch.setattr(cli_check_determinism, "write_csv_deterministic", _fake_write_csv)
+    monkeypatch.setattr(
+        cli_check_determinism, "write_csv_chunks_deterministic", _fake_write_chunks
+    )
+
+    assert cli_check_determinism.run_check(tmp_path) is True
+
+    assert "metadata_check" in caplog.text
+    assert "status='skipped'" in caplog.text
+
+
+def test_run_check__metadata_mismatch_fails(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Metadata hash mismatch should fail the check with a warning."""
+
+    caplog.set_level("DEBUG", logger="chembl")
+
+    write_calls: list[Path] = []
+
+    def _fake_write_csv(df, path: Path, key_cols):  # pragma: no cover - helper
+        del df, key_cols
+        path.write_text("csv", encoding="utf-8")
+        meta_path = path.with_suffix(path.suffix + ".meta.yaml")
+        meta_path.write_text(f"meta-{len(write_calls)}", encoding="utf-8")
+        write_calls.append(path)
+
+    def _fake_write_chunks(chunk_iter, path: Path, **kwargs):  # pragma: no cover
+        del chunk_iter, kwargs
+        path.write_text("csv", encoding="utf-8")
+
+    monkeypatch.setattr(cli_check_determinism, "write_csv_deterministic", _fake_write_csv)
+    monkeypatch.setattr(
+        cli_check_determinism, "write_csv_chunks_deterministic", _fake_write_chunks
+    )
+
+    assert cli_check_determinism.run_check(tmp_path) is False
+
+    assert "metadata_hash_mismatch" in caplog.text
+    assert "metadata_check" in caplog.text
+    assert "status='mismatch'" in caplog.text
 def test_run_activity__passes_dry_run_flag(monkeypatch, tmp_path: Path) -> None:
     """Ensure the activity runner forwards the --dry-run flag."""
 
