@@ -7,6 +7,7 @@ import logging
 import pandas as pd
 import pytest
 
+from library.schemas.assays import AssaysSchema
 from scripts.get_assay_data import (
     ASSAY_OUTPUT_DROP_COLUMNS,
     _drop_assay_output_columns,
@@ -113,3 +114,23 @@ def test_drop_assay_output_columns__removes_and_preserves_order(
         in message
         for message in messages
     )
+
+
+@pytest.mark.unit
+def test_drop_assay_output_columns__matches_schema_columns() -> None:
+    """The helper preserves exactly the columns defined in ``AssaysSchema``."""
+
+    schema_columns = list(AssaysSchema.columns.keys())
+
+    # Safety net: if a dropped column sneaks into the schema we want the test to fail
+    # with a clear message rather than producing duplicate columns.
+    overlap = set(schema_columns) & set(ASSAY_OUTPUT_DROP_COLUMNS)
+    assert not overlap, f"Schema unexpectedly includes dropped columns: {sorted(overlap)}"
+
+    input_columns = schema_columns + ASSAY_OUTPUT_DROP_COLUMNS
+    sample_row = {column: f"value-{idx}" for idx, column in enumerate(input_columns)}
+    frame = pd.DataFrame([sample_row], columns=input_columns)
+
+    filtered = _drop_assay_output_columns(frame)
+
+    assert list(filtered.columns) == schema_columns

@@ -12,9 +12,13 @@ import pandas as pd
 from library import io
 from library.common.csv_utils import write_csv_chunks_deterministic
 from library.postprocess.common.config import PipelineConfig, load_pipeline_config
-from library.postprocess.common.logging import PipelineRunMetrics
+from library.postprocess.common.logging import (
+    PipelineRunMetrics,
+    build_report_payload,
+    dump_report,
+)
 from library.postprocess.common.schema import DataFrameSchema
-from library.postprocess.common.types import SchemaValidationError, StepError
+from library.postprocess.common.types import SchemaValidationError
 from library.postprocess.common.utils import collect_postprocess_metrics
 
 
@@ -49,7 +53,7 @@ def get_csv_runtime_config(config: PipelineConfig) -> CsvRuntimeConfig:
     params = dict(config.params or {})
     io_params = dict(params.get("io", {}))
     sep = str(io_params.get("csv_sep", ","))
-    encoding = str(io_params.get("encoding", "utf-8"))
+    encoding = str(io_params.get("encoding", "utf-8-sig"))
     chunksize = int(io_params.get("chunksize", 10000))
     return CsvRuntimeConfig(sep=sep, encoding=encoding, chunksize=chunksize)
 
@@ -231,10 +235,28 @@ def generate_metrics_report(
     pipeline_version: str | None,
     extras: Mapping[str, Any] | None,
     logger,
+    pipeline_metrics: PipelineRunMetrics | None = None,
 ) -> tuple[PipelineRunMetrics | None, Path | None]:
     """Create a structured metrics report for ``table``."""
 
     prefix = event_prefix(table)
+    if pipeline_metrics is not None:
+        report_path = output_path.parent / f"{table}.postprocess.report.json"
+        payload = build_report_payload(
+            table=table,
+            metrics=pipeline_metrics,
+            output_path=str(output_path),
+            extras=extras,
+        )
+        dump_report(report_path, payload)
+        logger.info(
+            f"{prefix}_report_written",
+            report=str(report_path),
+            rows=pipeline_metrics.output_rows,
+            columns=pipeline_metrics.output_columns,
+        )
+        return pipeline_metrics, report_path
+
     metrics, report_path = collect_postprocess_metrics(
         table=table,
         output_path=output_path,

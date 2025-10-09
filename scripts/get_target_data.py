@@ -12,48 +12,36 @@ Fetch ChEMBL target information for identifiers in ``targets.csv``::
 
 from __future__ import annotations
 
+# ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
+    bootstrap_cli(__package__, __file__)
 else:  # pragma: no cover - executed when imported as a package module
     from ._bootstrap import bootstrap_cli
+    bootstrap_cli(__package__, __file__)
+    del bootstrap_cli
 
-bootstrap_cli(__package__, __file__)
-del bootstrap_cli
-
-# ruff: noqa: E402
+    # ruff: noqa: E402
 import argparse
+import math
 import os
-import sys
 import shutil
+import stat
+import sys
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-import math
 from inspect import signature
 from itertools import islice
 from pathlib import Path
-import stat
-from typing import IO, Any, cast
-
+from typing import Any
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
 import library.cli_utils as cli_utils_module
-from library import cli
-from library import io
-from library.integration import chembl_library as cl
-from library.integration import iuphar_library as ii
-from library.integration import uniprot_library as uu
-from library.pipelines.target import protein_classification as pc
-from library.pipelines.target import postprocessing as tp
-from library.pipelines.target.defaults import ModeDefaults, TARGET_MODE_DEFAULTS
-
-from library.orchestration import ETLContext
-from library.cli.pipeline_definition import normalise_definition
-from library.cli_utils import PipelineError, run_cli_command, run_pipeline
-from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
+from library import SidecarErrors, cli, io
 from library.cli import (
     Logger,
     LoggerConfig,
@@ -64,27 +52,35 @@ from library.cli import (
     prepare_io_paths,
 )
 from library.cli.base import PipelineCLIBase
-from library.cli.logging import CLILoggingContext, setup_cli_logging
+from library.cli.logging import CLILoggingContext
+from library.cli.pipeline_definition import normalise_definition
+from library.cli_utils import PipelineError, run_cli_command, run_pipeline
+from library.common.csv_utils import write_csv_deterministic
+from library.common.log import logger
 from library.config import (
     Config,
     _serialize_paths,
 )
-from library.common.csv_utils import write_csv_deterministic
-from library.common.log import logger
+from library.integration import chembl_library as cl
+from library.integration import iuphar_library as ii
+from library.integration import uniprot_library as uu
 from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.orchestration import ETLContext
 from library.pipelines.common import add_pipeline_metadata
 from library.pipelines.common.metadata import get_pipeline_version
-from library import SidecarErrors
+from library.pipelines.target import postprocessing as tp
+from library.pipelines.target import protein_classification as pc
+from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
+from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS, ModeDefaults
+from library.postprocess.common import collect_postprocess_metrics
+from library.postprocess.target.export import prepare_targets_for_schema
+from library.postprocess.targets import run_target_pipeline as run_target_postprocess
+from library.postprocessing import names as names_pp
+from library.postprocessing import target as target_pp
 from library.qa.reporting import build_table_quality_hook, is_quality_enabled
-from library.validation import ValidationResult
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
-
-
-from library.postprocessing import target as target_pp
-from library.postprocessing import names as names_pp
-from library.postprocess.targets import run_target_pipeline as run_target_postprocess
-from library.postprocess.common import collect_postprocess_metrics
+from library.validation import ValidationResult, validate_targets
 
 try:
     from library.postprocessing import iuphar as iuphar_pp
@@ -106,7 +102,7 @@ except ImportError as _process_targets_exc:  # pragma: no cover - compatibility
     if _process_targets_impl is None:  # pragma: no cover - defensive guard
         raise _process_targets_exc
 else:  # pragma: no cover - compatibility bridge
-    setattr(target_pp, "process_targets", _process_targets_impl)
+    target_pp.process_targets = _process_targets_impl
 
 try:
     _TARGET_PROCESS_SIGNATURE = signature(_process_targets_impl)
@@ -156,20 +152,6 @@ def _run_pipeline_with_meta(**kwargs: object) -> int:
             logger=logger,
         )
 
-TARGETS_REQUIRED_COLUMNS: set[str] = {
-    name for name, column in TargetsSchema.columns.items() if column.required
-}
-
-TARGETS_OPTIONAL_COLUMNS: list[str] = [
-    column for column in TARGETS_COLUMN_ORDER if column not in TARGETS_REQUIRED_COLUMNS
-]
-
-TARGETS_OBJECT_COLUMNS: set[str] = {
-    name
-    for name, column in TargetsSchema.columns.items()
-    if str(column.dtype) == "object"
-}
-
 UNIPROT_MISSING_VALUE = ""
 
 
@@ -215,7 +197,7 @@ class StoreWithSource(argparse.Action):
         overrides = getattr(namespace, "_cli_overrides", None)
         if overrides is None:
             overrides = set()
-            setattr(namespace, "_cli_overrides", overrides)
+            namespace._cli_overrides = overrides
         overrides.add(self.dest)
         setattr(namespace, self.dest, values)
 
@@ -295,8 +277,15 @@ def _normalise_target_export_name(path: Path) -> str:
     for marker in _NORMALISED_MARKERS:
         marker_lower = marker.lower()
         csv_marker = f".csv{marker_lower}"
+        marker_csv = f"{marker_lower}.csv"
         if lowered_name.endswith(csv_marker):
             name = name[: -len(marker)]
+            lowered_name = name.lower()
+            break
+        if lowered_name.endswith(marker_csv):
+            extension = name[-len(".csv") :]
+            name_without_extension = name[: -len(extension)]
+            name = f"{name_without_extension[: -len(marker)]}{extension}"
             lowered_name = name.lower()
             break
         if lowered_name.endswith(marker_lower):
@@ -491,7 +480,7 @@ def _coerce_target_names_result(
         if isinstance(extra, Mapping):
             summary = _normalise_names_summary(extra)
     elif hasattr(result, "path"):
-        path_candidate = getattr(result, "path")
+        path_candidate = result.path
         extra = getattr(result, "summary", None)
         if isinstance(extra, Mapping):
             summary = _normalise_names_summary(extra)
@@ -523,7 +512,7 @@ def _coerce_iuphar_result(result: object) -> Path | None:
             or result.get("iuphar_path")
         )
     elif hasattr(result, "path"):
-        candidate = getattr(result, "path")
+        candidate = result.path
     else:
         candidate = result
 
@@ -745,6 +734,17 @@ def _postprocess_target_exports(
     """Run all target post-processing helpers for ``source`` export."""
 
     if not _is_supported_target_export(source):
+        logger.info(
+            "target_postprocess_skipped",
+            path=str(source),
+            reason="unsupported_export_name",
+        )
+        return
+
+    # Skip when export is already a downstream projection (e.g., *_uniprot.csv)
+    # to avoid cascading post-processing on derived files
+    stem = _export_stem(_normalise_target_export_name(source))
+    if stem.endswith("_uniprot"):
         logger.info(
             "target_postprocess_skipped",
             path=str(source),
@@ -1047,7 +1047,7 @@ def _build_uniprot_query_plan(df: pd.DataFrame, cfg: Config) -> _UniprotQueryPla
     for row in df.itertuples(index=False, name=None):
         candidates: list[_UniprotCandidate] = []
         row_seen: set[str] = set()
-        for column, pos in zip(candidate_columns, positions):
+        for column, pos in zip(candidate_columns, positions, strict=False):
             raw_value = row[pos]
             if not isinstance(raw_value, str) or not raw_value:
                 continue
@@ -1096,7 +1096,7 @@ def _resolve_uniprot_matches(
             uniprot_df["original_id"].fillna("").astype(str).map(str.strip)
         )
         candidate_map: dict[str, str] = {}
-        for canonical, original in zip(cleaned, original_series):
+        for canonical, original in zip(cleaned, original_series, strict=False):
             if not canonical:
                 continue
             candidate_map.setdefault(canonical, canonical)
@@ -1232,18 +1232,69 @@ class _RawDumpStreamWriter:
             mode = "w" if self._rows_written == 0 else "a"
             header = self._rows_written == 0
             working.to_csv(
-                self.destination,
+                str(self.destination),
                 mode=mode,
                 header=header,
                 index=False,
                 sep=self.cfg.io.csv_sep,
                 encoding=self.cfg.io.csv_encoding,
             )
-            self._destination_opened = True
-
         self._rows_written += len(working)
+        logger.info(
+            "raw_dump_written", rows=self._rows_written, path=str(self.destination)
+        )
+        return self.destination
+
+
+def _finalize_raw_dump_writer(
+    writer: object,
+    *,
+    logger: Logger,
+    destination: Path,
+) -> bool:
+    """Finalize ``writer`` if it exposes a ``finalize`` method.
+
+    Parameters
+    ----------
+    writer:
+        Writer instance returned by :class:`_RawDumpStreamWriter`.
+    logger:
+        Structured logger used by the pipeline.
+    destination:
+        Raw dump destination path for logging context.
+
+    Returns
+    -------
+    bool
+        ``True`` when the writer either finalizes successfully or does not
+        expose a ``finalize`` method. ``False`` indicates that finalization
+        failed due to an :class:`OSError`.
+    """
+
+    finalize = getattr(writer, "finalize", None)
+    if finalize is None or not callable(finalize):
+        logger.debug(
+            "raw_dump_finalize_missing",
+            writer_type=type(writer).__name__,
+        )
+        return True
+
+    try:
+        finalize()
+    except OSError as exc:
+        logger.error(
+            "raw_dump_failed",
+            error=str(exc),
+            exc_info=exc,
+            path=str(destination),
+        )
+        return False
+
+    return True
 
     def finalize(self) -> Path:
+        """Flush buffered payloads to ``destination`` and return the path."""
+
         if self._is_parquet:
             frames = self._frames or []
             if frames:
@@ -1252,20 +1303,20 @@ class _RawDumpStreamWriter:
                 combined = pd.DataFrame(columns=self._columns or [])
             try:
                 combined.to_parquet(self.destination, index=False)
-            except (ImportError, ValueError) as exc:
-                raise OSError(f"failed to write parquet: {exc}") from exc
+            except ImportError as exc:  # pragma: no cover - optional dependency
+                raise ValueError(
+                    "Parquet export requires optional pyarrow or fastparquet"
+                ) from exc
         else:
-            if not self._destination_opened:
+            if not self.destination.exists():
                 empty = pd.DataFrame(columns=self._columns or [])
                 empty.to_csv(
-                    self.destination,
+                    str(self.destination),
                     index=False,
                     sep=self.cfg.io.csv_sep,
                     encoding=self.cfg.io.csv_encoding,
                 )
-        logger.info(
-            "raw_dump_written", rows=self._rows_written, path=str(self.destination)
-        )
+
         return self.destination
 
 
@@ -1347,65 +1398,6 @@ def _prefer_primary(
     if mask.any():
         result.loc[mask] = secondary.loc[mask]
     return result
-
-
-def _prepare_targets_for_schema(
-    df: pd.DataFrame,
-) -> tuple[pd.DataFrame, set[str], set[str]]:
-    """Return a copy of ``df`` aligned to :data:`TargetsSchema`.
-
-    The returned frame contains only columns defined in
-    :data:`TARGETS_COLUMN_ORDER`. Missing optional columns are created with
-    ``"-"`` placeholders and schema fields expecting a generic ``object`` dtype
-    are coerced accordingly.
-
-    Returns
-    -------
-    tuple[pandas.DataFrame, set[str], set[str]]
-        The prepared dataframe, names of missing required columns and optional
-        columns that were injected.
-    """
-
-    columns_present = set(df.columns)
-    missing_required = TARGETS_REQUIRED_COLUMNS - columns_present
-    missing_optional = {
-        column for column in TARGETS_OPTIONAL_COLUMNS if column not in columns_present
-    }
-
-    extra_preserve: dict[str, pd.Series] = {}
-
-    if "uniprot_id_primary" not in df.columns and "uniprot_id" in df.columns:
-        extra_preserve["uniprot_id_primary"] = df["uniprot_id"].astype(object)
-
-    if "mapping_uniprot_id" in df.columns:
-        extra_preserve["mapping_uniprot_id"] = df["mapping_uniprot_id"].astype(object)
-
-    if missing_optional:
-        fill_values = {
-            column: (
-                pd.Series(["-"] * len(df), index=df.index, dtype=object)
-                if len(df)
-                else pd.Series(dtype=object)
-            )
-            for column in missing_optional
-        }
-        prepared = df.assign(**fill_values)
-    else:
-        prepared = df.copy()
-
-    reindex_columns = TARGETS_COLUMN_ORDER
-    if extra_preserve:
-        reindex_columns = reindex_columns + [column for column in extra_preserve if column not in TARGETS_COLUMN_ORDER]
-
-    prepared = prepared.reindex(columns=reindex_columns)
-
-    if extra_preserve:
-        for column, series in extra_preserve.items():
-            prepared[column] = series.reindex(prepared.index)
-
-    for column in TARGETS_OBJECT_COLUMNS & set(prepared.columns):
-        prepared[column] = prepared[column].astype(object)
-    return prepared, missing_required, missing_optional
 
 
 def _save_snapshot(df: pd.DataFrame, base: Path, step: str, cfg: Config) -> Path:
@@ -2417,7 +2409,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     def _prepare_chunk(frame: pd.DataFrame) -> pd.DataFrame:
         nonlocal placeholder_replacements, post_cleanup_rows_total
-        prepared, _, missing_optional = _prepare_targets_for_schema(frame)
+        prepared, _, missing_optional = prepare_targets_for_schema(frame)
         if missing_optional and not frame.empty:
             placeholder_replacements += len(frame) * len(missing_optional)
         post_cleanup_rows_total += len(prepared)
@@ -2432,7 +2424,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     def _validate_chunk(frame: pd.DataFrame) -> ValidationResult:
         try:
-            validated = TargetsSchema.validate(frame, lazy=True)
+            validation = validate_targets(frame, return_result=True)
         except SchemaErrors as exc:
             validated_subset = getattr(exc, "validated_data", frame)
             return ValidationResult(
@@ -2440,7 +2432,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 exc.failure_cases.copy(),
                 "TargetsSchema",
             )
-        return ValidationResult(validated, pd.DataFrame(), "TargetsSchema")
+        return validation
 
     raw_dump_writer = _RawDumpStreamWriter(
         raw_destination, cfg=cfg, reindex_columns=reindex_raw
@@ -2542,8 +2534,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         if resolved_keys:
             missing_keys = [col for col in resolved_keys if col not in combined.columns]
-            if not missing_keys:
-                combined = combined.sort_values(by=resolved_keys).reset_index(drop=True)
+            if not missing_keys and resolved_keys:
+                combined = combined.sort_values(by=list(resolved_keys)).reset_index(drop=True)
 
         if raw_format == "parquet":
             try:
@@ -2567,8 +2559,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         final_df = combined
         if normalize_at_export:
             final_df = normalize_targets(final_df)
-            final_df, _, missing_optional = _prepare_targets_for_schema(final_df)
-            missing_optional_columns.update(missing_optional)
+            final_df, _, missing_optional = prepare_targets_for_schema(final_df)
+            if missing_optional is not None:
+                missing_optional_columns.update(missing_optional)
+                missing_optional_columns.update(missing_optional)
 
         if final_output == raw_output and not normalize_at_export and raw_format == "parquet":
             final_path = raw_path
@@ -2630,10 +2624,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         ),
     )
 
-    try:
-        raw_dump_writer.finalize()
-    except OSError as exc:
-        logger.error("raw_dump_failed", error=str(exc), exc_info=exc, path=str(raw_destination))
+    if not _finalize_raw_dump_writer(
+        raw_dump_writer,
+        logger=logger,
+        destination=raw_destination,
+    ):
         return 1
 
     if limit is not None:
@@ -2861,7 +2856,7 @@ def fetch_chembl(
             cfg.target.chembl.limit = original_limit
         if chunk_size is not None:
             cfg.target.chembl.chunk_size = original_chunk_size
-    normalized_output = _normalized_output_path(final_out)
+    _normalized_output_path(final_out)
     df = pd.read_csv(
 
         final_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
@@ -3270,14 +3265,16 @@ def fetch_iuphar(
         combined_df = combined_df.rename(columns=rename_map)
 
     combined_df = combined_df.drop(
-        columns=[lookup_column, mapping_join_column], errors="ignore"
+        columns=[col for col in [lookup_column, mapping_join_column] if col is not None],
+        errors="ignore"
     )
     if "original_id" in combined_df.columns:
         combined_df = combined_df.drop(columns=["original_id"])
 
     overlap_columns = sorted(
-        set(chembl_for_merge.columns)
-        & (set(uniprot_df.columns) - {"original_id"})
+        col
+        for col in (set(chembl_for_merge.columns) & (set(uniprot_df.columns) - {"original_id"}))
+        if col is not None
     )
     overlap_updates: dict[str, pd.Series] = {}
 
@@ -3310,7 +3307,7 @@ def fetch_iuphar(
             overlap_updates[column] = pd.Series(
                 [
                     normalize_reaction_ec_numbers([u, c])
-                    for u, c in zip(uniprot_values, chembl_values)
+                    for u, c in zip(uniprot_values, chembl_values, strict=False)
                 ],
                 index=combined_df.index,
                 dtype=object,
@@ -3412,7 +3409,7 @@ def fetch_iuphar(
     column_updates["ec_number"] = pd.Series(
         (
             _pipe_merge([ec_val, reaction_val])
-            for ec_val, reaction_val in zip(ec_numbers_values, reaction_values)
+            for ec_val, reaction_val in zip(ec_numbers_values, reaction_values, strict=False)
         ),
         index=index,
         dtype=object,
@@ -3484,7 +3481,7 @@ def fetch_iuphar(
 
     combined_df["reaction_ec_numbers"] = [
         normalize_reaction_ec_numbers([u, c])
-        for u, c in zip(uniprot_reactions, chembl_reactions)
+        for u, c in zip(uniprot_reactions, chembl_reactions, strict=False)
     ]
 
     from tempfile import NamedTemporaryFile
@@ -3681,7 +3678,7 @@ def validate_and_write(
         after=normalized_rows,
     )
     normalized = add_pipeline_metadata(normalized)
-    prepared, missing_required, missing_optional = _prepare_targets_for_schema(
+    prepared, missing_required, missing_optional = prepare_targets_for_schema(
         normalized
     )
     final_df = prepared
@@ -3720,7 +3717,7 @@ def validate_and_write(
             )
         logger.info("targets_schema_validate_start", rows=len(final_df))
         try:
-            final_df = TargetsSchema.validate(final_df, lazy=True)
+            validation = validate_targets(final_df, return_result=True)
         except SchemaErrors as exc:
             failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
             errors = SidecarErrors()
@@ -3751,12 +3748,44 @@ def validate_and_write(
             final_df = getattr(exc, "validated_data", final_df)
             exit_code = 1
         else:
-            logger.info(
-                "targets_schema_validate_result",
-                status="success",
-                rows=len(final_df),
-                failures=0,
-            )
+            final_df = validation.data
+            failure_cases = validation.failure_cases.copy()
+            if not failure_cases.empty:
+                failure_path = output.with_name(
+                    f"{output.stem}_failure_cases.csv"
+                )
+                errors = SidecarErrors()
+                for row in failure_cases.to_dict("records"):
+                    errors.add_error(row)
+                errors.save(failure_path, cfg=cfg)
+                logger.error(
+                    "validation_failed",
+                    failures=len(failure_cases),
+                    path=str(failure_path),
+                )
+                for _, failure_row in failure_cases.iterrows():
+                    reason = _categorize_failure(failure_row)
+                    identifier = failure_row.get("index")
+                    if pd.isna(identifier):
+                        identifier = (
+                            failure_row.get("column"),
+                            failure_row.get("failure_case"),
+                        )
+                    drop_reasons[reason].add(identifier)
+                logger.info(
+                    "targets_schema_validate_result",
+                    status="failed",
+                    rows=len(final_df),
+                    failures=len(failure_cases),
+                )
+                exit_code = 1
+            else:
+                logger.info(
+                    "targets_schema_validate_result",
+                    status="success",
+                    rows=len(final_df),
+                    failures=0,
+                )
     else:
 
         logger.warning(
@@ -4043,12 +4072,12 @@ class TargetPipelineCLI(PipelineCLIBase):
         self,
         parser: argparse.ArgumentParser,
         args: argparse.Namespace,
-        argv: Sequence[str] | None,
+        argv: Sequence[str] = None,
     ) -> argparse.Namespace:
         del argv
         command_alias = COMMAND_ALIAS_TO_CANONICAL.get(getattr(args, "command", ""))
         if command_alias is not None:
-            setattr(args, "_command_keyboard_alias", args.command)
+            args._command_keyboard_alias = args.command
             args.command = command_alias
         prepare_io_paths(
             args,
@@ -4148,9 +4177,9 @@ class TargetPipelineCLI(PipelineCLIBase):
                         input_default=DEFAULT_INPUT_NAME,
                         output_stem=DEFAULT_OUTPUT_STEM,
                     )
-                    args_dict["final_out"] = getattr(temp_namespace, "final_out")
-                    args_dict["output_csv"] = getattr(temp_namespace, "output_csv")
-                    args_dict["raw_out"] = getattr(temp_namespace, "raw_out")
+                    args_dict["final_out"] = temp_namespace.final_out
+                    args_dict["output_csv"] = temp_namespace.output_csv
+                    args_dict["raw_out"] = temp_namespace.raw_out
                     args_dict["date"] = getattr(temp_namespace, "date", None)
                 else:
                     args_dict["final_out"] = Path(final_value)

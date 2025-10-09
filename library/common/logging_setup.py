@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 import sys
 import time
-import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import IO, Any, Iterator
+
+from .run_context import RunContext, set_current
 
 _LEVELS: dict[str, int] = {
     "DEBUG": logging.DEBUG,
@@ -46,6 +47,7 @@ class LoggerConfig:
 
     level: str = "INFO"
     run_id: str = ""
+    generated_at: str = ""
     redact_secrets: bool = True
     stream: IO[str] | None = sys.stdout
     handlers: list[logging.Handler] = field(default_factory=list)
@@ -208,6 +210,8 @@ def configure_logger(cfg: LoggerConfig, replace_root: bool = True) -> Logger:
 
     level_no = _level_no(cfg.level)
     formatter = logging.Formatter(_FORMAT)
+    # Ensure timestamps are rendered in UTC to keep logs deterministic across environments
+    formatter.converter = time.gmtime
 
     handlers: list[logging.Handler] = []
     if cfg.stream is not None:
@@ -244,6 +248,8 @@ def configure_logger(cfg: LoggerConfig, replace_root: bool = True) -> Logger:
     base_logger = logging.getLogger(cfg.logger_name)
     base_logger.setLevel(level_no)
     base_logger.propagate = True
+
+    set_current(RunContext(run_id=cfg.run_id, generated_at=cfg.generated_at))
     return Logger(cfg, base_logger=base_logger)
 
 

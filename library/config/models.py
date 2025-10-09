@@ -22,7 +22,7 @@ from collections.abc import Sequence
 from contextlib import ExitStack
 from pathlib import Path
 from types import UnionType
-from typing import Any, Callable, Mapping, Union, get_args, get_origin
+from typing import Any, Callable, Union, get_args, get_origin
 
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
@@ -63,8 +63,8 @@ def _collect_path_field_paths(
     """Return dotted paths for ``Path`` fields within *model*."""
 
     paths: set[tuple[str, ...]] = set()
-    for name, field in model.model_fields.items():
-        annotation = field.annotation
+    for name, model_field in model.model_fields.items():
+        annotation = model_field.annotation
         if annotation is None:
             continue
         origin = get_origin(annotation)
@@ -123,6 +123,7 @@ class ConfigMetadata:
     snapshot: dict[str, Any]
     sources: dict[tuple[str, ...], ConfigSource]
     cli_paths: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    env_warnings: list[str] = field(default_factory=list)
 
     def get(self, path: Sequence[str] | str) -> dict[str, Any]:
         """Return a copy of the metadata entry located at ``path``."""
@@ -279,9 +280,6 @@ TESTITEM_FIELD_DEFAULTS: tuple[str, ...] = (
     "topical",
     "black_box_warning",
     "structure_type",
-    "molecule_structures.canonical_smiles",
-    "molecule_structures.standard_inchi",
-    "molecule_structures.standard_inchi_key",
     "pubchem_cid",
     "pubchem_iupac_name",
     "pubchem_molecular_formula",
@@ -1477,9 +1475,9 @@ def build_alias_map(
     mapping: dict[str, list[str]] = {}
 
     def _walk(cls: type[BaseModel], path: list[str]) -> None:
-        for name, field in cls.model_fields.items():
+        for name, model_field in cls.model_fields.items():
             sub_path = path + [name]
-            annotation = field.annotation
+            annotation = model_field.annotation
             if isinstance(annotation, type) and issubclass(annotation, BaseModel):
                 _walk(annotation, sub_path)
             else:

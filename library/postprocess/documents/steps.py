@@ -5,7 +5,7 @@ import unicodedata
 
 import pandas as pd
  
-from library.postprocess.common import StepDefinition, run_steps
+from library.postprocess.common import run_steps
 from library.postprocess.common.logging import PipelineRunMetrics
  
 from library.pipelines.common.metadata import get_pipeline_version
@@ -162,12 +162,33 @@ def finalize_document_records(
 
     prepared = df.copy(deep=True)
 
-    required_string_columns = ["document_chembl_id", "title", "doc_type"]
+    identifier_column = "document_chembl_id"
+    id_fallback_columns = (
+        identifier_column,
+        "chembl.document_chembl_id",
+    )
+
+    if identifier_column in prepared.columns:
+        document_ids = prepared[identifier_column].astype("string")
+    else:
+        document_ids = pd.Series(pd.NA, index=prepared.index, dtype="string")
+
+    document_ids = document_ids.replace({"": pd.NA})
+
+    for fallback in id_fallback_columns:
+        if fallback == identifier_column or fallback not in prepared.columns:
+            continue
+        candidate = prepared[fallback].astype("string").replace({"": pd.NA})
+        document_ids = document_ids.fillna(candidate)
+
+    prepared[identifier_column] = document_ids
+
+    required_string_columns = [identifier_column, "title", "doc_type"]
     for column in required_string_columns:
         if column not in prepared.columns:
             prepared[column] = pd.Series(pd.NA, index=prepared.index, dtype="string")
         else:
-            prepared[column] = prepared[column].astype("string")
+            prepared[column] = prepared[column].astype("string").replace({"": pd.NA})
 
     if "publication_year" in prepared.columns:
         prepared["publication_year"] = prepared["publication_year"].astype("Int64")

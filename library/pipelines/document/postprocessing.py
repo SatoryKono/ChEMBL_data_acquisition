@@ -415,6 +415,7 @@ def _prepare_input_frame(df: pd.DataFrame) -> pd.DataFrame:
         "ChEMBL.journal_abbrev",
         "ChEMBL.authors",
         "ChEMBL.source",
+        "PubMed.Error",
     )
     for column in optional_text:
         _ensure_text_column(frame, column)
@@ -521,9 +522,9 @@ def postprocess_documents(
 
     journal_value = np.where(journal_match, frame["ChEMBL.journal"], "unknown")
     volume_value = np.where(volume_match, frame["ChEMBL.volume"], "unknown")
-    issue_value = np.where(issue_match, frame["ChEMBL.issue"], "unknown")
+    issue_value = np.where(issue_match, frame["ChEMBL.issue"], "")
     start_value = np.where(start_match, frame["ChEMBL.first_page"], "unknown")
-    end_value = np.where(end_match, frame["ChEMBL.last_page"], "unknown")
+    end_value = np.where(end_match, frame["ChEMBL.last_page"], "")
 
     frame["reference"] = (
         pd.Series(journal_value, index=frame.index)
@@ -649,6 +650,8 @@ def postprocess_documents(
         raise ValueError(f"Missing expected columns after harmonisation: {missing}")
 
     frame = frame.loc[:, FINAL_COLUMN_ORDER]
+    if frame.columns.has_duplicates:
+        frame = frame.loc[:, ~frame.columns.duplicated()]
     frame = frame.sort_values("completed", ascending=True, kind="mergesort")
     frame.reset_index(drop=True, inplace=True)
 

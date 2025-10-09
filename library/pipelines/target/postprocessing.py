@@ -180,6 +180,20 @@ def _series_or_default(df: pd.DataFrame, column: str, default: str = "-") -> pd.
     return _default_series(df, default)
 
 
+def _derive_genus(series: pd.Series) -> pd.Series:
+    """Return the genus token extracted from an organism label series."""
+
+    if series.empty:
+        return pd.Series(dtype="string")
+
+    as_string = series.astype("string")
+    genus = as_string.str.split().str[0]
+    genus = genus.where(genus.notna(), pd.NA)
+    if pd.api.types.is_string_dtype(genus):
+        genus = genus.where(genus.str.strip() != "", pd.NA)
+    return genus.astype("string")
+
+
 def _pipe_merge_columns(df: pd.DataFrame, columns: Iterable[str]) -> pd.Series:
     """Create a pipe-merged series from the specified ``columns``."""
 
@@ -397,9 +411,10 @@ def postprocess_targets(
     else:
         resolved_uniprot_ids = raw_uniprot_ids.copy()
 
-    if "uniprot_id" in df.columns:
+    uniprot_id_values = df.get("uniprot_id")
+    if uniprot_id_values is not None:
         resolved_uniprot_ids = resolved_uniprot_ids.fillna(
-            df["uniprot_id"].astype("string")
+            uniprot_id_values.astype("string")
         )
 
     df["uniprotkb_Id"] = (
@@ -410,9 +425,18 @@ def postprocess_targets(
         .str.split("-")
         .str[0]
     )
-    df["secondary_uniprot_id"] = df.get(
-        "secondaryAccessions", pd.Series(dtype=str)
-    ).fillna(df.get("uniprot_id"))
+    secondary_accessions = df.get("secondaryAccessions")
+    if secondary_accessions is not None:
+        secondary_accessions = secondary_accessions.astype("string")
+    else:
+        secondary_accessions = pd.Series(pd.NA, index=df.index, dtype="string")
+
+    if "uniprot_id" in df.columns:
+        secondary_fallback = df["uniprot_id"].astype("string")
+    else:
+        secondary_fallback = pd.Series(pd.NA, index=df.index, dtype="string")
+
+    df["secondary_uniprot_id"] = secondary_accessions.fillna(secondary_fallback)
 
     # Copy "pref_name" into the normalised "recommended_name" column but keep the
     # original field for downstream exports
@@ -424,6 +448,11 @@ def postprocess_targets(
         {"51.1rMVA_034": "N1L"}
     )
     df["gene_name"] = df.get("geneName", pd.Series(dtype=str))
+
+    if "gene" in df.columns:
+        df["gene"] = df["gene"].astype("string").fillna("")
+    else:
+        df["gene"] = pd.Series("", index=df.index, dtype="string")
     mask = df["gene_name"].isna() | (df["gene_name"] == "")
     df.loc[mask, "gene_name"] = df.loc[mask, "gene_name_x"].fillna("")
     mask = df["gene_name"] == ""
@@ -612,6 +641,45 @@ def finalise_targets(
         class_col: "lineage_class",
     }
     df = df.rename(columns={k: v for k, v in internal_mapping.items() if k != v})
+
+    genus_missing_mask: pd.Series
+    if "genus" in df.columns:
+        genus_series = df["genus"].astype("string")
+        genus_missing_mask = (
+            genus_series.isna()
+            | genus_series.str.strip().isin(["", "nan"])
+        )
+    else:
+        genus_missing_mask = pd.Series(True, index=df.index)
+
+    if genus_missing_mask.any():
+        fallback_candidates = [
+            col
+            for col in (
+                "organism",
+                "organism_name",
+                "organism_x",
+                "organism_y",
+            )
+            if col in df.columns
+        ]
+        for candidate in fallback_candidates:
+            derived = _derive_genus(df[candidate])
+            if "genus" in df.columns:
+                to_fill = genus_missing_mask & derived.notna()
+                if to_fill.any():
+                    df.loc[to_fill, "genus"] = derived[to_fill]
+            else:
+                df["genus"] = derived
+
+            genus_series = df["genus"].astype("string")
+            genus_missing_mask = (
+                genus_series.isna()
+                | genus_series.str.strip().isin(["", "nan"])
+            )
+            if not genus_missing_mask.any():
+                logger.debug("Filled missing 'genus' values from '%s' column", candidate)
+                break
 
     if "lineage_superkingdom" not in df.columns and "superkingdom" in df.columns:
         df["lineage_superkingdom"] = df["superkingdom"]

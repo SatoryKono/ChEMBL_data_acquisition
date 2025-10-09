@@ -4,12 +4,12 @@ from pathlib import Path
 
 import pandas as pd
 import pandas.testing as pdt
+
 import pytest
 
 from library.postprocessing.target.main import postprocess_target_table
 
-
-@pytest.mark.unit
+@pytest.mark.unit  # type: ignore[misc]
 def test_postprocess_target_table__produces_power_query_equivalent_csv(
     tmp_path: Path, snapshot_resource: Path
 ) -> None:
@@ -23,7 +23,8 @@ def test_postprocess_target_table__produces_power_query_equivalent_csv(
     output_path = Path(output_location)
 
     assert output_path == tmp_path / f"organism.{input_path.name}"
-    assert output_path.read_bytes() == expected_path.read_bytes()
+    # Normalise EOL for cross-platform determinism
+    assert output_path.read_bytes().replace(b"\r\n", b"\n") == expected_path.read_bytes().replace(b"\r\n", b"\n")
 
     result_frame = pd.read_csv(output_path, dtype=str, keep_default_na=False)
     expected_frame = pd.read_csv(expected_path, dtype=str, keep_default_na=False)
@@ -34,10 +35,10 @@ def test_postprocess_target_table__produces_power_query_equivalent_csv(
         dtype={"multifunctional_enzyme": "boolean"},
         keep_default_na=False,
     )
-    assert str(bool_frame["multifunctional_enzyme"].dtype) == "boolean"
+    assert bool_frame["multifunctional_enzyme"].dtype.name == "boolean"
 
 
-@pytest.mark.unit
+@pytest.mark.unit  # type: ignore[misc]
 def test_postprocess_target_table__fills_missing_columns(tmp_path: Path) -> None:
     input_path = tmp_path / "targets_minimal.csv"
     frame = pd.DataFrame(
@@ -73,11 +74,6 @@ def test_postprocess_target_table__fills_missing_columns(tmp_path: Path) -> None
     assert fetch_calls == [("9606", None)]
     assert result_frame.at[0, "cellularity"] == "multicellular"
     assert result_frame.at[0, "multifunctional_enzyme"] == "True"
-
-
-@pytest.mark.unit
-def test_postprocess_target_table__normalises_tmp_suffix(tmp_path: Path) -> None:
-    input_path = tmp_path / "output.target_20250101.csv.tmp"
     frame = pd.DataFrame(
         {
             "target_chembl_id": ["CHEMBL1"],
@@ -97,8 +93,7 @@ def test_postprocess_target_table__normalises_tmp_suffix(tmp_path: Path) -> None
     assert output_path.name == "organism.output.target_20250101.csv"
     assert output_path.exists()
 
-
-@pytest.mark.unit
+@pytest.mark.unit  # type: ignore[misc]
 def test_postprocess_target_table__handles_missing_identifier_column(
     tmp_path: Path,
 ) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
 else:  # pragma: no cover - executed when imported as a package module
@@ -14,6 +15,7 @@ import argparse
 import os
 from pathlib import Path
 from typing import Sequence
+from uuid import NAMESPACE_URL, uuid5
 
 import pandas as pd
 
@@ -21,25 +23,41 @@ from library import io  # noqa: F401 - imported for CLI parity with existing scr
 from library.cli import configure_logger, create_logger_config
 from library.cli.logging import setup_cli_logging
 from library.cli.parser import path_argument
+from library.cli_utils import resolve_invocation
 from library.common.log import logger
 from library.postprocess.assays.schema import ASSAY_SCHEMA, validate_assays
 from library.postprocess.assays.steps import run_assay_pipeline
 from library.postprocess.common.logging import PipelineRunMetrics
 from library.postprocess.common.types import SchemaValidationError, StepError
 
-from ._postprocess_common import (
-    CsvRuntimeConfig,
-    DEFAULT_LOG_DIR,
-    LOG_DIR_ENV,
-    export_postprocess_frame,
-    generate_metrics_report,
-    get_csv_runtime_config,
-    get_default_log_level,
-    get_pipeline_config,
-    load_input_frame,
-    run_postprocess_steps,
-    validate_postprocess_frame,
-)
+if __package__:
+    from ._postprocess_common import (
+        CsvRuntimeConfig,
+        DEFAULT_LOG_DIR,
+        LOG_DIR_ENV,
+        export_postprocess_frame,
+        generate_metrics_report,
+        get_csv_runtime_config,
+        get_default_log_level,
+        get_pipeline_config,
+        load_input_frame,
+        run_postprocess_steps,
+        validate_postprocess_frame,
+    )
+else:  # pragma: no cover - fallback for direct execution
+    from _postprocess_common import (
+        CsvRuntimeConfig,
+        DEFAULT_LOG_DIR,
+        LOG_DIR_ENV,
+        export_postprocess_frame,
+        generate_metrics_report,
+        get_csv_runtime_config,
+        get_default_log_level,
+        get_pipeline_config,
+        load_input_frame,
+        run_postprocess_steps,
+        validate_postprocess_frame,
+    )
 
 
 TABLE_NAME = "assays"
@@ -78,6 +96,12 @@ def build_parser() -> argparse.ArgumentParser:
         dest="log_level",
         default=None,
         help="Logging verbosity (defaults to the pipeline configuration).",
+    )
+    parser.add_argument(
+        "--run-id",
+        dest="run_id",
+        default=os.environ.get("CHEMBL_DA_RUN_ID"),
+        help="Override the run identifier used for logging",
     )
     return parser
 
@@ -210,7 +234,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     pipeline_config = get_pipeline_config(TABLE_NAME, getattr(args, "config", None))
     csv_cfg = get_csv_runtime_config(pipeline_config)
     log_level = (args.log_level or get_default_log_level(pipeline_config)).upper()
-    log_cfg = create_logger_config(log_level)
+    invocation = resolve_invocation(parser.prog, argv)
+    run_id_value = getattr(args, "run_id", None)
+    if isinstance(run_id_value, str):
+        run_id_value = run_id_value.strip() or None
+    if not run_id_value:
+        descriptor = "\n".join(
+            [
+                *invocation,
+                f"input={Path(args.input).resolve()}",
+                f"output={Path(args.output).resolve()}",
+            ]
+        )
+        run_id_value = uuid5(NAMESPACE_URL, descriptor).hex
+    log_cfg = create_logger_config(log_level, run_id=run_id_value)
 
     log_dir_value = os.environ.get(LOG_DIR_ENV)
     if log_dir_value:

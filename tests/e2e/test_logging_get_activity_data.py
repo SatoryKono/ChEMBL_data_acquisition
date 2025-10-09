@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 
@@ -29,13 +30,6 @@ def test_logging_get_activity_data__writes_expected_messages(
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_dir))
     monkeypatch.setattr(
         "library.cli.logging._current_date_str", lambda: "20240102"
-    )
-
-    class _FixedUUID:
-        hex = "run-id-0001"
-
-    monkeypatch.setattr(
-        "library.cli.parser.uuid.uuid4", lambda: _FixedUUID()
     )
 
     def _stub_run_cli_command(
@@ -91,22 +85,37 @@ def test_logging_get_activity_data__writes_expected_messages(
     assert "Exported activities" in content
     assert "Completed get_activity_data run" in content
 
-    expected_lines = [
+    expected_templates = [
         (
             "[2020-01-01 00:00:00,000] [INFO] [chembl] "
             f"Starting get_activity_data run input='{input_path}' output='{output_path}' "
-            "rps=None run_id='run-id-0001' status=None"
+            "rps=None run_id='{run_id}' status=None"
         ),
         (
             "[2020-01-01 00:00:00,000] [INFO] [chembl] "
             f"Exported activities output='{output_path}' rows=2 "
-            "rps=None run_id='run-id-0001' status=None"
+            "rps=None run_id='{run_id}' status=None"
         ),
         (
             "[2020-01-01 00:00:00,000] [INFO] [chembl] "
             f"Completed get_activity_data run output='{output_path}' "
-            "rps=None run_id='run-id-0001' status=None"
+            "rps=None run_id='{run_id}' status=None"
         ),
     ]
 
-    assert content.splitlines() == expected_lines
+    lines = content.splitlines()
+    assert lines
+    assert len(lines) == len(expected_templates)
+
+    observed_run_ids: list[str] = []
+    for actual, template in zip(lines, expected_templates, strict=True):
+        prefix, _, suffix = template.partition("{run_id}")
+        assert suffix, "template must contain run_id placeholder"
+        assert actual.startswith(prefix)
+        assert actual.endswith(suffix)
+        run_id = actual[len(prefix) : len(actual) - len(suffix)]
+        UUID(run_id)
+        observed_run_ids.append(run_id)
+
+    assert len(observed_run_ids) == len(expected_templates)
+    assert len(set(observed_run_ids)) == 1

@@ -239,26 +239,26 @@ Schema: [`library/schemas/assays.py`](../../library/schemas/assays.py).
 | Column | Type | Notes |
 |--------|------|-------|
 | `assay_chembl_id` | string | Primary assay identifier. |
-| `ASSAY_ID` | string | Secondary identifier. |
-| `Target TYPE` | string | Target type category. |
-| `accession` | string | UniProt accession. |
-| `acts_per_assay_step5` | numeric/string | Activity count (flexible dtype). |
-| `assay_cell_type` | string | Cell type. |
-| `assay_subcellular_fraction` | string | Sub-cellular fraction. |
+| `accession` | string | UniProt accession for the annotated target. |
+| `assay_cell_type` | string | Reported cell type. |
+| `assay_subcellular_fraction` | string | Sub-cellular fraction tested in the assay. |
+| `assay_group` | string | Group classification delivered with the export. |
 | `assay_tissue` | string | Tissue context. |
+| `assay_strain` | string | Strain information provided by ChEMBL. |
 | `bao_format` | string | BAO format code. |
-| `cited_assay_corr` / `error_assay_corr` / `higly_correlated_cit` / `shuffled_cit` / `shuffled_target_assay` | boolean/string | Correlation and QA flags. |
 | `description` | string | Assay description. |
 | `document_chembl_id` | string | Source document identifier. |
-| `isoform` | string | Isoform identifier. |
-| `month` / `year` | numeric/string | Publication month/year. |
+| `isoform` | string/nullable | Isoform identifier (`None` disables dtype coercion). |
 | `mutation` | string | Target mutation details. |
-| `substrate_name` | string | Substrate information. |
-| `target_chembl_id` | string | Linked target. |
-| `target_name` | string | Human-readable target name. |
-| `version` | numeric/string | Internal version. |
-| `pipeline_version` | string | Package version. |
-| `timestamp_utc` | string | Export timestamp. |
+| `target_chembl_id` | string | Linked target identifier. |
+| `year` | numeric/string | Publication year, accepted as string or numeric. |
+| `pipeline_version` | string | Package version written during export. |
+| `timestamp_utc` | string | ISO 8601 export timestamp. |
+
+> **Post-processing note:** Columns listed in
+> [`_ASSAY_OUTPUT_DROP_COLUMNS`](../../scripts/get_assay_data.py) are removed
+> after download to prevent legacy fields (for example `ASSAY_ID`, `Target TYPE`
+> or `acts_per_assay_step5`) from resurfacing in published CSVs.
 
 ## Activity export (`activities`)
 

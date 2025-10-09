@@ -5,7 +5,6 @@ from pathlib import Path
 import yaml
 
 import pytest
-import yaml
 
 from library.resources import dictionaries
 from config.paths import DICTIONARY_DIR
@@ -53,6 +52,7 @@ def test_normalise_text_newlines__binary_payload_preserved() -> None:
     "checksum",
     (
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a",
         "92b6b3612557eb0916f38aee701a61f3bc470b0ffd0251866ecaf7364fb16d64",
         "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
         "70f0b19c450d0fc8d19ddb41bd69906d6b1a5ac39e3e4e2d2b6dea54a501569d",
@@ -60,6 +60,7 @@ def test_normalise_text_newlines__binary_payload_preserved() -> None:
         "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15",
         dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM,
         dictionaries.WINDOWS_VFS_EAGER_PLACEHOLDER_CHECKSUM,
+        dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM,
         dictionaries.WINDOWS_VFS_NTFS_CHECKSUM,
         "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b",
     ),
@@ -165,6 +166,54 @@ def test_parse_manifest__accepts_taxonomy_lookup_checksum_variant(
 
 
 @pytest.mark.unit
+def test_parse_manifest__deduplicates_expected_checksums(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Duplicate checksum entries should be collapsed in error messages."""
+
+    manifest_dir = tmp_path / "dictionary"
+    manifest_dir.mkdir()
+    manifest_path = manifest_dir / "manifest.yaml"
+    manifest_payload = {
+        "version": 1,
+        "resources": {
+            "dictionary_root": {
+                "path": ".",
+                "version": "test",
+                "sha256": ["duplicate", "duplicate"],
+                "generator": "tests/generator.py",
+            }
+        },
+    }
+    manifest_path.write_text(
+        yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8"
+    )
+
+    def fake_checksum(path: Path) -> str:  # pragma: no cover - simple stub
+        return "unmatched"
+
+    monkeypatch.setattr(dictionaries, "_compute_sha256", fake_checksum)
+    monkeypatch.setattr(
+        dictionaries,
+        "_iter_additional_checksums",
+        lambda name, base_dir=None: (
+            dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM,
+        ),
+    )
+
+    with pytest.raises(dictionaries.DictionaryManifestError) as excinfo:
+        dictionaries._parse_manifest(base_dir=manifest_dir)
+
+    message = str(excinfo.value)
+
+    assert message.count("duplicate") == 1
+    assert (
+        dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM
+        in message
+    )
+
+
+@pytest.mark.unit
 def test_parse_manifest__allowlist_file_extends_checksums(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -217,6 +266,7 @@ def test_manifest_allows_latest_windows_sha256() -> None:
 
     expected = {
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a",
         "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
         "70f0b19c450d0fc8d19ddb41bd69906d6b1a5ac39e3e4e2d2b6dea54a501569d",
         "95f7a33a028aeeba9027b64f558e50ad25e76934782cc03ba14437fd8eff8476",
@@ -224,6 +274,7 @@ def test_manifest_allows_latest_windows_sha256() -> None:
         dictionaries.WINDOWS_VFS_SPARSE_INDEX_CHECKSUM,
         dictionaries.WINDOWS_VFS_TEXTMODE_CHECKSUM,
         dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM,
+        dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM,
         dictionaries.WINDOWS_VFS_NTFS_CHECKSUM,
     }
 
@@ -245,7 +296,9 @@ def test_repository_allowlist_includes_sparse_index_checksum(monkeypatch: pytest
     assert dictionaries.WINDOWS_VFS_SPARSE_INDEX_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_TEXTMODE_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM in variants
+    assert dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_NTFS_CHECKSUM in variants
+    assert "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a" in variants
 
 
 @pytest.mark.unit

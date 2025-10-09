@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli, ensure_project_root
 else:  # pragma: no cover - executed when imported as a package module
@@ -30,14 +31,20 @@ def _hash_file(path: Path) -> str:
     return hasher.hexdigest()
 
 
+def _metadata_path(csv_path: Path) -> Path:
+    return csv_path.with_suffix(csv_path.suffix + ".meta.yaml")
+
+
 def _run_activity(
-    limit: int, destination: Path, input_csv: Path
+    limit: int, destination: Path, input_csv: Path, *, dry_run: bool
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.setdefault("PYTHONHASHSEED", "0")
+    repo_root = Path(__file__).resolve().parents[1]
     cmd = [
         sys.executable,
-        str(Path(__file__).resolve().parents[0] / "get_activity_data.py"),
+        "-m",
+        "scripts.get_activity_data",
         "--limit",
         str(limit),
         "--final-out",
@@ -45,7 +52,15 @@ def _run_activity(
         "--input",
         str(input_csv),
     ]
-    return subprocess.run(cmd, text=True, capture_output=True, env=env)
+    if dry_run:
+        cmd.append("--dry-run")
+    return subprocess.run(
+        cmd,
+        text=True,
+        capture_output=True,
+        env=env,
+        cwd=str(repo_root),
+    )
 
 
 def _default_input_csv(tmp_dir: Path) -> Path:
@@ -92,6 +107,22 @@ def main(argv: list[str] | None = None) -> int:
             "Defaults to data/input/activity.csv when available."
         ),
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Forward the --dry-run flag to get_activity_data. "
+            "Enable this option to perform a dry run; real writes are performed by default."
+        ),
+    )
+    parser.add_argument(
+        "--no-dry-run",
+        dest="dry_run",
+        action="store_false",
+        help="Explicitly disable dry-run mode (default).",
+    )
+    parser.set_defaults(dry_run=False)
+
     args = parser.parse_args(argv)
 
     ensure_project_root(__file__)
@@ -111,19 +142,31 @@ def main(argv: list[str] | None = None) -> int:
         else:
             input_csv = _default_input_csv(tmp_dir)
 
-        first_run = _run_activity(args.limit, first, input_csv)
+        first_run = _run_activity(args.limit, first, input_csv, dry_run=args.dry_run)
         if first_run.returncode != 0:
             _report_process_failure("first run", first_run)
             return 1
 
-        second_run = _run_activity(args.limit, second, input_csv)
+        second_run = _run_activity(args.limit, second, input_csv, dry_run=args.dry_run)
         if second_run.returncode != 0:
             _report_process_failure("second run", second_run)
             return 1
 
         if not first.exists() or not second.exists():
-            print(
-                "Outputs not created; determinism check inconclusive", file=sys.stderr
+            if args.dry_run:
+                sys.stderr.write(
+                    "Determinism check failed: --dry-run prevents creating output files.\n"
+                )
+                sys.stderr.write(
+                    "Re-run with --no-dry-run to verify that the pipeline produces stable results.\n"
+                )
+                return 2
+
+            sys.stderr.write(
+                "Determinism check failed: the pipeline exited without writing output files.\n"
+            )
+            sys.stderr.write(
+                "Inspect the pipeline logs for warnings or errors before rerunning this check.\n"
             )
             return 1
 
@@ -135,6 +178,28 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  first:  {first_hash}")
             print(f"  second: {second_hash}")
             return 1
+
+        first_meta = _metadata_path(first)
+        second_meta = _metadata_path(second)
+
+        if first_meta.exists() and second_meta.exists():
+            first_meta_hash = _hash_file(first_meta)
+            second_meta_hash = _hash_file(second_meta)
+
+            if first_meta_hash != second_meta_hash:
+                print("Metadata hash check: mismatch")
+                print("WARNING: Metadata hashes differ")
+                print(f"  first:  {first_meta} ({first_meta_hash})")
+                print(f"  second: {second_meta} ({second_meta_hash})")
+                return 1
+
+            print("Metadata hash check: matched")
+            print(f"  first metadata SHA256:  {first_meta_hash}")
+            print(f"  second metadata SHA256: {second_meta_hash}")
+        else:
+            print(
+                "Metadata hash check: skipped (sidecars missing for one or both runs)"
+            )
 
         print("Deterministic output confirmed")
         print(f"SHA256: {first_hash}")

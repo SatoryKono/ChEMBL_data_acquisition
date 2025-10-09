@@ -10,7 +10,6 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field
-from itertools import islice
 from pathlib import Path
 from threading import Lock, local
 from typing import Any, Hashable, TypeVar

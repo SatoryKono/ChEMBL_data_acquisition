@@ -143,6 +143,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     cli.prepare_io_paths(args, output_stem=output_stem)
     if args.limit is not None and args.limit <= 0:
         parser.error("--limit must be a positive integer")
+    run_id_value = getattr(args, "run_id", None)
+    if isinstance(run_id_value, str):
+        run_id_value = run_id_value.strip() or None
+    if run_id_value is not None:
+        log_cfg.run_id = run_id_value
     log_cfg.level = args.log_level
     logger_inst = configure_logger(log_cfg)
     logger_inst.info("pipeline_start", run_id=log_cfg.run_id)

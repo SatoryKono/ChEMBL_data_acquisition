@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import logging
 import os
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping as TypingMapping
@@ -13,7 +12,11 @@ import yaml
 from pydantic import BaseModel, ValidationError
 
 from ..common.log import logger
-from library.resources.dictionaries import DictionaryManifestError, list_resources
+from library.resources.dictionaries import (
+    DictionaryManifestError,
+    list_resource_names,
+    list_resources,
+)
 from config.paths import CONFIG_DIR as _CONFIG_DIR
 from config.paths import DEFAULT_CONFIG_PATH as _DEFAULT_CONFIG_PATH
 from .runtime import configure_rate_limiters
@@ -226,10 +229,10 @@ def _dictionary_resource_names() -> frozenset[str]:
     """Return the set of known dictionary resource identifiers."""
 
     try:
-        resources = list_resources()
+        names = list_resource_names(validate=False)
     except (DictionaryManifestError, FileNotFoundError):
         return frozenset()
-    return frozenset(resources.keys())
+    return frozenset(names)
 
 
 def _collect_unknown_keys(
@@ -365,7 +368,7 @@ def load_config(
         for path_tuple, _ in _iter_leaf_items(local_data):
             source_map[path_tuple] = ConfigSource("config", local_detail)
 
-    env_overrides = _apply_env_overrides(data)
+    env_overrides, env_warnings = _apply_env_overrides(data)
     for path_tuple, env_key in env_overrides.items():
         source_map[path_tuple] = ConfigSource("env", env_key)
     _upgrade_legacy_config(data)
@@ -429,6 +432,8 @@ def load_config(
         source_map.setdefault(path_tuple, ConfigSource("default", None))
     snapshot = _build_snapshot(cfg_dict, source_map)
     metadata = ConfigMetadata(snapshot=snapshot, sources=source_map)
+    if env_warnings:
+        metadata.env_warnings.extend(env_warnings)
     if cli_path_map:
         metadata.cli_paths.update(cli_path_map)
     return cfg, metadata

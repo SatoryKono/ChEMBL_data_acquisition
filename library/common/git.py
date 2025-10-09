@@ -12,8 +12,9 @@ import functools
 import os
 import shutil
 import subprocess
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from .log import logger
 
@@ -296,12 +297,15 @@ def _git_sha() -> str:
         logger.info("git_directory_missing", path=str(repo_root))
         return "UNKNOWN"
 
-    head_sha = _read_head_sha(git_dir)
-    if head_sha is not None:
-        logger.info("git_sha_head", sha=head_sha)
-        return head_sha
-
     git_executable = shutil.which("git")
+
+    # If we have a normal git (not a GitHub Desktop shim), prefer HEAD file to avoid subprocess.
+    if git_executable is not None and "githubdesktop" not in str(git_executable).lower():
+        head_sha = _read_head_sha(git_dir)
+        if head_sha is not None:
+            logger.info("git_sha_head", sha=head_sha)
+            return head_sha
+
     if git_executable is None:
         fallback = _read_head_sha(git_dir)
         if fallback is not None:

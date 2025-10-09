@@ -117,12 +117,14 @@ def test_manifest_allows_windows_textmode_checksum() -> None:
 
     expected = {
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a",
         "92b6b3612557eb0916f38aee701a61f3bc470b0ffd0251866ecaf7364fb16d64",
         "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224",
         dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM,
         dictionaries.WINDOWS_VFS_SPARSE_INDEX_CHECKSUM,
         dictionaries.WINDOWS_VFS_TEXTMODE_CHECKSUM,
         dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM,
+        dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM,
         dictionaries.WINDOWS_VFS_NTFS_CHECKSUM,
         "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b",
     }
@@ -140,7 +142,9 @@ def test_known_checksum_variants__includes_sparse_index_checksum(tmp_path: Path)
     assert dictionaries.WINDOWS_VFS_SPARSE_INDEX_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_TEXTMODE_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM in variants
+    assert dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_NTFS_CHECKSUM in variants
+    assert "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a" in variants
     assert "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b" in variants
 
 
@@ -161,4 +165,6 @@ def test_iter_additional_checksums__merges_manifest_allowlist(tmp_path: Path) ->
     assert dictionaries.WINDOWS_VFS_SPARSE_INDEX_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_TEXTMODE_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM in variants
+    assert dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM in variants
+    assert "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a" in variants
     assert custom_checksum in variants

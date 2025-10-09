@@ -57,6 +57,7 @@ in [`docs/en/SUMMARY.md`](./docs/en/SUMMARY.md) and
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-lock.txt
+pip install .[dev]
 pre-commit install
 ```
 
@@ -78,6 +79,53 @@ python scripts/get_data.py \
   --config config/config.yaml \
   --date $(date -u +%Y%m%d)
 ```
+
+## Quality gates
+
+Every merge request must satisfy the deterministic quality gates enforced in CI.
+The quickest way to reproduce them locally is to run the bundled test harness:
+
+```bash
+python scripts/run_tests.py
+```
+
+The command executes the full pytest matrix with coverage, writes the structured
+log to `reports/test_report.json` and the Markdown summary to
+`reports/test_summary.md`, and exits with a non-zero status when the
+`summary.success_rate` falls below **95 %**. Re-run the script after touching
+tests or pipeline code to confirm the outputs stay identical apart from the
+timestamp – any drift indicates a determinism regression that must be fixed
+before opening a pull request. When sharing results, commit the code changes and
+attach the generated reports to the PR so reviewers can audit the exact pass
+rate without reproducing the run locally.
+
+### Logging contract
+
+All CLI entry points initialise structured logging via the shared bootstrap
+helpers. By default every command writes to `logs/<program>_<YYYYMMDD>.log`,
+where `<program>` matches the script name (for example,
+`get_data` → `logs/get_data_20250228.log`). Setting `--base-path` or the
+`CHEMBL_DA_BASE_PATH` environment variable relocates the directory to
+`<base>/logs` while keeping the `<program>_<YYYYMMDD>.log` naming scheme.
+Tests and operational runbooks rely on this pattern to locate artefacts, so the
+file stem must not be renamed or rotated differently.
+
+### Determinism verification order
+
+Pipeline promotions must follow a strict determinism check list:
+
+1. Run `python scripts/run_tests.py` to confirm the pytest suite completes with
+   a ≥95 % success rate.
+2. Execute the target CLI against a clean output directory.
+3. Immediately repeat the same command — or call
+   `python scripts/check_determinism.py --no-dry-run` with the intended input —
+   to produce a second export.
+4. Compare the resulting files (the helper computes SHA256 digests for CSVs and
+   `.meta.yaml` sidecars). Any mismatch indicates a determinism regression.
+
+The log contract above ensures both executions append to the same
+`<program>_<YYYYMMDD>.log` file, making it straightforward to diff the emitted
+events while investigating discrepancies.
 
 ### CLI quick reference
 
@@ -107,6 +155,32 @@ the [output reference](./docs/en/OUTPUT.md) for the complete specification.
 Custom file names such as `targets.csv` still trigger this post-processing
 chain, so downstream helpers are generated even when the export deviates from
 the canonical `output.target_<stamp>.csv` pattern.
+
+#### Reproducing the archived target bundle
+
+Historical examples of the target export bundle now live under
+[`reports/archive/target_pipeline/`](./reports/archive/target_pipeline). To
+recreate the same structure locally:
+
+1. Activate your virtual environment and install the locked dependencies as
+   shown in the [quick start](#quick-start).
+2. Run the target pipeline against the bundled sample identifiers:
+
+   ```bash
+   python scripts/get_target_data.py all \
+     --input data/input/target.csv \
+     --final-out output/targets.csv \
+     --chembl-chunk-size 10 \
+     --uniprot-data-dir cache/uniprot
+   ```
+
+3. Inspect the contents of `output/targets.csv` and its sidecars:
+   `output/targets.csv.meta.yaml`, `output/targets_quality_report_table.csv`,
+   `output/targets_uniprot.csv`, `output/targets_iuphar.csv`, `output/targets_chembl.csv`
+   plus the associated quality reports.
+
+All artefacts share the deterministic guarantees described above, so repeating
+the command with the same inputs produces byte-identical files.
 
 ## Documentation
 
@@ -138,10 +212,16 @@ languages:
 ## Testing policy
 
 Tests are organised under `tests/` and executed with `pytest`. Local and CI runs
-must produce:
+must produce (the files are git-ignored to avoid spurious diffs):
 
 - `reports/test_report.json` — machine readable execution log
 - `reports/test_summary.md` — condensed Markdown summary
+
+GitHub Actions uploads both files (plus the coverage directory) as the
+`test-reports-<python-version>` artefact for every CI matrix entry. Navigate to
+the latest workflow run, download the archive and inspect the JSON/Markdown to
+review the most recent pipeline health snapshot without regenerating the
+reports locally.
 
 `test_report.json` always exposes three top-level keys:
 

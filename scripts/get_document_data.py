@@ -24,6 +24,7 @@ The input file must contain a ``PMID`` column.
 
 from __future__ import annotations
 
+# ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
 else:  # pragma: no cover - executed when imported as a package module
@@ -42,14 +43,13 @@ import tempfile
 from pathlib import Path
 
 from numbers import Integral, Real
-from typing import Any, cast
+from typing import Any
 
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
-from library import cli
 from library import io
 from library.common.csv_utils import write_csv_chunks_deterministic
 from library.integration import chembl_library as cl
@@ -58,10 +58,12 @@ from library.pipelines.document import postprocessing as dp
 from library.postprocessing import document as document_export_postprocessing
 from library.postprocess.documents import run_document_pipeline as run_document_postprocess
 from library.postprocess.common import collect_postprocess_metrics
+from library.postprocess.common.logging import PipelineRunMetrics
 from library.orchestration import ETLContext
 from library.cli import (
-    LoggerConfig,
     ConfigMetadata,
+    Logger,
+    LoggerConfig,
     build_root_parser,
     configure_logger,
     path_argument,
@@ -81,7 +83,6 @@ from library.pipelines.document.pipeline import (
     build_dataframe,
     build_quality_report,
     dataframe_to_strings,
-    merge_metadata,
     merge_with_chembl,
     normalise_doi,
 )
@@ -103,6 +104,7 @@ from library.common.sidecar import SidecarErrors
 from library.qa.reporting import build_table_quality_hook
 from library.qa.table_quality import TableQualityProfiler
 from library.schemas import DocumentsSchema, normalize_documents
+from library.validation import validate_documents
 from library.schemas.document_spec import DOCUMENT_EXPORT_COLUMNS
 
 
@@ -547,7 +549,7 @@ def _finalise_export(
             rows_total += len(ordered)
             validated = ordered
             try:
-                validated = DocumentsSchema.validate(ordered, lazy=True)
+                validation = validate_documents(ordered, return_result=True)
             except SchemaErrors as exc:
                 for row in exc.failure_cases.to_dict("records"):
                     errors.add_error(row)
@@ -555,10 +557,23 @@ def _finalise_export(
                     "document_validation_failed",
                     failure_count=len(exc.failure_cases),
                     failure_path=str(failure_path),
-                    error=str(exc), exc_info=exc,
+                    error=str(exc),
+                    exc_info=exc,
                 )
                 validated = getattr(exc, "validated_data", ordered)
                 exit_code = 1
+            else:
+                validated = validation.data
+                if not validation.failure_cases.empty:
+                    failure_records = validation.failure_cases.to_dict("records")
+                    for row in failure_records:
+                        errors.add_error(row)
+                    logger.error(
+                        "document_validation_failed",
+                        failure_count=len(validation.failure_cases),
+                        failure_path=str(failure_path),
+                    )
+                    exit_code = 1
             rows_kept += len(validated)
             cleaned = build_dataframe(
                 validated, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
@@ -727,7 +742,7 @@ def _generate_document_postprocess_metrics(
     *,
     logger: Logger,
     extras: Mapping[str, object] | None = None,
-):
+) -> tuple[PipelineRunMetrics | None, Path | None]:
     """Run the document postprocess pipeline and persist the metrics report."""
 
     return collect_postprocess_metrics(

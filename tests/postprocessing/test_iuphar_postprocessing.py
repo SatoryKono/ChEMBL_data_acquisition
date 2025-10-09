@@ -183,10 +183,13 @@ def test_process_iuphar_targets__produces_expected_csv(tmp_path: Path, snapshot_
     assert output_path.name == "IUPHAR.output.target_20240101.csv"
     expected_bytes = (snapshot_resource / "iuphar_postprocessing_expected.csv").read_bytes()
     actual_bytes = output_path.read_bytes()
-    assert actual_bytes == expected_bytes
+    # Normalise line endings for cross-platform determinism
+    expected_norm = expected_bytes.replace(b"\r\n", b"\n")
+    actual_norm = actual_bytes.replace(b"\r\n", b"\n")
+    assert actual_norm == expected_norm
     assert not actual_bytes.startswith(BOM_UTF8)
     expected_header = ",".join(iuphar._OUTPUT_COLUMNS) + "\n"
-    assert actual_bytes.startswith(expected_header.encode("utf-8"))
+    assert actual_norm.startswith(expected_header.encode("utf-8"))
 
 
 def test_process_iuphar_targets__normalises_tmp_suffix(tmp_path: Path) -> None:

@@ -59,7 +59,15 @@ def _write_manifest(tmp_path, body: str) -> None:
     (
         (
             "dictionary_root",
+            "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a",
+        ),
+        (
+            "dictionary_root",
             "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        ),
+        (
+            "dictionary_root",
+            "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a",
         ),
         (
             "dictionary_root",
@@ -84,6 +92,14 @@ def _write_manifest(tmp_path, body: str) -> None:
         (
             "dictionary_root",
             "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b",
+        ),
+        (
+            "dictionary_root",
+            "e50c951fb02903d25e40507f032c48c1d87f46673450837cfcc6afeff833e2e4",
+        ),
+        (
+            "dictionary_root",
+            "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a",
         ),
         (
             "target_uniprot_cache",
@@ -154,3 +170,43 @@ def test_parse_manifest__env_allowlist_accepts_unknown_checksum(tmp_path, monkey
         assert resources[resource_name].sha256 == "override"
     finally:
         dictionaries._env_checksum_allowlist.cache_clear()
+
+
+@pytest.mark.unit
+def test_list_resources__loads_bundled_manifest():
+    dictionaries._load_manifest.cache_clear()
+    try:
+        resources = dictionaries.list_resources()
+        assert "dictionary_root" in resources
+        root_resource = resources["dictionary_root"]
+        assert root_resource.path.exists()
+        assert root_resource.sha256
+    finally:
+        dictionaries._load_manifest.cache_clear()
+
+
+@pytest.mark.unit
+def test_list_resource_names__skips_validation_when_requested(tmp_path):
+    manifest_dir = tmp_path / "dict"
+    manifest_dir.mkdir()
+    manifest_path = manifest_dir / "manifest.yaml"
+    manifest_path.write_text(
+        """
+        resources:
+          foo:
+            path: foo.csv
+            version: "1"
+            sha256: deadbeef
+            generator: build.py
+        """.strip()
+    )
+
+    names = dictionaries.list_resource_names(validate=False, base_dir=manifest_dir)
+
+    assert names == ("foo",)
+
+    with pytest.raises((FileNotFoundError, dictionaries.DictionaryManifestError)):
+        dictionaries.list_resource_names(validate=True, base_dir=manifest_dir)
+
+    with pytest.raises(FileNotFoundError):
+        dictionaries.get_resource_path("foo", base_dir=manifest_dir)

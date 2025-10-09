@@ -24,7 +24,9 @@ from ..config import _mask_secrets
 from ..resources.dictionaries import DictionaryManifestError, get_resource
 from .git import _git_sha
 from .log import logger
+from .run_context import get_current
 from ..utils.atomic import open_atomic
+from ..project_version import get_pipeline_version
 
 
 def _load_metadata(meta_path: Path) -> dict[str, Any]:
@@ -64,6 +66,8 @@ class Stats(_StatsRequired, total=False):
     missing_molecule_ids_count: int
     chunk_fetch_failure_chunks: int
     chunk_fetch_failure_ids: list[str]
+    chunk_fetch_failure_ids_total: int
+    chunk_fetch_failure_ids_truncated: bool
 
 
 def file_sha256(path: Path | str) -> str:
@@ -98,6 +102,7 @@ def write_meta_yaml(
     invocation: Sequence[str] | None = None,
     extra_metadata: Mapping[str, Any] | None = None,
     dictionary_resources: Sequence[str] | None = None,
+    generated_at: str | None = None,
 ) -> Path:
     """Write metadata for ``csv_path`` to ``<csv_path>.meta.yaml``.
 
@@ -127,6 +132,10 @@ def write_meta_yaml(
         bundled manifest.  When provided, the metadata output is enriched with
         the corresponding version and SHA256 checksum for every listed
         resource.
+    generated_at:
+        Optional ISO 8601 timestamp overriding the default deterministic
+        resolution. When omitted the active run context is queried before
+        falling back to ``datetime.now``.
 
     Returns
     -------
@@ -140,9 +149,16 @@ def write_meta_yaml(
     existing = _load_metadata(meta_path)
 
     metadata: dict[str, Any] = dict(existing)
+    context = get_current()
+    timestamp = generated_at
+    if timestamp is None and context is not None and context.generated_at:
+        timestamp = context.generated_at
+    if timestamp is None:
+        timestamp = datetime.now(UTC).isoformat()
+
     metadata.update(
         {
-            "generated_at": datetime.now(UTC).isoformat(),
+            "generated_at": timestamp,
             "git_sha": _git_sha(),
             "python_version": platform.python_version(),
             "platform": platform.platform(),
@@ -151,6 +167,7 @@ def write_meta_yaml(
             "inputs": dict(inputs),
             "stats": stats,
             "schema": schema,
+            "pipeline_version": get_pipeline_version(),
         }
     )
     if invocation:

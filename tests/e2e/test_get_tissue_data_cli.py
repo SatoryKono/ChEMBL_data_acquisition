@@ -19,6 +19,7 @@ import yaml
 from library.pipelines.tissue import TISSUE_COLUMN_ORDER
 from scripts import get_tissue_data
 from tests.conftest import FROZEN_UTC
+from library.common.run_context import RunContext, get_current, set_current
 
 
 class MemoryLogger:
@@ -119,19 +120,6 @@ def test_get_tissue_data_cli__end_to_end(
     monkeypatch.setattr("library.pipelines.tissue.pipeline.logger", logger)
     monkeypatch.setattr("library.pipelines.tissue.chembl.logger", logger)
 
-    import library.io.metadata as io_metadata
-
-    def _frozen_meta_now(tz: Any | None = None) -> Any:
-        if tz is None:
-            return FROZEN_UTC.replace(tzinfo=None)
-        return FROZEN_UTC.astimezone(tz)
-
-    monkeypatch.setattr(
-        io_metadata,
-        "datetime",
-        SimpleNamespace(now=_frozen_meta_now),
-    )
-
     def fake_apply_config_overrides(
         args: Any,
         parser: Any,
@@ -172,6 +160,12 @@ def test_get_tissue_data_cli__end_to_end(
 
     def fake_configure_logger(log_cfg: Any) -> MemoryLogger:
         logger.log("debug", "configure_logger_called", log_level=getattr(log_cfg, "level", ""))
+        set_current(
+            RunContext(
+                run_id=str(getattr(log_cfg, "run_id", "")),
+                generated_at=str(getattr(log_cfg, "generated_at", "")),
+            )
+        )
         return logger
 
     monkeypatch.setattr("library.cli_utils.cli.configure_logger", fake_configure_logger)
@@ -262,7 +256,12 @@ def test_get_tissue_data_cli__end_to_end(
     assert "--input" in metadata["command"]
     assert metadata.get("dtypes")
     assert metadata.get("config")
-    assert metadata["generated_at"] == FROZEN_UTC.isoformat()
+    first_pipeline_start = next(
+        payload for level, event, payload in logger.events if event == "pipeline_start"
+    )
+    context = get_current()
+    assert context is not None
+    assert metadata["generated_at"] == context.generated_at
 
     csv_hash_first = hashlib.sha256(output_csv.read_bytes()).hexdigest()
     first_event_count = len(logger.events)

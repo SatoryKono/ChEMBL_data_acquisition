@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping as TypingMapping
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping as TypingMapping
+from typing import TYPE_CHECKING, Any
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pydantic import BaseModel
 from pydantic_core import ErrorDetails
 
@@ -32,7 +33,7 @@ __all__ = [
 ]
 
 
-def _config_model() -> type["Config"]:
+def _config_model() -> type[Config]:
     from .models import Config
 
     return Config
@@ -41,8 +42,8 @@ def _config_model() -> type["Config"]:
 def _alias_map() -> dict[str, tuple[str, ...]]:
     from .models import _ALIAS_MAP
 
-    return _ALIAS_MAP
-
+    # Ensure all values are tuples to match the expected return type
+    return {k: tuple(v) for k, v in _ALIAS_MAP.items()}
 
 def _normalize_base_path(value: Path | str) -> Path:
     """Return *value* coerced into an absolute :class:`~pathlib.Path`."""
@@ -79,7 +80,9 @@ def _resolve_placeholder_base_path(base_path: Path | str | None) -> Path:
 def _expand_config_placeholders(data: Any, *, base_path: Path) -> Any:
     """Expand configuration placeholders in ``data`` using *base_path*."""
 
-    replacements = {"$CHEMBL_DA_BASE_PATH": str(base_path)}
+    # Normalise to platform-specific path string
+    base_str = str(Path(base_path))
+    replacements = {"$CHEMBL_DA_BASE_PATH": base_str}
 
     def _expand(value: Any) -> Any:
         if isinstance(value, dict):
@@ -94,10 +97,19 @@ def _expand_config_placeholders(data: Any, *, base_path: Path) -> Any:
             return tuple(_expand(item) for item in value)
         if isinstance(value, str):
             replaced = value
+            had_placeholder = False
             for marker, target in replacements.items():
-                replaced = replaced.replace(marker, target)
+                if marker in replaced:
+                    had_placeholder = True
+                    replaced = replaced.replace(marker, target)
             replaced = os.path.expandvars(replaced)
             replaced = os.path.expanduser(replaced)
+            # Only normalise path separators when placeholder was present
+            if had_placeholder or replaced.startswith(base_str):
+                try:
+                    replaced = str(Path(replaced))
+                except Exception:
+                    return replaced
             return replaced
         return value
 
@@ -236,24 +248,33 @@ def _normalize_env_errors(
     return messages, handled
 
 
-def _apply_env_overrides(data: dict[str, Any]) -> dict[tuple[str, ...], str]:
+def _apply_env_overrides(
+    data: dict[str, Any]
+) -> tuple[dict[tuple[str, ...], str], list[str]]:
     prefix = "CHEMBL_DA"
     overrides: dict[tuple[str, ...], str] = {}
     alias_map = _alias_map()
+    warnings: list[str] = []
     for env_key, env_val in os.environ.items():
         key = env_key.upper()
-        if key in alias_map:
-            path = alias_map[key]
-        elif key.startswith(prefix + "__"):
-            path = key[len(prefix) + 2 :].split("__")
-        else:
+        path = alias_map.get(key)
+        if not path and key.startswith(prefix + "__"):
+            raw_path = key[len(prefix) + 2 :]
+            path = tuple(part for part in raw_path.split("__") if part)
+        if not path:
             continue
         parts = [p.lower() for p in path]
-        if not _is_valid_path(parts):
-            logger.warning(f"Environment variable {key} ignored")
+        if not parts or not _is_valid_path(parts):
+            joined = ".".join(parts) if parts else "<root>"
+            logger.warning(
+                "config_env_unknown_path",
+                variable=key,
+                path=joined,
+            )
+            warnings.append(f"{key}: unknown configuration path '{joined}'")
             continue
         value = _parse_env_value(key, env_val)
         _set_by_path(data, parts, value)
         overrides[tuple(parts)] = key
-    return overrides
+    return overrides, warnings
 

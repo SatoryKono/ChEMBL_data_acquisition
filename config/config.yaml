@@ -82,9 +82,6 @@ sources:
           - topical
           - black_box_warning
           - structure_type
-          - molecule_structures.canonical_smiles
-          - molecule_structures.standard_inchi
-          - molecule_structures.standard_inchi_key
           - pubchem_cid
           - pubchem_iupac_name
           - pubchem_molecular_formula

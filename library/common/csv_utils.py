@@ -11,7 +11,6 @@ from __future__ import annotations
 import csv
 import hashlib
 import heapq
-import os
 import tempfile
 from collections.abc import Callable, Iterable, Sequence
 from datetime import date, datetime
@@ -22,14 +21,10 @@ import numpy as np
 import pandas as pd
 from pandas.api import types as ptypes
 
-from typing import TYPE_CHECKING
-
 from ..config import Config
+from ..utils.atomic import open_atomic, robust_replace
 from .log import logger
-from ..utils.atomic import open_atomic
-
-if TYPE_CHECKING:  # pragma: no cover - import for type checking only
-    from ..io.metadata import write_meta_yaml as _write_meta_yaml_type
+from .run_context import get_current
 
 
 def _write_meta_yaml(*args: Any, **kwargs: Any) -> Path:
@@ -40,7 +35,16 @@ def _write_meta_yaml(*args: Any, **kwargs: Any) -> Path:
     return _write_meta_yaml_impl(*args, **kwargs)
 
 
-def _normalise_bool(series: pd.Series) -> pd.Series:
+def _metadata_generated_at() -> str | None:
+    """Return the active deterministic ``generated_at`` timestamp."""
+
+    context = get_current()
+    if context is not None and context.generated_at:
+        return context.generated_at
+    return None
+
+
+def _normalise_bool(series: pd.Series[Any]) -> pd.Series[str]:
     """Return ``series`` with booleans converted to ``"true"``/``"false"``.
 
     ``pandas`` has two boolean dtypes: the classic ``bool`` which cannot
@@ -53,7 +57,7 @@ def _normalise_bool(series: pd.Series) -> pd.Series:
     return series.map({True: "true", False: "false"}).astype("string")
 
 
-def _normalise_dates(series: pd.Series) -> pd.Series:
+def _normalise_dates(series: pd.Series[Any]) -> pd.Series[Any]:
     """Return ``series`` with dates formatted as ``YYYY-MM-DD``.
 
     Both native ``datetime`` columns and object columns containing
@@ -68,7 +72,7 @@ def _normalise_dates(series: pd.Series) -> pd.Series:
         ptypes.is_object_dtype(series)
         and series.dropna().map(lambda x: isinstance(x, date | datetime)).all()
     ):
-        result: pd.Series = pd.to_datetime(series).dt.strftime("%Y-%m-%d")
+        result: pd.Series[str] = pd.to_datetime(series).dt.strftime("%Y-%m-%d")
         return result
 
     return series
@@ -269,7 +273,7 @@ def _merge_sorted_csv_group(
                 key = (
                     tuple(
                         converter(row[col])
-                        for converter, col in zip(key_converters, resolved_sort_cols)
+                        for converter, col in zip(key_converters, resolved_sort_cols, strict=False)
                     )
                     if resolved_sort_cols
                     else tuple()
@@ -292,7 +296,7 @@ def _merge_sorted_csv_group(
                         tuple(
                             converter(next_row[col])
                             for converter, col in zip(
-                                key_converters, resolved_sort_cols
+                                key_converters, resolved_sort_cols, strict=False
                             )
                         )
                         if resolved_sort_cols
@@ -308,7 +312,7 @@ def _merge_sorted_csv_group(
                             tuple(
                                 converter(next_row[col])
                                 for converter, col in zip(
-                                    key_converters, resolved_sort_cols
+                                    key_converters, resolved_sort_cols, strict=False
                                 )
                             )
                             if resolved_sort_cols
@@ -460,8 +464,9 @@ def write_csv_deterministic(
                 na_rep="",
                 chunksize=chunksize,
                 sep=sep,
+                lineterminator="\n",
             )
-        os.replace(tmp_path, out_path)
+        robust_replace(tmp_path, out_path)
     else:
         # External merge sort writing intermediate chunks to disk.
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -486,6 +491,7 @@ def write_csv_deterministic(
                     na_rep="",
                     sep=sep,
                     encoding=encoding,
+                    lineterminator="\n",
                 )
                 tmp_paths.append(chunk_path)
 
@@ -555,13 +561,14 @@ def write_csv_deterministic(
                     )
                     heapq.heappush(heap, (key, idx, row))
 
-        os.replace(tmp_path, out_path)
+            robust_replace(tmp_path, out_path)
 
     _write_meta_yaml(
         out_path,
         cfg,
         columns=list(work.columns),
         dtypes={col: work.dtypes[col].name for col in work.columns},
+        generated_at=_metadata_generated_at(),
     )
     return out_path
 
@@ -755,6 +762,7 @@ def write_csv_chunks_deterministic(
         cfg,
         columns=meta_columns or columns,
         dtypes=dtype_names,
+        generated_at=_metadata_generated_at(),
     )
     return out_path
 

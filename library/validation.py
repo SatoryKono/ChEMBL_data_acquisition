@@ -17,6 +17,8 @@ __all__ = [
     "validate_activities",
     "validate_assays",
     "validate_celllines",
+    "validate_documents",
+    "validate_targets",
     "validate_tissues",
     "validate_testitems",
 ]
@@ -237,5 +239,35 @@ def validate_testitems(
         df,
         schema=TestitemsSchema,
         schema_name="TestitemsSchema",
+        return_result=return_result,
+    )
+
+
+def validate_documents(
+    df: pd.DataFrame, *, return_result: bool = False
+) -> ValidationResult | pd.DataFrame:
+    """Validate document dataframe using :data:`library.schemas.DocumentsSchema`."""
+
+    from library.schemas import DocumentsSchema
+
+    return _validate_with_schema(
+        df,
+        schema=DocumentsSchema,
+        schema_name="DocumentsSchema",
+        return_result=return_result,
+    )
+
+
+def validate_targets(
+    df: pd.DataFrame, *, return_result: bool = False
+) -> ValidationResult | pd.DataFrame:
+    """Validate target dataframe using :data:`library.schemas.TargetsSchema`."""
+
+    from library.schemas import TargetsSchema
+
+    return _validate_with_schema(
+        df,
+        schema=TargetsSchema,
+        schema_name="TargetsSchema",
         return_result=return_result,
     )

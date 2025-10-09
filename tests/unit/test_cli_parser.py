@@ -22,10 +22,10 @@ class _SpyLogger:
     def warning(self, event: str, **kwargs: object) -> None:  # pragma: no cover - thin
         self.events.append((event, kwargs))
 
-    # Compatibility methods used elsewhere in the module.  They are no-ops for
-    # the scope of these tests.
-    def info(self, *args: object, **kwargs: object) -> None:  # pragma: no cover
-        return None
+    # Compatibility methods used elsewhere in the module.  They record events so
+    # assertions can inspect the emitted structured logs.
+    def info(self, event: str, **kwargs: object) -> None:  # pragma: no cover
+        self.events.append((event, kwargs))
 
     def error(self, *args: object, **kwargs: object) -> None:  # pragma: no cover
         return None
@@ -115,3 +115,37 @@ def test_apply_config_overrides__require_date_enforced(
 
     with pytest.raises(ValueError, match="--date is required"):
         apply_config_overrides(args, parser, cfg_path)
+
+
+@pytest.mark.unit
+def test_apply_config_overrides__uses_default_config_when_none(monkeypatch):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default=None)
+    parser.add_argument("--log-level", default="INFO")
+    args = parser.parse_args([])
+
+    spy = _SpyLogger()
+    monkeypatch.setattr(parser_module, "logger", spy)
+
+    calls: dict[str, object] = {}
+
+    def _load_stub(path, **_kwargs):
+        calls["path"] = path
+        cfg = SimpleNamespace(
+            sources=SimpleNamespace(),
+            local=SimpleNamespace(io=SimpleNamespace(output_stamp_mode="omit")),
+        )
+        return cfg, ConfigMetadata(snapshot={}, sources={})
+
+    monkeypatch.setattr(parser_module, "load_config", _load_stub)
+
+    cfg = apply_config_overrides(args, parser, None)
+
+    assert cfg.local.io.output_stamp_mode == "omit"
+    assert calls["path"] == parser_module.DEFAULT_CONFIG_PATH
+    assert args.config == parser_module.DEFAULT_CONFIG_PATH
+    assert any(
+        event == "config_default_path_used" and payload.get("config")
+        == str(parser_module.DEFAULT_CONFIG_PATH)
+        for event, payload in spy.events
+    )

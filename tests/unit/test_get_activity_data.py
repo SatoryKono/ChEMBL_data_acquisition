@@ -7,13 +7,12 @@ from collections import Counter
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import Event, Lock
+from threading import Condition, Event, Lock
 from typing import Any, Iterable, Sequence
 from types import SimpleNamespace
 
 import pandas as pd
 import pytest
-import requests
 
 from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS
 from library.pipelines.common import PipelineRunResult
@@ -45,6 +44,16 @@ def _make_args(tmp_path: Path) -> argparse.Namespace:
         dry_run=False,
         invocation=None,
     )
+
+
+def test_build_parser__captures_run_id_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHEMBL_DA_RUN_ID", "env-run")
+    parser, log_cfg = get_activity_data.build_parser()
+
+    args = parser.parse_args(["--input", str(tmp_path / "activity.csv"), "--limit", "0"])
+
+    assert getattr(args, "run_id") == "env-run"
+    assert log_cfg.run_id == "env-run"
 
 
 class _DummyClient:
@@ -141,12 +150,12 @@ def test_run_chembl__dry_run_short_circuits(cfg, tmp_path, monkeypatch) -> None:
         (level, event, context) for level, event, context in logger_stub.events
     ]
     completion_events = [
-        event
-        for _, event, _ in logger_stub.events
-        if event.startswith("Completed get_activity_data pipeline:")
+        payload
+        for _, event, payload in logger_stub.events
+        if event == "activity_pipeline_completion"
     ]
     assert completion_events
-    assert "mode=dry_run" in completion_events[-1]
+    assert completion_events[-1]["mode"] == "dry_run"
 
 
 def test_ensure_molecule_pref_name__concurrent_single_fetch(monkeypatch) -> None:
@@ -165,6 +174,7 @@ def test_ensure_molecule_pref_name__concurrent_single_fetch(monkeypatch) -> None
     frame = _make_pref_name_frame()
     cache: dict[str, str | None] = {}
     cache_lock = Lock()
+    cache_condition = Condition(cache_lock)
 
     call_records: list[tuple[str, ...]] = []
     ready = Event()
@@ -203,7 +213,7 @@ def test_ensure_molecule_pref_name__concurrent_single_fetch(monkeypatch) -> None
             cfg=cfg,
             client=object(),
             cache=cache,
-            cache_lock=cache_lock,
+            cache_condition=cache_condition,
         )
 
     with ThreadPoolExecutor(max_workers=4) as executor:
@@ -250,6 +260,7 @@ def test_ensure_molecule_pref_name__applies_testitem_retry_overrides(monkeypatch
     frame = _make_pref_name_frame()
     cache: dict[str, str | None] = {}
     cache_lock = Lock()
+    cache_condition = Condition(cache_lock)
     captured_cfg: dict[str, Any] = {}
 
     def fake_get_testitem(
@@ -281,7 +292,7 @@ def test_ensure_molecule_pref_name__applies_testitem_retry_overrides(monkeypatch
         cfg=cfg,
         client=object(),
         cache=cache,
-        cache_lock=cache_lock,
+        cache_condition=cache_condition,
     )
 
     assert "cfg" in captured_cfg
@@ -313,6 +324,7 @@ def test_ensure_molecule_pref_name__requests_minimal_field_set(monkeypatch) -> N
     frame = _make_pref_name_frame()
     cache: dict[str, str | None] = {}
     cache_lock = Lock()
+    cache_condition = Condition(cache_lock)
     captured_fields: list[Sequence[str]] = []
 
     def fake_get_testitem(
@@ -344,7 +356,7 @@ def test_ensure_molecule_pref_name__requests_minimal_field_set(monkeypatch) -> N
         cfg=cfg,
         client=object(),
         cache=cache,
-        cache_lock=cache_lock,
+        cache_condition=cache_condition,
     )
 
     assert captured_fields == [
@@ -411,13 +423,13 @@ def test_run__skip_existing_matrix(
     assert exit_code == 0
     assert len(call_counter) == expected_calls
     summary_events = [
-        event
-        for _, event, _ in logger_stub.events
-        if event.startswith("Completed get_activity_data pipeline:")
+        payload
+        for _, event, payload in logger_stub.events
+        if event == "activity_pipeline_completion"
     ]
     if skip_existing and has_existing and not force:
         assert summary_events
-        assert "mode=skip_existing" in summary_events[-1]
+        assert summary_events[-1]["mode"] == "skip_existing"
     else:
         assert not summary_events
 

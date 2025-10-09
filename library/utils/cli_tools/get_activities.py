@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import os
-import tempfile
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from uuid import uuid4
+
+import yaml
 
 import pandas as pd
 
@@ -21,6 +21,7 @@ from library.config import (
     print_config,
 )
 from library.pipelines.activity import get_activities
+from library.utils.atomic import robust_replace
 
 
 DEFAULT_LIMIT = 25
@@ -45,7 +46,15 @@ def parse_args(
         action="store_true",
         help="Print effective configuration and exit",
     )
-    log_cfg = cli.create_logger_config(parser.get_default("log_level"))
+    run_id_default = parser.get_default("run_id")
+    if run_id_default in (None, argparse.SUPPRESS):
+        run_id_value = None
+    else:
+        run_id_value = str(run_id_default)
+    log_cfg = cli.create_logger_config(
+        parser.get_default("log_level"),
+        run_id=run_id_value,
+    )
 
     def _limit(value: str) -> int:
         """Return ``value`` validated as a non-negative integer."""
@@ -75,6 +84,11 @@ def parse_args(
     input_path = getattr(args, "input_csv", None)
     output_stem = Path(input_path).stem if input_path else None
     cli.prepare_io_paths(args, output_stem=output_stem)
+    run_id_value = getattr(args, "run_id", None)
+    if isinstance(run_id_value, str):
+        run_id_value = run_id_value.strip() or None
+    if run_id_value is not None:
+        log_cfg.run_id = run_id_value
     return parser, args, log_cfg
 
 
@@ -90,42 +104,46 @@ def _frame_from_records(records: Iterable[dict[str, object]]) -> pd.DataFrame:
 def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Path:
     """Persist ``frame`` and accompanying metadata to ``output_path`` atomically."""
 
-    temp_path = output_path.with_name(
-        f".{output_path.name}.{uuid4().hex}.tmp"
-    )
-    written = io.write_csv(frame, temp_path, cfg=cfg)
-    temp_meta = Path(f"{written}.meta.yaml")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    tmp_path = output_path.with_name(f".{output_path.name}.{uuid4().hex}.tmp")
+    written = io.write_csv(frame, tmp_path, cfg=cfg)
+    tmp_meta = Path(f"{written}.meta.yaml")
+
+    if not tmp_meta.exists():
+        written.unlink(missing_ok=True)
+        msg = f"metadata sidecar missing for temporary output: {tmp_meta}"
+        raise FileNotFoundError(msg)
+
+    metadata = yaml.safe_load(tmp_meta.read_text(encoding="utf-8")) or {}
+    expected_columns = list(frame.columns)
+    expected_dtypes = {
+        column: str(dtype) for column, dtype in frame.dtypes.items()
+    }
+
+    meta_columns = metadata.get("columns")
+    meta_dtypes = metadata.get("dtypes")
+    if meta_columns != expected_columns or meta_dtypes != expected_dtypes:
+        written.unlink(missing_ok=True)
+        tmp_meta.unlink(missing_ok=True)
+        msg = "metadata sidecar schema mismatch for generated CSV"
+        raise ValueError(msg)
+
+    target_meta = Path(f"{output_path}.meta.yaml")
 
     try:
-        written.replace(output_path)
+        robust_replace(written, output_path)
+        robust_replace(tmp_meta, target_meta)
     except Exception:
         written.unlink(missing_ok=True)
+        tmp_meta.unlink(missing_ok=True)
         raise
-    finally:
-        temp_meta.unlink(missing_ok=True)
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(
-        dir=str(output_path.parent),
-        prefix=f".{output_path.name}.",
-        suffix=output_path.suffix or ".tmp",
-    )
-    os.close(fd)
-    tmp_path = Path(tmp_name)
-    try:
-        io.write_csv(frame, tmp_path, cfg=cfg)
-        written = tmp_path.replace(output_path)
-    except Exception:
-        tmp_path.unlink(missing_ok=True)
-        raise
-    else:
-        tmp_path.unlink(missing_ok=True)
-    io.write_meta_yaml(
-        output_path,
-        cfg=cfg,
-        columns=list(frame.columns),
-        dtypes={col: str(dtype) for col, dtype in frame.dtypes.items()},
-    )
+    # Clean up any lingering temporary metadata artefacts from the staging write.
+    for orphan in output_path.parent.glob(f".{output_path.name}.*.tmp.meta.yaml"):
+        if orphan != target_meta:
+            orphan.unlink(missing_ok=True)
+
     return output_path
 
 
@@ -134,11 +152,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
     limit = args.limit
     if limit is None:
-        limit = (
-            cfg.activity.limit
-            if cfg.activity.limit is not None
-            else DEFAULT_LIMIT
-        )
+        limit = cfg.activity.limit if cfg.activity.limit is not None else DEFAULT_LIMIT
         if limit < 0:
             logger.error(
                 "config_error",
@@ -163,8 +177,10 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     else:
         output_path = Path(output_candidate)
 
-    if output_path.exists() and getattr(args, "skip_existing", False) and not getattr(
-        args, "force", False
+    if (
+        output_path.exists()
+        and getattr(args, "skip_existing", False)
+        and not getattr(args, "force", False)
     ):
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0

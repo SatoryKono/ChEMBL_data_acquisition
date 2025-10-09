@@ -3,7 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
+import yaml
 
 from library.utils.cli_tools import get_activities
 
@@ -20,13 +22,17 @@ class _LoggerStub:
     def info(self, event: str, **data: object) -> None:
         self.events.append(("info", event, dict(data)))
 
-    def warning(self, event: str, **data: object) -> None:  # pragma: no cover - defensive
+    def warning(
+        self, event: str, **data: object
+    ) -> None:  # pragma: no cover - defensive
         self.events.append(("warning", event, dict(data)))
 
     def error(self, event: str, **data: object) -> None:  # pragma: no cover - defensive
         self.events.append(("error", event, dict(data)))
 
-    def exception(self, event: str, **data: object) -> None:  # pragma: no cover - defensive
+    def exception(
+        self, event: str, **data: object
+    ) -> None:  # pragma: no cover - defensive
         self.events.append(("exception", event, dict(data)))
 
 
@@ -128,7 +134,9 @@ def test_main__dry_run_skips_fetch(
 
     called: dict[str, bool] = {"value": False}
 
-    def _unexpected_call(limit: int) -> list[dict[str, int]]:  # pragma: no cover - defensive
+    def _unexpected_call(
+        limit: int,
+    ) -> list[dict[str, int]]:  # pragma: no cover - defensive
         called["value"] = True
         return [{"activity_id": limit}]
 
@@ -209,7 +217,17 @@ def test_main__skip_existing_short_circuit(
 
     called = {"value": False}
 
-    def _unexpected_write(*_: object, **__: object) -> Path:  # pragma: no cover - defensive
+    cfg_stub = _make_cfg_stub(tmp_path)
+    monkeypatch.setattr(
+        get_activities.cli,
+        "apply_config_overrides",
+        lambda args, parser, config: cfg_stub,
+    )
+    monkeypatch.setattr(get_activities, "ensure_dirs", lambda _cfg: None)
+
+    def _unexpected_write(
+        *_: object, **__: object
+    ) -> Path:  # pragma: no cover - defensive
         called["value"] = True
         raise AssertionError("_write_output should not be invoked when skipping")
 
@@ -230,7 +248,11 @@ def test_main__skip_existing_short_circuit(
     assert exit_code == 0
     assert called["value"] is False
     assert output_csv.read_text(encoding="utf-8") == "existing\n"
-    assert ("info", "pipeline_skip_existing", {"output": str(output_csv)}) in logger_stub.events
+    assert (
+        "info",
+        "pipeline_skip_existing",
+        {"output": str(output_csv)},
+    ) in logger_stub.events
 
 
 @pytest.mark.unit
@@ -262,12 +284,33 @@ def test_main__skip_existing_with_force_writes_output(
     logger_stub = _LoggerStub()
     monkeypatch.setattr(get_activities, "logger", logger_stub)
 
+    cfg_stub = _make_cfg_stub(tmp_path, limit=None)
+    monkeypatch.setattr(
+        get_activities.cli,
+        "apply_config_overrides",
+        lambda args, parser, config: cfg_stub,
+    )
+    monkeypatch.setattr(get_activities, "ensure_dirs", lambda _cfg: None)
+
     write_calls: list[Path] = []
 
     def _write_csv(frame, path, *, cfg):  # type: ignore[override]
         path_obj = Path(path)
         write_calls.append(path_obj)
         frame.to_csv(path_obj, index=False)
+        meta_path = path_obj.with_suffix(path_obj.suffix + ".meta.yaml")
+        meta_path.write_text(
+            yaml.safe_dump(
+                {
+                    "columns": list(frame.columns),
+                    "dtypes": {
+                        column: str(dtype) for column, dtype in frame.dtypes.items()
+                    },
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
         return path_obj
 
     monkeypatch.setattr(get_activities.io, "write_csv", _write_csv)
@@ -290,3 +333,80 @@ def test_main__skip_existing_with_force_writes_output(
     assert write_calls[0] != output_csv
     assert "activity_id" in output_csv.read_text(encoding="utf-8")
     assert any(event[1] == "activity_generated" for event in logger_stub.events)
+
+
+@pytest.mark.unit
+def test_write_output__creates_meta_sidecar_and_removes_temporaries(
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "activities.csv"
+    frame = pd.DataFrame(
+        {
+            "activity_id": pd.Series([1, 2], dtype="Int64"),
+            "name": pd.Series(["alpha", "beta"], dtype="string"),
+        }
+    )
+
+    cfg_stub = _make_cfg_stub(tmp_path)
+
+    result = get_activities._write_output(frame, output_path, cfg=cfg_stub)
+
+    assert result == output_path
+    assert output_path.exists()
+
+    meta_path = output_path.with_suffix(output_path.suffix + ".meta.yaml")
+    assert meta_path.exists()
+
+    meta = yaml.safe_load(meta_path.read_text(encoding="utf-8")) or {}
+
+    assert meta.get("columns") == list(frame.columns)
+    assert meta.get("dtypes") == {
+        column: str(dtype) for column, dtype in frame.dtypes.items()
+    }
+
+    leftover_temporaries = [
+        child.name
+        for child in tmp_path.iterdir()
+        if child.is_file()
+        and (
+            child.name.startswith(f".{output_path.name}.")
+            or child.name.endswith(".tmp")
+        )
+    ]
+    assert leftover_temporaries == []
+
+
+@pytest.mark.unit
+def test_write_output__fails_on_metadata_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_path = tmp_path / "activities.csv"
+    frame = pd.DataFrame(
+        {
+            "activity_id": pd.Series([1, 2], dtype="Int64"),
+            "name": pd.Series(["alpha", "beta"], dtype="string"),
+        }
+    )
+
+    cfg_stub = _make_cfg_stub(tmp_path)
+
+    def _write_csv(frame: pd.DataFrame, path: Path, *, cfg):  # type: ignore[override]
+        path_obj = Path(path)
+        frame.to_csv(path_obj, index=False)
+        meta_path = path_obj.with_suffix(path_obj.suffix + ".meta.yaml")
+        meta_path.write_text(
+            yaml.safe_dump(
+                {"columns": ["wrong"], "dtypes": {"wrong": "string"}},
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        return path_obj
+
+    monkeypatch.setattr(get_activities.io, "write_csv", _write_csv)
+
+    with pytest.raises(ValueError, match="metadata sidecar schema mismatch"):
+        get_activities._write_output(frame.copy(), output_path, cfg=cfg_stub)
+
+    assert list(tmp_path.glob("*.csv")) == []
+    assert list(tmp_path.glob("*.meta.yaml")) == []

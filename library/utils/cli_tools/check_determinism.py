@@ -10,6 +10,8 @@ from __future__ import annotations
 
 # ruff: noqa: E402
 import argparse
+import sys
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter
@@ -23,6 +25,7 @@ except ImportError as exc:  # pragma: no cover - import-time check
     ) from exc
 
 from library.cli import configure_logger, create_logger_config
+from library.cli.base import compute_generated_at
 from library.common.csv_utils import (
     sha256_file,
     write_csv_chunks_deterministic,
@@ -79,6 +82,39 @@ def run_check(tmp_dir: Path) -> bool:
     logger.debug("hash", label="second", value=hash2)
     logger.debug("hash", label="chunked", value=hash3)
 
+    metadata_status = "skipped"
+    first_meta = first.with_suffix(first.suffix + ".meta.yaml")
+    second_meta = second.with_suffix(second.suffix + ".meta.yaml")
+    chunked_meta = chunked.with_suffix(chunked.suffix + ".meta.yaml")
+
+    meta_entries: list[tuple[str, Path, str]] = []
+    for label, path in (
+        ("first_meta", first_meta),
+        ("second_meta", second_meta),
+        ("chunked_meta", chunked_meta),
+    ):
+        if path.exists():
+            digest = sha256_file(path)
+            logger.debug("hash", label=label, value=digest)
+            meta_entries.append((label, path, digest))
+
+    if len(meta_entries) >= 2:
+        metadata_status = "matched"
+        baseline = meta_entries[0][2]
+        if any(digest != baseline for _, _, digest in meta_entries[1:]):
+            metadata_status = "mismatch"
+            logger.warning(
+                "metadata_hash_mismatch",
+                entries=[
+                    {"label": label, "path": str(path), "hash": digest}
+                    for label, path, digest in meta_entries
+                ],
+            )
+            logger.info("metadata_check", status=metadata_status)
+            return False
+
+    logger.info("metadata_check", status=metadata_status)
+
     return hash1 == hash2 == hash3
 
 
@@ -101,9 +137,21 @@ def main() -> int:
             default="INFO",
             help="Logging level (default: INFO).",
         )
+        parser.add_argument(
+            "--run-id",
+            default=os.environ.get("CHEMBL_DA_RUN_ID"),
+            help="Override the run identifier used for logging",
+        )
         args = parser.parse_args()
 
         log_cfg = create_logger_config(args.log_level)
+        seed_parts = [parser.prog]
+        seed_parts.extend(sys.argv[1:])
+        log_cfg.generated_at = compute_generated_at(
+            date_token=None,
+            run_id=log_cfg.run_id,
+            seed_parts=seed_parts,
+        )
         configure_logger(log_cfg)
 
         with TemporaryDirectory() as tmp:

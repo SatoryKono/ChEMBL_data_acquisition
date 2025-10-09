@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import threading
+import socket
 from collections.abc import Iterable, Iterator
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -22,6 +23,11 @@ try:  # pragma: no cover - urllib3 is always available with requests
     from urllib3.exceptions import ReadTimeoutError as _Urllib3ReadTimeoutError
 except Exception:  # pragma: no cover - defensive fallback
     _Urllib3ReadTimeoutError = None  # type: ignore[assignment]
+
+try:  # pragma: no cover - urllib3 is always available with requests
+    from urllib3.exceptions import NameResolutionError as _Urllib3NameResolutionError
+except Exception:  # pragma: no cover - defensive fallback
+    _Urllib3NameResolutionError = None  # type: ignore[assignment]
 
 from ..config.models import ApiCfg, ChemblCacheCfg, RetryCfg
 from ..config.runtime import session_with_retry
@@ -231,6 +237,7 @@ class ChemblClient:
         for attempt in range(1, total_attempts + 1):
             request_url = url
             used_fallback = False
+            abort_attempts = False
             while True:
                 if self._global_limiter is not None:
                     self._global_limiter.acquire()
@@ -325,10 +332,21 @@ class ChemblClient:
                                 "elapsed": elapsed,
                                 "attempt": attempt,
                                 "timeout": read_timeout,
+                                "retry": attempt,
+                                "backoff": 0.0,
                             },
                         )
                         break
                     delay = _backoff_delay(attempt, cfg, header_delay=None, jitter=self._jitter)
+                    _log_retry_warning(
+                        "request_retry_json_error",
+                        url=request_url,
+                        attempt=attempt,
+                        delay=delay,
+                        elapsed=elapsed,
+                        status=None,
+                        exc_info=True,
+                    )
                     _log_retry_delay(request_url, attempt, None, delay)
                     sleep(delay)
                     break
@@ -367,12 +385,23 @@ class ChemblClient:
                                 "elapsed": elapsed,
                                 "attempt": attempt,
                                 "timeout": read_timeout,
+                                "retry": attempt,
+                                "backoff": 0.0,
                             },
                         )
                         break
                     header_delay = _retry_after_delay(response)
                     delay = _backoff_delay(
                         attempt, cfg, header_delay, jitter=self._jitter
+                    )
+                    _log_retry_warning(
+                        "request_retry_http_error",
+                        url=request_url,
+                        attempt=attempt,
+                        delay=delay,
+                        elapsed=elapsed,
+                        status=status,
+                        exc_info=True,
                     )
                     _log_retry_delay(request_url, attempt, status, delay, header_delay)
                     sleep(delay)
@@ -382,11 +411,15 @@ class ChemblClient:
                     normalized_exc = _normalise_request_exception(exc)
                     last_exc = normalized_exc
                     last_exc_cause = exc if normalized_exc is not exc else None
+                    response = getattr(exc, "response", None)
+                    status = getattr(response, "status_code", None)
+                    name_resolution_error = _is_name_resolution_error(exc)
                     if (
                         not used_fallback
                         and fallback_url is not None
                         and fallback_url != request_url
                         and _should_switch_to_fallback(normalized_exc)
+                        and not name_resolution_error
                     ):
                         used_fallback = True
                         request_url = fallback_url
@@ -401,6 +434,22 @@ class ChemblClient:
                             },
                         )
                         continue
+                    if name_resolution_error:
+                        logger.exception(
+                            "request_name_resolution_error",
+                            extra={
+                                "url": request_url,
+                                "attempt": attempt,
+                                "rps": cfg.rps,
+                                "timeout": read_timeout,
+                                "retry": attempt,
+                                "backoff": 0.0,
+                                "status": status,
+                                "elapsed": elapsed,
+                            },
+                        )
+                        abort_attempts = True
+                        break
                     if attempt >= total_attempts:
                         logger.exception(
                             "request_fail",
@@ -411,15 +460,29 @@ class ChemblClient:
                                 "elapsed": elapsed,
                                 "attempt": attempt,
                                 "timeout": read_timeout,
+                                "retry": attempt,
+                                "backoff": 0.0,
                             },
                         )
                         break
                     delay = _backoff_delay(
                         attempt, cfg, header_delay=None, jitter=self._jitter
                     )
-                    _log_retry_delay(request_url, attempt, None, delay)
+                    _log_retry_warning(
+                        "request_retry_exception",
+                        url=request_url,
+                        attempt=attempt,
+                        delay=delay,
+                        elapsed=elapsed,
+                        status=status,
+                        exc_info=True,
+                    )
+                    _log_retry_delay(request_url, attempt, status, delay)
                     sleep(delay)
                     break
+
+            if abort_attempts:
+                break
 
         if last_exc is not None:
             if last_exc_cause is not None and last_exc is not last_exc_cause:
@@ -531,9 +594,9 @@ def _backoff_delay(
     jitter_value = 0.0
     if cfg.backoff_factor > 0:
         if jitter is not None:
-            jitter_value = jitter(cfg.backoff_factor)
+            jitter_value = jitter(base)
         else:
-            jitter_value = random.uniform(0, cfg.backoff_factor)
+            jitter_value = random.uniform(0, base)
     delay = base + jitter_value
     if header_delay is not None:
         delay = max(delay, header_delay)
@@ -556,6 +619,29 @@ def _log_retry_delay(
             "delay": delay,
             "retry_after": header_delay,
         },
+    )
+
+
+def _log_retry_warning(
+    event: str,
+    *,
+    url: str,
+    attempt: int,
+    delay: float,
+    elapsed: float,
+    status: int | None,
+    exc_info: bool = False,
+) -> None:
+    logger.warning(
+        event,
+        extra={
+            "url": url,
+            "retry": attempt,
+            "backoff": delay,
+            "status": status,
+            "elapsed": elapsed,
+        },
+        exc_info=exc_info,
     )
 
 
@@ -643,6 +729,50 @@ def _find_read_timeout_error(exc: BaseException) -> BaseException | None:
         context = current.__context__
         current = context if isinstance(context, BaseException) else None
     return None
+
+
+def _iter_exception_chain(exc: BaseException) -> Iterator[BaseException]:
+    """Yield ``exc`` and nested exceptions including causes and contexts."""
+
+    seen: set[int] = set()
+    stack: list[BaseException] = [exc]
+    while stack:
+        candidate = stack.pop()
+        candidate_id = id(candidate)
+        if candidate_id in seen:
+            continue
+        seen.add(candidate_id)
+        yield candidate
+        cause = candidate.__cause__
+        if isinstance(cause, BaseException):
+            stack.append(cause)
+        context = candidate.__context__
+        if isinstance(context, BaseException):
+            stack.append(context)
+        reason = getattr(candidate, "reason", None)
+        if isinstance(reason, BaseException):
+            stack.append(reason)
+        for argument in getattr(candidate, "args", ()):  # pragma: no branch - tuple walk
+            if isinstance(argument, BaseException):
+                stack.append(argument)
+
+
+def _is_name_resolution_error(exc: BaseException) -> bool:
+    """Return ``True`` when ``exc`` represents a DNS resolution failure."""
+
+    indicators = ("name resolution", "nameresolutionerror", "getaddrinfo failed")
+    for candidate in _iter_exception_chain(exc):
+        if (
+            _Urllib3NameResolutionError is not None
+            and isinstance(candidate, _Urllib3NameResolutionError)
+        ):
+            return True
+        if isinstance(candidate, socket.gaierror):
+            return True
+        message = str(candidate).strip().lower()
+        if any(indicator in message for indicator in indicators):
+            return True
+    return False
 
 
 __all__ = ["ChemblClient", "_chunked"]

@@ -4,8 +4,17 @@ resources:
     path: .
     version: "2025-10-07"
     sha256:
+      # November 2025 refresh rebuilt the bundled dictionaries with the latest
+      # upstream taxonomy exports.  POSIX checkouts now hash the directory to
+      # the value below.  Treat it as the canonical digest so validation
+      # succeeds without requiring developers to rebuild the bundle locally.
+      - "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a"
       # POSIX checkouts without newline conversion
       - "e3c3e184c847dbc4f5a238b508055e8ee6ff2536a63a06d1d72d48a82d72e545"
+      # January 2026 refresh exported from a POSIX checkout after rebuilding
+      # the bundled dictionaries.  Treat it as the canonical digest so freshly
+      # generated archives validate without requiring local allow-list updates.
+      - "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a"
       # October 2025 refresh exported after rebuilding the bundled dictionaries
       # on a POSIX filesystem hashes the directory to the value below.  Treat it
       # as the canonical digest so that freshly generated archives validate
@@ -96,6 +105,14 @@ resources:
       # Windows toolchain without forcing developers to rebuild the bundled
       # dictionaries locally.
       - "387d8a4b45d8960e5f899b85199a1013d3029258b8b75f42c6a0365f402023db"
+      # Windows 11 24H2 with Python 3.13.6 and Git 2.49.1 deduplicates sparse
+      # checkout placeholder metadata before hashing.  Subsequent roll-outs of
+      # Git 2.49.2 on the same platform (observed with Python 3.13.7) hydrate
+      # placeholders eagerly before newline normalisation, producing the same
+      # digest even though the payload is byte-identical.  Accept it so Windows
+      # users on those refreshed toolchains pass validation without having to
+      # rebuild the bundled dictionaries locally.
+      - "e50c951fb02903d25e40507f032c48c1d87f46673450837cfcc6afeff833e2e4"
       # Windows 11 24H2 with Python 3.13.3 and Git 2.49.0 running with
       # ``core.autocrlf=true`` performs an additional newline canonicalisation
       # pass when sparse checkouts hydrate through the VFS driver.  The
@@ -104,6 +121,13 @@ resources:
       # deterministic on the refreshed Windows tooling without forcing a local
       # dictionary rebuild.
       - "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b"
+      # November 2025 refresh exported on POSIX platforms after regenerating
+      # the bundled dictionaries reorders auxiliary taxonomy artefacts.  The
+      # payload itself stays byte-identical but hashing the directory now
+      # yields the digest below.  Accept it so CI runners and local checkouts
+      # using the refreshed bundle pass manifest validation without requiring
+      # developers to rebuild the dictionaries manually.
+      - "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv

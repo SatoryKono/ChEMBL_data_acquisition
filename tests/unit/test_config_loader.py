@@ -101,6 +101,27 @@ def test_load_config__metadata_records_cli_override(tmp_path, monkeypatch):
 
 
 @pytest.mark.unit
+def test_load_config__metadata_includes_env_warnings(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text("system:\n  log:\n    level: INFO\n", encoding="utf-8")
+
+    monkeypatch.setenv("CHEMBL_DA__SYSTEM__UNKNOWN", "42")
+    monkeypatch.setattr(loader, "configure_rate_limiters", lambda cfg: None)
+    monkeypatch.setattr(
+        "library.config.models.get_resource_path", lambda name: tmp_path / name
+    )
+    monkeypatch.setattr(
+        "library.config.models.resolve_resource_reference", lambda value: Path(value)
+    )
+
+    _, metadata = load_config(cfg_path, include_metadata=True)
+
+    assert metadata.env_warnings == [
+        "CHEMBL_DA__SYSTEM__UNKNOWN: unknown configuration path 'system.unknown'"
+    ]
+
+
+@pytest.mark.unit
 def test_load_config__preserves_dictionary_resource_reference(tmp_path, monkeypatch):
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(
@@ -126,3 +147,20 @@ def test_load_config__preserves_dictionary_resource_reference(tmp_path, monkeypa
     cfg = load_config(cfg_path)
 
     assert cfg.resources.dictionary_dir == DICTIONARY_DIR.resolve()
+
+
+@pytest.mark.unit
+def test_dictionary_resource_names__uses_manifest_without_validation(monkeypatch):
+    calls: list[bool] = []
+
+    def fake_list_resource_names(*, validate: bool = True, base_dir=None):
+        calls.append(validate)
+        return ("foo", "bar")
+
+    monkeypatch.setattr(loader, "list_resource_names", fake_list_resource_names)
+    loader._dictionary_resource_names.cache_clear()
+
+    result = loader._dictionary_resource_names()
+
+    assert result == frozenset({"foo", "bar"})
+    assert calls == [False]

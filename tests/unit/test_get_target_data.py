@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import stat
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Iterable
 
 import pandas as pd
 from types import SimpleNamespace
@@ -36,6 +36,12 @@ class _MemoryLogger:
 
     def exception(self, event: str, **payload: object) -> None:
         self.events.append(("exception", event, dict(payload)))
+
+
+def _events_of_level(
+    logger: _MemoryLogger, level: str
+) -> list[tuple[str, str, dict[str, object]]]:
+    return [event for event in logger.events if event[0] == level]
 
 
 @pytest.fixture()
@@ -100,6 +106,20 @@ def test_is_supported_target_export__cases(
     result = get_target_data._is_supported_target_export(path)
 
     assert result is expected
+
+
+@pytest.mark.parametrize(
+    "filename, expected",
+    [
+        ("targets_normalized.csv", "targets.csv"),
+    ],
+)
+def test_normalise_target_export_name__normalised_suffix_cases(
+    filename: str, expected: str
+) -> None:
+    result = get_target_data._normalise_target_export_name(Path(filename))
+
+    assert result == expected
 
 
 @pytest.mark.parametrize(
@@ -788,3 +808,75 @@ def test_postprocess_iuphar_export__missing_columns_logs_warning(
         "target_iuphar_postprocess_missing_columns",
         {"path": str(source), "error": "Input CSV is missing required columns: foo"},
     ) in logger_stub.events
+
+
+def test_finalize_raw_dump_writer__missing_method(
+    tmp_path: Path, logger_stub: _MemoryLogger
+) -> None:
+    class _Writer:
+        pass
+
+    writer = _Writer()
+    destination = tmp_path / "raw.csv"
+
+    result = get_target_data._finalize_raw_dump_writer(
+        writer,
+        logger=logger_stub,
+        destination=destination,
+    )
+
+    assert result is True
+    debug_events = _events_of_level(logger_stub, "debug")
+    assert (
+        "debug",
+        "raw_dump_finalize_missing",
+        {"writer_type": "_Writer"},
+    ) in debug_events
+
+
+def test_finalize_raw_dump_writer__error(tmp_path: Path, logger_stub: _MemoryLogger) -> None:
+    class _Writer:
+        def finalize(self) -> None:
+            raise OSError("boom")
+
+    writer = _Writer()
+    destination = tmp_path / "raw.csv"
+
+    result = get_target_data._finalize_raw_dump_writer(
+        writer,
+        logger=logger_stub,
+        destination=destination,
+    )
+
+    assert result is False
+    error_events = _events_of_level(logger_stub, "error")
+    assert len(error_events) == 1
+    level, event, payload = error_events[0]
+    assert level == "error"
+    assert event == "raw_dump_failed"
+    assert payload["error"] == "boom"
+    assert payload["path"] == str(destination)
+    assert isinstance(payload["exc_info"], OSError)
+
+
+def test_finalize_raw_dump_writer__success(
+    tmp_path: Path, logger_stub: _MemoryLogger
+) -> None:
+    calls: list[str] = []
+
+    class _Writer:
+        def finalize(self) -> None:
+            calls.append("finalize")
+
+    writer = _Writer()
+    destination = tmp_path / "raw.csv"
+
+    result = get_target_data._finalize_raw_dump_writer(
+        writer,
+        logger=logger_stub,
+        destination=destination,
+    )
+
+    assert result is True
+    assert calls == ["finalize"]
+    assert not _events_of_level(logger_stub, "error")

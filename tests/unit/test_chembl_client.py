@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import json
+import socket
 from dataclasses import dataclass
+from http.client import HTTPConnection
 from urllib.parse import urlsplit
 
 import pytest
 import requests
 from urllib3.connectionpool import HTTPSConnectionPool
-from urllib3.exceptions import MaxRetryError, ReadTimeoutError
+from urllib3.exceptions import MaxRetryError, NameResolutionError, ReadTimeoutError
 
 from library.clients import ChemblClient
 from library.clients.chembl import _backoff_delay, _normalise_request_exception
@@ -113,6 +116,79 @@ class _MaxRetryTimeoutSession:
         return None
 
 
+class _Always404Session:
+    """Return 404 for both primary and fallback URLs."""
+
+    def __init__(self, primary: str, fallback: str) -> None:
+        self.primary_url = primary
+        self.fallback_url = fallback
+        self.calls: list[str] = []
+
+    def get(self, url: str, timeout: object) -> _StubResponse:
+        del timeout
+        self.calls.append(url)
+        return _StubResponse(url, 404)
+
+    def close(self) -> None:  # pragma: no cover - compatibility shim
+        return None
+
+
+class _EmptyResponseSession:
+    """Return an empty payload that triggers JSON parsing errors."""
+
+    def __init__(self, primary: str) -> None:
+        self.primary_url = primary
+        self.calls: list[str] = []
+
+    def get(self, url: str, timeout: object) -> _StubResponse:
+        del timeout
+        self.calls.append(url)
+        return _StubResponse(url, 200, payload=None)
+
+    def close(self) -> None:  # pragma: no cover - compatibility shim
+        return None
+
+
+class _InvalidJSONSession:
+    """Return a response object raising ``JSONDecodeError``."""
+
+    def __init__(self, primary: str) -> None:
+        self.primary_url = primary
+        self.calls: list[str] = []
+
+    def get(self, url: str, timeout: object) -> _StubResponse:
+        del timeout
+        self.calls.append(url)
+
+        class _InvalidResponse(_StubResponse):
+            def json(self) -> dict[str, object]:  # type: ignore[override]
+                raise json.JSONDecodeError("Expecting value", "", 0)
+
+        return _InvalidResponse(url, 200, payload={})
+
+    def close(self) -> None:  # pragma: no cover - compatibility shim
+        return None
+
+
+class _NameResolutionSession:
+    """Raise ``NameResolutionError`` to emulate DNS failures."""
+
+    def __init__(self, primary: str) -> None:
+        self.primary_url = primary
+        self.calls: list[str] = []
+
+    def get(self, url: str, timeout: object) -> _StubResponse:
+        del timeout
+        self.calls.append(url)
+        host = urlsplit(url).hostname or "example.test"
+        connection = HTTPConnection(host)
+        reason = socket.gaierror(-2, "Name or service not known")
+        raise requests.ConnectionError(NameResolutionError(host, connection, reason))
+
+    def close(self) -> None:  # pragma: no cover - compatibility shim
+        return None
+
+
 @pytest.mark.unit
 def test_request_json__falls_back_to_extensionless_endpoint() -> None:
     """The client retries with an extensionless URL when a 404 is returned."""
@@ -172,6 +248,72 @@ def test_request_json__raises_read_timeout_for_max_retry_chain() -> None:
 
     assert "Read timed out" in str(excinfo.value)
     assert session.calls == [primary_url, fallback_url]
+
+
+@pytest.mark.unit
+def test_request_json__raises_for_persistent_404() -> None:
+    """The client surfaces HTTP errors when fallback also returns 404."""
+
+    base = "https://example.test/chembl/api/data"
+    query = "format=json&assay_chembl_id__in=CHEMBL1&limit=1"
+    primary_url = f"{base}/assay.json?{query}"
+    fallback_url = f"{base}/assay?{query}"
+    session = _Always404Session(primary_url, fallback_url)
+    client = ChemblClient(session=session)
+    cfg = ApiCfg(chembl_base=base, timeout_read=5.0, retries=0)
+
+    with pytest.raises(requests.HTTPError):
+        client.request_json(primary_url, cfg=cfg)
+
+    assert session.calls == [primary_url, fallback_url]
+
+
+@pytest.mark.unit
+def test_request_json__raises_for_empty_response() -> None:
+    """Empty payloads raise ``ValueError`` signalling invalid JSON."""
+
+    base = "https://example.test/chembl/api/data"
+    primary_url = f"{base}/assay.json?format=json"
+    session = _EmptyResponseSession(primary_url)
+    client = ChemblClient(session=session)
+    cfg = ApiCfg(chembl_base=base, timeout_read=5.0, retries=0)
+
+    with pytest.raises(ValueError):
+        client.request_json(primary_url, cfg=cfg)
+
+    assert session.calls == [primary_url]
+
+
+@pytest.mark.unit
+def test_request_json__raises_for_invalid_json() -> None:
+    """Malformed JSON surfaces as a ``ValueError`` to the caller."""
+
+    base = "https://example.test/chembl/api/data"
+    primary_url = f"{base}/assay.json?format=json"
+    session = _InvalidJSONSession(primary_url)
+    client = ChemblClient(session=session)
+    cfg = ApiCfg(chembl_base=base, timeout_read=5.0, retries=0)
+
+    with pytest.raises(ValueError):
+        client.request_json(primary_url, cfg=cfg)
+
+    assert session.calls == [primary_url]
+
+
+@pytest.mark.unit
+def test_request_json__fails_fast_on_name_resolution_error() -> None:
+    """DNS failures are not retried and raise ``ConnectionError``."""
+
+    base = "https://example.test/chembl/api/data"
+    primary_url = f"{base}/assay.json?format=json"
+    session = _NameResolutionSession(primary_url)
+    client = ChemblClient(session=session)
+    cfg = ApiCfg(chembl_base=base, timeout_read=5.0, retries=3)
+
+    with pytest.raises(requests.ConnectionError):
+        client.request_json(primary_url, cfg=cfg)
+
+    assert session.calls == [primary_url]
 
 
 @pytest.mark.unit

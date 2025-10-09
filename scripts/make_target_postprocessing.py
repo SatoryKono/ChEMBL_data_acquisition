@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
+
+    bootstrap_cli(__package__, __file__)
+    package_name = "scripts"
 else:  # pragma: no cover - executed when imported as a package module
     from ._bootstrap import bootstrap_cli
 
-bootstrap_cli(__package__, __file__)
+    bootstrap_cli(__package__, __file__)
+    package_name = __package__
+
 del bootstrap_cli
 
 import argparse
 import os
+from collections.abc import Mapping
+from importlib import import_module
 from pathlib import Path
 from typing import Sequence
+from uuid import NAMESPACE_URL, uuid5
 
 import pandas as pd
 
@@ -21,25 +30,32 @@ from library import io  # noqa: F401 - imported for CLI parity with existing scr
 from library.cli import configure_logger, create_logger_config
 from library.cli.logging import setup_cli_logging
 from library.cli.parser import path_argument
+from library.cli_utils import resolve_invocation
 from library.common.log import logger
+from library.postprocess.common.config import PipelineConfig, normalize_pipeline_version
 from library.postprocess.common.logging import PipelineRunMetrics
 from library.postprocess.common.types import SchemaValidationError, StepError
-from library.postprocess.targets.schema import TARGET_SCHEMA, validate_targets
-from library.postprocess.targets.steps import run_target_pipeline
-
-from ._postprocess_common import (
-    CsvRuntimeConfig,
-    DEFAULT_LOG_DIR,
-    LOG_DIR_ENV,
-    export_postprocess_frame,
-    generate_metrics_report,
-    get_csv_runtime_config,
-    get_default_log_level,
-    get_pipeline_config,
-    load_input_frame,
-    run_postprocess_steps,
-    validate_postprocess_frame,
+from library.postprocess.targets import (
+    run_target_pipeline as run_target_postprocess,
 )
+from library.postprocess.targets import steps as target_steps
+from library.postprocess.targets.schema import TARGET_SCHEMA, validate_targets
+from library.pipelines.common.metadata import get_pipeline_version
+
+_postprocess_common = import_module(f"{package_name}._postprocess_common")
+
+CsvRuntimeConfig = _postprocess_common.CsvRuntimeConfig
+DEFAULT_LOG_DIR = _postprocess_common.DEFAULT_LOG_DIR
+LOG_DIR_ENV = _postprocess_common.LOG_DIR_ENV
+export_postprocess_frame = _postprocess_common.export_postprocess_frame
+generate_metrics_report = _postprocess_common.generate_metrics_report
+get_csv_runtime_config = _postprocess_common.get_csv_runtime_config
+get_default_log_level = _postprocess_common.get_default_log_level
+get_pipeline_config = _postprocess_common.get_pipeline_config
+load_input_frame = _postprocess_common.load_input_frame
+run_postprocess_steps = _postprocess_common.run_postprocess_steps
+validate_postprocess_frame = _postprocess_common.validate_postprocess_frame
+del _postprocess_common, package_name
 
 
 TABLE_NAME = "targets"
@@ -79,6 +95,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Logging verbosity (defaults to the pipeline configuration).",
     )
+    parser.add_argument(
+        "--run-id",
+        dest="run_id",
+        default=os.environ.get("CHEMBL_DA_RUN_ID"),
+        help="Override the run identifier used for logging",
+    )
     return parser
 
 
@@ -98,7 +120,7 @@ def apply_postprocessing_steps(
     return run_postprocess_steps(
         TABLE_NAME,
         df,
-        run_target_pipeline,
+        run_target_postprocess,
         pipeline_version,
         logger=logger,
     )
@@ -138,6 +160,47 @@ def save_output_data(
     )
 
 
+def resolve_pipeline_version(
+    pipeline_config: PipelineConfig,
+    *,
+    override: str | None = None,
+) -> str:
+    """Return the effective pipeline version for the current execution."""
+
+    candidate = normalize_pipeline_version(override)
+    if candidate is not None:
+        return candidate
+
+    candidate = normalize_pipeline_version(pipeline_config.pipeline_version)
+    if candidate is not None:
+        return candidate
+
+    fallback = _pipeline_version_from_defaults(pipeline_config.params)
+    candidate = normalize_pipeline_version(fallback)
+    if candidate is not None:
+        return candidate
+
+    return get_pipeline_version()
+
+
+def _pipeline_version_from_defaults(params: Mapping[str, object] | None) -> str | None:
+    """Return the pipeline version declared under ``params.defaults`` when present."""
+
+    if not params:
+        return None
+
+    params_map = dict(params)
+    defaults = params_map.get("defaults")
+    if not isinstance(defaults, Mapping):
+        return None
+
+    defaults_map = dict(defaults)
+    value = defaults_map.get("pipeline_version")
+    if value is None:
+        return None
+    return str(value)
+
+
 def run(args: argparse.Namespace) -> int:
     """Execute the target postprocessing pipeline using ``args``."""
 
@@ -147,6 +210,10 @@ def run(args: argparse.Namespace) -> int:
     csv_cfg = getattr(args, "_csv_runtime_config", None)
     if csv_cfg is None:
         csv_cfg = get_csv_runtime_config(pipeline_config)
+
+    target_steps.PIPELINE_CONFIG = pipeline_config
+    target_steps.PIPELINE_STEPS = pipeline_config.step_definitions()
+    resolved_pipeline_version = resolve_pipeline_version(pipeline_config)
 
     input_path = Path(args.input)
     output_path = Path(args.output)
@@ -162,11 +229,12 @@ def run(args: argparse.Namespace) -> int:
         frame = load_output_data(input_path, csv_cfg)
         processed, metrics = apply_postprocessing_steps(
             frame,
-            pipeline_version=pipeline_config.pipeline_version,
+            pipeline_version=resolved_pipeline_version,
         )
+        effective_version = metrics.pipeline_version if metrics else None
         validated = validate_output_schema(
             processed,
-            pipeline_version=metrics.pipeline_version,
+            pipeline_version=effective_version,
         )
         save_output_data(validated, output_path, csv_cfg)
     except (SchemaValidationError, StepError) as exc:
@@ -186,17 +254,18 @@ def run(args: argparse.Namespace) -> int:
         TABLE_NAME,
         output_path,
         csv_cfg,
-        run_target_pipeline,
-        pipeline_version=metrics.pipeline_version if metrics else None,
+        run_target_postprocess,
+        pipeline_version=resolved_pipeline_version,
         extras=extras,
         logger=logger,
+        pipeline_metrics=metrics,
     )
 
     logger.info(
         f"{event_prefix}_done",
         output=str(output_path),
-        rows=int(validated.shape[0]),
-        columns=int(validated.shape[1]),
+        rows=int(metrics.output_rows) if metrics and metrics.output_rows is not None else None,
+        columns=int(metrics.output_columns) if metrics and metrics.output_columns is not None else None,
     )
     return 0
 
@@ -210,7 +279,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     pipeline_config = get_pipeline_config(TABLE_NAME, getattr(args, "config", None))
     csv_cfg = get_csv_runtime_config(pipeline_config)
     log_level = (args.log_level or get_default_log_level(pipeline_config)).upper()
-    log_cfg = create_logger_config(log_level)
+    invocation = resolve_invocation(parser.prog, argv)
+    run_id_value = getattr(args, "run_id", None)
+    if isinstance(run_id_value, str):
+        run_id_value = run_id_value.strip() or None
+    if not run_id_value:
+        descriptor = "\n".join(
+            [
+                *invocation,
+                f"input={Path(args.input).resolve()}",
+                f"output={Path(args.output).resolve()}",
+            ]
+        )
+        run_id_value = uuid5(NAMESPACE_URL, descriptor).hex
+    log_cfg = create_logger_config(log_level, run_id=run_id_value)
 
     log_dir_value = os.environ.get(LOG_DIR_ENV)
     if log_dir_value:

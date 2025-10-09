@@ -8,30 +8,49 @@ presented to users via :meth:`argparse.ArgumentParser.error`.
 from __future__ import annotations
 
 import argparse
-import uuid
 import os
+import uuid
 from pathlib import Path, PureWindowsPath
 from typing import Any, cast
 
 from pydantic import ValidationError
 
 from ..common.log import logger
-from ..config import Config, ConfigError, ConfigMetadata, load_config
+from .run_context import compute_generated_at
 from ..common.logging_setup import Logger, LoggerConfig
 from ..common.logging_setup import configure_logger as _configure_logger
-from ..version import require_python_version
+from ..config import Config, ConfigError, ConfigMetadata, load_config
 from ..config.loader import DEFAULT_CONFIG_PATH
+from ..version import require_python_version
 
 require_python_version()
 
 
-def create_logger_config(level: str) -> LoggerConfig:
-    """Return :class:`LoggerConfig` with a random ``run_id``.
+def _default_run_id(level: str) -> str:
+    """Return a unique run identifier for ``level``."""
+
+    # ``level`` is currently unused but retained in the signature so that
+    # callers may request a run identifier that depends on the log level in the
+    # future without modifying the public API. The default should remain
+    # unpredictable so concurrent CLI runs stay distinguishable when a custom
+    # ``run_id`` is not supplied.
+    _ = level
+    return uuid.uuid4().hex
+
+
+_RUN_ID_ENV = "CHEMBL_DA_RUN_ID"
+
+
+def create_logger_config(level: str, *, run_id: str | None = None) -> LoggerConfig:
+    """Return :class:`LoggerConfig` using a random ``run_id`` when omitted.
 
     Parameters
     ----------
     level:
         Desired logging level.
+    run_id:
+        Optional run identifier. When omitted a random default is used so that
+        each CLI run is uniquely identifiable.
 
     Returns
     -------
@@ -39,7 +58,13 @@ def create_logger_config(level: str) -> LoggerConfig:
         Configuration containing ``run_id`` and ``level``.
     """
 
-    return LoggerConfig(run_id=uuid.uuid4().hex, level=level)
+    resolved_run_id = run_id if run_id is not None else _default_run_id(level)
+    generated_at = compute_generated_at(
+        date_token=None,
+        run_id=resolved_run_id,
+        seed_parts=("create_logger_config", level.upper()),
+    )
+    return LoggerConfig(run_id=resolved_run_id, level=level, generated_at=generated_at)
 
 
 def _positive_int(value: str) -> int:
@@ -138,6 +163,10 @@ def add_common_arguments(
     date_default: str | None | object = None if defaults else argparse.SUPPRESS
     force_default: bool | object = False if defaults else argparse.SUPPRESS
     skip_default: bool | object = False if defaults else argparse.SUPPRESS
+    if defaults:
+        run_id_default: str | object = os.environ.get(_RUN_ID_ENV) or None
+    else:
+        run_id_default = argparse.SUPPRESS
 
     parser.add_argument("--log-level", default=log_level, help="Logging level")
     parser.add_argument(
@@ -203,6 +232,15 @@ def add_common_arguments(
         default=skip_default,
         help="Skip processing if the destination file is present",
     )
+    parser.add_argument(
+        "--run-id",
+        dest="run_id",
+        default=run_id_default,
+        help=(
+            "Override the run identifier used for logging ("
+            f"default: derived from invocation; env {_RUN_ID_ENV})"
+        ),
+    )
     return parser
 
 
@@ -264,7 +302,15 @@ def build_parser(
         action="store_true",
         help="Print effective configuration and exit",
     )
-    log_cfg = create_logger_config(parser.get_default("log_level"))
+    default_run_id = parser.get_default("run_id")
+    if default_run_id in (None, argparse.SUPPRESS):
+        run_id_value = None
+    else:
+        run_id_value = str(default_run_id)
+    log_cfg = create_logger_config(
+        parser.get_default("log_level"),
+        run_id=run_id_value,
+    )
     return parser, log_cfg
 
 
@@ -320,7 +366,15 @@ def build_root_parser() -> (
         help="Print effective configuration and exit",
     )
 
-    log_cfg = create_logger_config(root.get_default("log_level"))
+    root_run_id_default = root.get_default("run_id")
+    if root_run_id_default in (None, argparse.SUPPRESS):
+        root_run_id_value = None
+    else:
+        root_run_id_value = str(root_run_id_default)
+    log_cfg = create_logger_config(
+        root.get_default("log_level"),
+        run_id=root_run_id_value,
+    )
     return root, shared, log_cfg
 
 
@@ -358,6 +412,7 @@ def configure_logger(
         LoggerConfig(
             level=cfg.level,
             run_id=cfg.run_id,
+            generated_at=cfg.generated_at,
             redact_secrets=cfg.redact_secrets,
             stream=cfg.stream,
             handlers=list(cfg.handlers),
@@ -486,7 +541,7 @@ def _get_cfg_value(cfg: Config, path: str) -> Any:
 def apply_config_overrides(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser,
-    config_path: str | Path,
+    config_path: str | Path | None,
     mapping: dict[str, str] | None = None,
     *,
     base_parser: argparse.ArgumentParser | None = None,
@@ -506,7 +561,8 @@ def apply_config_overrides(
         Argument parser used to determine default values for command specific
         options.
     config_path:
-        Location of the YAML configuration file.
+        Location of the YAML configuration file. When ``None`` the default
+        configuration shipped with the package is used.
     mapping:
         Optional mapping of argument names to ``Config`` attribute paths. The
         mapping is merged with a set of common defaults.
@@ -551,6 +607,15 @@ def apply_config_overrides(
             cli_overrides[key] = value
             cli_override_sources[tuple(key.split("."))] = arg
 
+    if config_path is None:
+        logger.info(
+            "config_default_path_used",
+            config=str(DEFAULT_CONFIG_PATH),
+        )
+        if hasattr(args, "config") and getattr(args, "config") is None:
+            setattr(args, "config", DEFAULT_CONFIG_PATH)
+    selected_config_path: str | Path = config_path or DEFAULT_CONFIG_PATH
+
     try:
         base_path_arg = getattr(args, "base_path", None)
         if isinstance(base_path_arg, Path):
@@ -561,7 +626,7 @@ def apply_config_overrides(
             config_base_path = Path(base_path_arg)
 
         load_result = load_config(
-            config_path,
+            selected_config_path,
             cli_overrides=cli_overrides,
             base_path=config_base_path,
             strict=True,
@@ -573,7 +638,7 @@ def apply_config_overrides(
         logger.error(
             "config_load_failed",
             error=str(exc),
-            config=str(config_path),
+            config=str(selected_config_path),
         )
         raise
     except ValidationError as exc:
@@ -590,8 +655,6 @@ def apply_config_overrides(
         arg: path for arg, path in normalized_cli_paths.items() if path
     }
     setattr(args, "_config_metadata", metadata)
-
-    missing_cfg_paths: set[str] = set()
 
     for arg, key in override_map.items():
         if not hasattr(args, arg):

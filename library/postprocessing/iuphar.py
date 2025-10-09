@@ -7,13 +7,14 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Any
 
 import pandas as pd
 
-from .helpers import normalise_export_basename, normalise_text, read_csv_with_fallbacks
 from library.common.csv_utils import write_csv_deterministic
 from library.common.log import logger
+
+from .helpers import normalise_export_basename, normalise_text, read_csv_with_fallbacks
 
 __all__ = ["process_iuphar_targets", "IUPHARPostProcessingError"]
 
@@ -76,7 +77,7 @@ _OUTPUT_COLUMNS: tuple[str, ...] = (
 def _current_default_search_dir() -> Path:
     package = sys.modules.get(__name__)
     if package is not None and hasattr(package, "_DEFAULT_SEARCH_DIR"):
-        override = getattr(package, "_DEFAULT_SEARCH_DIR")
+        override = package._DEFAULT_SEARCH_DIR
         if override is not None:
             return Path(override)
     return _DEFAULT_SEARCH_DIR
@@ -179,13 +180,13 @@ def _parse_component_descriptions(value: str) -> list[str]:
             result.append(record.strip())
     return result
 
-
-def _collect_synonym_tokens(row: pd.Series) -> tuple[list[str], list[str]]:
+def _collect_synonym_tokens(row: pd.Series[Any]) -> tuple[list[str], list[str]]:
     raw_tokens: list[str] = []
-    sources: Sequence[str | None] = (
-        normalise_text(row.get("gtop_synonyms")),
-        normalise_text(row.get("synonyms")),
+    sources: tuple[str | None, ...] = (
+        normalise_text(row.get("gtop_synonyms")) if "gtop_synonyms" in row and pd.notnull(row["gtop_synonyms"]) else None,
+        normalise_text(row.get("synonyms")) if "synonyms" in row and pd.notnull(row["synonyms"]) else None,
     )
+    
     for source in sources:
         if source:
             raw_tokens.extend(_split_pipe(source))
@@ -240,7 +241,7 @@ def _prepare_output(df: pd.DataFrame) -> pd.DataFrame:
     for column in _OUTPUT_COLUMNS:
         if column not in df.columns:
             df[column] = ""
-    return df.loc[:, _OUTPUT_COLUMNS]
+    return df.loc[:, list(_OUTPUT_COLUMNS)]
 
 
 def process_iuphar_targets(
@@ -285,6 +286,7 @@ def process_iuphar_targets(
             )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Write with stable column order and LF newlines without BOM to match snapshots
     write_csv_deterministic(
         df,
         output_path,
@@ -306,5 +308,5 @@ def process_iuphar_targets(
             stats.before,
             stats.after,
         )
-
+    
     return output_path

@@ -4,8 +4,8 @@ This module defines :data:`AssaysSchema`, a
 :class:`pandera.DataFrameSchema` describing the expected structure of the
 ``assay.csv`` input table.  The schema mirrors the columns distributed with
 ``data/input/assay.csv`` and allows flexible dtypes.  Counts such as
-``acts_per_assay_step5`` and temporal fields (``month``, ``year`` and
-``version``) previously used strict :class:`int` dtypes while boolean flags
+ ``acts_per_assay_step-5`` and temporal fields (``month``, ``year`` and
+ ``version``) previously used strict :class:`int` dtypes while boolean flags
 like ``cited_assay_corr`` were :class:`bool`.  These fields now omit explicit
 dtype enforcement so that CSVs representing numbers or booleans as strings
 remain valid.  All columns are nullable to accommodate missing values.
@@ -14,7 +14,6 @@ Column overview
 ---------------
 * ``assay_chembl_id`` (:class:`str`): Primary ChEMBL assay identifier.
 * ``accession`` (:class:`str`): UniProt accession of the target protein.
-* ``acts_per_assay_step5`` (:class:`object`): Number of activities per assay step 5.
 * ``assay_cell_type`` (:class:`str`): Cell type used in the assay.
 * ``assay_subcellular_fraction`` (:class:`str`): Sub-cellular fraction tested.
 * ``assay_tissue`` (:class:`str`): Tissue or organ where the assay is performed.
