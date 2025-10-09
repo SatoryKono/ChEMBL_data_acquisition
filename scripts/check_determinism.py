@@ -130,11 +130,30 @@ def main(argv: list[str] | None = None) -> int:
         first_hash = _hash_file(first)
         second_hash = _hash_file(second)
 
+        first_meta = first.with_suffix(first.suffix + ".meta.yaml")
+        second_meta = second.with_suffix(second.suffix + ".meta.yaml")
+
         if first_hash != second_hash:
             print("Mismatch detected:")
             print(f"  first:  {first_hash}")
             print(f"  second: {second_hash}")
             return 1
+
+        if first_meta.exists() and second_meta.exists():
+            print("Metadata sidecars detected; verifying determinism")
+            first_meta_hash = _hash_file(first_meta)
+            second_meta_hash = _hash_file(second_meta)
+
+            if first_meta_hash != second_meta_hash:
+                print("WARNING: Metadata mismatch detected:")
+                print(f"  first meta:  {first_meta_hash}")
+                print(f"  second meta: {second_meta_hash}")
+                return 1
+
+            print("Metadata deterministic output confirmed")
+            print(f"Metadata SHA256: {first_meta_hash}")
+        else:
+            print("Metadata sidecars not found; skipping metadata check")
 
         print("Deterministic output confirmed")
         print(f"SHA256: {first_hash}")

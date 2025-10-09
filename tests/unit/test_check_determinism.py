@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -61,3 +62,74 @@ def test_default_input_csv__matches_activity_column(tmp_path: Path) -> None:
 
     assert header == [expected_column]
     assert data_rows == [["ACT1"], ["ACT2"]]
+
+
+def test_main__metadata_sidecars_verified(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """Report success when metadata sidecars are identical."""
+
+    work_dir = tmp_path / "runs"
+    work_dir.mkdir()
+    monkeypatch.setattr(
+        check_determinism.tempfile, "mkdtemp", lambda prefix: str(work_dir)
+    )
+
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("activity_chembl_id\nACT0\n", encoding="utf-8")
+
+    meta_contents = iter(["key: value\n", "key: value\n"])
+
+    def _fake_run(limit: int, destination: Path, input_file: Path):
+        destination.write_text(
+            "activity_chembl_id\nACT0\n", encoding="utf-8"
+        )
+        meta_path = destination.with_suffix(destination.suffix + ".meta.yaml")
+        meta_path.write_text(next(meta_contents), encoding="utf-8")
+        return subprocess.CompletedProcess(
+            args=["test"], returncode=0, stdout="", stderr=""
+        )
+
+    monkeypatch.setattr(check_determinism, "_run_activity", _fake_run)
+
+    exit_code = check_determinism.main(["--limit", "1", "--input", str(input_csv)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Metadata deterministic output confirmed" in captured.out
+    assert "Metadata SHA256:" in captured.out
+
+
+def test_main__metadata_sidecars_mismatch(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """Fail with a warning when metadata sidecars diverge."""
+
+    work_dir = tmp_path / "runs"
+    work_dir.mkdir()
+    monkeypatch.setattr(
+        check_determinism.tempfile, "mkdtemp", lambda prefix: str(work_dir)
+    )
+
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("activity_chembl_id\nACT0\n", encoding="utf-8")
+
+    meta_contents = iter(["key: first\n", "key: second\n"])
+
+    def _fake_run(limit: int, destination: Path, input_file: Path):
+        destination.write_text(
+            "activity_chembl_id\nACT0\n", encoding="utf-8"
+        )
+        meta_path = destination.with_suffix(destination.suffix + ".meta.yaml")
+        meta_path.write_text(next(meta_contents), encoding="utf-8")
+        return subprocess.CompletedProcess(
+            args=["test"], returncode=0, stdout="", stderr=""
+        )
+
+    monkeypatch.setattr(check_determinism, "_run_activity", _fake_run)
+
+    exit_code = check_determinism.main(["--limit", "1", "--input", str(input_csv)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "WARNING: Metadata mismatch detected:" in captured.out
