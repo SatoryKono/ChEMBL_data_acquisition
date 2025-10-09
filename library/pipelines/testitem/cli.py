@@ -883,6 +883,7 @@ def finalize_output(
     rows_written = 0
     exit_code = 0
     columns_seen: set[str] = set()
+    columns_present: set[str] = set()
     columns_to_fill: set[str] = set()
     expected_columns: set[str] = set()
     column_dtypes: dict[str, pd.api.extensions.ExtensionDtype | str | type | None] = {}
@@ -951,6 +952,7 @@ def finalize_output(
         if "pubchem_cid" in current.columns:
             current["pubchem_cid"] = current["pubchem_cid"].astype(object)
         current = _add_pipeline_metadata(current)
+        columns_present.update(current.columns)
         _ensure_column_alignment(current)
         for column in current.columns:
             column_dtypes.setdefault(column, _normalise_dtype(current.dtypes[column]))
@@ -1022,19 +1024,21 @@ def finalize_output(
         )
         return 1
 
-    missing_optional = optional_cols - columns_seen
+    validated_chunks_list = list(_validated_chunks())
+
+    missing_optional = optional_cols - columns_present
     if missing_optional:
-        logger.warning(
-            "optional_columns_missing",
-            columns=sorted(missing_optional),
-        )
         columns_to_fill.update(missing_optional)
         expected_columns.update(columns_to_fill)
         for column in missing_optional:
             column_dtypes.setdefault(column, _column_dtype(column))
-        for chunk in prepared_chunks:
+        for chunk in validated_chunks_list:
             _ensure_column_alignment(chunk)
         columns_seen.update(columns_to_fill)
+        logger.warning(
+            "optional_columns_missing",
+            columns=sorted(missing_optional),
+        )
 
     if failure_count:
         failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
@@ -1050,7 +1054,7 @@ def finalize_output(
 
     try:
         csv_path = write_csv_chunks_deterministic(
-            _validated_chunks(),
+            validated_chunks_list,
             output,
             col_order=col_order,
             key_cols=key_cols,

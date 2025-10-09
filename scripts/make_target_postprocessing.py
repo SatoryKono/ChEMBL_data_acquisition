@@ -27,19 +27,34 @@ from library.postprocess.common.types import SchemaValidationError, StepError
 from library.postprocess.targets.schema import TARGET_SCHEMA, validate_targets
 from library.postprocess.targets.steps import run_target_pipeline
 
-from ._postprocess_common import (
-    CsvRuntimeConfig,
-    DEFAULT_LOG_DIR,
-    LOG_DIR_ENV,
-    export_postprocess_frame,
-    generate_metrics_report,
-    get_csv_runtime_config,
-    get_default_log_level,
-    get_pipeline_config,
-    load_input_frame,
-    run_postprocess_steps,
-    validate_postprocess_frame,
-)
+try:
+    from ._postprocess_common import (
+        CsvRuntimeConfig,
+        DEFAULT_LOG_DIR,
+        LOG_DIR_ENV,
+        export_postprocess_frame,
+        generate_metrics_report,
+        get_csv_runtime_config,
+        get_default_log_level,
+        get_pipeline_config,
+        load_input_frame,
+        run_postprocess_steps,
+        validate_postprocess_frame,
+    )
+except ImportError:  # pragma: no cover - fallback for direct execution
+    from _postprocess_common import (
+        CsvRuntimeConfig,
+        DEFAULT_LOG_DIR,
+        LOG_DIR_ENV,
+        export_postprocess_frame,
+        generate_metrics_report,
+        get_csv_runtime_config,
+        get_default_log_level,
+        get_pipeline_config,
+        load_input_frame,
+        run_postprocess_steps,
+        validate_postprocess_frame,
+    )
 
 
 TABLE_NAME = "targets"
