@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 from types import ModuleType
-from typing import Iterable
 
 _DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 

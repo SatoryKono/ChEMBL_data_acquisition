@@ -6,10 +6,11 @@ import errno
 import os
 import tempfile
 import time
+from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 from types import ModuleType, TracebackType
-from typing import IO, TYPE_CHECKING, Any, Iterator, Protocol, TextIO, cast
+from typing import IO, TYPE_CHECKING, Any, Protocol, TextIO, cast
 
 __all__ = ["open_atomic", "robust_replace"]
 
@@ -76,7 +77,7 @@ class FileLock:
         self._poll_interval = poll_interval
         self._handle: TextIO | None = None
 
-    def __enter__(self) -> "FileLock":
+    def __enter__(self) -> FileLock:
         start_time = time.monotonic()
         self._path.parent.mkdir(parents=True, exist_ok=True)
         handle = self._path.open("w+")
