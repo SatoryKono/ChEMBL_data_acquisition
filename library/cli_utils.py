@@ -40,7 +40,11 @@ from .sidecar import SidecarErrors
 from .config.loader import DEFAULT_CONFIG_PATH
 from .cli.pipeline_definition import (
     Fetcher,
+    MetadataHook,
     PipelineDefinition,
+    TableQualityHook,
+    Validator,
+    Writer,
     normalise_definition,
 )
 
@@ -50,6 +54,13 @@ __all__ = [
     "run_cli_command",
     "run_pipeline",
     "build_parser",
+    "Fetcher",
+    "MetadataHook",
+    "PipelineDefinition",
+    "TableQualityHook",
+    "Validator",
+    "Writer",
+    "normalise_definition",
 ]
 
 
