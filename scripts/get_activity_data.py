@@ -1444,7 +1444,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             limit=limit,
         )
     else:
-        if processed_ids is not None and isinstance(processed_ids, (int, float, str)):
+        if processed_ids is not None and isinstance(processed_ids, int | float | str):
             try:
                 processed_count = int(processed_ids)
             except (TypeError, ValueError):

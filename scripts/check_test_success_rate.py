@@ -46,7 +46,7 @@ def _load_report(path: Path) -> dict[str, Any]:
 
 def _extract_success_rate(summary: dict[str, Any]) -> float:
     raw_rate = summary.get("success_rate")
-    if isinstance(raw_rate, (int, float)):
+    if isinstance(raw_rate, int | float):
         rate = float(raw_rate)
         if rate > 1.0:
             rate = rate / 100.0

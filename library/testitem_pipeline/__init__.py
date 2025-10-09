@@ -18,7 +18,7 @@ from library.pipelines.testitem import (
     write_csv_deterministic,
     write_meta_yaml,
 )
-from library.pipelines.testitem import enrichment as testitem_enrichment
+from library.pipelines.testitem import enrichment as testitem_enrichment  # noqa: F401
 
 _DEPRECATION_MESSAGE = (
     "library.testitem_pipeline is deprecated and will be removed in a future "
