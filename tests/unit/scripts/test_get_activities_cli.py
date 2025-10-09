@@ -217,6 +217,14 @@ def test_main__skip_existing_short_circuit(
 
     called = {"value": False}
 
+    cfg_stub = _make_cfg_stub(tmp_path)
+    monkeypatch.setattr(
+        get_activities.cli,
+        "apply_config_overrides",
+        lambda args, parser, config: cfg_stub,
+    )
+    monkeypatch.setattr(get_activities, "ensure_dirs", lambda _cfg: None)
+
     def _unexpected_write(
         *_: object, **__: object
     ) -> Path:  # pragma: no cover - defensive
@@ -276,12 +284,33 @@ def test_main__skip_existing_with_force_writes_output(
     logger_stub = _LoggerStub()
     monkeypatch.setattr(get_activities, "logger", logger_stub)
 
+    cfg_stub = _make_cfg_stub(tmp_path, limit=None)
+    monkeypatch.setattr(
+        get_activities.cli,
+        "apply_config_overrides",
+        lambda args, parser, config: cfg_stub,
+    )
+    monkeypatch.setattr(get_activities, "ensure_dirs", lambda _cfg: None)
+
     write_calls: list[Path] = []
 
     def _write_csv(frame, path, *, cfg):  # type: ignore[override]
         path_obj = Path(path)
         write_calls.append(path_obj)
         frame.to_csv(path_obj, index=False)
+        meta_path = path_obj.with_suffix(path_obj.suffix + ".meta.yaml")
+        meta_path.write_text(
+            yaml.safe_dump(
+                {
+                    "columns": list(frame.columns),
+                    "dtypes": {
+                        column: str(dtype) for column, dtype in frame.dtypes.items()
+                    },
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
         return path_obj
 
     monkeypatch.setattr(get_activities.io, "write_csv", _write_csv)
@@ -345,3 +374,39 @@ def test_write_output__creates_meta_sidecar_and_removes_temporaries(
         )
     ]
     assert leftover_temporaries == []
+
+
+@pytest.mark.unit
+def test_write_output__fails_on_metadata_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_path = tmp_path / "activities.csv"
+    frame = pd.DataFrame(
+        {
+            "activity_id": pd.Series([1, 2], dtype="Int64"),
+            "name": pd.Series(["alpha", "beta"], dtype="string"),
+        }
+    )
+
+    cfg_stub = _make_cfg_stub(tmp_path)
+
+    def _write_csv(frame: pd.DataFrame, path: Path, *, cfg):  # type: ignore[override]
+        path_obj = Path(path)
+        frame.to_csv(path_obj, index=False)
+        meta_path = path_obj.with_suffix(path_obj.suffix + ".meta.yaml")
+        meta_path.write_text(
+            yaml.safe_dump(
+                {"columns": ["wrong"], "dtypes": {"wrong": "string"}},
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        return path_obj
+
+    monkeypatch.setattr(get_activities.io, "write_csv", _write_csv)
+
+    with pytest.raises(ValueError, match="metadata sidecar schema mismatch"):
+        get_activities._write_output(frame.copy(), output_path, cfg=cfg_stub)
+
+    assert list(tmp_path.glob("*.csv")) == []
+    assert list(tmp_path.glob("*.meta.yaml")) == []
