@@ -11,6 +11,7 @@ from __future__ import annotations
 # ruff: noqa: E402
 import argparse
 import sys
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter
@@ -135,6 +136,11 @@ def main() -> int:
             "--log-level",
             default="INFO",
             help="Logging level (default: INFO).",
+        )
+        parser.add_argument(
+            "--run-id",
+            default=os.environ.get("CHEMBL_DA_RUN_ID"),
+            help="Override the run identifier used for logging",
         )
         args = parser.parse_args()
 

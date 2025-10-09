@@ -62,7 +62,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         action="store_true",
         help="Print effective configuration and exit",
     )
-    return parser, create_logger_config("INFO")
+    run_id_default = parser.get_default("run_id")
+    if run_id_default in (None, argparse.SUPPRESS):
+        run_id_value = None
+    else:
+        run_id_value = str(run_id_default)
+    return parser, create_logger_config("INFO", run_id=run_id_value)
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
@@ -130,6 +135,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     input_path = getattr(args, "input_csv", None)
     output_stem = Path(input_path).stem if input_path else None
     cli.prepare_io_paths(args, output_stem=output_stem)
+    run_id_value = getattr(args, "run_id", None)
+    if isinstance(run_id_value, str):
+        run_id_value = run_id_value.strip() or None
+    if run_id_value is not None:
+        log_cfg.run_id = run_id_value
     log_cfg.level = args.log_level
     configure_logger(log_cfg)
     try:
