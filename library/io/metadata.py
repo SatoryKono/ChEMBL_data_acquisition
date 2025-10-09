@@ -12,6 +12,7 @@ import yaml
 from ..config import Config, _mask_secrets, _serialize_paths
 from ..git_utils import _git_sha
 from ..utils.atomic import open_atomic
+from ..project_version import get_pipeline_version
 
 
 def write_meta_yaml(
@@ -35,6 +36,7 @@ def write_meta_yaml(
         "config": (
             _mask_secrets(_serialize_paths(cfg.to_dict())) if cfg is not None else {}
         ),
+        "pipeline_version": get_pipeline_version(),
     }
     meta_path = Path(f"{path}.meta.yaml")
     with open_atomic(meta_path, encoding="utf8") as fh:
