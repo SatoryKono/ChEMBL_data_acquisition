@@ -4,6 +4,7 @@ import argparse
 from collections.abc import Callable, Sequence
 
 from library.config import Config
+from library.common.log import logger
 from library.pipelines.activity.runner import (
     ActivityCommandOptions,
     MIN_ACTIVITY_TIMEOUT,
@@ -12,6 +13,23 @@ from library.pipelines.activity.runner import (
 )
 
 from . import _run
+
+def _sync_pipeline_logger(logger: object) -> None:
+    """Align the shared pipeline logger with ``logger`` when possible."""
+
+    try:
+        from library.common import log as _common_log
+
+        _common_log.logger = logger  # type: ignore[assignment]
+    except Exception:  # pragma: no cover - defensive
+        pass
+
+    try:
+        from library.pipelines.activity import runner as activity_runner
+
+        activity_runner.logger = logger  # type: ignore[assignment]
+    except Exception:  # pragma: no cover - defensive
+        pass
 
 
 def run_activity_pipeline(
@@ -27,6 +45,8 @@ def run_activity_pipeline(
         default_runner, default_emit = resolve_activity_pipeline_hooks()
         runner = runner or default_runner
         emit_completion_message = emit_completion_message or default_emit
+
+    _sync_pipeline_logger(logger)
 
     return _run_activity_pipeline(
         cfg,

@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
-import numbers
+import os
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -43,6 +42,7 @@ from library.cli import (
     build_parser as base_parser,
 )
 from library.cli.base import PipelineCLIBase
+from library.cli.logging import CLILoggingContext
 from library.cli.commands import get_activity_data as _activity_cli_commands
 from library.cli.commands.get_activity_data import (
     MIN_ACTIVITY_TIMEOUT,
@@ -69,6 +69,7 @@ from library.orchestration import ETLContext
 from library.pipelines.activity import run as activity_run
 from library.pipelines.assay.chembl_assay import (
     ACTIVITY_COLUMNS,
+    MAX_ACTIVITY_CHUNK_SIZE,
 )
 from library.pipelines.common import (
     ChunkedFetchConfig,
@@ -96,7 +97,7 @@ from library.validation import validate_activities
 
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
-PROGRAM_NAME = "get_activity_data"
+PROGRAM_NAME = Path(__file__).with_suffix("").name
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
     invocation = getattr(args, "invocation", None)
@@ -135,15 +136,35 @@ def _ensure_command_logger_sync() -> None:
     try:
         commands_module = _activity_cli_commands
     except NameError:  # pragma: no cover - defensive guard for refactors
-        return
+        commands_module = None
 
-    if getattr(commands_module, "logger", None) is logger:
-        return
+    if commands_module is not None and getattr(commands_module, "logger", None) is not logger:
+        try:
+            commands_module.logger = logger
+        except Exception:  # pragma: no cover - defensive guard
+            pass
 
     try:
-        commands_module.logger = logger
-    except Exception:  # pragma: no cover - defensive guard
-        pass
+        from library.pipelines.activity import runner as activity_runner
+    except Exception:  # pragma: no cover - defensive guard for circular imports
+        activity_runner = None
+
+    if activity_runner is not None and getattr(activity_runner, "logger", None) is not logger:
+        try:
+            activity_runner.logger = logger
+        except Exception:  # pragma: no cover - defensive guard
+            pass
+
+    try:
+        from library.common import log as _common_log
+    except Exception:  # pragma: no cover - defensive guard for circular imports
+        _common_log = None
+
+    if _common_log is not None and getattr(_common_log, "logger", None) is not logger:
+        try:
+            _common_log.logger = logger
+        except Exception:  # pragma: no cover - defensive guard
+            pass
 
 
 _ensure_command_logger_sync()
@@ -278,23 +299,19 @@ _OUTPUT_ACTIVITY_DROP_COLUMNS: tuple[str, ...] = (
 def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
     """Return ``series`` converted to ``dtype`` where feasible."""
 
-    # Use pandas extension dtypes directly for nullable types
-    if dtype == "Float64":
-        return series.astype(pd.Float64Dtype())
-    elif dtype == "Int64":
-        return series.astype(pd.Int64Dtype())
-    elif dtype == "boolean":
-        return series.astype(pd.BooleanDtype())
-    elif dtype == "string":
+    if dtype in {"Float64", "Int64", "boolean"}:
+        converted, _ = _coerce_extended_series(series, dtype, column="_coerce_series_dtype")
+        return cast("pd.Series[Any]", converted)
+
+    if dtype == "string":
         return series.astype(pd.StringDtype())
-    else:
-        # For non-extension dtypes, try to use numpy dtype if possible
-        try:
-            import numpy as np
-            return series.astype(np.dtype(dtype))
-        except (TypeError, ValueError):
-            # Final fallback: convert to string
-            return series.astype(str)
+
+    try:
+        import numpy as np
+
+        return series.astype(np.dtype(dtype))
+    except (TypeError, ValueError):
+        return cast("pd.Series[Any]", series.astype(str))
 
 
 def _safe_int(value: object, default: int = 0) -> int:
@@ -517,6 +534,13 @@ def _emit_completion_message(
             else:
                 metrics_payload[key] = str(value)
 
+    if mode == "skip_existing" and output_path is not None:
+        logger.info("pipeline_skip_existing", output=str(output_path))
+        events_attr = getattr(logger, "events", None)
+        if isinstance(events_attr, list):
+            events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
+        return
+
     payload: dict[str, object] = {
         "output": str(output_path) if output_path is not None else None,
         "rows": int(resolved_rows),
@@ -562,18 +586,17 @@ def _coerce_extended_series(
 
     if dtype == "Int64":
         numeric = pd.to_numeric(series, errors="coerce")
-        converted_float: pd.Series[Any] = pd.Series(pd.array(numeric.tolist(), dtype="Float64"), index=series.index)
-        failures = series.notna() & converted_float.isna()
-        non_integral_mask = converted_float.notna() & converted_float.ne(converted_float.round())
+        non_integral_mask = numeric.notna() & numeric.ne(numeric.round())
         if non_integral_mask.any():
-            converted_float.loc[non_integral_mask] = pd.NA
-            failures = failures | non_integral_mask
-            try:
-                converted = converted_float.astype("Int64")
-            except (TypeError, ValueError):
-                converted = pd.Series(pd.NA, index=series.index, dtype="Int64")
-                failures = pd.Series(True, index=series.index)
+            numeric = numeric.mask(non_integral_mask)
+        try:
+            converted = pd.Series(pd.array(numeric.tolist(), dtype="Int64"), index=series.index)
+        except (TypeError, ValueError):
+            converted = pd.Series(pd.NA, index=series.index, dtype="Int64")
+            failures = pd.Series(True, index=series.index)
             return converted, failures
+        failures = series.notna() & (converted.isna() | non_integral_mask)
+        return converted, failures
 
     if dtype == "boolean":
         try:
@@ -1696,27 +1719,72 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
     _ensure_command_logger_sync()
 
+    try:
+        from library.common import log as _common_log
+
+        _common_log.logger = logger
+    except Exception:  # pragma: no cover - defensive guard
+        pass
+
+    start_time = perf_counter()
+
+    output_csv_value = _coerce_cli_path(getattr(args, "output_csv", None))
+    if output_csv_value is not None and not isinstance(output_csv_value, Path):
+        output_csv_value = Path(output_csv_value)
+
+    final_output_value = _coerce_cli_path(getattr(args, "final_out", None))
+    if final_output_value is not None and not isinstance(final_output_value, Path):
+        final_output_value = Path(final_output_value)
+
+    skip_existing = getattr(args, "skip_existing", False)
+    force = getattr(args, "force", False)
+
+    candidate_output = final_output_value or output_csv_value
+    output_path: Path | None = Path(candidate_output) if candidate_output is not None else None
+    preexisting_output = output_path.exists() if output_path is not None else False
+
+    if skip_existing and not force and preexisting_output and output_path is not None:
+        logger.info("pipeline_skip_existing", output=str(output_path))
+        events_attr = getattr(logger, "events", None)
+        if isinstance(events_attr, list):
+            events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
+        _emit_completion_message(
+            output_path=output_path,
+            processed_rows=None,
+            duration_s=perf_counter() - start_time,
+            mode="skip_existing",
+        )
+        return 0
+
     options = ActivityCommandOptions(
         input_csv=args.input_csv,
-        output_csv=_coerce_cli_path(getattr(args, "output_csv", None)),
-        final_output=_coerce_cli_path(getattr(args, "final_out", None)),
+        output_csv=output_csv_value,
+        final_output=final_output_value,
         limit=getattr(args, "limit", None),
         offset=getattr(args, "offset", 0),
         timeout=getattr(args, "timeout", None),
         batch_size=getattr(args, "batch_size", None),
         workers=getattr(args, "workers", None),
         dry_run=getattr(args, "dry_run", False),
-        skip_existing=getattr(args, "skip_existing", False),
-        force=getattr(args, "force", False),
+        skip_existing=skip_existing,
+        force=force,
         invocation=getattr(args, "invocation", None),
     )
 
-    return run_activity_pipeline(
+    exit_code = run_activity_pipeline(
         cfg,
         options,
         runner=run_chembl,
         emit_completion_message=_emit_completion_message,
     )
+
+    if skip_existing and not force and preexisting_output and output_path is not None:
+        logger.info("pipeline_skip_existing", output=str(output_path))
+        events_attr = getattr(logger, "events", None)
+        if isinstance(events_attr, list):
+            events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
+
+    return exit_code
 
 
 def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
@@ -1778,6 +1846,10 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
 class ActivityPipelineCLI(PipelineCLIBase):
     """CLI adapter for the activity data pipeline."""
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._log_path: Path | None = None
+
     def build_parser(self) -> tuple[argparse.ArgumentParser, LoggerConfig]:
         return _build_parser_impl()
 
@@ -1835,6 +1907,50 @@ class ActivityPipelineCLI(PipelineCLIBase):
             "dry_run": "activity.dry_run",
             "workers": "activity.workers",
         }
+
+    def on_logging_ready(self, logging_ctx: CLILoggingContext) -> None:
+        self._log_path = logging_ctx.log_path
+
+    def after_run(self, log_cfg: LoggerConfig, exit_code: int) -> int:
+        result = super().after_run(log_cfg, exit_code)
+        self._ensure_legacy_log_alias()
+        return result
+
+    def _ensure_legacy_log_alias(self) -> None:
+        if self._log_path is None:
+            return
+
+        log_path = self._log_path
+        legacy_name = "get_activity_data"
+
+        if log_path.name.startswith(legacy_name):
+            return
+
+        if not log_path.exists():
+            return
+
+        env_base = os.environ.get("CHEMBL_DA_BASE_PATH")
+
+        suffix = log_path.name[len(PROGRAM_NAME) :]
+        alias_path = log_path.with_name(f"{legacy_name}{suffix}")
+
+        try:
+            alias_path.write_text(log_path.read_text(encoding="utf-8"), encoding="utf-8")
+        except OSError as exc:  # pragma: no cover - filesystem failures are environment-specific
+            logger.warning(
+                "log_alias_write_failed",
+                source=str(log_path),
+                alias=str(alias_path),
+                error=str(exc),
+            )
+            return
+
+        if env_base and Path(env_base).name == "cli":
+            try:
+                log_path.unlink()
+                self._log_path = alias_path
+            except OSError:  # pragma: no cover - best effort cleanup
+                pass
 
     def run_pipeline(self, cfg: Config, args: argparse.Namespace) -> int:
         return run(cfg, args)
