@@ -1434,8 +1434,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             raise
 
     processed_ids = prepared_context.processed_ids
-    processed_count = 0
-    summary_snapshot = streamed_summary or streaming_stats.snapshot()
+    try:
+        processed_count = int(processed_ids or 0)
+    except (TypeError, ValueError):
+        logger.info("processed_count_conversion_failed", value=processed_ids)
+        processed_count = 0
+
+    summary_snapshot: dict[str, object] | None = None
 
     if limit is not None:
         logger.info(
@@ -1443,18 +1448,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             processed=processed_ids,
             limit=limit,
         )
+        summary_snapshot = streamed_summary or streaming_stats.snapshot()
     else:
-        if processed_ids is not None and isinstance(processed_ids, (int, float, str)):
-            try:
-                processed_count = int(processed_ids)
-            except (TypeError, ValueError):
-                logger.info(
-                    "processed_count_conversion_failed",
-                    value=processed_ids,
-                )
-                processed_count = 0
-        else:
-            logger.info("processed_count", count=processed_count)
+        summary_snapshot = streamed_summary or streaming_stats.snapshot()
+        logger.info("processed_count", count=processed_count)
 
     if pipeline_stats is not None:
         try:
