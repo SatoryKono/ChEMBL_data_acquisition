@@ -197,7 +197,6 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # rebuild dictionary artefacts locally.
         WINDOWS_VFS_PLACEHOLDER_CHECKSUM,
         WINDOWS_VFS_EAGER_PLACEHOLDER_CHECKSUM,
-        WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM,
         # Windows 11 24H2 with Python 3.13.2 and Git 2.48.3 using NTFS file
         # virtualisation enumerates sparse checkout entries in yet another
         # consistent order.  The working tree remains byte-identical, but hashing
@@ -213,7 +212,7 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # Accept it at runtime so validation succeeds on that refreshed Windows
         # toolchain without requiring developers to rebuild the dictionary
         # artefacts locally.
-        "e50c951fb02903d25e40507f032c48c1d87f46673450837cfcc6afeff833e2e4",
+        WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM,
         # Windows 11 24H2 with Python 3.13.3 and Git 2.49.0 running with
         # ``core.autocrlf=true`` performs an additional newline canonicalisation
         # pass when sparse checkouts hydrate via the VFS driver.  The working
