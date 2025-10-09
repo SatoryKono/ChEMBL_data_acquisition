@@ -3,7 +3,15 @@
 from __future__ import annotations
 
 if __package__ in {None, ""}:
-    from _bootstrap import bootstrap_cli
+    import sys
+    from importlib import import_module
+    from pathlib import Path
+
+    _module_path = Path(__file__).resolve().parent
+    if str(_module_path) not in sys.path:
+        sys.path.insert(0, str(_module_path))
+
+    bootstrap_cli = import_module("_bootstrap").bootstrap_cli
 else:  # pragma: no cover - executed when imported as a package module
     from ._bootstrap import bootstrap_cli
 
@@ -42,19 +50,29 @@ try:
         validate_postprocess_frame,
     )
 except ImportError:  # pragma: no cover - fallback for direct execution
-    from _postprocess_common import (
-        CsvRuntimeConfig,
-        DEFAULT_LOG_DIR,
-        LOG_DIR_ENV,
-        export_postprocess_frame,
-        generate_metrics_report,
-        get_csv_runtime_config,
-        get_default_log_level,
-        get_pipeline_config,
-        load_input_frame,
-        run_postprocess_steps,
-        validate_postprocess_frame,
-    )
+    import sys
+    from importlib import import_module
+    from pathlib import Path
+
+    module_path = Path(__file__).resolve().parent
+    module_name = "_postprocess_common"
+
+    if str(module_path) not in sys.path:
+        sys.path.insert(0, str(module_path))
+
+    _postprocess_common = import_module(module_name)
+
+    CsvRuntimeConfig = _postprocess_common.CsvRuntimeConfig
+    DEFAULT_LOG_DIR = _postprocess_common.DEFAULT_LOG_DIR
+    LOG_DIR_ENV = _postprocess_common.LOG_DIR_ENV
+    export_postprocess_frame = _postprocess_common.export_postprocess_frame
+    generate_metrics_report = _postprocess_common.generate_metrics_report
+    get_csv_runtime_config = _postprocess_common.get_csv_runtime_config
+    get_default_log_level = _postprocess_common.get_default_log_level
+    get_pipeline_config = _postprocess_common.get_pipeline_config
+    load_input_frame = _postprocess_common.load_input_frame
+    run_postprocess_steps = _postprocess_common.run_postprocess_steps
+    validate_postprocess_frame = _postprocess_common.validate_postprocess_frame
 
 
 TABLE_NAME = "activities"
