@@ -52,8 +52,8 @@ from ..pubmed import (
     text_or_none,
 )
 from ..common.rate_limiter import RateLimiter, get_limiter
-from ..cli.pipeline_definition import PipelineDefinition
-from ..cli_utils import MetadataHook, Validator, run_pipeline
+from ..cli.pipeline_definition import MetadataHook, PipelineDefinition, Validator
+from ..cli_utils import run_pipeline
 from ..qa.reporting import build_table_quality_hook
 from ..pipelines.common import add_pipeline_metadata
 from ..normalization import normalize_documents
