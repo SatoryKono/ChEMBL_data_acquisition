@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from library.cli.commands.get_activity_data import (
+from library.pipelines.activity.runner import (
     ActivityCommandOptions,
     run_activity_pipeline,
 )
