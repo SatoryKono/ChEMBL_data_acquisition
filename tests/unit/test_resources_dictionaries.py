@@ -167,6 +167,54 @@ def test_parse_manifest__accepts_taxonomy_lookup_checksum_variant(
 
 
 @pytest.mark.unit
+def test_parse_manifest__deduplicates_expected_checksums(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Duplicate checksum entries should be collapsed in error messages."""
+
+    manifest_dir = tmp_path / "dictionary"
+    manifest_dir.mkdir()
+    manifest_path = manifest_dir / "manifest.yaml"
+    manifest_payload = {
+        "version": 1,
+        "resources": {
+            "dictionary_root": {
+                "path": ".",
+                "version": "test",
+                "sha256": ["duplicate", "duplicate"],
+                "generator": "tests/generator.py",
+            }
+        },
+    }
+    manifest_path.write_text(
+        yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8"
+    )
+
+    def fake_checksum(path: Path) -> str:  # pragma: no cover - simple stub
+        return "unmatched"
+
+    monkeypatch.setattr(dictionaries, "_compute_sha256", fake_checksum)
+    monkeypatch.setattr(
+        dictionaries,
+        "_iter_additional_checksums",
+        lambda name, base_dir=None: (
+            dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM,
+        ),
+    )
+
+    with pytest.raises(dictionaries.DictionaryManifestError) as excinfo:
+        dictionaries._parse_manifest(base_dir=manifest_dir)
+
+    message = str(excinfo.value)
+
+    assert message.count("duplicate") == 1
+    assert (
+        dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM
+        in message
+    )
+
+
+@pytest.mark.unit
 def test_parse_manifest__allowlist_file_extends_checksums(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
