@@ -33,6 +33,9 @@ def _default_run_id(level: str) -> str:
     return uuid.uuid5(uuid.NAMESPACE_URL, seed).hex
 
 
+_RUN_ID_ENV = "CHEMBL_DA_RUN_ID"
+
+
 def create_logger_config(level: str, *, run_id: str | None = None) -> LoggerConfig:
     """Return :class:`LoggerConfig` using a deterministic ``run_id``.
 
@@ -155,6 +158,10 @@ def add_common_arguments(
     date_default: str | None | object = None if defaults else argparse.SUPPRESS
     force_default: bool | object = False if defaults else argparse.SUPPRESS
     skip_default: bool | object = False if defaults else argparse.SUPPRESS
+    if defaults:
+        run_id_default: str | object = os.environ.get(_RUN_ID_ENV) or None
+    else:
+        run_id_default = argparse.SUPPRESS
 
     parser.add_argument("--log-level", default=log_level, help="Logging level")
     parser.add_argument(
@@ -220,6 +227,15 @@ def add_common_arguments(
         default=skip_default,
         help="Skip processing if the destination file is present",
     )
+    parser.add_argument(
+        "--run-id",
+        dest="run_id",
+        default=run_id_default,
+        help=(
+            "Override the run identifier used for logging ("
+            f"default: derived from invocation; env {_RUN_ID_ENV})"
+        ),
+    )
     return parser
 
 
@@ -281,7 +297,15 @@ def build_parser(
         action="store_true",
         help="Print effective configuration and exit",
     )
-    log_cfg = create_logger_config(parser.get_default("log_level"))
+    default_run_id = parser.get_default("run_id")
+    if default_run_id in (None, argparse.SUPPRESS):
+        run_id_value = None
+    else:
+        run_id_value = str(default_run_id)
+    log_cfg = create_logger_config(
+        parser.get_default("log_level"),
+        run_id=run_id_value,
+    )
     return parser, log_cfg
 
 
@@ -337,7 +361,15 @@ def build_root_parser() -> (
         help="Print effective configuration and exit",
     )
 
-    log_cfg = create_logger_config(root.get_default("log_level"))
+    root_run_id_default = root.get_default("run_id")
+    if root_run_id_default in (None, argparse.SUPPRESS):
+        root_run_id_value = None
+    else:
+        root_run_id_value = str(root_run_id_default)
+    log_cfg = create_logger_config(
+        root.get_default("log_level"),
+        run_id=root_run_id_value,
+    )
     return root, shared, log_cfg
 
 

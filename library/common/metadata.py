@@ -26,6 +26,7 @@ from .git import _git_sha
 from .log import logger
 from .run_context import get_current
 from ..utils.atomic import open_atomic
+from ..project_version import get_pipeline_version
 
 
 def _load_metadata(meta_path: Path) -> dict[str, Any]:
@@ -166,6 +167,7 @@ def write_meta_yaml(
             "inputs": dict(inputs),
             "stats": stats,
             "schema": schema,
+            "pipeline_version": get_pipeline_version(),
         }
     )
     if invocation:

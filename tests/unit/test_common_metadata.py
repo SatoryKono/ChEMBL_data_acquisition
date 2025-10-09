@@ -7,6 +7,7 @@ from pathlib import Path
 import yaml
 
 from library.common.metadata import Stats, file_sha256, write_meta_yaml
+from library.pipelines.common.metadata import get_pipeline_version
 from library.resources.dictionaries import get_resource
 
 
@@ -35,6 +36,7 @@ def test_write_meta_yaml__records_dictionary_metadata(tmp_path: Path) -> None:
 
     meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
     assert isinstance(meta, dict)
+    assert meta.get("pipeline_version") == get_pipeline_version()
     dictionaries = meta.get("dictionaries")
     assert isinstance(dictionaries, dict)
 

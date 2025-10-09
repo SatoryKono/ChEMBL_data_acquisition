@@ -239,6 +239,61 @@ def test_main__dry_run_without_outputs_fails(
         assert not directory.exists()
 
 
+def test_main__dry_run_with_outputs_succeeds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Dry-run mode succeeds when the pipeline still writes outputs."""
+
+    input_csv = tmp_path / "activity.csv"
+    input_csv.write_text("activity_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    created_dirs = _patch_mkdtemp(tmp_path, monkeypatch)
+
+    payload = "activity_id\n1\n"
+    metadata = {
+        "generated_at": "2025-01-01T00:00:00+00:00",
+        "stats": {"rows_total": 1, "rows_kept": 1},
+        "schema": "activity",
+    }
+
+    runs: list[tuple[int, Path, Path, bool]] = []
+
+    def _fake_run_activity(
+        limit: int,
+        destination: Path,
+        observed_input: Path,
+        *,
+        dry_run: bool,
+    ) -> CompletedProcess[str]:
+        _write_run_payload(destination, payload, metadata)
+        runs.append((limit, destination, observed_input, dry_run))
+        return CompletedProcess(args=["python"], returncode=0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr(check_determinism, "_run_activity", _fake_run_activity)
+
+    exit_code = check_determinism.main(
+        ["--limit", "2", "--input", str(input_csv), "--dry-run"]
+    )
+
+    assert exit_code == 0
+
+    captured = capsys.readouterr()
+    assert "Deterministic output confirmed" in captured.out
+    assert "Metadata hash check: matched" in captured.out
+    assert captured.err == ""
+
+    assert len(runs) == 2
+    for limit, _destination, observed_input, dry_run in runs:
+        assert limit == 2
+        assert observed_input == input_csv
+        assert dry_run is True
+
+    for directory in created_dirs:
+        assert not directory.exists()
+
+
 def test_run_check__metadata_absent_is_skipped(
     tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
