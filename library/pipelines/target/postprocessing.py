@@ -397,9 +397,10 @@ def postprocess_targets(
     else:
         resolved_uniprot_ids = raw_uniprot_ids.copy()
 
-    if "uniprot_id" in df.columns:
+    uniprot_id_values = df.get("uniprot_id")
+    if uniprot_id_values is not None:
         resolved_uniprot_ids = resolved_uniprot_ids.fillna(
-            df["uniprot_id"].astype("string")
+            uniprot_id_values.astype("string")
         )
 
     df["uniprotkb_Id"] = (
