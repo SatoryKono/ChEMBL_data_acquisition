@@ -73,9 +73,8 @@ def normalise_doi(value: Any) -> str:
     doi = str(value).strip()
     if not doi:
         return ""
-    doi = doi.lower()
     for prefix in ("doi:", "https://doi.org/", "http://doi.org/", "doi.org/"):
-        if doi.startswith(prefix):
+        if doi.lower().startswith(prefix):
             doi = doi[len(prefix) :].strip()
     return doi
 
