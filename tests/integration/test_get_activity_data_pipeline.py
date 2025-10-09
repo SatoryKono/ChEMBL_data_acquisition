@@ -350,6 +350,94 @@ def test_activity_pipeline__warns_when_api_retries_disabled(
     warning_events = [event for level, event, _ in logger_stub.events if level == "warning"]
     assert "activity_api_retry_disabled" in warning_events
     assert exit_code == 0
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("deterministic_env")
+def test_activity_pipeline__fallback_postprocess_report_created(
+    activity_resource_dir: Path, cfg, tmp_path, monkeypatch
+) -> None:
+    _configure_cfg(cfg)
+    cfg.io.output_dir = tmp_path
+    cfg.io.csv_sep = ","
+    cfg.io.csv_encoding = "utf-8"
+
+    input_csv = _copy_resource(activity_resource_dir, "ids_happy.csv", tmp_path)
+    output_csv = tmp_path / "activities.csv"
+    chunk_df = pd.read_csv(activity_resource_dir / "chunk_happy.csv")
+
+    monkeypatch.setattr(
+        get_activity_data,
+        "process_activity_extended",
+        lambda **_: None,
+    )
+
+    captured = _install_fetch_stubs(monkeypatch, chunk_df)
+    written = _install_writer_stub(monkeypatch)
+
+    logger_stub = _RecordingLogger()
+    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
+    monkeypatch.setattr("library.validation.logger", logger_stub)
+
+    monkeypatch.setattr(get_activity_data, "_emit_completion_message", lambda **_: None)
+
+    class _StubMetrics:
+        def __init__(self) -> None:
+            self.pipeline_version = "fallback-version"
+            self.validation = SimpleNamespace(schema="activity-schema")
+
+        def summary(self) -> dict[str, object]:
+            return {
+                "rows": 3,
+                "columns": len(chunk_df.columns),
+                "duration_s": 0.0,
+                "steps": 2,
+            }
+
+    stub_metrics = _StubMetrics()
+    collect_calls: list[dict[str, object]] = []
+    original_collect = get_activity_data.collect_postprocess_metrics
+
+    def _fake_collect_postprocess_metrics(**kwargs):
+        collect_calls.append(kwargs)
+        return stub_metrics, None
+
+    monkeypatch.setattr(
+        get_activity_data,
+        "collect_postprocess_metrics",
+        _fake_collect_postprocess_metrics,
+    )
+
+    try:
+        args = _make_args(input_csv, output_csv)
+        exit_code = get_activity_data.run(cfg, args)
+    finally:
+        monkeypatch.setattr(
+            get_activity_data,
+            "collect_postprocess_metrics",
+            original_collect,
+        )
+
+    assert exit_code == 0
+    assert collect_calls
+    call_kwargs = collect_calls[0]
+    assert call_kwargs["table"] == "activity"
+    assert Path(call_kwargs["output_path"]) == output_csv
+
+    fallback_path = tmp_path / "activity.postprocess.report.json"
+    assert fallback_path.exists()
+
+    payload = json.loads(fallback_path.read_text(encoding="utf-8"))
+    assert payload["table"] == "activity"
+    assert payload["metrics"] is None
+    assert payload["output_path"] == str(output_csv)
+    extras = payload.get("extras")
+    assert isinstance(extras, dict)
+    assert "rows" in extras and "processed" in extras
+
+    assert {path for path, _ in written} == {output_csv}
+    assert captured.activities == [("ACT1", "ACT2", "ACT3")]
+
+
 @pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
 def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_path, monkeypatch):
