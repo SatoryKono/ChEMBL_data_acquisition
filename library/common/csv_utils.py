@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 
 from ..config import Config
 from .log import logger
-from ..utils.atomic import open_atomic
+from ..utils.atomic import open_atomic, robust_replace
 
 if TYPE_CHECKING:  # pragma: no cover - import for type checking only
     from ..io.metadata import write_meta_yaml as _write_meta_yaml_type
@@ -461,7 +461,7 @@ def write_csv_deterministic(
                 chunksize=chunksize,
                 sep=sep,
             )
-        os.replace(tmp_path, out_path)
+        robust_replace(tmp_path, out_path)
     else:
         # External merge sort writing intermediate chunks to disk.
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -555,7 +555,7 @@ def write_csv_deterministic(
                     )
                     heapq.heappush(heap, (key, idx, row))
 
-        os.replace(tmp_path, out_path)
+            robust_replace(tmp_path, out_path)
 
     _write_meta_yaml(
         out_path,

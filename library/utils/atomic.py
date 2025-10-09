@@ -11,6 +11,11 @@ from pathlib import Path
 from types import ModuleType, TracebackType
 from typing import IO, TYPE_CHECKING, Any, Iterator, Protocol, TextIO, cast
 
+__all__ = ["open_atomic", "robust_replace"]
+
+_REPLACE_RETRYABLE_ERRNOS = {errno.EACCES, errno.EPERM}
+_REPLACE_RETRYABLE_WINERRORS = {5, 32, 33}
+
 if TYPE_CHECKING:  # pragma: no cover - typing helpers only
     class _PortalockerModule(Protocol):
         def Lock(
@@ -188,12 +193,52 @@ def open_atomic(
         except Exception:
             raise
         else:
-            os.replace(tmp_name, path)
+            robust_replace(tmp_name, path)
         finally:
             try:
                 os.unlink(tmp_name)
             except FileNotFoundError:
                 pass
+
+
+def robust_replace(
+    src: str | os.PathLike[str],
+    dst: str | os.PathLike[str],
+    *,
+    attempts: int = 5,
+    delay: float = 0.1,
+    backoff: float = 2.0,
+) -> None:
+    """Replace *dst* with *src* retrying transient permission errors."""
+
+    if attempts <= 0:
+        raise ValueError("attempts must be a positive integer")
+    if delay < 0:
+        raise ValueError("delay must be non-negative")
+    if backoff < 1:
+        raise ValueError("backoff must be greater than or equal to 1")
+
+    attempt = 0
+    sleep_delay = delay
+    while True:
+        attempt += 1
+        try:
+            os.replace(src, dst)
+            return
+        except OSError as exc:
+            if attempt >= attempts or not _should_retry_replace(exc):
+                raise
+
+            time.sleep(sleep_delay)
+            sleep_delay *= backoff
+
+
+def _should_retry_replace(exc: OSError) -> bool:
+    """Return ``True`` if ``exc`` represents a transient replace failure."""
+
+    err_no = exc.errno
+    win_err = getattr(exc, "winerror", None)
+    return (err_no in _REPLACE_RETRYABLE_ERRNOS) or (win_err in _REPLACE_RETRYABLE_WINERRORS)
 
 
 @contextmanager
