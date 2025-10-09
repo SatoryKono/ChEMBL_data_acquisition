@@ -31,7 +31,7 @@ def _hash_file(path: Path) -> str:
 
 
 def _run_activity(
-    limit: int, destination: Path, input_csv: Path
+    limit: int, destination: Path, input_csv: Path, *, dry_run: bool
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.setdefault("PYTHONHASHSEED", "0")
@@ -45,6 +45,8 @@ def _run_activity(
         "--input",
         str(input_csv),
     ]
+    if dry_run:
+        cmd.append("--dry-run")
     return subprocess.run(cmd, text=True, capture_output=True, env=env)
 
 
@@ -92,6 +94,16 @@ def main(argv: list[str] | None = None) -> int:
             "Defaults to data/input/activity.csv when available."
         ),
     )
+    parser.add_argument(
+        "--dry-run",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Forward the --dry-run flag to get_activity_data. "
+            "Disable with --no-dry-run to perform a real write."
+        ),
+    )
+
     args = parser.parse_args(argv)
 
     ensure_project_root(__file__)
@@ -111,12 +123,12 @@ def main(argv: list[str] | None = None) -> int:
         else:
             input_csv = _default_input_csv(tmp_dir)
 
-        first_run = _run_activity(args.limit, first, input_csv)
+        first_run = _run_activity(args.limit, first, input_csv, dry_run=args.dry_run)
         if first_run.returncode != 0:
             _report_process_failure("first run", first_run)
             return 1
 
-        second_run = _run_activity(args.limit, second, input_csv)
+        second_run = _run_activity(args.limit, second, input_csv, dry_run=args.dry_run)
         if second_run.returncode != 0:
             _report_process_failure("second run", second_run)
             return 1
