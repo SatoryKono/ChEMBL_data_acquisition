@@ -332,10 +332,21 @@ class ChemblClient:
                                 "elapsed": elapsed,
                                 "attempt": attempt,
                                 "timeout": read_timeout,
+                                "retry": attempt,
+                                "backoff": 0.0,
                             },
                         )
                         break
                     delay = _backoff_delay(attempt, cfg, header_delay=None, jitter=self._jitter)
+                    _log_retry_warning(
+                        "request_retry_json_error",
+                        url=request_url,
+                        attempt=attempt,
+                        delay=delay,
+                        elapsed=elapsed,
+                        status=None,
+                        exc_info=True,
+                    )
                     _log_retry_delay(request_url, attempt, None, delay)
                     sleep(delay)
                     break
@@ -374,12 +385,23 @@ class ChemblClient:
                                 "elapsed": elapsed,
                                 "attempt": attempt,
                                 "timeout": read_timeout,
+                                "retry": attempt,
+                                "backoff": 0.0,
                             },
                         )
                         break
                     header_delay = _retry_after_delay(response)
                     delay = _backoff_delay(
                         attempt, cfg, header_delay, jitter=self._jitter
+                    )
+                    _log_retry_warning(
+                        "request_retry_http_error",
+                        url=request_url,
+                        attempt=attempt,
+                        delay=delay,
+                        elapsed=elapsed,
+                        status=status,
+                        exc_info=True,
                     )
                     _log_retry_delay(request_url, attempt, status, delay, header_delay)
                     sleep(delay)
@@ -389,6 +411,8 @@ class ChemblClient:
                     normalized_exc = _normalise_request_exception(exc)
                     last_exc = normalized_exc
                     last_exc_cause = exc if normalized_exc is not exc else None
+                    response = getattr(exc, "response", None)
+                    status = getattr(response, "status_code", None)
                     name_resolution_error = _is_name_resolution_error(exc)
                     if (
                         not used_fallback
@@ -418,6 +442,10 @@ class ChemblClient:
                                 "attempt": attempt,
                                 "rps": cfg.rps,
                                 "timeout": read_timeout,
+                                "retry": attempt,
+                                "backoff": 0.0,
+                                "status": status,
+                                "elapsed": elapsed,
                             },
                         )
                         abort_attempts = True
@@ -432,13 +460,24 @@ class ChemblClient:
                                 "elapsed": elapsed,
                                 "attempt": attempt,
                                 "timeout": read_timeout,
+                                "retry": attempt,
+                                "backoff": 0.0,
                             },
                         )
                         break
                     delay = _backoff_delay(
                         attempt, cfg, header_delay=None, jitter=self._jitter
                     )
-                    _log_retry_delay(request_url, attempt, None, delay)
+                    _log_retry_warning(
+                        "request_retry_exception",
+                        url=request_url,
+                        attempt=attempt,
+                        delay=delay,
+                        elapsed=elapsed,
+                        status=status,
+                        exc_info=True,
+                    )
+                    _log_retry_delay(request_url, attempt, status, delay)
                     sleep(delay)
                     break
 
@@ -580,6 +619,29 @@ def _log_retry_delay(
             "delay": delay,
             "retry_after": header_delay,
         },
+    )
+
+
+def _log_retry_warning(
+    event: str,
+    *,
+    url: str,
+    attempt: int,
+    delay: float,
+    elapsed: float,
+    status: int | None,
+    exc_info: bool = False,
+) -> None:
+    logger.warning(
+        event,
+        extra={
+            "url": url,
+            "retry": attempt,
+            "backoff": delay,
+            "status": status,
+            "elapsed": elapsed,
+        },
+        exc_info=exc_info,
     )
 
 

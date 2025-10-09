@@ -97,9 +97,11 @@ def _run_activity(
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.setdefault("PYTHONHASHSEED", "0")
+    repo_root = Path(__file__).resolve().parents[1]
     cmd = [
         sys.executable,
-        str(Path(__file__).resolve().parents[0] / "get_activity_data.py"),
+        "-m",
+        "scripts.get_activity_data",
         "--limit",
         str(limit),
         "--final-out",
@@ -109,7 +111,13 @@ def _run_activity(
     ]
     if dry_run:
         cmd.append("--dry-run")
-    return subprocess.run(cmd, text=True, capture_output=True, env=env)
+    return subprocess.run(
+        cmd,
+        text=True,
+        capture_output=True,
+        env=env,
+        cwd=str(repo_root),
+    )
 
 
 def _default_input_csv(tmp_dir: Path) -> Path:

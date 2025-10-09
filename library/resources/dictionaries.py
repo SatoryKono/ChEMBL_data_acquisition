@@ -553,7 +553,11 @@ def get_resource(name: str, *, base_dir: Path | None = None) -> DictionaryResour
     try:
         return manifest[name]
     except KeyError as exc:
-        raise KeyError(f"Unknown dictionary resource: {name}") from exc
+        raise KeyError(
+            "Unknown dictionary resource: "
+            f"{name}. "
+            "Rebuild the dictionary bundle with tools/build_dictionary_resources.py."
+        ) from exc
 
 
 def get_resource_path(name: str, *, base_dir: Path | None = None) -> Path:
