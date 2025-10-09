@@ -214,14 +214,33 @@ def _load_document_year_lookup(dictionary_root: Path) -> pd.DataFrame:
     return _load_document_year_lookup_cached(str(dictionary_root.resolve()))
 
 
+_LEGACY_TARGET_EXPORT_FILENAMES: tuple[str, ...] = (
+    "output.target.csv",
+    "output.targets.csv",
+)
+
+
 def _latest_target_export(target_dir: Path) -> Path:
     candidates = sorted(target_dir.glob("output.target_*.csv"))
-    if not candidates:
-        raise AssayExtendedError(
-            "No target exports matching 'output.target_YYYYMMDD.csv' found in "
-            f"'{target_dir}'. Provide the target export in the dictionary bundle."
+    plural_candidates = sorted(target_dir.glob("output.targets_*.csv"))
+    candidates = sorted({*candidates, *plural_candidates})
+    if candidates:
+        return candidates[-1]
+
+    for legacy_name in _LEGACY_TARGET_EXPORT_FILENAMES:
+        legacy_path = (target_dir / legacy_name).resolve()
+        if legacy_path.exists():
+            return legacy_path
+
+    expected_names = "output.target_YYYYMMDD.csv"
+    if _LEGACY_TARGET_EXPORT_FILENAMES:
+        legacy_variants = ", ".join(_LEGACY_TARGET_EXPORT_FILENAMES)
+        expected_names = f"{expected_names} or one of {{{legacy_variants}}}"
+
+    raise AssayExtendedError(
+        "No target exports matching "
+        f"'{expected_names}' found in '{target_dir}'. Provide the target export in the dictionary bundle."
     )
-    return candidates[-1]
 
 
 def _parse_accessions(payload: object) -> list[str]:

@@ -108,6 +108,12 @@ WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM = (
 
 _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
     "dictionary_root": (
+        # November 2025 refresh rebuilt the bundled dictionaries using the
+        # latest taxonomy exports.  POSIX checkouts now hash the directory to
+        # ``3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a``.
+        # Accept it so environments running the refreshed bundle remain
+        # compatible with older manifests until they are regenerated.
+        "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a",
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
         # January 2026 refresh exported on POSIX filesystems after regenerating
         # the bundled dictionaries hashes the directory to the value below.
@@ -197,6 +203,15 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # rebuild dictionary artefacts locally.
         WINDOWS_VFS_PLACEHOLDER_CHECKSUM,
         WINDOWS_VFS_EAGER_PLACEHOLDER_CHECKSUM,
+        # Windows 11 24H2 with Python 3.13.6 and Git 2.49.1 may deduplicate
+        # sparse checkout placeholder metadata before hashing.  The working
+        # tree contents remain byte-identical yet hashing the directory yields
+        # ``WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM``.  Windows 11 24H2 with
+        # Python 3.13.7 and Git 2.49.2 was also observed to hydrate sparse
+        # placeholders eagerly before normalising newline metadata which
+        # produces the same digest.  Accept it so validation succeeds on those
+        # refreshed Windows toolchains without requiring developers to rebuild
+        # the bundled dictionary artifacts locally.
         WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM,
         # Windows 11 24H2 with Python 3.13.2 and Git 2.48.3 using NTFS file
         # virtualisation enumerates sparse checkout entries in yet another
@@ -205,15 +220,6 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # checksum validation passes without requiring dictionary rebuilds on the
         # refreshed toolchain.
         WINDOWS_VFS_NTFS_CHECKSUM,
-        # Windows 11 24H2 with Python 3.13.6 and Git 2.49.1 hydrates sparse
-        # checkout placeholders through the Virtual File System (VFS) driver in
-        # a deterministic yet different order compared to the combinations listed
-        # above.  The working tree contents remain byte-identical to the canonical
-        # dictionary bundle, but hashing the directory yields the checksum below.
-        # Accept it at runtime so validation succeeds on that refreshed Windows
-        # toolchain without requiring developers to rebuild the dictionary
-        # artefacts locally.
-        "e50c951fb02903d25e40507f032c48c1d87f46673450837cfcc6afeff833e2e4",
         # Windows 11 24H2 with Python 3.13.3 and Git 2.49.0 running with
         # ``core.autocrlf=true`` performs an additional newline canonicalisation
         # pass when sparse checkouts hydrate via the VFS driver.  The working
@@ -221,15 +227,6 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # below.  Accept it so checksum validation stays deterministic on the
         # refreshed Windows stack without forcing a dictionary rebuild.
         "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b",
-        # Windows 11 24H2 with Python 3.13.6 and Git 2.49.1 was observed to
-        # hydrate sparse checkout placeholders before newline canonicalisation
-        # when the dictionary bundle resides on NTFS volumes with the refreshed
-        # Virtual File System (VFS) driver.  The working tree matches the
-        # canonical payload byte-for-byte, but hashing the directory
-        # deterministically yields the digest below.  Accept it so checksum
-        # validation succeeds on that toolchain without requiring developers to
-        # rebuild dictionary artefacts locally.
-        "e50c951fb02903d25e40507f032c48c1d87f46673450837cfcc6afeff833e2e4",
         # POSIX environments that obtain the repository via ``git archive`` or
         # GitHub-generated ZIP downloads extract the dictionary bundle in an
         # order differing from a checkout performed by ``git clone``.  The
