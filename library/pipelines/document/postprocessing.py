@@ -146,6 +146,8 @@ FINAL_COLUMN_ORDER: tuple[str, ...] = (
     "day",
 )
 
+OPTIONAL_HARMONISED_COLUMNS: frozenset[str] = frozenset({"PubMed.Error"})
+
 REFERENCE_REQUIRED_COLUMNS: tuple[str, ...] = (
     "document_chembl_id",
     "doctype_review",
@@ -416,6 +418,7 @@ def _prepare_input_frame(df: pd.DataFrame) -> pd.DataFrame:
         "ChEMBL.authors",
         "ChEMBL.source",
     )
+
     for column in optional_text:
         _ensure_text_column(frame, column)
 
@@ -643,8 +646,14 @@ def postprocess_documents(
     )
 
     frame = frame.drop(columns=["is_experimental_doc"], errors="ignore")
+    frame = frame.loc[:, ~frame.columns.duplicated(keep="first")]
 
     missing = [column for column in FINAL_COLUMN_ORDER if column not in frame.columns]
+    recoverable = [column for column in missing if column in OPTIONAL_HARMONISED_COLUMNS]
+    if recoverable:
+        for column in recoverable:
+            frame[column] = pd.Series(pd.NA, index=frame.index, dtype="string")
+        missing = [column for column in FINAL_COLUMN_ORDER if column not in frame.columns]
     if missing:
         raise ValueError(f"Missing expected columns after harmonisation: {missing}")
 

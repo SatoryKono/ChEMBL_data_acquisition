@@ -49,7 +49,7 @@ def test_load_pipeline_config__applies_env_overrides(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "config_name,module_path,env_var,expected_steps,extra_sections",
+    "config_name,module_path,env_var,expected_steps,extra_sections,expected_encoding",
     [
         (
             "activities",
@@ -79,6 +79,7 @@ def test_load_pipeline_config__applies_env_overrides(monkeypatch):
                 ),
             ),
             ("quality",),
+            "utf-8",
         ),
         (
             "assays",
@@ -108,6 +109,7 @@ def test_load_pipeline_config__applies_env_overrides(monkeypatch):
                 ),
             ),
             ("flags",),
+            "utf-8",
         ),
         (
             "targets",
@@ -137,6 +139,7 @@ def test_load_pipeline_config__applies_env_overrides(monkeypatch):
                 ),
             ),
             ("enrichment",),
+            "utf-8-sig",
         ),
         (
             "documents",
@@ -166,6 +169,7 @@ def test_load_pipeline_config__applies_env_overrides(monkeypatch):
                 ),
             ),
             ("enrichment",),
+            "utf-8",
         ),
     ],
 )
@@ -176,6 +180,7 @@ def test_pipeline_configs__resolve_steps_and_defaults(
     env_var,
     expected_steps,
     extra_sections,
+    expected_encoding,
 ) -> None:
     """Each domain config resolves callables and exposes deterministic defaults."""
 
@@ -194,7 +199,7 @@ def test_pipeline_configs__resolve_steps_and_defaults(
         assert step.params == expected_params
 
     assert cfg.params["defaults"]["log_level"] == "INFO"
-    assert cfg.params["io"]["encoding"] == "utf-8"
+    assert cfg.params["io"]["encoding"] == expected_encoding
     assert cfg.params["io"]["csv_sep"] == ","
     for section in ("defaults", "io", *extra_sections):
         assert section in cfg.params

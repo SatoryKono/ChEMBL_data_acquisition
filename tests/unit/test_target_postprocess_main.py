@@ -90,7 +90,7 @@ def test_postprocess_target_table__fills_missing_columns(tmp_path: Path) -> None
     output_location = postprocess_target_table(input_path)
     output_path = Path(output_location)
 
-    assert output_path.name == "organism.output.target_20250101.csv"
+    assert output_path.name == "organism.targets_minimal.csv"
     assert output_path.exists()
 
 

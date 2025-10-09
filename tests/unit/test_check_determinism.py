@@ -261,9 +261,10 @@ def test_run_activity__passes_dry_run_flag(monkeypatch, tmp_path: Path) -> None:
 
     captured: dict[str, object] = {}
 
-    def _fake_run(cmd, *, text, capture_output, env):
+    def _fake_run(cmd, *, text, capture_output, env, cwd=None):
         captured["cmd"] = cmd
         captured["env"] = env
+        captured["cwd"] = cwd
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     monkeypatch.setattr(check_determinism.subprocess, "run", _fake_run)

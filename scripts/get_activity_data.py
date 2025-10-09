@@ -75,6 +75,7 @@ from library.orchestration import ETLContext
 from library.pipelines.activity import run as activity_run
 from library.pipelines.assay.chembl_assay import (
     ACTIVITY_COLUMNS,
+    MAX_ACTIVITY_CHUNK_SIZE,
 )
 from library.pipelines.common import (
     ChunkedFetchConfig,
@@ -289,11 +290,33 @@ def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
 
     # Use pandas extension dtypes directly for nullable types
     if dtype == "Float64":
-        return cast(pd.Series[Any], series.astype(pd.Float64Dtype()))
+        try:
+            return cast("pd.Series[Any]", series.astype(pd.Float64Dtype()))
+        except (TypeError, ValueError):
+            numeric = pd.to_numeric(series, errors="coerce")
+            coerced = pd.Series(pd.array(numeric, dtype="Float64"), index=series.index)
+            return cast("pd.Series[Any]", coerced)
     elif dtype == "Int64":
-        return cast(pd.Series[Any], series.astype(pd.Int64Dtype()))
+        try:
+            return cast("pd.Series[Any]", series.astype(pd.Int64Dtype()))
+        except (TypeError, ValueError):
+            numeric = pd.to_numeric(series, errors="coerce")
+            as_float = pd.Series(pd.array(numeric, dtype="Float64"), index=series.index)
+            non_integral = as_float.notna() & as_float.ne(as_float.round())
+            if non_integral.any():
+                as_float.loc[non_integral] = pd.NA
+            return cast("pd.Series[Any]", as_float.astype(pd.Int64Dtype()))
     elif dtype == "boolean":
-        return cast(pd.Series[Any], series.astype(pd.BooleanDtype()))
+        try:
+            return cast("pd.Series[Any]", series.astype(pd.BooleanDtype()))
+        except (TypeError, ValueError):
+            stringified = series.astype("string").str.strip().str.lower()
+            truthy = {"true", "t", "1", "yes", "y"}
+            falsy = {"false", "f", "0", "no", "n"}
+            coerced = pd.Series(pd.NA, index=series.index, dtype="boolean")
+            coerced[stringified.isin(truthy)] = True
+            coerced[stringified.isin(falsy)] = False
+            return cast("pd.Series[Any]", coerced)
     elif dtype == "string":
         return series.astype(pd.StringDtype())
     else:
@@ -303,7 +326,7 @@ def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
             return series.astype(np.dtype(dtype))
         except (TypeError, ValueError):
             # Final fallback: convert to string
-            return cast(pd.Series[Any], series.astype(str))
+            return cast("pd.Series[Any]", series.astype(str))
 
 
 def _extract_adapter_retry_metadata(
@@ -1433,23 +1456,25 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             raise
 
     processed_ids = prepared_context.processed_ids
+    processed_count = 0
+    processed_ids_scalar = False
+    if processed_ids is not None and isinstance(processed_ids, (int, float, str)):
+        try:
+            processed_count = int(processed_ids)
+            processed_ids_scalar = True
+        except (TypeError, ValueError):
+            processed_count = 0
+
     if limit is not None:
         logger.info(
             "process_limit",
             processed=processed_ids,
             limit=limit,
         )
-    else:
-        if processed_ids is not None and isinstance(processed_ids, (int, float, str)):
-            try:
-                processed_count = int(processed_ids)
-            except (TypeError, ValueError):
-                processed_count = 0
-        else:
-            processed_count = 0
-            logger.info("processed_count", count=processed_count)
+    elif not processed_ids_scalar:
+        logger.info("processed_count", count=processed_count)
 
-            summary_snapshot = streamed_summary or streaming_stats.snapshot()
+    summary_snapshot: dict[str, object] | None = None
 
     if pipeline_stats is not None:
         try:
@@ -1469,6 +1494,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
 
     if exit_code == 0:
+        if summary_snapshot is None:
+            summary_snapshot = streamed_summary or streaming_stats.snapshot()
         completion_rows = processed_ids
         summary_rows = summary_snapshot.get("rows") if summary_snapshot else None
         if isinstance(summary_rows, int | float):

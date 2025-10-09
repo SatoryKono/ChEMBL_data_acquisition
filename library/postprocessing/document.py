@@ -26,7 +26,9 @@ import pandas as pd
 from ..common.csv_utils import write_csv_deterministic
 from ..common.log import logger
 from ..config import IoCfg
-from ..pipelines.document import postprocessing as stage_document_postprocessing
+from ..postprocess.common import run_steps
+from ..postprocess.common.config import PipelineConfig
+from ..postprocess.documents import DOCUMENT_SCHEMA, run_document_pipeline
 
 # ===== Parameters ===========================================================
 UTF8_ENCODING = "utf-8"
@@ -510,6 +512,8 @@ def postprocess_export_file(
     encoding: str | None = None,
     ref_document: pd.DataFrame | None = None,
     ref_document_path: Path | str | None = None,
+    pipeline_config: PipelineConfig | None = None,
+    pipeline_version_override: str | None = None,
 ) -> Path:
     """Read ``input_path`` and materialise the Stage-aligned projection."""
 
@@ -522,20 +526,36 @@ def postprocess_export_file(
         dtype=str,
         keep_default_na=False,
     )
-    processed = preprocess_document_export(
-        frame,
-        ref_document=ref_document,
-        ref_document_path=ref_document_path,
-    )
+    if pipeline_config is not None:
+        steps = pipeline_config.step_definitions()
+        effective_version = pipeline_version_override or pipeline_config.pipeline_version
+        document_frame, metrics = run_steps(
+            frame,
+            steps,
+            post_schema=DOCUMENT_SCHEMA,
+            pipeline_version=effective_version,
+            logger=logger,
+        )
+    else:
+        document_frame, metrics = run_document_pipeline(
+            frame,
+            pipeline_version=pipeline_version_override,
+            logger=logger,
+        )
+    pipeline_version = getattr(metrics, "pipeline_version", None)
+    if pipeline_version is not None:
+        document_frame["pipeline_version"] = pipeline_version
     destination = Path(output_path) if output_path else _build_default_destination(input_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     col_order = [
-        column
-        for column in stage_document_postprocessing.FINAL_COLUMN_ORDER
-        if column in processed.columns
+        column for column in DOCUMENT_SCHEMA.column_order if column in document_frame.columns
     ]
+    if col_order:
+        output_frame = document_frame.loc[:, col_order]
+    else:
+        output_frame = document_frame
     write_csv_deterministic(
-        processed,
+        output_frame,
         destination,
         col_order=col_order,
         key_cols=list(DEFAULT_KEY_COLUMNS),

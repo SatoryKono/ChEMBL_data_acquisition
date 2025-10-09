@@ -62,9 +62,10 @@ from library.cli import configure_logger, create_logger_config
 from library.cli.logging import setup_cli_logging
 from library.cli.parser import path_argument
 from library.common.log import logger
+from library.postprocess.common import run_steps
 from library.postprocess.common.config import PipelineConfig, normalize_pipeline_version
+from library.postprocess.documents import DOCUMENT_SCHEMA, run_document_pipeline as run_document_postprocess
 from library.postprocessing import document as document_postprocessing
-from library.postprocess.documents import run_document_pipeline as run_document_postprocess
 from library.pipelines.common.metadata import get_pipeline_version
 
 
@@ -197,6 +198,8 @@ def run(args: argparse.Namespace) -> int:
         encoding=csv_cfg.encoding,
     )
 
+    pipeline_version = resolve_pipeline_version(pipeline_config)
+
     try:
         processed_path = document_postprocessing.postprocess_export_file(
             input_path,
@@ -204,6 +207,8 @@ def run(args: argparse.Namespace) -> int:
             output_path=output_path,
             sep=csv_cfg.sep,
             encoding=csv_cfg.encoding,
+            pipeline_config=pipeline_config,
+            pipeline_version_override=pipeline_version,
         )
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception(
@@ -215,12 +220,30 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
     extras = {"input": str(input_path), "output": str(processed_path)}
-    pipeline_version = resolve_pipeline_version(pipeline_config)
+    def _metrics_runner(
+        df,
+        *,
+        pipeline_version: str | None = None,
+        logger=None,
+    ):
+        if pipeline_config is not None:
+            effective_version = pipeline_version or pipeline_config.pipeline_version
+            return run_steps(
+                df,
+                pipeline_config.step_definitions(),
+                post_schema=DOCUMENT_SCHEMA,
+                pipeline_version=effective_version,
+                logger=logger,
+            )
+        return run_document_postprocess(
+            df, pipeline_version=pipeline_version, logger=logger
+        )
+
     metrics, _ = generate_metrics_report(
         TABLE_NAME,
         processed_path,
         csv_cfg,
-        run_document_postprocess,
+        _metrics_runner,
         pipeline_version=pipeline_version,
         extras=extras,
         logger=logger,
