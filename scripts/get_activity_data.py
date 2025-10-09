@@ -12,11 +12,66 @@ del bootstrap_cli
 
 from importlib import import_module
 import argparse
+import json
 import math
 import numbers
-import json
 import sys
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime
+from functools import partial
+from itertools import islice
 from pathlib import Path
+from threading import Lock
+from time import perf_counter, sleep
+from typing import Any, cast
+from urllib.parse import urlsplit
+
+import pandas as pd
+import requests
+
+from library import cli, io
+from library.clients.chembl import ChemblClient
+from library.integration import chembl_library as cl
+
+try:  # pragma: no cover - urllib3 is part of requests dependency chain
+    from urllib3.exceptions import NameResolutionError as _Urllib3NameResolutionError
+except Exception:  # pragma: no cover - defensive fallback for alternative stacks
+    _Urllib3NameResolutionError = None  # type: ignore
+
+from library.cli import (
+    Logger,
+    LoggerConfig,
+    positive_int,
+    build_parser as base_parser,
+)
+from library.cli.base import PipelineCLIBase
+from library.cli.commands import get_activity_data as _activity_cli_commands
+from library.cli.commands.get_activity_data import (
+    MIN_ACTIVITY_TIMEOUT,
+    ActivityCommandOptions,
+    run_activity_pipeline,
+)
+from library.cli_utils import (
+    PipelineError,
+    resolve_invocation,
+    run_cli_command as _run_cli_command,
+)
+from library.common.csv_utils import (
+    write_csv_chunks_deterministic,
+)
+from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
+from library.common.log import logger
+from library.config import Config, _serialize_paths
+from library.io.metadata import (
+    write_meta_yaml as _cli_write_meta_yaml,
+)
+from library.metadata import file_sha256 as _metadata_file_sha256
+from library.orchestration import ETLContext
+from library.pipelines.activity import run as activity_run
+from library.pipelines.assay.chembl_assay import (
+    ACTIVITY_COLUMNS,
+)
 
 from library.cli.entrypoints.activity import (
     ActivityPipelineCLI,
