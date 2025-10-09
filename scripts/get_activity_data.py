@@ -10,6 +10,7 @@ else:  # pragma: no cover - executed when imported as a module
 bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
+import argparse
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
