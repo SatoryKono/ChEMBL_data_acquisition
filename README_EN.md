@@ -108,6 +108,32 @@ Custom file names such as `targets.csv` still trigger this post-processing
 chain, so downstream helpers are generated even when the export deviates from
 the canonical `output.target_<stamp>.csv` pattern.
 
+#### Reproducing the archived target bundle
+
+Historical examples of the target export bundle now live under
+[`reports/archive/target_pipeline/`](./reports/archive/target_pipeline). To
+recreate the same structure locally:
+
+1. Activate your virtual environment and install the locked dependencies as
+   shown in the [quick start](#quick-start).
+2. Run the target pipeline against the bundled sample identifiers:
+
+   ```bash
+   python scripts/get_target_data.py all \
+     --input data/input/target.csv \
+     --final-out output/targets.csv \
+     --chembl-chunk-size 10 \
+     --uniprot-data-dir cache/uniprot
+   ```
+
+3. Inspect the contents of `output/targets.csv` and its sidecars:
+   `output/targets.csv.meta.yaml`, `output/targets_quality_report_table.csv`,
+   `output/targets_uniprot.csv`, `output/targets_iuphar.csv`, `output/targets_chembl.csv`
+   plus the associated quality reports.
+
+All artefacts share the deterministic guarantees described above, so repeating
+the command with the same inputs produces byte-identical files.
+
 ## Documentation
 
 All guides are provided in English and Russian. The structure is mirrored across
