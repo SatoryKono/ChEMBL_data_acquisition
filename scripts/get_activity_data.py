@@ -24,15 +24,14 @@ from urllib.parse import urlsplit
 import pandas as pd
 import requests
 
+from library import cli, io
 from library.clients.chembl import ChemblClient
+from library.integration import chembl_library as cl
 
 try:  # pragma: no cover - urllib3 is part of requests dependency chain
     from urllib3.exceptions import NameResolutionError as _Urllib3NameResolutionError
 except Exception:  # pragma: no cover - defensive fallback for alternative stacks
     _Urllib3NameResolutionError = None  # type: ignore
-
-    from library import cli, io
-    from library.integration import chembl_library as cl
 from library.cli import (
     Logger,
     LoggerConfig,
@@ -62,6 +61,7 @@ from library.config import Config, _serialize_paths
 from library.io.metadata import (
     write_meta_yaml as _cli_write_meta_yaml,
 )
+from library.metadata import file_sha256 as _metadata_file_sha256
 from library.orchestration import ETLContext
 from library.pipelines.activity import run as activity_run
 from library.pipelines.assay.chembl_assay import (
@@ -109,7 +109,7 @@ def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
         result.append(text)
     return tuple(result)
 
-file_sha256 = None  # _cli_file_sha256 is not defined; set to None or import if available
+file_sha256 = _metadata_file_sha256
 write_meta_yaml = _cli_write_meta_yaml
 try:
     from library.cli import configure_logger
@@ -126,19 +126,21 @@ __all__ = (
 def _ensure_command_logger_sync() -> None:
     """Keep the shared command module logger aligned with this script logger."""
 
-    # Fix: Only attempt to sync logger if both _activity_cli_commands and logger are defined
-    # Only attempt to sync logger if both _activity_cli_commands and logger are defined and accessible
-    _activity_cli_commands = globals().get("_activity_cli_commands", None)
-    logger = globals().get("logger", None)
-    if _activity_cli_commands is not None and logger is not None:
-        if getattr(_activity_cli_commands, "logger", None) is not logger:
-            try:
-                _activity_cli_commands.logger = logger
-            except Exception:
-                # Something went wrong; skip sync
-                pass
+    try:
+        commands_module = _activity_cli_commands
+    except NameError:  # pragma: no cover - defensive guard for refactors
+        return
 
-    _ensure_command_logger_sync()
+    if getattr(commands_module, "logger", None) is logger:
+        return
+
+    try:
+        commands_module.logger = logger
+    except Exception:  # pragma: no cover - defensive guard
+        pass
+
+
+_ensure_command_logger_sync()
 
 
 _CACHE_MISS = object()
