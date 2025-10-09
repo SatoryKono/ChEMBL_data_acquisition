@@ -25,6 +25,7 @@ from ..resources.dictionaries import DictionaryManifestError, get_resource
 from .git import _git_sha
 from .log import logger
 from ..utils.atomic import open_atomic
+from ..project_version import get_pipeline_version
 
 
 def _load_metadata(meta_path: Path) -> dict[str, Any]:
@@ -153,6 +154,7 @@ def write_meta_yaml(
             "inputs": dict(inputs),
             "stats": stats,
             "schema": schema,
+            "pipeline_version": get_pipeline_version(),
         }
     )
     if invocation:
