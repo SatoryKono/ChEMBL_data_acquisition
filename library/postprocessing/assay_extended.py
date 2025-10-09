@@ -222,6 +222,8 @@ _LEGACY_TARGET_EXPORT_FILENAMES: tuple[str, ...] = (
 
 def _latest_target_export(target_dir: Path) -> Path:
     candidates = sorted(target_dir.glob("output.target_*.csv"))
+    plural_candidates = sorted(target_dir.glob("output.targets_*.csv"))
+    candidates = sorted({*candidates, *plural_candidates})
     if candidates:
         return candidates[-1]
 
