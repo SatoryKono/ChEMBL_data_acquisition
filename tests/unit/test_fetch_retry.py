@@ -50,3 +50,18 @@ def test_chunk_failure_tracker_stats__does_not_share_lists() -> None:
     second = tracker.stats()
 
     assert second["chunk_fetch_failure_ids"] == ["A", "B"]
+    assert second["chunk_fetch_failure_ids_total"] == 2
+    assert second["chunk_fetch_failure_ids_truncated"] is False
+
+
+def test_chunk_failure_tracker_stats__limits_reported_ids() -> None:
+    tracker = ChunkFailureTracker()
+
+    for index in range(150):
+        tracker.add_failure([f"ID{index:03d}"], "boom")
+
+    stats = tracker.stats()
+
+    assert stats["chunk_fetch_failure_ids_total"] == 150
+    assert stats["chunk_fetch_failure_ids_truncated"] is True
+    assert len(stats["chunk_fetch_failure_ids"]) < stats["chunk_fetch_failure_ids_total"]

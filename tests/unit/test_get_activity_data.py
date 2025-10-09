@@ -141,12 +141,12 @@ def test_run_chembl__dry_run_short_circuits(cfg, tmp_path, monkeypatch) -> None:
         (level, event, context) for level, event, context in logger_stub.events
     ]
     completion_events = [
-        event
-        for _, event, _ in logger_stub.events
-        if event.startswith("Completed get_activity_data pipeline:")
+        payload
+        for _, event, payload in logger_stub.events
+        if event == "activity_pipeline_completion"
     ]
     assert completion_events
-    assert "mode=dry_run" in completion_events[-1]
+    assert completion_events[-1]["mode"] == "dry_run"
 
 
 def test_ensure_molecule_pref_name__concurrent_single_fetch(monkeypatch) -> None:
@@ -411,13 +411,13 @@ def test_run__skip_existing_matrix(
     assert exit_code == 0
     assert len(call_counter) == expected_calls
     summary_events = [
-        event
-        for _, event, _ in logger_stub.events
-        if event.startswith("Completed get_activity_data pipeline:")
+        payload
+        for _, event, payload in logger_stub.events
+        if event == "activity_pipeline_completion"
     ]
     if skip_existing and has_existing and not force:
         assert summary_events
-        assert "mode=skip_existing" in summary_events[-1]
+        assert summary_events[-1]["mode"] == "skip_existing"
     else:
         assert not summary_events
 

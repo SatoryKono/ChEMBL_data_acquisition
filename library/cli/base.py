@@ -41,7 +41,11 @@ class PipelineCLIBase:
     def get_program_name(self) -> str:
         """Return the identifier used when creating log files."""
 
-        return Path(__file__).with_suffix("").name
+        module = sys.modules.get(self.__class__.__module__)
+        module_file = getattr(module, "__file__", None) if module is not None else None
+        if module_file:
+            return Path(module_file).with_suffix("").name
+        return self.__class__.__name__.lower()
 
     def get_logging_date(self, args: argparse.Namespace) -> str | None:
         """Return the date token forwarded to :func:`setup_cli_logging`."""
