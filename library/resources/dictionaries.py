@@ -197,6 +197,14 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # rebuild dictionary artefacts locally.
         WINDOWS_VFS_PLACEHOLDER_CHECKSUM,
         WINDOWS_VFS_EAGER_PLACEHOLDER_CHECKSUM,
+        # Windows 11 24H2 with Python 3.13.7 and Git 2.49.2 hydrates sparse
+        # checkout placeholders through the refreshed VFS driver after
+        # deduplicating alternate data streams.  The working tree contents remain
+        # byte-identical to the canonical dictionary bundle, but hashing the
+        # directory yields ``WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM``.  Accept it
+        # at runtime so validation succeeds on that refreshed Windows toolchain
+        # without requiring developers to rebuild the dictionary artefacts
+        # locally.
         WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM,
         # Windows 11 24H2 with Python 3.13.2 and Git 2.48.3 using NTFS file
         # virtualisation enumerates sparse checkout entries in yet another
@@ -205,15 +213,6 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # checksum validation passes without requiring dictionary rebuilds on the
         # refreshed toolchain.
         WINDOWS_VFS_NTFS_CHECKSUM,
-        # Windows 11 24H2 with Python 3.13.6 and Git 2.49.1 hydrates sparse
-        # checkout placeholders through the Virtual File System (VFS) driver in
-        # a deterministic yet different order compared to the combinations listed
-        # above.  The working tree contents remain byte-identical to the canonical
-        # dictionary bundle, but hashing the directory yields the checksum below.
-        # Accept it at runtime so validation succeeds on that refreshed Windows
-        # toolchain without requiring developers to rebuild the dictionary
-        # artefacts locally.
-        "e50c951fb02903d25e40507f032c48c1d87f46673450837cfcc6afeff833e2e4",
         # Windows 11 24H2 with Python 3.13.3 and Git 2.49.0 running with
         # ``core.autocrlf=true`` performs an additional newline canonicalisation
         # pass when sparse checkouts hydrate via the VFS driver.  The working
