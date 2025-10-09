@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import numbers
 import os
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence

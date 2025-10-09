@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 import pandas as pd
 import pytest
 
@@ -55,3 +58,104 @@ def test_coerce_series_dtype__fallback_to_string(dtype: str) -> None:
 )
 def test_safe_int__conversion_cases(value: object, default: int, expected: int) -> None:
     assert activity._safe_int(value, default) == expected
+
+
+class _StubLogger:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.events: list[tuple[str, str, dict[str, Any]]] = []
+
+    def info(self, event: str, **payload: Any) -> None:
+        self.calls.append((event, payload))
+
+
+@pytest.mark.unit
+def test_emit_completion_message__basic_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    logger = _StubLogger()
+    monkeypatch.setattr(activity, "logger", logger)
+
+    activity._emit_completion_message(
+        output_path=Path("output.csv"),
+        processed_rows=15,
+        duration_s=1.25,
+        mode="fetch",
+    )
+
+    assert len(logger.calls) == 1
+    event, payload = logger.calls[0]
+    assert event == "activity_pipeline_completion"
+    assert payload == {
+        "output": "output.csv",
+        "rows": 15,
+        "duration_s": 1.25,
+        "mode": "fetch",
+        "processed_rows": 15,
+    }
+
+
+@pytest.mark.unit
+def test_emit_completion_message__skip_existing(monkeypatch: pytest.MonkeyPatch) -> None:
+    logger = _StubLogger()
+    monkeypatch.setattr(activity, "logger", logger)
+
+    activity._emit_completion_message(
+        output_path=Path("existing.csv"),
+        processed_rows=None,
+        duration_s=0.5,
+        mode="skip_existing",
+    )
+
+    assert len(logger.calls) == 1
+    event, payload = logger.calls[0]
+    assert event == "pipeline_skip_existing"
+    assert payload == {"output": "existing.csv"}
+    assert logger.events == [
+        ("info", "pipeline_skip_existing", {"output": "existing.csv"})
+    ]
+
+
+@pytest.mark.unit
+def test_emit_completion_message__streamed_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
+    logger = _StubLogger()
+    monkeypatch.setattr(activity, "logger", logger)
+
+    class ReprObject:
+        def __str__(self) -> str:  # pragma: no cover - trivial
+            return "repr-object"
+
+    activity._emit_completion_message(
+        output_path=None,
+        processed_rows=None,
+        duration_s=2.0,
+        mode="stream",
+        streamed_metrics={
+            "rows": 9.7,
+            "null_fraction": 0.125,
+            "nan_value": float("nan"),
+            "integral_value": 4,
+            "text": "value",
+            "flag": True,
+            "other": ReprObject(),
+        },
+    )
+
+    assert len(logger.calls) == 1
+    event, payload = logger.calls[0]
+    assert event == "activity_pipeline_completion"
+    assert payload["output"] is None
+    assert payload["rows"] == 9
+    assert payload["duration_s"] == 2.0
+    assert payload["mode"] == "stream"
+    assert payload["null_fraction"] == pytest.approx(0.125)
+
+    metrics = payload["streamed_metrics"]
+    assert metrics["rows"] == pytest.approx(9.7)
+    assert metrics["null_fraction"] == pytest.approx(0.125)
+    assert metrics["nan_value"] is None
+    assert metrics["integral_value"] == 4
+    assert metrics["text"] == "value"
+    assert metrics["flag"] == 1
+    assert metrics["other"] == "repr-object"
+
+
+

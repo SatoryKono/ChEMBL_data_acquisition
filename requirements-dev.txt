@@ -1,1 +1,5 @@
 .[dev]
+# Ensure type stubs are available even when extras are not expanded by the
+# environment consuming this file.
+types-requests>=2.32.0.20241016,<3.0
+types-urllib3>=1.26.25.14,<1.27
