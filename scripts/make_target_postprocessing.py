@@ -41,6 +41,7 @@ from library.postprocess.common.logging import (
 from library.postprocess.common.types import SchemaValidationError, StepError
 from library.postprocess.target.export import prepare_targets_for_schema
 from library.schemas import TargetsSchema, normalize_targets
+from library.validation import validate_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
 
 _postprocess_common = import_module(f"{package_name}._postprocess_common")
@@ -160,9 +161,18 @@ def _run_postprocess(
     validation_started_at = _now_iso()
     validation_clock = perf_counter()
     try:
-        current = TargetsSchema.validate(current, lazy=True)
+        validation = validate_targets(current, return_result=True)
     except SchemaErrors as exc:  # pragma: no cover - pandera raises SchemaErrors
         raise SchemaValidationError("TargetsSchema", str(exc)) from exc
+    if not validation.failure_cases.empty:
+        failure_count = len(validation.failure_cases)
+        sample = validation.failure_cases.head(3).to_dict("records")
+        message = (
+            f"{failure_count} rows failed TargetsSchema validation: "
+            f"{sample}"
+        )
+        raise SchemaValidationError("TargetsSchema", message)
+    current = validation.data
     validation_duration = perf_counter() - validation_clock
     metrics.validation = ValidationMetrics(
         schema="TargetsSchema",
