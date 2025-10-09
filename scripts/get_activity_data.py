@@ -43,9 +43,10 @@ from library.cli import (
 )
 from library.cli.base import PipelineCLIBase
 from library.cli.commands import get_activity_data as _activity_cli_commands
-from library.cli.commands.get_activity_data import (
+from library.pipelines.activity.runner import (
     MIN_ACTIVITY_TIMEOUT,
     ActivityCommandOptions,
+    register_activity_pipeline_hooks,
     run_activity_pipeline,
 )
 from library.cli_utils import (  # noqa: E402
@@ -1541,11 +1542,15 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("activity_pipeline_done", extra=pipeline_done_payload)
         if extended_output_path is not None:
             logger.info(
-                f"Successful export checkpoint: primary data at '{output_path}', extended data at '{extended_output_path}'."
+                "activity_export_checkpoint",
+                output=str(output_path),
+                extended_output=str(extended_output_path),
             )
         else:
             logger.info(
-                f"Successful export checkpoint: activity data written to '{output_path}'."
+                "activity_export_checkpoint",
+                output=str(output_path),
+                extended_output=None,
             )
         _emit_completion_message(
             output_path=output_path,
@@ -1579,10 +1584,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             details=detail_text or None,
         )
         logger.error(
-            f"Activity pipeline failed with exit code {exit_code} after processing {processed_ids} identifiers destined for '{output_path}'. {detail_text}"
+            "activity_pipeline_failed_detail",
+            output=str(output_path),
+            processed=processed_ids,
+            exit_code=exit_code,
+            details=detail_text or None,
         )
 
     return exit_code
+
+
+register_activity_pipeline_hooks(
+    runner=run_chembl,
+    emit_completion_message=_emit_completion_message,
+)
+
 
 def _generate_activity_postprocess_metrics(
     cfg: Config,

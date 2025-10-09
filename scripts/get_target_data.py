@@ -1244,6 +1244,53 @@ class _RawDumpStreamWriter:
         )
         return self.destination
 
+
+def _finalize_raw_dump_writer(
+    writer: object,
+    *,
+    logger: Logger,
+    destination: Path,
+) -> bool:
+    """Finalize ``writer`` if it exposes a ``finalize`` method.
+
+    Parameters
+    ----------
+    writer:
+        Writer instance returned by :class:`_RawDumpStreamWriter`.
+    logger:
+        Structured logger used by the pipeline.
+    destination:
+        Raw dump destination path for logging context.
+
+    Returns
+    -------
+    bool
+        ``True`` when the writer either finalizes successfully or does not
+        expose a ``finalize`` method. ``False`` indicates that finalization
+        failed due to an :class:`OSError`.
+    """
+
+    finalize = getattr(writer, "finalize", None)
+    if finalize is None or not callable(finalize):
+        logger.debug(
+            "raw_dump_finalize_missing",
+            writer_type=type(writer).__name__,
+        )
+        return True
+
+    try:
+        finalize()
+    except OSError as exc:
+        logger.error(
+            "raw_dump_failed",
+            error=str(exc),
+            exc_info=exc,
+            path=str(destination),
+        )
+        return False
+
+    return True
+
     def finalize(self) -> Path:
         """Flush buffered payloads to ``destination`` and return the path."""
 
@@ -2576,10 +2623,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         ),
     )
 
-    try:
-        raw_dump_writer.finalize()
-    except OSError as exc:
-        logger.error("raw_dump_failed", error=str(exc), exc_info=exc, path=str(raw_destination))
+    if not _finalize_raw_dump_writer(
+        raw_dump_writer,
+        logger=logger,
+        destination=raw_destination,
+    ):
         return 1
 
     if limit is not None:
