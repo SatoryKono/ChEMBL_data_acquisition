@@ -1238,9 +1238,37 @@ class _RawDumpStreamWriter:
                 sep=self.cfg.io.csv_sep,
                 encoding=self.cfg.io.csv_encoding,
             )
+        self._rows_written += len(working)
         logger.info(
             "raw_dump_written", rows=self._rows_written, path=str(self.destination)
         )
+        return self.destination
+
+    def finalize(self) -> Path:
+        """Flush buffered payloads to ``destination`` and return the path."""
+
+        if self._is_parquet:
+            frames = self._frames or []
+            if frames:
+                combined = pd.concat(frames, ignore_index=True)
+            else:
+                combined = pd.DataFrame(columns=self._columns or [])
+            try:
+                combined.to_parquet(self.destination, index=False)
+            except ImportError as exc:  # pragma: no cover - optional dependency
+                raise ValueError(
+                    "Parquet export requires optional pyarrow or fastparquet"
+                ) from exc
+        else:
+            if not self.destination.exists():
+                empty = pd.DataFrame(columns=self._columns or [])
+                empty.to_csv(
+                    str(self.destination),
+                    index=False,
+                    sep=self.cfg.io.csv_sep,
+                    encoding=self.cfg.io.csv_encoding,
+                )
+
         return self.destination
 
 
