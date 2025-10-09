@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -15,6 +16,9 @@ from ..common.logging_setup import LoggerConfig
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_LOG_DIR = (_PROJECT_ROOT / "data" / "logs").resolve()
+
+_SEPARATOR_PATTERN = re.compile(r"[\\/]+")
+_SAFE_NAME_PATTERN = re.compile(r"[^0-9A-Za-z._-]+")
 
 
 def _normalize_log_dir(path: Path | str) -> Path:
@@ -51,9 +55,32 @@ class CLILoggingContext:
     console_stream: IO[str]
 
 
+def _canonical_log_name(script_name: str | os.PathLike[str]) -> str:
+    """Return a normalised prefix for CLI log files."""
+
+    if isinstance(script_name, Path):
+        candidate = script_name.name
+    else:
+        candidate = str(script_name).strip()
+    if not candidate:
+        raise ValueError("script_name must be a non-empty string")
+
+    candidate = _SEPARATOR_PATTERN.split(candidate)[-1]
+    if candidate.endswith(".py"):
+        candidate = candidate[:-3]
+
+    sanitised = _SAFE_NAME_PATTERN.sub("_", candidate)
+    sanitised = sanitised.strip("._-") or sanitised
+    if not sanitised:
+        raise ValueError(
+            f"Unable to derive a valid log file prefix from {script_name!r}."
+        )
+    return sanitised
+
+
 @contextmanager
 def setup_cli_logging(
-    script_name: str,
+    script_name: str | os.PathLike[str],
     log_cfg: LoggerConfig,
     date_str: str | None = None,
     *,
@@ -72,8 +99,13 @@ def setup_cli_logging(
     else:
         suffix = _current_date_str()
 
-    log_path = resolved_dir / f"{script_name}_{suffix}.log"
+    canonical_name = _canonical_log_name(script_name)
+    log_path = resolved_dir / f"{canonical_name}_{suffix}.log"
     log_path.touch(exist_ok=True)
+    if not log_path.exists():  # pragma: no cover - defensive
+        raise RuntimeError(
+            f"Failed to create log file '{log_path}'. Ensure the log directory is writable."
+        )
 
     console_stream = getattr(log_cfg, "stream", None) or sys.stdout
     file_handler = logging.FileHandler(log_path, encoding="utf-8")
