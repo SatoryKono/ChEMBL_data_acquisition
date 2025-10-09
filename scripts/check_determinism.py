@@ -147,17 +147,15 @@ def main(argv: list[str] | None = None) -> int:
 
         if not first.exists() or not second.exists():
             if args.dry_run:
-                print(
-                    "Outputs not created because --dry-run skips writing files. "
-                    "Re-run with --no-dry-run to exercise the full pipeline.",
-                    file=sys.stderr,
+                sys.stderr.write(
+                    "Outputs were not created because --dry-run skips writing files. "
+                    "Re-run with --no-dry-run to exercise the full pipeline.\n"
                 )
             else:
-                print(
-                    "Outputs not created; determinism check failed before files were written.",
-                    file=sys.stderr,
+                sys.stderr.write(
+                    "Outputs were not created; determinism check failed before files were written.\n"
                 )
-            return 2
+            return 1
 
         first_hash = _hash_file(first)
         second_hash = _hash_file(second)
