@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from importlib import import_module
+from typing import Any
 
 from . import atomic, bootstrap
 
 __all__ = ["atomic", "bootstrap", "config"]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     """Lazily import heavy utility submodules."""
 
     if name == "config":

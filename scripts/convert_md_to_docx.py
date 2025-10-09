@@ -1,40 +1,27 @@
 #!/usr/bin/env python3
-"""
-convert_md_to_docx.py
-Конвертация Markdown → DOCX через Pandoc.
-Фичи:
-- reference DOCX (шаблон стилей)
-- таблица содержимого (TOC)
-- нумерация разделов
-- метаданные из YAML (title, author, date и т.п.)
-- поддержка нескольких входных .md, склейка по порядку
-- resource-path для картинок/таблиц
-- опциональные pandoc-фильтры (crossref, mermaid, citeproc и т.д.)
-- внятные ошибки и коды возврата
+"""Utility for converting Markdown documents into DOCX via Pandoc."""
 
-Требования:
-- pandoc установлен в системе
-- (опц.) pandoc-crossref / pandoc-mermaid / citeproc — если нужны соответствующие фичи
-"""
+from __future__ import annotations
 
 import argparse
 import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 
 def check_pandoc() -> None:
-    if not shutil.which("pandoc"):
-        print(
-            "ERROR: pandoc не найден в PATH. Установи pandoc и повтори.",
-            file=sys.stderr,
-        )
-        sys.exit(127)
+    """Ensure that ``pandoc`` is available in ``PATH``."""
+
+    if shutil.which("pandoc"):
+        return
+    msg = "pandoc не найден в PATH. Установи pandoc и повтори."
+    raise RuntimeError(msg)
 
 
 def build_pandoc_cmd(
-    inputs,
+    inputs: Sequence[Path],
     output: Path,
     reference_doc: Path | None,
     metadata_file: Path | None,
@@ -49,7 +36,7 @@ def build_pandoc_cmd(
     cmd = ["pandoc"]
     # входные файлы (порядок важен)
     for inp in inputs:
-        cmd += [str(inp)]
+        cmd.append(str(inp))
 
     cmd += ["-o", str(output), "--from=markdown", "--to=docx"]
 
@@ -86,7 +73,7 @@ def build_pandoc_cmd(
     return cmd
 
 
-def main():
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="convert_md_to_docx",
         description="Конвертация Markdown → DOCX через pandoc с поддержкой шаблонов и метаданных.",
@@ -151,22 +138,25 @@ def main():
         help="Не добавлять --standalone (по умолчанию standalone включён).",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    # sanity checks
-    check_pandoc()
+    try:
+        check_pandoc()
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 127
     for p in args.inputs:
         if not p.exists():
             print(f"ERROR: входной файл не найден: {p}", file=sys.stderr)
-            sys.exit(2)
+            return 2
 
     if args.reference_doc and not args.reference_doc.exists():
         print(f"ERROR: reference DOCX не найден: {args.reference_doc}", file=sys.stderr)
-        sys.exit(2)
+        return 2
 
     if args.metadata_file and not args.metadata_file.exists():
         print(f"ERROR: metadata YAML не найден: {args.metadata_file}", file=sys.stderr)
-        sys.exit(2)
+        return 2
 
     cmd = build_pandoc_cmd(
         inputs=args.inputs,
@@ -185,16 +175,20 @@ def main():
     print("Running:", " ".join(str(x) for x in cmd))
     try:
         subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
+    except subprocess.CalledProcessError as exc:
         print(
-            f"ERROR: pandoc завершился с ошибкой (exit {e.returncode}).",
+            f"ERROR: pandoc завершился с ошибкой (exit {exc.returncode}).",
             file=sys.stderr,
         )
-        sys.exit(e.returncode)
+        return int(exc.returncode)
+    except FileNotFoundError as exc:
+        print(f"ERROR: не удалось запустить pandoc: {exc}", file=sys.stderr)
+        return 127
 
     # немножко гуманности
     print(f"OK: {args.output} создан.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

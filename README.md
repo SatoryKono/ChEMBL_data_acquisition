@@ -57,6 +57,7 @@ in [`docs/en/SUMMARY.md`](./docs/en/SUMMARY.md) and
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-lock.txt
+pip install .[dev]
 pre-commit install
 ```
 
