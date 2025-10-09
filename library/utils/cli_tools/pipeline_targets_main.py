@@ -497,7 +497,8 @@ def _cached_chembl_fetch(
 
 
 def run(cfg: Config, options: PipelineConfig) -> int:
-    chunk_factory = lambda: _chunk_iterator(cfg, options)
+    def chunk_factory() -> Iterator[pd.DataFrame]:
+        return _chunk_iterator(cfg, options)
     batch_size = options.batch_size if options.batch_size is not None else 100
     raw_format = (options.raw_format or "csv").lower()
     if raw_format not in {"csv", "parquet"}:

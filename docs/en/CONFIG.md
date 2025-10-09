@@ -114,9 +114,12 @@ and may be overridden via CLI or environment variables.
 | Key | Default | Notes |
 |-----|---------|-------|
 | `column` | `assay_chembl_id` | Input column. |
-| `batch_size` | `50` | Identifiers per request. |
-| `timeout` | `30.0` | Read timeout. |
+| `batch_size` | `25` | Identifiers per request. |
+| `timeout` | `60.0` | Read timeout. |
 | `limit` | `null` | Record limit. |
+
+> **Note:** When overriding defaults in `config.local.yaml`, double-check that
+> `batch_size` and `timeout` stay aligned with the configured API limits.
 
 #### `testitem`
 

@@ -278,11 +278,11 @@ def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
 
     # Use pandas extension dtypes directly for nullable types
     if dtype == "Float64":
-        return cast("pd.Series[Any]", series.astype(pd.Float64Dtype()))
+        return series.astype(pd.Float64Dtype())
     elif dtype == "Int64":
-        return cast("pd.Series[Any]", series.astype(pd.Int64Dtype()))
+        return series.astype(pd.Int64Dtype())
     elif dtype == "boolean":
-        return cast("pd.Series[Any]", series.astype(pd.BooleanDtype()))
+        return series.astype(pd.BooleanDtype())
     elif dtype == "string":
         return series.astype(pd.StringDtype())
     else:
@@ -292,7 +292,19 @@ def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
             return series.astype(np.dtype(dtype))
         except (TypeError, ValueError):
             # Final fallback: convert to string
-            return cast("pd.Series[Any]", series.astype(str))
+            return series.astype(str)
+
+
+def _safe_int(value: object, default: int = 0) -> int:
+    """Safely convert ``value`` to :class:`int` while tolerating bad inputs."""
+
+    if value is None:
+        return default
+
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
 
 
 def _extract_adapter_retry_metadata(
@@ -1423,12 +1435,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     summary_snapshot: Mapping[str, object] | None = None
     processed_ids = prepared_context.processed_ids
-    processed_count = 0
-    try:
-        processed_count = int(processed_ids or 0)
-    except (TypeError, ValueError):
+    processed_count = _safe_int(processed_ids, 0)
+    if processed_count == 0 and processed_ids not in (None, 0, "0", 0.0):
         logger.info("processed_count_conversion_failed", value=processed_ids)
-        processed_count = 0
 
     if limit is not None:
         logger.info(
@@ -1442,15 +1451,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("processed_count", count=processed_count)
 
     if pipeline_stats is not None:
-        try:
-            rows_total = int(pipeline_stats.get("rows_total", processed_count))
-        except (TypeError, ValueError):
-            rows_total = processed_count
-        try:
-            rows_kept = int(pipeline_stats.get("rows_kept", 0))
-        except (TypeError, ValueError):
-            rows_kept = 0
-        rows_dropped = int(pipeline_stats.get("rows_dropped", 0))
+        rows_total = _safe_int(pipeline_stats.get("rows_total"), processed_count)
+        rows_kept = _safe_int(pipeline_stats.get("rows_kept"), 0)
+        rows_dropped = _safe_int(pipeline_stats.get("rows_dropped"), 0)
         logger.info(
             "records_dropped",
             rows_total=rows_total,
