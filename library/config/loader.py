@@ -13,7 +13,11 @@ import yaml
 from pydantic import BaseModel, ValidationError
 
 from ..common.log import logger
-from library.resources.dictionaries import DictionaryManifestError, list_resources
+from library.resources.dictionaries import (
+    DictionaryManifestError,
+    list_resource_names,
+    list_resources,
+)
 from config.paths import CONFIG_DIR as _CONFIG_DIR
 from config.paths import DEFAULT_CONFIG_PATH as _DEFAULT_CONFIG_PATH
 from .runtime import configure_rate_limiters
@@ -226,10 +230,10 @@ def _dictionary_resource_names() -> frozenset[str]:
     """Return the set of known dictionary resource identifiers."""
 
     try:
-        resources = list_resources()
+        names = list_resource_names(validate=False)
     except (DictionaryManifestError, FileNotFoundError):
         return frozenset()
-    return frozenset(resources.keys())
+    return frozenset(names)
 
 
 def _collect_unknown_keys(
