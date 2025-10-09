@@ -10,7 +10,7 @@ else:  # pragma: no cover - executed when imported as a package module
 bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from importlib import import_module, util
 from types import ModuleType
 
@@ -136,7 +136,30 @@ def resolve_pipeline_version(
     if candidate is not None:
         return candidate
 
+    fallback = _pipeline_version_from_defaults(pipeline_config.params)
+    candidate = normalize_pipeline_version(fallback)
+    if candidate is not None:
+        return candidate
+
     return get_pipeline_version()
+
+
+def _pipeline_version_from_defaults(params: Mapping[str, object] | None) -> str | None:
+    """Return the pipeline version declared under ``params.defaults`` when present."""
+
+    if not params:
+        return None
+
+    params_map = dict(params)
+    defaults = params_map.get("defaults")
+    if not isinstance(defaults, Mapping):
+        return None
+
+    defaults_map = dict(defaults)
+    value = defaults_map.get("pipeline_version")
+    if value is None:
+        return None
+    return str(value)
 
 
 def build_pipeline_runner(
