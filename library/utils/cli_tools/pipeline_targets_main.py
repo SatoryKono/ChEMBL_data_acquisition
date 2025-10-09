@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Iterable, Iterator, Sequence
+from dataclasses import replace
 from itertools import islice
 from pathlib import Path
 
@@ -597,9 +598,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if isinstance(run_id_value, str):
         run_id_value = run_id_value.strip() or None
     if run_id_value is not None:
-        log_cfg.run_id = run_id_value
-    log_cfg.level = args.log_level
-    log_cfg = LoggerConfig(level=log_cfg.level, run_id=log_cfg.run_id)
+        updated_run_id = run_id_value
+    else:
+        updated_run_id = log_cfg.run_id
+    log_cfg = replace(log_cfg, level=args.log_level, run_id=updated_run_id)
     logger_inst = configure_logger(log_cfg)
     pipeline_logger = logger_inst.bind(stage="pipeline")
     pipeline_logger.info("pipeline_start")
