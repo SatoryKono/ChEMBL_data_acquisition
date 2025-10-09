@@ -26,39 +26,75 @@ del bootstrap_cli
 
 from library.cli.entrypoints import activity as _activity
 from library.pipelines.activity import runner as _activity_runner
-from library.pipelines.activity.runner import register_activity_pipeline_hooks
-from library.pipelines.assay.chembl_assay import MAX_ACTIVITY_CHUNK_SIZE
+from library.pipelines.activity.runner import (
+    MAX_ACTIVITY_CHUNK_SIZE,
+    register_activity_pipeline_hooks,
+)
+from library.pipelines.common import (
+    ChunkedFetchConfig,
+    CsvWriterConfig,
+    add_pipeline_metadata,
+)
+from library.pipelines.common.metadata import get_pipeline_version
+from library.postprocess.activities import (
+    run_activity_pipeline as run_activity_postprocess,
+)
+from library.postprocess.common import collect_postprocess_metrics
+from library.postprocessing import helpers as postprocessing_helpers
+from library.postprocessing.activity_extended import process_activity_extended
+from library.processing.activity import (
+    apply_activity_annotations,
+    compute_activity_bounds,
+)
+from library.qa.reporting import build_table_quality_hook
+from library.schemas import (
+    ActivitiesSchema,
+    configure_activity_schema,
+    normalize_activities,
+)
+from library.validation import validate_activities
 
-ActivityCommandOptions = _activity.ActivityCommandOptions
-ActivityPipelineCLI = _activity.ActivityPipelineCLI
-PreparedActivityContext = _activity.PreparedActivityContext
+try:
+    from library.cli.entrypoints.activity import (
+        _generate_activity_postprocess_metrics as _entrypoint_generate_activity_postprocess_metrics,
+    )
+except (ImportError, AttributeError):  # pragma: no cover - defensive guard for refactors
+    _entrypoint_generate_activity_postprocess_metrics = None
 
-DEFAULT_INPUT_NAME = _activity.DEFAULT_INPUT_NAME
-DEFAULT_OUTPUT_STEM = _activity.DEFAULT_OUTPUT_STEM
-PROGRAM_NAME = _activity.PROGRAM_NAME
-MIN_ACTIVITY_TIMEOUT = _activity.MIN_ACTIVITY_TIMEOUT
+DEFAULT_INPUT_NAME = "activity.csv"
+DEFAULT_OUTPUT_STEM = "activities"
+PROGRAM_NAME = Path(__file__).with_suffix("").name
 
-cl = _activity.cl
-configure_logger = _activity.configure_logger
-file_sha256 = _activity.file_sha256
-io = _activity.io
-logger = _activity.logger
-run_cli_command = _activity.run_cli_command
-sleep = _activity.sleep
-write_csv_chunks_deterministic = _activity.write_csv_chunks_deterministic
-write_meta_yaml = _activity.write_meta_yaml
+def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
+    invocation = getattr(args, "invocation", None)
+    if invocation is None:
+        return (PROGRAM_NAME,)
+    # Preserve POSIX-style paths for predictable logs and tests
+    result: list[str] = []
+    for arg in invocation:
+        text = str(arg)
+        # Convert backslashes to forward slashes only for absolute POSIX-like roots
+        if isinstance(arg, Path):
+            text = text.replace("\\", "/")
+        result.append(text)
+    return tuple(result)
 
-_args_invocation = _activity._args_invocation
+file_sha256 = _metadata_file_sha256
+write_meta_yaml = _cli_write_meta_yaml
+try:
+    from library.cli import configure_logger
+except ImportError:
+    configure_logger = None  # type: ignore[assignment]
 
+run_cli_command = _run_cli_command
 
-def _sync_runtime_dependencies() -> None:
-    module_globals = globals()
-    logger_obj = module_globals["logger"]
-    _activity.logger = logger_obj
-    _activity_runner.logger = logger_obj
-    _activity.sleep = module_globals["sleep"]
-    _activity.write_csv_chunks_deterministic = module_globals[
-        "write_csv_chunks_deterministic"
+__all__ = (
+    "file_sha256",
+    "write_meta_yaml",
+    "configure_logger",
+    "run_cli_command",
+    "MAX_ACTIVITY_CHUNK_SIZE",
+)
     ]
     _activity.run_chembl = module_globals["run_chembl"]
     _activity._emit_completion_message = module_globals["_emit_completion_message"]
