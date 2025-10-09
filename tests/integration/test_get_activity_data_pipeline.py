@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import warnings
-from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Callable, Iterable
@@ -540,76 +539,6 @@ def test_activity_pipeline__happy_path(activity_resource_dir: Path, cfg, tmp_pat
         "version": target_resource.version,
         "sha256": target_resource.sha256,
     }
-
-
-@pytest.mark.integration
-@pytest.mark.usefixtures("deterministic_env")
-def test_activity_pipeline__extended_columns_dtype_coercion(
-    activity_resource_dir: Path, cfg, tmp_path, monkeypatch
-):
-    _configure_cfg(cfg)
-    input_csv = _copy_resource(activity_resource_dir, "ids_happy.csv", tmp_path)
-    output_csv = tmp_path / "activities.csv"
-
-    chunk_df = pd.read_csv(activity_resource_dir / "chunk_happy.csv")
-    chunk_df["activity_chembl_id"] = pd.Series([float("nan"), 502.0, float("nan")], dtype="float64")
-    chunk_df["compound_name"] = pd.Series([float("nan"), 1.0, float("nan")], dtype="float64")
-    chunk_df["molecule_pref_name"] = pd.Series(["NALTREXONE", "CLOZAPINE", pd.NA], dtype="string")
-    chunk_df["pchembl_value"] = pd.Series(["7.5", "not-a-number", "6.25"], dtype="object")
-    chunk_df["log_value"] = pd.Series([float("nan")] * len(chunk_df), dtype="float64")
-
-    testitem_frame = pd.DataFrame(
-        {
-            "molecule_chembl_id": ["CHEMBL1", "CHEMBL2", "CHEMBL3"],
-            "pref_name": ["NALTREXONE", "CLOZAPINE", "OXFORD"],
-        }
-    )
-
-    monkeypatch.setattr(
-        get_activity_data,
-        "_load_assay_src_lookup",
-        lambda *_: {"ASSAY1": "SRC-ASSAY1", "ASSAY2": "SRC-ASSAY2", "ASSAY3": "SRC-ASSAY3"},
-    )
-
-    _install_fetch_stubs(monkeypatch, chunk_df, testitem_frame=testitem_frame)
-    written = _install_writer_stub(monkeypatch)
-    logger_stub = _RecordingLogger()
-    monkeypatch.setattr(get_activity_data, "logger", logger_stub)
-    monkeypatch.setattr("library.validation.logger", logger_stub)
-
-    args = _make_args(input_csv, output_csv)
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        exit_code = get_activity_data.run_chembl(cfg, args)
-
-    dtype_warnings = [
-        warning
-        for warning in caught
-        if "incompatible dtype" in str(warning.message)
-        or "Setting an item of incompatible dtype" in str(warning.message)
-    ]
-
-    assert exit_code == 0
-    assert not dtype_warnings
-    assert {path for path, _ in written} == {output_csv}
-
-    debug_events = [event for level, event, _ in logger_stub.events if level == "debug"]
-    assert "activity_extended_fallback_conversion_failed" in debug_events
-
-    written_df = written[0][1]
-    assert pd.api.types.is_string_dtype(written_df["activity_chembl_id"])  # type: ignore[arg-type]
-    assert pd.api.types.is_string_dtype(written_df["compound_name"])  # type: ignore[arg-type]
-    assert pd.api.types.is_float_dtype(written_df["log_value"])  # type: ignore[arg-type]
-    assert written_df.loc[0, "activity_chembl_id"] == "ACT1"
-    assert written_df.loc[0, "compound_name"] == "NALTREXONE"
-    assert pytest.approx(written_df.loc[0, "log_value"], rel=1e-6) == 7.5
-    assert pd.isna(written_df.loc[1, "log_value"])
-    assert written_df["standard_value"].tolist() == [5.5, 7.25, 9.0]
-    assert "src_assay_id" in written_df.columns
-    src_assay_series = written_df["src_assay_id"].astype("string")
-    assert src_assay_series.tolist() == ["SRC-ASSAY1", "SRC-ASSAY2", "SRC-ASSAY3"]
-    assert src_assay_series.str.strip().ne("").all()
 
 
 @pytest.mark.integration

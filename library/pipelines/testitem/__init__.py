@@ -15,22 +15,23 @@ from __future__ import annotations
 # ===== Modules =====
 from pathlib import Path
 
-from library.clients import pubchem as pc
+from library.clients import pubchem as pc  # noqa: F401
 from library.common.csv_utils import (
-    write_csv_chunks_deterministic as write_csv_deterministic,
+    write_csv_chunks_deterministic as write_csv_deterministic,  # noqa: F401
 )
-from library.common.log import logger
+from library.common.log import logger  # noqa: F401
 from library.config import Config
-from library.integration import pubchem_library as pl
-from library.integration.chembl_client import ChemblClient
-from library.metadata import file_sha256, write_meta_yaml
-from library.pipelines.assay.chembl_assay import TESTITEM_PUBCHEM_COLUMNS
+from library.integration import pubchem_library as pl  # noqa: F401
+from library.integration.chembl_client import ChemblClient  # noqa: F401
+from library.metadata import file_sha256, write_meta_yaml  # noqa: F401
+from library.pipelines.assay.chembl_assay import TESTITEM_PUBCHEM_COLUMNS  # noqa: F401
 from library.pipelines.common import PipelineRunResult
-from library.table_quality import analyze_table_quality
-from library.validation import validate_testitems
+from library.table_quality import analyze_table_quality  # noqa: F401
+from library.validation import validate_testitems  # noqa: F401
 
 from . import core as _core
-from . import enrichment as testitem_enrichment
+from . import enrichment as testitem_enrichment  # noqa: F401
+from .cli import TestitemPipelineOptions, run_testitem_pipeline
 
 for _name in _core.__all__:
     globals()[_name] = getattr(_core, _name)

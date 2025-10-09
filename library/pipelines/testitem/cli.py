@@ -24,7 +24,6 @@ from library.config import (
     ApiCfg,
     Config,
     IoCfg,
-    RetryCfg,
     TestitemBatchRetryCfg,
     TestitemMoleculeEnrichmentCfg,
     _serialize_paths,
@@ -44,13 +43,7 @@ from library.qa.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
 
 from .catalog import (
-    PARENT_LOOKUP_SOURCE_CACHE,
-    PARENT_LOOKUP_SOURCE_LOOKUP,
-    PARENT_LOOKUP_SOURCE_PARTIAL,
     PARENT_LOOKUP_SOURCE_SKIPPED,
-    PARENT_LOOKUP_SOURCE_SYNC,
-    ParentEnrichmentPreparation,
-    ParentEnrichmentResult,
     ParentLookupStats,
     _merge_parent_stats,
     prepare_parent_enrichment,
@@ -413,7 +406,6 @@ def _load_pipeline_metadata_adder():
 def _load_testitem_schema():
     """Return the schema model and normalizer lazily to avoid circular imports."""
 
-    from library.schemas import TestitemsSchema, normalize_testitems
 
     return TestitemsSchema, normalize_testitems
 
@@ -674,14 +666,6 @@ def run_testitem_pipeline(
 
     requested_ids: tuple[str, ...] = ()
     missing_ids: list[str] = []
-    parent_stats = ParentLookupStats(
-        source=PARENT_LOOKUP_SOURCE_SKIPPED,
-        missing=0,
-        unique=0,
-        attached=0,
-        uncovered=0,
-    )
-
     input_csv = Path(options.input_csv)
     output_csv = Path(options.output_csv) if options.output_csv is not None else None
     offset = options.offset if options.offset is not None else cfg.testitem.offset

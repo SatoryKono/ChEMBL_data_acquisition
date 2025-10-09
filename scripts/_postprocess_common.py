@@ -18,7 +18,7 @@ from library.postprocess.common.logging import (
     dump_report,
 )
 from library.postprocess.common.schema import DataFrameSchema
-from library.postprocess.common.types import SchemaValidationError, StepError
+from library.postprocess.common.types import SchemaValidationError
 from library.postprocess.common.utils import collect_postprocess_metrics
 
 

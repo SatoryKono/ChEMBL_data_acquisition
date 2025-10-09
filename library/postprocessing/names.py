@@ -7,7 +7,28 @@ validate behaviour against the historical pipeline.
 
 from __future__ import annotations
 
+import json
+import re
+import sys
+from collections.abc import Iterable, Mapping, MutableMapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
+import pandas as pd
+
+from library.common.csv_utils import write_csv_deterministic
+
+from ..common.log import logger
+from . import helpers
+from .helpers import (
+    ENCODING_FALLBACKS,
+    normalise_export_basename,
+    normalise_text,
+    read_csv_with_fallbacks,
+)
+
+# ruff: noqa: E501
 SSOT_CONTEXT = '''
 The implementation follows the Single Source of Truth (SSoT) captured in the
 Power Query (M) script that shipped with the historical Excel workbook. The
@@ -45,22 +66,15 @@ long-form table where each row represents a distinct name attributed to a
 target.
 '''
 
-from dataclasses import dataclass
-import json
-import re
-import sys
-from pathlib import Path
-from typing import Any, Iterable, Mapping, MutableMapping, Sequence
-
-import pandas as pd
-
-from .helpers import (
-    ENCODING_FALLBACKS,
-    normalise_export_basename,
-    normalise_text,
-    read_csv_with_fallbacks,
-)
-from library.common.csv_utils import write_csv_deterministic
+__all__ = [
+    "SSOT_CONTEXT",
+    "process_target_names",
+    "is_hidrate",
+    "remove_hidrate",
+    "sort_my_list",
+    "reference_SMILES",
+    "write_csv_deterministic",
+]
 
 _DEFAULT_SEARCH_DIR = Path("data/output")
 _OUTPUT_COLUMNS: tuple[str, ...] = (
@@ -386,60 +400,6 @@ def _ensure_columns(frame: pd.DataFrame, columns: Sequence[str]) -> None:
             "Input target table is missing required columns: " + ", ".join(missing)
         )
 
-
-def process_target_names(
-    input_path: str | Path | None = None,
-    *,
-    search_dir: str | Path | None = None,
-) -> str:
-    if input_path is None:
-        directory = Path(search_dir) if search_dir is not None else _current_default_search_dir()
-        path = _latest_target_file(directory)
-    else:
-        path = Path(input_path)
-        if not path.exists():
-            raise TargetNamesError(f"Target export not found at {path!s}")
-
-    frame = read_csv_with_fallbacks(path, encodings=ENCODING_FALLBACKS)
-    _ensure_columns(frame, ["target_chembl_id", "target_components"])
-
-    rows = _component_rows(frame)
-    result = pd.DataFrame(rows, columns=_OUTPUT_COLUMNS)
-    result = result.fillna("")
-    if not result.empty:
-        result = helpers.stable_sort(
-            result,
-            ["target_chembl_id", "molecule_chembl_id", "all_names"],
-        )
-    base = normalise_export_basename(path)
-    output_path = path.with_name(f"name.{base}").with_suffix(".csv")
-    write_csv_deterministic(
-        result,
-        output_path,
-        col_order=_OUTPUT_COLUMNS,
-        key_cols=["target_chembl_id", "molecule_chembl_id"],
-        encoding="utf-8",
-        sep=",",
-        cfg=None,
-    )
-    return str(output_path)
-
-
-__all__ = [
-    "process_target_names",
-    "is_hidrate",
-    "remove_hidrate",
-    "sort_my_list",
-    "reference_SMILES",
-]
-from collections.abc import Iterable
-from pathlib import Path
-from typing import Any
-
-import pandas as pd
-
-from . import helpers
-from ..common.log import logger
 
 # Columns in the targets table used to derive names.  Each entry maps the column
 # name to a descriptive label stored alongside the extracted token so consumers

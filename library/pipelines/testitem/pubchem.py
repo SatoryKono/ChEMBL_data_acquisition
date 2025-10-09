@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, MutableMapping, Sequence, TypeAlias, cast
+from typing import TYPE_CHECKING, Any, Callable, Mapping, MutableMapping, Sequence, TypeAlias, cast
 
 import pandas as pd
 import requests

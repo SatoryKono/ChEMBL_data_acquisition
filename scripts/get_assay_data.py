@@ -7,6 +7,7 @@ instead of terminating the interpreter to make orchestration easier.
 
 from __future__ import annotations
 
+# ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
 else:  # pragma: no cover - executed when imported as a package module
@@ -52,8 +53,7 @@ from library.cli.pipeline_definition import PipelineDefinition
 
 from library.cli.base import PipelineCLIBase
 
-from library.cli_utils import run_cli_command, run_pipeline
-from library.cli.logging import setup_cli_logging
+from library.cli_utils import run_pipeline
 from library.cli.metadata import prepare_option
 from library.config import Config, _serialize_paths
 from library.common.log import logger
@@ -68,8 +68,6 @@ from library.pipelines.common import (
 )
 from library.pipelines.common.metadata import get_pipeline_version
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
-
-configure_logger = cli.configure_logger
 
 __all__ = ["ap", "configure_logger", "main", "run", "run_chembl"]
 

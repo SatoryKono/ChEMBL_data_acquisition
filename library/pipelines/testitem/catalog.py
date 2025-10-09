@@ -6,7 +6,7 @@ from collections import ChainMap
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Mapping, MutableMapping, NamedTuple, Sequence
+from typing import Mapping, MutableMapping, NamedTuple, Sequence
 
 import pandas as pd
 import requests

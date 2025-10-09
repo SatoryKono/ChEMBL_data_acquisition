@@ -5,7 +5,7 @@ import unicodedata
 
 import pandas as pd
  
-from library.postprocess.common import StepDefinition, run_steps
+from library.postprocess.common import run_steps
 from library.postprocess.common.logging import PipelineRunMetrics
  
 from library.pipelines.common.metadata import get_pipeline_version

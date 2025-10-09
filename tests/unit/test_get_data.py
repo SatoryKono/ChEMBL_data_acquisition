@@ -264,7 +264,7 @@ def test_configure_logging__delegates_to_configure_logger(monkeypatch: pytest.Mo
         return original_configure(cfg)
 
     monkeypatch.setattr(get_data, "configure_logger", _wrapper)
-    logger = get_data._configure_logging("warn", run_id="fixed")
+    get_data._configure_logging("warn", run_id="fixed")
     assert captured, "expected configure_logger to be invoked"
     cfg = captured[0]
     assert cfg.level == "WARN"
