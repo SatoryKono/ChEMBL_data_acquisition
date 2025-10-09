@@ -15,18 +15,18 @@ import importlib
 import math
 import os
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping, cast
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from ..pipelines.document import postprocessing as stage_document_postprocessing
-from ..config import IoCfg
 from ..common.csv_utils import write_csv_deterministic
 from ..common.log import logger
+from ..config import IoCfg
+from ..pipelines.document import postprocessing as stage_document_postprocessing
 
 # ===== Parameters ===========================================================
 UTF8_ENCODING = "utf-8"
@@ -214,16 +214,17 @@ def _string_value(value: object) -> str:
         return value.strip()
     if value is None:
         return ""
-    if isinstance(value, (int, float)):
-        if pd.isna(value):
-            return ""
+    if isinstance(value, int | float):
+        # pd.isna handles both int and float, including numpy types
+        try:
+            if pd.isna(value):
+                return ""
+        except ImportError:
+            pass
         return str(value).strip()
-    if pd.isna(value):
-        return ""
     return str(value).strip()
 
-
-def _string_series(series: pd.Series) -> pd.Series:
+def _string_series(series: pd.Series[Any]) -> pd.Series[str]:
     """Return ``series`` as a trimmed ``string`` dtype series."""
 
     if series.empty:
@@ -248,7 +249,7 @@ def _apply_export_aliases(df: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
-def _truthy_mask(series: pd.Series) -> pd.Series:
+def _truthy_mask(series: pd.Series[Any]) -> pd.Series[bool]:
     """Return a boolean mask highlighting non-empty values in ``series``."""
 
     if pd.api.types.is_bool_dtype(series):
@@ -257,7 +258,7 @@ def _truthy_mask(series: pd.Series) -> pd.Series:
     return cleaned != ""
 
 
-def _coalesce_columns(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
+def _coalesce_columns(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series[str]:
     """Return the first non-empty value from ``columns`` per row."""
 
     if df.empty:
@@ -271,8 +272,7 @@ def _coalesce_columns(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
         result = result.mask(mask & (candidate != ""), candidate)
     return result
 
-
-def _series_to_bool(series: pd.Series) -> pd.Series:
+def _series_to_bool(series: pd.Series[Any]) -> pd.Series[bool]:
     """Return ``series`` as boolean values recognising textual truthy tokens."""
 
     if pd.api.types.is_bool_dtype(series):
@@ -293,11 +293,11 @@ def _split_tokens(value: str, delimiters: Iterable[str]) -> list[str]:
         tokens = parts
     return [token.strip() for token in tokens if token.strip()]
 
-
-def _aggregate_terms(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
+def _aggregate_terms(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series[str]:
     """Combine descriptor columns into a semicolon-delimited series."""
 
     if not columns:
+        return pd.Series([""] * len(df), index=df.index, dtype="string")
         return pd.Series([""] * len(df), index=df.index, dtype="string")
     collected: list[str] = []
     for values in df[columns].fillna("").itertuples(index=False, name=None):
@@ -333,7 +333,7 @@ def _sort_tokens(tokens: Iterable[str], priority: Sequence[str]) -> list[str]:
     return unique
 
 
-def _build_error_sources(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+def _build_error_sources(df: pd.DataFrame) -> tuple[pd.Series[str], pd.Series[bool]]:
     """Return aggregated error sources and presence flags."""
 
     error_tokens: list[str] = []
@@ -365,11 +365,12 @@ def _build_error_sources(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
         pd.Series(has_error, index=df.index, dtype="boolean"),
     )
 
-
-def _build_metadata_flags(df: pd.DataFrame) -> tuple[pd.Series, dict[str, pd.Series]]:
+def _build_metadata_flags(
+    df: pd.DataFrame,
+) -> tuple[pd.Series[str], dict[str, pd.Series[Any]]]:
     """Return aggregated metadata source strings and per-source flags."""
 
-    flags: dict[str, pd.Series] = {}
+    flags: dict[str, pd.Series[bool]] = {}
     token_lists: list[list[str]] = []
 
     for source in METADATA_SOURCE_ORDER:
@@ -380,16 +381,16 @@ def _build_metadata_flags(df: pd.DataFrame) -> tuple[pd.Series, dict[str, pd.Ser
                 continue
             mask = mask | _truthy_mask(df[column])
         flags[f"has_{source}"] = mask
-    for row in zip(*(flags[f"has_{src}"] for src in METADATA_SOURCE_ORDER)):
-        sources = [name for name, present in zip(METADATA_SOURCE_ORDER, row) if present]
+    for row in zip(*(flags[f"has_{src}"] for src in METADATA_SOURCE_ORDER), strict=False):
+        sources = [name for name, present in zip(METADATA_SOURCE_ORDER, row, strict=False) if present]
         token_lists.append(sources)
     metadata_strings = [METADATA_LIST_SEPARATOR.join(tokens) for tokens in token_lists]
     metadata_counts = [len(tokens) for tokens in token_lists]
     metadata_series = pd.Series(metadata_strings, index=df.index, dtype="string")
     count_series = pd.Series(metadata_counts, index=df.index, dtype="Int64")
+    # Fix: type of count_series in returned dict should be pd.Series[int], not pd.Series[bool]
     return metadata_series, {**flags, "metadata_source_count": count_series}
-
-
+    
 def _coverage_status(score: int, has_error: bool) -> str:
     """Return textual coverage label for ``score``."""
 
@@ -476,7 +477,9 @@ def preprocess_document_export(
             missing_columns,
         )
 
-    return processed.loc[:, stage_document_postprocessing.FINAL_COLUMN_ORDER]
+    # Ensure only columns present in processed are selected, in the correct order
+    col_order = [col for col in stage_document_postprocessing.FINAL_COLUMN_ORDER if col in processed.columns]
+    return processed.loc[:, col_order]
 
 
 def _normalise_export_basename(source: Path | str) -> str:
@@ -695,20 +698,22 @@ def to_text(value: Any) -> str:
         return value
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="ignore")
-    if isinstance(value, (np.bool_, bool)):
+    if isinstance(value, np.bool_ | bool):
         return "true" if bool(value) else "false"
-    if isinstance(value, (np.integer, int)):
+    if isinstance(value, np.integer | int):
         return str(int(value))
-    if isinstance(value, (np.floating, float)):
+    if isinstance(value, np.floating | float):
         if math.isnan(float(value)):
             return ""
-        integer = float(value)
-        if float(integer).is_integer():
-            return str(int(integer))
-        return str(integer)
-    if pd.isna(cast(object, value)):
+        if float(value).is_integer():
+            return str(int(value))
+        return str(float(value))
+    if pd.isna(value):
         return ""
-    return str(value)
+    try:
+        return str(value)
+    except Exception:
+        return ""
 
 
 def safe_lower(text: Any) -> str:
@@ -795,8 +800,7 @@ def try_parse_int(value: Any) -> int | None:
             return int(float_value)
         return None
 
-
-def _series_any(series_list: Iterable[pd.Series]) -> pd.Series:
+def _series_any(series_list: Iterable[pd.Series[bool]]) -> pd.Series[bool]:
     series_iter = iter(series_list)
     try:
         result = next(series_iter).copy()
@@ -992,10 +996,16 @@ def _load_output_document(path: Path) -> pd.DataFrame:
         numeric = pd.to_numeric(frame[column], errors="coerce")
         frame[column] = numeric.astype("Int64")
 
-    # Coerce ChEMBL.issue into Int64, mapping non-numeric ranges like "11-12" to <NA>
+    # Conditionally coerce ChEMBL.issue to Int64 only when values look numeric or numeric ranges
     if "ChEMBL.issue" in frame.columns:
-        chembl_issue_numeric = pd.to_numeric(frame["ChEMBL.issue"], errors="coerce")
-        frame["ChEMBL.issue"] = chembl_issue_numeric.astype("Int64")
+        issue_series = frame["ChEMBL.issue"].astype("string")
+        non_empty = issue_series.fillna("") != ""
+        looks_numeric_or_range = issue_series.str.fullmatch(r"\d+(?:-\d+)?", na=False)
+        if (non_empty == looks_numeric_or_range).all():
+            chembl_issue_numeric = pd.to_numeric(issue_series, errors="coerce")
+            frame["ChEMBL.issue"] = chembl_issue_numeric.astype("Int64")
+        else:
+            frame["ChEMBL.issue"] = issue_series
 
     return frame
 
@@ -1032,14 +1042,15 @@ def _harmonise_documents(out_frame: pd.DataFrame, ref_frame: pd.DataFrame) -> pd
     conflict_any = _series_any(conflict_series)
     df["invalid.doi"] = (~agree_any) & conflict_any
 
-    ref_pmid_numbers = df["ChEMBL.pubmed_id"].map(try_parse_int)
-    agree_pmid: list[pd.Series] = []
-    conflict_pmid: list[pd.Series] = []
+    ref_pmid_numbers = df["ChEMBL.pubmed_id"].apply(try_parse_int)
+    agree_pmid: list[pd.Series[bool]] = []
+    conflict_pmid: list[pd.Series[bool]] = []
     ref_valid = ref_pmid_numbers.notna()
 
     for column in EXTERNAL_PMID_COLUMNS:
         external_text = df[column].map(to_text)
-        external_numbers = external_text.map(try_parse_int)
+        # Use .apply instead of .map for try_parse_int to avoid type issues
+        external_numbers = external_text.apply(try_parse_int)
         external_valid = external_numbers.notna()
 
         match = ref_valid & external_valid & (external_numbers == ref_pmid_numbers)
@@ -1176,7 +1187,7 @@ def _harmonise_documents(out_frame: pd.DataFrame, ref_frame: pd.DataFrame) -> pd
     df = df.merge(ref_frame, on="document_chembl_id", how="left")
 
     review_values: list[Any] = []
-    for current, doctype in zip(df["review"], df["doctype_review"]):
+    for current, doctype in zip(df["review"], df["doctype_review"], strict=False):
         current_value = None if pd.isna(current) else bool(current)
         doctype_value = None if pd.isna(doctype) else bool(doctype)
         if current_value is True or doctype_value is True:
@@ -1201,7 +1212,7 @@ def _harmonise_documents(out_frame: pd.DataFrame, ref_frame: pd.DataFrame) -> pd
     if missing_columns:
         raise ValueError(f"Missing expected columns after harmonisation: {missing_columns}")
 
-    df = df.loc[:, FINAL_COLUMN_ORDER]
+    df = df.reindex(columns=FINAL_COLUMN_ORDER)
     df = df.sort_values("completed", ascending=True, kind="mergesort")
     df.reset_index(drop=True, inplace=True)
     return df

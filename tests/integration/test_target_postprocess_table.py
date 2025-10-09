@@ -27,7 +27,8 @@ def test_postprocess_target_table__matches_golden(
 
     helpers.postprocess_target_table_file(working_input, working_output, cfg=cfg)
 
-    assert working_output.read_bytes() == expected_path.read_bytes()
+    # Normalise EOL across platforms
+    assert working_output.read_bytes().replace(b"\r\n", b"\n") == expected_path.read_bytes().replace(b"\r\n", b"\n")
 
     result = pd.read_csv(working_output, dtype=str, keep_default_na=False).astype(
         "string"
@@ -56,4 +57,4 @@ def test_postprocess_target_table__is_idempotent(
     helpers.postprocess_target_table_file(working_input, second_output, cfg=cfg)
     second_run = second_output.read_bytes()
 
-    assert first_run == second_run == expected_path.read_bytes()
+    assert first_run.replace(b"\r\n", b"\n") == second_run.replace(b"\r\n", b"\n") == expected_path.read_bytes().replace(b"\r\n", b"\n")

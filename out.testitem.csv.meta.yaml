@@ -1,0 +1,67 @@
+generated_at: '2025-10-09T07:07:44.724167+00:00'
+git_sha: 514cfc2d3a32419d2eaee41952ab794ec7011001
+command: scripts\make_testitem_postprocessing.py --input data\output\testitem\output.testitem_20251010.csv
+  --output out.testitem.csv
+columns:
+- molecule_chembl_id
+- parent_molecule_chembl_id
+- salt_chembl_id
+- pref_name
+- molecule_type
+- structure_type
+- max_phase
+- natural_product
+- prodrug
+- polymer_flag
+- oral
+- parenteral
+- topical
+- black_box_warning
+- first_approval
+- canonical_smiles
+- standard_inchi
+- standard_inchi_key
+- pubchem_cid
+- pubchem_canonical_smiles
+- pubchem_isomeric_smiles
+- pubchem_inchi
+- pubchem_inchikey
+- pubchem_iupac_name
+- pubchem_molecular_formula
+- timestamp_utc
+- pipeline_version
+- molecule_structures.canonical_smiles
+- molecule_structures.standard_inchi
+- molecule_structures.standard_inchi_key
+dtypes:
+  molecule_chembl_id: string
+  parent_molecule_chembl_id: string
+  salt_chembl_id: string
+  pref_name: string
+  molecule_type: string
+  structure_type: string
+  max_phase: string
+  natural_product: boolean
+  prodrug: boolean
+  polymer_flag: boolean
+  oral: boolean
+  parenteral: boolean
+  topical: boolean
+  black_box_warning: string
+  first_approval: string
+  canonical_smiles: string
+  standard_inchi: string
+  standard_inchi_key: string
+  pubchem_cid: object
+  pubchem_canonical_smiles: string
+  pubchem_isomeric_smiles: string
+  pubchem_inchi: string
+  pubchem_inchikey: string
+  pubchem_iupac_name: string
+  pubchem_molecular_formula: string
+  timestamp_utc: string
+  pipeline_version: string
+  molecule_structures.canonical_smiles: float64
+  molecule_structures.standard_inchi: float64
+  molecule_structures.standard_inchi_key: float64
+config: {}

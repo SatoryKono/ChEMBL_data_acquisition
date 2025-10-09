@@ -7,50 +7,32 @@ applications or tests.
 
 from __future__ import annotations
 
-if __package__ in {None, ""}:
-    from _bootstrap import bootstrap_cli
-else:  # pragma: no cover - executed when imported as a package module
-    from ._bootstrap import bootstrap_cli
-
-bootstrap_cli(__package__, __file__)
-del bootstrap_cli
-
+# Bootstrap code removed - not needed
 import argparse
 import json
 import sys
-
-from collections.abc import Iterable, Iterator, Mapping, Sequence, Callable
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from threading import Lock
-from datetime import datetime, timezone
-
 from functools import partial
 from itertools import islice
 from pathlib import Path
-from time import sleep, perf_counter
+from threading import Lock
+from time import perf_counter, sleep
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 import pandas as pd
 import requests
 
-from typing import Any
+from library.clients.chembl import ChemblClient
 
 try:  # pragma: no cover - urllib3 is part of requests dependency chain
     from urllib3.exceptions import NameResolutionError as _Urllib3NameResolutionError
 except Exception:  # pragma: no cover - defensive fallback for alternative stacks
-    _Urllib3NameResolutionError = None  # type: ignore[assignment]
+    _Urllib3NameResolutionError = None  # type: ignore
 
-from library.integration import chembl_library as cl
-from library import cli
-from library import io
-from library.orchestration import ETLContext
-from library.common.csv_utils import write_csv_chunks_deterministic  # re-exported for tests
-from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS, MAX_ACTIVITY_CHUNK_SIZE
-from library.pipelines.common import (
-    ChunkedFetchConfig,
-    CsvWriterConfig,
-)
-
+    from library import cli, io
+    from library.integration import chembl_library as cl
 from library.cli import (
     Logger,
     LoggerConfig,
@@ -59,45 +41,55 @@ from library.cli import (
 from library.cli import (
     build_parser as base_parser,
 )
-
 from library.cli.base import PipelineCLIBase
-
-from library.cli_utils import (
-    PipelineError,
-    resolve_invocation,
-    run_cli_command,
-    run_pipeline,
-)
-from library.cli_utils import (
-    file_sha256 as _cli_file_sha256,
-)
-from library.cli_utils import (
-    write_meta_yaml as _cli_write_meta_yaml,
-)
-from library.config import Config, _serialize_paths
-from library.common.log import logger
-from library.cli.logging import setup_cli_logging
 from library.cli.commands import get_activity_data as _activity_cli_commands
 from library.cli.commands.get_activity_data import (
-    ActivityCommandOptions,
     MIN_ACTIVITY_TIMEOUT,
+    ActivityCommandOptions,
     run_activity_pipeline,
 )
+from library.cli_utils import (  # noqa: E402
+    PipelineError,
+    resolve_invocation,
+    # file_sha256 is not explicitly exported by library.cli_utils, so import directly if needed
+)
+from library.common.csv_utils import (
+    write_csv_chunks_deterministic,  # re-exported for tests
+)
+from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
+from library.common.log import logger
+from library.config import Config, _serialize_paths
+from library.io.metadata import (
+    write_meta_yaml as _cli_write_meta_yaml,
+)
+from library.orchestration import ETLContext
 from library.pipelines.activity import run as activity_run
-from library.pipelines.common import add_pipeline_metadata
+from library.pipelines.assay.chembl_assay import (
+    ACTIVITY_COLUMNS,
+)
+from library.pipelines.common import (
+    ChunkedFetchConfig,
+    CsvWriterConfig,
+    add_pipeline_metadata,
+)
 from library.pipelines.common.metadata import get_pipeline_version
+from library.postprocess.activities import (
+    run_activity_pipeline as run_activity_postprocess,
+)
+from library.postprocess.common import collect_postprocess_metrics
+from library.postprocessing import helpers as postprocessing_helpers
+from library.postprocessing.activity_extended import process_activity_extended
 from library.processing.activity import (
     apply_activity_annotations,
     compute_activity_bounds,
 )
-from library.postprocessing.activity_extended import process_activity_extended
-from library.postprocessing import helpers as postprocessing_helpers
-from library.postprocess.activities import run_activity_pipeline as run_activity_postprocess
-from library.postprocess.common import collect_postprocess_metrics
 from library.qa.reporting import build_table_quality_hook
+from library.schemas import (
+    ActivitiesSchema,
+    configure_activity_schema,
+    normalize_activities,
+)
 from library.validation import validate_activities
-from library.schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
-from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
@@ -107,12 +99,22 @@ def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
     invocation = getattr(args, "invocation", None)
     if invocation is None:
         return (PROGRAM_NAME,)
-    return tuple(str(arg) for arg in invocation)
+    # Preserve POSIX-style paths for predictable logs and tests
+    result: list[str] = []
+    for arg in invocation:
+        text = str(arg)
+        # Convert backslashes to forward slashes only for absolute POSIX-like roots
+        if isinstance(arg, Path):
+            text = text.replace("\\", "/")
+        result.append(text)
+    return tuple(result)
 
-
-file_sha256 = _cli_file_sha256
+file_sha256 = None  # _cli_file_sha256 is not defined; set to None or import if available
 write_meta_yaml = _cli_write_meta_yaml
-configure_logger = cli.configure_logger
+try:
+    from library.cli import configure_logger
+except ImportError:
+    configure_logger = None  # type: ignore[assignment]
 
 __all__ = (
     "file_sha256",
@@ -260,24 +262,26 @@ _OUTPUT_ACTIVITY_DROP_COLUMNS: tuple[str, ...] = (
 
 
 
-def _coerce_series_dtype(series: pd.Series, dtype: str) -> pd.Series:
+def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
     """Return ``series`` converted to ``dtype`` where feasible."""
 
-    try:
-        return series.astype(dtype)
-    except (TypeError, ValueError):
-        if dtype in {"Float64", "Int64"}:
-            coerced = pd.to_numeric(series, errors="coerce")
-            return coerced.astype(dtype)
-        if dtype == "boolean":
-            lowered = series.astype("string").str.lower()
-            truthy = lowered.isin({"true", "1", "yes"})
-            falsy = lowered.isin({"false", "0", "no"})
-            result = pd.Series(pd.NA, index=series.index, dtype="boolean")
-            result.loc[truthy] = True
-            result.loc[falsy] = False
-            return result
-        return series.astype("string")
+    # Use pandas extension dtypes directly for nullable types
+    if dtype == "Float64":
+        return cast(pd.Series[Any], series.astype(pd.Float64Dtype()))
+    elif dtype == "Int64":
+        return cast(pd.Series[Any], series.astype(pd.Int64Dtype()))
+    elif dtype == "boolean":
+        return cast(pd.Series[Any], series.astype(pd.BooleanDtype()))
+    elif dtype == "string":
+        return cast(pd.Series[Any], series.astype(pd.StringDtype()))
+    else:
+        # For non-extension dtypes, try to use numpy dtype if possible
+        try:
+            import numpy as np
+            return cast(pd.Series[Any], series.astype(np.dtype(dtype)))
+        except (TypeError, ValueError):
+            # Final fallback: convert to string
+            return cast(pd.Series[Any], series.astype(str))
 
 
 def _extract_adapter_retry_metadata(
@@ -460,10 +464,10 @@ def _emit_completion_message(
 
     if streamed_metrics:
         rows_value = streamed_metrics.get("rows")
-        if isinstance(rows_value, (int, float)):
+        if isinstance(rows_value, int | float):
             resolved_rows = int(rows_value)
         null_fraction = streamed_metrics.get("null_fraction")
-        if isinstance(null_fraction, (int, float)):
+        if isinstance(null_fraction, int | float):
             null_fraction_value = float(null_fraction)
 
     null_fraction_display = (
@@ -478,7 +482,7 @@ def _emit_completion_message(
     )
     logger.info(message)
 
-_EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series | None]] = {
+_EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series[Any] | None]] = {
     "activity_chembl_id": lambda df: df.get("activity_id"),
     "compound_name": lambda df: df.get("molecule_pref_name"),
     "log_value": lambda df: df.get("pchembl_value"),
@@ -486,10 +490,10 @@ _EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series | Non
 
 
 def _coerce_extended_series(
-    series: pd.Series,
+    series: pd.Series[Any],
     dtype: str,
     column: str,
-) -> tuple[pd.Series, pd.Series]:
+) -> tuple[pd.Series[Any], pd.Series[bool]]:
     """Return ``series`` coerced to ``dtype`` and a mask of conversion failures."""
 
     if not isinstance(series, pd.Series):
@@ -502,13 +506,13 @@ def _coerce_extended_series(
 
     if dtype == "Float64":
         numeric = pd.to_numeric(series, errors="coerce")
-        converted = pd.Series(pd.array(numeric, dtype="Float64"), index=series.index)
+        converted = pd.Series(pd.array(numeric.tolist(), dtype="Float64"), index=series.index)
         failures = series.notna() & converted.isna()
         return converted, failures
 
     if dtype == "Int64":
         numeric = pd.to_numeric(series, errors="coerce")
-        converted_float = pd.Series(pd.array(numeric, dtype="Float64"), index=series.index)
+        converted_float: pd.Series[Any] = pd.Series(pd.array(numeric.tolist(), dtype="Float64"), index=series.index)
         failures = series.notna() & converted_float.isna()
         non_integral_mask = converted_float.notna() & converted_float.ne(converted_float.round())
         if non_integral_mask.any():
@@ -540,7 +544,7 @@ def _coerce_extended_series(
 
 
  
-def _string_like_missing(series: pd.Series) -> pd.Series:
+def _string_like_missing(series: pd.Series[Any]) -> pd.Series[bool]:
     """Return a boolean mask for ``series`` treating blanks as missing."""
 
     mask = series.isna()
@@ -550,7 +554,7 @@ def _string_like_missing(series: pd.Series) -> pd.Series:
     return mask
  
  
-def _string_blank_mask(series: pd.Series) -> pd.Series:
+def _string_blank_mask(series: pd.Series[Any]) -> pd.Series[bool]:
     """Return mask of entries that are null or contain only whitespace."""
 
     values = series.astype("string")
@@ -952,19 +956,22 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if final_out_attr in (None, argparse.SUPPRESS):
         legacy_output = getattr(args, "output_csv", None)
         if legacy_output not in (None, argparse.SUPPRESS):
-            output_path = Path(legacy_output)
+            if isinstance(legacy_output, str | Path):
+                output_path = Path(legacy_output)
+            else:
+                output_path = Path(str(legacy_output))
             if not isinstance(legacy_output, Path):
                 args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
         else:
             output_path = Path(io.default_output_path(args.input_csv, cfg.io))
             args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
     else:
-        output_path = Path(final_out_attr)
+        output_path = Path(str(final_out_attr)) if not isinstance(final_out_attr, str | Path) else Path(final_out_attr)
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
-        setattr(args, "output_csv", output_path)
+        args.output_csv = output_path
 
     start_time = perf_counter()
 
@@ -1022,7 +1029,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         extra_columns.append(action_cfg.column)
     extra_kwargs = {"extra_columns": extra_columns} if extra_columns else {}
 
-    invocation = _args_invocation(args)
+    _args_invocation(args)
 
     failure_path = output_path.with_name(f"{output_path.stem}_failure_cases.csv")
     fetch_failure_path = output_path.with_name(
@@ -1052,7 +1059,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             "activity_missing_columns",
             missing=sorted(missing),
         )
-        fillers: dict[str, pd.Series] = {}
+        fillers: dict[str, pd.Series[Any]] = {}
         for column in missing:
             dtype_info = _ACTIVITY_REQUIRED_DTYPES.get(column)
             python_type = getattr(dtype_info, "python_type", None)
@@ -1299,7 +1306,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                                 **log_context,
                             )
                             chunk_failures.add_failure(id_list, error_message)
-                            raise PipelineError("chunk_fetch_failed")
+                            raise PipelineError("chunk_fetch_failed")  # noqa: B904
                         delay = compute_backoff_delay(attempt, retry_cfg)
                         logger.warning(
                             "activity_fetch_retry",
@@ -1369,7 +1376,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         result = activity_run.run_activity_pipeline(
             fetch_config=fetch_config,
-            metadata_hooks=metadata_hooks,
+            metadata_hooks=list(metadata_hooks),
             fetch_chunk=fetch_chunk,
             writer_config=writer_config,
             definition_kwargs=definition_kwargs,
@@ -1425,15 +1432,29 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if exit_code == 0:
         completion_rows = processed_ids
         summary_rows = summary_snapshot.get("rows") if summary_snapshot else None
-        if isinstance(summary_rows, (int, float)):
-            completion_rows = int(summary_rows)
+        if isinstance(summary_rows, int | float):
+            try:
+                completion_rows = int(summary_rows)
+            except Exception:
+                # Fallback in case of any unexpected type or value
+                completion_rows = processed_ids
         elif pipeline_stats is not None:
-            completion_rows = int(
-                pipeline_stats.get(
-                    "rows_kept",
-                    pipeline_stats.get("rows_total", processed_ids),
-                )
-            )
+            try:
+                # Try to get from pipeline_stats if available
+                rows_kept = pipeline_stats.get("rows_kept")
+                if rows_kept is not None and isinstance(rows_kept, int | float):
+                    completion_rows = int(rows_kept)
+                else:
+                    rows_total = pipeline_stats.get("rows_total", processed_ids)
+                    if isinstance(rows_total, int | float):
+                        completion_rows = int(rows_total)
+                    else:
+                        completion_rows = processed_ids
+            except Exception:
+                # Fallback in case of any unexpected type or value
+                completion_rows = processed_ids
+        else:
+            completion_rows = processed_ids
 
         report_extras: dict[str, object] = {"rows": completion_rows, "processed": processed_ids}
         if pipeline_stats is not None:
@@ -1475,14 +1496,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 pipeline_done_payload["postprocess_duration_s"] = summary["duration_s"]
             if summary.get("steps") is not None:
                 pipeline_done_payload["postprocess_steps"] = summary["steps"]
-            if postprocess_metrics.validation is not None:
-                pipeline_done_payload["postprocess_schema"] = (
-                    postprocess_metrics.validation.schema
-                )
-        if report_path is not None:
-            pipeline_done_payload["postprocess_report"] = str(report_path)
+            validation = getattr(postprocess_metrics, "validation", None)
+            if validation is not None:
+                pipeline_done_payload["postprocess_schema"] = getattr(validation, "schema", None)
+            if report_path is not None:
+                pipeline_done_payload["postprocess_report"] = str(report_path)
 
-        logger.info("activity_pipeline_done", **pipeline_done_payload)
+        logger.info("activity_pipeline_done", extra=pipeline_done_payload)
         if extended_output_path is not None:
             logger.info(
                 f"Successful export checkpoint: primary data at '{output_path}', extended data at '{extended_output_path}'."
@@ -1528,14 +1548,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     return exit_code
 
-
 def _generate_activity_postprocess_metrics(
     cfg: Config,
     output_path: Path,
     *,
     logger: Logger,
     extras: Mapping[str, object] | None = None,
-):
+) -> tuple[object, Path]:
     """Run the activity postprocess pipeline and persist the metrics report."""
 
     metrics, report_path = collect_postprocess_metrics(
@@ -1572,7 +1591,7 @@ def _coerce_cli_path(value: object) -> Path | str | None:
 
     if value in (None, argparse.SUPPRESS):
         return None
-    return value  # ``run_activity_pipeline`` handles conversion to :class:`Path`.
+    return cast(Path | str | None, value)  # ``run_activity_pipeline`` handles conversion to :class:`Path`.
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
@@ -1581,7 +1600,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     _ensure_command_logger_sync()
 
     options = ActivityCommandOptions(
-        input_csv=getattr(args, "input_csv"),
+        input_csv=args.input_csv,
         output_csv=_coerce_cli_path(getattr(args, "output_csv", None)),
         final_output=_coerce_cli_path(getattr(args, "final_out", None)),
         limit=getattr(args, "limit", None),

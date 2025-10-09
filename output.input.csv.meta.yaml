@@ -1,5 +1,5 @@
-generated_at: '2025-10-09T06:55:27.918948+00:00'
-git_sha: b22c67007b5f9621dfebf5021ba8b020e77e2138
+generated_at: '2025-10-09T07:23:47.434520+00:00'
+git_sha: 514cfc2d3a32419d2eaee41952ab794ec7011001
 command: E:\github\ChEMBL_data_acquisition4\library\utils\cli_tools\get_activities.py
   --limit 5
 columns:

@@ -1,0 +1,209 @@
+{
+  "extras": {
+    "input": "data\\output\\testitem\\output.testitem_20251010.csv",
+    "output": "out.testitem.csv"
+  },
+  "metrics": {
+    "completed_at": "2025-10-09T07:07:45.662052+00:00",
+    "duration_s": 0.5323101000394672,
+    "input": {
+      "columns": 30,
+      "rows": 40672
+    },
+    "output": {
+      "columns": 30,
+      "rows": 40672
+    },
+    "pipeline_version": "0.1.3",
+    "started_at": "2025-10-09T07:07:45.129725+00:00",
+    "steps": [
+      {
+        "completed_at": "2025-10-09T07:07:45.395440+00:00",
+        "duration_s": 0.25713080004788935,
+        "error": null,
+        "input": {
+          "columns": 30,
+          "rows": 40672
+        },
+        "name": "normalize_testitem_records",
+        "output": {
+          "columns": 30,
+          "rows": 40672
+        },
+        "parameters": {
+          "coerce_booleans": true,
+          "uppercase_identifiers": true
+        },
+        "schema_diff": {
+          "added": [],
+          "removed": [],
+          "type_changes": {
+            "black_box_warning": {
+              "from": "float64",
+              "to": "string"
+            },
+            "canonical_smiles": {
+              "from": "object",
+              "to": "string"
+            },
+            "first_approval": {
+              "from": "float64",
+              "to": "string"
+            },
+            "max_phase": {
+              "from": "float64",
+              "to": "string"
+            },
+            "molecule_chembl_id": {
+              "from": "object",
+              "to": "string"
+            },
+            "molecule_type": {
+              "from": "object",
+              "to": "string"
+            },
+            "natural_product": {
+              "from": "object",
+              "to": "boolean"
+            },
+            "oral": {
+              "from": "object",
+              "to": "boolean"
+            },
+            "parent_molecule_chembl_id": {
+              "from": "object",
+              "to": "string"
+            },
+            "parenteral": {
+              "from": "object",
+              "to": "boolean"
+            },
+            "polymer_flag": {
+              "from": "object",
+              "to": "boolean"
+            },
+            "pref_name": {
+              "from": "object",
+              "to": "string"
+            },
+            "prodrug": {
+              "from": "object",
+              "to": "boolean"
+            },
+            "pubchem_canonical_smiles": {
+              "from": "float64",
+              "to": "string"
+            },
+            "pubchem_cid": {
+              "from": "float64",
+              "to": "object"
+            },
+            "pubchem_inchi": {
+              "from": "object",
+              "to": "string"
+            },
+            "pubchem_inchikey": {
+              "from": "object",
+              "to": "string"
+            },
+            "pubchem_isomeric_smiles": {
+              "from": "float64",
+              "to": "string"
+            },
+            "pubchem_iupac_name": {
+              "from": "object",
+              "to": "string"
+            },
+            "pubchem_molecular_formula": {
+              "from": "object",
+              "to": "string"
+            },
+            "salt_chembl_id": {
+              "from": "float64",
+              "to": "string"
+            },
+            "standard_inchi": {
+              "from": "object",
+              "to": "string"
+            },
+            "standard_inchi_key": {
+              "from": "object",
+              "to": "string"
+            },
+            "structure_type": {
+              "from": "object",
+              "to": "string"
+            },
+            "timestamp_utc": {
+              "from": "object",
+              "to": "string"
+            },
+            "topical": {
+              "from": "object",
+              "to": "boolean"
+            }
+          }
+        },
+        "started_at": "2025-10-09T07:07:45.138307+00:00"
+      },
+      {
+        "completed_at": "2025-10-09T07:07:45.442947+00:00",
+        "duration_s": 0.02836240001488477,
+        "error": null,
+        "input": {
+          "columns": 30,
+          "rows": 40672
+        },
+        "name": "enrich_testitem_annotations",
+        "output": {
+          "columns": 30,
+          "rows": 40672
+        },
+        "parameters": {},
+        "schema_diff": {
+          "added": [],
+          "removed": [],
+          "type_changes": {}
+        },
+        "started_at": "2025-10-09T07:07:45.414583+00:00"
+      },
+      {
+        "completed_at": "2025-10-09T07:07:45.603482+00:00",
+        "duration_s": 0.1418538000434637,
+        "error": null,
+        "input": {
+          "columns": 30,
+          "rows": 40672
+        },
+        "name": "finalize_testitem_records",
+        "output": {
+          "columns": 30,
+          "rows": 40672
+        },
+        "parameters": {
+          "enforce_schema": true
+        },
+        "schema_diff": {
+          "added": [],
+          "removed": [],
+          "type_changes": {
+            "pipeline_version": {
+              "from": "object",
+              "to": "string"
+            }
+          }
+        },
+        "started_at": "2025-10-09T07:07:45.461638+00:00"
+      }
+    ],
+    "validation": {
+      "completed_at": "2025-10-09T07:07:45.661442+00:00",
+      "duration_s": 0.052603600022848696,
+      "schema": "DataFrameSchema",
+      "started_at": "2025-10-09T07:07:45.608822+00:00",
+      "status": "passed"
+    }
+  },
+  "output_path": "out.testitem.csv",
+  "table": "testitems"
+}

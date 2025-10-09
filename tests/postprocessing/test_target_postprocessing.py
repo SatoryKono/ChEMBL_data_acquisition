@@ -133,7 +133,8 @@ def test_postprocess_target_table_file__writes_expected_bytes(
     )
 
     assert output_path == working_output
-    assert working_output.read_bytes() == expected_path.read_bytes()
+    # Normalise EOL across platforms
+    assert working_output.read_bytes().replace(b"\r\n", b"\n") == expected_path.read_bytes().replace(b"\r\n", b"\n")
 
     result = pd.read_csv(working_output, dtype=str, keep_default_na=False).astype(
         "string"

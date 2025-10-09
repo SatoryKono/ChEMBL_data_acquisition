@@ -1,0 +1,161 @@
+{
+  "extras": {
+    "input": "data\\output\\target\\output.targets.csv",
+    "output": "out.target.csv"
+  },
+  "metrics": {
+    "completed_at": "2025-10-09T07:10:43.990325+00:00",
+    "duration_s": 0.07173139997757971,
+    "input": {
+      "columns": 99,
+      "rows": 1960
+    },
+    "output": {
+      "columns": 99,
+      "rows": 1960
+    },
+    "pipeline_version": "0.1.3",
+    "started_at": "2025-10-09T07:10:43.918580+00:00",
+    "steps": [
+      {
+        "completed_at": "2025-10-09T07:10:43.944145+00:00",
+        "duration_s": 0.024871500034350902,
+        "error": null,
+        "input": {
+          "columns": 99,
+          "rows": 1960
+        },
+        "name": "normalize_target_fields",
+        "output": {
+          "columns": 99,
+          "rows": 1960
+        },
+        "parameters": {
+          "fill_missing_identifiers": true,
+          "normalize_taxonomy": true
+        },
+        "schema_diff": {
+          "added": [],
+          "removed": [],
+          "type_changes": {
+            "lineage_class": {
+              "from": "object",
+              "to": "string"
+            },
+            "lineage_phylum": {
+              "from": "object",
+              "to": "string"
+            },
+            "lineage_superkingdom": {
+              "from": "object",
+              "to": "string"
+            },
+            "organism": {
+              "from": "object",
+              "to": "string"
+            },
+            "pref_name": {
+              "from": "object",
+              "to": "string"
+            },
+            "protein_family": {
+              "from": "float64",
+              "to": "string"
+            },
+            "species_group_flag": {
+              "from": "bool",
+              "to": "string"
+            },
+            "synonyms": {
+              "from": "float64",
+              "to": "string"
+            },
+            "target_chembl_id": {
+              "from": "object",
+              "to": "string"
+            },
+            "target_class": {
+              "from": "float64",
+              "to": "string"
+            },
+            "target_type": {
+              "from": "object",
+              "to": "string"
+            },
+            "tax_id": {
+              "from": "int64",
+              "to": "Int64"
+            },
+            "taxon_id": {
+              "from": "float64",
+              "to": "Int64"
+            }
+          }
+        },
+        "started_at": "2025-10-09T07:10:43.919290+00:00"
+      },
+      {
+        "completed_at": "2025-10-09T07:10:43.965088+00:00",
+        "duration_s": 0.016779800003860146,
+        "error": null,
+        "input": {
+          "columns": 99,
+          "rows": 1960
+        },
+        "name": "enrich_target_synonyms",
+        "output": {
+          "columns": 99,
+          "rows": 1960
+        },
+        "parameters": {
+          "preferred_separator": "; ",
+          "synonym_sources": [
+            "chembl",
+            "gtopdb"
+          ]
+        },
+        "schema_diff": {
+          "added": [],
+          "removed": [],
+          "type_changes": {}
+        },
+        "started_at": "2025-10-09T07:10:43.948307+00:00"
+      },
+      {
+        "completed_at": "2025-10-09T07:10:43.983555+00:00",
+        "duration_s": 0.015932800015434623,
+        "error": null,
+        "input": {
+          "columns": 99,
+          "rows": 1960
+        },
+        "name": "finalize_target_records",
+        "output": {
+          "columns": 99,
+          "rows": 1960
+        },
+        "parameters": {
+          "enforce_schema": true,
+          "sort_by": [
+            "target_chembl_id"
+          ]
+        },
+        "schema_diff": {
+          "added": [],
+          "removed": [],
+          "type_changes": {}
+        },
+        "started_at": "2025-10-09T07:10:43.967628+00:00"
+      }
+    ],
+    "validation": {
+      "completed_at": "2025-10-09T07:10:43.989953+00:00",
+      "duration_s": 0.005050700041465461,
+      "schema": "DataFrameSchema",
+      "started_at": "2025-10-09T07:10:43.984893+00:00",
+      "status": "passed"
+    }
+  },
+  "output_path": "out.target.csv",
+  "table": "targets"
+}

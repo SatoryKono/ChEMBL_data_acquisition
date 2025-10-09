@@ -752,6 +752,17 @@ def _postprocess_target_exports(
         )
         return
 
+    # Skip when export is already a downstream projection (e.g., *_uniprot.csv)
+    # to avoid cascading post-processing on derived files
+    stem = _export_stem(_normalise_target_export_name(source))
+    if stem.endswith("_uniprot"):
+        logger.info(
+            "target_postprocess_skipped",
+            path=str(source),
+            reason="unsupported_export_name",
+        )
+        return
+
     _postprocess_organism_export(source, cfg=cfg)
     _postprocess_isoform_export(
         source,

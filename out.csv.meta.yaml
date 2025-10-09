@@ -1,85 +1,145 @@
-generated_at: '2025-10-09T06:57:00.821136+00:00'
-git_sha: 42a34d9a9a730477554b2bfc9c6d73a78aeee23f
-command: scripts\make_assay_postprocessing.py --input data\output\assay\output.assay.csv
+generated_at: '2025-10-09T07:05:02.268992+00:00'
+git_sha: 514cfc2d3a32419d2eaee41952ab794ec7011001
+command: scripts\make_document_postprocessing.py --input data\output\document\output.document_chembl_20251010.csv
   --output out.csv
 columns:
-- assay_chembl_id
-- assay_type
-- assay_test_type
-- description
-- target_chembl_id
-- confidence_score
-- is_confirmatory
-- pipeline_version
-- accession
-- acts_per_assay_step5
-- aidx
-- assay_cell_type
-- assay_classifications
-- assay_group
-- assay_organism
-- assay_parameters
-- assay_strain
-- assay_subcellular_fraction
-- assay_tax_id
-- assay_tissue
-- assay_type_description
-- assay_with_same_target
-- bao_format
-- bao_label
-- cell_chembl_id
-- cited_assay_corr
 - document_chembl_id
-- isoform
-- month
-- mutation
-- relationship_type
-- sequence
-- src_id
-- substrate_name
-- target_name
-- timestamp_utc
-- tissue_chembl_id
-- version
-- year
+- title
+- doc_type
+- publication_year
+- pipeline_version
+- chembl.abstract
+- chembl.authors
+- chembl.document_chembl_id
+- chembl.doi
+- chembl.first_page
+- chembl.issue
+- chembl.journal
+- chembl.journal_abbrev
+- chembl.last_page
+- chembl.pubmed_id
+- chembl.source
+- chembl.title
+- chembl.volume
+- chembl.year
+- crossref.doi
+- crossref.error
+- crossref.subject
+- crossref.subtitle
+- crossref.subtype
+- crossref.title
+- crossref.type
+- openalex.doi
+- openalex.error
+- openalex.genre
+- openalex.id
+- openalex.meshdescriptors
+- openalex.meshqualifiers
+- openalex.pmid
+- openalex.publicationtypes
+- openalex.typecrossref
+- openalex.venue
+- publication_class
+- publication_experimental_score
+- publication_review_score
+- publication_types_normalised
+- pubmed.abstract
+- pubmed.articletitle
+- pubmed.chemicallist
+- pubmed.daycompleted
+- pubmed.dayrevised
+- pubmed.doi
+- pubmed.endpage
+- pubmed.error
+- pubmed.issn
+- pubmed.issue
+- pubmed.journalisoabbrev
+- pubmed.journaltitle
+- pubmed.mesh_descriptors
+- pubmed.mesh_qualifiers
+- pubmed.monthcompleted
+- pubmed.monthrevised
+- pubmed.pmid
+- pubmed.publicationtype
+- pubmed.startpage
+- pubmed.volume
+- pubmed.yearcompleted
+- pubmed.yearrevised
+- scholar.doi
+- scholar.error
+- scholar.externalids
+- scholar.pmid
+- scholar.publicationtypes
+- scholar.semanticscholarid
+- scholar.venue
 dtypes:
-  assay_chembl_id: string
-  assay_type: string
-  assay_test_type: string
-  description: string
-  target_chembl_id: string
-  confidence_score: int64
-  is_confirmatory: bool
+  document_chembl_id: string
+  title: string
+  doc_type: string
+  publication_year: Int64
   pipeline_version: string
-  accession: object
-  acts_per_assay_step5: float64
-  aidx: object
-  assay_cell_type: object
-  assay_classifications: object
-  assay_group: object
-  assay_organism: object
-  assay_parameters: object
-  assay_strain: object
-  assay_subcellular_fraction: object
-  assay_tax_id: int64
-  assay_tissue: object
-  assay_type_description: object
-  assay_with_same_target: int64
-  bao_format: object
-  bao_label: object
-  cell_chembl_id: object
-  cited_assay_corr: float64
-  document_chembl_id: object
-  isoform: float64
-  month: float64
-  mutation: object
-  relationship_type: object
-  sequence: object
-  src_id: int64
-  substrate_name: float64
-  target_name: float64
-  timestamp_utc: object
-  tissue_chembl_id: object
-  version: float64
-  year: float64
+  chembl.abstract: object
+  chembl.authors: object
+  chembl.document_chembl_id: object
+  chembl.doi: object
+  chembl.first_page: object
+  chembl.issue: object
+  chembl.journal: object
+  chembl.journal_abbrev: object
+  chembl.last_page: float64
+  chembl.pubmed_id: int64
+  chembl.source: object
+  chembl.title: object
+  chembl.volume: float64
+  chembl.year: int64
+  crossref.doi: object
+  crossref.error: float64
+  crossref.subject: float64
+  crossref.subtitle: object
+  crossref.subtype: float64
+  crossref.title: object
+  crossref.type: object
+  openalex.doi: object
+  openalex.error: object
+  openalex.genre: float64
+  openalex.id: object
+  openalex.meshdescriptors: object
+  openalex.meshqualifiers: float64
+  openalex.pmid: int64
+  openalex.publicationtypes: object
+  openalex.typecrossref: object
+  openalex.venue: float64
+  publication_class: object
+  publication_experimental_score: int64
+  publication_review_score: int64
+  publication_types_normalised: object
+  pubmed.abstract: object
+  pubmed.articletitle: object
+  pubmed.chemicallist: object
+  pubmed.daycompleted: float64
+  pubmed.dayrevised: float64
+  pubmed.doi: object
+  pubmed.endpage: int64
+  pubmed.error: object
+  pubmed.issn: object
+  pubmed.issue: object
+  pubmed.journalisoabbrev: float64
+  pubmed.journaltitle: object
+  pubmed.mesh_descriptors: object
+  pubmed.mesh_qualifiers: object
+  pubmed.monthcompleted: float64
+  pubmed.monthrevised: float64
+  pubmed.pmid: int64
+  pubmed.publicationtype: object
+  pubmed.startpage: object
+  pubmed.volume: int64
+  pubmed.yearcompleted: float64
+  pubmed.yearrevised: float64
+  scholar.doi: object
+  scholar.error: object
+  scholar.externalids: object
+  scholar.pmid: int64
+  scholar.publicationtypes: object
+  scholar.semanticscholarid: object
+  scholar.venue: object
 config: {}

@@ -22,8 +22,8 @@ import pandas as pd
 from pandas.api import types as ptypes
 
 from ..config import Config
-from .log import logger
 from ..utils.atomic import open_atomic, robust_replace
+from .log import logger
 
 
 def _write_meta_yaml(*args: Any, **kwargs: Any) -> Path:
@@ -263,7 +263,7 @@ def _merge_sorted_csv_group(
                 key = (
                     tuple(
                         converter(row[col])
-                        for converter, col in zip(key_converters, resolved_sort_cols)
+                        for converter, col in zip(key_converters, resolved_sort_cols, strict=False)
                     )
                     if resolved_sort_cols
                     else tuple()
