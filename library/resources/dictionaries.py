@@ -547,6 +547,14 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
         for candidate in _iter_additional_checksums(name, base_dir=manifest_root):  # pragma: no branch
             if candidate not in sha256_expected_list:
                 sha256_expected_list.append(candidate)
+
+        # ``sha256`` entries coming from the manifest, repository allow-list and
+        # runtime overrides may contain duplicates.  Collapse them here while
+        # preserving order so that error messages remain readable and the list
+        # of accepted digests stays deterministic across environments.
+        if sha256_expected_list:
+            sha256_expected_list = list(dict.fromkeys(sha256_expected_list))
+
         sha256_expected = tuple(sha256_expected_list)
         if not isinstance(generator, str):
             raise DictionaryManifestError(f"Resource {name!r} is missing a string 'generator'")
