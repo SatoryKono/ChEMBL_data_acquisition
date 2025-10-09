@@ -31,13 +31,19 @@ def _build_catalog_cfg(tmp_path: Path) -> MoleculeCatalogCfg:
     )
 
 
-def _capture_warnings(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, object]]]:
-    events: list[tuple[str, dict[str, object]]] = []
+def _capture_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[tuple[str, str, dict[str, object]]]:
+    events: list[tuple[str, str, dict[str, object]]] = []
 
-    def _capture(event: str, **fields: object) -> None:
-        events.append((event, fields))
+    def _capture(level: str):
+        def _record(event: str, **fields: object) -> None:
+            events.append((level, event, fields))
 
-    monkeypatch.setattr(catalog.logger, "warning", _capture)
+        return _record
+
+    monkeypatch.setattr(catalog.logger, "warning", _capture("warning"))
+    monkeypatch.setattr(catalog.logger, "info", _capture("info"))
     return events
 
 
@@ -49,7 +55,7 @@ def _run_parent_lookup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> list[tuple[str, dict[str, object]]]:
     _stub_parent_catalog_calls(monkeypatch)
-    events = _capture_warnings(monkeypatch)
+    events = _capture_events(monkeypatch)
 
     client = MagicMock(spec=catalog.ChemblClient)
     frame = pd.DataFrame({"molecule_chembl_id": child_ids})
@@ -67,9 +73,12 @@ def _run_parent_lookup(
 
 
 def _extract_event(
-    events: list[tuple[str, dict[str, object]]], name: str
-) -> dict[str, object]:
-    return next(fields for event, fields in events if event == name)
+    events: list[tuple[str, str, dict[str, object]]], name: str
+) -> tuple[str, dict[str, object]]:
+    level, fields = next(
+        (level, fields) for level, event, fields in events if event == name
+    )
+    return level, fields
 
 
 @pytest.mark.integration
@@ -114,10 +123,18 @@ def test_attach_parent_molecule_ids__summarises_identifier_payload(
         assert len(expected_identifiers) > 20
         expected_identifiers = expected_identifiers[:20]
 
-    skip_event = _extract_event(
+    skip_level, skip_event = _extract_event(
         events, "parent_lookup_full_sync_skipped_parentless"
     )
-    missing_event = _extract_event(events, "parent_lookup_missing_parents")
+    missing_level, missing_event = _extract_event(
+        events, "parent_lookup_missing_parents"
+    )
+
+    assert skip_level == "info"
+    assert missing_level == "info"
+
+    warning_events = [event for event in events if event[0] == "warning"]
+    assert not warning_events
 
     for payload in (skip_event, missing_event):
         assert payload["count"] == len(child_ids)
