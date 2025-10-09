@@ -226,23 +226,15 @@ languages:
 ## Testing policy
 
 Tests are organised under `tests/` and executed via the canonical wrapper
-`python scripts/run_tests.py` (the module form `python -m scripts.run_tests`
-remains available). The command always writes deterministic artefacts to
-`reports/` and enforces the ≥95 % success-rate gate used by CI.
+`python -m scripts.run_tests`. The command always writes deterministic artefacts
+to `reports/` and enforces the ≥95 % success-rate gate used by CI.
 
 ### Test artefacts
 
-Local and CI runs must produce (the files are git-ignored to avoid spurious
-diffs):
+Local and CI runs must produce:
 
 - `reports/test_report.json` — machine readable execution log
 - `reports/test_summary.md` — condensed Markdown summary
-
-GitHub Actions uploads both files (plus the coverage directory) as the
-`test-reports-<python-version>` artefact for every CI matrix entry. Navigate to
-the latest workflow run, download the archive and inspect the JSON/Markdown to
-review the most recent pipeline health snapshot without regenerating the
-reports locally.
 
 Use the canonical wrapper to collect both artefacts and validate the quality
 threshold:

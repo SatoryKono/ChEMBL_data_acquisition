@@ -42,6 +42,8 @@ config/dictionary/**/output*.data_correlation_report_table.csv
 logs/*
 !logs/.gitkeep
 reports/*
+!reports/test_report.json
+!reports/test_summary.md
 !reports/tests/
 !reports/code_review.md
 !reports/archive/
