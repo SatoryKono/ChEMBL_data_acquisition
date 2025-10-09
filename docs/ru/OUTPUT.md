@@ -224,27 +224,27 @@ CSV и проверяет схему из `library/postprocess/targets/schema.py
 
 | Колонка | Тип | Описание |
 |---------|-----|----------|
-| `assay_chembl_id` | string | Основной ID. |
-| `ASSAY_ID` | string | Дополнительный ID. |
-| `Target TYPE` | string | Категория таргета. |
-| `accession` | string | UniProt акцессий. |
-| `acts_per_assay_step5` | numeric/string | Кол-во активностей. |
+| `assay_chembl_id` | string | Основной ID ассая. |
+| `accession` | string | UniProt-акцессий целевого белка. |
 | `assay_cell_type` | string | Тип клеток. |
 | `assay_subcellular_fraction` | string | Субклеточная фракция. |
+| `assay_group` | string | Группировка, передаваемая вместе с выгрузкой. |
 | `assay_tissue` | string | Ткань/орган. |
+| `assay_strain` | string | Штамм (если указан в ChEMBL). |
 | `bao_format` | string | Код BAO. |
-| `cited_assay_corr`, `error_assay_corr`, `higly_correlated_cit`, `shuffled_cit`, `shuffled_target_assay` | string/bool | Флаги QA. |
 | `description` | string | Описание. |
 | `document_chembl_id` | string | Связанный документ. |
-| `isoform` | string | Изоформа. |
-| `month` / `year` | numeric/string | Дата публикации. |
+| `isoform` | string/nullable | Изоформа; тип не фиксируется, чтобы принимать строки и числа. |
 | `mutation` | string | Детали мутации. |
-| `substrate_name` | string | Субстрат. |
-| `target_chembl_id` | string | Связанный таргет. |
-| `target_name` | string | Название таргета. |
-| `version` | numeric/string | Внутренняя версия. |
+| `target_chembl_id` | string | ID связанного таргета. |
+| `year` | numeric/string | Год публикации (строка или число). |
 | `pipeline_version` | string | Версия пакета. |
-| `timestamp_utc` | string | Время выгрузки. |
+| `timestamp_utc` | string | Время выгрузки (ISO 8601). |
+
+> **Примечание пост-обработки.** Колонки из списка
+> [`_ASSAY_OUTPUT_DROP_COLUMNS`](../../scripts/get_assay_data.py) удаляются
+> после выгрузки, чтобы устаревшие поля (например, `ASSAY_ID`, `Target TYPE` или
+> `acts_per_assay_step5`) не возвращались в опубликованные CSV.
 
 ## Таблица активностей (`activities`)
 
