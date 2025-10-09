@@ -17,9 +17,9 @@ matching suffixes, for example ``activity_independent.csv`` or
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Sequence
 from pathlib import Path
-import sys
 
 if __package__ in {None, ""}:
     project_root = Path(__file__).resolve().parents[3]
@@ -27,23 +27,23 @@ if __package__ in {None, ""}:
     if project_root_str not in sys.path:
         sys.path.insert(0, project_root_str)
 
-from library.utils import bootstrap
+from library.utils import bootstrap  # noqa: E402
 
 bootstrap.ensure_project_root()
 
-from library import cli
-from library.integration import input_initialisation_library as lib
-from library.cli import (
+from library import cli  # noqa: E402
+from library.cli import (  # noqa: E402
     LoggerConfig,
     configure_logger,
     path_argument,
 )
-from library.cli import (
+from library.cli import (  # noqa: E402
     build_parser as base_parser,
 )
-from library.config import Config, ConfigError, ensure_dirs, print_config
-from library.common.log import logger
-from library.qa.reporting import build_table_quality_hook
+from library.common.log import logger  # noqa: E402
+from library.config import Config, ConfigError, ensure_dirs, print_config  # noqa: E402
+from library.integration import input_initialisation_library as lib  # noqa: E402
+from library.qa.reporting import build_table_quality_hook  # noqa: E402
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:

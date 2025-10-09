@@ -21,14 +21,17 @@ import argparse
 import shutil
 import subprocess
 import sys
-import pandoc
-import pypandoc
 from pathlib import Path
+
 
 def check_pandoc() -> None:
     if not shutil.which("pandoc"):
-        print("ERROR: pandoc не найден в PATH. Установи pandoc и повтори.", file=sys.stderr)
+        print(
+            "ERROR: pandoc не найден в PATH. Установи pandoc и повтори.",
+            file=sys.stderr,
+        )
         sys.exit(127)
+
 
 def build_pandoc_cmd(
     inputs,
@@ -82,76 +85,70 @@ def build_pandoc_cmd(
 
     return cmd
 
+
 def main():
     parser = argparse.ArgumentParser(
         prog="convert_md_to_docx",
-        description="Конвертация Markdown → DOCX через pandoc с поддержкой шаблонов и метаданных."
+        description="Конвертация Markdown → DOCX через pandoc с поддержкой шаблонов и метаданных.",
     )
     parser.add_argument(
         "inputs",
         nargs="+",
         type=Path,
-        help="Входные .md файлы (один или несколько, склеиваются по порядку)."
+        help="Входные .md файлы (один или несколько, склеиваются по порядку).",
     )
     parser.add_argument(
-        "-o", "--output",
-        type=Path,
-        required=True,
-        help="Путь к выходному .docx"
+        "-o", "--output", type=Path, required=True, help="Путь к выходному .docx"
     )
     parser.add_argument(
-        "--refdoc", "--reference-doc",
+        "--refdoc",
+        "--reference-doc",
         dest="reference_doc",
         type=Path,
-        help="DOCX-шаблон стилей (reference.docx)."
+        help="DOCX-шаблон стилей (reference.docx).",
     )
     parser.add_argument(
-        "--meta", "--metadata-file",
+        "--meta",
+        "--metadata-file",
         dest="metadata_file",
         type=Path,
-        help="YAML-файл с метаданными (title, author, date, ...)."
+        help="YAML-файл с метаданными (title, author, date, ...).",
     )
     parser.add_argument(
-        "--number-sections",
-        action="store_true",
-        help="Нумеровать разделы."
+        "--number-sections", action="store_true", help="Нумеровать разделы."
     )
     parser.add_argument(
-        "--toc",
-        action="store_true",
-        help="Добавить таблицу содержимого."
+        "--toc", action="store_true", help="Добавить таблицу содержимого."
     )
     parser.add_argument(
-        "--toc-depth",
-        type=int,
-        default=3,
-        help="Глубина TOC (по умолчанию 3)."
+        "--toc-depth", type=int, default=3, help="Глубина TOC (по умолчанию 3)."
     )
     parser.add_argument(
         "--resource-path",
         nargs="*",
         type=Path,
         default=[],
-        help="Список директорий для ресурсов (картинки и т.п.)."
+        help="Список директорий для ресурсов (картинки и т.п.).",
     )
     parser.add_argument(
         "--filter",
         dest="filters",
         nargs="*",
         default=[],
-        help="Список pandoc-фильтров (например: pandoc-crossref, pandoc-mermaid, citeproc)."
+        help="Список pandoc-фильтров (например: pandoc-crossref, pandoc-mermaid, citeproc).",
     )
     parser.add_argument(
-        "-V", "--variable",
+        "-V",
+        "--variable",
         dest="variables",
         nargs="*",
         default=[],
-        help="Переменные шаблона (key=value), прокидываются в pandoc (-V)."
+        help="Переменные шаблона (key=value), прокидываются в pandoc (-V).",
     )
     parser.add_argument(
         "--no-standalone",
         action="store_true",
-        help="Не добавлять --standalone (по умолчанию standalone включён)."
+        help="Не добавлять --standalone (по умолчанию standalone включён).",
     )
 
     args = parser.parse_args()
@@ -187,13 +184,17 @@ def main():
 
     print("Running:", " ".join(str(x) for x in cmd))
     try:
-        completed = subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError as e:
-        print(f"ERROR: pandoc завершился с ошибкой (exit {e.returncode}).", file=sys.stderr)
+        print(
+            f"ERROR: pandoc завершился с ошибкой (exit {e.returncode}).",
+            file=sys.stderr,
+        )
         sys.exit(e.returncode)
 
     # немножко гуманности
     print(f"OK: {args.output} создан.")
+
 
 if __name__ == "__main__":
     main()
