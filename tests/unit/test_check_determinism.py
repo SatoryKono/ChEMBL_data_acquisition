@@ -350,6 +350,36 @@ def test_run_check__metadata_mismatch_fails(
     assert "metadata_hash_mismatch" in caplog.text
     assert "metadata_check" in caplog.text
     assert "status='mismatch'" in caplog.text
+
+
+def test_run_check__chunked_metadata_mismatch_fails(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mismatch involving chunked metadata should fail the determinism check."""
+
+    caplog.set_level("DEBUG", logger="chembl")
+
+    def _fake_write_csv(df, path: Path, key_cols):  # pragma: no cover - helper
+        del df, key_cols
+        path.write_text("csv", encoding="utf-8")
+        meta_path = path.with_suffix(path.suffix + ".meta.yaml")
+        meta_path.write_text("stable", encoding="utf-8")
+
+    def _fake_write_chunks(chunk_iter, path: Path, **kwargs):  # pragma: no cover
+        del chunk_iter, kwargs
+        path.write_text("csv", encoding="utf-8")
+        meta_path = path.with_suffix(path.suffix + ".meta.yaml")
+        meta_path.write_text("different", encoding="utf-8")
+
+    monkeypatch.setattr(cli_check_determinism, "write_csv_deterministic", _fake_write_csv)
+    monkeypatch.setattr(
+        cli_check_determinism, "write_csv_chunks_deterministic", _fake_write_chunks
+    )
+
+    assert cli_check_determinism.run_check(tmp_path) is False
+
+    assert "metadata_hash_mismatch" in caplog.text
+    assert "status='mismatch'" in caplog.text
 def test_run_activity__passes_dry_run_flag(monkeypatch, tmp_path: Path) -> None:
     """Ensure the activity runner forwards the --dry-run flag."""
 

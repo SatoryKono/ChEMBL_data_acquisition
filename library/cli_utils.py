@@ -33,6 +33,7 @@ from .cli import (
     path_argument,
     positive_int,
 )
+from .cli.run_context import compute_generated_at
 from .config import Config, ConfigError, ensure_dirs, print_config
 from .common.log import logger as default_logger
 from .metadata import Stats, file_sha256, write_meta_yaml, record_quality_failure
@@ -152,6 +153,22 @@ def run_cli_command(
     logger: Logger | None = None,
 ) -> int:
     """Execute CLI boilerplate shared by data acquisition commands."""
+
+    if not log_cfg.generated_at:
+        seed_parts: list[str] = []
+        invocation = getattr(args, "invocation", None)
+        if isinstance(invocation, Sequence) and invocation:
+            seed_parts.extend(str(part) for part in invocation)
+        else:
+            program = getattr(parser, "prog", None)
+            if program:
+                seed_parts.append(str(program))
+            seed_parts.extend(str(part) for part in sys.argv[1:])
+        log_cfg.generated_at = compute_generated_at(
+            date_token=getattr(args, "date", None),
+            run_id=log_cfg.run_id,
+            seed_parts=seed_parts,
+        )
 
     desired_level = getattr(args, "log_level", log_cfg.level)
     if getattr(args, "verbose", False):

@@ -212,9 +212,13 @@ All pipelines are required to be deterministic. Running the same CLI twice with
 identical inputs and configuration produces byte-identical CSV files and a
 matching `<output>.meta.yaml` sidecar. The metadata document captures the
 columns, Pandas dtypes, git SHA and effective configuration so analysts can
-audit the provenance of every export. These `.meta.yaml` files are mandatory
-artefacts and must be stored alongside their CSV counterparts when publishing
-results or exchanging data with downstream systems.
+audit the provenance of every export. The `generated_at` field is derived
+deterministically — `--date` takes precedence, otherwise the normalised CLI
+invocation (including the resolved run identifier) feeds a stable hash — which
+means repeated runs with the same arguments no longer drift. These `.meta.yaml`
+files are mandatory artefacts and must be stored alongside their CSV
+counterparts when publishing results or exchanging data with downstream
+systems.
 
 Temporary files created during atomic writes follow the `.<name>.*.tmp`
 pattern and are always removed after a successful run. If a command fails, the
