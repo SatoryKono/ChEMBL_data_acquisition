@@ -114,6 +114,13 @@ from library.schemas import (
 )
 from library.validation import validate_activities
 
+try:
+    from library.cli.entrypoints.activity import (
+        _generate_activity_postprocess_metrics as _entrypoint_generate_activity_postprocess_metrics,
+    )
+except (ImportError, AttributeError):  # pragma: no cover - defensive guard for refactors
+    _entrypoint_generate_activity_postprocess_metrics = None
+
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
@@ -168,6 +175,52 @@ def _ensure_command_logger_sync() -> None:
 
 
 _ensure_command_logger_sync()
+
+
+def _generate_activity_postprocess_metrics(
+    cfg: Config,
+    output_path: Path,
+    *,
+    logger: Logger,
+    extras: Mapping[str, object] | None = None,
+) -> tuple[object, Path]:
+    """Generate postprocess metrics using the entrypoint helper or a local fallback."""
+
+    if _entrypoint_generate_activity_postprocess_metrics is not None:
+        return _entrypoint_generate_activity_postprocess_metrics(
+            cfg,
+            output_path,
+            logger=logger,
+            extras=extras,
+        )
+
+    metrics, report_path = collect_postprocess_metrics(
+        table="activity",
+        output_path=output_path,
+        csv_sep=cfg.io.csv_sep,
+        csv_encoding=cfg.io.csv_encoding,
+        output_dir=cfg.io.output_dir,
+        runner=run_activity_postprocess,
+        logger=logger,
+        pipeline_version=get_pipeline_version(),
+        report_extras=extras,
+    )
+    if report_path is None:
+        fallback = Path(cfg.io.output_dir) / "activity.postprocess.report.json"
+        fallback.parent.mkdir(parents=True, exist_ok=True)
+        fallback_payload: dict[str, object] = {
+            "table": "activity",
+            "metrics": None,
+            "output_path": str(output_path),
+        }
+        if extras:
+            fallback_payload["extras"] = dict(extras)
+        fallback.write_text(
+            json.dumps(fallback_payload, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        report_path = fallback
+    return metrics, report_path
 
 
 _CACHE_MISS = object()
