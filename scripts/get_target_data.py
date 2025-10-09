@@ -79,7 +79,7 @@ from library.postprocessing import target as target_pp
 from library.qa.reporting import build_table_quality_hook, is_quality_enabled
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
-from library.validation import ValidationResult
+from library.validation import ValidationResult, validate_targets
 
 try:
     from library.postprocessing import iuphar as iuphar_pp
@@ -2348,7 +2348,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     def _validate_chunk(frame: pd.DataFrame) -> ValidationResult:
         try:
-            validated = TargetsSchema.validate(frame, lazy=True)
+            validation = validate_targets(frame, return_result=True)
         except SchemaErrors as exc:
             validated_subset = getattr(exc, "validated_data", frame)
             return ValidationResult(
@@ -2356,7 +2356,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 exc.failure_cases.copy(),
                 "TargetsSchema",
             )
-        return ValidationResult(validated, pd.DataFrame(), "TargetsSchema")
+        return validation
 
     raw_dump_writer = _RawDumpStreamWriter(
         raw_destination, cfg=cfg, reindex_columns=reindex_raw
@@ -3640,7 +3640,7 @@ def validate_and_write(
             )
         logger.info("targets_schema_validate_start", rows=len(final_df))
         try:
-            final_df = TargetsSchema.validate(final_df, lazy=True)
+            validation = validate_targets(final_df, return_result=True)
         except SchemaErrors as exc:
             failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
             errors = SidecarErrors()
@@ -3671,12 +3671,44 @@ def validate_and_write(
             final_df = getattr(exc, "validated_data", final_df)
             exit_code = 1
         else:
-            logger.info(
-                "targets_schema_validate_result",
-                status="success",
-                rows=len(final_df),
-                failures=0,
-            )
+            final_df = validation.data
+            failure_cases = validation.failure_cases.copy()
+            if not failure_cases.empty:
+                failure_path = output.with_name(
+                    f"{output.stem}_failure_cases.csv"
+                )
+                errors = SidecarErrors()
+                for row in failure_cases.to_dict("records"):
+                    errors.add_error(row)
+                errors.save(failure_path, cfg=cfg)
+                logger.error(
+                    "validation_failed",
+                    failures=len(failure_cases),
+                    path=str(failure_path),
+                )
+                for _, failure_row in failure_cases.iterrows():
+                    reason = _categorize_failure(failure_row)
+                    identifier = failure_row.get("index")
+                    if pd.isna(identifier):
+                        identifier = (
+                            failure_row.get("column"),
+                            failure_row.get("failure_case"),
+                        )
+                    drop_reasons[reason].add(identifier)
+                logger.info(
+                    "targets_schema_validate_result",
+                    status="failed",
+                    rows=len(final_df),
+                    failures=len(failure_cases),
+                )
+                exit_code = 1
+            else:
+                logger.info(
+                    "targets_schema_validate_result",
+                    status="success",
+                    rows=len(final_df),
+                    failures=0,
+                )
     else:
 
         logger.warning(

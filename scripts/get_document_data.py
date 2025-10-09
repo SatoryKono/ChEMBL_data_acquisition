@@ -103,6 +103,7 @@ from library.common.sidecar import SidecarErrors
 from library.qa.reporting import build_table_quality_hook
 from library.qa.table_quality import TableQualityProfiler
 from library.schemas import DocumentsSchema, normalize_documents
+from library.validation import validate_documents
 from library.schemas.document_spec import DOCUMENT_EXPORT_COLUMNS
 
 
@@ -547,7 +548,7 @@ def _finalise_export(
             rows_total += len(ordered)
             validated = ordered
             try:
-                validated = DocumentsSchema.validate(ordered, lazy=True)
+                validation = validate_documents(ordered, return_result=True)
             except SchemaErrors as exc:
                 for row in exc.failure_cases.to_dict("records"):
                     errors.add_error(row)
@@ -555,10 +556,23 @@ def _finalise_export(
                     "document_validation_failed",
                     failure_count=len(exc.failure_cases),
                     failure_path=str(failure_path),
-                    error=str(exc), exc_info=exc,
+                    error=str(exc),
+                    exc_info=exc,
                 )
                 validated = getattr(exc, "validated_data", ordered)
                 exit_code = 1
+            else:
+                validated = validation.data
+                if not validation.failure_cases.empty:
+                    failure_records = validation.failure_cases.to_dict("records")
+                    for row in failure_records:
+                        errors.add_error(row)
+                    logger.error(
+                        "document_validation_failed",
+                        failure_count=len(validation.failure_cases),
+                        failure_path=str(failure_path),
+                    )
+                    exit_code = 1
             rows_kept += len(validated)
             cleaned = build_dataframe(
                 validated, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
