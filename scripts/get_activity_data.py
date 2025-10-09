@@ -7,6 +7,7 @@ import json
 import sys
 from dataclasses import dataclass
 from importlib import import_module
+from functools import partial
 from itertools import islice
 from pathlib import Path
 from threading import Lock
