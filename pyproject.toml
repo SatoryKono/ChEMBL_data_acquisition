@@ -115,6 +115,7 @@ strict = true
 warn_unused_configs = true
 exclude = ["tests"]
 plugins = ["pydantic.mypy"]
+mypy_path = "typings"
 
 [tool.pytest.ini_options]
 addopts = "-ra -q"

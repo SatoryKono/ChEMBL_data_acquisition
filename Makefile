@@ -21,9 +21,8 @@ $(PYTHON_BIN): .python-version requirements.txt pyproject.toml
 	@test -f .python-version
 	@$(PYTHON) -c 'import pathlib, sys; expected = pathlib.Path(".python-version").read_text().strip(); actual = ".".join(map(str, sys.version_info[:3])); assert actual == expected, f"Python {expected} required, but {actual} found"'
 	$(PYTHON) -m venv $(VENV)
-	$(PIP) install --upgrade pip
-	$(PIP) install -r requirements.txt
-	$(PIP) install -e .[dev]
+       $(PIP) install --upgrade pip
+       $(PIP) install '.[dev]'
 
 lint: $(PYTHON_BIN)
 	$(VENV)/bin/ruff check .

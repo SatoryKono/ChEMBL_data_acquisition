@@ -21,6 +21,9 @@ jobs:
         run: |
           # Install the project using the canonical lock file
           pip install -r requirements-lock.txt
+          pip install .[dev]
+      - name: Install pre-commit hooks
+        run: pre-commit install --install-hooks
       - name: Check installed packages
         run: pip check
       - name: Check formatting

@@ -58,10 +58,12 @@ from library.pipelines.document import postprocessing as dp
 from library.postprocessing import document as document_export_postprocessing
 from library.postprocess.documents import run_document_pipeline as run_document_postprocess
 from library.postprocess.common import collect_postprocess_metrics
+from library.postprocess.common.logging import PipelineRunMetrics
 from library.orchestration import ETLContext
 from library.cli import (
-    LoggerConfig,
     ConfigMetadata,
+    Logger,
+    LoggerConfig,
     build_root_parser,
     configure_logger,
     path_argument,
@@ -741,7 +743,7 @@ def _generate_document_postprocess_metrics(
     *,
     logger: Logger,
     extras: Mapping[str, object] | None = None,
-):
+) -> tuple[PipelineRunMetrics | None, Path | None]:
     """Run the document postprocess pipeline and persist the metrics report."""
 
     return collect_postprocess_metrics(
