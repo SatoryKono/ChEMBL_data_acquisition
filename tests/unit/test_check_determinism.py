@@ -200,6 +200,62 @@ def test_main__metadata_mismatch_returns_error(
         assert not directory.exists()
 
 
+def test_main__metadata_missing_sidecar_returns_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Missing metadata on exactly one run must fail the check."""
+
+    input_csv = tmp_path / "activity.csv"
+    input_csv.write_text("activity_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    created_dirs = _patch_mkdtemp(tmp_path, monkeypatch)
+
+    payload = "activity_id\n1\n"
+    base_metadata = {
+        "generated_at": "2025-01-01T00:00:00+00:00",
+        "stats": {"rows_total": 1, "rows_kept": 1},
+        "schema": "activity",
+    }
+
+    runs: list[tuple[int, Path, Path]] = []
+
+    def _fake_run_activity(
+        limit: int,
+        destination: Path,
+        observed_input: Path,
+        *,
+        dry_run: bool,
+    ) -> CompletedProcess[str]:
+        del dry_run
+        if not runs:
+            _write_run_payload(destination, payload, base_metadata)
+        else:
+            destination.write_text(payload, encoding="utf-8")
+        runs.append((limit, destination, observed_input))
+        return CompletedProcess(args=["python"], returncode=0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr(check_determinism, "_run_activity", _fake_run_activity)
+
+    exit_code = check_determinism.main(["--limit", "2", "--input", str(input_csv)])
+
+    assert exit_code == 1
+
+    captured = capsys.readouterr()
+    assert "Metadata hash check: missing sidecar" in captured.out
+    assert "WARNING: Metadata sidecar missing for one run" in captured.out
+    assert "missing:" in captured.out
+
+    assert len(runs) == 2
+    for limit, _destination, observed_input in runs:
+        assert limit == 2
+        assert observed_input == input_csv
+
+    for directory in created_dirs:
+        assert not directory.exists()
+
+
 def test_run_check__metadata_absent_is_skipped(
     tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
