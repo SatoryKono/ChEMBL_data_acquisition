@@ -21,6 +21,10 @@ import sys
 import tempfile
 from pathlib import Path
 
+from typing import Any
+
+import yaml
+
 
 def _hash_file(path: Path) -> str:
     hasher = hashlib.sha256()
@@ -28,6 +32,64 @@ def _hash_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1 << 20), b""):
             hasher.update(chunk)
     return hasher.hexdigest()
+
+
+_NON_DETERMINISTIC_META_KEYS = {"generated_at"}
+
+
+def _metadata_path(csv_path: Path) -> Path:
+    return csv_path.with_name(csv_path.name + ".meta.yaml")
+
+
+def _load_metadata(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            loaded = yaml.safe_load(handle)
+    except (OSError, yaml.YAMLError):
+        return {}
+
+    if loaded is None:
+        return {}
+
+    if isinstance(loaded, dict):
+        return dict(loaded)
+
+    return {}
+
+
+def _normalise_metadata(value: Any) -> Any:
+    if isinstance(value, dict):
+        items = []
+        for key in sorted(value):
+            if key in _NON_DETERMINISTIC_META_KEYS:
+                continue
+            items.append((key, _normalise_metadata(value[key])))
+        return tuple(items)
+    if isinstance(value, list):
+        return tuple(_normalise_metadata(item) for item in value)
+    return value
+
+
+def _compare_metadata(first_csv: Path, second_csv: Path) -> bool:
+    first_meta_path = _metadata_path(first_csv)
+    second_meta_path = _metadata_path(second_csv)
+
+    first_meta = _load_metadata(first_meta_path)
+    second_meta = _load_metadata(second_meta_path)
+
+    if first_meta is None and second_meta is None:
+        return True
+
+    if first_meta is None or second_meta is None:
+        print("Metadata sidecar missing for one of the runs:")
+        print(f"  first:  {first_meta_path}")
+        print(f"  second: {second_meta_path}")
+        return False
+
+    return _normalise_metadata(first_meta) == _normalise_metadata(second_meta)
 
 
 def _run_activity(
@@ -146,6 +208,12 @@ def main(argv: list[str] | None = None) -> int:
             print("Mismatch detected:")
             print(f"  first:  {first_hash}")
             print(f"  second: {second_hash}")
+            return 1
+
+        if not _compare_metadata(first, second):
+            print("Metadata mismatch detected:")
+            print(f"  first:  {_metadata_path(first)}")
+            print(f"  second: {_metadata_path(second)}")
             return 1
 
         print("Deterministic output confirmed")
