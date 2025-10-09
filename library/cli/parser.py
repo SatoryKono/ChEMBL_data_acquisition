@@ -612,8 +612,6 @@ def apply_config_overrides(
     }
     setattr(args, "_config_metadata", metadata)
 
-    missing_cfg_paths: set[str] = set()
-
     for arg, key in override_map.items():
         if not hasattr(args, arg):
             continue

@@ -191,8 +191,8 @@ class Crosswalk:
 
     def metric_groups(self) -> Mapping[str, list[str]]:
         groups: dict[str, list[str]] = {}
-        for field in self.fields:
-            groups.setdefault(field.metric_group, []).append(field.name)
+        for field_cfg in self.fields:
+            groups.setdefault(field_cfg.metric_group, []).append(field_cfg.name)
         return groups
 
 
@@ -492,9 +492,9 @@ def _build_projection(frame: pd.DataFrame, crosswalk: Crosswalk, *, side: str) -
         raise ValueError(f"Unknown side {side}")
 
     result = pd.DataFrame(index=frame.index)
-    for field in crosswalk.fields:
-        series = builder(context, getattr(field, side))
-        result[field.name] = series
+    for field_cfg in crosswalk.fields:
+        series = builder(context, getattr(field_cfg, side))
+        result[field_cfg.name] = series
     return result
 
 

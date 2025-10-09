@@ -1,16 +1,20 @@
 """Render a Markdown summary from a structured pytest JSON report."""
 from __future__ import annotations
 
+# ruff: noqa: E402  # requires sys.path mutation before local imports
+
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:  # pragma: no cover - import side effect
     sys.path.insert(0, str(ROOT_DIR))
 
+# ruff: noqa: E402  # allow importing project modules after sys.path adjustments
 from scripts.run_tests import build_summary_markdown
 
 DEFAULT_INPUT = Path("reports/test_report.json")
@@ -105,7 +109,8 @@ def _validate_report(report: dict[str, Any]) -> None:
     for index, entry in enumerate(tests):
         if not isinstance(entry, dict):
             raise ValueError(
-                f"Test entry at index {index} must be an object, got {type(entry).__name__}"
+                f"Test entry at index {index} must be an object, "
+                f"got {type(entry).__name__}"
             )
 
     meta = report.get("meta")

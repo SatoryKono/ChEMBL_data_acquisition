@@ -13,7 +13,6 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
-import requests
 
 from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS
 from library.pipelines.common import PipelineRunResult

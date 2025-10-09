@@ -93,9 +93,6 @@ def test_postprocess_target_table__fills_missing_columns(tmp_path: Path) -> None
     assert output_path.name == "organism.output.target_20250101.csv"
     assert output_path.exists()
 
-
-import pytest
-
 @pytest.mark.unit  # type: ignore[misc]
 def test_postprocess_target_table__handles_missing_identifier_column(
     tmp_path: Path,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E402  # bootstrap alters import order for script compatibility
 import argparse
 import json
 import sys
@@ -13,6 +14,7 @@ from pathlib import Path
 from threading import Lock
 from time import perf_counter, sleep
 from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence, cast
+from urllib.parse import urlsplit
 
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli

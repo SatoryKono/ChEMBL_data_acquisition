@@ -2,6 +2,16 @@
 
 from __future__ import annotations
 
+import argparse
+import os
+from collections.abc import Mapping, Sequence
+from importlib import import_module, util
+from pathlib import Path
+from types import ModuleType
+
+import pandas as pd
+
+# ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
 else:  # pragma: no cover - executed when imported as a package module
@@ -10,9 +20,21 @@ else:  # pragma: no cover - executed when imported as a package module
 bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
-from collections.abc import Mapping
-from importlib import import_module, util
-from types import ModuleType
+from library import io  # noqa: F401 - imported for CLI parity with existing scripts
+from library.cli import configure_logger, create_logger_config
+from library.cli.logging import setup_cli_logging
+from library.cli.parser import path_argument
+from library.common.log import logger
+from library.postprocess.common.config import PipelineConfig, normalize_pipeline_version
+from library.postprocess.common.logging import PipelineRunMetrics
+from library.postprocess.common.types import SchemaValidationError, StepError
+from library.postprocess.documents import (
+    run_document_pipeline as run_document_postprocess,
+)
+from library.postprocess.documents import steps as document_steps
+from library.postprocess.documents.schema import DOCUMENT_SCHEMA, validate_documents
+from library.postprocessing import document as document_postprocessing
+from library.pipelines.common.metadata import get_pipeline_version
 
 
 def _load_postprocess_common_module() -> ModuleType:
@@ -54,29 +76,6 @@ get_pipeline_config = _postprocess_common.get_pipeline_config
 load_input_frame = _postprocess_common.load_input_frame
 run_postprocess_steps = _postprocess_common.run_postprocess_steps
 validate_postprocess_frame = _postprocess_common.validate_postprocess_frame
-
-import argparse
-import os
-from pathlib import Path
-from typing import Sequence
-
-import pandas as pd
-
-from library import io  # noqa: F401 - imported for CLI parity with existing scripts
-from library.cli import configure_logger, create_logger_config
-from library.cli.logging import setup_cli_logging
-from library.cli.parser import path_argument
-from library.common.log import logger
-from library.postprocess.common.config import PipelineConfig, normalize_pipeline_version
-from library.postprocess.common.logging import PipelineRunMetrics
-from library.postprocess.common.types import SchemaValidationError, StepError
-from library.postprocess.documents import (
-    run_document_pipeline as run_document_postprocess,
-)
-from library.postprocess.documents import steps as document_steps
-from library.postprocess.documents.schema import DOCUMENT_SCHEMA, validate_documents
-from library.postprocessing import document as document_postprocessing
-from library.pipelines.common.metadata import get_pipeline_version
 
 
 TABLE_NAME = "documents"

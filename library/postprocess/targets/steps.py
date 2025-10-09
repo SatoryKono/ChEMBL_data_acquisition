@@ -8,7 +8,7 @@ import re
 
 import pandas as pd
 
-from library.postprocess.common import StepDefinition, run_steps
+from library.postprocess.common import run_steps
 from library.postprocess.common.logging import PipelineRunMetrics
 
 

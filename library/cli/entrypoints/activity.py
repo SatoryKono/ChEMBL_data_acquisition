@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import numbers
 import os
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
-from datetime import datetime
 from itertools import islice
 from pathlib import Path
 from threading import Condition, Lock
@@ -69,7 +70,6 @@ from library.orchestration import ETLContext
 from library.pipelines.activity import run as activity_run
 from library.pipelines.assay.chembl_assay import (
     ACTIVITY_COLUMNS,
-    MAX_ACTIVITY_CHUNK_SIZE,
 )
 from library.pipelines.common import (
     ChunkedFetchConfig,

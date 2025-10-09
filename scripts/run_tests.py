@@ -271,7 +271,6 @@ def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, An
         else:
             summary["error"] += 1
 
-    executed_total = summary["total"] - summary["skipped"]
     success_rate = _calculate_success_rate(summary)
 
     if summary["total"] == 0 and exit_code != 0:
@@ -604,7 +603,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             validate_structured_report(structured)
         except ValueError as exc:  # pragma: no cover - defensive guard
             logger.error("Structured report validation failed: %s", exc)
-            fallback_reason = str(exc)
             validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
             generation_error = _normalise_message(exc)
         except Exception as exc:  # pragma: no cover - defensive guard

@@ -246,7 +246,7 @@ def test_main__verbose_propagates_debug_logging(
 
     def _fake_pytest_main(pytest_args: list[str], plugins: list[object]) -> int:
         assert f"--log-file={log_path}" in pytest_args
-        assert f"--log-file-level=DEBUG" in pytest_args
+        assert "--log-file-level=DEBUG" in pytest_args
         return 0
 
     monkeypatch.setattr(run_tests_module.pytest, "main", _fake_pytest_main)
@@ -295,16 +295,16 @@ def test_main__emits_deprecation_warning(
 
 def _install_fake_cli_logging(
     run_tests: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> tuple[Path, list[run_tests.LoggerConfig]]:
+) -> tuple[Path, list[object]]:
     log_path = tmp_path / "run_tests.log"
-    captured_cfgs: list[run_tests.LoggerConfig] = []
+    captured_cfgs: list[object] = []
 
-    def _fake_configure(cfg: run_tests.LoggerConfig, *_: object, **__: object) -> object:
+    def _fake_configure(cfg: object, *_: object, **__: object) -> object:
         captured_cfgs.append(cfg)
         return object()
 
     @contextmanager
-    def _fake_setup(script_name: str, log_cfg: run_tests.LoggerConfig, *_: object, **__: object):
+    def _fake_setup(script_name: str, log_cfg: object, *_: object, **__: object):
         assert script_name == "run_tests"
         stream = io.StringIO()
         cloned_cfg = run_tests.LoggerConfig(
