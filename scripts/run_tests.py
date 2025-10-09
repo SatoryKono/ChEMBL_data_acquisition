@@ -271,7 +271,10 @@ def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, An
         else:
             summary["error"] += 1
 
+    executed_total = summary["total"] - summary["skipped"]
     success_rate = _calculate_success_rate(summary)
+    if exit_code != 0 and executed_total <= 0:
+        success_rate = 0.0
     summary["success_rate"] = round(success_rate, 4)
 
     meta = {
@@ -289,6 +292,40 @@ def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, An
         "meta": meta,
         "summary": summary,
         "tests": tests,
+    }
+
+
+def build_failure_report(exit_code: int, *, reason: str | None = None) -> dict[str, Any]:
+    """Return a structured failure report when pytest crashes early."""
+
+    meta = {
+        "repo": REPO_SLUG,
+        "commit": _git_output("rev-parse", "HEAD"),
+        "branch": _git_output("rev-parse", "--abbrev-ref", "HEAD"),
+        "ts_utc": datetime.now(timezone.utc).isoformat(),
+        "duration_sec": 0.0,
+        "python": platform.python_version(),
+        "pytest": pytest.__version__,
+        "exit_code": exit_code,
+    }
+    if reason:
+        meta["failure_reason"] = reason
+
+    summary = {
+        "total": 0,
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "xfailed": 0,
+        "xpassed": 0,
+        "error": 0,
+        "success_rate": 0.0,
+    }
+
+    return {
+        "meta": meta,
+        "summary": summary,
+        "tests": [],
     }
 
 
@@ -527,24 +564,42 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         exit_code = run_pytest(pytest_command)
 
-        raw_report = _load_raw_report()
-        structured = build_structured_report(raw_report, exit_code)
-
+        structured = build_failure_report(exit_code)
+        fallback_reason: str | None = None
         validation_exit_code: int | None = None
+
         try:
-            validate_structured_report(structured)
+            raw_report = _load_raw_report()
+            candidate = build_structured_report(raw_report, exit_code)
+            validate_structured_report(candidate)
         except ValueError as exc:  # pragma: no cover - defensive guard
             logger.error("Structured report validation failed: %s", exc)
+            fallback_reason = str(exc)
             validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
+        except Exception as exc:  # pragma: no cover - defensive guard
+            logger.error("Failed to build structured report: %s", exc)
+            fallback_reason = str(exc)
         else:
+            structured = candidate
+        finally:
+            if fallback_reason is not None:
+                structured = build_failure_report(exit_code, reason=fallback_reason)
+
+        try:
             write_json_report(structured, report_path)
+        except OSError as exc:  # pragma: no cover - defensive guard
+            logger.error("Failed to write structured report: %s", exc)
+        else:
             try:
                 validate_report_file(report_path)
             except ValueError as exc:  # pragma: no cover - defensive guard
                 logger.error("Written report failed validation: %s", exc)
                 validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
-            else:
+        finally:
+            try:
                 write_summary(structured, summary_path)
+            except OSError as exc:  # pragma: no cover - defensive guard
+                logger.error("Failed to write summary report: %s", exc)
 
         log_path = _relative_to_root(logging_ctx.log_path)
         logger.info("Pytest finished with exit code %s", exit_code)
@@ -566,41 +621,37 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
 
         final_exit_code = exit_code
+        success_rate_raw = structured.get("summary", {}).get("success_rate", 0.0) or 0.0
+        try:
+            success_rate_value = float(success_rate_raw)
+        except (TypeError, ValueError):  # pragma: no cover - guarded by validation
+            logger.error(
+                "Structured summary provided a non-numeric success rate %r; treating it as 0%%",
+                success_rate_raw,
+            )
+            success_rate_value = 0.0
+
+        success_rate_pct = (
+            success_rate_value * 100.0 if success_rate_value <= 1.0 else success_rate_value
+        )
+
+        if success_rate_pct < QUALITY_THRESHOLD_PERCENT:
+            logger.error(
+                "Success rate %.2f%% is below the required %.2f%% threshold",
+                success_rate_pct,
+                QUALITY_THRESHOLD_PERCENT,
+            )
+            if final_exit_code == 0:
+                final_exit_code = QUALITY_FAILURE_EXIT_CODE
+        else:
+            logger.info(
+                "Success rate %.2f%% meets the required %.2f%% threshold",
+                success_rate_pct,
+                QUALITY_THRESHOLD_PERCENT,
+            )
+
         if validation_exit_code is not None:
             final_exit_code = validation_exit_code
-        else:
-            success_rate_raw = (
-                structured.get("summary", {}).get("success_rate", 0.0) or 0.0
-            )
-            try:
-                success_rate_value = float(success_rate_raw)
-            except (TypeError, ValueError):  # pragma: no cover - guarded by validation
-                logger.error(
-                    "Structured summary provided a non-numeric success rate %r; treating it as 0%%",
-                    success_rate_raw,
-                )
-                success_rate_value = 0.0
-
-            success_rate_pct = (
-                success_rate_value * 100.0
-                if success_rate_value <= 1.0
-                else success_rate_value
-            )
-
-            if success_rate_pct < QUALITY_THRESHOLD_PERCENT:
-                logger.error(
-                    "Success rate %.2f%% is below the required %.2f%% threshold",
-                    success_rate_pct,
-                    QUALITY_THRESHOLD_PERCENT,
-                )
-                if final_exit_code == 0:
-                    final_exit_code = QUALITY_FAILURE_EXIT_CODE
-            else:
-                logger.info(
-                    "Success rate %.2f%% meets the required %.2f%% threshold",
-                    success_rate_pct,
-                    QUALITY_THRESHOLD_PERCENT,
-                )
 
     return final_exit_code
 

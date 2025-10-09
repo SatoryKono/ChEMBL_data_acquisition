@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 import pandas.testing as pdt
+import pytest
 
 from library.config import Config
 from library.pipelines.target import helpers
