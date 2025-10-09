@@ -28,7 +28,15 @@ config/*.local.yaml
 config/*.secrets.yaml
 config/*.override.yaml
 config/**/secrets*.yaml
- 
+config/dictionary/**/output*.csv
+config/dictionary/**/output*.meta.yaml
+config/dictionary/**/output*.quality_report_table.csv
+config/dictionary/**/output*.data_correlation_report_table.csv
+
+# Top-level pipeline artefacts
+/output*.csv
+/*.meta.yaml
+
 logs/*
 !logs/.gitkeep
 reports/*
@@ -37,6 +45,7 @@ reports/*
 !reports/tests/
 !reports/code_review.md
 !reports/archive/
+!reports/archive/**
 !reports/archive/REPORT_activity_log_missing.md
 
 dictionary/_activity/pairs.csv

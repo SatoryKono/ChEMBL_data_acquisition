@@ -95,6 +95,32 @@ python scripts/get_data.py \
 [`docs/en/OUTPUT_TARGETS.md`](./docs/en/OUTPUT_TARGETS.md). Полную спецификацию
 см. в [`docs/ru/OUTPUT.md`](./docs/ru/OUTPUT.md).
 
+#### Воспроизведение архива экспорта таргетов
+
+Исторические примеры набора артефактов теперь находятся в каталоге
+[`reports/archive/target_pipeline/`](./reports/archive/target_pipeline). Чтобы
+воссоздать ту же структуру локально:
+
+1. Активируйте виртуальное окружение и установите зависимости по инструкции из
+   раздела [«Быстрый старт»](#быстрый-старт).
+2. Запустите пайплайн таргетов на поставляемых примерах идентификаторов:
+
+   ```bash
+   python scripts/get_target_data.py all \
+     --input data/input/target.csv \
+     --final-out output/targets.csv \
+     --chembl-chunk-size 10 \
+     --uniprot-data-dir cache/uniprot
+   ```
+
+3. Проверьте содержимое `output/targets.csv` и вспомогательных файлов:
+   `output/targets.csv.meta.yaml`, `output/targets_quality_report_table.csv`,
+   `output/targets_uniprot.csv`, `output/targets_iuphar.csv`,
+   `output/targets_chembl.csv` и связанные отчёты по качеству.
+
+Все артефакты сохраняют описанную выше детерминированность: повторные запуски с
+одинаковыми входами дают байтово идентичные файлы.
+
 ## Документация
 
 Все руководства доступны на двух языках. Структура зеркальна:
