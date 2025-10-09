@@ -11,6 +11,7 @@ bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
 import argparse
+import json
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
