@@ -44,7 +44,8 @@ Declarative pipeline scenarios are now covered in both integration and end-to-en
 
 - loads miniature CSV fixtures and normalises core columns,
 - emits structured WARN/ERROR events for missing or duplicated records,
-- records pipeline metadata such as `pipeline_version`, per-step metric payloads and runner identifiers,
+- records pipeline metadata such as `pipeline_version`, per-step metric payloads, runner identifiers and a deterministic
+  `generated_at` timestamp derived from the CLI invocation,
 - writes the derived tables with deterministic ordering and derived fields, and
 - honours the edge-case flags `--skip-existing`, `--limit` and `--dry-run` without invoking unintended side effects.
 

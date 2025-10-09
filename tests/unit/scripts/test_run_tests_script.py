@@ -445,3 +445,69 @@ def test_main__writes_reports_when_pytest_fails(tmp_path: Path, monkeypatch: pyt
     placeholder = payload["tests"][0]
     assert placeholder["status"] == "error"
     assert "code 2" in placeholder["error"]
+
+
+@pytest.mark.unit
+def test_main__fails_fast_on_summary_filesystem_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reports_dir = tmp_path / "reports"
+    coverage_dir = reports_dir / "coverage"
+    raw_report_file = reports_dir / "pytest_raw_report.json"
+    report_file = reports_dir / "test_report.json"
+    summary_file = reports_dir / "test_summary.md"
+
+    monkeypatch.setattr(run_tests, "ROOT_DIR", tmp_path, raising=False)
+    monkeypatch.setattr(run_tests, "REPORTS_DIR", reports_dir, raising=False)
+    monkeypatch.setattr(run_tests, "RAW_REPORT_FILE", raw_report_file, raising=False)
+    monkeypatch.setattr(run_tests, "REPORT_FILE", report_file, raising=False)
+    monkeypatch.setattr(run_tests, "SUMMARY_FILE", summary_file, raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_DIR", coverage_dir, raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_XML", coverage_dir / "coverage.xml", raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_HTML", coverage_dir / "html", raising=False)
+
+    base_command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "--json-report",
+        "--json-report-file",
+        str(raw_report_file),
+    ]
+    monkeypatch.setattr(run_tests, "_BASE_PYTEST_COMMAND", base_command, raising=False)
+    monkeypatch.setattr(run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False)
+    monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
+
+    monkeypatch.setattr(run_tests, "run_pytest", lambda command: 0)
+    monkeypatch.setattr(run_tests, "_load_raw_report", lambda: {"tests": [], "duration": 0.0})
+
+    def _fake_configure_logger(cfg: LoggerConfig) -> object:
+        return object()
+
+    monkeypatch.setattr(run_tests, "configure_logger", _fake_configure_logger)
+
+    log_path = tmp_path / "logs" / "run_tests.log"
+
+    @contextmanager
+    def _fake_setup(script_name: str, log_cfg: LoggerConfig, date: str | None = None):
+        assert script_name == "run_tests"
+        yield SimpleNamespace(log_path=log_path, log_cfg=log_cfg, console_stream=None)
+
+    monkeypatch.setattr(run_tests, "setup_cli_logging", _fake_setup)
+
+    summary_attempts = 0
+
+    def _failing_write_summary(report: dict[str, Any], destination: Path) -> None:
+        nonlocal summary_attempts
+        summary_attempts += 1
+        raise OSError("simulated write failure")
+
+    monkeypatch.setattr(run_tests, "write_summary", _failing_write_summary)
+
+    exit_code = run_tests.main([])
+
+    assert exit_code == run_tests.VALIDATION_FAILURE_EXIT_CODE
+    assert summary_attempts == 1
+    assert not summary_file.exists()
+    assert report_file.exists(), "JSON report should still be produced"

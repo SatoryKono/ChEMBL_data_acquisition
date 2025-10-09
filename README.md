@@ -61,6 +61,30 @@ pip install .[dev]
 pre-commit install
 ```
 
+### Pre-commit hooks
+
+The repository ships a curated [`pre-commit`](https://pre-commit.com/)\
+configuration that formats code, lints YAML/TOML files and validates static
+metadata before every commit. After installing the development dependencies run
+`pre-commit install` (see the quick start steps above) to register the hooks with
+your local Git clone. To verify the checks manually without committing, execute:
+
+```bash
+pre-commit run --all-files
+```
+
+Hooks automatically cache their environments, so subsequent executions only
+re-run the steps affected by the files you touched. If you update the
+configuration (for example, bump hook revisions) refresh the cache with:
+
+```bash
+pre-commit autoupdate
+pre-commit run --all-files
+```
+
+All hooks must pass locally before pushing — CI enforces the same suite to
+guarantee consistent formatting and linting outcomes.
+
 Inspect the orchestrator and pipeline-specific flags:
 
 ```bash
@@ -188,9 +212,13 @@ All pipelines are required to be deterministic. Running the same CLI twice with
 identical inputs and configuration produces byte-identical CSV files and a
 matching `<output>.meta.yaml` sidecar. The metadata document captures the
 columns, Pandas dtypes, git SHA and effective configuration so analysts can
-audit the provenance of every export. These `.meta.yaml` files are mandatory
-artefacts and must be stored alongside their CSV counterparts when publishing
-results or exchanging data with downstream systems.
+audit the provenance of every export. The `generated_at` field is derived
+deterministically — `--date` takes precedence, otherwise the normalised CLI
+invocation (including the resolved run identifier) feeds a stable hash — which
+means repeated runs with the same arguments no longer drift. These `.meta.yaml`
+files are mandatory artefacts and must be stored alongside their CSV
+counterparts when publishing results or exchanging data with downstream
+systems.
 
 Temporary files created during atomic writes follow the `.<name>.*.tmp`
 pattern and are always removed after a successful run. If a command fails, the

@@ -80,7 +80,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             config=str(ns.config),
         )
         return 1
-    log_cfg: LoggerConfig = create_logger_config(ns.log_level)
+    run_id_value = getattr(ns, "run_id", None)
+    if isinstance(run_id_value, str):
+        run_id_value = run_id_value.strip() or None
+    log_cfg: LoggerConfig = create_logger_config(ns.log_level, run_id=run_id_value)
     if getattr(ns, "print_config", False):
         print_config(cfg)
         configure_logger(log_cfg)

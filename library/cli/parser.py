@@ -16,6 +16,7 @@ from typing import Any, cast
 from pydantic import ValidationError
 
 from ..common.log import logger
+from .run_context import compute_generated_at
 from ..common.logging_setup import Logger, LoggerConfig
 from ..common.logging_setup import configure_logger as _configure_logger
 from ..config import Config, ConfigError, ConfigMetadata, load_config
@@ -30,6 +31,9 @@ def _default_run_id(level: str) -> str:
 
     seed = f"chembl-data-acquisition|{level.upper()}"
     return uuid.uuid5(uuid.NAMESPACE_URL, seed).hex
+
+
+_RUN_ID_ENV = "CHEMBL_DA_RUN_ID"
 
 
 def create_logger_config(level: str, *, run_id: str | None = None) -> LoggerConfig:
@@ -50,7 +54,12 @@ def create_logger_config(level: str, *, run_id: str | None = None) -> LoggerConf
     """
 
     resolved_run_id = run_id if run_id is not None else _default_run_id(level)
-    return LoggerConfig(run_id=resolved_run_id, level=level)
+    generated_at = compute_generated_at(
+        date_token=None,
+        run_id=resolved_run_id,
+        seed_parts=("create_logger_config", level.upper()),
+    )
+    return LoggerConfig(run_id=resolved_run_id, level=level, generated_at=generated_at)
 
 
 def _positive_int(value: str) -> int:
@@ -149,6 +158,10 @@ def add_common_arguments(
     date_default: str | None | object = None if defaults else argparse.SUPPRESS
     force_default: bool | object = False if defaults else argparse.SUPPRESS
     skip_default: bool | object = False if defaults else argparse.SUPPRESS
+    if defaults:
+        run_id_default: str | object = os.environ.get(_RUN_ID_ENV) or None
+    else:
+        run_id_default = argparse.SUPPRESS
 
     parser.add_argument("--log-level", default=log_level, help="Logging level")
     parser.add_argument(
@@ -214,6 +227,15 @@ def add_common_arguments(
         default=skip_default,
         help="Skip processing if the destination file is present",
     )
+    parser.add_argument(
+        "--run-id",
+        dest="run_id",
+        default=run_id_default,
+        help=(
+            "Override the run identifier used for logging ("
+            f"default: derived from invocation; env {_RUN_ID_ENV})"
+        ),
+    )
     return parser
 
 
@@ -275,7 +297,15 @@ def build_parser(
         action="store_true",
         help="Print effective configuration and exit",
     )
-    log_cfg = create_logger_config(parser.get_default("log_level"))
+    default_run_id = parser.get_default("run_id")
+    if default_run_id in (None, argparse.SUPPRESS):
+        run_id_value = None
+    else:
+        run_id_value = str(default_run_id)
+    log_cfg = create_logger_config(
+        parser.get_default("log_level"),
+        run_id=run_id_value,
+    )
     return parser, log_cfg
 
 
@@ -331,7 +361,15 @@ def build_root_parser() -> (
         help="Print effective configuration and exit",
     )
 
-    log_cfg = create_logger_config(root.get_default("log_level"))
+    root_run_id_default = root.get_default("run_id")
+    if root_run_id_default in (None, argparse.SUPPRESS):
+        root_run_id_value = None
+    else:
+        root_run_id_value = str(root_run_id_default)
+    log_cfg = create_logger_config(
+        root.get_default("log_level"),
+        run_id=root_run_id_value,
+    )
     return root, shared, log_cfg
 
 
@@ -369,6 +407,7 @@ def configure_logger(
         LoggerConfig(
             level=cfg.level,
             run_id=cfg.run_id,
+            generated_at=cfg.generated_at,
             redact_secrets=cfg.redact_secrets,
             stream=cfg.stream,
             handlers=list(cfg.handlers),

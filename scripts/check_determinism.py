@@ -154,7 +154,6 @@ def main(argv: list[str] | None = None) -> int:
         if not first.exists() or not second.exists():
             if args.dry_run:
                 sys.stderr.write(
-                sys.stderr.write(
                     "Determinism check failed: --dry-run prevents creating output files.\n"
                 )
                 sys.stderr.write(

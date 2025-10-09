@@ -9,9 +9,11 @@ from typing import Mapping, Sequence
 
 import yaml
 
+from ..common.run_context import get_current
 from ..config import Config, _mask_secrets, _serialize_paths
 from ..git_utils import _git_sha
 from ..utils.atomic import open_atomic
+from ..project_version import get_pipeline_version
 
 
 def write_meta_yaml(
@@ -20,14 +22,22 @@ def write_meta_yaml(
     *,
     columns: Sequence[str] | None = None,
     dtypes: Mapping[str, str] | None = None,
+    generated_at: str | None = None,
 ) -> Path:
     """Write metadata for ``path`` to ``<path>.meta.yaml``."""
 
     if dtypes is None and columns is not None:
         dtypes = {col: "string" for col in columns}
 
+    context = get_current()
+    timestamp = generated_at
+    if timestamp is None and context is not None and context.generated_at:
+        timestamp = context.generated_at
+    if timestamp is None:
+        timestamp = datetime.now(timezone.utc).isoformat()
+
     meta = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": timestamp,
         "git_sha": _git_sha(),
         "command": " ".join(sys.argv),
         "columns": list(columns or []),
@@ -35,6 +45,7 @@ def write_meta_yaml(
         "config": (
             _mask_secrets(_serialize_paths(cfg.to_dict())) if cfg is not None else {}
         ),
+        "pipeline_version": get_pipeline_version(),
     }
     meta_path = Path(f"{path}.meta.yaml")
     with open_atomic(meta_path, encoding="utf8") as fh:

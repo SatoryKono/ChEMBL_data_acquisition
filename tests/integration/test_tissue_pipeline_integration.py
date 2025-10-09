@@ -18,6 +18,11 @@ from library.pipelines.tissue.pipeline import (
     run_tissue_pipeline,
 )
 from library.pipelines.common import metadata as pipeline_metadata_module
+from library.common import run_context as run_context_module
+from library.common.run_context import RunContext
+
+
+RUN_GENERATED_AT = "2020-01-01T00:00:00+00:00"
 
 
 class _DummyClient:
@@ -75,6 +80,12 @@ def test_run_tissue_pipeline__writes_normalised_output(tmp_path: Path, cfg, monk
         timeout=None,
     )
 
+    monkeypatch.setattr(
+        run_context_module,
+        "_CURRENT",
+        RunContext(run_id="tissue-test", generated_at=RUN_GENERATED_AT),
+    )
+
     result = run_tissue_pipeline(cfg, options, client=_DummyClient())
 
     assert result.exit_code == 0
@@ -101,6 +112,8 @@ def test_run_tissue_pipeline__writes_normalised_output(tmp_path: Path, cfg, monk
     assert (tmp_path / "output_validation_failures.csv").exists() is False
     meta_path = Path(f"{output_csv}.meta.yaml")
     assert meta_path.exists()
+    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert metadata["generated_at"] == RUN_GENERATED_AT
 
 
 @pytest.mark.integration
@@ -175,6 +188,12 @@ def test_run_tissue_pipeline__deterministic_output_from_fixtures(
     pipeline_metadata_module.get_timestamp_utc.cache_clear()
     pipeline_metadata_module.pipeline_metadata.cache_clear()
 
+    monkeypatch.setattr(
+        run_context_module,
+        "_CURRENT",
+        RunContext(run_id="tissue-test", generated_at=RUN_GENERATED_AT),
+    )
+
     result = run_tissue_pipeline(cfg, options, client=_DummyClient())
 
     assert result.exit_code == 0
@@ -201,6 +220,6 @@ def test_run_tissue_pipeline__deterministic_output_from_fixtures(
     assert meta_path.exists()
     metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
     assert metadata["columns"] == TISSUE_COLUMN_ORDER
-    assert metadata["generated_at"] == expected_df["timestamp_utc"].iloc[0]
+    assert metadata["generated_at"] == RUN_GENERATED_AT
     assert metadata["command"]
 
