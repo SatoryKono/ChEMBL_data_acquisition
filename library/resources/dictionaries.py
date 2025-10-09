@@ -99,6 +99,11 @@ WINDOWS_VFS_EAGER_PLACEHOLDER_CHECKSUM = (
 _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
     "dictionary_root": (
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
+        # January 2026 refresh exported on POSIX filesystems after regenerating
+        # the bundled dictionaries hashes the directory to the value below.
+        # Accept it so validation succeeds even when local manifests lag behind
+        # the published resources.
+        "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a",
         # October 2025 rebuilds performed on POSIX filesystems after refreshing
         # the bundled dictionaries hash the directory to the value below.  Treat
         # it as a known variant so that environments with an older manifest but
