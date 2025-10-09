@@ -91,7 +91,7 @@ python scripts/get_data.py \
 | Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto` | Resolves tissue metadata, merges ontology cross-references and normalises synonyms for downstream joins. Run separately before `get_activity_data` when tissue lookups are required. |
 | Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --final-out output/cellline.csv --batch-size 20 --limit 100` | Retrieves ChEMBL cell line records, normalises nullable identifiers and enforces deterministic ordering. |
 | Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --column activity_id --batch-size 10 --workers 4 --dry-run` | Flags: identifier column overrides (`--column activity_id`), per-request limits (`--batch-size`, `--timeout`), range selection (`--limit`, `--offset`) and dry-run validation/workers toggles. |
-| Synthetic activities | `python scripts/get_activities.py --limit 25 --dry-run` | Generates deterministic dummy rows for smoke tests; accepts the same logging flags as other CLI tools. |
+| Synthetic activities | `python scripts/get_activities.py --limit 25 --dry-run` | Generates deterministic dummy rows for smoke tests, writes `.meta.yaml` sidecars and cleans temporary files; accepts the same logging flags as other CLI tools. |
 
 Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar
 and table-quality reports under the same directory. The target pipeline also
@@ -107,6 +107,21 @@ the [output reference](./docs/en/OUTPUT.md) for the complete specification.
 Custom file names such as `targets.csv` still trigger this post-processing
 chain, so downstream helpers are generated even when the export deviates from
 the canonical `output.target_<stamp>.csv` pattern.
+
+### Deterministic exports and metadata policy
+
+All pipelines are required to be deterministic. Running the same CLI twice with
+identical inputs and configuration produces byte-identical CSV files and a
+matching `<output>.meta.yaml` sidecar. The metadata document captures the
+columns, Pandas dtypes, git SHA and effective configuration so analysts can
+audit the provenance of every export. These `.meta.yaml` files are mandatory
+artefacts and must be stored alongside their CSV counterparts when publishing
+results or exchanging data with downstream systems.
+
+Temporary files created during atomic writes follow the `.<name>.*.tmp`
+pattern and are always removed after a successful run. If a command fails, the
+cleanup logic also deletes partially written CSVs and orphaned metadata to keep
+output directories tidy.
 
 ## Documentation
 
@@ -138,13 +153,18 @@ languages:
 ## Testing policy
 
 Tests are organised under `tests/` and executed via the canonical wrapper
-`python -m scripts.run_tests`. Local and CI runs must produce:
+`python -m scripts.run_tests`. The command always writes deterministic artefacts
+to `reports/` and enforces the ≥95 % success-rate gate used by CI.
+
+### Test artefacts
+
+Local and CI runs must produce:
 
 - `reports/test_report.json` — machine readable execution log
 - `reports/test_summary.md` — condensed Markdown summary
 
-Use the canonical wrapper to collect both artefacts and enforce the ≥95 %
-success-rate gate:
+Use the canonical wrapper to collect both artefacts and validate the quality
+threshold:
 
 ```bash
 python scripts/run_tests.py
@@ -198,6 +218,26 @@ using the `--` separator, for example:
 ```bash
 python -m scripts.run_tests -- -k "not slow and not e2e"
 ```
+
+### Smoke tests and determinism checks
+
+Run the lightweight determinism smoke test before publishing results or opening
+a pull request:
+
+```bash
+python scripts/check_determinism.py --limit 5
+```
+
+For CLI-level sanity checks you can generate a small deterministic export and
+its metadata sidecar in a temporary directory:
+
+```bash
+python scripts/get_activities.py --limit 10 --final-out /tmp/activities.csv
+```
+
+The resulting `/tmp/activities.csv` and `/tmp/activities.csv.meta.yaml` files
+should be byte-identical across repeated runs when using the same input and
+configuration.
 
 See [`docs/en/development/TESTING.md`](./docs/en/development/TESTING.md) for
 fixtures, determinism requirements and coverage targets.

@@ -90,11 +90,10 @@ def _frame_from_records(records: Iterable[dict[str, object]]) -> pd.DataFrame:
 def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Path:
     """Persist ``frame`` and accompanying metadata to ``output_path`` atomically."""
 
-    temp_path = output_path.with_name(
-        f".{output_path.name}.{uuid4().hex}.tmp"
-    )
+    temp_path = output_path.with_name(f".{output_path.name}.{uuid4().hex}.tmp")
     written = io.write_csv(frame, temp_path, cfg=cfg)
     temp_meta = Path(f"{written}.meta.yaml")
+    temp_meta_lock = temp_meta.with_name(temp_meta.name + ".lock")
 
     try:
         written.replace(output_path)
@@ -103,6 +102,7 @@ def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Pat
         raise
     finally:
         temp_meta.unlink(missing_ok=True)
+        temp_meta_lock.unlink(missing_ok=True)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(
@@ -112,6 +112,8 @@ def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Pat
     )
     os.close(fd)
     tmp_path = Path(tmp_name)
+    tmp_meta = Path(f"{tmp_path}.meta.yaml")
+    tmp_meta_lock = tmp_meta.with_name(tmp_meta.name + ".lock")
     try:
         io.write_csv(frame, tmp_path, cfg=cfg)
         written = tmp_path.replace(output_path)
@@ -120,6 +122,9 @@ def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Pat
         raise
     else:
         tmp_path.unlink(missing_ok=True)
+    finally:
+        tmp_meta.unlink(missing_ok=True)
+        tmp_meta_lock.unlink(missing_ok=True)
     io.write_meta_yaml(
         output_path,
         cfg=cfg,
@@ -134,11 +139,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
     limit = args.limit
     if limit is None:
-        limit = (
-            cfg.activity.limit
-            if cfg.activity.limit is not None
-            else DEFAULT_LIMIT
-        )
+        limit = cfg.activity.limit if cfg.activity.limit is not None else DEFAULT_LIMIT
         if limit < 0:
             logger.error(
                 "config_error",
@@ -163,8 +164,10 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     else:
         output_path = Path(output_candidate)
 
-    if output_path.exists() and getattr(args, "skip_existing", False) and not getattr(
-        args, "force", False
+    if (
+        output_path.exists()
+        and getattr(args, "skip_existing", False)
+        and not getattr(args, "force", False)
     ):
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0
