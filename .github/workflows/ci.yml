@@ -94,7 +94,13 @@ jobs:
             --final-out "${tmp_output}/targets.csv" \
             --log-level INFO \
             --limit 2
-          python scripts/get_activities.py --limit 5 --dry-run
+          python scripts/get_activities.py --limit 5 --final-out "${tmp_output}/activities.csv"
+          test -f "${tmp_output}/activities.csv"
+          test -f "${tmp_output}/activities.csv.meta.yaml"
+          if compgen -G "${tmp_output}/.activities.csv.*.tmp" > /dev/null; then
+            echo "Temporary files from get_activities smoke test were not cleaned up" >&2
+            exit 1
+          fi
       - name: Upload output data
         if: always()
         uses: actions/upload-artifact@v4

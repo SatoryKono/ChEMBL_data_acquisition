@@ -39,4 +39,6 @@ def write_meta_yaml(
     meta_path = Path(f"{path}.meta.yaml")
     with open_atomic(meta_path, encoding="utf8") as fh:
         yaml.safe_dump(meta, fh, sort_keys=False)
+    meta_lock_path = meta_path.with_name(meta_path.name + ".lock")
+    meta_lock_path.unlink(missing_ok=True)
     return meta_path
