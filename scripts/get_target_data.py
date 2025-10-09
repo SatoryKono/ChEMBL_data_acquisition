@@ -295,8 +295,15 @@ def _normalise_target_export_name(path: Path) -> str:
     for marker in _NORMALISED_MARKERS:
         marker_lower = marker.lower()
         csv_marker = f".csv{marker_lower}"
+        marker_csv = f"{marker_lower}.csv"
         if lowered_name.endswith(csv_marker):
             name = name[: -len(marker)]
+            lowered_name = name.lower()
+            break
+        if lowered_name.endswith(marker_csv):
+            extension = name[-len(".csv") :]
+            name_without_extension = name[: -len(extension)]
+            name = f"{name_without_extension[: -len(marker)]}{extension}"
             lowered_name = name.lower()
             break
         if lowered_name.endswith(marker_lower):
