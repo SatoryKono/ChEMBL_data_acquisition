@@ -18,7 +18,7 @@ from itertools import islice
 from pathlib import Path
 from threading import Lock
 from time import perf_counter, sleep
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlsplit
 
 import pandas as pd
@@ -276,26 +276,32 @@ _OUTPUT_ACTIVITY_DROP_COLUMNS: tuple[str, ...] = (
 
 
 
-def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
+if TYPE_CHECKING:  # pragma: no cover - used only for static typing
+    from pandas import Series as _PandasSeries
+else:  # pragma: no cover - runtime alias avoids importing in typing mode
+    _PandasSeries = pd.Series
+
+
+def _coerce_series_dtype(series: _PandasSeries, dtype: str) -> _PandasSeries:
     """Return ``series`` converted to ``dtype`` where feasible."""
 
     # Use pandas extension dtypes directly for nullable types
     if dtype == "Float64":
-        return cast(pd.Series[Any], series.astype(pd.Float64Dtype()))
+        return cast(_PandasSeries, series.astype(pd.Float64Dtype()))
     elif dtype == "Int64":
-        return cast(pd.Series[Any], series.astype(pd.Int64Dtype()))
+        return cast(_PandasSeries, series.astype(pd.Int64Dtype()))
     elif dtype == "boolean":
-        return cast(pd.Series[Any], series.astype(pd.BooleanDtype()))
+        return cast(_PandasSeries, series.astype(pd.BooleanDtype()))
     elif dtype == "string":
-        return series.astype(pd.StringDtype())
+        return cast(_PandasSeries, series.astype(pd.StringDtype()))
     else:
         # For non-extension dtypes, try to use numpy dtype if possible
         try:
             import numpy as np
-            return series.astype(np.dtype(dtype))
+            return cast(_PandasSeries, series.astype(np.dtype(dtype)))
         except (TypeError, ValueError):
             # Final fallback: convert to string
-            return cast(pd.Series[Any], series.astype(str))
+            return cast(_PandasSeries, series.astype(str))
 
 
 def _extract_adapter_retry_metadata(
