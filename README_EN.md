@@ -138,10 +138,16 @@ languages:
 ## Testing policy
 
 Tests are organised under `tests/` and executed with `pytest`. Local and CI runs
-must produce:
+must produce (the files are git-ignored to avoid spurious diffs):
 
 - `reports/test_report.json` — machine readable execution log
 - `reports/test_summary.md` — condensed Markdown summary
+
+GitHub Actions uploads both files (plus the coverage directory) as the
+`test-reports-<python-version>` artefact for every CI matrix entry. Navigate to
+the latest workflow run, download the archive and inspect the JSON/Markdown to
+review the most recent pipeline health snapshot without regenerating the
+reports locally.
 
 `test_report.json` always exposes three top-level keys:
 

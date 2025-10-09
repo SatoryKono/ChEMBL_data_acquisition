@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import subprocess
 from pathlib import Path
 from subprocess import CompletedProcess
 
@@ -182,3 +183,27 @@ def test_main__metadata_mismatch_returns_error(
 
     for directory in created_dirs:
         assert not directory.exists()
+def test_run_activity__passes_dry_run_flag(monkeypatch, tmp_path: Path) -> None:
+    """Ensure the activity runner forwards the --dry-run flag."""
+
+    captured: dict[str, object] = {}
+
+    def _fake_run(cmd, *, text, capture_output, env):
+        captured["cmd"] = cmd
+        captured["env"] = env
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(check_determinism.subprocess, "run", _fake_run)
+
+    destination = tmp_path / "out.csv"
+    input_csv = tmp_path / "input.csv"
+
+    check_determinism._run_activity(
+        limit=5,
+        destination=destination,
+        input_csv=input_csv,
+        dry_run=True,
+    )
+
+    assert "cmd" in captured, "subprocess.run must be invoked"
+    assert captured["cmd"].count("--dry-run") == 1

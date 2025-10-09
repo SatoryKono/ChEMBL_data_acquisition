@@ -153,15 +153,23 @@ languages:
 ## Testing policy
 
 Tests are organised under `tests/` and executed via the canonical wrapper
-`python -m scripts.run_tests`. The command always writes deterministic artefacts
-to `reports/` and enforces the ≥95 % success-rate gate used by CI.
+`python scripts/run_tests.py` (the module form `python -m scripts.run_tests`
+remains available). The command always writes deterministic artefacts to
+`reports/` and enforces the ≥95 % success-rate gate used by CI.
 
 ### Test artefacts
 
-Local and CI runs must produce:
+Local and CI runs must produce (the files are git-ignored to avoid spurious
+diffs):
 
 - `reports/test_report.json` — machine readable execution log
 - `reports/test_summary.md` — condensed Markdown summary
+
+GitHub Actions uploads both files (plus the coverage directory) as the
+`test-reports-<python-version>` artefact for every CI matrix entry. Navigate to
+the latest workflow run, download the archive and inspect the JSON/Markdown to
+review the most recent pipeline health snapshot without regenerating the
+reports locally.
 
 Use the canonical wrapper to collect both artefacts and validate the quality
 threshold:
@@ -227,6 +235,10 @@ a pull request:
 ```bash
 python scripts/check_determinism.py --limit 5
 ```
+
+The script forwards `--dry-run` to the underlying `get_activity_data.py`
+invocations so the smoke check never mutates tracked outputs. Disable the flag
+with `--no-dry-run` if you explicitly want to compare real exports.
 
 For CLI-level sanity checks you can generate a small deterministic export and
 its metadata sidecar in a temporary directory:
