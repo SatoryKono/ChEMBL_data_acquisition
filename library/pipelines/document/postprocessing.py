@@ -521,9 +521,9 @@ def postprocess_documents(
 
     journal_value = np.where(journal_match, frame["ChEMBL.journal"], "unknown")
     volume_value = np.where(volume_match, frame["ChEMBL.volume"], "unknown")
-    issue_value = np.where(issue_match, frame["ChEMBL.issue"], "unknown")
+    issue_value = np.where(issue_match, frame["ChEMBL.issue"], "")
     start_value = np.where(start_match, frame["ChEMBL.first_page"], "unknown")
-    end_value = np.where(end_match, frame["ChEMBL.last_page"], "unknown")
+    end_value = np.where(end_match, frame["ChEMBL.last_page"], "")
 
     frame["reference"] = (
         pd.Series(journal_value, index=frame.index)

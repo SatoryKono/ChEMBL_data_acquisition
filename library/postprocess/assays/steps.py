@@ -73,7 +73,7 @@ def normalize_assay_metadata(
         if collapse_internal_whitespace:
             series = series.str.replace(r"\s+", " ", regex=True)
         if uppercase_categories:
-            series = series.str.upper()
+            series = series.str.lower()
         normalized[column] = series
     return normalized
 

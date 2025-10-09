@@ -1090,7 +1090,7 @@ def _harmonise_documents(out_frame: pd.DataFrame, ref_frame: pd.DataFrame) -> pd
 
     journal_value = np.where(journal_match, df["ChEMBL.journal"], "unknown")
     volume_value = np.where(volume_match, df["ChEMBL.volume"], "unknown")
-    issue_value = np.where(issue_match, df["ChEMBL.issue"], "unknown")
+    issue_value =   df["ChEMBL.issue"] 
     start_value = np.where(start_match, df["ChEMBL.first_page"], "unknown")
     end_value = np.where(end_match, df["ChEMBL.last_page"], "unknown")
 
