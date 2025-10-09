@@ -75,6 +75,7 @@ from library.orchestration import ETLContext
 from library.pipelines.activity import run as activity_run
 from library.pipelines.assay.chembl_assay import (
     ACTIVITY_COLUMNS,
+    MAX_ACTIVITY_CHUNK_SIZE,
 )
 from library.pipelines.common import (
     ChunkedFetchConfig,
@@ -284,16 +285,18 @@ _OUTPUT_ACTIVITY_DROP_COLUMNS: tuple[str, ...] = (
 
 
 
-def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
+def _coerce_series_dtype(series: pd.Series, dtype: str) -> pd.Series:
     """Return ``series`` converted to ``dtype`` where feasible."""
 
     # Use pandas extension dtypes directly for nullable types
     if dtype == "Float64":
-        return cast(pd.Series[Any], series.astype(pd.Float64Dtype()))
+        numeric = pd.to_numeric(series, errors="coerce")
+        return pd.Series(pd.array(numeric.tolist(), dtype="Float64"), index=series.index)
     elif dtype == "Int64":
-        return cast(pd.Series[Any], series.astype(pd.Int64Dtype()))
+        numeric = pd.to_numeric(series, errors="coerce")
+        return pd.Series(pd.array(numeric.tolist(), dtype="Int64"), index=series.index)
     elif dtype == "boolean":
-        return cast(pd.Series[Any], series.astype(pd.BooleanDtype()))
+        return cast(pd.Series, series.astype(pd.BooleanDtype()))
     elif dtype == "string":
         return series.astype(pd.StringDtype())
     else:
@@ -303,7 +306,7 @@ def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
             return series.astype(np.dtype(dtype))
         except (TypeError, ValueError):
             # Final fallback: convert to string
-            return cast(pd.Series[Any], series.astype(str))
+            return cast(pd.Series, series.astype(str))
 
 
 def _extract_adapter_retry_metadata(
@@ -1433,6 +1436,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             raise
 
     processed_ids = prepared_context.processed_ids
+    summary_snapshot = streamed_summary or streaming_stats.snapshot()
+    processed_count = 0
+    if processed_ids is not None and isinstance(processed_ids, (int, float, str)):
+        try:
+            processed_count = int(processed_ids)
+        except (TypeError, ValueError):
+            processed_count = 0
+
     if limit is not None:
         logger.info(
             "process_limit",
@@ -1440,16 +1451,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             limit=limit,
         )
     else:
-        if processed_ids is not None and isinstance(processed_ids, (int, float, str)):
-            try:
-                processed_count = int(processed_ids)
-            except (TypeError, ValueError):
-                processed_count = 0
-        else:
-            processed_count = 0
-            logger.info("processed_count", count=processed_count)
-
-            summary_snapshot = streamed_summary or streaming_stats.snapshot()
+        logger.info("processed_count", count=processed_count)
 
     if pipeline_stats is not None:
         try:
