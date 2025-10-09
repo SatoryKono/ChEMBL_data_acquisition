@@ -11,7 +11,9 @@ bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from importlib import import_module, util
+from time import perf_counter
 from types import ModuleType
 
 
@@ -63,8 +65,8 @@ from library.cli.logging import setup_cli_logging
 from library.cli.parser import path_argument
 from library.common.log import logger
 from library.postprocess.common.config import PipelineConfig, normalize_pipeline_version
+from library.postprocess.common.logging import PipelineRunMetrics
 from library.postprocessing import document as document_postprocessing
-from library.postprocess.documents import run_document_pipeline as run_document_postprocess
 from library.pipelines.common.metadata import get_pipeline_version
 
 
@@ -197,6 +199,9 @@ def run(args: argparse.Namespace) -> int:
         encoding=csv_cfg.encoding,
     )
 
+    pipeline_started_at = datetime.now(timezone.utc).isoformat()
+    pipeline_timer = perf_counter()
+
     try:
         processed_path = document_postprocessing.postprocess_export_file(
             input_path,
@@ -214,13 +219,35 @@ def run(args: argparse.Namespace) -> int:
         )
         return 1
 
+    duration_s = max(0.0, perf_counter() - pipeline_timer)
     extras = {"input": str(input_path), "output": str(processed_path)}
     pipeline_version = resolve_pipeline_version(pipeline_config)
+    pipeline_version_override = pipeline_version
+
+    def _stage_metrics_runner(
+        frame,
+        *,
+        pipeline_version: str | None = None,
+        logger=None,
+    ) -> tuple[object, PipelineRunMetrics]:
+        metrics = PipelineRunMetrics(
+            pipeline_version=pipeline_version or pipeline_version_override,
+            started_at=pipeline_started_at,
+            input_rows=int(frame.shape[0]),
+            input_columns=int(frame.shape[1]),
+        )
+        metrics.finalize(
+            output_rows=int(frame.shape[0]),
+            output_columns=int(frame.shape[1]),
+            duration_s=duration_s,
+        )
+        return frame, metrics
+
     metrics, _ = generate_metrics_report(
         TABLE_NAME,
         processed_path,
         csv_cfg,
-        run_document_postprocess,
+        _stage_metrics_runner,
         pipeline_version=pipeline_version,
         extras=extras,
         logger=logger,
