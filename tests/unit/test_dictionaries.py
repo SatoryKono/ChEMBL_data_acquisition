@@ -91,6 +91,10 @@ def _write_manifest(tmp_path, body: str) -> None:
         ),
         (
             "dictionary_root",
+            "e50c951fb02903d25e40507f032c48c1d87f46673450837cfcc6afeff833e2e4",
+        ),
+        (
+            "dictionary_root",
             "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a",
         ),
         (

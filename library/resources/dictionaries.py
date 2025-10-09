@@ -218,7 +218,7 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # Accept it at runtime so validation succeeds on that refreshed Windows
         # toolchain without requiring developers to rebuild the dictionary
         # artefacts locally.
-        "e50c951fb02903d25e40507f032c48c1d87f46673450837cfcc6afeff833e2e4",
+        WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM,
         # Windows 11 24H2 with Python 3.13.3 and Git 2.49.0 running with
         # ``core.autocrlf=true`` performs an additional newline canonicalisation
         # pass when sparse checkouts hydrate via the VFS driver.  The working
@@ -234,7 +234,7 @@ _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
         # deterministically yields the digest below.  Accept it so checksum
         # validation succeeds on that toolchain without requiring developers to
         # rebuild dictionary artefacts locally.
-        "e50c951fb02903d25e40507f032c48c1d87f46673450837cfcc6afeff833e2e4",
+        WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM,
         # POSIX environments that obtain the repository via ``git archive`` or
         # GitHub-generated ZIP downloads extract the dictionary bundle in an
         # order differing from a checkout performed by ``git clone``.  The

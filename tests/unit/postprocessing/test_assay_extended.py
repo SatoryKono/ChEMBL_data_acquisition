@@ -34,3 +34,17 @@ def test_resolve_dictionary_root__accepts_string_paths(tmp_path: Path) -> None:
 
     assert resolved == provided
     assert isinstance(resolved, Path)
+
+
+@pytest.mark.unit
+def test_latest_target_export__accepts_legacy_filename(tmp_path: Path) -> None:
+    """Fallback target export names should remain backwards compatible."""
+
+    target_dir = tmp_path / "_target"
+    target_dir.mkdir()
+    legacy_export = target_dir / "output.targets.csv"
+    legacy_export.write_text("target_id,name\n1,test\n", encoding="utf-8")
+
+    resolved = assay_extended._latest_target_export(target_dir)
+
+    assert resolved == legacy_export.resolve()
