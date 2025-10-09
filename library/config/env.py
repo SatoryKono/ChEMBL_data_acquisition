@@ -248,10 +248,13 @@ def _normalize_env_errors(
     return messages, handled
 
 
-def _apply_env_overrides(data: dict[str, Any]) -> dict[tuple[str, ...], str]:
+def _apply_env_overrides(
+    data: dict[str, Any]
+) -> tuple[dict[tuple[str, ...], str], list[str]]:
     prefix = "CHEMBL_DA"
     overrides: dict[tuple[str, ...], str] = {}
     alias_map = _alias_map()
+    warnings: list[str] = []
     for env_key, env_val in os.environ.items():
         key = env_key.upper()
         path = alias_map.get(key)
@@ -262,10 +265,16 @@ def _apply_env_overrides(data: dict[str, Any]) -> dict[tuple[str, ...], str]:
             continue
         parts = [p.lower() for p in path]
         if not parts or not _is_valid_path(parts):
-            logger.warning(f"Environment variable {key} ignored")
+            joined = ".".join(parts) if parts else "<root>"
+            logger.warning(
+                "config_env_unknown_path",
+                variable=key,
+                path=joined,
+            )
+            warnings.append(f"{key}: unknown configuration path '{joined}'")
             continue
         value = _parse_env_value(key, env_val)
         _set_by_path(data, parts, value)
         overrides[tuple(parts)] = key
-    return overrides
+    return overrides, warnings
 

@@ -6,6 +6,10 @@ resources:
     sha256:
       # POSIX checkouts without newline conversion
       - "e3c3e184c847dbc4f5a238b508055e8ee6ff2536a63a06d1d72d48a82d72e545"
+      # January 2026 refresh exported from a POSIX checkout after rebuilding
+      # the bundled dictionaries.  Treat it as the canonical digest so freshly
+      # generated archives validate without requiring local allow-list updates.
+      - "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a"
       # October 2025 refresh exported after rebuilding the bundled dictionaries
       # on a POSIX filesystem hashes the directory to the value below.  Treat it
       # as the canonical digest so that freshly generated archives validate

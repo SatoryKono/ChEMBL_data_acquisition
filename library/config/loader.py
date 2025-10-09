@@ -365,7 +365,7 @@ def load_config(
         for path_tuple, _ in _iter_leaf_items(local_data):
             source_map[path_tuple] = ConfigSource("config", local_detail)
 
-    env_overrides = _apply_env_overrides(data)
+    env_overrides, env_warnings = _apply_env_overrides(data)
     for path_tuple, env_key in env_overrides.items():
         source_map[path_tuple] = ConfigSource("env", env_key)
     _upgrade_legacy_config(data)
@@ -429,6 +429,8 @@ def load_config(
         source_map.setdefault(path_tuple, ConfigSource("default", None))
     snapshot = _build_snapshot(cfg_dict, source_map)
     metadata = ConfigMetadata(snapshot=snapshot, sources=source_map)
+    if env_warnings:
+        metadata.env_warnings.extend(env_warnings)
     if cli_path_map:
         metadata.cli_paths.update(cli_path_map)
     return cfg, metadata

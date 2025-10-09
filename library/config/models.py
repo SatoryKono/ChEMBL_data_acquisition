@@ -123,6 +123,7 @@ class ConfigMetadata:
     snapshot: dict[str, Any]
     sources: dict[tuple[str, ...], ConfigSource]
     cli_paths: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    env_warnings: list[str] = field(default_factory=list)
 
     def get(self, path: Sequence[str] | str) -> dict[str, Any]:
         """Return a copy of the metadata entry located at ``path``."""
