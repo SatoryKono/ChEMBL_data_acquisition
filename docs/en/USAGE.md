@@ -13,7 +13,7 @@ or via the console scripts installed from `pyproject.toml` (`get-data`,
 | `--final-out` | Destination CSV. If omitted a deterministic filename `output.<stem>.csv` is generated inside the resolved output directory. Provide `--date` or set `io.output_stamp_mode=require` to append the date token. |
 | `--sep`, `--encoding` | CSV delimiter and encoding. Inherit defaults from the configuration. |
 | `--log-level` | Logging verbosity (`DEBUG`, `INFO`, `WARN`, `ERROR`). |
-| `--verbose` | Shortcut to enable DEBUG logging without editing configuration files. |
+| `--verbose` | Enables DEBUG logging without modifying configuration files. |
 | `--force` | Overwrite existing outputs. |
 | `--skip-existing` | Skip execution when the destination file already exists. |
 | `--limit`, `--offset` | Restrict the number of identifiers processed or skip leading rows. Supplying `--limit 0` disables the pipeline. |
@@ -239,7 +239,7 @@ python scripts/get_assay_data.py \
 
 Extends the assay options with range selection, per-request timeouts, optional
 dry-run execution and parallel fetching controls. In addition to the shared
-flags the command accepts:
+flags (including `--verbose` for DEBUG logging) the command accepts:
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -281,8 +281,8 @@ configuration (`testitem` section).
 ## Tissue pipeline `get_tissue_data`
 
 Aggregates tissue metadata from ChEMBL and companion ontologies, producing a
-normalised lookup for downstream joins. Besides the shared options the command
-supports:
+normalised lookup for downstream joins. Besides the shared options (such as
+`--verbose` for DEBUG logging) the command supports:
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -307,7 +307,8 @@ python scripts/get_tissue_data.py \
 ## Cell line pipeline `get_cellline_data`
 
 The command exports metadata for ChEMBL cell lines with stable typing and
-ordering. Supported options in addition to the shared flags:
+ordering. Supported options in addition to the shared flags (remember that
+`--verbose` switches logging to DEBUG without editing configuration files):
 
 | Option | Default | Description |
 |--------|---------|-------------|

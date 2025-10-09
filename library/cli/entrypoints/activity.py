@@ -1,16 +1,14 @@
-"""Thin wrapper exposing the activity pipeline CLI entry point."""
+"""Command line interface for retrieving ChEMBL activity data.
+
+The module exposes a ``main`` entry point compatible with setuptools console
+scripts as well as helpers that can be invoked directly from other
+applications or tests.
+"""
 
 from __future__ import annotations
 
-if __package__ in {None, ""}:
-    from _bootstrap import bootstrap_cli
-else:  # pragma: no cover - executed when imported as a module
-    from ._bootstrap import bootstrap_cli
-
-bootstrap_cli(__package__, __file__)
-del bootstrap_cli
-
 import argparse
+import json
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -44,10 +42,9 @@ from library.cli import (
 )
 from library.cli.base import PipelineCLIBase
 from library.cli.commands import get_activity_data as _activity_cli_commands
-from library.pipelines.activity.runner import (
+from library.cli.commands.get_activity_data import (
     MIN_ACTIVITY_TIMEOUT,
     ActivityCommandOptions,
-    register_activity_pipeline_hooks,
     run_activity_pipeline,
 )
 from library.cli_utils import (  # noqa: E402
@@ -70,7 +67,6 @@ from library.orchestration import ETLContext
 from library.pipelines.activity import run as activity_run
 from library.pipelines.assay.chembl_assay import (
     ACTIVITY_COLUMNS,
-    MAX_ACTIVITY_CHUNK_SIZE,
 )
 from library.pipelines.common import (
     ChunkedFetchConfig,
@@ -98,7 +94,7 @@ from library.validation import validate_activities
 
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
-PROGRAM_NAME = Path(__file__).with_suffix("").name
+PROGRAM_NAME = "get_activity_data"
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
     invocation = getattr(args, "invocation", None)
@@ -128,7 +124,6 @@ __all__ = (
     "write_meta_yaml",
     "configure_logger",
     "run_cli_command",
-    "MAX_ACTIVITY_CHUNK_SIZE",
 )
 
 
@@ -284,22 +279,35 @@ _OUTPUT_ACTIVITY_DROP_COLUMNS: tuple[str, ...] = (
 def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
     """Return ``series`` converted to ``dtype`` where feasible."""
 
-    # Delegate to the extended coercion helper for extension-aware conversions.
-    if dtype in {"Float64", "Int64", "boolean"}:
-        converted, _ = _coerce_extended_series(series, dtype, column="_coerce_series_dtype")
-        return cast("pd.Series[Any]", converted)
-
-    if dtype == "string":
+    # Use pandas extension dtypes directly for nullable types
+    if dtype == "Float64":
+        return series.astype(pd.Float64Dtype())
+    elif dtype == "Int64":
+        return series.astype(pd.Int64Dtype())
+    elif dtype == "boolean":
+        return series.astype(pd.BooleanDtype())
+    elif dtype == "string":
         return series.astype(pd.StringDtype())
+    else:
+        # For non-extension dtypes, try to use numpy dtype if possible
+        try:
+            import numpy as np
+            return series.astype(np.dtype(dtype))
+        except (TypeError, ValueError):
+            # Final fallback: convert to string
+            return series.astype(str)
 
-    # For non-extension dtypes, try to use numpy dtype if possible.
+
+def _safe_int(value: object, default: int = 0) -> int:
+    """Safely convert ``value`` to :class:`int` while tolerating bad inputs."""
+
+    if value is None:
+        return default
+
     try:
-        import numpy as np
-
-        return series.astype(np.dtype(dtype))
+        return int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
-        # Final fallback: convert to string.
-        return cast("pd.Series[Any]", series.astype(str))
+        return default
 
 
 def _extract_adapter_retry_metadata(
@@ -1428,14 +1436,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
             raise
 
+    summary_snapshot: Mapping[str, object] | None = None
     processed_ids = prepared_context.processed_ids
-    try:
-        processed_count = int(processed_ids or 0)
-    except (TypeError, ValueError):
+    processed_count = _safe_int(processed_ids, 0)
+    if processed_count == 0 and processed_ids not in (None, 0, "0", 0.0):
         logger.info("processed_count_conversion_failed", value=processed_ids)
-        processed_count = 0
-
-    summary_snapshot: dict[str, object] | None = None
 
     if limit is not None:
         logger.info(
@@ -1449,15 +1454,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("processed_count", count=processed_count)
 
     if pipeline_stats is not None:
-        try:
-            rows_total = int(pipeline_stats.get("rows_total", processed_count))
-        except (TypeError, ValueError):
-            rows_total = processed_count
-        try:
-            rows_kept = int(pipeline_stats.get("rows_kept", 0))
-        except (TypeError, ValueError):
-            rows_kept = 0
-        rows_dropped = int(pipeline_stats.get("rows_dropped", 0))
+        rows_total = _safe_int(pipeline_stats.get("rows_total"), processed_count)
+        rows_kept = _safe_int(pipeline_stats.get("rows_kept"), 0)
+        rows_dropped = _safe_int(pipeline_stats.get("rows_dropped"), 0)
         logger.info(
             "records_dropped",
             rows_total=rows_total,
@@ -1543,15 +1542,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("activity_pipeline_done", extra=pipeline_done_payload)
         if extended_output_path is not None:
             logger.info(
-                "activity_export_checkpoint",
-                output=str(output_path),
-                extended_output=str(extended_output_path),
+                f"Successful export checkpoint: primary data at '{output_path}', extended data at '{extended_output_path}'."
             )
         else:
             logger.info(
-                "activity_export_checkpoint",
-                output=str(output_path),
-                extended_output=None,
+                f"Successful export checkpoint: activity data written to '{output_path}'."
             )
         _emit_completion_message(
             output_path=output_path,
@@ -1585,21 +1580,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             details=detail_text or None,
         )
         logger.error(
-            "activity_pipeline_failed_detail",
-            output=str(output_path),
-            processed=processed_ids,
-            exit_code=exit_code,
-            details=detail_text or None,
+            f"Activity pipeline failed with exit code {exit_code} after processing {processed_ids} identifiers destined for '{output_path}'. {detail_text}"
         )
 
     return exit_code
-
-
-register_activity_pipeline_hooks(
-    runner=run_chembl,
-    emit_completion_message=_emit_completion_message,
-)
-
 
 def _generate_activity_postprocess_metrics(
     cfg: Config,
@@ -1776,7 +1760,7 @@ class ActivityPipelineCLI(PipelineCLIBase):
         return None
 
     def get_program_name(self) -> str:
-        return Path(__file__).with_suffix("").name
+        return PROGRAM_NAME
 
     def get_logger(self) -> Logger:
         return logger
@@ -1805,11 +1789,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     return _CLI.build_parser()
 
 
-from library.cli.entrypoints import activity as _activity
+def main(argv: Sequence[str] | None = None) -> int:
+    """Delegate to :class:`ActivityPipelineCLI` for backwards compatibility."""
 
-sys.modules[__name__] = _activity
-sys.modules.setdefault("scripts.get_activity_data", _activity)
+    return _CLI.main(argv)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
-    raise SystemExit(_activity.main())
+    raise SystemExit(main())

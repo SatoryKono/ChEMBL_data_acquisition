@@ -35,7 +35,9 @@ config/dictionary/**/output*.data_correlation_report_table.csv
 
 # Top-level pipeline artefacts
 /output*.csv
+/out*.csv
 /*.meta.yaml
+/out*.meta.yaml
 
 logs/*
 !logs/.gitkeep
