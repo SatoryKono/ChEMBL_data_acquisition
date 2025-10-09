@@ -103,6 +103,20 @@ def test_is_supported_target_export__cases(
 
 
 @pytest.mark.parametrize(
+    "filename, expected",
+    [
+        ("targets_normalized.csv", "targets.csv"),
+    ],
+)
+def test_normalise_target_export_name__normalised_suffix_cases(
+    filename: str, expected: str
+) -> None:
+    result = get_target_data._normalise_target_export_name(Path(filename))
+
+    assert result == expected
+
+
+@pytest.mark.parametrize(
     "value, tokens",
     [
         ("P12345", ["P12345"]),
