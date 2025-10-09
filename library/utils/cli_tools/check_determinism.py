@@ -79,6 +79,32 @@ def run_check(tmp_dir: Path) -> bool:
     logger.debug("hash", label="second", value=hash2)
     logger.debug("hash", label="chunked", value=hash3)
 
+    metadata_status = "skipped"
+    first_meta = first.with_suffix(first.suffix + ".meta.yaml")
+    second_meta = second.with_suffix(second.suffix + ".meta.yaml")
+
+    if first_meta.exists() and second_meta.exists():
+        first_meta_hash = sha256_file(first_meta)
+        second_meta_hash = sha256_file(second_meta)
+
+        logger.debug("hash", label="first_meta", value=first_meta_hash)
+        logger.debug("hash", label="second_meta", value=second_meta_hash)
+
+        metadata_status = "matched"
+        if first_meta_hash != second_meta_hash:
+            metadata_status = "mismatch"
+            logger.warning(
+                "metadata_hash_mismatch",
+                first=str(first_meta),
+                second=str(second_meta),
+                first_hash=first_meta_hash,
+                second_hash=second_meta_hash,
+            )
+            logger.info("metadata_check", status=metadata_status)
+            return False
+
+    logger.info("metadata_check", status=metadata_status)
+
     return hash1 == hash2 == hash3
 
 
