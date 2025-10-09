@@ -486,7 +486,7 @@ def _get_cfg_value(cfg: Config, path: str) -> Any:
 def apply_config_overrides(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser,
-    config_path: str | Path,
+    config_path: str | Path | None,
     mapping: dict[str, str] | None = None,
     *,
     base_parser: argparse.ArgumentParser | None = None,
@@ -506,7 +506,8 @@ def apply_config_overrides(
         Argument parser used to determine default values for command specific
         options.
     config_path:
-        Location of the YAML configuration file.
+        Location of the YAML configuration file. When ``None`` the default
+        configuration shipped with the package is used.
     mapping:
         Optional mapping of argument names to ``Config`` attribute paths. The
         mapping is merged with a set of common defaults.
@@ -551,6 +552,15 @@ def apply_config_overrides(
             cli_overrides[key] = value
             cli_override_sources[tuple(key.split("."))] = arg
 
+    if config_path is None:
+        logger.info(
+            "config_default_path_used",
+            config=str(DEFAULT_CONFIG_PATH),
+        )
+        if hasattr(args, "config") and getattr(args, "config") is None:
+            setattr(args, "config", DEFAULT_CONFIG_PATH)
+    selected_config_path: str | Path = config_path or DEFAULT_CONFIG_PATH
+
     try:
         base_path_arg = getattr(args, "base_path", None)
         if isinstance(base_path_arg, Path):
@@ -561,7 +571,7 @@ def apply_config_overrides(
             config_base_path = Path(base_path_arg)
 
         load_result = load_config(
-            config_path,
+            selected_config_path,
             cli_overrides=cli_overrides,
             base_path=config_base_path,
             strict=True,
@@ -573,7 +583,7 @@ def apply_config_overrides(
         logger.error(
             "config_load_failed",
             error=str(exc),
-            config=str(config_path),
+            config=str(selected_config_path),
         )
         raise
     except ValidationError as exc:

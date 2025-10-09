@@ -47,6 +47,14 @@ from .cli.pipeline_definition import (
     normalise_definition,
 )
 
+__all__ = [
+    "PipelineError",
+    "resolve_invocation",
+    "run_cli_command",
+    "run_pipeline",
+    "build_parser",
+]
+
 
 def _callable_name(func: Callable[..., object]) -> str:
     """Return a human readable name for ``func``."""

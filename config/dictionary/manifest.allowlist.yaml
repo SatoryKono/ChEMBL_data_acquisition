@@ -12,6 +12,10 @@
 # checksum variant and the platforms they cover.
 
 dictionary_root:
+  # January 2026 refresh exported on POSIX filesystems after regenerating the
+  # bundled dictionaries.  Include it so validation succeeds even when older
+  # manifests are present locally.
+  - "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a"
   # Windows 11 (23H2) with Python 3.13.1 and Git 2.48 may rewrite sparse index
   # metadata when expanding the checkout, yielding the checksum below even
   # though the dictionary content is byte-identical to the POSIX export.

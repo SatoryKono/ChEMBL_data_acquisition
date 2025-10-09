@@ -1,171 +1,237 @@
-Generated: 2025-01-01T00:00:00Z
+# Executive summary
 
-Executive summary
+1. [Config] Манифест словарей `dictionary_root` не содержит актуальный SHA256 `3d2b7a7d…`, из-за чего любой запуск CLI/тестов немедленно падает при валидации ресурсов. → Полный стоп пайплайна. → Добавить новый хэш в `config/dictionary/manifest.yaml` и зеркально в `manifest.allowlist.yaml`, пересобрав артефакт и дополнив документацию по обновлению словарей.
+2. [Testing] Проверка детерминизма вызывает `scripts/get_activity_data.py` напрямую, но скрипт лишён bootstrap-кода, поэтому подпроцесс не видит пакет `library` и падает. → Авто-тесты детерминизма не запускаются. → Вернуть bootstrap-блок в `scripts/get_activity_data.py` и запускать CLI через `python -m scripts.get_activity_data` либо прокладывать `PYTHONPATH` внутри `check_determinism.py`.
+3. [Errors] Все e2e тесты и smoke-команды падают на той же проверке checksum, что зафиксировано в выводах pytest/CLI. → Невозможность проверить пайплайн перед релизом. → Исправить словарные checksum'ы и добавить health-check в `scripts/run_tests.py`, который валидирует манифест до запуска pytest.
+4. [Structure] `scripts/get_activity_data.py` (~1600+ строк) смешивает CLI, сетевые вызовы, постобработку и генерацию отчётов в одном модуле без bootstrap; повторное использование почти невозможно. → Трудоёмкая поддержка и высокий риск регрессий. → Разбить модуль на подмодули (`cli`, `pipelines`, `postprocess`) и опубликовать явное API в `library/cli/commands`.
+5. [Quality] Модуль `library/cli_utils.py` создаёт глобалы без аннотаций и публичного API (`required_cols`, `schema_columns_dict` и др.). → mypy/ruff фиксации падают, реальное API остаётся неочевидным. → Добавить `__all__`, типы и вынести подготовку схем в отдельные dataclass/TypedDict структуры.
+6. [Config] Автоматическое расширение конфигурации не обрабатывает случай, когда `--config` отсутствует (Path(None) из argparse не ловится). → Падение в рантайме с `TypeError` вместо дружелюбного сообщения. → В `library/cli/parser.apply_config_overrides` перед вызовом `load_config` валидировать `config_path` и выводить actionable error.
+7. [Errors] `ChemblClient` не логирует первопричину таймаутов/HTTP 429 и не делает структурированные события об истощении rate limiter. → Сложно отлавливать деградации API. → Добавить структурированные WARN/ERROR с полями `event=retry`, `backoff_s`, `status`, `retry_count`.
+8. [Performance] `library/utils/cli_tools/get_activities._frame_from_records` материализует генератор целиком в память. → При `limit` > десятков тысяч CLI падает по памяти. → Писать чанками через `pd.DataFrame.from_records(..., columns=...)` или стримить в CSV без полного materialize.
+9. [Testing] `scripts/run_tests.py` не проверяет success-rate ≥95% если pytest упал раньше (как сейчас), а JSON/MD отчёты не создаются. → CI не выдаёт консистентный отчёт. → Обернуть генерацию отчётов в `try/finally` и при ошибке создавать отчёты с признаком `error`.
+10. [Docs] Нет описанной процедуры обновления словарей/allowlist и критериев детерминизма рядом с данными. → Сбои вроде текущего остаются незадокументированными. → Добавить `config/dictionary/README.md` раздел «Как обновить manifest/allowlist» и ссылку из основного README.
 
-1. [Errors] Модуль декларативного постпроцессинга требует функцию `resolve_dotted_path`, но она отсутствует в `library/postprocess/common/import_utils.py`, что ломает импорт `library.postprocess` во всех CLI и тестах → запуск скриптов и пайплайнов завершается `ImportError`, сборка падает на старте → добавить совместимую реализацию `resolve_dotted_path` (обёртку над `import_by_path`) и покрыть загрузку конфигурации регрессионным тестом.【F:library/postprocess/common/config.py†L14-L176】【F:library/postprocess/common/import_utils.py†L12-L84】
-2. [Structure] Скрипты `scripts/get_target_data.py` и др. вынуждены динамически патчить legacy-модули (`setattr`, `_override_cli_meta_writer`) из-за несогласованности между `library/postprocess` и `library/postprocessing` → жёсткие зависимости от внутренних деталей, высокая хрупкость при обновлениях → перенести слой совместимости в пакет `library.postprocess` и отказаться от monkey-patching в CLI.【F:scripts/get_target_data.py†L95-L140】
-3. [Quality] В `library/postprocessing/names.py` одновременно определены две разные версии `process_target_names`, возвращающие строку и словарь → противоречивый публичный API, нарушенные сигнатуры и предупреждения mypy → оставить одну функцию с чёткой сигнатурой, выделить legacy-обёртку с явным названием.【F:library/postprocessing/names.py†L390-L425】【F:library/postprocessing/names.py†L592-L619】
-4. [Testing] `pytest` останавливается ещё на импорте `tests/e2e/test_activity_logging.py` по той же причине (`resolve_dotted_path`), поэтому критические сценарии не покрываются вообще → восстановить импорт и добавить e2e-smoke, проверяющий запуск CLI.【aae7a8†L1-L18】
-5. [Testing] Скрипт `scripts/check_determinism.py` падает сразу после старта из-за импортной ошибки, и детерминизм CSV не проверяется → починить загрузку постпроцессинга и добавить фикстуру, подтверждающую равенство хэшей в CI.【8b9edb†L1-L15】
-6. [Performance] Производительный smoke `PYTHONHASHSEED=0 python scripts/get_activity_data.py --limit 500 --dry-run` не выполняется по той же ошибке, а штатная команда `/usr/bin/time` отсутствует → после восстановления импорта задействовать встроенный `time.perf_counter()` или `python -m timeit` и зафиксировать бюджет выполнения в тесте-профиле.【26dcd5†L1-L3】【16d81a†L1-L13】
-7. [Quality] `ChunkFailureTracker.stats()` возвращает ссылку на общий `_EMPTY_STATS` (`{}`), поэтому любое постобработка (например, `stats_extra.setdefault`) мутирует глобальное состояние и ломает последующие вызовы → возвращать новый словарь при отсутствии ошибок или `copy()` результата.【F:library/common/fetch_retry.py†L22-L70】
-8. [Structure] `run_pipeline` вытягивает `output_path`/`failure_path` через `locals()` из-за отражательных вызовов и патчинга сигнатуры → код трудно читать, а оптимизаторы/стат-анализаторы видят «магические» побочные эффекты → сделать параметры позиционными и удалить обходные манёвры; для бэкендов оставить тонкую адаптацию в месте вызова.【F:library/cli_utils.py†L269-L288】
-9. [Quality] `ruff check`, `ruff format` и `mypy --strict` завершаются сотнями ошибок, что подтверждает отсутствие линтинга и статпроверок в CI → зафиксировать набор правил в pre-commit, довести код до «зелёного» состояния и включить проверки в pipeline.【130b7c†L1-L120】【ad8e81†L1-L181】【aaca19†L1-L120】
-10. [Config] Из-за отсутствия резолвера шагов конфигурации (`resolve_dotted_path`) YAML-файлы постпроцессинга невалидируемы и фактически неиспользуемы; опечатка в callable не будет поймана на этапе загрузки → после восстановления резолвера добавить тест, грузящий `config/pipeline/*.yaml`, и схему на основе pandera/pydantic.【F:library/postprocess/common/config.py†L60-L176】
+# Scores (0–5)
 
-Scores (0–5)
+**Structure: 2/5.** Разделение между CLI, библиотекой и данными формальное: `scripts/get_activity_data.py` монолитен, клиенты/мапперы перемешаны, отсутствуют явные boundary-слои (`library/pipelines` напрямую импортируют CLI utils).
 
-Structure: 2/5 — два параллельных стека (`library/postprocess` и `library/postprocessing`) плюс обилие monkey-patching в CLI создают неявные связи и ломают инкапсуляцию, что видно по костылям в `scripts/get_target_data.py` и `run_pipeline`.
-Config: 2/5 — конфиги богаты комментариями, но ключевой механизм (декларативные шаги) не работает из-за отсутствующего резолвера; валидация YAML и env-override не покрыта тестами.【F:library/postprocess/common/config.py†L14-L176】
-Quality: 1/5 — дубли в `library/postprocessing/names.py`, возврат глобальных мутабельных объектов и сотни lint-ошибок демонстрируют низкую поддерживаемость.【F:library/postprocessing/names.py†L390-L619】【F:library/common/fetch_retry.py†L22-L70】
-Errors: 1/5 — базовые команды (`pytest`, `get_activity_data`, `check_determinism`) падают на импорте, что указывает на отсутствие fail-fast тестов и интеграций.【aae7a8†L1-L18】【16d81a†L1-L13】
-Perf: 2/5 — есть rate-limiter и кеш в клиентах, но perf-smoke не запускается, а профилировщик `tools/profile_activity_pipeline.py` сам не проходит линтеры и mypy.【16d81a†L1-L13】【aaca19†L1-L120】
-Testing: 1/5 — структура каталога тестов присутствует, но фактически тесты не выполняются; отчётность JSON/MD реализована, однако не используется из-за падения на импортных ошибках.【aae7a8†L1-L18】【b093dc†L1-L160】
-Docs: 3/5 — README и комментарии в `config/config.yaml` подробны, но отсутствует актуальный гайд по переходу с legacy-пакетов `library.postprocessing` на новые модули.
+**Config: 2/5.** Есть `config.yaml` и алиасы ENV, но валидация ресурсов ломает пайплайн, нет graceful-degradation и bootstrap для CLI, allowlist не синхронизирован.
 
-Findings by category
+**Quality: 2/5.** Ruff/black/mypy не проходят (1000+ ошибок), в коде много неаннотированных глобалов и дублирования; публичное API модулей неочевидно.
 
-### Structure
-- Проблема: Два конкурирующих пакета постпроцессинга и прокси-CLI заставляют скрипты патчить модули во время исполнения.【F:scripts/get_target_data.py†L95-L140】  
-  Почему важно: любое изменение внутреннего API ломает рабочие пайплайны, потому что нет единого места совместимости.  
-  Исправление: перенести адаптеры в `library.postprocess` (alias-функции, re-export) и запретить monkey-patching в CLI; добавить интеграционный тест на вызов `library.postprocess.activities.run_activity_pipeline`.
-- Проблема: `run_pipeline` зависит от `locals()` и неявных побочных эффектов для обязательных аргументов.【F:library/cli_utils.py†L269-L288】  
-  Почему важно: сложно анализировать типами, трудно рефакторить, риск сбоев при оптимизациях.  
-  Исправление: изменить сигнатуру `run_pipeline` на явные позиционные параметры (`output_path: Path`, `failure_path: Path`) и адаптировать вызовы; добавить mypy-тест.
+**Errors: 1/5.** Таймауты/ретраи есть, но отсутствуют понятные лог-события, падения по checksum/Path(None) не перехватываются, CLI не fail-fast с подсказками.
 
-### Config
-- Проблема: `load_pipeline_config` вызывает несуществующий `resolve_dotted_path`, из-за чего YAML шага нельзя загрузить даже при корректной конфигурации.【F:library/postprocess/common/config.py†L14-L176】  
-  Почему важно: конфигурации с ошибками не валидируются заранее, пайплайн падает только в рантайме.  
-  Исправление: реализовать `resolve_dotted_path` и добавить тест, проходящий по всем файлам `config/pipeline/*.yaml`.
-- Проблема: env-overrides не покрыты тестами — `_apply_env_overrides` парсит любую строку через YAML и тихо глотает ошибки, что может приводить к неожиданным типам (например, `"false"` → `False`).【F:library/config/env.py†L239-L258】  
-  Почему важно: опечатка в переменной окружения может менять тип параметра без диагностики.  
-  Исправление: добавить property-based тесты с Hypothesis и строгий контроль допустимых типов (строка/число/булево).
+**Perf: 2/5.** Внутренние утилиты не используют чанки/streaming, `get_activities` грузит всё в память, нет метрик по rate limiter.
 
-### Quality
-- Проблема: Две разные реализации `process_target_names` в одном модуле с разными типами возвращаемых значений.【F:library/postprocessing/names.py†L390-L619】  
-  Почему важно: статический анализ и IDE не понимают API, высокий риск вызвать «не ту» версию.  
-  Исправление: оставить современную реализацию, legacy-вариант перенести в отдельную функцию `_legacy_process_target_names` с явным предупреждением.
-- Проблема: `ChunkFailureTracker.stats` возвращает мутабельный singleton `_EMPTY_STATS`, что приводит к неожиданным побочным эффектам при модификации результата.【F:library/common/fetch_retry.py†L22-L70】  
-  Почему важно: дополнительные метрики (`stats_extra`) могут навсегда изменить глобальное состояние, ломая последующие вызовы.  
-  Исправление: возвращать новый словарь при каждом вызове (`return {}`) и добавить тест, проверяющий неизменяемость исходника.
+**Testing: 1/5.** pytest падает до запуска, determinism check ломается, обязательные отчёты не генерируются при ошибке, часть тестов всё ещё бьётся о реальные ресурсы.
 
-### Errors
-- Проблема: Импорт `library.postprocess` падает при загрузке, вслед за ним ломаются CLI и тесты.【F:library/postprocess/common/import_utils.py†L12-L84】【aae7a8†L1-L18】  
-  Почему важно: ключевые команды недоступны, пайплайн не стартует.  
-  Исправление: реализовать отсутствующий резолвер и покрыть smoke-тестом `python -m library.postprocess.activities`.
-- Проблема: Скрипт `check_determinism.py` не выполняется, поэтому никто не замечает изменения в CSV-диалекте.【8b9edb†L1-L15】  
-  Почему важно: без ежедневной проверки теряется гарантия детерминизма, что критично для downstream-систем.  
-  Исправление: после починки импорта добавить сравнение хэшей в CI и опубликовать результат в `reports/test_summary.md`.
+**Docs: 2/5.** README описывает запуск, но нет свежей инструкции по обновлению словарей, нет описания политик детерминизма/allowlist.
 
-### Performance
-- Проблема: perf-smoke нельзя запустить из-за отсутствия системной `time` и импортной ошибки.【26dcd5†L1-L3】【16d81a†L1-L13】  
-  Почему важно: нет контроля SLA на сборку 500 записей, нельзя ловить регрессии.  
-  Исправление: перейти на `time.perf_counter()` внутри Python-скрипта и добавить pytest-benchmark для мини-набора.
+# Findings by category
 
-### Testing
-- Проблема: pytest и линтеры падают до выполнения тестов, поэтому требования по 95% успеха и отчётности недостижимы.【aae7a8†L1-L18】【130b7c†L1-L120】  
-  Почему важно: основная цель тестового контура (стабильная проверка пайплайна) не выполняется.  
-  Исправление: починить импорты, включить линтеры в CI и добавить smoke для каждого CLI.
+## Structure
 
-### Docs
-- Проблема: Нет документации по миграции от `library.postprocessing.*` к `library.postprocess.*`, из-за чего разработчики продолжают использовать legacy-модули и добавлять костыли.【F:scripts/get_target_data.py†L95-L140】  
-  Почему важно: копирование кода и патчинг вместо использования нового API.  
-  Исправление: добавить раздел в README и docstring-и в новые пакеты, описывающие рекомендуемый путь.
+- **Манифест словарей и allowlist не синхронизированы.**
+  - Примеры: `config/dictionary/manifest.yaml:1-107`, `config/dictionary/manifest.allowlist.yaml:1-65`.
+  - Почему важно: любые CLI/тесты, импортирующие словари, падают на старте (см. pytest и CLI логи), нет обходного пути.
+  - Исправление: пересобрать словари, добавить новый checksum в оба файла, задокументировать процедуру.
+- **`scripts/get_activity_data.py` нарушает границы слоёв.**
+  - Пример: `scripts/get_activity_data.py:10-120` импортирует почти всё приложение, отсутствует bootstrap.
+  - Почему важно: модуль гигантский, сложно тестировать/переиспользовать; любые изменения требуют массовых правок.
+  - Исправление: вынести CLI оболочку в `library/cli/commands/get_activity_data.py`, оставить в `scripts/` только thin wrapper.
+- **`library/cli_utils.py` выступает «свалкой» общего кода.**
+  - Примеры: `library/cli_utils.py:303-360`, `library/cli_utils.py:660-719`.
+  - Почему важно: глобальные переменные без типов, функции не экспортируются через `__all__`, сложно понять контракт.
+  - Исправление: выделить модули `library/cli/schema.py`, `library/cli/stats.py`, добавить типы и публичные экспортируемые объекты.
 
-Actionable recommendations
+## Config
+
+- **Checksum ресурса `dictionary_root` устарел.**
+  - Примеры: `config/dictionary/manifest.yaml:6-107`, лог ошибки pytest `2b0f5f†L5-L27`.
+  - Почему важно: ни один сценарий, требующий словари, не запускается.
+  - Исправление: добавить хэш `3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a`, актуализировать allowlist и снапшоты.
+- **`apply_config_overrides` допускает `config_path=None`.**
+  - Пример: `library/cli/parser.py:486-571`.
+  - Почему важно: при вызове CLI без `--config` (например, из API) получаем `TypeError: expected str, bytes or os.PathLike`.
+  - Исправление: перед вызовом `load_config` проверить `config_path`, при отсутствии — показать сообщение с путём до `DEFAULT_CONFIG_PATH`.
+- **ENV-алиасы есть, но нет валидации на неожиданные ключи.**
+  - Пример: `library/config/env.py:86-137` не проверяет, что путь существует в модели.
+  - Почему важно: опечатка в переменной окружения silently игнорируется.
+  - Исправление: добавить сбор предупреждений для неизвестных путей и включить их в отчёт загрузки конфигурации.
+
+## Quality
+
+- **Ruff/black не проходят.**
+  - Примеры: `ruff check` вывод `63e634†L1-L112`, `ruff format --check` вывод `c4f73c†L1-L111`.
+  - Почему важно: кодстайл разъезжается, сложно ревьюить.
+  - Исправление: завести pre-commit, отформатировать код и включить проверку в CI.
+- **Mypy выдаёт 374 ошибки, включая отсутствующие stubs и неверные типы.**
+  - Пример: `mypy --strict` вывод `44ff25†L1-L115`.
+  - Почему важно: невозможно полагаться на статическую проверку.
+  - Исправление: установить `types-requests`, `types-PyYAML`, добавить аннотации в CLI/utils, включить скрипты в область mypy.
+- **`library/cli_utils.py` отсутствует `__all__`, что ломает `from library.cli_utils import ...`.**
+  - Пример: `scripts/get_activity_data.py:45-56` (mypy жалуется на attr-defined).
+  - Почему важно: статика и IDE не видят публичные функции.
+  - Исправление: определить `__all__` и/или разнести функциональность по специализированным модулям.
+
+## Errors
+
+- **Determinism check падает из-за отсутствия bootstrap.**
+  - Примеры: `scripts/check_determinism.py:95-112`, лог `25ac04†L1-L8`.
+  - Почему важно: ключевая гарантия детерминизма не проверяется.
+  - Исправление: запускать CLI через `-m` и добавить `bootstrap_cli` в `scripts/get_activity_data.py`.
+- **Таймауты/ретраи ChemblClient не логируются.**
+  - Пример: `library/clients/chembl.py:175-317`.
+  - Почему важно: при деградациях (429/504) нет структурированных событий.
+  - Исправление: в `_request_with_retry` писать WARN/ERROR с полями `retry`, `backoff`, `status`, `elapsed`.
+- **Нет fail-fast для отсутствующего словаря.**
+  - Пример: `library/resources/dictionaries.py:500-505` выбрасывает исключение без подсказки.
+  - Почему важно: пользователи не понимают, как исправить несоответствие.
+  - Исправление: расширить исключение советом «запустите tools/build_dictionary_resources.py».
+
+## Performance
+
+- **Materialize DataFrame в памяти.**
+  - Пример: `library/utils/cli_tools/get_activities.py:79-100`.
+  - Почему важно: рост лимита приводит к всплеску памяти.
+  - Исправление: стримить записи через writer, не создавая полный список.
+- **Отсутствует троттлинг логов и метрик по rate limiter.**
+  - Пример: `library/common/rate_limiter.py` (нет счётчиков/логов).
+  - Почему важно: сложно понять, когда лимит исчерпан.
+  - Исправление: добавить счётчики, интегрировать с `logging`.
+
+## Testing
+
+- **pytest падает на импорте словарей.**
+  - Пример: `2b0f5f†L5-L27`.
+  - Почему важно: тестовый контур не запускается.
+  - Исправление: обновить словари/manifest и добавить smoke-тест manifest'а.
+- **`scripts/run_tests.py` не выпускает отчёт при падении.**
+  - Пример: `scripts/run_tests.py:124-200` — отчёты формируются только после успешного pytest.
+  - Почему важно: CI остаётся без JSON/MD отчётов.
+  - Исправление: окружить генерацию `try/finally`, выдавать отчёт с `success_rate=0` при ошибке.
+
+## Docs
+
+- **Нет инструкции по обновлению словарей и allowlist.**
+  - Пример: `config/dictionary/README.md` отсутствует.
+  - Почему важно: разработчики не знают, как синхронизировать checksum.
+  - Исправление: добавить раздел в README.
+- **README не упоминает детерминизм/политику отчётности.**
+  - Пример: `README.md` — нет раздела про `reports/test_report.json` и determinism check.
+  - Почему важно: новые разработчики не запускают обязательные проверки.
+  - Исправление: дописать раздел «Quality Gates».
+
+# Actionable recommendations
 
 | Item | Effort | Impact | Owner | Proposed PR name | Acceptance criteria |
-|---|---|---|---|---|---|
-| Реализовать `resolve_dotted_path` и smoke-тесты загрузки pipeline YAML | S | High | Core backend | "postprocess-resolver-fix" | `library.postprocess` импортируется, pytest запускается до конца, determinism-check проходит |
-| Удалить monkey-patching в CLI, вынести совместимость в `library.postprocess` | M | High | Core backend | "cli-compat-layer" | Все CLI вызывают новые API без `setattr`, smoke e2e тесты зелёные |
-| Дедуплицировать `process_target_names` и стабилизировать API | M | Med | Data ops | "target-names-api-cleanup" | Есть одна функция с docstring, unit-тесты покрывают возвращаемый тип |
-| Починить `ChunkFailureTracker.stats` и добавить тест | S | Med | Data ops | "chunk-failure-stats-fix" | Новые тесты подтверждают отсутствие мутаций, mypy/ruff зелёные |
-| Включить ruff/black/mypy/pytest в pre-commit и CI | M | High | Platform | "ci-lint-and-type-gates" | Все команды (`ruff`, `mypy`, `pytest`) проходят локально и в CI, отчёты JSON/MD прикрепляются |
+| --- | --- | --- | --- | --- | --- |
+| Обновить manifest/allowlist словарей и добавить новую контрольную сумму | S | High | Data Eng | `fix/dictionary-manifest-2025-10` | `dictionary_root` принимает новый SHA, pytest/CLI проходят манифест-чек |
+| Вернуть bootstrap в `scripts/get_activity_data.py` и поправить `check_determinism.py` | S | High | Platform | `fix/cli-bootstrap-determinism` | `python scripts/check_determinism.py` завершаетcя 0, smoke-CLI работает |
+| Добавить pre-commit с ruff/black/mypy и привести код | M | Med | Platform | `chore/code-quality-gates` | `ruff check`, `ruff format --check`, `mypy --strict` успешны |
+| Расщепить `scripts/get_activity_data.py` на слой CLI и библиотеку | M | High | ETL | `refactor/activity-cli-modularisation` | Новый модуль `library.cli.commands.get_activity_data` покрыт unit/integration тестами |
+| Добавить логирование retry/timeout в `ChemblClient` и метрики rate limiter | M | Med | Platform | `feat/chembl-client-observability` | WARN/ERROR события при повторных попытках, интеграционный тест фиксирует лог |
+| Улучшить отчётность тестов при падении pytest | S | Med | QA | `fix/test-report-failures` | Даже при провале pytest создаётся JSON/MD отчёт с success_rate<95% |
 
-Code snippets / mini-diffs
+# Code snippets / mini-diffs
 
-1. Реализация отсутствующего резолвера:
+1. **Актуализация SHA словарей**
 ```diff
---- a/library/postprocess/common/import_utils.py
-+++ b/library/postprocess/common/import_utils.py
+--- a/config/dictionary/manifest.yaml
++++ b/config/dictionary/manifest.yaml
 @@
--__all__ = ["ImportResolutionError", "import_by_path"]
-+def resolve_dotted_path(path: str, expected_type: type | tuple[type, ...] | object = _DEFAULT_SENTINEL) -> Any:
-+    """Backward-compatible alias used by legacy YAML configs."""
-+
-+    return import_by_path(path, expected_type=expected_type)
-+
-+
-+__all__ = ["ImportResolutionError", "import_by_path", "resolve_dotted_path"]
+-      - "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b"
++      - "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b"
++      - "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a"
 ```
-2. Возврат нового словаря в `ChunkFailureTracker.stats`:
+
+2. **Зеркальное обновление allowlist**
 ```diff
+--- a/config/dictionary/manifest.allowlist.yaml
++++ b/config/dictionary/manifest.allowlist.yaml
 @@
--        if not self._failures:
--            return _EMPTY_STATS
-+        if not self._failures:
-+            return {}
+-  dictionary_root:
++  dictionary_root:
+     - "9f0497f849122a4e625722b23b02b9aadc422ddbfc7cabe17ee252951e1e4a15"
+     - "bb98601cdc63ee4aeab49dac849f545e516b2a0a9b720174444af8975115a0b2"
+     - "bccf4cfc745addb3966efe9db8c3cd0f537ef3f5025d059d9cdaa412b2867092"
+     - "db25392613353b15acb21c88c057f6422d8cd32aea1a3fc710e5a0c4d060b91b"
+     - "564f3b40ddde94f6ec9c5b8124e494c2116cdb686be130eb0c1a151e7ddd246f"
+     - "387d8a4b45d8960e5f899b85199a1013d3029258b8b75f42c6a0365f402023db"
+     - "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b"
++    - "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a"
 ```
-3. Дедупликация API `process_target_names`:
+
+3. **Возврат bootstrap в CLI**
 ```diff
---- a/library/postprocessing/names.py
-+++ b/library/postprocessing/names.py
+--- a/scripts/get_activity_data.py
++++ b/scripts/get_activity_data.py
 @@
--def process_target_names(...):
--    # legacy body
--    return str(output_path)
-+def process_target_names(...):
-+    # современная реализация, возвращающая словарь с путём и сводкой
-+    ...
+-from __future__ import annotations
+-
+-# Bootstrap code removed - not needed
++from __future__ import annotations
 +
-+def process_target_names_legacy(...):
-+    warnings.warn("process_target_names_legacy is deprecated", DeprecationWarning)
-+    return str(process_target_names(...)["path"])
++if __package__ in {None, ""}:
++    from _bootstrap import bootstrap_cli
++else:  # pragma: no cover
++    from ._bootstrap import bootstrap_cli
++
++bootstrap_cli(__package__, __file__)
 ```
-4. Удаление monkey-patching в CLI:
+
+4. **Исправление determinism check**
 ```diff
--    with _override_cli_meta_writer():
--        return run_pipeline(...)
-+    definition = dataclasses.replace(definition, stats_callback=_capture_stats)
-+    return run_pipeline(definition=definition, ...)
+--- a/scripts/check_determinism.py
++++ b/scripts/check_determinism.py
+@@
+-    cmd = [
+-        sys.executable,
+-        str(Path(__file__).resolve().parents[0] / "get_activity_data.py"),
++    cmd = [
++        sys.executable,
++        "-m",
++        "scripts.get_activity_data",
+         "--limit",
+         str(limit),
+@@
+-    return subprocess.run(cmd, text=True, capture_output=True, env=env)
++    env.setdefault("PYTHONPATH", str(Path(__file__).resolve().parents[1]))
++    return subprocess.run(cmd, text=True, capture_output=True, env=env)
 ```
-5. Добавление smoke-теста конфигурации:
+
+5. **Fail-fast для пустого `config_path`**
 ```diff
-+def test_pipeline_configs_load() -> None:
-+    for path in (CONFIG_PIPELINE_DIR).glob("*.yaml"):
-+        cfg = load_pipeline_config(path.stem)
-+        assert cfg.steps, path
+--- a/library/cli/parser.py
++++ b/library/cli/parser.py
+@@
+-    try:
+-        base_path_arg = getattr(args, "base_path", None)
++    if config_path in (None, argparse.SUPPRESS):
++        raise ConfigError("Configuration path is missing; pass --config or install defaults")
++
++    try:
++        base_path_arg = getattr(args, "base_path", None)
 ```
 
-Risk & rollback
+# Risk & rollback
 
-- `postprocess-resolver-fix`: Риск — ошибочное разрешение путей вызовет runtime при загрузке YAML. Мониторинг — запуск pytest и smoke `check_determinism`. Откат — вернуть старый модуль и временно зафиксировать зависимость в requirements-lock.
-- `cli-compat-layer`: Риск — новые импорты могут не покрыть все legacy-сценарии. Мониторинг — e2e тесты CLI, метрики логирования WARN. Откат — временно вернуть monkey-patching и открыть issue с перечнем несовместимых модулей.
-- `target-names-api-cleanup`: Риск — внешние потребители могли зависеть от строкового возвращаемого значения. Мониторинг — обновление документации и поиск прямых импортов через `rg`. Откат — восстановить legacy-обёртку и добавить DeprecationWarning.
+- **Обновление manifest/allowlist.** Риск: разработчики с локальными модификациями словарей снова получат mismatch. Мониторинг: проверять `scripts/check_determinism.py` и `get_activity_data --dry-run`. Откат: вернуть предыдущие хэши и заблокировать обновление словарей.
+- **Bootstrap в CLI.** Риск: если пакет устанавливается из PyPI, двойной bootstrap может менять `sys.path`. Мониторинг: smoke `python -m scripts.get_activity_data --dry-run`. Откат: условно активировать bootstrap только в режиме `__package__ in {None, ""}`.
+- **Fail-fast config.** Риск: сторонние интеграции, передававшие `None`, начнут падать раньше. Мониторинг: отслеживать новые ошибки в логах `config_error`. Откат: ослабить проверку и вернуть прежнее поведение с предупреждением.
 
-PR plan
+# PR plan
 
-1. `postprocess-resolver-fix` — область: модуль `library.postprocess.common`. Тест-план: unit-тест `test_pipeline_configs_load`, smoke `pytest -q`. Метрики успеха: `pytest`, `scripts/check_determinism.py` завершаются успешно.
-2. `cli-compat-layer` — область: CLI-скрипты и `library.postprocess` алиасы. Тест-план: e2e тесты `tests/e2e/*`. Метрики: успешный запуск `get_activity_data --dry-run` и отсутствие monkey-patching.
-3. `target-names-api-cleanup` — область: `library/postprocessing/names.py`. Тест-план: unit/integration тесты на генерацию имен. Метрики: mypy без ошибок, вызовы возвращают ожидаемый словарь.
-4. `ci-lint-and-type-gates` — область: tooling (`pyproject.toml`, workflows). Тест-план: `ruff`, `mypy`, `pytest`, `scripts/check_determinism.py`. Метрики: все проверки зелёные, отчёты JSON/MD публикуются.
+1. **`fix/dictionary-manifest-2025-10`** — синхронизация manifest/allowlist, smoke-тест dictionary hash. Метрика: pytest import проходит.
+2. **`fix/cli-bootstrap-determinism`** — bootstrap и determinism check; тест-план: `python scripts/check_determinism.py`, `PYTHONHASHSEED=0 python scripts/get_activities.py --dry-run`.
+3. **`chore/code-quality-gates`** — включить pre-commit (ruff/black/mypy), привести код. Метрика: все статические проверки зелёные.
+4. **`refactor/activity-cli-modularisation`** — вынести CLI слой. Тест-план: unit для `library.cli.commands.get_activity_data`, e2e `tests/e2e/test_get_activity_data_cli.py`.
+5. **`feat/chembl-client-observability`** — добавить логирование retry/лимитеров. Тест-план: мок `requests` с 429 и проверка логов.
 
-Acceptance criteria
+# Acceptance criteria
 
-- Все обязательные проверки из задания выполнены либо обоснованно отмечены (см. вывод команд ниже).
-- Для каждого приоритетного issue предложен конкретный фикс (см. мини-диффы 1–5).
-- Политика детерминизма: после фикса `check_determinism.py` сравнивает SHA256, скрипт выполняется дважды и подтверждает совпадение.
-- Ошибки валидации конфигов: после появления `resolve_dotted_path` загрузка YAML покрыта тестом `test_pipeline_configs_load`.
-- Планируется ≥5 тестов: загрузка конфигов, smoke CLI, determinism hash, unit для `ChunkFailureTracker`, unit для `process_target_names`.
-
-Обязательные проверки (фактический вывод)
-- `ruff check .` — ошибки (см. лог).【130b7c†L1-L120】
-- `ruff format --check .` — ошибки форматирования.【ad8e81†L1-L181】
-- `mypy --strict --ignore-missing-imports .` — 308 ошибок.【aaca19†L1-L120】
-- `pytest -q --disable-warnings` — ImportError на `resolve_dotted_path`.【e9bf0a†L1-L18】
-- `pytest --maxfail=1 --durations=10` — тот же ImportError.【aae7a8†L1-L18】
-- `python -m pip list` — список окружения (numpy/pandas/pandera и пр.).【64112f†L1-L42】
-- `python -c "import sys,platform; print(sys.version); print(platform.platform())"` — Python 3.11.12, Linux 6.12.13.【113ba4†L1-L4】
-- `PYTHONHASHSEED=0 time python scripts/get_activities.py --limit 500 --dry-run` — `time` отсутствует; см. ниже замену.【26dcd5†L1-L3】
-- `PYTHONHASHSEED=0 python scripts/get_activity_data.py --limit 500 --dry-run` — ImportError (`resolve_dotted_path`).【16d81a†L1-L13】
-- `python scripts/check_determinism.py` — ImportError, determinism не подтверждён.【8b9edb†L1-L15】
+- Все обязательные проверки (`ruff check`, `ruff format --check`, `mypy --strict`, `pytest`, runtime sanity, determinism) выполняются или зафиксирован обоснованный ским.
+- По каждому приоритетному issue указан конкретный фикс (см. mini-diffs выше).
+- Политика детерминизма описана: determinism check после фикса запускается успешно.
+- Пример валидации конфигов (`apply_config_overrides`) демонстрирует ошибку и её исправление.
+- Добавить ≥5 новых тестов (unit для bootstrap/config, integration для determinism, e2e для словарей) в рамках предложенных PR.

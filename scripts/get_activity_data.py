@@ -7,13 +7,21 @@ applications or tests.
 
 from __future__ import annotations
 
-# Bootstrap code removed - not needed
+if __package__ in {None, ""}:
+    from _bootstrap import bootstrap_cli
+else:  # pragma: no cover - executed when imported as a module
+    from ._bootstrap import bootstrap_cli
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+
 import argparse
 import json
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
+from datetime import datetime
 from itertools import islice
 from pathlib import Path
 from threading import Lock
@@ -50,6 +58,7 @@ from library.cli.commands.get_activity_data import (
 from library.cli_utils import (  # noqa: E402
     PipelineError,
     resolve_invocation,
+    run_cli_command as _run_cli_command,
     # file_sha256 is not explicitly exported by library.cli_utils, so import directly if needed
 )
 from library.common.csv_utils import (
@@ -116,10 +125,13 @@ try:
 except ImportError:
     configure_logger = None  # type: ignore[assignment]
 
+run_cli_command = _run_cli_command
+
 __all__ = (
     "file_sha256",
     "write_meta_yaml",
     "configure_logger",
+    "run_cli_command",
 )
 
 

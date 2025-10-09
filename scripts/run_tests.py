@@ -271,6 +271,7 @@ def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, An
         else:
             summary["error"] += 1
 
+    executed_total = summary["total"] - summary["skipped"]
     success_rate = _calculate_success_rate(summary)
 
     if summary["total"] == 0 and exit_code != 0:
@@ -603,6 +604,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             validate_structured_report(structured)
         except ValueError as exc:  # pragma: no cover - defensive guard
             logger.error("Structured report validation failed: %s", exc)
+            fallback_reason = str(exc)
             validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
             generation_error = _normalise_message(exc)
         except Exception as exc:  # pragma: no cover - defensive guard
@@ -662,41 +664,37 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
 
         final_exit_code = exit_code
+        success_rate_raw = structured.get("summary", {}).get("success_rate", 0.0) or 0.0
+        try:
+            success_rate_value = float(success_rate_raw)
+        except (TypeError, ValueError):  # pragma: no cover - guarded by validation
+            logger.error(
+                "Structured summary provided a non-numeric success rate %r; treating it as 0%%",
+                success_rate_raw,
+            )
+            success_rate_value = 0.0
+
+        success_rate_pct = (
+            success_rate_value * 100.0 if success_rate_value <= 1.0 else success_rate_value
+        )
+
+        if success_rate_pct < QUALITY_THRESHOLD_PERCENT:
+            logger.error(
+                "Success rate %.2f%% is below the required %.2f%% threshold",
+                success_rate_pct,
+                QUALITY_THRESHOLD_PERCENT,
+            )
+            if final_exit_code == 0:
+                final_exit_code = QUALITY_FAILURE_EXIT_CODE
+        else:
+            logger.info(
+                "Success rate %.2f%% meets the required %.2f%% threshold",
+                success_rate_pct,
+                QUALITY_THRESHOLD_PERCENT,
+            )
+
         if validation_exit_code is not None:
             final_exit_code = validation_exit_code
-        else:
-            success_rate_raw = (
-                structured.get("summary", {}).get("success_rate", 0.0) or 0.0
-            )
-            try:
-                success_rate_value = float(success_rate_raw)
-            except (TypeError, ValueError):  # pragma: no cover - guarded by validation
-                logger.error(
-                    "Structured summary provided a non-numeric success rate %r; treating it as 0%%",
-                    success_rate_raw,
-                )
-                success_rate_value = 0.0
-
-            success_rate_pct = (
-                success_rate_value * 100.0
-                if success_rate_value <= 1.0
-                else success_rate_value
-            )
-
-            if success_rate_pct < QUALITY_THRESHOLD_PERCENT:
-                logger.error(
-                    "Success rate %.2f%% is below the required %.2f%% threshold",
-                    success_rate_pct,
-                    QUALITY_THRESHOLD_PERCENT,
-                )
-                if final_exit_code == 0:
-                    final_exit_code = QUALITY_FAILURE_EXIT_CODE
-            else:
-                logger.info(
-                    "Success rate %.2f%% meets the required %.2f%% threshold",
-                    success_rate_pct,
-                    QUALITY_THRESHOLD_PERCENT,
-                )
 
     return final_exit_code
 
