@@ -415,6 +415,7 @@ def _prepare_input_frame(df: pd.DataFrame) -> pd.DataFrame:
         "ChEMBL.journal_abbrev",
         "ChEMBL.authors",
         "ChEMBL.source",
+        "PubMed.Error",
     )
     for column in optional_text:
         _ensure_text_column(frame, column)
@@ -649,6 +650,8 @@ def postprocess_documents(
         raise ValueError(f"Missing expected columns after harmonisation: {missing}")
 
     frame = frame.loc[:, FINAL_COLUMN_ORDER]
+    if frame.columns.has_duplicates:
+        frame = frame.loc[:, ~frame.columns.duplicated()]
     frame = frame.sort_values("completed", ascending=True, kind="mergesort")
     frame.reset_index(drop=True, inplace=True)
 
