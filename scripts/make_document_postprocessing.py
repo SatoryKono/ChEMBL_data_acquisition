@@ -27,7 +27,7 @@ from library.postprocess.common.types import SchemaValidationError, StepError
 from library.postprocess.documents.schema import DOCUMENT_SCHEMA, validate_documents
 from library.postprocess.documents.steps import run_document_pipeline
 
-try:
+if __package__:
     from ._postprocess_common import (
         CsvRuntimeConfig,
         DEFAULT_LOG_DIR,
@@ -41,7 +41,7 @@ try:
         run_postprocess_steps,
         validate_postprocess_frame,
     )
-except ImportError:  # pragma: no cover - fallback for direct execution
+else:  # pragma: no cover - fallback for direct execution
     from _postprocess_common import (
         CsvRuntimeConfig,
         DEFAULT_LOG_DIR,

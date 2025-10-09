@@ -27,7 +27,7 @@ from library.postprocess.activities.steps import run_activity_pipeline
 from library.postprocess.common.logging import PipelineRunMetrics
 from library.postprocess.common.types import SchemaValidationError, StepError
 
-try:
+if __package__:
     from ._postprocess_common import (
         CsvRuntimeConfig,
         DEFAULT_LOG_DIR,
@@ -41,7 +41,7 @@ try:
         run_postprocess_steps,
         validate_postprocess_frame,
     )
-except ImportError:  # pragma: no cover - fallback for direct execution
+else:  # pragma: no cover - fallback for direct execution
     from _postprocess_common import (
         CsvRuntimeConfig,
         DEFAULT_LOG_DIR,

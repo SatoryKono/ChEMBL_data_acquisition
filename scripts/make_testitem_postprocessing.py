@@ -27,7 +27,7 @@ from library.postprocess.common.types import SchemaValidationError, StepError
 from library.postprocess.testitem.schema import TESTITEM_SCHEMA, validate_testitems
 from library.postprocess.testitem.steps import run_testitem_pipeline
 
-try:
+if __package__:
     from ._postprocess_common import (
         CsvRuntimeConfig,
         DEFAULT_LOG_DIR,
@@ -41,7 +41,7 @@ try:
         run_postprocess_steps,
         validate_postprocess_frame,
     )
-except ImportError:  # pragma: no cover - fallback for direct execution
+else:  # pragma: no cover - fallback for direct execution
     from _postprocess_common import (
         CsvRuntimeConfig,
         DEFAULT_LOG_DIR,
