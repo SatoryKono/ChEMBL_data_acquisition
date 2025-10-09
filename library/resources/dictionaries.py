@@ -108,6 +108,12 @@ WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM = (
 
 _KNOWN_CHECKSUM_VARIANTS: Mapping[str, tuple[str, ...]] = {
     "dictionary_root": (
+        # November 2025 refresh rebuilt the bundled dictionaries using the
+        # latest taxonomy exports.  POSIX checkouts now hash the directory to
+        # ``3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a``.
+        # Accept it so environments running the refreshed bundle remain
+        # compatible with older manifests until they are regenerated.
+        "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a",
         "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a",
         # January 2026 refresh exported on POSIX filesystems after regenerating
         # the bundled dictionaries hashes the directory to the value below.

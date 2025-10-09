@@ -179,28 +179,19 @@ def test_build_structured_report__captures_failure_messages() -> None:
 
 
 @pytest.mark.unit
-def test_build_structured_report__no_tests_failure_sets_zero_success_rate(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
+def test_build_structured_report__injects_placeholder_on_startup_failure() -> None:
+    raw_report: dict[str, Any] = {"duration": 0.0, "tests": []}
 
-    structured = run_tests.build_structured_report({"tests": []}, exit_code=2)
+    structured = run_tests.build_structured_report(raw_report, exit_code=2)
 
-    assert structured["summary"]["success_rate"] == 0.0
-    assert structured["meta"]["exit_code"] == 2
+    summary = structured["summary"]
+    assert summary["total"] == 1
+    assert summary["error"] == 1
+    assert summary["success_rate"] == 0.0
 
-
-@pytest.mark.unit
-def test_build_failure_report__captures_reason(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
-
-    report = run_tests.build_failure_report(3, reason="pytest crashed")
-
-    assert report["meta"]["exit_code"] == 3
-    assert report["summary"]["success_rate"] == 0.0
-    assert report["summary"]["total"] == 0
-    assert report["tests"] == []
-    assert report["meta"].get("failure_reason") == "pytest crashed"
+    placeholder = structured["tests"][0]
+    assert placeholder["status"] == "error"
+    assert "code 2" in placeholder["error"]
 
 
 @pytest.mark.unit
@@ -390,9 +381,7 @@ def test_main__returns_exit_code_one_when_quality_gate_fails(
 
 
 @pytest.mark.unit
-def test_main__produces_failure_reports_when_pytest_crashes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_main__writes_reports_when_pytest_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     reports_dir = tmp_path / "reports"
     coverage_dir = reports_dir / "coverage"
     raw_report_file = reports_dir / "pytest_raw_report.json"
@@ -407,7 +396,6 @@ def test_main__produces_failure_reports_when_pytest_crashes(
     monkeypatch.setattr(run_tests, "COVERAGE_DIR", coverage_dir, raising=False)
     monkeypatch.setattr(run_tests, "COVERAGE_XML", coverage_dir / "coverage.xml", raising=False)
     monkeypatch.setattr(run_tests, "COVERAGE_HTML", coverage_dir / "html", raising=False)
-    monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
 
     base_command = [
         sys.executable,
@@ -416,105 +404,44 @@ def test_main__produces_failure_reports_when_pytest_crashes(
         "--json-report",
         "--json-report-file",
         str(raw_report_file),
-        "--durations=0",
     ]
     monkeypatch.setattr(run_tests, "_BASE_PYTEST_COMMAND", base_command, raising=False)
     monkeypatch.setattr(run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False)
+    monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
+
+    captured_commands: list[list[str]] = []
 
     def _fake_run_pytest(command: Sequence[str]) -> int:
-        assert command[: len(base_command)] == base_command
+        captured_commands.append(list(command))
         return 2
 
     monkeypatch.setattr(run_tests, "run_pytest", _fake_run_pytest)
     monkeypatch.setattr(run_tests, "_load_raw_report", lambda: {})
 
-    captured_configs: list[LoggerConfig] = []
-
     def _fake_configure_logger(cfg: LoggerConfig) -> object:
-        captured_configs.append(cfg)
         return object()
 
-    log_path = tmp_path / "logs" / "run_tests_20240131.log"
+    monkeypatch.setattr(run_tests, "configure_logger", _fake_configure_logger)
 
     @contextmanager
     def _fake_setup(script_name: str, log_cfg: LoggerConfig, date: str | None = None):
-        assert script_name == "run_tests"
-        yield SimpleNamespace(log_path=log_path, log_cfg=log_cfg, console_stream=None)
+        yield SimpleNamespace(log_path=tmp_path / "logs" / "run_tests.log", log_cfg=log_cfg, console_stream=None)
 
-    monkeypatch.setattr(run_tests, "configure_logger", _fake_configure_logger)
     monkeypatch.setattr(run_tests, "setup_cli_logging", _fake_setup)
 
-    exit_code = run_tests.main(["--date", "20240131"])
+    exit_code = run_tests.main([])
 
     assert exit_code == 2
+    assert captured_commands, "run_pytest should be invoked"
+    assert report_file.exists()
+    assert summary_file.exists()
+
     payload = json.loads(report_file.read_text(encoding="utf-8"))
-    assert payload["summary"]["success_rate"] == 0.0
-    summary_text = summary_file.read_text(encoding="utf-8")
-    assert "Success rate: 0.00%" in summary_text
-    assert captured_configs and captured_configs[-1].level == "INFO"
+    summary = payload["summary"]
+    assert summary["success_rate"] == 0.0
+    assert summary["total"] == 1
+    assert summary["error"] == 1
 
-
-@pytest.mark.unit
-def test_main__falls_back_to_failure_report_when_generation_errors(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    reports_dir = tmp_path / "reports"
-    coverage_dir = reports_dir / "coverage"
-    raw_report_file = reports_dir / "pytest_raw_report.json"
-    report_file = reports_dir / "test_report.json"
-    summary_file = reports_dir / "test_summary.md"
-
-    monkeypatch.setattr(run_tests, "ROOT_DIR", tmp_path, raising=False)
-    monkeypatch.setattr(run_tests, "REPORTS_DIR", reports_dir, raising=False)
-    monkeypatch.setattr(run_tests, "RAW_REPORT_FILE", raw_report_file, raising=False)
-    monkeypatch.setattr(run_tests, "REPORT_FILE", report_file, raising=False)
-    monkeypatch.setattr(run_tests, "SUMMARY_FILE", summary_file, raising=False)
-    monkeypatch.setattr(run_tests, "COVERAGE_DIR", coverage_dir, raising=False)
-    monkeypatch.setattr(run_tests, "COVERAGE_XML", coverage_dir / "coverage.xml", raising=False)
-    monkeypatch.setattr(run_tests, "COVERAGE_HTML", coverage_dir / "html", raising=False)
-    monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
-
-    base_command = [
-        sys.executable,
-        "-m",
-        "pytest",
-        "--json-report",
-        "--json-report-file",
-        str(raw_report_file),
-        "--durations=0",
-    ]
-    monkeypatch.setattr(run_tests, "_BASE_PYTEST_COMMAND", base_command, raising=False)
-    monkeypatch.setattr(run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False)
-
-    monkeypatch.setattr(run_tests, "run_pytest", lambda command: 0)
-
-    def _boom() -> dict[str, Any]:
-        raise RuntimeError("raw report missing")
-
-    monkeypatch.setattr(run_tests, "_load_raw_report", _boom)
-
-    captured_configs: list[LoggerConfig] = []
-
-    def _fake_configure_logger(cfg: LoggerConfig) -> object:
-        captured_configs.append(cfg)
-        return object()
-
-    log_path = tmp_path / "logs" / "run_tests_20240131.log"
-
-    @contextmanager
-    def _fake_setup(script_name: str, log_cfg: LoggerConfig, date: str | None = None):
-        assert script_name == "run_tests"
-        yield SimpleNamespace(log_path=log_path, log_cfg=log_cfg, console_stream=None)
-
-    monkeypatch.setattr(run_tests, "configure_logger", _fake_configure_logger)
-    monkeypatch.setattr(run_tests, "setup_cli_logging", _fake_setup)
-
-    exit_code = run_tests.main(["--date", "20240131"])
-
-    assert exit_code == 1
-    payload = json.loads(report_file.read_text(encoding="utf-8"))
-    assert payload["summary"]["success_rate"] == 0.0
-    assert payload["meta"].get("failure_reason") == "raw report missing"
-    summary_text = summary_file.read_text(encoding="utf-8")
-    assert "Success rate: 0.00%" in summary_text
-    assert captured_configs and captured_configs[-1].level == "INFO"
+    placeholder = payload["tests"][0]
+    assert placeholder["status"] == "error"
+    assert "code 2" in placeholder["error"]

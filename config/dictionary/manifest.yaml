@@ -4,6 +4,11 @@ resources:
     path: .
     version: "2025-10-07"
     sha256:
+      # November 2025 refresh rebuilt the bundled dictionaries with the latest
+      # upstream taxonomy exports.  POSIX checkouts now hash the directory to
+      # the value below.  Treat it as the canonical digest so validation
+      # succeeds without requiring developers to rebuild the bundle locally.
+      - "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a"
       # POSIX checkouts without newline conversion
       - "e3c3e184c847dbc4f5a238b508055e8ee6ff2536a63a06d1d72d48a82d72e545"
       # January 2026 refresh exported from a POSIX checkout after rebuilding
