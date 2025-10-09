@@ -34,6 +34,7 @@ from library.pipelines.assay import postprocessing as ap
 from library.postprocessing import enrich_assay_metadata
 from library.postprocess.assays import run_assay_pipeline as run_assay_postprocess
 from library.postprocess.common import collect_postprocess_metrics
+from library.postprocess.common.logging import PipelineRunMetrics
 from library import cli
 from library import io
 from library.common.csv_utils import write_csv_chunks_deterministic
@@ -510,7 +511,7 @@ def _generate_assay_postprocess_metrics(
     *,
     logger: Logger,
     processed_rows: int | None = None,
-):
+) -> tuple[PipelineRunMetrics | None, Path | None]:
     """Run the postprocess pipeline for metrics and emit a JSON report."""
 
     extras: dict[str, Any] | None = None
