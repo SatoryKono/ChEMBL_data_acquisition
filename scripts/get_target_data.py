@@ -72,13 +72,14 @@ from library.pipelines.target import protein_classification as pc
 from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
 from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS, ModeDefaults
 from library.postprocess.common import collect_postprocess_metrics
+from library.postprocess.target.export import prepare_targets_for_schema
 from library.postprocess.targets import run_target_pipeline as run_target_postprocess
 from library.postprocessing import names as names_pp
 from library.postprocessing import target as target_pp
 from library.qa.reporting import build_table_quality_hook, is_quality_enabled
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
-from library.validation import ValidationResult
+from library.validation import ValidationResult, validate_targets
 
 try:
     from library.postprocessing import iuphar as iuphar_pp
@@ -149,20 +150,6 @@ def _run_pipeline_with_meta(**kwargs: object) -> int:
             cfg=cfg,
             logger=logger,
         )
-
-TARGETS_REQUIRED_COLUMNS: set[str] = {
-    name for name, column in TargetsSchema.columns.items() if column.required
-}
-
-TARGETS_OPTIONAL_COLUMNS: list[str] = [
-    column for column in TARGETS_COLUMN_ORDER if column not in TARGETS_REQUIRED_COLUMNS
-]
-
-TARGETS_OBJECT_COLUMNS: set[str] = {
-    name
-    for name, column in TargetsSchema.columns.items()
-    if str(column.dtype) == "object"
-}
 
 UNIPROT_MISSING_VALUE = ""
 
@@ -1337,65 +1324,6 @@ def _prefer_primary(
     return result
 
 
-def _prepare_targets_for_schema(
-    df: pd.DataFrame,
-) -> tuple[pd.DataFrame, set[str], set[str]]:
-    """Return a copy of ``df`` aligned to :data:`TargetsSchema`.
-
-    The returned frame contains only columns defined in
-    :data:`TARGETS_COLUMN_ORDER`. Missing optional columns are created with
-    ``"-"`` placeholders and schema fields expecting a generic ``object`` dtype
-    are coerced accordingly.
-
-    Returns
-    -------
-    tuple[pandas.DataFrame, set[str], set[str]]
-        The prepared dataframe, names of missing required columns and optional
-        columns that were injected.
-    """
-
-    columns_present = set(df.columns)
-    missing_required = TARGETS_REQUIRED_COLUMNS - columns_present
-    missing_optional = {
-        column for column in TARGETS_OPTIONAL_COLUMNS if column not in columns_present
-    }
-
-    extra_preserve: dict[str, pd.Series] = {}
-
-    if "uniprot_id_primary" not in df.columns and "uniprot_id" in df.columns:
-        extra_preserve["uniprot_id_primary"] = df["uniprot_id"].astype(object)
-
-    if "mapping_uniprot_id" in df.columns:
-        extra_preserve["mapping_uniprot_id"] = df["mapping_uniprot_id"].astype(object)
-
-    if missing_optional:
-        fill_values = {
-            column: (
-                pd.Series(["-"] * len(df), index=df.index, dtype=object)
-                if len(df)
-                else pd.Series(dtype=object)
-            )
-            for column in missing_optional
-        }
-        prepared = df.assign(**fill_values)
-    else:
-        prepared = df.copy()
-
-    reindex_columns = TARGETS_COLUMN_ORDER
-    if extra_preserve:
-        reindex_columns = reindex_columns + [column for column in extra_preserve if column not in TARGETS_COLUMN_ORDER]
-
-    prepared = prepared.reindex(columns=reindex_columns)
-
-    if extra_preserve:
-        for column, series in extra_preserve.items():
-            prepared[column] = series.reindex(prepared.index)
-
-    for column in TARGETS_OBJECT_COLUMNS & set(prepared.columns):
-        prepared[column] = prepared[column].astype(object)
-    return prepared, missing_required, missing_optional
-
-
 def _save_snapshot(df: pd.DataFrame, base: Path, step: str, cfg: Config) -> Path:
     """Write ``df`` to a uniquely named snapshot CSV file with metadata.
 
@@ -2405,7 +2333,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     def _prepare_chunk(frame: pd.DataFrame) -> pd.DataFrame:
         nonlocal placeholder_replacements, post_cleanup_rows_total
-        prepared, _, missing_optional = _prepare_targets_for_schema(frame)
+        prepared, _, missing_optional = prepare_targets_for_schema(frame)
         if missing_optional and not frame.empty:
             placeholder_replacements += len(frame) * len(missing_optional)
         post_cleanup_rows_total += len(prepared)
@@ -2420,7 +2348,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     def _validate_chunk(frame: pd.DataFrame) -> ValidationResult:
         try:
-            validated = TargetsSchema.validate(frame, lazy=True)
+            validation = validate_targets(frame, return_result=True)
         except SchemaErrors as exc:
             validated_subset = getattr(exc, "validated_data", frame)
             return ValidationResult(
@@ -2428,7 +2356,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 exc.failure_cases.copy(),
                 "TargetsSchema",
             )
-        return ValidationResult(validated, pd.DataFrame(), "TargetsSchema")
+        return validation
 
     raw_dump_writer = _RawDumpStreamWriter(
         raw_destination, cfg=cfg, reindex_columns=reindex_raw
@@ -2555,7 +2483,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         final_df = combined
         if normalize_at_export:
             final_df = normalize_targets(final_df)
-            final_df, _, missing_optional = _prepare_targets_for_schema(final_df)
+            final_df, _, missing_optional = prepare_targets_for_schema(final_df)
             if missing_optional is not None:
                 missing_optional_columns.update(missing_optional)
                 missing_optional_columns.update(missing_optional)
@@ -3673,7 +3601,7 @@ def validate_and_write(
         after=normalized_rows,
     )
     normalized = add_pipeline_metadata(normalized)
-    prepared, missing_required, missing_optional = _prepare_targets_for_schema(
+    prepared, missing_required, missing_optional = prepare_targets_for_schema(
         normalized
     )
     final_df = prepared
@@ -3712,7 +3640,7 @@ def validate_and_write(
             )
         logger.info("targets_schema_validate_start", rows=len(final_df))
         try:
-            final_df = TargetsSchema.validate(final_df, lazy=True)
+            validation = validate_targets(final_df, return_result=True)
         except SchemaErrors as exc:
             failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
             errors = SidecarErrors()
@@ -3743,12 +3671,44 @@ def validate_and_write(
             final_df = getattr(exc, "validated_data", final_df)
             exit_code = 1
         else:
-            logger.info(
-                "targets_schema_validate_result",
-                status="success",
-                rows=len(final_df),
-                failures=0,
-            )
+            final_df = validation.data
+            failure_cases = validation.failure_cases.copy()
+            if not failure_cases.empty:
+                failure_path = output.with_name(
+                    f"{output.stem}_failure_cases.csv"
+                )
+                errors = SidecarErrors()
+                for row in failure_cases.to_dict("records"):
+                    errors.add_error(row)
+                errors.save(failure_path, cfg=cfg)
+                logger.error(
+                    "validation_failed",
+                    failures=len(failure_cases),
+                    path=str(failure_path),
+                )
+                for _, failure_row in failure_cases.iterrows():
+                    reason = _categorize_failure(failure_row)
+                    identifier = failure_row.get("index")
+                    if pd.isna(identifier):
+                        identifier = (
+                            failure_row.get("column"),
+                            failure_row.get("failure_case"),
+                        )
+                    drop_reasons[reason].add(identifier)
+                logger.info(
+                    "targets_schema_validate_result",
+                    status="failed",
+                    rows=len(final_df),
+                    failures=len(failure_cases),
+                )
+                exit_code = 1
+            else:
+                logger.info(
+                    "targets_schema_validate_result",
+                    status="success",
+                    rows=len(final_df),
+                    failures=0,
+                )
     else:
 
         logger.warning(

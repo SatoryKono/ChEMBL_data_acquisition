@@ -32,9 +32,7 @@ FROZEN_TIMESTAMP = FROZEN_UTC.timestamp()
 FROZEN_NAIVE = FROZEN_UTC.replace(tzinfo=None)
 
 
-def _fix_seed(
-    seed: int = 42, *, monkeypatch: pytest.MonkeyPatch | None = None
-) -> None:
+def _fix_seed(seed: int = 42, *, monkeypatch: pytest.MonkeyPatch | None = None) -> None:
     """Reset the pseudo-random generators to a deterministic state."""
 
     if monkeypatch is None:
@@ -52,6 +50,9 @@ def deterministic_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _fix_seed(monkeypatch=monkeypatch)
     monkeypatch.setenv("TZ", "UTC")
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    monkeypatch.setenv("TMP", str(tmp_path))
+    monkeypatch.setenv("TEMP", str(tmp_path))
 
     class FrozenDateTime(dt.datetime):
         @classmethod
@@ -90,7 +91,9 @@ def relax_dictionary_manifest_checks() -> None:
     except dictionary_resources.DictionaryManifestError:
         manifest_path = DICTIONARY_DIR / "manifest.yaml"
         try:
-            manifest_data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+            manifest_data = (
+                yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+            )
         except OSError:
             yield
             return
@@ -113,7 +116,11 @@ def relax_dictionary_manifest_checks() -> None:
                 version = entry.get("version")
                 sha256 = entry.get("sha256")
                 generator = entry.get("generator", "")
-                if not isinstance(path_value, str) or not isinstance(version, str) or not isinstance(sha256, str):
+                if (
+                    not isinstance(path_value, str)
+                    or not isinstance(version, str)
+                    or not isinstance(sha256, str)
+                ):
                     raise
                 root = Path(base_dir) if base_dir is not None else DICTIONARY_DIR
                 resolved_path = (root / path_value).resolve()
@@ -223,9 +230,7 @@ def make_fallback_doi_csv(tmp_path: Path) -> Callable[..., Path]:
 
 
 @pytest.fixture()
-def fallback_doi_csv(
-    make_fallback_doi_csv: Callable[..., Path]
-) -> Path:
+def fallback_doi_csv(make_fallback_doi_csv: Callable[..., Path]) -> Path:
     """Provide a default fallback DOI CSV used across tests."""
 
     default_rows = (
