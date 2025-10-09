@@ -27,7 +27,7 @@ params:
     pipeline_version: "${CHEMBL_TARGET_PIPELINE_VERSION:-auto}"
     log_level: "${POSTPROCESS_LOG_LEVEL:-INFO}"
   io:
-    encoding: "${POSTPROCESS_DEFAULT_ENCODING:-utf-8-sig}"
+    encoding: "${POSTPROCESS_DEFAULT_ENCODING:-utf-8}"
     csv_sep: "${POSTPROCESS_DEFAULT_CSV_SEPARATOR:-,}"
   enrichment:
     synonym_priority:

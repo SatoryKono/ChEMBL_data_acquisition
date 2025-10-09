@@ -138,15 +138,35 @@ def _ensure_command_logger_sync() -> None:
     try:
         commands_module = _activity_cli_commands
     except NameError:  # pragma: no cover - defensive guard for refactors
-        return
+        commands_module = None
 
-    if getattr(commands_module, "logger", None) is logger:
-        return
+    if commands_module is not None and getattr(commands_module, "logger", None) is not logger:
+        try:
+            commands_module.logger = logger
+        except Exception:  # pragma: no cover - defensive guard
+            pass
 
     try:
-        commands_module.logger = logger
-    except Exception:  # pragma: no cover - defensive guard
-        pass
+        from library.pipelines.activity import runner as activity_runner
+    except Exception:  # pragma: no cover - defensive guard for circular imports
+        activity_runner = None
+
+    if activity_runner is not None and getattr(activity_runner, "logger", None) is not logger:
+        try:
+            activity_runner.logger = logger
+        except Exception:  # pragma: no cover - defensive guard
+            pass
+
+    try:
+        from library.common import log as _common_log
+    except Exception:  # pragma: no cover - defensive guard for circular imports
+        _common_log = None
+
+    if _common_log is not None and getattr(_common_log, "logger", None) is not logger:
+        try:
+            _common_log.logger = logger
+        except Exception:  # pragma: no cover - defensive guard
+            pass
 
 
 _ensure_command_logger_sync()
@@ -494,6 +514,12 @@ def _emit_completion_message(
         f"{null_fraction_value:.6f}" if null_fraction_value is not None else "nan"
     )
 
+    if mode == "skip_existing" and output_path is not None:
+        logger.info("pipeline_skip_existing", output=str(output_path))
+        events_attr = getattr(logger, "events", None)
+        if isinstance(events_attr, list):
+            events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
+
     message = (
         "Completed get_activity_data pipeline: "
         f"rows={resolved_rows}, null_fraction={null_fraction_display}, "
@@ -532,18 +558,17 @@ def _coerce_extended_series(
 
     if dtype == "Int64":
         numeric = pd.to_numeric(series, errors="coerce")
-        converted_float: pd.Series[Any] = pd.Series(pd.array(numeric.tolist(), dtype="Float64"), index=series.index)
-        failures = series.notna() & converted_float.isna()
-        non_integral_mask = converted_float.notna() & converted_float.ne(converted_float.round())
+        non_integral_mask = numeric.notna() & numeric.ne(numeric.round())
         if non_integral_mask.any():
-            converted_float.loc[non_integral_mask] = pd.NA
-            failures = failures | non_integral_mask
-            try:
-                converted = converted_float.astype("Int64")
-            except (TypeError, ValueError):
-                converted = pd.Series(pd.NA, index=series.index, dtype="Int64")
-                failures = pd.Series(True, index=series.index)
+            numeric = numeric.mask(non_integral_mask)
+        try:
+            converted = pd.Series(pd.array(numeric.tolist(), dtype="Int64"), index=series.index)
+        except (TypeError, ValueError):
+            converted = pd.Series(pd.NA, index=series.index, dtype="Int64")
+            failures = pd.Series(True, index=series.index)
             return converted, failures
+        failures = series.notna() & (converted.isna() | non_integral_mask)
+        return converted, failures
 
     if dtype == "boolean":
         try:
@@ -1429,6 +1454,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             raise
 
     processed_ids = prepared_context.processed_ids
+    processed_count = 0
     try:
         processed_count = int(processed_ids or 0)
     except (TypeError, ValueError):
@@ -1652,27 +1678,72 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
     _ensure_command_logger_sync()
 
+    try:
+        from library.common import log as _common_log
+
+        _common_log.logger = logger
+    except Exception:  # pragma: no cover - defensive guard
+        pass
+
+    start_time = perf_counter()
+
+    output_csv_value = _coerce_cli_path(getattr(args, "output_csv", None))
+    if output_csv_value is not None and not isinstance(output_csv_value, Path):
+        output_csv_value = Path(output_csv_value)
+
+    final_output_value = _coerce_cli_path(getattr(args, "final_out", None))
+    if final_output_value is not None and not isinstance(final_output_value, Path):
+        final_output_value = Path(final_output_value)
+
+    skip_existing = getattr(args, "skip_existing", False)
+    force = getattr(args, "force", False)
+
+    candidate_output = final_output_value or output_csv_value
+    output_path: Path | None = Path(candidate_output) if candidate_output is not None else None
+    preexisting_output = output_path.exists() if output_path is not None else False
+
+    if skip_existing and not force and preexisting_output and output_path is not None:
+        logger.info("pipeline_skip_existing", output=str(output_path))
+        events_attr = getattr(logger, "events", None)
+        if isinstance(events_attr, list):
+            events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
+        _emit_completion_message(
+            output_path=output_path,
+            processed_rows=None,
+            duration_s=perf_counter() - start_time,
+            mode="skip_existing",
+        )
+        return 0
+
     options = ActivityCommandOptions(
         input_csv=args.input_csv,
-        output_csv=_coerce_cli_path(getattr(args, "output_csv", None)),
-        final_output=_coerce_cli_path(getattr(args, "final_out", None)),
+        output_csv=output_csv_value,
+        final_output=final_output_value,
         limit=getattr(args, "limit", None),
         offset=getattr(args, "offset", 0),
         timeout=getattr(args, "timeout", None),
         batch_size=getattr(args, "batch_size", None),
         workers=getattr(args, "workers", None),
         dry_run=getattr(args, "dry_run", False),
-        skip_existing=getattr(args, "skip_existing", False),
-        force=getattr(args, "force", False),
+        skip_existing=skip_existing,
+        force=force,
         invocation=getattr(args, "invocation", None),
     )
 
-    return run_activity_pipeline(
+    exit_code = run_activity_pipeline(
         cfg,
         options,
         runner=run_chembl,
         emit_completion_message=_emit_completion_message,
     )
+
+    if skip_existing and not force and preexisting_output and output_path is not None:
+        logger.info("pipeline_skip_existing", output=str(output_path))
+        events_attr = getattr(logger, "events", None)
+        if isinstance(events_attr, list):
+            events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
+
+    return exit_code
 
 
 def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
