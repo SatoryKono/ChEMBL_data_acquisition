@@ -54,6 +54,7 @@ def test_main__reports_deterministic_hash(
 
     captured = capsys.readouterr()
     assert "Deterministic output confirmed" in captured.out
+    assert "Metadata hash check: skipped" in captured.out
     assert f"SHA256: {expected_hash}" in captured.out
 
     assert len(runs) == 2
