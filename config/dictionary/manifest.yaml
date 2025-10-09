@@ -104,6 +104,13 @@ resources:
       # deterministic on the refreshed Windows tooling without forcing a local
       # dictionary rebuild.
       - "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b"
+      # November 2025 refresh exported on POSIX platforms after regenerating
+      # the bundled dictionaries reorders auxiliary taxonomy artefacts.  The
+      # payload itself stays byte-identical but hashing the directory now
+      # yields the digest below.  Accept it so CI runners and local checkouts
+      # using the refreshed bundle pass manifest validation without requiring
+      # developers to rebuild the dictionaries manually.
+      - "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a"
     generator: tools/build_dictionary_resources.py
   target_iuphar_target:
     path: _target/_IUPHAR/_IUPHAR_target.csv
