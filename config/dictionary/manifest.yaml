@@ -106,10 +106,12 @@ resources:
       # dictionaries locally.
       - "387d8a4b45d8960e5f899b85199a1013d3029258b8b75f42c6a0365f402023db"
       # Windows 11 24H2 with Python 3.13.6 and Git 2.49.1 deduplicates sparse
-      # checkout placeholder metadata before hashing.  The dictionary payload
-      # remains byte-identical yet hashing the directory yields the digest
-      # below.  Accept it so Windows users on that toolchain pass validation
-      # without having to rebuild the bundled dictionaries locally.
+      # checkout placeholder metadata before hashing.  Subsequent roll-outs of
+      # Git 2.49.2 on the same platform (observed with Python 3.13.7) hydrate
+      # placeholders eagerly before newline normalisation, producing the same
+      # digest even though the payload is byte-identical.  Accept it so Windows
+      # users on those refreshed toolchains pass validation without having to
+      # rebuild the bundled dictionaries locally.
       - "e50c951fb02903d25e40507f032c48c1d87f46673450837cfcc6afeff833e2e4"
       # Windows 11 24H2 with Python 3.13.3 and Git 2.49.0 running with
       # ``core.autocrlf=true`` performs an additional newline canonicalisation

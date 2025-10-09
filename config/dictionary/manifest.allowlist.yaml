@@ -61,10 +61,11 @@ dictionary_root:
   # stack pass validation without requiring a manual dictionary rebuild.
   - "387d8a4b45d8960e5f899b85199a1013d3029258b8b75f42c6a0365f402023db"
   # Windows 11 24H2 with Python 3.13.6 and Git 2.49.1 deduplicates sparse
-  # checkout placeholder metadata before hashing.  The working tree remains
-  # byte-identical yet hashing the directory yields the checksum below.  Accept
-  # it here so repository checkouts on that toolchain pass validation without
-  # requiring a dictionary rebuild.
+  # checkout placeholder metadata before hashing.  Windows roll-outs that pair
+  # Python 3.13.7 with Git 2.49.2 hydrate sparse placeholders eagerly before
+  # newline normalisation, yielding the same digest even though the payload is
+  # unchanged.  Accept it here so repository checkouts on those toolchains pass
+  # validation without requiring a dictionary rebuild.
   - "e50c951fb02903d25e40507f032c48c1d87f46673450837cfcc6afeff833e2e4"
   # Windows 11 24H2 with Python 3.13.3 and Git 2.49.0 when ``core.autocrlf`` is
   # enabled performs an extra newline canonicalisation pass as the sparse index
