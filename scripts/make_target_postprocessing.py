@@ -28,7 +28,7 @@ from library.postprocess.targets.schema import TARGET_SCHEMA, validate_targets
 from library.postprocess.targets.steps import run_target_pipeline
 
 try:
-    from ._postprocess_common import (
+    from _postprocess_common import (
         CsvRuntimeConfig,
         DEFAULT_LOG_DIR,
         LOG_DIR_ENV,
@@ -41,8 +41,8 @@ try:
         run_postprocess_steps,
         validate_postprocess_frame,
     )
-except ImportError:  # pragma: no cover - fallback for direct execution
-    from _postprocess_common import (
+except ModuleNotFoundError:  # pragma: no cover - fallback when executed as a package module
+    from ._postprocess_common import (
         CsvRuntimeConfig,
         DEFAULT_LOG_DIR,
         LOG_DIR_ENV,
