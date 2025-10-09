@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import numbers
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -482,30 +484,53 @@ def _emit_completion_message(
     mode: str,
     streamed_metrics: Mapping[str, object] | None = None,
 ) -> None:
-    """Log a human-readable completion summary for the pipeline."""
+    """Log a structured completion summary for the pipeline."""
 
     resolved_rows = processed_rows if processed_rows is not None else 0
     null_fraction_value: float | None = None
+    metrics_payload: dict[str, object] | None = None
 
     if streamed_metrics:
         rows_value = streamed_metrics.get("rows")
-        if isinstance(rows_value, int | float):
+        if isinstance(rows_value, numbers.Integral):
             resolved_rows = int(rows_value)
+        elif isinstance(rows_value, numbers.Real):
+            rows_float = float(rows_value)
+            if not math.isnan(rows_float):
+                resolved_rows = int(rows_float)
+
         null_fraction = streamed_metrics.get("null_fraction")
-        if isinstance(null_fraction, int | float):
-            null_fraction_value = float(null_fraction)
+        if isinstance(null_fraction, numbers.Real):
+            null_fraction_float = float(null_fraction)
+            if not math.isnan(null_fraction_float):
+                null_fraction_value = null_fraction_float
 
-    null_fraction_display = (
-        f"{null_fraction_value:.6f}" if null_fraction_value is not None else "nan"
-    )
+        metrics_payload = {}
+        for key, value in streamed_metrics.items():
+            if isinstance(value, numbers.Integral):
+                metrics_payload[key] = int(value)
+            elif isinstance(value, numbers.Real):
+                converted = float(value)
+                metrics_payload[key] = None if math.isnan(converted) else converted
+            elif isinstance(value, (str, bool)) or value is None:
+                metrics_payload[key] = value
+            else:
+                metrics_payload[key] = str(value)
 
-    message = (
-        "Completed get_activity_data pipeline: "
-        f"rows={resolved_rows}, null_fraction={null_fraction_display}, "
-        f"duration={duration_s:.3f}s, mode={mode}, "
-        f"output={str(output_path) if output_path is not None else 'n/a'}"
-    )
-    logger.info(message)
+    payload: dict[str, object] = {
+        "output": str(output_path) if output_path is not None else None,
+        "rows": int(resolved_rows),
+        "duration_s": float(duration_s),
+        "mode": mode,
+    }
+    if processed_rows is not None:
+        payload["processed_rows"] = int(processed_rows)
+    if null_fraction_value is not None:
+        payload["null_fraction"] = null_fraction_value
+    if metrics_payload:
+        payload["streamed_metrics"] = metrics_payload
+
+    logger.info("activity_pipeline_completion", **payload)
 
 _EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series[Any] | None]] = {
     "activity_chembl_id": lambda df: df.get("activity_id"),
