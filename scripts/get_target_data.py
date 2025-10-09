@@ -18,10 +18,9 @@ if __package__ in {None, ""}:
 else:  # pragma: no cover - executed when imported as a package module
     from ._bootstrap import bootstrap_cli
     bootstrap_cli(__package__, __file__)
-del bootstrap_cli
     del bootstrap_cli
 
-# ruff: noqa: E402
+    # ruff: noqa: E402
 import argparse
 import math
 import os
@@ -1251,9 +1250,7 @@ class _RawDumpStreamWriter:
                 index=False,
                 sep=self.cfg.io.csv_sep,
                 encoding=self.cfg.io.csv_encoding,
-                    sep=self.cfg.io.csv_sep,
-                    encoding=self.cfg.io.csv_encoding,
-                )
+            )
         logger.info(
             "raw_dump_written", rows=self._rows_written, path=str(self.destination)
         )
@@ -3273,9 +3270,6 @@ def fetch_iuphar(
         col
         for col in (set(chembl_for_merge.columns) & (set(uniprot_df.columns) - {"original_id"}))
         if col is not None
-    )
-        set(chembl_for_merge.columns)
-        & (set(uniprot_df.columns) - {"original_id"})
     )
     overlap_updates: dict[str, pd.Series] = {}
 
