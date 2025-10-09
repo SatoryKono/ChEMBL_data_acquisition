@@ -1,15 +1,14 @@
-"""Thin wrapper exposing the activity pipeline CLI entry point."""
+"""Command line interface for retrieving ChEMBL activity data.
+
+The module exposes a ``main`` entry point compatible with setuptools console
+scripts as well as helpers that can be invoked directly from other
+applications or tests.
+"""
 
 from __future__ import annotations
 
-if __package__ in {None, ""}:
-    from _bootstrap import bootstrap_cli
-else:  # pragma: no cover - executed when imported as a module
-    from ._bootstrap import bootstrap_cli
-
-bootstrap_cli(__package__, __file__)
-del bootstrap_cli
-
+import argparse
+import json
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -68,7 +67,6 @@ from library.orchestration import ETLContext
 from library.pipelines.activity import run as activity_run
 from library.pipelines.assay.chembl_assay import (
     ACTIVITY_COLUMNS,
-    MAX_ACTIVITY_CHUNK_SIZE,
 )
 from library.pipelines.common import (
     ChunkedFetchConfig,
@@ -96,7 +94,7 @@ from library.validation import validate_activities
 
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
-PROGRAM_NAME = Path(__file__).with_suffix("").name
+PROGRAM_NAME = "get_activity_data"
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
     invocation = getattr(args, "invocation", None)
@@ -126,7 +124,6 @@ __all__ = (
     "write_meta_yaml",
     "configure_logger",
     "run_cli_command",
-    "MAX_ACTIVITY_CHUNK_SIZE",
 )
 
 
@@ -282,22 +279,23 @@ _OUTPUT_ACTIVITY_DROP_COLUMNS: tuple[str, ...] = (
 def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
     """Return ``series`` converted to ``dtype`` where feasible."""
 
-    # Delegate to the extended coercion helper for extension-aware conversions.
-    if dtype in {"Float64", "Int64", "boolean"}:
-        converted, _ = _coerce_extended_series(series, dtype, column="_coerce_series_dtype")
-        return cast("pd.Series[Any]", converted)
-
-    if dtype == "string":
+    # Use pandas extension dtypes directly for nullable types
+    if dtype == "Float64":
+        return cast(pd.Series[Any], series.astype(pd.Float64Dtype()))
+    elif dtype == "Int64":
+        return cast(pd.Series[Any], series.astype(pd.Int64Dtype()))
+    elif dtype == "boolean":
+        return cast(pd.Series[Any], series.astype(pd.BooleanDtype()))
+    elif dtype == "string":
         return series.astype(pd.StringDtype())
-
-    # For non-extension dtypes, try to use numpy dtype if possible.
-    try:
-        import numpy as np
-
-        return series.astype(np.dtype(dtype))
-    except (TypeError, ValueError):
-        # Final fallback: convert to string.
-        return cast("pd.Series[Any]", series.astype(str))
+    else:
+        # For non-extension dtypes, try to use numpy dtype if possible
+        try:
+            import numpy as np
+            return series.astype(np.dtype(dtype))
+        except (TypeError, ValueError):
+            # Final fallback: convert to string
+            return cast(pd.Series[Any], series.astype(str))
 
 
 def _extract_adapter_retry_metadata(
@@ -1426,25 +1424,25 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
             raise
 
+    summary_snapshot: Mapping[str, object] | None = None
     processed_ids = prepared_context.processed_ids
-    try:
-        processed_count = int(processed_ids or 0)
-    except (TypeError, ValueError):
-        logger.info("processed_count_conversion_failed", value=processed_ids)
-        processed_count = 0
-
-    summary_snapshot: dict[str, object] | None = None
-
     if limit is not None:
         logger.info(
             "process_limit",
             processed=processed_ids,
             limit=limit,
         )
-        summary_snapshot = streamed_summary or streaming_stats.snapshot()
     else:
-        summary_snapshot = streamed_summary or streaming_stats.snapshot()
-        logger.info("processed_count", count=processed_count)
+        if processed_ids is not None and isinstance(processed_ids, (int, float, str)):
+            try:
+                processed_count = int(processed_ids)
+            except (TypeError, ValueError):
+                processed_count = 0
+        else:
+            processed_count = 0
+            logger.info("processed_count", count=processed_count)
+
+            summary_snapshot = streamed_summary or streaming_stats.snapshot()
 
     if pipeline_stats is not None:
         try:
@@ -1759,7 +1757,7 @@ class ActivityPipelineCLI(PipelineCLIBase):
         return None
 
     def get_program_name(self) -> str:
-        return Path(__file__).with_suffix("").name
+        return PROGRAM_NAME
 
     def get_logger(self) -> Logger:
         return logger
@@ -1788,11 +1786,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     return _CLI.build_parser()
 
 
-from library.cli.entrypoints import activity as _activity
+def main(argv: Sequence[str] | None = None) -> int:
+    """Delegate to :class:`ActivityPipelineCLI` for backwards compatibility."""
 
-sys.modules[__name__] = _activity
-sys.modules.setdefault("scripts.get_activity_data", _activity)
+    return _CLI.main(argv)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
-    raise SystemExit(_activity.main())
+    raise SystemExit(main())

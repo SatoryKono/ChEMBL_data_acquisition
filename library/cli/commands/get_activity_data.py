@@ -70,7 +70,7 @@ def run_activity_pipeline(
     """
 
     if runner is None or emit_completion_message is None:  # pragma: no cover - lazy import
-        from scripts import get_activity_data as activity_cli
+        from library.cli.entrypoints import activity as activity_cli
 
         if runner is None:
             runner = activity_cli.run_chembl
