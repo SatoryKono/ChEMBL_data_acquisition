@@ -13,11 +13,13 @@ Fetch ChEMBL target information for identifiers in ``targets.csv``::
 from __future__ import annotations
 
 import argparse
+import errno
 import math
 import os
 import shutil
 import stat
 import sys
+import time
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -1158,6 +1160,9 @@ def _prepare_raw_destination(destination: Path) -> None:
 class _RawDumpStreamWriter:
     """Stream ChEMBL raw payloads to disk without accumulating chunks."""
 
+    _CSV_WRITE_MAX_ATTEMPTS = 5
+    _CSV_WRITE_RETRY_BASE_SLEEP_S = 0.1
+
     def __init__(
         self,
         destination: Path,
@@ -1223,18 +1228,79 @@ class _RawDumpStreamWriter:
         else:
             mode = "w" if self._rows_written == 0 else "a"
             header = self._rows_written == 0
-            working.to_csv(
-                str(self.destination),
-                mode=mode,
-                header=header,
-                index=False,
-                sep=self.cfg.io.csv_sep,
-                encoding=self.cfg.io.csv_encoding,
-            )
+            self._write_csv_with_retry(working, mode=mode, header=header)
         self._rows_written += len(working)
         logger.info(
             "raw_dump_written", rows=self._rows_written, path=str(self.destination)
         )
+        return self.destination
+
+    def _write_csv_with_retry(
+        self, frame: pd.DataFrame, *, mode: str, header: bool
+    ) -> None:
+        """Persist ``frame`` to ``destination`` handling transient file locks."""
+
+        last_error: OSError | None = None
+        for attempt in range(1, self._CSV_WRITE_MAX_ATTEMPTS + 1):
+            try:
+                frame.to_csv(
+                    str(self.destination),
+                    mode=mode,
+                    header=header,
+                    index=False,
+                    sep=self.cfg.io.csv_sep,
+                    encoding=self.cfg.io.csv_encoding,
+                )
+                return
+            except OSError as exc:
+                should_retry = self._should_retry_on_oserror(exc)
+                if not should_retry or attempt == self._CSV_WRITE_MAX_ATTEMPTS:
+                    raise
+                last_error = exc
+                sleep_seconds = self._CSV_WRITE_RETRY_BASE_SLEEP_S * attempt
+                logger.warning(
+                    "raw_dump_write_retry",
+                    attempt=attempt,
+                    wait_seconds=sleep_seconds,
+                    path=str(self.destination),
+                    error=str(exc),
+                )
+                time.sleep(sleep_seconds)
+        if last_error is not None:  # pragma: no cover - defensive
+            raise last_error
+
+    @staticmethod
+    def _should_retry_on_oserror(exc: OSError) -> bool:
+        if isinstance(exc, PermissionError):
+            return True
+        errno_value = getattr(exc, "errno", None)
+        return errno_value in {errno.EACCES, errno.EPERM}
+
+    def finalize(self) -> Path:
+        """Flush buffered payloads to ``destination`` and return the path."""
+
+        if self._is_parquet:
+            frames = self._frames or []
+            if frames:
+                combined = pd.concat(frames, ignore_index=True)
+            else:
+                combined = pd.DataFrame(columns=self._columns or [])
+            try:
+                combined.to_parquet(self.destination, index=False)
+            except ImportError as exc:  # pragma: no cover - optional dependency
+                raise ValueError(
+                    "Parquet export requires optional pyarrow or fastparquet"
+                ) from exc
+        else:
+            if not self.destination.exists():
+                empty = pd.DataFrame(columns=self._columns or [])
+                empty.to_csv(
+                    str(self.destination),
+                    index=False,
+                    sep=self.cfg.io.csv_sep,
+                    encoding=self.cfg.io.csv_encoding,
+                )
+
         return self.destination
 
 
@@ -1283,33 +1349,6 @@ def _finalize_raw_dump_writer(
         return False
 
     return True
-
-    def finalize(self) -> Path:
-        """Flush buffered payloads to ``destination`` and return the path."""
-
-        if self._is_parquet:
-            frames = self._frames or []
-            if frames:
-                combined = pd.concat(frames, ignore_index=True)
-            else:
-                combined = pd.DataFrame(columns=self._columns or [])
-            try:
-                combined.to_parquet(self.destination, index=False)
-            except ImportError as exc:  # pragma: no cover - optional dependency
-                raise ValueError(
-                    "Parquet export requires optional pyarrow or fastparquet"
-                ) from exc
-        else:
-            if not self.destination.exists():
-                empty = pd.DataFrame(columns=self._columns or [])
-                empty.to_csv(
-                    str(self.destination),
-                    index=False,
-                    sep=self.cfg.io.csv_sep,
-                    encoding=self.cfg.io.csv_encoding,
-                )
-
-        return self.destination
 
 
 def _write_raw_dump(
