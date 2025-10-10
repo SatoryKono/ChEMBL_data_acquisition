@@ -2000,6 +2000,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_logger(log_cfg)
     return exit_code
 
+try:
+    from _bootstrap import bootstrap_cli
+except ImportError:  # pragma: no cover - namespace package fallback
+    from ._bootstrap import bootstrap_cli
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+
 _module = import_module("library.cli.commands.get_document_data")
 sys.modules[__name__] = _module
 

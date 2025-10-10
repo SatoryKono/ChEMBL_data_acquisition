@@ -663,6 +663,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     return _CLI.main(argv)
 
+try:
+    from _bootstrap import bootstrap_cli
+except ImportError:  # pragma: no cover - namespace package fallback
+    from ._bootstrap import bootstrap_cli
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+
 _module = import_module("library.cli.commands.get_assay_data")
 sys.modules[__name__] = _module
 
