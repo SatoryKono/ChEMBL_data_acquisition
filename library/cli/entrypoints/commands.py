@@ -20,7 +20,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Final
 
-from library.cli import logging as _cli_logging
 from library.cli.commands import _run as _run_command
 
 # ---------------------------------------------------------------------------
@@ -77,15 +76,6 @@ def get_activity_data_main(argv: Sequence[str] | None = None) -> int:
         raw_args = []
     else:
         raw_args = [str(arg) for arg in argv]
-
-    def _has_date_override(items: list[str]) -> bool:
-        for item in items:
-            if item == "--date" or item.startswith("--date="):
-                return True
-        return False
-
-    if not _has_date_override(raw_args):
-        raw_args.extend(["--date", _cli_logging._current_date_str()])
 
     return _dispatch("get_activity_data", raw_args)
 

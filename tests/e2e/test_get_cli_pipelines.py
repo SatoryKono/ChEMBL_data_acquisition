@@ -278,6 +278,81 @@ def _patch_activity_cli(monkeypatch: pytest.MonkeyPatch, cfg: Config) -> None:
 
 
 @pytest.mark.e2e
+def test_get_activity_cli__default_date_prefix_applied(
+    tmp_path: Path,
+    cfg: Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure CLI derives filenames and metadata from configured date prefix."""
+
+    _configure_activity_cfg(cfg)
+    cfg.io.output_dir = tmp_path / "out"
+    cfg.io.cache_dir = tmp_path / "cache"
+    cfg.io.default_date_prefix = "19991231"
+    cfg.io.output_stamp_mode = "omit"
+
+    input_csv = tmp_path / "activities.csv"
+    input_csv.write_text("activity_id\nACT1\n", encoding="utf-8")
+
+    written = _install_activity_writer(monkeypatch)
+
+    original_write_meta = get_activity_data.write_meta_yaml
+    captured_meta: dict[str, object] = {}
+
+    def _record_meta(path: Path | str, *, cfg: Config | None = None, **kwargs: object) -> Path:
+        meta_path = original_write_meta(path, cfg=cfg, **kwargs)
+        captured_meta["path"] = meta_path
+        captured_meta["cfg"] = cfg
+        return meta_path
+
+    monkeypatch.setattr(get_activity_data, "write_meta_yaml", _record_meta)
+
+    def _stub_activity_pipeline(**kwargs: object) -> PipelineRunResult:
+        output_csv = Path(kwargs["output_path"])
+        writer_cfg = kwargs["writer_config"]
+        definition_kwargs = dict(kwargs.get("definition_kwargs", {}))
+        frame = pd.DataFrame([{"activity_id": "ACT1"}])
+        writer_cfg.writer(
+            [frame],
+            output_csv,
+            key_cols=definition_kwargs.get("key_columns", ()),
+            col_order=definition_kwargs.get("column_order", tuple(frame.columns)),
+            **writer_cfg.kwargs,
+        )
+        get_activity_data.write_meta_yaml(
+            output_csv,
+            cfg=kwargs["cfg"],
+            columns=list(frame.columns),
+        )
+        return PipelineRunResult(exit_code=0, output_path=output_csv, written=True)
+
+    monkeypatch.setattr(
+        "library.pipelines.activity.run.run_activity_pipeline",
+        _stub_activity_pipeline,
+    )
+
+    _patch_activity_cli(monkeypatch, cfg)
+
+    exit_code = get_activity_data.main(["--input", str(input_csv)])
+
+    assert exit_code == 0
+    assert len(written) == 1
+
+    output_path = written[0][0]
+    expected_name = (
+        f"output.{get_activity_data.DEFAULT_OUTPUT_STEM}_{cfg.io.default_date_prefix}.csv"
+    )
+    assert output_path.name == expected_name
+    assert output_path.parent == cfg.io.output_dir
+
+    meta_path = captured_meta.get("path")
+    assert isinstance(meta_path, Path)
+    assert meta_path.name == f"{expected_name}.meta.yaml"
+    assert meta_path.parent == output_path.parent
+    assert captured_meta.get("cfg") is cfg
+
+
+@pytest.mark.e2e
 def test_get_document_type_main__writes_meta(
     tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:
