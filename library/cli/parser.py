@@ -29,14 +29,11 @@ require_python_version()
 def _default_run_id(level: str) -> str:
     """Return a unique run identifier for ``level``."""
 
-    # Mix a random component with the log level so that subsequent calls using
-    # the same level still receive distinct identifiers while retaining the
-    # ability to derive deterministic IDs in tests by providing ``run_id``
-    # explicitly. ``uuid5`` is used to keep the final value in canonical UUID
-    # form for downstream validation.
-    random_component = uuid.uuid4().hex
-    seed = f"chembl-data-acquisition|{level.upper()}|{random_component}"
-    return uuid.uuid5(uuid.NAMESPACE_URL, seed).hex
+    # Accept ``level`` for API compatibility but rely on randomness so that
+    # each invocation yields a distinct identifier unless callers specify a
+    # deterministic ``run_id`` explicitly (e.g. in tests).
+    _ = level  # unused: kept to avoid breaking the call signature
+    return uuid.uuid4().hex
 
 
 _RUN_ID_ENV = "CHEMBL_DA_RUN_ID"
