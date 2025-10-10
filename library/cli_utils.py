@@ -16,7 +16,9 @@ import sys
 import traceback
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict, cast
 
 import numpy as np
 import pandas as pd
@@ -65,6 +67,83 @@ __all__ = [
     "Writer",
     "normalise_definition",
 ]
+
+
+class StatsExtra(TypedDict, total=False):
+    """Additional metrics merged into the metadata output."""
+
+    chunk_fetch_failure_chunks: int
+    chunk_fetch_failure_ids: list[str]
+    chunk_fetch_failure_ids_total: int
+    chunk_fetch_failure_ids_truncated: bool
+    custom_metric: int
+
+
+StatsExtraMapping = Mapping[str, object]
+
+
+@dataclass(slots=True, frozen=True)
+class SchemaSnapshot:
+    """Captures introspection details derived from a Pandera schema."""
+
+    required_columns: frozenset[str]
+    optional_columns: frozenset[str]
+    column_dtypes: dict[str, object | None]
+
+    @classmethod
+    def from_schema(cls, schema: object | None) -> SchemaSnapshot:
+        if schema is None:
+            return cls(
+                required_columns=frozenset(),
+                optional_columns=frozenset(),
+                column_dtypes={},
+            )
+
+        schema_columns = getattr(schema, "columns", {}) or {}
+        required_cols = {
+            name
+            for name, column in schema_columns.items()
+            if getattr(column, "required", False)
+        }
+        optional_cols = set(schema_columns) - required_cols
+        column_dtypes = {
+            name: getattr(column, "dtype", None)
+            for name, column in schema_columns.items()
+        }
+        return cls(
+            required_columns=frozenset(required_cols),
+            optional_columns=frozenset(optional_cols),
+            column_dtypes=column_dtypes,
+        )
+
+
+@dataclass(slots=True)
+class PipelineMetrics:
+    """Aggregates per-chunk counters into totals for metadata."""
+
+    rows_total: int = 0
+    rows_kept: int = 0
+    rows_dropped: int = 0
+
+    def add_total(self, total: int) -> None:
+        self.rows_total += total
+
+    def record(self, *, total: int, kept: int) -> None:
+        self.rows_kept += kept
+        self.rows_dropped += total - kept
+
+    def build_stats(
+        self, *, output_sha256: str, extra: StatsExtraMapping | None
+    ) -> Stats:
+        stats: Stats = {
+            "rows_total": self.rows_total,
+            "rows_kept": self.rows_kept,
+            "rows_dropped": self.rows_dropped,
+            "output_sha256": output_sha256,
+        }
+        if extra:
+            stats.update(extra)
+        return stats
 
 
 def _callable_name(func: Callable[..., object]) -> str:
@@ -364,7 +443,7 @@ def run_pipeline(
     inputs = dict(definition.inputs)
     key_columns = list(definition.key_columns)
     table_quality = definition.table_quality or (lambda _: None)
-    stats_extra = definition.stats_extra
+    stats_extra_config = definition.stats_extra
     stats_callback = definition.stats_callback
     strict_mode = bool(definition.strict_mode)
     invocation_tuple = tuple(str(part) for part in (definition.invocation or ()))
@@ -392,26 +471,13 @@ def run_pipeline(
     else:
         raise ValueError("run_pipeline requires either 'command' or 'invocation'")
 
-    if schema is not None:
-        schema_columns_dict = getattr(schema, "columns", {})
-        required_cols = {
-            name for name, column in schema_columns_dict.items() if column.required
-        }
-        optional_cols = set(schema_columns_dict) - required_cols
-        schema_column_dtypes: dict[str, object | None] = {
-            name: getattr(column, "dtype", None)
-            for name, column in schema_columns_dict.items()
-        }
-    else:
-        required_cols = set()
-        optional_cols = set()
-        schema_columns_dict = {}
-        schema_column_dtypes = {}
+    schema_snapshot = SchemaSnapshot.from_schema(schema)
+    required_cols = set(schema_snapshot.required_columns)
+    optional_cols = set(schema_snapshot.optional_columns)
+    schema_column_dtypes = dict(schema_snapshot.column_dtypes)
 
     errors = SidecarErrors()
-    rows_total = 0
-    rows_kept = 0
-    rows_dropped = 0
+    metrics = PipelineMetrics()
     total_failures = 0
     exit_code = 0
     present_columns: set[str] = set()
@@ -438,7 +504,7 @@ def run_pipeline(
     schema_columns: list[str] | None
     optional_column_order: list[str]
     if schema is not None:
-        schema_columns = list(schema_columns_dict)
+        schema_columns = list(schema_column_dtypes)
         optional_column_order = [
             column for column in schema_columns if column in optional_cols
         ]
@@ -469,7 +535,7 @@ def run_pipeline(
         resolved_keys[:] = [column for column in key_columns if column in all_columns]
 
     def _validated_chunks() -> Iterator[pd.DataFrame]:
-        nonlocal rows_total, rows_kept, rows_dropped, total_failures, exit_code
+        nonlocal metrics, total_failures, exit_code
         nonlocal validation_enabled
 
         chunks_emitted = False
@@ -483,7 +549,7 @@ def run_pipeline(
 
                 chunk_index += 1
                 chunk_rows_total = len(chunk)
-                rows_total += chunk_rows_total
+                metrics.add_total(chunk_rows_total)
 
                 for hook in metadata_hooks:
                     hook_name = _callable_name(hook)
@@ -551,8 +617,7 @@ def run_pipeline(
                                     path=str(failure_path),
                                 )
 
-                rows_kept += len(validated_chunk)
-                rows_dropped += chunk_rows_total - len(validated_chunk)
+                metrics.record(total=chunk_rows_total, kept=len(validated_chunk))
                 _refresh_column_tracking(validated_chunk)
 
                 if exit_code != 0:
@@ -758,15 +823,20 @@ def run_pipeline(
         )
         return 1
 
-    stats: Stats = {
-        "rows_total": rows_total,
-        "rows_kept": rows_kept,
-        "rows_dropped": rows_dropped,
-        "output_sha256": file_sha256(csv_path),
-    }
-    extra_stats = stats_extra() if callable(stats_extra) else stats_extra
-    for key, value in (extra_stats or {}).items():
-        stats[key] = value
+    if stats_extra_config is None:
+        extra_stats: StatsExtraMapping | None = None
+    elif callable(stats_extra_config):
+        extra_candidate = cast(
+            StatsExtra | StatsExtraMapping | None, stats_extra_config()
+        )
+        extra_stats = dict(extra_candidate) if extra_candidate is not None else None
+    else:
+        extra_stats = dict(cast(StatsExtra | StatsExtraMapping, stats_extra_config))
+
+    stats = metrics.build_stats(
+        output_sha256=file_sha256(csv_path),
+        extra=extra_stats,
+    )
 
     if stats_callback is not None:
         try:
@@ -818,7 +888,7 @@ def run_pipeline(
         use_logger.warning("quality_report_failed", **log_kwargs)
 
     if exit_code == 0:
-        use_logger.info("write_done", rows=rows_kept, path=str(csv_path))
+        use_logger.info("write_done", rows=metrics.rows_kept, path=str(csv_path))
     return exit_code
 
 

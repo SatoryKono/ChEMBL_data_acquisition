@@ -29,39 +29,34 @@ from library.pipelines.common import PipelineRunResult
 from library.table_quality import analyze_table_quality  # noqa: F401
 from library.validation import validate_testitems  # noqa: F401
 
-from . import core as _core
 from . import enrichment as testitem_enrichment  # noqa: F401
 from .cli import TestitemPipelineOptions, run_testitem_pipeline
+from .core import *  # noqa: F401,F403
+from .core import __all__ as _CORE_EXPORTS
 
-for _name in _core.__all__:
-    globals()[_name] = getattr(_core, _name)
-del _name
-
-_shared_exports = list(dict.fromkeys(_core.__all__))
 
 __all__ = list(
     dict.fromkeys(
         [
-            *_shared_exports,
+            *_CORE_EXPORTS,
             "ChemblClient",
             "TESTITEM_PUBCHEM_COLUMNS",
+            "TestitemPipelineOptions",
             "analyze_table_quality",
             "enrich",
             "file_sha256",
             "logger",
-            "molecule_catalog",
             "pc",
             "pl",
             "run_pipeline",
+            "run_testitem_pipeline",
+            "testitem_enrichment",
             "validate_testitems",
             "write_csv_deterministic",
             "write_meta_yaml",
         ]
     )
 )
-
-if "testitem_enrichment" not in __all__:
-    __all__.append("testitem_enrichment")
 
 
 def run_pipeline(config: Config, options: TestitemPipelineOptions) -> PipelineRunResult:
