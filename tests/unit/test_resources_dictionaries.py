@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 
 import pytest
 import yaml
 
 from config.paths import DICTIONARY_DIR
 from library.resources import dictionaries
+
+
+@pytest.fixture()
+def dictionary_bundle(tmp_path: Path) -> Path:
+    destination = tmp_path / "dictionary"
+    shutil.copytree(DICTIONARY_DIR, destination)
+    return destination
 
 
 @pytest.mark.unit
@@ -267,10 +275,10 @@ def test_parse_manifest__allowlist_file_extends_checksums(
     )
 
 
-def test_manifest_allows_latest_windows_sha256() -> None:
+def test_manifest_allows_latest_windows_sha256(dictionary_bundle: Path) -> None:
     """The dictionary manifest accepts hashes produced by new Git versions."""
 
-    manifest_path = DICTIONARY_DIR / "manifest.yaml"
+    manifest_path = dictionary_bundle / "manifest.yaml"
     manifest_data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
     resources = manifest_data.get("resources", {})
     entry = resources.get("dictionary_root", {})
@@ -297,6 +305,7 @@ def test_manifest_allows_latest_windows_sha256() -> None:
 
 @pytest.mark.unit
 def test_repository_allowlist_includes_sparse_index_checksum(
+    dictionary_bundle: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The repo-level allow-list must include the sparse index checksum variant."""
@@ -305,7 +314,7 @@ def test_repository_allowlist_includes_sparse_index_checksum(
     monkeypatch.setattr(dictionaries, "_KNOWN_CHECKSUM_VARIANTS", {})
 
     variants = dictionaries._iter_additional_checksums(
-        "dictionary_root", base_dir=DICTIONARY_DIR
+        "dictionary_root", base_dir=dictionary_bundle
     )
 
     assert dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM in variants
@@ -320,10 +329,10 @@ def test_repository_allowlist_includes_sparse_index_checksum(
 
 
 @pytest.mark.unit
-def test_manifest_allows_latest_target_uniprot_checksum() -> None:
+def test_manifest_allows_latest_target_uniprot_checksum(dictionary_bundle: Path) -> None:
     """The manifest lists the newly observed UniProt cache checksum variant."""
 
-    manifest_path = DICTIONARY_DIR / "manifest.yaml"
+    manifest_path = dictionary_bundle / "manifest.yaml"
     manifest_data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
     resources = manifest_data.get("resources", {})
     entry = resources.get("target_uniprot_cache", {})

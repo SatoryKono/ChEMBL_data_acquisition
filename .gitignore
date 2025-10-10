@@ -14,6 +14,7 @@ data/output/ChEMBL/processed/pairs_same_document.csv
 data/output/
 data/output-smoke/
 data/cache/pubchem_cid_cache.json
+data/cache/*.lock
 uniprot/
 **/__pycache__/
 .hypothesis/
@@ -32,6 +33,7 @@ config/dictionary/**/output*.csv
 config/dictionary/**/output*.meta.yaml
 config/dictionary/**/output*.quality_report_table.csv
 config/dictionary/**/output*.data_correlation_report_table.csv
+config/dictionary/**/*.lock
 
 # Top-level pipeline artefacts
 /output*.csv
