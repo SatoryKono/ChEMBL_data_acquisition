@@ -1,2 +1,0 @@
-target_chembl_id,guidetopharmacology_id,iuphar_target_id,iuphar_family_id,iuphar_type,iuphar_class,iuphar_subclass,iuphar_chain,iuphar_name,iuphar_synonyms
-CHEMBL2343,1534,1534,0616,Enzyme.Transferase,Enzyme,Transferase,0616>0677>0698>0690-2>0690,-,sgk1|serine/threonine-protein kinase sgk1|serum/glucocorticoid-regulated kinase 1|sgk|-
