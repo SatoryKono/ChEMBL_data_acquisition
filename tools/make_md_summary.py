@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-# ruff: noqa: E402  # requires sys.path mutation before local imports
 import argparse
 import json
 import sys
@@ -10,27 +9,13 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
-if str(ROOT_DIR) not in sys.path:  # pragma: no cover - import side effect
-    sys.path.insert(0, str(ROOT_DIR))
-
-# ruff: noqa: E402  # allow importing project modules after sys.path adjustments
-from scripts.run_tests import build_summary_markdown
+from library.reporting.test_summary import (
+    build_summary_markdown,
+    validate_summary_report,
+)
 
 DEFAULT_INPUT = Path("reports/test_report.json")
 DEFAULT_OUTPUT = Path("reports/test_summary.md")
-REQUIRED_SUMMARY_KEYS = {
-    "total",
-    "passed",
-    "failed",
-    "skipped",
-    "xfailed",
-    "xpassed",
-    "error",
-    "success_rate",
-}
-
-
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=("Render a Markdown summary from a structured pytest JSON report.")
@@ -77,51 +62,12 @@ def _write_summary(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def _validate_report(report: dict[str, Any]) -> None:
-    if not isinstance(report, dict):
-        raise ValueError("Report payload must be a JSON object")
-
-    summary = report.get("summary")
-    if not isinstance(summary, dict):
-        raise ValueError("Report missing 'summary' section")
-
-    missing = REQUIRED_SUMMARY_KEYS - summary.keys()
-    if missing:
-        missing_list = ", ".join(sorted(missing))
-        raise ValueError(f"Summary missing required keys: {missing_list}")
-
-    for key in REQUIRED_SUMMARY_KEYS - {"success_rate"}:
-        value = summary.get(key)
-        if not isinstance(value, int):
-            raise ValueError(
-                f"Summary field '{key}' must be an integer, got {type(value).__name__}"
-            )
-
-    success_rate = summary.get("success_rate")
-    if not isinstance(success_rate, int | float):
-        raise ValueError("Summary field 'success_rate' must be numeric")
-
-    tests = report.get("tests")
-    if not isinstance(tests, list):
-        raise ValueError("Report 'tests' section must be a list")
-    for index, entry in enumerate(tests):
-        if not isinstance(entry, dict):
-            raise ValueError(
-                f"Test entry at index {index} must be an object, "
-                f"got {type(entry).__name__}"
-            )
-
-    meta = report.get("meta")
-    if meta is not None and not isinstance(meta, dict):
-        raise ValueError("Report 'meta' section must be an object when present")
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
 
     try:
         report = _load_report(args.input)
-        _validate_report(report)
+        validate_summary_report(report)
         summary_markdown = build_summary_markdown(report)
         _write_summary(args.output, summary_markdown)
     except ValueError as exc:
