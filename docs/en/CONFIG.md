@@ -319,3 +319,13 @@ line overrides both the auto-generated and environment-provided values.
 For further customisation consult the Pydantic models in
 [`library/config/models.py`](../../library/config/models.py); the documentation above mirrors the
 available fields and their default values.
+
+## Pipeline Configuration (`config/pipeline/`)
+
+The `config/pipeline/` directory uses a dual-file system to separate high-level ETL orchestration from detailed post-processing steps. For each data type (e.g., "document"), there are two corresponding YAML files:
+
+*   **Singular (`document.yaml`, `activity.yaml`, etc.):** These files define the high-level ETL orchestration. They specify the overall pipeline's inputs, outputs, schemas, and the parameters that are passed to the command-line scripts. This layer is concerned with the "what" of the data acquisition process.
+
+*   **Plural (`documents.yaml`, `activities.yaml`, etc.):** These files define the detailed post-processing steps. They specify a sequence of functions (or "steps") that are applied to the data *after* it has been extracted. This layer is concerned with the "how" of data transformation and cleaning.
+
+This separation of concerns allows for a clear distinction between the data acquisition workflow and the data transformation logic, making the pipelines easier to configure, maintain, and extend.
