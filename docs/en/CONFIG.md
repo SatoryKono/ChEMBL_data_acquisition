@@ -191,6 +191,7 @@ production use.
 | `keep_na_markers` | `false` | Preserve NA markers instead of dropping rows. |
 | `exist_ok` | `true` | Automatically create missing directories. |
 | `output_stamp_mode` | `omit` | Controls default filenames: `omit` keeps `output.<stem>.csv`, `require` enforces passing `--date`. |
+| `default_date_prefix` | `20240101` | Deterministic date prefix applied when `--date` is omitted (`CHEMBL_DA_DEFAULT_DATE_PREFIX` overrides it). |
 
 ### `local.init`
 

@@ -34,6 +34,7 @@ import argparse
 import hashlib
 import json
 import logging
+import os
 import shutil
 import time
 import uuid
@@ -112,6 +113,10 @@ _DEFAULT_OUTPUT_STEMS = DEFAULT_OUTPUT_STEMS
 _UNLINK_MAX_ATTEMPTS = 5
 _UNLINK_RETRY_SLEEP_SECONDS = 0.1
 _WINDOWS_SHARING_VIOLATION = 32
+
+_DEFAULT_DATE_ENV = "CHEMBL_DA_DEFAULT_DATE"
+_DEFAULT_DATE_ENV_ALIAS = "CHEMBL_DA_DEFAULT_DATE_PREFIX"
+_DEFAULT_DATE_PREFIX = "19700101"
 
 
 @dataclass(frozen=True)
@@ -324,6 +329,67 @@ def _validate_override_keys(
         raise ValueError(f"unknown {kind} override for step(s): {joined}")
 
 
+def _normalise_date_prefix(value: str) -> str:
+    """Validate and normalise a date prefix value."""
+
+    candidate = value.strip()
+    if not candidate:
+        raise ValueError("date prefix must not be empty when resolved automatically")
+    if not candidate.isdigit() or len(candidate) != 8:
+        raise ValueError(
+            "date prefix must be an eight digit YYYYMMDD string, got"
+            f" {value!r}"
+        )
+    return candidate
+
+
+def _resolve_default_date_prefix(
+    args: argparse.Namespace,
+    *,
+    base_path: Path,
+) -> str:
+    """Return a deterministic default date prefix for CLI invocations."""
+
+    for env_name in (_DEFAULT_DATE_ENV, _DEFAULT_DATE_ENV_ALIAS):
+        env_value = os.environ.get(env_name)
+        if env_value is not None:
+            return _normalise_date_prefix(env_value)
+
+    config_candidate = getattr(args, "config", None) or DEFAULT_CONFIG_PATH
+    config_path = Path(config_candidate).expanduser()
+
+    if config_path.exists():
+        try:
+            base_for_config = base_path if base_path.exists() else None
+            config_obj = load_config(config_path, base_path=base_for_config)
+        except (ConfigError, ConfigLoaderError, ValidationError, OSError):
+            pass
+        else:
+            local_cfg = getattr(config_obj, "local", None)
+            io_cfg = getattr(local_cfg, "io", None)
+            default_prefix = getattr(io_cfg, "default_date_prefix", None)
+            if isinstance(default_prefix, str) and default_prefix.strip():
+                return _normalise_date_prefix(default_prefix)
+
+    return _DEFAULT_DATE_PREFIX
+
+
+def _ensure_date_prefix(args: argparse.Namespace, *, base_path: Path) -> str:
+    """Ensure ``args.date_prefix`` is populated with a deterministic value."""
+
+    current = getattr(args, "date_prefix", None)
+    if isinstance(current, str):
+        stripped = current.strip()
+        if not stripped:
+            raise ValueError("--date must not be an empty string")
+        setattr(args, "date_prefix", stripped)
+        return stripped
+
+    default_prefix = _resolve_default_date_prefix(args, base_path=base_path)
+    setattr(args, "date_prefix", default_prefix)
+    return default_prefix
+
+
 def _configure_logging(
     level_name: str,
     *,
@@ -388,8 +454,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--date",
         dest="date_prefix",
-        default=datetime.now(UTC).strftime("%Y%m%d"),
-        help="Date prefix used to build output filenames",
+        default=None,
+        help=(
+            "Date prefix used to build output filenames. Defaults to "
+            "local.io.default_date_prefix or CHEMBL_DA_DEFAULT_DATE_PREFIX"
+        ),
     )
     parser.add_argument(
         "--log-level",
@@ -1695,8 +1764,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit(f"invalid log level: {args.log_level}")
 
     script_name = Path(__file__).with_suffix("").name
-    base_cfg = LoggerConfig(level=desired_level, run_id=uuid.uuid4().hex)
     resolved_base_path = Path(args.base_path).expanduser().resolve()
+    try:
+        _ensure_date_prefix(args, base_path=resolved_base_path)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    base_cfg = LoggerConfig(level=desired_level, run_id=uuid.uuid4().hex)
     log_directory = resolved_base_path / "logs"
     status = 1
 

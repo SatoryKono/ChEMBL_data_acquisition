@@ -243,6 +243,7 @@ local:
     keep_na_markers: false  # Preserve identifiers matching NA markers instead of dropping them
     exist_ok: true  # Create directories with ensure_dirs if missing
     output_stamp_mode: "omit"  # Append --date token to defaults ('require') or keep deterministic names ('omit')
+    default_date_prefix: "20240101"  # Default for --date when omitted (env: CHEMBL_DA_DEFAULT_DATE_PREFIX)
   init:
     same_doc: "$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"  # Source workbook
     all_doc: "$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"
