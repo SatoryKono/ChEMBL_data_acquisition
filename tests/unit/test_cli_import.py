@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 
 import pytest
 
@@ -16,3 +17,11 @@ def test_get_document_data_cli__import_smoke() -> None:
 
     assert cli_module is impl_module
     assert hasattr(cli_module, "main")
+    assert cli_module.DEFAULT_INPUT_NAME == impl_module.DEFAULT_INPUT_NAME
+    assert cli_module._EXPORT_COLUMNS is impl_module._EXPORT_COLUMNS
+
+    parser, _log_cfg = cli_module.build_parser()
+    args = parser.parse_args(["--mode", "pubmed"])
+
+    assert args.mode == "pubmed"
+    assert args.input_csv == Path(cli_module.DEFAULT_INPUT_NAME)
