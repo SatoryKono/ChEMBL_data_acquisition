@@ -12,8 +12,10 @@ import pandas as pd
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from library.cli.commands import get_data
 from library.config import Config, ConfigLoaderError
 from library.pipelines.common import PipelineRunResult
+from library.pipelines.document import DocumentPipelineOptions
 from scripts import get_target_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_lines
@@ -202,6 +204,158 @@ def test_pipeline_subset__schema_and_duplicates(
     assert manifest_failure["steps"][0]["status"] == "failed"
     assert manifest_failure["steps"][0]["reason"] == "schema_mismatch"
     assert manifest_failure["steps"][0]["output"]["exists"] is False
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("mode", ["chembl", "pubmed"])
+def test_pipeline_registry__document_mode_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    cfg = _prepare_environment(tmp_path)
+    updated_output_stems = dict(cfg.output_stems)
+    updated_output_stems["document"] = f"documents_{mode}"
+    cfg = replace(cfg, output_stems=updated_output_stems)
+
+    _write_input(
+        cfg,
+        "document",
+        pd.DataFrame(
+            [
+                {
+                    "document_chembl_id": "CHEMBL1",
+                    "title": "Example",
+                    "pubmed_id": "1",
+                }
+            ]
+        ),
+    )
+    _write_input(
+        cfg,
+        "activity",
+        pd.DataFrame([{"activity_id": "A1", "document_chembl_id": "CHEMBL1"}]),
+    )
+
+    stream = io.StringIO()
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id=f"mode-{mode}")
+    )
+    monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+    monkeypatch.setattr(
+        get_data, "load_config", lambda *args, **kwargs: Config(), raising=False
+    )
+
+    observed_modes: list[str] = []
+    consumed_payloads: list[str] = []
+
+    def _build_document_options(
+        current_cfg: get_data.PipelineRunConfig,
+        input_path: Path,
+        output_path: Path,
+    ) -> DocumentPipelineOptions:
+        assert input_path == current_cfg.input_path("document")
+        return DocumentPipelineOptions(
+            input_csv=input_path,
+            output_csv=output_path,
+            mode=mode,
+            limit=current_cfg.limit,
+            force=current_cfg.force,
+        )
+
+    def _run_document_pipeline(
+        _config: Config, options: DocumentPipelineOptions
+    ) -> PipelineRunResult:
+        observed_modes.append(options.mode)
+        destination = Path(options.output_csv)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(
+            "document_chembl_id,title\nCHEMBL1,Example\n", encoding="utf-8"
+        )
+        return PipelineRunResult(
+            exit_code=0,
+            output_path=destination,
+            executed=True,
+            reason=None,
+            written=True,
+        )
+
+    def _run_activity_pipeline(
+        _config: Config, options: object
+    ) -> PipelineRunResult:
+        output_destination = Path(options.output_csv)
+        consumed_path = cfg.output_dir / (
+            f"output.documents_{mode}_{cfg.date_prefix}.csv"
+        )
+        assert consumed_path.exists()
+        consumed_payloads.append(consumed_path.read_text(encoding="utf-8"))
+        output_destination.parent.mkdir(parents=True, exist_ok=True)
+        output_destination.write_text("activity_id\nA1\n", encoding="utf-8")
+        return PipelineRunResult(
+            exit_code=0,
+            output_path=output_destination,
+            executed=True,
+            reason=None,
+            written=True,
+        )
+
+    monkeypatch.setattr(
+        get_data,
+        "_PIPELINE_APIS",
+        {
+            "document": get_data.PipelineApi(
+                _build_document_options, _run_document_pipeline
+            ),
+            "activity": get_data.PipelineApi(
+                get_data._build_activity_options, _run_activity_pipeline
+            ),
+        },
+        raising=False,
+    )
+
+    document_step = next(
+        step for step in get_data.DEFAULT_PIPELINE_STEPS if step.name == "document"
+    )
+    activity_step = next(
+        step for step in get_data.DEFAULT_PIPELINE_STEPS if step.name == "activity"
+    )
+    mutated_document = replace(
+        document_step,
+        output_stem=f"documents_{mode}",
+        produces=(f"documents_{mode}",),
+    )
+    mutated_activity = replace(
+        activity_step,
+        consumes=(f"documents_{mode}",),
+        depends_on=(),
+    )
+
+    status = get_data.run_pipeline(cfg, steps=(mutated_document, mutated_activity))
+
+    assert status == 0
+    assert observed_modes == [mode]
+    assert consumed_payloads and "CHEMBL1" in consumed_payloads[0]
+
+    document_output = cfg.output_path("document")
+    activity_output = cfg.output_path("activity")
+    assert document_output.name == f"output.documents_{mode}_{cfg.date_prefix}.csv"
+    assert document_output.exists()
+    assert activity_output.exists()
+
+    logs = parse_log_lines(stream.getvalue())
+    assert not any(
+        record.get("event") == "step_dependencies_missing" for record in logs
+    )
+
+    manifest = _load_manifest(cfg)
+    assert [entry["name"] for entry in manifest["steps"]] == [
+        "document",
+        "activity",
+    ]
+    assert [entry["status"] for entry in manifest["steps"]] == [
+        "success",
+        "success",
+    ]
+    assert manifest["steps"][0]["output"]["path"] == str(document_output)
+    assert manifest["steps"][1]["output"]["path"] == str(activity_output)
 
 
 @pytest.mark.integration
