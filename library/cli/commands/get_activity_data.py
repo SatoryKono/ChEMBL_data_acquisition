@@ -10,6 +10,8 @@ from library.cli.activity_api import (
     main,
     register_activity_pipeline_hooks,
     run_activity_pipeline,
+    run_chembl,
+    _emit_completion_message,
 )
 
 
@@ -19,6 +21,8 @@ __all__ = (
     "MIN_ACTIVITY_TIMEOUT",
     "register_activity_pipeline_hooks",
     "run_activity_pipeline",
+    "run_chembl",
+    "_emit_completion_message",
     "main",
 )
 

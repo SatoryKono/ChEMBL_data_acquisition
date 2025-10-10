@@ -28,6 +28,8 @@ __all__ = (
     "ensure_entrypoint_exports",
     "register_activity_pipeline_hooks",
     "run_activity_pipeline",
+    "run_chembl",
+    "_emit_completion_message",
     "main",
 )
 
@@ -39,6 +41,8 @@ _COMPAT_EXPORTS: tuple[str, ...] = (
     "MIN_ACTIVITY_TIMEOUT",
     "register_activity_pipeline_hooks",
     "run_activity_pipeline",
+    "run_chembl",
+    "_emit_completion_message",
 )
 
 
@@ -97,6 +101,28 @@ def run_activity_pipeline(
     )
 
 
+def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
+    """Delegate to the entrypoint runner for backward compatibility."""
+
+    activity_entrypoint = _load_entrypoint_module()
+    entry_run = cast(
+        Callable[[Config, argparse.Namespace], int],
+        getattr(activity_entrypoint, "run_chembl"),
+    )
+    return entry_run(cfg, args)
+
+
+def _emit_completion_message(*args, **kwargs) -> None:
+    """Delegate completion hooks to the entrypoint implementation."""
+
+    activity_entrypoint = _load_entrypoint_module()
+    entry_emit = cast(
+        Callable[..., None],
+        getattr(activity_entrypoint, "_emit_completion_message"),
+    )
+    entry_emit(*args, **kwargs)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Delegate to :mod:`library.cli.entrypoints.activity` without circular imports."""
 
@@ -112,6 +138,8 @@ def ensure_entrypoint_exports(entrypoint: ModuleType | None = None) -> ModuleTyp
         entrypoint = _load_entrypoint_module()
 
     for name in _COMPAT_EXPORTS:
+        if hasattr(entrypoint, name):
+            continue
         setattr(entrypoint, name, globals()[name])
 
     entrypoint_all = getattr(entrypoint, "__all__", ())
