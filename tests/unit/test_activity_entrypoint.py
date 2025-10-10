@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import importlib
 from pathlib import Path
 from typing import Any
@@ -202,3 +203,28 @@ def test_emit_completion_message__streamed_metrics(
     assert metrics["text"] == "value"
     assert metrics["flag"] == 1
     assert metrics["other"] == "repr-object"
+
+
+@pytest.mark.unit
+def test_load_assay_src_lookup__coerces_numeric_values(tmp_path: Path) -> None:
+    dictionary_dir = tmp_path / "dictionary"
+    assay_dir = dictionary_dir / "_assay"
+    assay_dir.mkdir(parents=True)
+    csv_path = assay_dir / "assay.csv"
+
+    with csv_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["assay_chembl_id", "src_assay_id"])
+        writer.writerow(["CHEMBL_INT", 357280])
+        writer.writerow(["CHEMBL_FLOAT", 357280.0])
+        writer.writerow(["CHEMBL_STR", "  001  "])
+        writer.writerow(["CHEMBL_EMPTY", "   "])
+        writer.writerow(["", "12345"])
+
+    lookup = activity._load_assay_src_lookup(dictionary_dir)
+
+    assert lookup["CHEMBL_INT"] == "357280"
+    assert lookup["CHEMBL_FLOAT"] == "357280"
+    assert lookup["CHEMBL_STR"] == "001"
+    assert "CHEMBL_EMPTY" not in lookup
+    assert "" not in lookup
