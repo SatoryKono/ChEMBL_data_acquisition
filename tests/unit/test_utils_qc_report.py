@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from library.qa.table_quality import TableQualityProfiler
 from library.utils.qc_report import build_qc_summary
 
 
