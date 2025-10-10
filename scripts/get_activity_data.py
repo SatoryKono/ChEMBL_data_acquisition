@@ -141,6 +141,11 @@ except ImportError:
 
 run_cli_command = _run_cli_command
 
+# Preserve the attribute expected by tests and monkeypatching callers while reusing the
+# CLI helper import.  This mirrors the aliasing that happens inside the entrypoint module
+# but keeps the helper available on the script module for external patching.
+_generate_activity_postprocess_metrics = _cli_generate_activity_postprocess_metrics
+
 __all__ = (
     "file_sha256",
     "write_meta_yaml",
