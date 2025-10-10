@@ -12,17 +12,16 @@ from pathlib import Path
 
 import pandas as pd
 
-from library import cli
-from library import io
-from library.cli import (
-    configure_logger,
-)
+from library import cli, io
 from library.cli import (
     build_parser as base_parser,
 )
+from library.cli import (
+    configure_logger,
+)
+from library.common.log import logger
 from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.pipelines.document.type_classifier import compute_scores, decide_label
-from library.common.log import logger
 
 
 def _split_terms(value: object) -> Iterable[str]:

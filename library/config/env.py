@@ -45,6 +45,7 @@ def _alias_map() -> dict[str, tuple[str, ...]]:
     # Ensure all values are tuples to match the expected return type
     return {k: tuple(v) for k, v in _ALIAS_MAP.items()}
 
+
 def _normalize_base_path(value: Path | str) -> Path:
     """Return *value* coerced into an absolute :class:`~pathlib.Path`."""
 
@@ -277,4 +278,3 @@ def _apply_env_overrides(
         _set_by_path(data, parts, value)
         overrides[tuple(parts)] = key
     return overrides, warnings
-

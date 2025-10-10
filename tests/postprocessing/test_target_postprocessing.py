@@ -38,9 +38,7 @@ def _load_postprocessing_cellularity_module():
     target_pkg = sys.modules.get("library.postprocessing.target")
     if target_pkg is None:
         target_pkg = types.ModuleType("library.postprocessing.target")
-        target_pkg.__path__ = [
-            str(REPO_ROOT / "library" / "postprocessing" / "target")
-        ]
+        target_pkg.__path__ = [str(REPO_ROOT / "library" / "postprocessing" / "target")]
         sys.modules["library.postprocessing.target"] = target_pkg
     if not hasattr(sys.modules["library.postprocessing"], "target"):
         sys.modules["library.postprocessing"].target = target_pkg
@@ -128,7 +126,9 @@ def test_postprocess_target_table_file__writes_expected_bytes(
 
     assert output_path == working_output
     # Normalise EOL across platforms
-    assert working_output.read_bytes().replace(b"\r\n", b"\n") == expected_path.read_bytes().replace(b"\r\n", b"\n")
+    assert working_output.read_bytes().replace(
+        b"\r\n", b"\n"
+    ) == expected_path.read_bytes().replace(b"\r\n", b"\n")
 
     result = pd.read_csv(working_output, dtype=str, keep_default_na=False).astype(
         "string"
@@ -157,13 +157,15 @@ def test_process_target_names__strips_bom_headers(tmp_path: Path) -> None:
                 "active_component_type",
             ]
         )
-        writer.writerow([
-            "CHEMBL_TGT",
-            "Example Compound",
-            "Example Alias|Example Compound",
-            "Na|Cl",
-            "protein",
-        ])
+        writer.writerow(
+            [
+                "CHEMBL_TGT",
+                "Example Compound",
+                "Example Alias|Example Compound",
+                "Na|Cl",
+                "protein",
+            ]
+        )
 
     result_info = process_target_names(csv_path)
     output_path = Path(result_info["path"])
@@ -288,6 +290,8 @@ def test_classify_by_fetch__trailing_whitespace_lineage_remains_ambiguous() -> N
     result = classifier.classify_by_fetch("10335")
 
     assert result == "ambiguous"
+
+
 def test_classify_by_fetch__trailing_spaces_remain_ambiguous() -> None:
     lineage = [
         "Cellular organisms",
@@ -491,7 +495,9 @@ def test_isoform_output_columns__match_spec(snapshot_resource: Path) -> None:
 
 
 @pytest.mark.unit
-def test_isoform_make_triples_fixture__pads_missing_values(snapshot_resource: Path) -> None:
+def test_isoform_make_triples_fixture__pads_missing_values(
+    snapshot_resource: Path,
+) -> None:
     frame = pd.read_csv(
         snapshot_resource / "target_isoform_length_mismatch.csv",
         dtype=str,
@@ -511,7 +517,9 @@ def test_isoform_make_triples_fixture__pads_missing_values(snapshot_resource: Pa
 
 
 @pytest.mark.unit
-def test_isoform_process_targets__writes_isoform_prefix(tmp_path: Path, snapshot_resource: Path) -> None:
+def test_isoform_process_targets__writes_isoform_prefix(
+    tmp_path: Path, snapshot_resource: Path
+) -> None:
     source = snapshot_resource / "target_isoform_minimal.csv"
     input_path = tmp_path / "output.target_20250101.csv"
     input_path.write_bytes(source.read_bytes())

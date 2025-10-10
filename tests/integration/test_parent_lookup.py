@@ -15,8 +15,12 @@ def _stub_parent_catalog_calls(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(catalog, "query_parent_catalog", lambda *args, **kwargs: {})
     monkeypatch.setattr(catalog, "load_parent_catalog", lambda *args, **kwargs: {})
-    monkeypatch.setattr(catalog, "update_parent_catalog_cache", lambda *args, **kwargs: None)
-    monkeypatch.setattr(catalog, "write_parent_catalog_cache", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        catalog, "update_parent_catalog_cache", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        catalog, "write_parent_catalog_cache", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(
         catalog.molecule_catalog,
         "fetch_parent_catalog_for",
@@ -94,10 +98,7 @@ def _extract_event(
             False,
         ),
         (
-            [
-                f"CHEMBL{value:07d}"
-                for value in range(1024, 998, -1)
-            ],
+            [f"CHEMBL{value:07d}" for value in range(1024, 998, -1)],
             True,
         ),
     ],

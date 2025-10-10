@@ -39,7 +39,9 @@ def test_add_cellularity_smart__prefers_lineage_over_fetch() -> None:
 
 
 @pytest.mark.unit
-def test_add_cellularity_smart__falls_back_to_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_add_cellularity_smart__falls_back_to_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: dict[str, str | None] = {}
 
     def _fetch(tax_id: str, email: str | None) -> list[str]:

@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import argparse
 import stat
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, Iterable
-
-import pandas as pd
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from library.config import Config
@@ -55,16 +54,18 @@ def logger_stub(monkeypatch: pytest.MonkeyPatch) -> _MemoryLogger:
     "latin, cyrillic",
     list(get_target_data._RUSSIAN_KEYBOARD_MAP.items())[:10],
 )
-def test_translate_keyboard_layout__single_characters(latin: str, cyrillic: str) -> None:
+def test_translate_keyboard_layout__single_characters(
+    latin: str, cyrillic: str
+) -> None:
     assert get_target_data._translate_keyboard_layout(latin) == cyrillic
     assert get_target_data._translate_keyboard_layout(latin.upper()) == cyrillic.upper()
 
 
-@pytest.mark.parametrize("text", ["Hello", "Test-Value", "123", "aA" ])
+@pytest.mark.parametrize("text", ["Hello", "Test-Value", "123", "aA"])
 def test_translate_keyboard_layout__composite_strings(text: str) -> None:
     translated = get_target_data._translate_keyboard_layout(text)
     assert len(translated) == len(text)
-    for original, result in zip(text, translated):
+    for original, result in zip(text, translated, strict=False):
         lower = original.lower()
         mapped = get_target_data._RUSSIAN_KEYBOARD_MAP.get(lower, lower)
         expected = mapped.upper() if original.isupper() else mapped
@@ -162,9 +163,7 @@ def test_prepare_raw_destination__handles_permission_error(
         unlink_calls["count"] += 1
         original_unlink(self, *args, **kwargs)
 
-    monkeypatch.setattr(
-        get_target_data.Path, "unlink", _fake_unlink, raising=False
-    )
+    monkeypatch.setattr(get_target_data.Path, "unlink", _fake_unlink, raising=False)
 
     chmod_modes: list[int] = []
 
@@ -191,9 +190,7 @@ def test_prepare_raw_destination__raises_when_unlink_fails(
     def _always_fail(*args: object, **kwargs: object) -> None:
         raise PermissionError("locked")
 
-    monkeypatch.setattr(
-        get_target_data.Path, "unlink", _always_fail, raising=False
-    )
+    monkeypatch.setattr(get_target_data.Path, "unlink", _always_fail, raising=False)
     monkeypatch.setattr(get_target_data.os, "chmod", lambda *_, **__: None)
 
     with pytest.raises(OSError):
@@ -218,7 +215,9 @@ def test_collect_uniprot_candidate_columns__orders_columns(cfg: Config) -> None:
     assert any("accession" in column for column in ordered)
 
 
-def test_ensure_merge_column_present__uses_alias(cfg: Config, logger_stub: _MemoryLogger) -> None:
+def test_ensure_merge_column_present__uses_alias(
+    cfg: Config, logger_stub: _MemoryLogger
+) -> None:
     cfg.target.all.uniprot_column = "canonical_uniprot"
     frame = pd.DataFrame(
         {
@@ -227,19 +226,27 @@ def test_ensure_merge_column_present__uses_alias(cfg: Config, logger_stub: _Memo
         }
     )
 
-    result = get_target_data._ensure_merge_column_present(frame, cfg.target.all.uniprot_column, cfg)
+    result = get_target_data._ensure_merge_column_present(
+        frame, cfg.target.all.uniprot_column, cfg
+    )
 
     assert "canonical_uniprot" in result.columns
     assert result.loc[0, "canonical_uniprot"] == "P12345"
-    assert any(event == "uniprot_merge_column_alias" for _, event, _ in logger_stub.events)
+    assert any(
+        event == "uniprot_merge_column_alias" for _, event, _ in logger_stub.events
+    )
 
 
-def test_ensure_merge_column_present__raises(cfg: Config, logger_stub: _MemoryLogger) -> None:
+def test_ensure_merge_column_present__raises(
+    cfg: Config, logger_stub: _MemoryLogger
+) -> None:
     cfg.target.all.uniprot_column = "canonical_uniprot"
     frame = pd.DataFrame({"target_chembl_id": ["CHEMBL1"]})
 
     with pytest.raises(get_target_data.PipelineError):
-        get_target_data._ensure_merge_column_present(frame, cfg.target.all.uniprot_column, cfg)
+        get_target_data._ensure_merge_column_present(
+            frame, cfg.target.all.uniprot_column, cfg
+        )
 
     assert any(event == "missing_uniprot_column" for _, event, _ in logger_stub.events)
 
@@ -314,7 +321,11 @@ def test_run__skip_existing(
 
     assert exit_code == 0
     assert not called
-    assert ("info", "pipeline_skip_existing", {"output": str(final_out)}) in logger_stub.events
+    assert (
+        "info",
+        "pipeline_skip_existing",
+        {"output": str(final_out)},
+    ) in logger_stub.events
 
 
 def test_run_uniprot__invokes_target_postprocess(
@@ -453,7 +464,9 @@ def test_fetch_uniprot__no_candidates_writes_empty_output(
     )
 
     def _unexpected(*_: object, **__: object) -> None:  # pragma: no cover - defensive
-        raise AssertionError("run_uniprot should not be invoked when no candidates are found")
+        raise AssertionError(
+            "run_uniprot should not be invoked when no candidates are found"
+        )
 
     monkeypatch.setattr(get_target_data, "run_uniprot", _unexpected)
 
@@ -559,9 +572,7 @@ def test_fetch_uniprot__missing_output_creates_placeholder(
         candidate_columns=["uniprot_id"],
     )
 
-    monkeypatch.setattr(
-        get_target_data, "_build_uniprot_query_plan", lambda *_: plan
-    )
+    monkeypatch.setattr(get_target_data, "_build_uniprot_query_plan", lambda *_: plan)
 
     def _fake_run(cfg_obj: Config, args: argparse.Namespace) -> int:
         assert Path(args.final_out) == output_csv
@@ -634,10 +645,14 @@ def test_postprocess_organism_export__success(
 
     def _fake_postprocess(path: str) -> str:
         assert path == str(source)
-        output_path.write_text("target_chembl_id,target_type\nCHEMBL1,Multicellular\n", encoding="utf-8")
+        output_path.write_text(
+            "target_chembl_id,target_type\nCHEMBL1,Multicellular\n", encoding="utf-8"
+        )
         return str(output_path)
 
-    monkeypatch.setattr(get_target_data.target_pp, "postprocess_target_table", _fake_postprocess)
+    monkeypatch.setattr(
+        get_target_data.target_pp, "postprocess_target_table", _fake_postprocess
+    )
 
     result = get_target_data._postprocess_organism_export(source, cfg=cfg)
 
@@ -661,7 +676,9 @@ def test_postprocess_organism_export__failure(
     def _failing_postprocess(path: str) -> str:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(get_target_data.target_pp, "postprocess_target_table", _failing_postprocess)
+    monkeypatch.setattr(
+        get_target_data.target_pp, "postprocess_target_table", _failing_postprocess
+    )
 
     result = get_target_data._postprocess_organism_export(source, cfg=cfg)
 
@@ -834,7 +851,9 @@ def test_finalize_raw_dump_writer__missing_method(
     ) in debug_events
 
 
-def test_finalize_raw_dump_writer__error(tmp_path: Path, logger_stub: _MemoryLogger) -> None:
+def test_finalize_raw_dump_writer__error(
+    tmp_path: Path, logger_stub: _MemoryLogger
+) -> None:
     class _Writer:
         def finalize(self) -> None:
             raise OSError("boom")

@@ -38,7 +38,9 @@ def test_write_csv_deterministic__orders_columns_and_rows(tmp_path: Path) -> Non
 
 
 @pytest.mark.unit
-def test_write_csv_deterministic__drops_unexpected_columns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_write_csv_deterministic__drops_unexpected_columns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     frame = pd.DataFrame(
         {
             "id": [2, 1],

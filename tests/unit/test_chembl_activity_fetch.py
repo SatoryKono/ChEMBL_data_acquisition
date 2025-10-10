@@ -11,7 +11,9 @@ class _RecordingClient:
     def __init__(self) -> None:
         self.urls: list[str] = []
 
-    def request_json(self, url: str, *, cfg: ApiCfg, timeout: float) -> dict[str, object]:
+    def request_json(
+        self, url: str, *, cfg: ApiCfg, timeout: float
+    ) -> dict[str, object]:
         self.urls.append(url)
         return {"activities": [{"activity_id": "ACT1"}], "page_meta": {}}
 

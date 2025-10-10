@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, MutableMapping, Sequence
+from typing import Any
 
 import yaml
 
@@ -142,7 +143,9 @@ def finalise_csv_output(
     """Write metadata and optional quality artefacts for ``csv_path``."""
 
     path = Path(csv_path)
-    stats = _build_stats(path, rows_total=rows_total, rows_kept=rows_kept, extra=stats_extra)
+    stats = _build_stats(
+        path, rows_total=rows_total, rows_kept=rows_kept, extra=stats_extra
+    )
     meta_path = write_meta_yaml(
         csv_path=path,
         command=command,
@@ -159,7 +162,11 @@ def finalise_csv_output(
     quality_sha: str | None = None
     if quality_summary is not None or quality_builder is not None:
         report_data = _normalise_quality_summary(quality_summary, quality_builder)
-        destination = Path(quality_path) if quality_path is not None else path.with_suffix(".quality.json")
+        destination = (
+            Path(quality_path)
+            if quality_path is not None
+            else path.with_suffix(".quality.json")
+        )
         try:
             destination.write_text(
                 json.dumps(report_data, ensure_ascii=False, indent=2),
@@ -176,7 +183,9 @@ def finalise_csv_output(
             quality_hook(quality_subject)
         except Exception as exc:  # pragma: no cover - propagated to caller
             raise QualityAnalysisError(str(exc)) from exc
-    elif quality_profiler is not None and bool(_cfg_value(quality_config, "enable", False)):
+    elif quality_profiler is not None and bool(
+        _cfg_value(quality_config, "enable", False)
+    ):
         table_name = quality_table_name or path.with_suffix("").name
         destination_dir = quality_destination or path.parent
         try:
@@ -201,7 +210,9 @@ def finalise_csv_output(
     )
 
 
-def merge_run_output(entry: MutableMapping[str, Any], report: PipelineOutputReport) -> None:
+def merge_run_output(
+    entry: MutableMapping[str, Any], report: PipelineOutputReport
+) -> None:
     """Merge ``report`` statistics into a manifest ``entry`` in place."""
 
     stats: dict[str, Any] = {}

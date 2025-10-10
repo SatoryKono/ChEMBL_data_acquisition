@@ -1,20 +1,18 @@
 """Transformation steps for document postprocessing."""
+
 from __future__ import annotations
 
 import unicodedata
 
 import pandas as pd
- 
-from library.postprocess.common import run_steps
-from library.postprocess.common.logging import PipelineRunMetrics
- 
+
 from library.pipelines.common.metadata import get_pipeline_version
- 
+from library.postprocess.common import run_steps
 from library.postprocess.common.config import (
     load_pipeline_config,
     normalize_pipeline_version,
 )
- 
+from library.postprocess.common.logging import PipelineRunMetrics
 
 from .schema import DOCUMENT_SCHEMA, validate_documents
 
@@ -39,9 +37,11 @@ def normalize_document_fields(
             series = series.str.strip().str.replace(r"\s+", " ", regex=True)
         if normalise_unicode:
             series = series.map(
-                lambda value: unicodedata.normalize("NFKC", value)
-                if not pd.isna(value)
-                else value
+                lambda value: (
+                    unicodedata.normalize("NFKC", value)
+                    if not pd.isna(value)
+                    else value
+                )
             )
         normalized[column] = series.replace({"": pd.NA})
 
@@ -194,10 +194,9 @@ def finalize_document_records(
         prepared["publication_year"] = prepared["publication_year"].astype("Int64")
 
     if ensure_unique_ids and "document_chembl_id" in prepared.columns:
-        prepared = (
-            prepared.drop_duplicates(subset=["document_chembl_id"], keep="first")
-            .reset_index(drop=True)
-        )
+        prepared = prepared.drop_duplicates(
+            subset=["document_chembl_id"], keep="first"
+        ).reset_index(drop=True)
     else:
         prepared = prepared.reset_index(drop=True)
 
@@ -214,9 +213,9 @@ def finalize_document_records(
         if sort_by:
             sort_columns = [col for col in sort_by if col in ordered.columns]
             if sort_columns:
-                ordered = ordered.sort_values(sort_columns, kind="mergesort").reset_index(
-                    drop=True
-                )
+                ordered = ordered.sort_values(
+                    sort_columns, kind="mergesort"
+                ).reset_index(drop=True)
         return ordered
 
     validated = validate_documents(prepared, context="document_finalization")

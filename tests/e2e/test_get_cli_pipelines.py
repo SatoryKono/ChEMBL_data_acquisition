@@ -103,7 +103,9 @@ def test_cli_wrappers_delegate_to_cli_instance(
 class _DummyChemblClient:
     """Minimal context manager used to stub :class:`ChemblClient`."""
 
-    def __init__(self, *args, **kwargs) -> None:  # pragma: no cover - interface compatibility
+    def __init__(
+        self, *args, **kwargs
+    ) -> None:  # pragma: no cover - interface compatibility
         pass
 
     def __enter__(self) -> _DummyChemblClient:  # pragma: no cover - trivial helper
@@ -133,7 +135,9 @@ def _configure_activity_cfg(cfg: Config) -> None:
     cfg.activity_enrichment.activity_properties.enabled = False
 
 
-def _install_activity_writer(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, pd.DataFrame, str]]:
+def _install_activity_writer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[tuple[Path, pd.DataFrame, str]]:
     written: list[tuple[Path, pd.DataFrame, str]] = []
 
     def _writer(
@@ -202,7 +206,9 @@ def _fake_activity_pipeline(
 
     stats_callback = definition_kwargs.get("stats_callback")
     if stats_callback is not None:
-        stats_callback({"rows_total": len(result), "rows_kept": len(result), "rows_dropped": 0})
+        stats_callback(
+            {"rows_total": len(result), "rows_kept": len(result), "rows_dropped": 0}
+        )
 
     table_quality = definition_kwargs.get("table_quality")
     if callable(table_quality):
@@ -240,7 +246,9 @@ def _patch_activity_cli(monkeypatch: pytest.MonkeyPatch, cfg: Config) -> None:
             cfg.activity.workers = workers
         return cfg
 
-    monkeypatch.setattr(cli_utils, "apply_config_overrides", fake_apply_config_overrides)
+    monkeypatch.setattr(
+        cli_utils, "apply_config_overrides", fake_apply_config_overrides
+    )
     monkeypatch.setattr(cli_utils, "ensure_dirs", lambda _cfg: None)
 
 
@@ -255,18 +263,24 @@ def test_get_testitem_run_success(
     output_csv = tmp_path / "out" / "testitems.csv"
     logger_stub = _patch_logger(monkeypatch, get_testitem_data)
 
-    def _stub_pipeline(config: Config, options: get_testitem_data.TestitemPipelineOptions) -> int:
+    def _stub_pipeline(
+        config: Config, options: get_testitem_data.TestitemPipelineOptions
+    ) -> int:
         assert config is cfg
         assert options.input_csv == Path(input_csv)
         assert options.output_csv == output_csv
         frame = pd.read_csv(options.input_csv)
-        frame["preferred_name"] = frame["preferred_name"].fillna("").astype("string").str.strip()
+        frame["preferred_name"] = (
+            frame["preferred_name"].fillna("").astype("string").str.strip()
+        )
         missing = frame["preferred_name"] == ""
         if int(missing.sum()):
             get_testitem_data.logger.warning(
                 "testitem_missing_name", count=int(missing.sum())
             )
-        frame["normalized_name"] = frame["preferred_name"].replace("", pd.NA).str.lower()
+        frame["normalized_name"] = (
+            frame["preferred_name"].replace("", pd.NA).str.lower()
+        )
         frame["is_named"] = (~missing).astype("boolean")
         _ensure_parent(output_csv)
         frame.to_csv(output_csv, index=False)
@@ -310,7 +324,9 @@ def test_get_testitem_run_failure_logs(
     output_csv = tmp_path / "out" / "testitems.csv"
     logger_stub = _patch_logger(monkeypatch, get_testitem_data)
 
-    def _failing_pipeline(config: Config, options: get_testitem_data.TestitemPipelineOptions) -> int:
+    def _failing_pipeline(
+        config: Config, options: get_testitem_data.TestitemPipelineOptions
+    ) -> int:
         get_testitem_data.logger.error(
             "testitem_pipeline_failed", output=str(options.output_csv), exit_code=2
         )
@@ -621,9 +637,7 @@ def test_get_activity_cli__chembl_identifier_backfill_ratio(
             "assay_chembl_id": pd.Series(
                 [f"ASSAY{i % 11:05d}" for i in range(total_rows)], dtype="string"
             ),
-            "standard_value": pd.Series(
-                [float(i % 50 + 1) for i in range(total_rows)]
-            ),
+            "standard_value": pd.Series([float(i % 50 + 1) for i in range(total_rows)]),
             "standard_units": pd.Series(["nM"] * total_rows, dtype="string"),
             "standard_type": pd.Series(["IC50"] * total_rows, dtype="string"),
             "relation": pd.Series(["="] * total_rows, dtype="string"),
@@ -787,7 +801,9 @@ def test_get_document_run_all_success(
         "has_pubmed",
     ]
     assert set(result["document_chembl_id"]) == {"CHEMBL123", "CHEMBL456"}
-    assert not result.loc[result["document_chembl_id"] == "CHEMBL456", "has_pubmed"].iloc[0]
+    assert not result.loc[
+        result["document_chembl_id"] == "CHEMBL456", "has_pubmed"
+    ].iloc[0]
     events = [event for _, event, _ in logger_stub.events]
     assert "document_all_done" in events
     assert "document_missing_pubmed" in events
@@ -1019,7 +1035,9 @@ def test_get_assay_run_success(
         enriched["description_length"] = (
             enriched["description"].str.len().astype("Int64")
         )
-        enriched["year"] = pd.to_numeric(enriched["year"], errors="coerce").astype("Int64")
+        enriched["year"] = pd.to_numeric(enriched["year"], errors="coerce").astype(
+            "Int64"
+        )
         enriched = enriched.drop_duplicates(subset=["assay_chembl_id"])
         enriched = enriched.sort_values("assay_chembl_id").reset_index(drop=True)
         quality_columns = ["assay_strain", "assay_group", "year", "accession"]
@@ -1125,7 +1143,10 @@ def test_get_assay_run_failure(
 
     def _failing_run(config: Config, args: argparse.Namespace) -> int:
         get_assay_data.logger.error(
-            "assay_pipeline_failed", output=str(args.final_out), processed=0, exit_code=1
+            "assay_pipeline_failed",
+            output=str(args.final_out),
+            processed=0,
+            exit_code=1,
         )
         return 1
 
@@ -1158,7 +1179,9 @@ def test_get_activity_run_success(
 
     def _stub_run_chembl(config: Config, args: argparse.Namespace) -> int:
         frame = pd.read_csv(args.input_csv)
-        frame = frame.drop_duplicates(subset=["activity_id", "assay_chembl_id", "molecule_chembl_id"])
+        frame = frame.drop_duplicates(
+            subset=["activity_id", "assay_chembl_id", "molecule_chembl_id"]
+        )
         frame["standard_value"] = frame["standard_value"].astype("string").str.strip()
         numeric = pd.to_numeric(frame["standard_value"], errors="coerce")
         missing = numeric.isna()
@@ -1332,7 +1355,9 @@ def test_get_activity_run_retry_and_idempotent(
         written.append(destination)
         return destination
 
-    monkeypatch.setattr(get_activity_data, "write_csv_chunks_deterministic", _writer_stub)
+    monkeypatch.setattr(
+        get_activity_data, "write_csv_chunks_deterministic", _writer_stub
+    )
 
     args = argparse.Namespace(
         input_csv=input_csv,
@@ -1427,6 +1452,8 @@ def test_get_activity_run_workers_offset_and_non_csv(
     assert rc == 0
     events = [event for _, event, _ in logger_stub.events]
     assert "activity_pipeline_done" in events
-    assert any(event_name == "process_offset" for _, event_name, _ in logger_stub.events)
+    assert any(
+        event_name == "process_offset" for _, event_name, _ in logger_stub.events
+    )
     assert captured["workers"] == max(1, cfg.activity.workers)
     assert output_csv.exists()

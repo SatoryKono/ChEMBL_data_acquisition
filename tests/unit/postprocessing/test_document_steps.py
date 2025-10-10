@@ -49,11 +49,15 @@ def test_enrich_document_publication_year__uses_year_and_fallback() -> None:
     result = enrich_document_publication_year(frame, fallback_year=1999)
 
     expected = pd.Series([2010, 1999, 1999], dtype="Int64")
-    pd.testing.assert_series_equal(result["publication_year"], expected, check_names=False)
+    pd.testing.assert_series_equal(
+        result["publication_year"], expected, check_names=False
+    )
 
 
 @pytest.mark.unit
-def test_enrich_document_publication_year__prefers_external_sources_when_requested() -> None:
+def test_enrich_document_publication_year__prefers_external_sources_when_requested() -> (
+    None
+):
     frame = pd.DataFrame(
         {
             "year": ["2001", "2002"],
@@ -64,7 +68,9 @@ def test_enrich_document_publication_year__prefers_external_sources_when_request
     result = enrich_document_publication_year(frame, prefer_doi_year=True)
 
     expected = pd.Series([2005, 2002], dtype="Int64")
-    pd.testing.assert_series_equal(result["publication_year"], expected, check_names=False)
+    pd.testing.assert_series_equal(
+        result["publication_year"], expected, check_names=False
+    )
 
 
 @pytest.mark.unit
@@ -111,7 +117,9 @@ def test_finalize_document_records__deduplicates_when_requested() -> None:
 
 
 @pytest.mark.unit
-def test_finalize_document_records__fills_missing_identifier_from_prefixed_column() -> None:
+def test_finalize_document_records__fills_missing_identifier_from_prefixed_column() -> (
+    None
+):
     frame = pd.DataFrame(
         {
             "chembl.document_chembl_id": ["CHEMBL42", "CHEMBL99"],
@@ -133,4 +141,7 @@ def test_finalize_document_records__skips_validation_when_disabled() -> None:
 
     assert "unexpected" in result.columns
     # Missing required columns are injected even when validation is disabled.
-    assert all(column in result.columns for column in ("document_chembl_id", "title", "doc_type"))
+    assert all(
+        column in result.columns
+        for column in ("document_chembl_id", "title", "doc_type")
+    )

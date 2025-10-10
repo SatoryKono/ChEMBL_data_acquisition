@@ -25,14 +25,18 @@ def _fix_seed(seed: int = 42) -> None:
 def _prepare_dictionary(dictionary_root: Path) -> None:
     activity_subdir = dictionary_root / "_activity"
     activity_subdir.mkdir(parents=True, exist_ok=True)
-    with (activity_subdir / "citation_fraction.csv").open("w", newline="", encoding="utf-8") as handle:
+    with (activity_subdir / "citation_fraction.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as handle:
         writer = csv.DictWriter(handle, fieldnames=["N", "K_min_significant"])
         writer.writeheader()
         writer.writerow({"N": "1", "K_min_significant": "1"})
 
     targets_subdir = dictionary_root / "_target"
     targets_subdir.mkdir(parents=True, exist_ok=True)
-    with (targets_subdir / "targets_type.csv").open("w", newline="", encoding="utf-8") as handle:
+    with (targets_subdir / "targets_type.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as handle:
         writer = csv.DictWriter(
             handle,
             fieldnames=[
@@ -70,8 +74,12 @@ def _prepare_dictionary(dictionary_root: Path) -> None:
 
     document_subdir = dictionary_root / "_document"
     document_subdir.mkdir(parents=True, exist_ok=True)
-    with (document_subdir / "document.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["document_chembl_id", "completed", "review"])
+    with (document_subdir / "document.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as handle:
+        writer = csv.DictWriter(
+            handle, fieldnames=["document_chembl_id", "completed", "review"]
+        )
         writer.writeheader()
         writer.writerow(
             {
@@ -91,20 +99,28 @@ def _prepare_dictionary(dictionary_root: Path) -> None:
     assay_subdir = dictionary_root / "_assay"
     assay_subdir.mkdir(parents=True, exist_ok=True)
     with (assay_subdir / "assay.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["assay_chembl_id", "assay_with_same_target"])
+        writer = csv.DictWriter(
+            handle, fieldnames=["assay_chembl_id", "assay_with_same_target"]
+        )
         writer.writeheader()
         writer.writerow({"assay_chembl_id": "ASSAY1", "assay_with_same_target": "3"})
         writer.writerow({"assay_chembl_id": "ASSAY2", "assay_with_same_target": "2"})
 
     testitem_subdir = dictionary_root / "_testitem"
     testitem_subdir.mkdir(parents=True, exist_ok=True)
-    with (testitem_subdir / "testitem.csv").open("w", newline="", encoding="utf-8") as handle:
+    with (testitem_subdir / "testitem.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as handle:
         writer = csv.DictWriter(
             handle, fieldnames=["molecule_chembl_id", "standard_inchi_skeleton"]
         )
         writer.writeheader()
-        writer.writerow({"molecule_chembl_id": "CHEMBL1", "standard_inchi_skeleton": "InChI=1"})
-        writer.writerow({"molecule_chembl_id": "CHEMBL2", "standard_inchi_skeleton": "InChI=2"})
+        writer.writerow(
+            {"molecule_chembl_id": "CHEMBL1", "standard_inchi_skeleton": "InChI=1"}
+        )
+        writer.writerow(
+            {"molecule_chembl_id": "CHEMBL2", "standard_inchi_skeleton": "InChI=2"}
+        )
 
 
 @pytest.mark.integration
@@ -163,7 +179,9 @@ def test_process_activity_extended__fills_missing_optional_columns(tmp_path, cap
     assert output_path.exists()
 
     filled_records = [
-        record for record in caplog.records if "activity_extended_missing_columns_filled" in record.message
+        record
+        for record in caplog.records
+        if "activity_extended_missing_columns_filled" in record.message
     ]
     assert filled_records, "Expected log about backfilled columns not emitted"
 
@@ -253,7 +271,9 @@ def test_process_activity_extended__warns_on_unresolved_parent(tmp_path, caplog)
     assert "parent_molecule_chembl_id" in unresolved_logs[0].message
 
     filled_logs = [
-        record for record in caplog.records if "activity_extended_missing_columns_filled" in record.message
+        record
+        for record in caplog.records
+        if "activity_extended_missing_columns_filled" in record.message
     ]
     assert filled_logs, "Expected info log about filled columns not emitted"
     assert filled_logs[0].levelno == logging.INFO
@@ -356,11 +376,15 @@ def test_process_activity_extended__deduplicates_and_deterministic(tmp_path, cap
     assert len(output_df) == 2
     assert not output_df.duplicated(subset=subset).any()
 
-    expected_sorted = output_df.sort_values(by=subset, kind="mergesort").reset_index(drop=True)
+    expected_sorted = output_df.sort_values(by=subset, kind="mergesort").reset_index(
+        drop=True
+    )
     pd.testing.assert_frame_equal(output_df.reset_index(drop=True), expected_sorted)
 
     dedupe_records = [
-        record for record in caplog.records if "activity_extended_deduplicated" in record.message
+        record
+        for record in caplog.records
+        if "activity_extended_deduplicated" in record.message
     ]
     assert dedupe_records, "Expected deduplication log not emitted"
     assert "removed=1" in dedupe_records[0].message

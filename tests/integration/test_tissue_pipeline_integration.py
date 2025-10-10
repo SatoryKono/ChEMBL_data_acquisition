@@ -10,17 +10,16 @@ import pandas as pd
 import pytest
 import yaml
 
-from library.io import default_output_path
 import library.io.metadata as io_metadata
+from library.common import run_context as run_context_module
+from library.common.run_context import RunContext
+from library.io import default_output_path
+from library.pipelines.common import metadata as pipeline_metadata_module
 from library.pipelines.tissue import TISSUE_COLUMN_ORDER
 from library.pipelines.tissue.pipeline import (
     TissuePipelineOptions,
     run_tissue_pipeline,
 )
-from library.pipelines.common import metadata as pipeline_metadata_module
-from library.common import run_context as run_context_module
-from library.common.run_context import RunContext
-
 
 RUN_GENERATED_AT = "2020-01-01T00:00:00+00:00"
 
@@ -30,11 +29,15 @@ class _DummyClient:
         return None
 
 
-def test_run_tissue_pipeline__writes_normalised_output(tmp_path: Path, cfg, monkeypatch) -> None:
+def test_run_tissue_pipeline__writes_normalised_output(
+    tmp_path: Path, cfg, monkeypatch
+) -> None:
     """The pipeline writes a deterministic CSV and reports missing identifiers."""
 
     input_csv = tmp_path / "tissue.csv"
-    input_csv.write_text("tissue_chembl_id\nCHEMBLT1\nCHEMBLT2\nCHEMBLT3\n", encoding="utf-8")
+    input_csv.write_text(
+        "tissue_chembl_id\nCHEMBLT1\nCHEMBLT2\nCHEMBLT3\n", encoding="utf-8"
+    )
     output_csv = tmp_path / "output.csv"
 
     expected_calls: list[dict[str, object]] = []
@@ -222,4 +225,3 @@ def test_run_tissue_pipeline__deterministic_output_from_fixtures(
     assert metadata["columns"] == TISSUE_COLUMN_ORDER
     assert metadata["generated_at"] == RUN_GENERATED_AT
     assert metadata["command"]
-

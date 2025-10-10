@@ -4,17 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+
+from library.config import Config
 from library.pipelines.activity.runner import (
     ActivityCommandOptions,
     run_activity_pipeline,
 )
-from library.config import Config
-
 from library.pipelines.common import PipelineRunResult
+
 from .action_properties import (
-  annotate_action_properties,
-  build_activity_properties,
-  infer_action_type,
+    annotate_action_properties,
+    build_activity_properties,
+    infer_action_type,
 )
 from .activities import get_activities
 
@@ -108,11 +109,11 @@ def run_pipeline(config: Config, options: ActivityPipelineOptions) -> PipelineRu
 
 
 __all__ = [
-  "ActivityPipelineOptions",
-  "PipelineRunResult",
-  "annotate_action_properties",
-  "build_activity_properties",
-  "get_activities",
-  "infer_action_type",
-  "run_pipeline",
+    "ActivityPipelineOptions",
+    "PipelineRunResult",
+    "annotate_action_properties",
+    "build_activity_properties",
+    "get_activities",
+    "infer_action_type",
+    "run_pipeline",
 ]

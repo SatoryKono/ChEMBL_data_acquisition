@@ -11,15 +11,13 @@ normalisation, best-effort XML parsing and deterministic CSV emission.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from collections.abc import Mapping
-from typing import Iterable, Sequence
 from xml.etree import ElementTree
 
+import numpy as np
 import pandas as pd
 from pandas.errors import ParserError
-
-import numpy as np
 
 from library.common.csv_utils import write_csv_deterministic
 
@@ -176,7 +174,9 @@ def _normalise_separator_candidates(separators: Sequence[str] | None) -> list[st
     return resolved or [","]
 
 
-def _dtype_for_read(schema: Mapping[str, str] | None) -> dict[str, str | pd.api.extensions.ExtensionDtype]:
+def _dtype_for_read(
+    schema: Mapping[str, str] | None
+) -> dict[str, str | pd.api.extensions.ExtensionDtype]:
     if not schema:
         return {}
     mapping: dict[str, str | pd.api.extensions.ExtensionDtype] = {}
@@ -200,9 +200,9 @@ def _coerce_logical_series(series: pd.Series) -> pd.Series:
     def convert(value: object) -> object:
         if pd.isna(value):
             return pd.NA
-        if isinstance(value, (bool, np.bool_)):
+        if isinstance(value, bool | np.bool_):
             return bool(value)
-        if isinstance(value, (int, np.integer)):
+        if isinstance(value, int | np.integer):
             if value in (0, 1):
                 return bool(value)
         if isinstance(value, float):
@@ -265,7 +265,9 @@ def coerce_types(df: pd.DataFrame, schema: Mapping[str, str] | None) -> pd.DataF
         elif kind == "float64":
             coerced[column] = _coerce_float64_series(coerced[column])
         else:
-            raise ValueError(f"Unsupported schema type {declared!r} for column '{column}'")
+            raise ValueError(
+                f"Unsupported schema type {declared!r} for column '{column}'"
+            )
     return coerced
 
 
@@ -371,10 +373,14 @@ def sort_power_query(frame: pd.DataFrame, columns: Sequence[str]) -> pd.DataFram
     if not seen:
         return frame.copy()
 
-    return frame.sort_values(by=seen, kind="mergesort", na_position="last").reset_index(drop=True)
+    return frame.sort_values(by=seen, kind="mergesort", na_position="last").reset_index(
+        drop=True
+    )
 
 
-def fill_missing(frame: pd.DataFrame, columns: Iterable[str], fill_value: str = "-") -> pd.DataFrame:
+def fill_missing(
+    frame: pd.DataFrame, columns: Iterable[str], fill_value: str = "-"
+) -> pd.DataFrame:
     """Fill ``columns`` missing from ``frame`` with ``fill_value``."""
 
     result = frame.copy()
@@ -382,4 +388,3 @@ def fill_missing(frame: pd.DataFrame, columns: Iterable[str], fill_value: str = 
         if column not in result.columns:
             result[column] = fill_value
     return result
-

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, Sequence
+from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
@@ -132,7 +133,7 @@ class Cellularity:
         if tax_id is None:
             return []
 
-        if isinstance(missing_value, (bool, np.bool_)) and missing_value:
+        if isinstance(missing_value, bool | np.bool_) and missing_value:
             return []
 
         if getattr(missing_value, "all", None) is not None:
@@ -140,7 +141,7 @@ class Cellularity:
                 all_missing = missing_value.all()
             except TypeError:
                 all_missing = False
-            if isinstance(all_missing, (bool, np.bool_)) and all_missing:
+            if isinstance(all_missing, bool | np.bool_) and all_missing:
                 return []
             if all_missing is pd.NA:
                 return []
@@ -148,7 +149,7 @@ class Cellularity:
         if tax_id is pd.NA:
             return []
 
-        if isinstance(tax_id, (float, np.floating)) and pd.isna(tax_id):
+        if isinstance(tax_id, float | np.floating) and pd.isna(tax_id):
             return []
         values = list(self.fetcher(tax_id, email))  # type: ignore[arg-type]
         return values
@@ -192,15 +193,19 @@ class Cellularity:
         return lineage_names
 
     def classify_by_fetch(self, tax_id: Any, email: str | None = None) -> str:
-        names = [self._lower_token(name) for name in self.get_lineage_names(tax_id, email)]
+        names = [
+            self._lower_token(name) for name in self.get_lineage_names(tax_id, email)
+        ]
         if "viruses" in names:
             return "acellular (virus)"
         if "bacteria" in names or "archaea" in names:
             return "unicellular"
         if "eukaryota" in names:
-            if self._has_any(names, self.multicell_animal_phyla) or self._has_any(
-                names, self.multicell_plant_phyla
-            ) or "metazoa" in names:
+            if (
+                self._has_any(names, self.multicell_animal_phyla)
+                or self._has_any(names, self.multicell_plant_phyla)
+                or "metazoa" in names
+            ):
                 return "multicellular"
             if self._has_any(names, self.unicell_phyla):
                 return "unicellular"

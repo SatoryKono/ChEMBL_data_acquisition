@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
-
-from types import SimpleNamespace
 
 from library.utils.cli_tools import chunk_io_main
 
 
 @pytest.mark.e2e
-def test_chunk_io_main__copies_csv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chunk_io_main__copies_csv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     input_csv = tmp_path / "input.csv"
     rows = [
         ["molecule_chembl_id", "name", "smiles"],

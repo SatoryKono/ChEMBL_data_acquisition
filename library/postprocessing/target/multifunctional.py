@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 import pandas as pd
-
 
 _COLUMNS_TO_REMOVE: tuple[str, ...] = (
     "isoform_ids",

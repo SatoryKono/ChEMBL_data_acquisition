@@ -7,9 +7,9 @@ from urllib.parse import quote
 
 import requests
 
-from ..config.models import OpenAlexCfg, RetryCfg
 from ..common.log import logger
 from ..common.rate_limiter import RateLimiter, get_limiter
+from ..config.models import OpenAlexCfg, RetryCfg
 from .pubmed import _do_request
 
 __all__ = ["fetch_openalex"]

@@ -3,16 +3,19 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable, Sequence
 
-from library.config import Config
 from library.common.log import logger
+from library.config import Config
 from library.pipelines.activity.runner import (
-    ActivityCommandOptions,
     MIN_ACTIVITY_TIMEOUT,
+    ActivityCommandOptions,
     resolve_activity_pipeline_hooks,
+)
+from library.pipelines.activity.runner import (
     run_activity_pipeline as _run_activity_pipeline,
 )
 
 from . import _run
+
 
 def _sync_pipeline_logger(logger: object) -> None:
     """Align the shared pipeline logger with ``logger`` when possible."""

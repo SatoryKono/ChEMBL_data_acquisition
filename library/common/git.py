@@ -300,7 +300,10 @@ def _git_sha() -> str:
     git_executable = shutil.which("git")
 
     # If we have a normal git (not a GitHub Desktop shim), prefer HEAD file to avoid subprocess.
-    if git_executable is not None and "githubdesktop" not in str(git_executable).lower():
+    if (
+        git_executable is not None
+        and "githubdesktop" not in str(git_executable).lower()
+    ):
         head_sha = _read_head_sha(git_dir)
         if head_sha is not None:
             logger.info("git_sha_head", sha=head_sha)

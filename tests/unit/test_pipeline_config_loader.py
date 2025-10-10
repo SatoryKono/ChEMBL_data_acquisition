@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from library.pipelines.common.metadata import get_pipeline_version
 from library.pipelines.configuration import (
-    load_pipeline_config,
     list_pipeline_configs,
+    load_pipeline_config,
 )
 
 

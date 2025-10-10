@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from requests import ConnectionError, HTTPError, ReadTimeout, Response
-from urllib.parse import parse_qs, urlparse
 
 from library.config import ApiCfg
 from library.pipelines.assay.chembl_assay import (
-    MAX_ASSAY_CHUNK_SIZE,
     _ASSAY_MAX_IDS_PER_REQUEST,
+    MAX_ASSAY_CHUNK_SIZE,
     get_activities,
     get_assays,
     get_testitem,
@@ -25,7 +26,9 @@ class _StubClient:
         self._responders = responders
         self.calls: list[str] = []
 
-    def request_json(self, url: str, *, cfg: ApiCfg, timeout: float | None) -> dict[str, Any]:
+    def request_json(
+        self, url: str, *, cfg: ApiCfg, timeout: float | None
+    ) -> dict[str, Any]:
         self.calls.append(url)
         next_response = self._responders.pop(0)
         if isinstance(next_response, str) and next_response == "HTTP404":
@@ -150,9 +153,7 @@ def test_get_assays__clamps_large_chunks() -> None:
             "page_meta": {},
         },
         {
-            "assays": [
-                {"assay_chembl_id": identifier} for identifier in remainder_ids
-            ],
+            "assays": [{"assay_chembl_id": identifier} for identifier in remainder_ids],
             "page_meta": {},
         },
     ]
@@ -217,7 +218,9 @@ def test_get_testitem__splits_chunk_on_timeout() -> None:
             self._mapping = mapping
             self.calls: list[str] = []
 
-        def request_json(self, url: str, *, cfg: ApiCfg, timeout: float | None) -> dict[str, Any]:
+        def request_json(
+            self, url: str, *, cfg: ApiCfg, timeout: float | None
+        ) -> dict[str, Any]:
             del cfg, timeout
             self.calls.append(url)
             parsed = urlparse(url)
@@ -246,7 +249,8 @@ def test_get_testitem__splits_chunk_on_timeout() -> None:
         "CHEMBL3",
     ]
     assert any(
-        "molecule_chembl_id__in=CHEMBL1,CHEMBL2,CHEMBL3" in call for call in client.calls
+        "molecule_chembl_id__in=CHEMBL1,CHEMBL2,CHEMBL3" in call
+        for call in client.calls
     )
     assert any("molecule_chembl_id__in=CHEMBL1" in call for call in client.calls)
     assert any(

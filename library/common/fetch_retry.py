@@ -10,7 +10,6 @@ from typing import Any
 from ..config import Config, RetryCfg
 from ..sidecar import SidecarErrors
 
-
 _CHUNK_FAILURE_IDS_LIMIT = 100
 
 

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
 from time import perf_counter
-from typing import Sequence
 
 import pandas as pd
 import requests
@@ -113,7 +113,9 @@ def prepare_tissue_dataframe(
     if missing:
         placeholder = pd.DataFrame(
             {
-                column: pd.Series(pd.NA, index=range(len(missing)), dtype=pd.StringDtype())
+                column: pd.Series(
+                    pd.NA, index=range(len(missing)), dtype=pd.StringDtype()
+                )
                 for column in TISSUE_BASE_COLUMNS
             }
         )
@@ -140,7 +142,9 @@ def _write_failures(
             destination.unlink()
         return
 
-    failure_key_cols = [col for col in ("index", "column") if col in failure_cases.columns]
+    failure_key_cols = [
+        col for col in ("index", "column") if col in failure_cases.columns
+    ]
     if not failure_key_cols and not failure_cases.empty:
         failure_key_cols = [failure_cases.columns[0]]
 

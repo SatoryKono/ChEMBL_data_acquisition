@@ -7,22 +7,20 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from uuid import uuid4
 
-import yaml
-
 import pandas as pd
+import yaml
 
 from library import cli, io
 from library.common.log import logger
 from library.config import (
+    DEFAULT_CONFIG_PATH,
     Config,
     ConfigError,
-    DEFAULT_CONFIG_PATH,
     ensure_dirs,
     print_config,
 )
 from library.pipelines.activity import get_activities
 from library.utils.atomic import robust_replace
-
 
 DEFAULT_LIMIT = 25
 
@@ -117,9 +115,7 @@ def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Pat
 
     metadata = yaml.safe_load(tmp_meta.read_text(encoding="utf-8")) or {}
     expected_columns = list(frame.columns)
-    expected_dtypes = {
-        column: str(dtype) for column, dtype in frame.dtypes.items()
-    }
+    expected_dtypes = {column: str(dtype) for column, dtype in frame.dtypes.items()}
 
     meta_columns = metadata.get("columns")
     meta_dtypes = metadata.get("dtypes")
@@ -173,7 +169,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         fallback_input = input_candidate or Path("activities.csv")
         output_path = io.default_output_path(fallback_input, cfg.io)
         args.output_csv = output_path
-        setattr(args, "final_out", output_path)
+        args.final_out = output_path
     else:
         output_path = Path(output_candidate)
 

@@ -9,9 +9,10 @@ import pandas as pd
 import requests
 
 from library.clients import ChemblClient, _chunked
-from ...config import ApiCfg, TESTITEM_FIELD_DEFAULTS
+
 from ...common.log import logger
 from ...common.pandas_utils import json_normalize_pyarrow
+from ...config import TESTITEM_FIELD_DEFAULTS, ApiCfg
 
 # ChEMBL bulk endpoints accept at most 25 identifiers per request when using
 # ``__in`` filters. Requests above this threshold return HTTP 414 "URI Too
@@ -130,9 +131,7 @@ ACTIVITY_COLUMNS = [
 ]
 
 
-_ACTIVITY_EXTRA_FIELDS: tuple[str, ...] = (
-    "standard_text_value",
-)
+_ACTIVITY_EXTRA_FIELDS: tuple[str, ...] = ("standard_text_value",)
 
 ACTIVITY_QUERY_FIELDS: tuple[str, ...] = tuple(
     dict.fromkeys(list(ACTIVITY_COLUMNS) + list(_ACTIVITY_EXTRA_FIELDS))
@@ -326,7 +325,10 @@ def _is_retryable_chunk_error(exc: requests.RequestException) -> bool:
             message_parts.append(str(detail))
     combined = " ".join(part for part in message_parts if part)
     lowered = combined.lower()
-    return any(token in lowered for token in ("timed out", "timeout", "temporarily unavailable"))
+    return any(
+        token in lowered
+        for token in ("timed out", "timeout", "temporarily unavailable")
+    )
 
 
 def get_assay(
@@ -470,7 +472,8 @@ def get_assays(
             response = exc.response
             if response is not None and response.status_code == 404:
                 logger.info(
-                    "assay_missing", extra={"stage": "chunk_skip", "assay_chembl_id": identifier}
+                    "assay_missing",
+                    extra={"stage": "chunk_skip", "assay_chembl_id": identifier},
                 )
                 return _fallback_single(identifier)
             raise
@@ -487,6 +490,7 @@ def get_assays(
         else:
             frames = _filter_variant_frames(frames)
             return frames
+
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     effective_chunk_size = min(int(chunk_size), MAX_ASSAY_CHUNK_SIZE)
     if effective_chunk_size <= 0:
@@ -632,7 +636,9 @@ def get_activities(
         if identifier in {"", "#N/A"}:
             return []
         try:
-            frames = _fetch_paginated(_build_url({"activity_id": identifier, "limit": 1}))
+            frames = _fetch_paginated(
+                _build_url({"activity_id": identifier, "limit": 1})
+            )
         except requests.HTTPError as exc:
             response = exc.response
             status = getattr(response, "status_code", None)
