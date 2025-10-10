@@ -25,10 +25,10 @@ jobs:
           pip install .[dev]
       - name: Check installed packages
         run: pip check
-      - name: Ruff format check
-        run: ruff format --check .
-      - name: Ruff lint
+      - name: Ruff check
         run: ruff check .
+      - name: Black check
+        run: black --check .
       - name: Ruff docstring coverage
         run: >-
           ruff check
@@ -41,13 +41,7 @@ jobs:
           library/io/paths.py
       - name: Type check
         run: mypy --strict library
-      - name: Run pre-commit hooks
-        uses: pre-commit/action@v3.0.1
-        env:
-          SKIP: pytest
-        with:
-          extra_args: --all-files --show-diff-on-failure --color always
-      - name: Run tests via scripts/run_tests.py
+      - name: Run pytest suite
         id: run-tests
         continue-on-error: true
         run: python scripts/run_tests.py

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Callable
+from collections.abc import Callable
 
 import pytest
 
@@ -46,7 +46,9 @@ def _install_clock(monkeypatch: pytest.MonkeyPatch, clock: _FakeClock) -> None:
 
 
 @pytest.mark.unit
-def test_rate_limiter__adaptive_wait_increases_to_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rate_limiter__adaptive_wait_increases_to_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The adaptive wait grows until capped when progress is slow."""
 
     clock = _FakeClock(factor=0.01)
@@ -65,7 +67,9 @@ def test_rate_limiter__adaptive_wait_increases_to_cap(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.unit
-def test_rate_limiter__parallel_threads_make_progress(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rate_limiter__parallel_threads_make_progress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Concurrent callers all acquire a token without stalling indefinitely."""
 
     clock = _FakeClock()

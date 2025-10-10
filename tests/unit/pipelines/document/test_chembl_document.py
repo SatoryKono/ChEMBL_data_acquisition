@@ -19,7 +19,9 @@ class _StubChemblClient:
         self._responses = responses
         self.calls: list[tuple[str, float | None]] = []
 
-    def request_json(self, url: str, *, cfg: ApiCfg, timeout: float | None = None) -> dict:
+    def request_json(
+        self, url: str, *, cfg: ApiCfg, timeout: float | None = None
+    ) -> dict:
         del cfg  # Unused in the stub.
         self.calls.append((url, timeout))
         response = self._responses[url]
@@ -81,7 +83,9 @@ def _build_chunk_response(identifiers: Sequence[str]) -> dict[str, object]:
 
 
 @pytest.mark.unit
-def test_get_documents__splits_chunk_on_timeout(caplog: pytest.LogCaptureFixture) -> None:
+def test_get_documents__splits_chunk_on_timeout(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """The helper should split large chunks when a read timeout occurs."""
 
     cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=12.0)

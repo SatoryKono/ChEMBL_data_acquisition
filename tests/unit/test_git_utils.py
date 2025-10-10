@@ -121,7 +121,9 @@ def test_git_sha__shared_singleton() -> None:
 
 
 @pytest.mark.unit
-def test_git_sha__github_desktop_fallback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_git_sha__github_desktop_fallback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """GitHub Desktop shims should fall back to the bundled Git executable."""
 
     module = importlib.import_module("library.common.git")
@@ -138,18 +140,14 @@ def test_git_sha__github_desktop_fallback(monkeypatch: pytest.MonkeyPatch, tmp_p
     (git_dir / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf8")
     ref_dir = git_dir / "refs" / "heads"
     ref_dir.mkdir(parents=True)
-    (ref_dir / "main").write_text("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n", encoding="utf8")
+    (ref_dir / "main").write_text(
+        "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n", encoding="utf8"
+    )
 
     desktop_root = tmp_path / "GitHubDesktop"
     stub = desktop_root / "git.exe"
     actual_git = (
-        desktop_root
-        / "app-3.3.0"
-        / "resources"
-        / "app"
-        / "git"
-        / "cmd"
-        / "git.exe"
+        desktop_root / "app-3.3.0" / "resources" / "app" / "git" / "cmd" / "git.exe"
     )
     desktop_root.mkdir()
     actual_git.parent.mkdir(parents=True, exist_ok=True)
@@ -203,18 +201,14 @@ def test_git_sha__github_desktop_mingw64_fallback(
     (git_dir / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf8")
     ref_dir = git_dir / "refs" / "heads"
     ref_dir.mkdir(parents=True)
-    (ref_dir / "main").write_text("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n", encoding="utf8")
+    (ref_dir / "main").write_text(
+        "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n", encoding="utf8"
+    )
 
     desktop_root = tmp_path / "GitHubDesktop"
     stub = desktop_root / "git.exe"
     cmd_git = (
-        desktop_root
-        / "app-3.4.0"
-        / "resources"
-        / "app"
-        / "git"
-        / "cmd"
-        / "git.exe"
+        desktop_root / "app-3.4.0" / "resources" / "app" / "git" / "cmd" / "git.exe"
     )
     mingw_git = (
         desktop_root

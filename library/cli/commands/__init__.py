@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from importlib import import_module
-
 from inspect import signature
-from typing import Callable
-
 from types import ModuleType
 
 

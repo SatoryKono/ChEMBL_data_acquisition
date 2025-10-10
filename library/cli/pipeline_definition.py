@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Callable, Iterable, Mapping, Sequence, TypeVar, Protocol
 from pathlib import Path
+from typing import Protocol, TypeVar
 
 import pandas as pd
 
 from ..common.metadata import Stats
-
 
 SchemaT = TypeVar("SchemaT")
 
@@ -24,12 +24,16 @@ class ValidationResult(Protocol):
 class Validator(Protocol):
     """Callable interface for data frame validators."""
 
-    def __call__(self, df: pd.DataFrame) -> ValidationResult:  # pragma: no cover - Protocol
+    def __call__(
+        self, df: pd.DataFrame
+    ) -> ValidationResult:  # pragma: no cover - Protocol
         ...
 
 
 MetadataHook = Callable[[pd.DataFrame], pd.DataFrame]
-Writer = Callable[[Iterable[pd.DataFrame], Path, Sequence[str] | None, Sequence[str]], Path]
+Writer = Callable[
+    [Iterable[pd.DataFrame], Path, Sequence[str] | None, Sequence[str]], Path
+]
 TableQualityHook = Callable[[Path], None]
 Fetcher = Callable[[], Iterable[pd.DataFrame] | pd.DataFrame]
 
@@ -78,15 +82,19 @@ class PipelineDefinition:
         inputs: Mapping[str, object] | None = None,
         key_columns: Sequence[str] | None = None,
         table_quality: TableQualityHook | None = None,
-        stats_extra: Mapping[str, object] | Callable[[], Mapping[str, object]] | None = None,
+        stats_extra: (
+            Mapping[str, object] | Callable[[], Mapping[str, object]] | None
+        ) = None,
         stats_callback: Callable[[Stats], None] | None = None,
         strict_mode: bool = False,
         dictionary_resources: Sequence[str] | None = None,
-    ) -> "PipelineDefinition":
+    ) -> PipelineDefinition:
         """Construct a :class:`PipelineDefinition` using legacy keyword arguments."""
 
         if table_quality is None:
-            raise TypeError("'table_quality' must be provided when using legacy arguments")
+            raise TypeError(
+                "'table_quality' must be provided when using legacy arguments"
+            )
 
         return cls(
             schema=schema,
@@ -150,8 +158,7 @@ def normalise_definition(
     if remaining:
         unexpected = ", ".join(sorted(remaining))
         raise TypeError(
-            "run_pipeline received unexpected keyword arguments: "
-            f"{unexpected}"
+            "run_pipeline received unexpected keyword arguments: " f"{unexpected}"
         )
 
     try:
@@ -161,4 +168,3 @@ def normalise_definition(
             "run_pipeline requires a PipelineDefinition or the legacy keyword "
             "arguments (schema, schema_name, writer, table_quality, ...)."
         ) from exc
-

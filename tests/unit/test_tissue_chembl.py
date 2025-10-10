@@ -170,4 +170,3 @@ def test_get_tissues__skips_invalid_identifiers() -> None:
     client.request_json.assert_not_called()
     assert df.empty
     assert df.columns.tolist() == TISSUE_BASE_COLUMNS
-

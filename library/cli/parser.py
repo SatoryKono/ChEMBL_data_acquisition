@@ -16,12 +16,12 @@ from typing import Any, cast
 from pydantic import ValidationError
 
 from ..common.log import logger
-from .run_context import compute_generated_at
 from ..common.logging_setup import Logger, LoggerConfig
 from ..common.logging_setup import configure_logger as _configure_logger
 from ..config import Config, ConfigError, ConfigMetadata, load_config
 from ..config.loader import DEFAULT_CONFIG_PATH
 from ..version import require_python_version
+from .run_context import compute_generated_at
 
 require_python_version()
 
@@ -610,8 +610,8 @@ def apply_config_overrides(
             "config_default_path_used",
             config=str(DEFAULT_CONFIG_PATH),
         )
-        if hasattr(args, "config") and getattr(args, "config") is None:
-            setattr(args, "config", DEFAULT_CONFIG_PATH)
+        if hasattr(args, "config") and args.config is None:
+            args.config = DEFAULT_CONFIG_PATH
     selected_config_path: str | Path = config_path or DEFAULT_CONFIG_PATH
 
     try:
@@ -643,16 +643,18 @@ def apply_config_overrides(
         raise ValueError(str(exc)) from exc
 
     stamp_mode = getattr(cfg.local.io, "output_stamp_mode", _DEFAULT_OUTPUT_STAMP_MODE)
-    setattr(args, "output_stamp_mode", stamp_mode)
+    args.output_stamp_mode = stamp_mode
     if stamp_mode == "require":
         date_value = getattr(args, "date", None)
         if not isinstance(date_value, str) or not date_value.strip():
-            raise ValueError("--date is required when io.output_stamp_mode is 'require'")
+            raise ValueError(
+                "--date is required when io.output_stamp_mode is 'require'"
+            )
 
     metadata.cli_paths = {
         arg: path for arg, path in normalized_cli_paths.items() if path
     }
-    setattr(args, "_config_metadata", metadata)
+    args._config_metadata = metadata
 
     for arg, key in override_map.items():
         if not hasattr(args, arg):
@@ -758,23 +760,23 @@ def prepare_io_paths(
     """Normalize CLI namespace paths and populate derived locations."""
 
     base_path = _resolve_base_path(getattr(args, "base_path", None))
-    setattr(args, "base_path", base_path)
+    args.base_path = base_path
 
     input_dir = _resolve_directory(getattr(args, "input_dir", None), base=base_path)
-    setattr(args, "input_dir", input_dir)
+    args.input_dir = input_dir
 
     output_dir = _resolve_directory(getattr(args, "output_dir", None), base=base_path)
-    setattr(args, "output_dir", output_dir)
+    args.output_dir = output_dir
 
     cache_dir = _resolve_directory(getattr(args, "cache_dir", None), base=base_path)
-    setattr(args, "cache_dir", cache_dir)
+    args.cache_dir = cache_dir
 
     current_input = getattr(args, "input_csv", None)
     if current_input in (None, argparse.SUPPRESS) and input_default is not None:
         current_input = Path(input_default)
     resolved_input = _resolve_file(current_input, directory=input_dir, base=base_path)
     if resolved_input is not None:
-        setattr(args, "input_csv", resolved_input)
+        args.input_csv = resolved_input
 
     final_candidate = getattr(args, "final_out", None)
     if final_candidate in (None, argparse.SUPPRESS):
@@ -789,16 +791,16 @@ def prepare_io_paths(
         raw_format_str = "csv"
     else:
         raw_format_str = str(raw_format_value).lower()
-    setattr(args, "raw_format", raw_format_str)
+    args.raw_format = raw_format_str
 
     if output_stem is not None:
-        setattr(args, "_auto_output_stem", output_stem)
-    setattr(args, "_auto_output_suffix", suffix)
+        args._auto_output_stem = output_stem
+    args._auto_output_suffix = suffix
 
     stamp_mode = _normalize_stamp_mode(getattr(args, "output_stamp_mode", None))
     if stamp_mode is None:
         stamp_mode = _DEFAULT_OUTPUT_STAMP_MODE
-    setattr(args, "output_stamp_mode", stamp_mode)
+    args.output_stamp_mode = stamp_mode
 
     resolved_output = _resolve_file(
         final_candidate,
@@ -840,14 +842,14 @@ def prepare_io_paths(
                 base=base_path,
             ),
         )
-        setattr(args, "final_out", resolved_output)
-        setattr(args, "output_csv", resolved_output)
-        setattr(args, "_auto_output_generated", auto_output)
-    elif isinstance(final_candidate, (str, Path)):
+        args.final_out = resolved_output
+        args.output_csv = resolved_output
+        args._auto_output_generated = auto_output
+    elif isinstance(final_candidate, str | Path):
         candidate_path = Path(final_candidate)
-        setattr(args, "final_out", candidate_path)
-        setattr(args, "output_csv", candidate_path)
-        setattr(args, "_auto_output_generated", False)
+        args.final_out = candidate_path
+        args.output_csv = candidate_path
+        args._auto_output_generated = False
 
     raw_value = getattr(args, "raw_out", None)
     if raw_value in (None, argparse.SUPPRESS):
@@ -871,14 +873,14 @@ def prepare_io_paths(
             directory=output_dir,
             base=base_path,
         )
-    setattr(args, "raw_out", resolved_raw)
-    setattr(args, "_auto_raw_out_generated", bool(auto_raw and resolved_raw is not None))
+    args.raw_out = resolved_raw
+    args._auto_raw_out_generated = bool(auto_raw and resolved_raw is not None)
 
     if date_str is not None:
-        setattr(args, "date", date_str)
+        args.date = date_str
 
-    setattr(args, "force", bool(getattr(args, "force", False)))
-    setattr(args, "skip_existing", bool(getattr(args, "skip_existing", False)))
+    args.force = bool(getattr(args, "force", False))
+    args.skip_existing = bool(getattr(args, "skip_existing", False))
 
 
 __all__ = [

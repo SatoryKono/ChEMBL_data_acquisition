@@ -5,9 +5,7 @@ import logging
 import pandas as pd
 import pytest
 
-from library.postprocess.common import runner
-
-from library.postprocess.common import StepDefinition, run_steps
+from library.postprocess.common import StepDefinition, run_steps, runner
 from library.postprocess.common.schema import DataFrameSchema
 from library.postprocess.common.types import SchemaValidationError
 
@@ -100,7 +98,9 @@ def test_run_steps__accepts_tuple_step_specification() -> None:
     assert metadata.steps[0].parameters == {"column": "value", "value": 10}
 
 
-def test_run_steps__ignores_unsupported_parameters(caplog: pytest.LogCaptureFixture) -> None:
+def test_run_steps__ignores_unsupported_parameters(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     frame = pd.DataFrame({"seed": [5]}, dtype="int64")
 
     steps = (

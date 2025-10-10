@@ -15,13 +15,15 @@ class _StubLogger:
     def __init__(self) -> None:
         self.events: list[tuple[str, str, dict[str, object]]] = []
 
-    def bind(self, **_: object) -> "_StubLogger":  # pragma: no cover - interface parity
+    def bind(self, **_: object) -> _StubLogger:  # pragma: no cover - interface parity
         return self
 
     def info(self, event: str, **data: object) -> None:
         self.events.append(("info", event, dict(data)))
 
-    def warning(self, event: str, **data: object) -> None:  # pragma: no cover - defensive
+    def warning(
+        self, event: str, **data: object
+    ) -> None:  # pragma: no cover - defensive
         self.events.append(("warning", event, dict(data)))
 
     def error(self, event: str, **data: object) -> None:  # pragma: no cover - defensive
@@ -29,7 +31,9 @@ class _StubLogger:
 
 
 @pytest.mark.unit
-def test_get_tissue_data_main__limit_zero_skips_pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_get_tissue_data_main__limit_zero_skips_pipeline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """``main()`` should short-circuit when ``--limit 0`` is provided."""
 
     stub_logger = _StubLogger()
@@ -39,7 +43,9 @@ def test_get_tissue_data_main__limit_zero_skips_pipeline(monkeypatch: pytest.Mon
         raise AssertionError("run_cli_command should not be invoked when limit is zero")
 
     monkeypatch.setattr(get_tissue_data, "run_cli_command", _unexpected_run_cli_command)
-    monkeypatch.setattr(get_tissue_data, "configure_logger", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        get_tissue_data, "configure_logger", lambda *_args, **_kwargs: None
+    )
 
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("tissue_chembl_id\nCHEMBLT0\n", encoding="utf-8")

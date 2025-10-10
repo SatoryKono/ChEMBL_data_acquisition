@@ -14,7 +14,9 @@ def test_configure_logger__closes_existing_handlers() -> None:
     original_root_level = root_logger.level
     original_warnings_level = warnings_logger.level
     original_warnings_propagate = warnings_logger.propagate
-    was_capturing_warnings = warnings.showwarning is getattr(logging, "_showwarning", object())
+    was_capturing_warnings = warnings.showwarning is getattr(
+        logging, "_showwarning", object()
+    )
 
     root_handler = mock.create_autospec(logging.FileHandler, instance=True)
     warnings_handler = mock.create_autospec(logging.FileHandler, instance=True)

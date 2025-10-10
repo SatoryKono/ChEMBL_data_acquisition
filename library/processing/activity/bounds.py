@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable
+from collections.abc import Iterable
 
 import numpy as np
 import pandas as pd
 
-from ...config import ActivityBoundsCfg
 from ...common.log import logger
 from ...common.pandas_utils import merge_series_prefer_left
+from ...config import ActivityBoundsCfg
 
 __all__ = ["compute_activity_bounds"]
 
@@ -250,7 +250,10 @@ def _log_bounds_coverage(
         ("lower_value", std_lower_ratio, lower_ratio),
         ("upper_value", std_upper_ratio, upper_ratio),
     ):
-        if input_ratio >= _COVERAGE_WARN_THRESHOLD and output_ratio < _COVERAGE_WARN_THRESHOLD:
+        if (
+            input_ratio >= _COVERAGE_WARN_THRESHOLD
+            and output_ratio < _COVERAGE_WARN_THRESHOLD
+        ):
             logger.warning(
                 "activity_bounds_low_output_coverage",
                 column=column,
@@ -383,5 +386,7 @@ def compute_activity_bounds(
         result["activity_id"].dtype
     ):
         result["activity_id"] = result["activity_id"].astype("object")
-    _log_bounds_coverage(std_lower, std_upper, result["lower_value"], result["upper_value"])
+    _log_bounds_coverage(
+        std_lower, std_upper, result["lower_value"], result["upper_value"]
+    )
     return result

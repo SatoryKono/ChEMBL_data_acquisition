@@ -3,6 +3,7 @@
 from .base import PipelineCLIBase
 from .logging import setup_cli_logging
 from .parser import (
+    ConfigMetadata,
     Logger,
     LoggerConfig,
     add_common_arguments,
@@ -11,10 +12,9 @@ from .parser import (
     build_root_parser,
     configure_logger,
     create_logger_config,
-    prepare_io_paths,
     path_argument,
     positive_int,
-    ConfigMetadata,
+    prepare_io_paths,
 )
 
 __all__ = [

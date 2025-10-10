@@ -5,18 +5,18 @@ from __future__ import annotations
 import difflib
 import heapq
 import weakref
-
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock, local
-from typing import Any, Hashable, TypeVar
+from typing import Any, TypeVar
 
 import pandas as pd
 import requests
 
+from library.clients import _chunked
 from library.common.log import logger
 from library.common.rate_limiter import RateLimiter, get_global_limiter, get_limiter
 from library.config import (
@@ -36,8 +36,6 @@ from library.pipelines.document.pipeline import (
     merge_metadata,
     normalise_doi,
 )
-from library.clients import _chunked
-
 
 T = TypeVar("T")
 
@@ -182,7 +180,7 @@ class DocumentPipeline:
             info["suggestions"] = [str(path) for path in suggestions]
             best_match = suggestions[0]
             info["did_you_mean"] = str(best_match)
-            info["cli_hint"] = f"--input \"{best_match}\""
+            info["cli_hint"] = f'--input "{best_match}"'
             return info
 
         same_suffix = [str(p) for p in entries if p.suffix == path.suffix and p.suffix]
@@ -276,17 +274,14 @@ class DocumentPipeline:
         if not fallback_map or pmid_column not in frame.columns:
             return frame
 
-        pmid_series = (
-            frame[pmid_column]
-            .astype("string")
-            .fillna("")
-            .str.strip()
-        )
+        pmid_series = frame[pmid_column].astype("string").fillna("").str.strip()
         fallback_series = pmid_series.map(fallback_map).fillna("")
         if not (fallback_series != "").any():
             return frame
 
-        canonical_columns = [col for col in ("doi", "ChEMBL.doi") if col in frame.columns]
+        canonical_columns = [
+            col for col in ("doi", "ChEMBL.doi") if col in frame.columns
+        ]
         if not canonical_columns:
             return frame
 
@@ -429,14 +424,11 @@ class DocumentPipeline:
                 return None
             if effective_burst is not None and effective_burst <= 0:
                 effective_burst = None
-            if (
-                system_limiter is not None
-                and (
-                    (rps is None and burst is None)
-                    or (
-                        effective_rps == rate_cfg.global_rps
-                        and effective_burst == rate_cfg.global_burst
-                    )
+            if system_limiter is not None and (
+                (rps is None and burst is None)
+                or (
+                    effective_rps == rate_cfg.global_rps
+                    and effective_burst == rate_cfg.global_burst
                 )
             ):
                 return None
@@ -496,7 +488,7 @@ class DocumentPipeline:
 
             for candidate in candidates:
                 if isinstance(candidate, Sequence) and not isinstance(
-                    candidate, (str, bytes, bytearray)
+                    candidate, str | bytes | bytearray
                 ):
                     return [str(item) for item in candidate]
             raise TypeError(
@@ -608,12 +600,12 @@ class DocumentPipeline:
                 service: _SessionPool(session_stack, factory, resources, service)
                 for service, factory in session_factories.items()
             }
-            setattr(thread_local_state, "resources", resources)
+            thread_local_state.resources = resources
 
             finalizer = weakref.finalize(
                 thread_local_state, _close_thread_resources, resources
             )
-            setattr(thread_local_state, "resources_finalizer", finalizer)
+            thread_local_state.resources_finalizer = finalizer
 
             return resources
 
@@ -627,7 +619,9 @@ class DocumentPipeline:
 
             def _summarise_batch(pmids: Sequence[str]) -> dict[str, object]:
                 sample_limit = 5
-                sample = [pmids[index] for index in range(min(len(pmids), sample_limit))]
+                sample = [
+                    pmids[index] for index in range(min(len(pmids), sample_limit))
+                ]
                 if len(pmids) > sample_limit:
                     sample.append("...")
                 return {"pmids_count": len(pmids), "pmids_sample": sample}
@@ -824,7 +818,9 @@ class DocumentPipeline:
                     combined = merge_metadata(pubmed, semsch, openalex, crossref)
                     combined_records.append(combined)
                 return combined_records
-            except requests.RequestException as exc:  # pragma: no cover - network errors
+            except (
+                requests.RequestException
+            ) as exc:  # pragma: no cover - network errors
                 logger.warning(
                     "pubmed_batch_request_failed",
                     **batch_summary,

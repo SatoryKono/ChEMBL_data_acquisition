@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 import sys
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import IO, Any, Iterator
+from typing import IO, Any
 
 from .run_context import RunContext, set_current
 
@@ -84,7 +85,7 @@ class Logger:
         self._logger = base_logger or logging.getLogger(cfg.logger_name)
         self._context: dict[str, Any] = context.copy() if context else {}
 
-    def bind(self, **ctx: Any) -> "Logger":
+    def bind(self, **ctx: Any) -> Logger:
         merged = {**self._context, **ctx}
         return Logger(self._cfg, base_logger=self._logger, context=merged)
 
@@ -191,7 +192,7 @@ class Logger:
         )
 
     @contextmanager
-    def stage(self, name: str, **kv: Any) -> Iterator["Logger"]:
+    def stage(self, name: str, **kv: Any) -> Iterator[Logger]:
         bound = self.bind(stage=name, **kv)
         start = time.perf_counter()
         bound.info(f"{name}_start")

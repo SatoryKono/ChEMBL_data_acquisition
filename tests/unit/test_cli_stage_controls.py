@@ -20,7 +20,9 @@ class DummyLogger:
 
 
 @pytest.mark.unit
-def test_stage_execution_budget__start_logs_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stage_execution_budget__start_logs_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monotonic_calls = [0.0]
 
     def fake_monotonic() -> float:
@@ -32,11 +34,17 @@ def test_stage_execution_budget__start_logs_budget(monkeypatch: pytest.MonkeyPat
     budget = cli.StageExecutionBudget("fetch", minutes=1, logger=logger)
     budget.start()
 
-    assert ("info", "fetch_execution_budget_started", {"budget_seconds": 60}) in logger.messages
+    assert (
+        "info",
+        "fetch_execution_budget_started",
+        {"budget_seconds": 60},
+    ) in logger.messages
 
 
 @pytest.mark.unit
-def test_stage_execution_budget__enforce_within_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stage_execution_budget__enforce_within_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     now = [0.0]
 
     def fake_monotonic() -> float:
@@ -54,7 +62,9 @@ def test_stage_execution_budget__enforce_within_budget(monkeypatch: pytest.Monke
 
 
 @pytest.mark.unit
-def test_stage_execution_budget__enforce_after_budget_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stage_execution_budget__enforce_after_budget_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     now = [0.0]
 
     def fake_monotonic() -> float:
@@ -70,7 +80,9 @@ def test_stage_execution_budget__enforce_after_budget_raises(monkeypatch: pytest
     with pytest.raises(cli.TestitemPipelineStageError):
         budget.enforce("batch")
 
-    assert any(event == "stage_execution_budget_exhausted" for _, event, _ in logger.messages)
+    assert any(
+        event == "stage_execution_budget_exhausted" for _, event, _ in logger.messages
+    )
 
 
 @pytest.mark.unit
@@ -81,7 +93,9 @@ def test_stage_watchdog__start_without_timeout(monkeypatch: pytest.MonkeyPatch) 
     watchdog = cli.StageWatchdog("stage", idle_minutes=0, logger=logger)
     watchdog.start()
 
-    assert watchdog._thread is None  # noqa: SLF001 - internal state asserted for determinism
+    assert (
+        watchdog._thread is None
+    )  # noqa: SLF001 - internal state asserted for determinism
 
 
 @pytest.mark.unit
@@ -111,7 +125,11 @@ def test_stage_watchdog__ping_logs_progress(monkeypatch: pytest.MonkeyPatch) -> 
     monotonic_values[0] = 1.0
     watchdog.ping("chunk", processed=10)
 
-    assert ("info", "stage_watchdog_progress", {"watchdog_event": "chunk", "processed": 10}) in logger.messages
+    assert (
+        "info",
+        "stage_watchdog_progress",
+        {"watchdog_event": "chunk", "processed": 10},
+    ) in logger.messages
 
 
 @pytest.mark.unit
@@ -136,7 +154,9 @@ def test_stage_watchdog__monitor_emits_timeout(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(cli.time, "monotonic", fake_monotonic)
     logger = DummyLogger()
 
-    watchdog = cli.StageWatchdog("stage", idle_minutes=2, logger=logger, check_interval=1)
+    watchdog = cli.StageWatchdog(
+        "stage", idle_minutes=2, logger=logger, check_interval=1
+    )
     watchdog._idle_timeout_seconds = 60
     watchdog._effective_interval = 1
     watchdog._last_activity = 0.0
@@ -178,13 +198,17 @@ def test_stage_watchdog__monitor_emits_timeout(monkeypatch: pytest.MonkeyPatch) 
         (["a", "b", "c"], 5, [["a", "b", "c"]]),
     ],
 )
-def test_batched__yields_expected_groups(items: list[str], size: int, expected: list[list[str]]) -> None:
+def test_batched__yields_expected_groups(
+    items: list[str], size: int, expected: list[list[str]]
+) -> None:
     batches = list(cli._batched(items, size))
     assert batches == expected
 
 
 @pytest.mark.unit
-def test_log_missing_identifier_summary__emits_warning(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_missing_identifier_summary__emits_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     logger = DummyLogger()
     monkeypatch.setattr(cli, "logger", logger)
 
@@ -198,7 +222,9 @@ def test_log_missing_identifier_summary__emits_warning(monkeypatch: pytest.Monke
 
 
 @pytest.mark.unit
-def test_log_missing_identifier_summary__skips_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_missing_identifier_summary__skips_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     logger = DummyLogger()
     monkeypatch.setattr(cli, "logger", logger)
 

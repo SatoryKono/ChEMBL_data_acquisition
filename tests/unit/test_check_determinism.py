@@ -10,15 +10,17 @@ from subprocess import CompletedProcess
 import pytest
 import yaml
 
-from scripts import check_determinism
 from library.utils.cli_tools import check_determinism as cli_check_determinism
+from scripts import check_determinism
 
 
 def test_default_input_csv__matches_activity_column(tmp_path: Path) -> None:
     """Ensure the fallback CSV mirrors the configured activity column."""
 
     original_path_cls = check_determinism.Path
-    script_repo_root = original_path_cls(check_determinism.__file__).resolve().parents[1]
+    script_repo_root = (
+        original_path_cls(check_determinism.__file__).resolve().parents[1]
+    )
     candidate_path = script_repo_root / "data" / "input" / "activity.csv"
     candidate_str = str(candidate_path)
 
@@ -53,8 +55,7 @@ def test_default_input_csv__matches_activity_column(tmp_path: Path) -> None:
         config_data = yaml.safe_load(config_file) or {}
 
     expected_column = (
-        config_data
-        .get("sources", {})
+        config_data.get("sources", {})
         .get("chembl", {})
         .get("pipelines", {})
         .get("activity", {})
@@ -67,7 +68,9 @@ def test_default_input_csv__matches_activity_column(tmp_path: Path) -> None:
     assert data_rows == [["ACT1"], ["ACT2"]]
 
 
-def _write_run_payload(destination: Path, payload: str, metadata: dict[str, object]) -> None:
+def _write_run_payload(
+    destination: Path, payload: str, metadata: dict[str, object]
+) -> None:
     destination.write_text(payload, encoding="utf-8")
     meta_path = destination.with_suffix(destination.suffix + ".meta.yaml")
     with meta_path.open("w", encoding="utf-8") as handle:
@@ -77,7 +80,9 @@ def _write_run_payload(destination: Path, payload: str, metadata: dict[str, obje
 def _patch_mkdtemp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[Path]:
     created_dirs: list[Path] = []
 
-    def _mkdtemp(prefix: str, dir: str | None = None) -> str:  # pragma: no cover - helper
+    def _mkdtemp(
+        prefix: str, dir: str | None = None
+    ) -> str:  # pragma: no cover - helper
         del dir
         temp_dir = tmp_path / f"{prefix}{len(created_dirs)}"
         temp_dir.mkdir()
@@ -309,7 +314,9 @@ def test_run_check__metadata_absent_is_skipped(
         del chunk_iter, kwargs
         path.write_text("csv", encoding="utf-8")
 
-    monkeypatch.setattr(cli_check_determinism, "write_csv_deterministic", _fake_write_csv)
+    monkeypatch.setattr(
+        cli_check_determinism, "write_csv_deterministic", _fake_write_csv
+    )
     monkeypatch.setattr(
         cli_check_determinism, "write_csv_chunks_deterministic", _fake_write_chunks
     )
@@ -340,7 +347,9 @@ def test_run_check__metadata_mismatch_fails(
         del chunk_iter, kwargs
         path.write_text("csv", encoding="utf-8")
 
-    monkeypatch.setattr(cli_check_determinism, "write_csv_deterministic", _fake_write_csv)
+    monkeypatch.setattr(
+        cli_check_determinism, "write_csv_deterministic", _fake_write_csv
+    )
     monkeypatch.setattr(
         cli_check_determinism, "write_csv_chunks_deterministic", _fake_write_chunks
     )
@@ -371,7 +380,9 @@ def test_run_check__chunked_metadata_mismatch_fails(
         meta_path = path.with_suffix(path.suffix + ".meta.yaml")
         meta_path.write_text("different", encoding="utf-8")
 
-    monkeypatch.setattr(cli_check_determinism, "write_csv_deterministic", _fake_write_csv)
+    monkeypatch.setattr(
+        cli_check_determinism, "write_csv_deterministic", _fake_write_csv
+    )
     monkeypatch.setattr(
         cli_check_determinism, "write_csv_chunks_deterministic", _fake_write_chunks
     )
@@ -380,6 +391,8 @@ def test_run_check__chunked_metadata_mismatch_fails(
 
     assert "metadata_hash_mismatch" in caplog.text
     assert "status='mismatch'" in caplog.text
+
+
 def test_run_activity__passes_dry_run_flag(monkeypatch, tmp_path: Path) -> None:
     """Ensure the activity runner forwards the --dry-run flag."""
 

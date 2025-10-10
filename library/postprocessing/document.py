@@ -224,6 +224,7 @@ def _string_value(value: object) -> str:
         return str(value).strip()
     return str(value).strip()
 
+
 def _string_series(series: pd.Series[Any]) -> pd.Series[str]:
     """Return ``series`` as a trimmed ``string`` dtype series."""
 
@@ -272,6 +273,7 @@ def _coalesce_columns(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series[str
         result = result.mask(mask & (candidate != ""), candidate)
     return result
 
+
 def _series_to_bool(series: pd.Series[Any]) -> pd.Series[bool]:
     """Return ``series`` as boolean values recognising textual truthy tokens."""
 
@@ -292,6 +294,7 @@ def _split_tokens(value: str, delimiters: Iterable[str]) -> list[str]:
             parts.extend(token.split(delimiter))
         tokens = parts
     return [token.strip() for token in tokens if token.strip()]
+
 
 def _aggregate_terms(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series[str]:
     """Combine descriptor columns into a semicolon-delimited series."""
@@ -365,6 +368,7 @@ def _build_error_sources(df: pd.DataFrame) -> tuple[pd.Series[str], pd.Series[bo
         pd.Series(has_error, index=df.index, dtype="boolean"),
     )
 
+
 def _build_metadata_flags(
     df: pd.DataFrame,
 ) -> tuple[pd.Series[str], dict[str, pd.Series[Any]]]:
@@ -381,8 +385,14 @@ def _build_metadata_flags(
                 continue
             mask = mask | _truthy_mask(df[column])
         flags[f"has_{source}"] = mask
-    for row in zip(*(flags[f"has_{src}"] for src in METADATA_SOURCE_ORDER), strict=False):
-        sources = [name for name, present in zip(METADATA_SOURCE_ORDER, row, strict=False) if present]
+    for row in zip(
+        *(flags[f"has_{src}"] for src in METADATA_SOURCE_ORDER), strict=False
+    ):
+        sources = [
+            name
+            for name, present in zip(METADATA_SOURCE_ORDER, row, strict=False)
+            if present
+        ]
         token_lists.append(sources)
     metadata_strings = [METADATA_LIST_SEPARATOR.join(tokens) for tokens in token_lists]
     metadata_counts = [len(tokens) for tokens in token_lists]
@@ -391,7 +401,8 @@ def _build_metadata_flags(
     # Fix: type of count_series in returned dict should be pd.Series[int], not
     # pd.Series[bool]
     return metadata_series, {**flags, "metadata_source_count": count_series}
-    
+
+
 def _coverage_status(score: int, has_error: bool) -> str:
     """Return textual coverage label for ``score``."""
 
@@ -479,7 +490,11 @@ def preprocess_document_export(
         )
 
     # Ensure only columns present in processed are selected, in the correct order
-    col_order = [col for col in stage_document_postprocessing.FINAL_COLUMN_ORDER if col in processed.columns]
+    col_order = [
+        col
+        for col in stage_document_postprocessing.FINAL_COLUMN_ORDER
+        if col in processed.columns
+    ]
     return processed.loc[:, col_order]
 
 
@@ -528,7 +543,9 @@ def postprocess_export_file(
         ref_document=ref_document,
         ref_document_path=ref_document_path,
     )
-    destination = Path(output_path) if output_path else _build_default_destination(input_path)
+    destination = (
+        Path(output_path) if output_path else _build_default_destination(input_path)
+    )
     destination.parent.mkdir(parents=True, exist_ok=True)
     col_order = [
         column
@@ -545,7 +562,6 @@ def postprocess_export_file(
         cfg=None,
     )
     return destination
-
 
 
 # ---------------------------------------------------------------------------
@@ -801,6 +817,7 @@ def try_parse_int(value: Any) -> int | None:
             return int(float_value)
         return None
 
+
 def _series_any(series_list: Iterable[pd.Series[bool]]) -> pd.Series[bool]:
     series_iter = iter(series_list)
     try:
@@ -1016,7 +1033,9 @@ def _load_output_document(path: Path) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def _harmonise_documents(out_frame: pd.DataFrame, ref_frame: pd.DataFrame) -> pd.DataFrame:
+def _harmonise_documents(
+    out_frame: pd.DataFrame, ref_frame: pd.DataFrame
+) -> pd.DataFrame:
     df = out_frame.copy()
 
     for column in PUBMED_NUMERIC_TEXT_COLUMNS:
@@ -1083,15 +1102,27 @@ def _harmonise_documents(out_frame: pd.DataFrame, ref_frame: pd.DataFrame) -> pd
     ]
     df["review"] = _series_any(review_series)
 
-    journal_match = (df["PubMed.JournalTitle"] == df["ChEMBL.journal"]) & (df["ChEMBL.journal"] != "")
-    volume_match = (df["PubMed.Volume"] == df["ChEMBL.volume"]) & (df["ChEMBL.volume"] != "")
-    issue_match = (df["PubMed.Issue"] == df["ChEMBL.issue"]) & (df["ChEMBL.issue"] != "")
-    start_match = (df["PubMed.StartPage"] == df["ChEMBL.first_page"]) & (df["ChEMBL.first_page"] != "")
-    end_match = (df["PubMed.EndPage"] == df["ChEMBL.last_page"]) & (df["ChEMBL.last_page"] != "")
+    journal_match = (df["PubMed.JournalTitle"] == df["ChEMBL.journal"]) & (
+        df["ChEMBL.journal"] != ""
+    )
+    volume_match = (df["PubMed.Volume"] == df["ChEMBL.volume"]) & (
+        df["ChEMBL.volume"] != ""
+    )
+    issue_match = (df["PubMed.Issue"] == df["ChEMBL.issue"]) & (
+        df["ChEMBL.issue"] != ""
+    )
+    start_match = (df["PubMed.StartPage"] == df["ChEMBL.first_page"]) & (
+        df["ChEMBL.first_page"] != ""
+    )
+    end_match = (df["PubMed.EndPage"] == df["ChEMBL.last_page"]) & (
+        df["ChEMBL.last_page"] != ""
+    )
 
     journal_value = np.where(journal_match, df["ChEMBL.journal"], "unknown")
     volume_value = np.where(volume_match, df["ChEMBL.volume"], "unknown")
-    issue_match = (df["PubMed.Issue"] == df["ChEMBL.issue"]) & (df["ChEMBL.issue"] != "")
+    issue_match = (df["PubMed.Issue"] == df["ChEMBL.issue"]) & (
+        df["ChEMBL.issue"] != ""
+    )
     issue_value = np.where(issue_match, df["ChEMBL.issue"], "unknown")
     start_value = np.where(start_match, df["ChEMBL.first_page"], "unknown")
     end_value = np.where(end_match, df["ChEMBL.last_page"], "unknown")
@@ -1117,7 +1148,11 @@ def _harmonise_documents(out_frame: pd.DataFrame, ref_frame: pd.DataFrame) -> pd
     df["year"] = np.where(
         ~year_completed.map(null_or_empty),
         year_completed.map(pad4),
-        np.where(~year_revised.map(null_or_empty), year_revised.map(pad4), chembl_year.map(pad4)),
+        np.where(
+            ~year_revised.map(null_or_empty),
+            year_revised.map(pad4),
+            chembl_year.map(pad4),
+        ),
     )
 
     month_completed = df["PubMed.MonthCompleted"].map(to_text)
@@ -1210,9 +1245,13 @@ def _harmonise_documents(out_frame: pd.DataFrame, ref_frame: pd.DataFrame) -> pd
 
     df = df.drop(columns=["is_experimental_doc"], errors="ignore")
 
-    missing_columns = [column for column in FINAL_COLUMN_ORDER if column not in df.columns]
+    missing_columns = [
+        column for column in FINAL_COLUMN_ORDER if column not in df.columns
+    ]
     if missing_columns:
-        raise ValueError(f"Missing expected columns after harmonisation: {missing_columns}")
+        raise ValueError(
+            f"Missing expected columns after harmonisation: {missing_columns}"
+        )
 
     df = df.reindex(columns=FINAL_COLUMN_ORDER)
     df = df.sort_values("completed", ascending=True, kind="mergesort")
@@ -1296,9 +1335,7 @@ def preprocess_documents_csv(
         if qa_reference_path.exists():
             qa_module = None
             try:
-                qa_module = importlib.import_module(
-                    "qa.check_document_postprocessing"
-                )
+                qa_module = importlib.import_module("qa.check_document_postprocessing")
             except ModuleNotFoundError:
                 try:
                     qa_module = importlib.import_module(
@@ -1326,7 +1363,11 @@ def preprocess_documents_csv(
                     qa_module, "DEFAULT_REPORT_DIR", Path("output") / "document"
                 )
 
-                if callable(run_document_postprocessing_check) and crosswalk_cls and crosswalk_path:
+                if (
+                    callable(run_document_postprocessing_check)
+                    and crosswalk_cls
+                    and crosswalk_path
+                ):
                     try:
                         crosswalk = crosswalk_cls.load(Path(crosswalk_path))
                     except Exception:

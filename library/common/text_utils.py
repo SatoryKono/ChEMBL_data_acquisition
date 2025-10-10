@@ -19,11 +19,11 @@ def to_text(value: Any, *, encoding: str = UTF8_ENCODING) -> str:
         return value
     if isinstance(value, bytes):
         return value.decode(encoding, errors="ignore")
-    if isinstance(value, (np.bool_, bool)):
+    if isinstance(value, np.bool_ | bool):
         return "true" if bool(value) else "false"
-    if isinstance(value, (np.integer, int)):
+    if isinstance(value, np.integer | int):
         return str(int(value))
-    if isinstance(value, (np.floating, float)):
+    if isinstance(value, np.floating | float):
         numeric = float(value)
         if numeric != numeric:  # NaN check
             return ""

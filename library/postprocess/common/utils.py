@@ -1,8 +1,11 @@
 """Pipeline orchestration utilities for postprocessing transformations."""
+
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any
+
 import pandas as pd
 
 from . import logging as logging_utils

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import pytest
 
@@ -74,7 +74,9 @@ def test_main__forwards_pytest_args(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_main__respects_verbose_and_report_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_main__respects_verbose_and_report_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     spy = _RunTestsSpy()
     monkeypatch.setattr(run_test_suite.run_tests, "main", spy.main)
 
@@ -93,7 +95,9 @@ def test_main__respects_verbose_and_report_dir(monkeypatch: pytest.MonkeyPatch, 
 
 
 @pytest.mark.unit
-def test_main__sets_pythonhashseed_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main__sets_pythonhashseed_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     spy = _RunTestsSpy()
     monkeypatch.setattr(run_test_suite.run_tests, "main", spy.main)
 
@@ -103,7 +107,9 @@ def test_main__sets_pythonhashseed_when_missing(monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.mark.unit
-def test_main__preserves_existing_pythonhashseed(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main__preserves_existing_pythonhashseed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     spy = _RunTestsSpy()
     monkeypatch.setattr(run_test_suite.run_tests, "main", spy.main)
     monkeypatch.setenv("PYTHONHASHSEED", "123")
@@ -114,7 +120,9 @@ def test_main__preserves_existing_pythonhashseed(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.unit
-def test_main__emits_warning_for_custom_suite(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main__emits_warning_for_custom_suite(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     spy = _RunTestsSpy()
     monkeypatch.setattr(run_test_suite.run_tests, "main", spy.main)
 

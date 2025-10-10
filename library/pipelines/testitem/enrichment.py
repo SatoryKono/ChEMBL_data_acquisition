@@ -225,14 +225,12 @@ def enrich(
             value for value in parent_ids.dropna() if value not in known_ids
         }
         missing_parentless_children: set[str] = set()
-        for child_value, parent_value in zip(child_ids, parent_ids):
+        for child_value, parent_value in zip(child_ids, parent_ids, strict=False):
             if pd.isna(parent_value) and pd.notna(child_value):
                 child_text = str(child_value)
                 if child_text not in known_ids:
                     missing_parentless_children.add(child_text)
-        missing_parents = sorted(
-            missing_parent_values | missing_parentless_children
-        )
+        missing_parents = sorted(missing_parent_values | missing_parentless_children)
         if missing_children:
             child_identifiers, child_truncated = _summarise_identifiers(
                 missing_children

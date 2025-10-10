@@ -11,8 +11,8 @@ from __future__ import annotations
 import hashlib
 import platform
 from collections.abc import Mapping, Sequence
-from functools import lru_cache
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -21,12 +21,12 @@ import yaml
 from config.paths import DICTIONARY_DIR
 
 from ..config import _mask_secrets
+from ..project_version import get_pipeline_version
 from ..resources.dictionaries import DictionaryManifestError, get_resource
+from ..utils.atomic import open_atomic
 from .git import _git_sha
 from .log import logger
 from .run_context import get_current
-from ..utils.atomic import open_atomic
-from ..project_version import get_pipeline_version
 
 
 def _load_metadata(meta_path: Path) -> dict[str, Any]:
@@ -44,6 +44,7 @@ def _load_metadata(meta_path: Path) -> dict[str, Any]:
     if isinstance(loaded, dict):
         return dict(loaded)
     return {}
+
 
 # ``datetime.UTC`` is only available in Python 3.11 and later.
 # ``timezone.utc`` provides the same value and works on older versions.
@@ -252,6 +253,8 @@ def record_quality_failure(
         logger.info("metadata_quality_status", path=str(path), status="failed")
 
     return path
+
+
 @lru_cache(maxsize=1)
 def _dictionary_manifest_metadata() -> Mapping[str, Mapping[str, str]]:
     manifest_path = DICTIONARY_DIR / "manifest.yaml"
@@ -274,4 +277,3 @@ def _dictionary_manifest_metadata() -> Mapping[str, Mapping[str, str]]:
         if isinstance(version, str) and isinstance(sha256, str):
             entries[name] = {"version": version, "sha256": sha256}
     return entries
-

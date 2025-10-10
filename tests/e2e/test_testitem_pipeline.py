@@ -49,7 +49,9 @@ def test_testitem_pipeline_e2e__deterministic_output(
     )
 
     normalised = normalize_testitems(raw_frame)
-    enriched = enrichment.enrich(normalised, cfg=cfg.testitem_molecule_enrichment, io_cfg=cfg.io)
+    enriched = enrichment.enrich(
+        normalised, cfg=cfg.testitem_molecule_enrichment, io_cfg=cfg.io
+    )
     final = cli.integrate_missing_identifiers(
         enriched,
         missing_ids=["CHEMBL999"],

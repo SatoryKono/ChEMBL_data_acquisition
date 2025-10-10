@@ -34,4 +34,6 @@ def test_normalize_testitems__preserves_non_string_values() -> None:
 
     normalised = normalize_testitems(frame)
 
-    assert normalised.equals(frame.assign(molecule_chembl_id=pd.Series(["CHEMBL1"], dtype="string")))
+    assert normalised.equals(
+        frame.assign(molecule_chembl_id=pd.Series(["CHEMBL1"], dtype="string"))
+    )

@@ -1,26 +1,22 @@
 """Transformation steps for assay postprocessing."""
+
 from __future__ import annotations
 
-import re
 import logging
-from typing import Sequence
+import re
+from collections.abc import Sequence
 
 import pandas as pd
 
- 
-from library.postprocess.common import run_steps
-from library.postprocess.common.logging import PipelineRunMetrics
- 
 from library.pipelines.common.metadata import get_pipeline_version
- 
+from library.postprocess.common import run_steps
 from library.postprocess.common.config import (
     load_pipeline_config,
     normalize_pipeline_version,
 )
- 
+from library.postprocess.common.logging import PipelineRunMetrics
 
 from .schema import ASSAY_SCHEMA, validate_assays
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -138,10 +134,7 @@ def finalize_assay_records(
         for column in identifier_columns:
             if column in prepared.columns:
                 prepared[column] = (
-                    prepared[column]
-                    .astype("string")
-                    .str.strip()
-                    .str.upper()
+                    prepared[column].astype("string").str.strip().str.upper()
                 )
 
     for column in ["assay_chembl_id", "assay_type", "assay_test_type", "description"]:

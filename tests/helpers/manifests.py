@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Tuple
 
 
 def list_manifest_files(base_path: Path) -> list[Path]:
@@ -19,7 +18,7 @@ def list_manifest_files(base_path: Path) -> list[Path]:
     return sorted(manifests)
 
 
-def load_latest_manifest(base_path: Path) -> Tuple[Path, dict[str, object]]:
+def load_latest_manifest(base_path: Path) -> tuple[Path, dict[str, object]]:
     """Load the most recent manifest ensuring the ``latest`` alias is consistent."""
 
     manifests = list_manifest_files(base_path)
@@ -33,9 +32,8 @@ def load_latest_manifest(base_path: Path) -> Tuple[Path, dict[str, object]]:
             alias.resolve() == latest.resolve()
         ), "manifest alias must reference the latest run"
     else:
-        assert (
-            alias.read_text(encoding="utf-8")
-            == latest.read_text(encoding="utf-8")
+        assert alias.read_text(encoding="utf-8") == latest.read_text(
+            encoding="utf-8"
         ), "manifest alias content must match the latest run"
 
     payload = json.loads(latest.read_text(encoding="utf-8"))

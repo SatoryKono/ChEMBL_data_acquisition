@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Sequence, TypedDict, cast
+from typing import Any, TypedDict, cast
 
 import yaml
 
@@ -50,7 +51,9 @@ class PipelineStep:
         """Return CLI arguments forwarded to the wrapped ``main`` function."""
 
         input_csv = cfg.input_path(self.name)
-        output_csv = output_path if output_path is not None else cfg.output_path(self.name)
+        output_csv = (
+            output_path if output_path is not None else cfg.output_path(self.name)
+        )
         args = ["--config", str(cfg.config_path), "--input", str(input_csv)]
         args.extend([self.output_flag, str(output_csv)])
         args.extend(["--log-level", cfg.log_level])
@@ -78,6 +81,7 @@ class PipelineStep:
         """Return the CSV that the pipeline expects as input."""
 
         return cfg.input_path(self.name)
+
 
 _DEFAULT_DEFINITIONS: tuple[PipelineStepDefinition, ...] = (
     {
@@ -124,14 +128,16 @@ _DEFAULT_DEFINITIONS: tuple[PipelineStepDefinition, ...] = (
 
 
 def load_pipeline_registry(
-    source: Path | str | Iterable[PipelineStepDefinition] | Mapping[str, object] | None = None,
+    source: (
+        Path | str | Iterable[PipelineStepDefinition] | Mapping[str, object] | None
+    ) = None,
 ) -> tuple[PipelineStep, ...]:
     """Return pipeline steps loaded from ``source`` or the default registry."""
 
     definitions: Iterable[PipelineStepDefinition]
     if source is None:
         definitions = _DEFAULT_DEFINITIONS
-    elif isinstance(source, (str, Path)):
+    elif isinstance(source, str | Path):
         path = Path(source)
         if not path.exists():
             raise FileNotFoundError(f"registry file not found: {path}")
@@ -152,7 +158,7 @@ def _coerce_definitions(data: object) -> Iterable[PipelineStepDefinition]:
         if pipelines is None:
             raise ValueError("registry mapping must contain a 'pipelines' key")
         data = pipelines
-    if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
+    if not isinstance(data, Iterable) or isinstance(data, str | bytes):
         raise TypeError("registry definitions must be an iterable of mappings")
     definitions: list[PipelineStepDefinition] = []
     for entry in data:
@@ -167,7 +173,7 @@ def _coerce_string_sequence(value: object, *, field: str) -> tuple[str, ...]:
         return ()
     if isinstance(value, str):
         return (value,)
-    if isinstance(value, Iterable) and not isinstance(value, (bytes, bytearray)):
+    if isinstance(value, Iterable) and not isinstance(value, bytes | bytearray):
         result: list[str] = []
         for item in value:
             if not isinstance(item, str):

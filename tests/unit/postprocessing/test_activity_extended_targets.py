@@ -52,13 +52,18 @@ def _base_row(**overrides: object) -> dict[str, object]:
     return base
 
 
-def test_load_target_metadata__derives_unicellular_from_type_alias(tmp_path: Path) -> None:
+def test_load_target_metadata__derives_unicellular_from_type_alias(
+    tmp_path: Path,
+) -> None:
     csv_path = tmp_path / "targets.csv"
     _write_target_csv(
         csv_path,
         [
             _base_row(**{"Organism Type": "Unicellular organism"}),
-            _base_row(target_chembl_id="CHEMBL2", **{"Organism Type": "Multicellular organism"}),
+            _base_row(
+                target_chembl_id="CHEMBL2",
+                **{"Organism Type": "Multicellular organism"},
+            ),
         ],
     )
 
@@ -81,7 +86,9 @@ def test_load_target_metadata__derives_unicellular_from_type_alias(tmp_path: Pat
     assert frame["unicellular_organism"].tolist() == [True, False]
 
 
-def test_load_target_metadata__normalises_unicellular_column_name(tmp_path: Path) -> None:
+def test_load_target_metadata__normalises_unicellular_column_name(
+    tmp_path: Path,
+) -> None:
     csv_path = tmp_path / "targets.csv"
     _write_target_csv(
         csv_path,

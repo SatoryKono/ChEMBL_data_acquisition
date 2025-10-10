@@ -29,7 +29,9 @@ class _MemoryLogger:
     def exception(self, event: str, **payload: object) -> None:
         self.events.append(("exception", event, dict(payload)))
 
-    def debug(self, event: str, **payload: object) -> None:  # pragma: no cover - optional
+    def debug(
+        self, event: str, **payload: object
+    ) -> None:  # pragma: no cover - optional
         self.events.append(("debug", event, dict(payload)))
 
 
@@ -43,9 +45,7 @@ def document_cli_logger(
         return logger
 
     @contextmanager
-    def _setup_cli_logging(
-        _script: str, log_cfg: object, _date: str | None = None
-    ):
+    def _setup_cli_logging(_script: str, log_cfg: object, _date: str | None = None):
         yield SimpleNamespace(log_cfg=log_cfg, log_path=tmp_path / "cli.log")
 
     monkeypatch.setattr(get_document_data, "logger", logger)
@@ -135,7 +135,8 @@ def test_main_pubmed__without_fallback_csv(
     )
     assert start_event["fallback_doi"]["value"] is False
     assert any(
-        event == "document_pubmed_done" for _level, event, _payload in document_cli_logger.events
+        event == "document_pubmed_done"
+        for _level, event, _payload in document_cli_logger.events
     )
 
 

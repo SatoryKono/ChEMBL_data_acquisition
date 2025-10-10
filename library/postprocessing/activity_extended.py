@@ -16,14 +16,14 @@ import json
 import re
 import sys
 import warnings
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Callable, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
 
-from library.common.log import logger
 from config.paths import DICTIONARY_DIR
+from library.common.log import logger
 
 from . import helpers
 
@@ -99,15 +99,14 @@ _ACTIVITY_INPUT_SCHEMA: Mapping[str, str] = {
     column: (
         "Logical"
         if dtype == "boolean"
-        else "Int64"
-        if dtype == "Int64"
-        else "Float64"
-        if dtype == "Float64"
-        else "Text"
+        else (
+            "Int64" if dtype == "Int64" else "Float64" if dtype == "Float64" else "Text"
+        )
     )
     for column, dtype in _REQUIRED_COLUMN_DTYPES.items()
     if dtype in {"string", "boolean", "Int64", "Float64"}
 }
+
 
 def _normalise_column_key(name: str) -> str:
     """Return a canonical key used to match column aliases."""
@@ -164,9 +163,11 @@ _CITATION_FRACTION_SCHEMA: Mapping[str, str] = {
 _REQUIRED_COLUMN_FALLBACKS: Mapping[str, Callable[[pd.DataFrame], pd.Series | None]] = {
     "activity_chembl_id": lambda frame: frame.get("activity_id"),
     "salt_chembl_id": (
-        lambda frame: frame.get("molecule_chembl_id")
-        if "parent_molecule_chembl_id" not in frame.columns
-        else None
+        lambda frame: (
+            frame.get("molecule_chembl_id")
+            if "parent_molecule_chembl_id" not in frame.columns
+            else None
+        )
     ),
     "compound_name": lambda frame: frame.get("molecule_pref_name"),
     "log_value": lambda frame: frame.get("pchembl_value"),
@@ -271,7 +272,7 @@ class ActivityExtendedError(RuntimeError):
 def _current_default_search_dir() -> Path:
     package = sys.modules.get(__name__)
     if package is not None and hasattr(package, "_DEFAULT_SEARCH_DIR"):
-        override = getattr(package, "_DEFAULT_SEARCH_DIR")
+        override = package._DEFAULT_SEARCH_DIR
         if override is not None:
             return Path(override)
     return _DEFAULT_SEARCH_DIR
@@ -333,7 +334,9 @@ def _resolve_targets_path(dictionary_root: Path, override: Path | None) -> Path:
     if override is not None:
         path = Path(override)
         if not path.exists():
-            raise ActivityExtendedError(f"targets_type.csv override not found: {path!s}")
+            raise ActivityExtendedError(
+                f"targets_type.csv override not found: {path!s}"
+            )
         return path
 
     candidates = [
@@ -344,7 +347,9 @@ def _resolve_targets_path(dictionary_root: Path, override: Path | None) -> Path:
     for path in candidates:
         if path.exists():
             return path
-    formatted = " or ".join(f"'{path}'" for path in candidates[:-1]) + f" or '{candidates[-1]}'"
+    formatted = (
+        " or ".join(f"'{path}'" for path in candidates[:-1]) + f" or '{candidates[-1]}'"
+    )
     raise ActivityExtendedError(
         "targets_type.csv not found in the provided dictionary directory. Expected at "
         + formatted
@@ -362,14 +367,18 @@ def _load_target_metadata(path: Path) -> pd.DataFrame:
     if alias is not None and alias != "unicellular_organism":
         frame = frame.rename(columns={alias: "unicellular_organism"})
     if "unicellular_organism" not in frame.columns:
-        source_column = _lookup_column_name(frame, "type", "organism_type", "organism type")
+        source_column = _lookup_column_name(
+            frame, "type", "organism_type", "organism type"
+        )
         if source_column is not None:
             source = frame[source_column].astype("string")
             normalised = source.str.strip().str.lower()
             inferred = normalised == "unicellular organism"
             frame["unicellular_organism"] = inferred.astype("boolean")
         else:
-            frame["unicellular_organism"] = pd.Series(pd.NA, index=frame.index, dtype="boolean")
+            frame["unicellular_organism"] = pd.Series(
+                pd.NA, index=frame.index, dtype="boolean"
+            )
     frame = frame.rename(columns={"target_sort_order": "sortorder.target"})
 
     if "unicellular_organism" not in frame.columns and "organism_type" in frame.columns:
@@ -427,12 +436,19 @@ def _load_document_lookup(dictionary_root: Path) -> pd.DataFrame:
             normalised = column.strip().lower()
             if normalised == "document_chembl_id":
                 resolved_columns[column] = "document_chembl_id"
-            elif normalised in {"chembl.document_chembl_id", "chembl.document chembl id"}:
+            elif normalised in {
+                "chembl.document_chembl_id",
+                "chembl.document chembl id",
+            }:
                 resolved_columns[column] = "document_chembl_id"
 
         if resolved_columns:
             candidate_frame = candidate_frame.rename(columns=resolved_columns)
-            alias_source = [src for src, dst in resolved_columns.items() if dst == "document_chembl_id" and src != dst]
+            alias_source = [
+                src
+                for src, dst in resolved_columns.items()
+                if dst == "document_chembl_id" and src != dst
+            ]
             if alias_source:
                 logger.warning(
                     "Renamed document identifier column(s) %s to 'document_chembl_id'. "
@@ -517,7 +533,7 @@ def _load_testitem_lookup(dictionary_root: Path) -> pd.DataFrame:
     return result.drop_duplicates(subset=["molecule_chembl_id"])
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _load_parent_lookup_cached(dictionary_root: str) -> pd.Series:
     root_path = Path(dictionary_root)
     candidate = root_path / "_testitem" / "molecule_hierarchy.csv"
@@ -580,7 +596,9 @@ def _log_join_statistics(event: str, indicator: pd.Series) -> None:
 
 def _safe_to_bool(series: pd.Series, column: str) -> pd.Series:
     if not isinstance(series, pd.Series):
-        raise ActivityExtendedError(f"column '{column}' has duplicate entries; expected a Series")
+        raise ActivityExtendedError(
+            f"column '{column}' has duplicate entries; expected a Series"
+        )
 
     def mapper(value: object) -> object:
         if pd.isna(value):
@@ -605,7 +623,9 @@ def _safe_to_bool(series: pd.Series, column: str) -> pd.Series:
 
 def _safe_to_int(series: pd.Series, column: str) -> pd.Series:
     if not isinstance(series, pd.Series):
-        raise ActivityExtendedError(f"column '{column}' has duplicate entries; expected a Series")
+        raise ActivityExtendedError(
+            f"column '{column}' has duplicate entries; expected a Series"
+        )
     try:
         return pd.to_numeric(series, errors="raise").astype("Int64")
     except Exception as exc:  # pragma: no cover - defensive downgrade
@@ -616,7 +636,9 @@ def _safe_to_int(series: pd.Series, column: str) -> pd.Series:
 def _prepare_unknown_chirality(frame: pd.DataFrame) -> pd.DataFrame:
     df = frame.copy()
     if "nstereo" in df.columns:
-        df["unknown_chirality"] = _safe_to_int(df["nstereo"], "nstereo").ne(1).fillna(True)
+        df["unknown_chirality"] = (
+            _safe_to_int(df["nstereo"], "nstereo").ne(1).fillna(True)
+        )
         df.drop(columns=["nstereo"], inplace=True)
     else:
         df["unknown_chirality"] = pd.Series(True, index=df.index, dtype="boolean")
@@ -627,7 +649,8 @@ def _apply_multimol_logic(df: pd.DataFrame) -> pd.DataFrame:
     missing = set(_GROUP_KEY_COLUMNS) - set(df.columns)
     if missing:
         raise ActivityExtendedError(
-            "activity table missing columns for multimol grouping: " + ", ".join(sorted(missing))
+            "activity table missing columns for multimol grouping: "
+            + ", ".join(sorted(missing))
         )
     df = helpers.sort_power_query(df, _GROUP_KEY_COLUMNS)
     counts = (
@@ -646,7 +669,9 @@ def _apply_multimol_logic(df: pd.DataFrame) -> pd.DataFrame:
     duplicated_assays = set(merged.loc[mask, "assay_chembl_id"].dropna().astype(str))
     merged["multimol_assay_same"] = merged["assay_chembl_id"].isin(duplicated_assays)
 
-    multmol_series = _safe_to_bool(merged["multmol_assay"], "multmol_assay").fillna(False)
+    multmol_series = _safe_to_bool(merged["multmol_assay"], "multmol_assay").fillna(
+        False
+    )
     merged["multmol_assay"] = _safe_to_bool(
         multmol_series | merged["multimol_assay_same"], "multmol_assay"
     )
@@ -664,7 +689,9 @@ def _empty_series(index: pd.Index, dtype: str) -> pd.Series:
     return pd.Series(pd.NA, index=index, dtype=dtype)
 
 
-def _ensure_required_input_columns(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]]:
+def _ensure_required_input_columns(
+    frame: pd.DataFrame,
+) -> tuple[pd.DataFrame, set[str]]:
     df = frame.copy()
     filled: set[str] = set()
     if df.empty:
@@ -704,7 +731,9 @@ def _ensure_compound_key_sources(
         filled.add("molecule_chembl_id")
 
     if "parent_molecule_chembl_id" not in df.columns:
-        df["parent_molecule_chembl_id"] = pd.Series(pd.NA, index=df.index, dtype="string")
+        df["parent_molecule_chembl_id"] = pd.Series(
+            pd.NA, index=df.index, dtype="string"
+        )
         filled.add("parent_molecule_chembl_id")
 
     if df.empty:
@@ -772,7 +801,7 @@ def _drop_unused_columns(df: pd.DataFrame) -> pd.DataFrame:
 def _normalise_activity_properties_text(value: object) -> str | None:
     if value is None:
         return None
-    if isinstance(value, (float, np.floating)) and np.isnan(value):
+    if isinstance(value, float | np.floating) and np.isnan(value):
         return None
     if value is pd.NA:
         return None
@@ -782,7 +811,7 @@ def _normalise_activity_properties_text(value: object) -> str | None:
         return None
     if text.lower() in {"nan", "none", "null"}:
         return None
-    if text.startswith("\"") and text.endswith("\""):
+    if text.startswith('"') and text.endswith('"'):
         inner = text[1:-1]
         if inner.startswith("{") and inner.endswith("}"):
             text = inner
@@ -791,12 +820,12 @@ def _normalise_activity_properties_text(value: object) -> str | None:
 
 def _load_activity_properties_json(text: str) -> Mapping[str, object] | None:
     candidates = [text]
-    if "\"\"" in text:
-        candidates.append(text.replace("\"\"", "\""))
-    if text.startswith("\"") and text.endswith("\""):
+    if '""' in text:
+        candidates.append(text.replace('""', '"'))
+    if text.startswith('"') and text.endswith('"'):
         inner = text[1:-1]
         candidates.append(inner)
-        candidates.append(inner.replace("\"\"", "\""))
+        candidates.append(inner.replace('""', '"'))
 
     expanded: list[str] = []
     for candidate in candidates:
@@ -825,9 +854,9 @@ def _load_activity_properties_json(text: str) -> Mapping[str, object] | None:
 def _coerce_activity_property_flag(value: object) -> bool | None:
     if isinstance(value, bool):
         return value
-    if isinstance(value, (np.bool_,)):
+    if isinstance(value, np.bool_):
         return bool(value)
-    if isinstance(value, (int, np.integer)):
+    if isinstance(value, int | np.integer):
         if value in (0, 1):
             return bool(value)
     if isinstance(value, str):
@@ -867,7 +896,9 @@ def _extract_activity_properties_flags(df: pd.DataFrame) -> pd.DataFrame:
         if payload is None:
             continue
         feature_source: Mapping[str, object] | None = None
-        features = payload.get("effect_features") if isinstance(payload, Mapping) else None
+        features = (
+            payload.get("effect_features") if isinstance(payload, Mapping) else None
+        )
         if isinstance(features, Mapping):
             feature_source = features
         elif isinstance(payload, Mapping):
@@ -912,7 +943,9 @@ def _compute_citation_flags(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _annotate_high_citation(df: pd.DataFrame, dictionary_root: Path) -> pd.DataFrame:
-    converted = helpers.sort_power_query(df, ("document_chembl_id", "activity_chembl_id"))
+    converted = helpers.sort_power_query(
+        df, ("document_chembl_id", "activity_chembl_id")
+    )
     counts = (
         converted.groupby("document_chembl_id")["is_citation"]
         .agg(n_citation="sum", n_non_citation=lambda s: (~s).sum())
@@ -964,7 +997,9 @@ def _merge_document_metadata(df: pd.DataFrame, dictionary_root: Path) -> pd.Data
     else:
         merged["review"] = pd.Series(pd.NA, index=merged.index, dtype="boolean")
 
-    merged = _insert_columns_after(merged, "document_chembl_id", ("completed", "review"))
+    merged = _insert_columns_after(
+        merged, "document_chembl_id", ("completed", "review")
+    )
     return merged
 
 
@@ -985,7 +1020,9 @@ def _merge_assay_metadata(df: pd.DataFrame, dictionary_root: Path) -> pd.DataFra
             merged["assay_with_same_target"], "assay_with_same_target"
         )
     else:
-        merged["assay_with_same_target"] = pd.Series(pd.NA, index=merged.index, dtype="Int64")
+        merged["assay_with_same_target"] = pd.Series(
+            pd.NA, index=merged.index, dtype="Int64"
+        )
 
     merged = _insert_columns_after(merged, "multmol_assay", ("assay_with_same_target",))
     return merged
@@ -1027,10 +1064,16 @@ def _merge_testitem_metadata(df: pd.DataFrame, dictionary_root: Path) -> pd.Data
     merged["standard_inchi_skeleton"] = right_inchi.fillna(left_inchi)
 
     merged["molecule_chembl_id.1"] = merged["molecule_chembl_id.1"].astype("string")
-    merged["standard_inchi_skeleton"] = merged["standard_inchi_skeleton"].astype("string")
+    merged["standard_inchi_skeleton"] = merged["standard_inchi_skeleton"].astype(
+        "string"
+    )
 
-    merged = _insert_columns_after(merged, "molecule_chembl_id", ("molecule_chembl_id.1",))
-    merged = _insert_columns_after(merged, "compound_name", ("standard_inchi_skeleton",))
+    merged = _insert_columns_after(
+        merged, "molecule_chembl_id", ("molecule_chembl_id.1",)
+    )
+    merged = _insert_columns_after(
+        merged, "compound_name", ("standard_inchi_skeleton",)
+    )
     return merged
 
 
@@ -1136,13 +1179,21 @@ def dedupe_final(df: pd.DataFrame) -> pd.DataFrame:
                 sort_candidates.append(option)
                 break
 
-    sorted_df = helpers.sort_power_query(df, sort_candidates) if sort_candidates else df.copy()
+    sorted_df = (
+        helpers.sort_power_query(df, sort_candidates) if sort_candidates else df.copy()
+    )
 
     subset: list[str] = []
     missing: list[str] = []
     for column in _DEDUPE_SUBSET_KEYS:
-        options = ("activity_id", "activity_chembl_id") if column == "activity_id" else (column,)
-        selected = next((candidate for candidate in options if candidate in sorted_df.columns), None)
+        options = (
+            ("activity_id", "activity_chembl_id")
+            if column == "activity_id"
+            else (column,)
+        )
+        selected = next(
+            (candidate for candidate in options if candidate in sorted_df.columns), None
+        )
         if selected is None:
             missing.append(column)
         else:
@@ -1155,9 +1206,13 @@ def dedupe_final(df: pd.DataFrame) -> pd.DataFrame:
             + ", ".join(sorted(missing))
         )
 
-    deduped = sorted_df.drop_duplicates(subset=subset, keep="first").reset_index(drop=True)
+    deduped = sorted_df.drop_duplicates(subset=subset, keep="first").reset_index(
+        drop=True
+    )
     removed = int(len(sorted_df) - len(deduped))
-    logger.info("activity_extended_deduplicated", removed=removed, remaining=len(deduped))
+    logger.info(
+        "activity_extended_deduplicated", removed=removed, remaining=len(deduped)
+    )
     return deduped
 
 
@@ -1224,7 +1279,9 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
     log_value_filled = False
     pchembl_series: pd.Series | None = None
     if "pchembl_value" in df.columns:
-        pchembl_series = pd.to_numeric(df["pchembl_value"], errors="coerce").astype("Float64")
+        pchembl_series = pd.to_numeric(df["pchembl_value"], errors="coerce").astype(
+            "Float64"
+        )
         mask = log_value_series.isna() & pchembl_series.notna()
         if mask.any():
             log_value_series = log_value_series.copy()
@@ -1248,23 +1305,25 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
     if "standard_value" in df.columns and "standard_units" in df.columns:
         std_value = pd.to_numeric(df["standard_value"], errors="coerce")
         units = df["standard_units"].astype("string").str.strip().str.lower()
-        factors = units.map({
-            "m": 1.0,
-            "mm": 1e-3,
-            "um": 1e-6,
-            "µm": 1e-6,
-            "nm": 1e-9,
-            "pm": 1e-12,
-        })
+        factors = units.map(
+            {
+                "m": 1.0,
+                "mm": 1e-3,
+                "um": 1e-6,
+                "µm": 1e-6,
+                "nm": 1e-9,
+                "pm": 1e-12,
+            }
+        )
         factors = pd.to_numeric(factors, errors="coerce")
         molar = std_value * factors
         computed = pd.Series(pd.NA, index=df.index, dtype="Float64")
         valid = molar.notna() & (molar > 0)
         if valid.any():
             computed_values = -np.log10(molar[valid].astype("float64"))
-            computed.loc[valid] = pd.Series(computed_values, index=df.index[valid]).astype(
-                "Float64"
-            )
+            computed.loc[valid] = pd.Series(
+                computed_values, index=df.index[valid]
+            ).astype("Float64")
         mask = log_value_series.isna() & computed.notna()
         if mask.any():
             log_value_series = log_value_series.copy()
@@ -1276,7 +1335,11 @@ def _augment_activity_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, set[str]
         df = df.drop(columns=["log_value"], errors="ignore")
         df["log_value"] = log_value_series.astype("Float64")
 
-    if not log_value_filled and not log_value_column_present and not log_value_series.notna().any():
+    if (
+        not log_value_filled
+        and not log_value_column_present
+        and not log_value_series.notna().any()
+    ):
         filled.discard("log_value")
 
     bool_defaults = (
@@ -1363,7 +1426,12 @@ def _transform_activity_frame(
         frame, dictionary_root=dictionary_root
     )
     original_filled = _augment_activity_frame(original_sources)[1]
-    filled = ensured_filled | original_identifier_filled | original_filled | identifier_filled
+    filled = (
+        ensured_filled
+        | original_identifier_filled
+        | original_filled
+        | identifier_filled
+    )
 
     if filled:
         unresolved_columns = sorted(
@@ -1401,7 +1469,9 @@ def _transform_activity_frame(
     df = _annotate_high_citation(df, dictionary_root)
     df = _extract_activity_properties_flags(df)
     df = _drop_unused_columns(df)
-    df = _merge_target_metadata(df, dictionary_root=dictionary_root, targets_override=targets_override)
+    df = _merge_target_metadata(
+        df, dictionary_root=dictionary_root, targets_override=targets_override
+    )
     df = _select_and_cast(df)
     return df
 
@@ -1481,15 +1551,23 @@ def process_activity_extended(
                 f"input_path must point to a file, received directory: {explicit_input!s}"
             )
         if not explicit_input.exists():
-            raise ActivityExtendedError(f"Activity export not found: {explicit_input!s}")
+            raise ActivityExtendedError(
+                f"Activity export not found: {explicit_input!s}"
+            )
 
     resolved_search_dir = (
         Path(search_dir)
         if search_dir is not None
-        else (explicit_input.parent if explicit_input is not None else _current_default_search_dir())
+        else (
+            explicit_input.parent
+            if explicit_input is not None
+            else _current_default_search_dir()
+        )
     )
     if not resolved_search_dir.exists():
-        raise ActivityExtendedError(f"Search directory does not exist: {resolved_search_dir!s}")
+        raise ActivityExtendedError(
+            f"Search directory does not exist: {resolved_search_dir!s}"
+        )
     if not resolved_search_dir.is_dir():
         raise ActivityExtendedError(
             f"Search directory is not a directory: {resolved_search_dir!s}"
@@ -1521,7 +1599,9 @@ def process_activity_extended(
         columns=sorted(processed.columns.tolist()),
     )
     for column in ("activity_chembl_id", "saltform_id", "pA_value"):
-        non_null = int(processed[column].notna().sum()) if column in processed.columns else 0
+        non_null = (
+            int(processed[column].notna().sum()) if column in processed.columns else 0
+        )
         logger.info(
             "activity_extended_non_null_counts",
             column=column,
@@ -1540,4 +1620,3 @@ def process_activity_extended(
 
 
 __all__ = ["process_activity_extended", "ActivityExtendedError"]
-
