@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from types import SimpleNamespace
+
 import pandas as pd
 
 from library.cli.pipeline_definition import PipelineDefinition
@@ -52,10 +54,14 @@ def test_run_pipeline__triggers_postprocessing_on_known_table(monkeypatch, tmp_p
         captured["output"] = Path(output_path)
         output_path = Path(output_path)
         output_path.write_text("postprocessed", encoding="utf-8")
+        metrics = SimpleNamespace(output_rows=0, output_columns=0)
+        report_path = output_path.parent / "activities.postprocess.report.json"
+        report_path.write_text("{}", encoding="utf-8")
         return PostprocessingPipelineResult(
             dataframe=pd.DataFrame(),
-            metrics=None,
+            metrics=metrics,
             output_path=output_path,
+            report_path=report_path,
         )
 
     monkeypatch.setattr(

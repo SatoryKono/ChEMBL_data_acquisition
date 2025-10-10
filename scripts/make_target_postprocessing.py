@@ -214,7 +214,7 @@ def run(args: argparse.Namespace) -> int:
 
     if metrics is not None:
         summary = metrics.summary()
-        summary["output_postprocessed"] = str(result.output_path)
+        summary["output_postprocessed"] = str(output_path)
         logger.info(f"{event_prefix}_summary", **summary)
 
     extras = {
@@ -234,7 +234,7 @@ def run(args: argparse.Namespace) -> int:
 
     logger.info(
         f"{event_prefix}_done",
-        output_postprocessed=str(result.output_path),
+        output_postprocessed=str(output_path),
         rows=(
             int(metrics.output_rows)
             if metrics and metrics.output_rows is not None
@@ -280,7 +280,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         log_dir = DEFAULT_LOG_DIR
 
     with setup_cli_logging(
-        LOG_FILE_STEM, log_cfg, date_str=None, log_dir=log_dir
+        PROGRAM_NAME,
+        log_cfg,
+        date_str=None,
+        log_dir=log_dir,
+        log_file_stem=f"make_{TABLE_NAME}_postprocessing",
     ) as logging_ctx:
         configure_logger(logging_ctx.log_cfg)
         args._pipeline_config = pipeline_config

@@ -87,8 +87,15 @@ def setup_cli_logging(
     date_str: str | None = None,
     *,
     log_dir: Path | None = None,
+    log_file_stem: str | None = None,
 ) -> Iterator[CLILoggingContext]:
-    """Configure logging to mirror output to a file and the console."""
+    """Configure logging to mirror output to a file and the console.
+
+    When ``log_file_stem`` is provided the produced log filename uses that
+    value instead of deriving it from ``script_name``.  This allows callers to
+    keep filenames aligned with downstream ingestion rules while still
+    reusing the shared CLI logging helpers.
+    """
 
     if log_dir is not None:
         resolved_dir = _normalize_log_dir(log_dir)
@@ -96,7 +103,10 @@ def setup_cli_logging(
         resolved_dir = _default_log_dir()
     resolved_dir.mkdir(parents=True, exist_ok=True)
 
-    normalised_name = _normalise_script_name(os.fspath(script_name))
+    if log_file_stem is not None:
+        normalised_name = _normalise_script_name(log_file_stem)
+    else:
+        normalised_name = _normalise_script_name(os.fspath(script_name))
 
     if date_str:
         suffix = date_str

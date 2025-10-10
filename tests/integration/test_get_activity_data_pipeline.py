@@ -237,8 +237,8 @@ def _invoke_activity_runner(
     """Execute the orchestrator via the requested variant."""
 
     if variant == "cli":
-        monkeypatch.setattr(get_activity_data, "run_chembl", runner)
-        return get_activity_data.run(cfg, args)
+        monkeypatch.setattr(command_activity, "run_chembl", runner)
+        return command_activity.run(cfg, args)
 
     helper_options = _activity_options_from_args(args)
     return command_activity.run_activity_pipeline(

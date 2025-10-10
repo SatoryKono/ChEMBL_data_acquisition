@@ -286,15 +286,26 @@ def build_report_payload(
     metrics: PipelineRunMetrics,
     *,
     output_path: str | None = None,
+    output_postprocessed: str | None = None,
     extras: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return a JSON payload representing the collected metrics."""
 
     payload = {
         "table": table,
-        "output_path": output_path,
         "metrics": metrics.to_dict(),
     }
+
+    # `output_path` is a legacy key consumed by existing tooling.
+    # `output_postprocessed` is the new preferred field.
+    # For backwards compatibility, always provide both fields if possible:
+    effective_postprocessed = (
+        output_postprocessed if output_postprocessed is not None else output_path
+    )
+    if effective_postprocessed is not None:
+        payload["output_postprocessed"] = effective_postprocessed
+    if effective_postprocessed is not None:
+        payload["output_path"] = effective_postprocessed
     if extras:
         payload["extras"] = dict(extras)
     return payload

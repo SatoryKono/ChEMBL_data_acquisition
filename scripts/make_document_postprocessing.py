@@ -209,7 +209,7 @@ def run(args: argparse.Namespace) -> int:
         f"{event_prefix}_start",
         input=str(input_path),
         output_postprocessed=str(output_path),
-        separator=csv_cfg.sep,
+        separator=csv_cfg.separator,
         encoding=csv_cfg.encoding,
     )
 
@@ -304,7 +304,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         log_dir = DEFAULT_LOG_DIR
 
     with setup_cli_logging(
-        LOG_FILE_STEM, log_cfg, date_str=None, log_dir=log_dir
+        PROGRAM_NAME,
+        log_cfg,
+        date_str=None,
+        log_dir=log_dir,
+        log_file_stem=f"make_{TABLE_NAME}_postprocessing",
     ) as logging_ctx:
         configure_logger(logging_ctx.log_cfg)
         args._pipeline_config = pipeline_config
