@@ -82,3 +82,19 @@ def test_build_correlation_matrix__accepts_duck_typed_profiler():
     reuse = build_correlation_matrix(None, table_name="demo", profiler=proxy)
 
     pd.testing.assert_frame_equal(direct, reuse)
+
+
+def test_build_correlation_matrix__falls_back_when_profiler_invalid(
+    multi_numeric_frame,
+):
+    class DummyProfiler:
+        pass
+
+    with pytest.warns(RuntimeWarning, match="Ignoring incompatible profiler"):
+        correlation = build_correlation_matrix(
+            multi_numeric_frame,
+            table_name="fallback",
+            profiler=DummyProfiler(),
+        )
+
+    assert correlation.shape == (3, 3)
