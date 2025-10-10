@@ -94,3 +94,17 @@ def test_build_correlation_matrix__reprofiles_when_profiler_invalid(multi_numeri
     )
 
     pd.testing.assert_frame_equal(expected, fallback)
+def test_build_correlation_matrix__falls_back_when_profiler_invalid(
+    multi_numeric_frame,
+):
+    class DummyProfiler:
+        pass
+
+    with pytest.warns(RuntimeWarning, match="Ignoring incompatible profiler"):
+        correlation = build_correlation_matrix(
+            multi_numeric_frame,
+            table_name="fallback",
+            profiler=DummyProfiler(),
+        )
+
+    assert correlation.shape == (3, 3)

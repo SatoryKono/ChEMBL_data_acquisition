@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+import warnings
 
 import pandas as pd
 
@@ -58,6 +59,17 @@ def build_correlation_matrix(
             )
 
     if profiler_instance is None:
+    fallback_to_frame = False
+    invalid_profiler_type: type | None = None
+    if profiler is not None:
+        if _is_table_profiler_instance(profiler):
+            _, numeric_candidates = _build_reports_from_profiler(profiler)
+        elif frame is None:
+            raise TypeError("profiler must be a TableQualityProfiler instance")
+        else:
+            fallback_to_frame = True
+            invalid_profiler_type = type(profiler)
+    if profiler is None or fallback_to_frame:
         if frame is None:
             raise ValueError("frame is required when profiler is not provided")
         filtered = _prepare_filtered_frame(
@@ -72,6 +84,14 @@ def build_correlation_matrix(
         profiler_instance.consume(filtered)
 
     _, numeric_candidates = _build_reports_from_profiler(profiler_instance)
+        _, numeric_candidates = _build_reports_from_profiler(profiler)
+        if fallback_to_frame:
+            warnings.warn(
+                "Ignoring incompatible profiler %r; falling back to frame data"
+                % (invalid_profiler_type.__name__ if invalid_profiler_type else "unknown"),
+                RuntimeWarning,
+                stacklevel=2,
+            )
     if not numeric_candidates:
         return pd.DataFrame()
 
