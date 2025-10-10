@@ -207,3 +207,28 @@ def test_default_output_path__falls_back_to_explicit_date(tmp_path: Path) -> Non
     )
 
     assert output_path == tmp_path / "output.input_20240615.csv"
+
+
+@pytest.mark.unit
+def test_default_output_path__omit_mode_without_suffix(tmp_path: Path) -> None:
+    cfg = SimpleNamespace(
+        output_dir=tmp_path,
+        default_date_prefix="19991231",
+        output_stamp_mode="omit",
+    )
+
+    output_path = default_output_path(tmp_path / "input.csv", cfg)
+
+    assert output_path == tmp_path / "output.input.csv"
+
+
+@pytest.mark.unit
+def test_default_output_path__require_mode_needs_date(tmp_path: Path) -> None:
+    cfg = SimpleNamespace(
+        output_dir=tmp_path,
+        default_date_prefix=None,
+        output_stamp_mode="require",
+    )
+
+    with pytest.raises(ValueError, match="date must be provided"):
+        default_output_path(tmp_path / "input.csv", cfg)
