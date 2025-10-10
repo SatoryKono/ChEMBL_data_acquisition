@@ -15,6 +15,7 @@ distlib==0.4.0
 docutils==0.22.2
 et_xmlfile==2.0.0
 filelock==3.19.1
+freezegun==1.5.1
 hypothesis==6.140.2
 identify==2.6.15
 idna==3.10
