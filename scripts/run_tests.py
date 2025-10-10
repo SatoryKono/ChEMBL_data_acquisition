@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 import threading
 from typing import Any, cast
+from xml.etree import ElementTree
 from uuid import NAMESPACE_URL, uuid5
 
 import pytest
@@ -52,6 +53,7 @@ except ValueError:  # pragma: no cover - defensive fallback
     DEFAULT_MARKDOWN_ARG = str(DEFAULT_SUMMARY_FILE)
 REPO_SLUG = DEFAULT_REPO_SLUG
 QUALITY_THRESHOLD_PERCENT = 95.0
+LINE_COVERAGE_THRESHOLD_PERCENT = 80.0
 QUALITY_FAILURE_EXIT_CODE = 1
 VALIDATION_FAILURE_EXIT_CODE = 11
 TEST_DIRECTORIES = (
@@ -83,6 +85,10 @@ _PROCESS_TERMINATION_TIMEOUT = 5.0
 
 
 logger = logging.getLogger("run_tests")
+
+
+class CoverageReportError(RuntimeError):
+    """Raised when the coverage report cannot be parsed."""
 
 
 def _relative_to_root(path: Path) -> str:
@@ -175,6 +181,40 @@ def run_pytest(command: Sequence[str], *, timeout: float | None = None) -> int:
     else:
         logger.debug("Pytest exited successfully")
     return return_code
+
+
+def _parse_line_coverage(path: Path) -> float:
+    """Return the total line coverage percentage from ``coverage.xml``."""
+
+    if not path.exists():
+        raise CoverageReportError(
+            f"Coverage report {_relative_to_root(path)} was not generated"
+        )
+
+    try:
+        tree = ElementTree.parse(path)
+    except ElementTree.ParseError as exc:  # pragma: no cover - depends on coverage output
+        raise CoverageReportError(
+            f"Coverage report {_relative_to_root(path)} is not valid XML: {exc}"
+        ) from exc
+
+    root = tree.getroot()
+    line_rate_raw = root.attrib.get("line-rate")
+    if line_rate_raw is None:
+        raise CoverageReportError(
+            "Coverage XML is missing the 'line-rate' attribute on the root element"
+        )
+
+    try:
+        line_rate = float(line_rate_raw)
+    except ValueError as exc:
+        raise CoverageReportError(
+            "Coverage XML attribute 'line-rate' must be numeric"
+        ) from exc
+
+    if line_rate > 1.0:
+        return max(0.0, min(100.0, line_rate))
+    return max(0.0, min(100.0, line_rate * 100.0))
 
 
 def _load_raw_report() -> dict[str, Any]:
@@ -740,6 +780,30 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if validation_exit_code is not None:
             final_exit_code = validation_exit_code
+
+        coverage_exit_code: int | None = None
+        try:
+            coverage_pct = _parse_line_coverage(COVERAGE_XML)
+        except CoverageReportError as exc:
+            logger.error("Unable to determine coverage: %s", exc)
+            coverage_exit_code = QUALITY_FAILURE_EXIT_CODE
+        else:
+            if coverage_pct < LINE_COVERAGE_THRESHOLD_PERCENT:
+                logger.error(
+                    "Line coverage %.2f%% is below the required %.2f%% threshold",
+                    coverage_pct,
+                    LINE_COVERAGE_THRESHOLD_PERCENT,
+                )
+                coverage_exit_code = QUALITY_FAILURE_EXIT_CODE
+            else:
+                logger.info(
+                    "Line coverage %.2f%% meets the required %.2f%% threshold",
+                    coverage_pct,
+                    LINE_COVERAGE_THRESHOLD_PERCENT,
+                )
+
+        if coverage_exit_code is not None and final_exit_code == 0:
+            final_exit_code = coverage_exit_code
 
     return final_exit_code
 

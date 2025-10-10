@@ -90,6 +90,11 @@ jobs:
         if: always()
         continue-on-error: true
         run: python -m scripts.check_test_success_rate --report reports/test_report.json --threshold 95
+      - name: Check coverage threshold
+        id: check-coverage
+        if: always()
+        continue-on-error: true
+        run: python -m scripts.check_coverage_threshold --report reports/coverage/coverage.xml --threshold 80
       - name: Enforce test quality gates
         if: always()
         run: |
@@ -103,6 +108,10 @@ jobs:
           fi
           if [ "${{ steps.check-success-rate.outcome }}" != "success" ]; then
             echo "Test success rate check failed" >&2
+            exit 1
+          fi
+          if [ "${{ steps.check-coverage.outcome }}" != "success" ]; then
+            echo "Coverage threshold check failed" >&2
             exit 1
           fi
       - name: Determinism smoke test
