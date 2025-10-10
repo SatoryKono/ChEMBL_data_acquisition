@@ -87,6 +87,7 @@ from library.postprocessing.document import preprocess_documents_csv
 from library.postprocessing.documents import (
     run_document_pipeline as run_document_postprocess,
 )
+from library.postprocessing.documents import steps as document_steps
 from library.qa.reporting import build_table_quality_hook
 from library.qa.table_quality import TableQualityProfiler
 from library.reporting.run_manifest import (
