@@ -14,10 +14,15 @@ or via the console scripts installed from `pyproject.toml` (`get-data`,
 | `--sep`, `--encoding` | CSV delimiter and encoding. Inherit defaults from the configuration. |
 | `--log-level` | Logging verbosity (`DEBUG`, `INFO`, `WARN`, `ERROR`). |
 | `--verbose` | Enables DEBUG logging without modifying configuration files. |
+| `--run-id` | Override the run identifier recorded in logs and metadata sidecars. Defaults to a value derived from the invocation or the `CHEMBL_DA_RUN_ID` environment variable. |
 | `--force` | Overwrite existing outputs. |
 | `--skip-existing` | Skip execution when the destination file already exists. |
 | `--limit`, `--offset` | Restrict the number of identifiers processed or skip leading rows. Supplying `--limit 0` disables the pipeline. |
 | `--print-config` | Emit the resolved configuration (defaults + YAML + environment + CLI) and exit. |
+
+> 💡 **Tip:** Setting the `CHEMBL_DA_RUN_ID` environment variable pre-populates
+> the `--run-id` default so automated jobs can stamp logs and manifests with a
+> predictable identifier.
 
 ### Output artefacts
 

@@ -276,6 +276,10 @@ Controls post-processing of activity tables.
 |-----|---------|-------------|
 | `level` | `INFO` | Default logging level (overridable via `--log-level`). |
 
+Environment variable `CHEMBL_DA_RUN_ID` seeds the default run identifier used by
+`library.cli.parser.create_logger_config`. Supplying `--run-id` on the command
+line overrides both the auto-generated and environment-provided values.
+
 ### `system.rate`
 
 | Key | Default | Description |
