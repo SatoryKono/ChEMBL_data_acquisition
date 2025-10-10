@@ -53,7 +53,12 @@ jobs:
           scripts/get_testitem_data.py
           library/io/paths.py
       - name: Type check
-        run: mypy --strict library
+        id: type-check
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          mkdir -p reports
+          mypy --strict library | tee reports/mypy-report.txt
       - name: Run pytest suite
         id: run-tests
         continue-on-error: true
@@ -64,6 +69,7 @@ jobs:
         with:
           name: test-reports
           path: |
+            reports/mypy-report.txt
             reports/test_report.json
             reports/test_summary.md
             reports/coverage
@@ -87,6 +93,10 @@ jobs:
       - name: Enforce test quality gates
         if: always()
         run: |
+          if [ "${{ steps.type-check.outcome }}" != "success" ]; then
+            echo "mypy failed; see reports/mypy-report.txt in the test-reports artifact" >&2
+            exit 1
+          fi
           if [ "${{ steps.run-tests.outcome }}" != "success" ]; then
             echo "pytest execution failed; see previous logs for details" >&2
             exit 1

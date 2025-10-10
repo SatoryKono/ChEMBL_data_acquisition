@@ -1,2 +1,0 @@
-mypy --strict library
-Success: no issues found in 109 source files
