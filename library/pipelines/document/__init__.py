@@ -16,7 +16,12 @@ from .chembl_document import get_documents
 
 @dataclass(slots=True)
 class DocumentPipelineOptions:
-    """Configuration for executing the document pipeline programmatically."""
+    """Configuration for executing the document pipeline programmatically.
+
+    The :mod:`library.cli.commands.get_data` orchestration forwards ``skip_existing``
+    when the ``--skip-existing`` flag is set so repeated runs can reuse previously
+    generated CSV files instead of rewriting them.
+    """
 
     input_csv: Path
     output_csv: Path

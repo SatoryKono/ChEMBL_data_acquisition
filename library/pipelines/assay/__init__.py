@@ -23,7 +23,12 @@ from .postprocessing import postprocess_assays, postprocess_file
 
 @dataclass(slots=True)
 class AssayPipelineOptions:
-    """Parameters controlling programmatic assay pipeline execution."""
+    """Parameters controlling programmatic assay pipeline execution.
+
+    During orchestrated runs ``skip_existing`` mirrors the ``--skip-existing`` CLI
+    flag so previously exported assay CSV files can be retained without rerunning
+    the pipeline.
+    """
 
     input_csv: Path
     output_csv: Path
