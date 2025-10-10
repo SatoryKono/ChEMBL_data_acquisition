@@ -6,8 +6,16 @@ from importlib import import_module
 from typing import Any
 
 from . import atomic, bootstrap
+from .data_correlation import build_correlation_matrix
+from .qc_report import build_qc_summary
 
-__all__ = ["atomic", "bootstrap", "config"]
+__all__ = [
+    "atomic",
+    "bootstrap",
+    "config",
+    "build_qc_summary",
+    "build_correlation_matrix",
+]
 
 
 def __getattr__(name: str) -> Any:
