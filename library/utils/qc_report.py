@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Tuple, TYPE_CHECKING
 
@@ -34,6 +34,28 @@ TableQualityProfilerLike = _LegacyTableQualityProfiler | _QaTableQualityProfiler
 
 # Re-export the legacy profiler for typing/backwards compatibility.
 TableQualityProfiler = _LegacyTableQualityProfiler
+
+
+def _is_table_profiler_instance(candidate: object) -> bool:
+    """Return ``True`` when ``candidate`` behaves like a table profiler."""
+
+    if isinstance(candidate, _TABLE_PROFILER_TYPES):
+        return True
+
+    if candidate is None:
+        return False
+
+    required_attrs = ("_columns", "_accumulators")
+    if not all(hasattr(candidate, attr) for attr in required_attrs):
+        return False
+
+    columns = getattr(candidate, "_columns")
+    accumulators = getattr(candidate, "_accumulators")
+
+    if not isinstance(columns, Sequence) or not isinstance(accumulators, Mapping):
+        return False
+
+    return True
 
 
 def _validate_table_name(table_name: str) -> str:
@@ -164,7 +186,7 @@ def build_qc_summary(
 
     _validate_table_name(table_name)
     if profiler is not None:
-        if not isinstance(profiler, _TABLE_PROFILER_TYPES):
+        if not _is_table_profiler_instance(profiler):
             raise TypeError("profiler must be a TableQualityProfiler instance")
         quality_report, _ = _build_reports_from_profiler(profiler)
         return quality_report
