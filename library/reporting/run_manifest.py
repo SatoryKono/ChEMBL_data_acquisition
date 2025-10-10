@@ -124,7 +124,7 @@ def finalise_csv_output(
     rows_total: int,
     rows_kept: int,
     command: str,
-    config_subset: Mapping[str, Any],
+    config: Mapping[str, Any],
     inputs: Mapping[str, Any],
     schema: str,
     stats_extra: Mapping[str, Any] | None = None,
@@ -148,7 +148,7 @@ def finalise_csv_output(
     meta_path = write_meta_yaml(
         csv_path=path,
         command=command,
-        config_subset=config_subset,
+        config=config,
         inputs=inputs,
         stats=stats,
         schema=schema,

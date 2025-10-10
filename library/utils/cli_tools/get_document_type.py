@@ -407,7 +407,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_meta_yaml(
         output_path,
         command="library.utils.cli_tools.get_document_type",
-        config_subset={
+        config={
             "doc_type": cfg.doc_type.to_dict(),
             "io": {
                 "csv_sep": args.sep,
