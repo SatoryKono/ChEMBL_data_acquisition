@@ -147,6 +147,7 @@ def test_get_tissue_data_cli__end_to_end(
     ) -> Any:
         del parser, mapping, base_parser
         args._config_metadata = SimpleNamespace(snapshot={"config": str(config_path)})
+        args.date = "20200101"
         if hasattr(args, "input_csv"):
             args.input_csv = Path(args.input_csv)
             final_out = getattr(args, "final_out", None)
@@ -181,6 +182,8 @@ def test_get_tissue_data_cli__end_to_end(
         logger.log(
             "debug", "configure_logger_called", log_level=getattr(log_cfg, "level", "")
         )
+        log_cfg.run_id = "tissue-e2e"
+        log_cfg.generated_at = "2020-01-01T00:00:00+00:00"
         set_current(
             RunContext(
                 run_id=str(getattr(log_cfg, "run_id", "")),
@@ -198,6 +201,7 @@ def test_get_tissue_data_cli__end_to_end(
         script_name: str, log_cfg: Any, date_str: str | None = None
     ):
         del script_name, date_str
+        log_cfg.generated_at = ""
         yield SimpleNamespace(log_cfg=log_cfg, console_stream=None)
 
     monkeypatch.setattr(get_tissue_data, "setup_cli_logging", fake_setup_cli_logging)

@@ -45,6 +45,7 @@ from library.cli import (
 from library.cli import (
     build_parser as base_parser,
 )
+from library.cli import logging as _cli_logging
 from library.cli.base import PipelineCLIBase
 from library.cli.commands import get_activity_data as _activity_cli_commands
 from library.cli.commands.get_activity_data import (
@@ -82,10 +83,10 @@ from library.pipelines.common import (
     add_pipeline_metadata,
 )
 from library.pipelines.common.metadata import get_pipeline_version
-from library.postprocess.activities import (
+from library.postprocessing.activities import (
     run_activity_pipeline as run_activity_postprocess,
 )
-from library.postprocess.common import collect_postprocess_metrics
+from library.postprocessing.common import collect_postprocess_metrics
 from library.postprocessing import helpers as postprocessing_helpers
 from library.postprocessing.activity_extended import process_activity_extended
 from library.processing.activity import (
@@ -104,7 +105,6 @@ DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
 
-<<<<<<< HEAD
 # ---------------------------------------------------------------------------
 # Compatibility hooks
 # ---------------------------------------------------------------------------
@@ -131,8 +131,6 @@ def _current_date_token() -> str:
     """Return the YYYYMMDD date string derived from :data:`datetime`."""
 
     return _current_utc_datetime().strftime("%Y%m%d")
-=======
->>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
     invocation = getattr(args, "invocation", None)
@@ -164,11 +162,8 @@ __all__ = (
     "configure_logger",
     "run_cli_command",
     "datetime",
-<<<<<<< HEAD
     "clock",
-=======
     "UTC",
->>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
 )
 
 
@@ -599,14 +594,9 @@ def _emit_completion_message(
         logger.info("pipeline_skip_existing", output=str(output_path))
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
-<<<<<<< HEAD
-            events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
-        return
-=======
             events_attr.append(
                 ("info", "pipeline_skip_existing", {"output": str(output_path)})
             )
->>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
 
     payload: dict[str, object] = {
         "output": str(output_path) if output_path is not None else None,
@@ -622,6 +612,11 @@ def _emit_completion_message(
         payload["streamed_metrics"] = metrics_payload
 
     logger.info("activity_pipeline_completion", **payload)
+    events_attr = getattr(logger, "events", None)
+    if isinstance(events_attr, list):
+        events_attr.append(
+            ("info", "activity_pipeline_completion", dict(payload))
+        )
 
 
 _EXTENDED_ACTIVITY_FALLBACKS: dict[
@@ -2016,9 +2011,12 @@ class ActivityPipelineCLI(PipelineCLIBase):
             if stripped:
                 return stripped
         try:
-            return _current_date_token()
+            return _cli_logging._current_date_str()
         except Exception:  # pragma: no cover - defensive against custom hooks
-            return value if isinstance(value, str) else None
+            try:
+                return _current_date_token()
+            except Exception:  # pragma: no cover - defensive guard
+                return value if isinstance(value, str) else None
 
     def get_config_mapping(self) -> Mapping[str, str]:
         return {

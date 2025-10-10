@@ -111,12 +111,32 @@ def test_emit_completion_message__skip_existing(
         mode="skip_existing",
     )
 
-    assert len(logger.calls) == 1
-    event, payload = logger.calls[0]
-    assert event == "pipeline_skip_existing"
-    assert payload == {"output": "existing.csv"}
+    assert len(logger.calls) == 2
+    skip_event, skip_payload = logger.calls[0]
+    assert skip_event == "pipeline_skip_existing"
+    assert skip_payload == {"output": "existing.csv"}
+
+    completion_event, completion_payload = logger.calls[1]
+    assert completion_event == "activity_pipeline_completion"
+    assert completion_payload == {
+        "output": "existing.csv",
+        "rows": 0,
+        "duration_s": 0.5,
+        "mode": "skip_existing",
+    }
+
     assert logger.events == [
-        ("info", "pipeline_skip_existing", {"output": "existing.csv"})
+        ("info", "pipeline_skip_existing", {"output": "existing.csv"}),
+        (
+            "info",
+            "activity_pipeline_completion",
+            {
+                "output": "existing.csv",
+                "rows": 0,
+                "duration_s": 0.5,
+                "mode": "skip_existing",
+            },
+        ),
     ]
 
 

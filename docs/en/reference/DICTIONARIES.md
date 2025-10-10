@@ -39,7 +39,7 @@ logged and, if `parent_fallback` is enabled, replaced using the hierarchy file.
 ### Target classification helpers
 
 Post-processing does not introduce new dictionary files, but the modular
-`library.postprocess.targets` pipeline relies on existing columns to derive a
+`library.postprocessing.targets` pipeline relies on existing columns to derive a
 compact view for QA metrics. The helper reads `protein_classifications` from the
 canonical export to populate the `target_class` and `protein_family` columns and
 combines `pref_name`, component descriptions and alternative names into the

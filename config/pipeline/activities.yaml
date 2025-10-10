@@ -2,13 +2,13 @@
 pipeline_version: "${CHEMBL_ACTIVITY_PIPELINE_VERSION:-auto}"
 enabled_steps:
   - name: normalize_activity_records
-    callable: "library.postprocess.activities.steps:normalize_activity_records"
+    callable: "library.postprocessing.activities.steps:normalize_activity_records"
     description: "Trim whitespace and harmonise activity metadata fields."
     params:
       relation_normalization: true
       enforce_uppercase_units: true
   - name: enrich_activity_quality
-    callable: "library.postprocess.activities.steps:enrich_activity_quality"
+    callable: "library.postprocessing.activities.steps:enrich_activity_quality"
     description: "Derive deterministic quality flags from validity comments."
     params:
       quality_terms:
@@ -16,7 +16,7 @@ enabled_steps:
         - expert curated
       default_quality_flag: false
   - name: finalize_activity_records
-    callable: "library.postprocess.activities.steps:finalize_activity_records"
+    callable: "library.postprocessing.activities.steps:finalize_activity_records"
     description: "Coerce identifiers, align schema ordering and validate outputs."
     params:
       enforce_schema: true

@@ -132,7 +132,11 @@ def test_load_config__preserves_dictionary_resource_reference(tmp_path, monkeypa
     )
 
     monkeypatch.setattr(loader, "configure_rate_limiters", lambda cfg: None)
-    monkeypatch.setattr(loader, "list_resources", lambda: {"dictionary_root": object()})
+    monkeypatch.setattr(
+        loader,
+        "list_resource_names",
+        lambda *, validate=True, base_dir=None: ("dictionary_root",),
+    )
     loader._dictionary_resource_names.cache_clear()
     monkeypatch.setattr(
         "library.config.models.resolve_resource_reference",

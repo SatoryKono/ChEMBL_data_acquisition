@@ -11,30 +11,30 @@ ideas that have not yet been prioritised.
   `StepDefinition` dataclasses and executed sequentially through
   `run_steps`, which provides schema validation hooks, defensive argument
   filtering, and per-step timing/shape metrics. The implementation lives in
-  [`library/postprocess/common/types.py`](../library/postprocess/common/types.py)
-  and [`library/postprocess/common/runner.py`](../library/postprocess/common/runner.py).
+  [`library/postprocessing/common/types.py`](../library/postprocessing/common/types.py)
+  and [`library/postprocessing/common/runner.py`](../library/postprocessing/common/runner.py).
 - **Declarative configuration.** Pipelines are described via YAML files under
   [`config/pipeline/*.yaml`](../config/pipeline/), resolved through
-  [`library/postprocess/common/config.py`](../library/postprocess/common/config.py).
+  [`library/postprocessing/common/config.py`](../library/postprocessing/common/config.py).
   The loader expands environment placeholders, validates callable signatures, and
   exposes ordered `StepDefinition` collections for the runner.
 - **Schema governance.** Canonical output schemas, column ordering rules, and
   deterministic sorting helpers are defined per domain in the `schema.py` files
-  (for example, [`library/postprocess/activities/schema.py`](../library/postprocess/activities/schema.py)).
-  The shared helpers in [`library/postprocess/common/schema.py`](../library/postprocess/common/schema.py)
+  (for example, [`library/postprocessing/activities/schema.py`](../library/postprocessing/activities/schema.py)).
+  The shared helpers in [`library/postprocessing/common/schema.py`](../library/postprocessing/common/schema.py)
   enforce the contract before/after each pipeline run.
 - **Domain step libraries.** Each entity exposes a `steps.py` module that houses
   pure DataFrame transforms and a lazily loaded `PIPELINE_STEPS` tuple sourced
   from the declarative configuration. Examples include
-  [`library/postprocess/documents/steps.py`](../library/postprocess/documents/steps.py),
-  [`library/postprocess/assays/steps.py`](../library/postprocess/assays/steps.py),
-  [`library/postprocess/activities/steps.py`](../library/postprocess/activities/steps.py),
-  and [`library/postprocess/targets/steps.py`](../library/postprocess/targets/steps.py).
+  [`library/postprocessing/documents/steps.py`](../library/postprocessing/documents/steps.py),
+  [`library/postprocessing/assays/steps.py`](../library/postprocessing/assays/steps.py),
+  [`library/postprocessing/activities/steps.py`](../library/postprocessing/activities/steps.py),
+  and [`library/postprocessing/targets/steps.py`](../library/postprocessing/targets/steps.py).
 - **Metrics and reporting.** The execution layer captures structured per-step
   telemetry and final run summaries through
-  [`library/postprocess/common/logging.py`](../library/postprocess/common/logging.py).
+  [`library/postprocessing/common/logging.py`](../library/postprocessing/common/logging.py).
   CLI entry points collect these metrics and persist JSON reports by delegating to
-  [`library/postprocess/common/utils.py`](../library/postprocess/common/utils.py).
+  [`library/postprocessing/common/utils.py`](../library/postprocessing/common/utils.py).
 - **Integration with ETL scripts.** Entity scripts such as
   [`scripts/get_document_data.py`](../scripts/get_document_data.py),
   [`scripts/get_assay_data.py`](../scripts/get_assay_data.py),

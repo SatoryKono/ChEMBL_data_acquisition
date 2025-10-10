@@ -47,9 +47,9 @@ Follow this checklist to bolt a new export onto the stack:
 
 ### Declarative pipeline configuration
 
-The active step list for each post-processing domain now lives under `config/pipeline/<domain>.yaml`. These YAML files describe the pipeline version advertised in metadata, the enabled steps and domain-specific parameters that documentation and orchestration hooks may consume. Callables are referenced through dotted import paths such as `library.postprocess.activities.steps:normalize_activity_records` and resolved lazily via `load_pipeline_config`. 【F:config/pipeline/activities.yaml†L1-L34】【F:library/postprocess/common/config.py†L22-L170】
+The active step list for each post-processing domain now lives under `config/pipeline/<domain>.yaml`. These YAML files describe the pipeline version advertised in metadata, the enabled steps and domain-specific parameters that documentation and orchestration hooks may consume. Callables are referenced through dotted import paths such as `library.postprocessing.activities.steps:normalize_activity_records` and resolved lazily via `load_pipeline_config`. 【F:config/pipeline/activities.yaml†L1-L34】【F:library/postprocessing/common/config.py†L22-L170】
 
-Environment variables can override YAML values using `${VAR}` or `${VAR:-default}` placeholders. For example, `${CHEMBL_ACTIVITY_PIPELINE_VERSION:-auto}` defaults to the installed library version unless `CHEMBL_ACTIVITY_PIPELINE_VERSION` is exported. Similarly, `${POSTPROCESS_LOG_LEVEL:-INFO}` sets the default log level consumed by orchestration. The loader expands these markers with UTF-8 safe reads and normalises `auto`/empty values to fall back to `get_pipeline_version()`. 【F:library/postprocess/common/config.py†L64-L170】【F:library/postprocess/activities/steps.py†L67-L104】
+Environment variables can override YAML values using `${VAR}` or `${VAR:-default}` placeholders. For example, `${CHEMBL_ACTIVITY_PIPELINE_VERSION:-auto}` defaults to the installed library version unless `CHEMBL_ACTIVITY_PIPELINE_VERSION` is exported. Similarly, `${POSTPROCESS_LOG_LEVEL:-INFO}` sets the default log level consumed by orchestration. The loader expands these markers with UTF-8 safe reads and normalises `auto`/empty values to fall back to `get_pipeline_version()`. 【F:library/postprocessing/common/config.py†L64-L170】【F:library/postprocessing/activities/steps.py†L67-L104】
 
 Available overrides:
 
@@ -94,7 +94,7 @@ python -m scripts.make_activity_postprocessing --input data/raw/activities.csv -
 
 The same pattern applies to assays, documents, targets and test items.
 
-Each steps module imports its matching configuration, exposing `PIPELINE_CONFIG` and constructing `PIPELINE_STEPS` directly from the YAML definition so future additions require no code edits. 【F:library/postprocess/assays/steps.py†L1-L76】【F:library/postprocess/documents/steps.py†L1-L82】【F:library/postprocess/targets/steps.py†L1-L80】
+Each steps module imports its matching configuration, exposing `PIPELINE_CONFIG` and constructing `PIPELINE_STEPS` directly from the YAML definition so future additions require no code edits. 【F:library/postprocessing/assays/steps.py†L1-L76】【F:library/postprocessing/documents/steps.py†L1-L82】【F:library/postprocessing/targets/steps.py†L1-L80】
 
 ## Runtime flow
 

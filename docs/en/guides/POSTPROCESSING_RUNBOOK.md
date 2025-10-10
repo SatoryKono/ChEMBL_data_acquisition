@@ -101,9 +101,9 @@ across reruns on the same input.
 ### Metrics view for modular post-processing
 
 After the canonical CSV and helper artefacts are written, the orchestrator loads
-the export and executes `library.postprocess.targets.run_target_pipeline` via
+the export and executes `library.postprocessing.targets.run_target_pipeline` via
 `collect_postprocess_metrics`. The modular pipeline validates a compact schema
-(`library/postprocess/targets/schema.py`) exposing `target_class`,
+(`library/postprocessing/targets/schema.py`) exposing `target_class`,
 `protein_family`, `synonyms` and `pipeline_version`. The resulting DataFrame is
 not persisted by default; its metrics (`rows`, `columns`, schema identifier,
 timings) are stored in `target.postprocess.report.json` alongside the run

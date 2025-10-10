@@ -234,7 +234,7 @@ def test_main__dry_run_without_outputs_fails(
         ["--limit", "2", "--input", str(input_csv), "--dry-run"]
     )
 
-    assert exit_code == 1
+    assert exit_code == 2
 
     captured = capsys.readouterr()
     assert "--no-dry-run" in captured.err
