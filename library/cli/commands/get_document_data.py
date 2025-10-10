@@ -769,7 +769,7 @@ def _log_document_completion(
     )
 
     payload: dict[str, object] = {
-        "output": str(output_path),
+        "output_postprocessed": str(output_path),
         "pipeline_version": pipeline_version_value,
     }
     if extras:

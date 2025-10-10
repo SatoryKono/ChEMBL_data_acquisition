@@ -47,9 +47,11 @@ def test_make_document_postprocessing__end_to_end(tmp_path, monkeypatch):
     payload = json.loads(report_path.read_text(encoding="utf-8"))
     assert payload["table"] == "documents"
     assert payload["metrics"]["output"]["rows"] == len(result)
+    extras = payload.get("extras")
+    assert extras and extras["output_postprocessed"] == str(output_path)
 
     date_str = datetime.now(UTC).strftime("%Y%m%d")
-    log_path = log_dir / f"make_document_postprocessing_{date_str}.log"
+    log_path = log_dir / f"make_documents_postprocessing_{date_str}.log"
     assert log_path.exists()
 
     snapshot = output_path.read_bytes()

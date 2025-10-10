@@ -65,6 +65,7 @@ except ImportError:  # pragma: no cover - fallback for direct execution
 
 TABLE_NAME = "testitems"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
+LOG_FILE_STEM = f"make_{TABLE_NAME}_postprocessing"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -153,10 +154,13 @@ def run(args: argparse.Namespace) -> int:
 
     if metrics is not None:
         summary = metrics.summary()
-        summary["output"] = str(result.output_path)
+        summary["output_postprocessed"] = str(result.output_path)
         logger.info(f"{event_prefix}_summary", **summary)
 
-    extras = {"input": str(input_path), "output": str(output_path)}
+    extras = {
+        "input": str(input_path),
+        "output_postprocessed": str(output_path),
+    }
     pipeline_version = (
         metrics.pipeline_version if metrics else pipeline_config.pipeline_version
     )
@@ -173,7 +177,7 @@ def run(args: argparse.Namespace) -> int:
 
     logger.info(
         f"{event_prefix}_done",
-        output=str(result.output_path),
+        output_postprocessed=str(result.output_path),
         rows=int(validated.shape[0]),
         columns=int(validated.shape[1]),
     )
@@ -198,7 +202,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             [
                 *invocation,
                 f"input={Path(args.input).resolve()}",
-                f"output={Path(args.output).resolve()}",
+                f"output_postprocessed={Path(args.output).resolve()}",
             ]
         )
         run_id_value = uuid5(NAMESPACE_URL, descriptor).hex
@@ -211,7 +215,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         log_dir = DEFAULT_LOG_DIR
 
     with setup_cli_logging(
-        PROGRAM_NAME, log_cfg, date_str=None, log_dir=log_dir
+        LOG_FILE_STEM, log_cfg, date_str=None, log_dir=log_dir
     ) as logging_ctx:
         configure_logger(logging_ctx.log_cfg)
         args._pipeline_config = pipeline_config

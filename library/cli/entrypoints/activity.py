@@ -582,16 +582,24 @@ def _emit_completion_message(
                 metrics_payload[key] = str(value)
 
     if mode == "skip_existing" and output_path is not None:
-        logger.info("pipeline_skip_existing", output=str(output_path))
+        logger.info(
+            "pipeline_skip_existing", output_postprocessed=str(output_path)
+        )
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
             events_attr.append(
-                ("info", "pipeline_skip_existing", {"output": str(output_path)})
+                (
+                    "info",
+                    "pipeline_skip_existing",
+                    {"output_postprocessed": str(output_path)},
+                )
             )
         return
 
     payload: dict[str, object] = {
-        "output": str(output_path) if output_path is not None else None,
+        "output_postprocessed": str(output_path)
+        if output_path is not None
+        else None,
         "rows": int(resolved_rows),
         "duration_s": float(duration_s),
         "mode": mode,
@@ -1836,11 +1844,17 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     preexisting_output = output_path.exists() if output_path is not None else False
 
     if skip_existing and not force and preexisting_output and output_path is not None:
-        logger.info("pipeline_skip_existing", output=str(output_path))
+        logger.info(
+            "pipeline_skip_existing", output_postprocessed=str(output_path)
+        )
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
             events_attr.append(
-                ("info", "pipeline_skip_existing", {"output": str(output_path)})
+                (
+                    "info",
+                    "pipeline_skip_existing",
+                    {"output_postprocessed": str(output_path)},
+                )
             )
         _emit_completion_message(
             output_path=output_path,
@@ -1873,11 +1887,17 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     )
 
     if skip_existing and not force and preexisting_output and output_path is not None:
-        logger.info("pipeline_skip_existing", output=str(output_path))
+        logger.info(
+            "pipeline_skip_existing", output_postprocessed=str(output_path)
+        )
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
             events_attr.append(
-                ("info", "pipeline_skip_existing", {"output": str(output_path)})
+                (
+                    "info",
+                    "pipeline_skip_existing",
+                    {"output_postprocessed": str(output_path)},
+                )
             )
 
     return exit_code

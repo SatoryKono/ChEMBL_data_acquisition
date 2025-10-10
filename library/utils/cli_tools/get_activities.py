@@ -178,7 +178,9 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         and getattr(args, "skip_existing", False)
         and not getattr(args, "force", False)
     ):
-        logger.info("pipeline_skip_existing", output=str(output_path))
+        logger.info(
+            "pipeline_skip_existing", output_postprocessed=str(output_path)
+        )
         return 0
 
     try:
@@ -191,16 +193,16 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     logger.info(
         "activity_generated",
         count=int(frame.shape[0]),
-        output=str(written_path),
+        output_postprocessed=str(written_path),
     )
     logger.info(
         "generated",
-        output=str(written_path),
+        output_postprocessed=str(written_path),
         count=int(frame.shape[0]),
     )
     logger.info(
         "activity_pipeline_done",
-        output=str(written_path),
+        output_postprocessed=str(written_path),
         rows=int(frame.shape[0]),
     )
     return 0
