@@ -149,6 +149,9 @@ TESTITEM_PUBCHEM_COLUMNS: tuple[str, ...] = (
 
 
 TESTITEM_STRUCTURE_COLUMNS = {
+    "molecule_structures.canonical_smiles": "canonical_smiles",
+    "molecule_structures.standard_inchi": "standard_inchi",
+    "molecule_structures.standard_inchi_key": "standard_inchi_key",
     "pubchem.cid": "pubchem_cid",
     "pubchem.canonical_smiles": "pubchem_canonical_smiles",
     "pubchem.isomeric_smiles": "pubchem_isomeric_smiles",
