@@ -7,7 +7,7 @@ from textwrap import dedent
 
 import pytest
 
-from library.postprocess.common.config import (
+from library.postprocessing.pipeline.common.config import (
     PipelineConfigError,
     load_pipeline_config,
     normalize_pipeline_version,
@@ -27,7 +27,7 @@ def test_load_pipeline_config__resolves_step_callables(monkeypatch):
         "finalize_activity_records",
     ]
 
-    from library.postprocess.activities import steps as activity_steps
+    from library.postprocessing.pipeline.activities import steps as activity_steps
 
     assert cfg.steps[0].definition.func is activity_steps.normalize_activity_records
     assert cfg.steps[1].definition.func is activity_steps.enrich_activity_quality
@@ -53,7 +53,7 @@ def test_load_pipeline_config__applies_env_overrides(monkeypatch):
     [
         (
             "activities",
-            "library.postprocess.activities.steps",
+            "library.postprocessing.pipeline.activities.steps",
             "CHEMBL_ACTIVITY_PIPELINE_VERSION",
             (
                 (
@@ -82,7 +82,7 @@ def test_load_pipeline_config__applies_env_overrides(monkeypatch):
         ),
         (
             "assays",
-            "library.postprocess.assays.steps",
+            "library.postprocessing.pipeline.assays.steps",
             "CHEMBL_ASSAY_PIPELINE_VERSION",
             (
                 (
@@ -111,7 +111,7 @@ def test_load_pipeline_config__applies_env_overrides(monkeypatch):
         ),
         (
             "targets",
-            "library.postprocess.targets.steps",
+            "library.postprocessing.pipeline.targets.steps",
             "CHEMBL_TARGET_PIPELINE_VERSION",
             (
                 (
@@ -140,7 +140,7 @@ def test_load_pipeline_config__applies_env_overrides(monkeypatch):
         ),
         (
             "documents",
-            "library.postprocess.documents.steps",
+            "library.postprocessing.pipeline.documents.steps",
             "CHEMBL_DOCUMENT_PIPELINE_VERSION",
             (
                 (
@@ -210,7 +210,7 @@ def test_load_pipeline_config__errors_on_unsupported_step_parameters(tmp_path):
         pipeline_version: "auto"
         enabled_steps:
           - name: normalize_document_fields
-            callable: "library.postprocess.documents.steps:normalize_document_fields"
+            callable: "library.postprocessing.pipeline.documents.steps:normalize_document_fields"
             params:
               unexpected: true
         """

@@ -5,9 +5,9 @@ import logging
 import pandas as pd
 import pytest
 
-from library.postprocess.common import StepDefinition, run_steps, runner
-from library.postprocess.common.schema import DataFrameSchema
-from library.postprocess.common.types import SchemaValidationError
+from library.postprocessing.pipeline.common import StepDefinition, run_steps, runner
+from library.postprocessing.pipeline.common.schema import DataFrameSchema
+from library.postprocessing.pipeline.common.types import SchemaValidationError
 
 
 def _with_constant(

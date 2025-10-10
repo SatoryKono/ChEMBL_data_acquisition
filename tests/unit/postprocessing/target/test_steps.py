@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from library.postprocess.targets.steps import (
+from library.postprocessing.pipeline.targets.steps import (
     enrich_target_synonyms,
     finalize_target_records,
     normalize_target_fields,
@@ -164,7 +164,7 @@ def test_finalize_target_records__supports_optional_flags(monkeypatch) -> None:
     )
 
     monkeypatch.setattr(
-        "library.postprocess.targets.steps.validate_targets",
+        "library.postprocessing.pipeline.targets.steps.validate_targets",
         lambda *args, **kwargs: pytest.fail("validate_targets should not be called"),
     )
 
@@ -213,7 +213,7 @@ def test_finalize_target_records__fills_target_type_from_dictionary(
     )
 
     monkeypatch.setattr(
-        "library.postprocess.targets.steps._get_target_type_lookup",
+        "library.postprocessing.pipeline.targets.steps._get_target_type_lookup",
         lambda: lookup,
     )
 

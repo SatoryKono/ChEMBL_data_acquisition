@@ -21,7 +21,7 @@
 - `library/clients/` — API-клиенты (ChEMBL, CrossRef/OpenAlex, PubChem, UniProt, GtoPdb) с политикой ретраев и rate limiting.
 - `library/io/` — чтение/запись CSV/Parquet, управление путями, генерация sidecar-метаданных.
 - `library/utils/` — вспомогательные функции (CLI-инструменты, валидация аргументов, контроль идемпотентности).
-- `library/postprocess/{table}/` — модульные шаги постобработки для таблиц (`activities`, `assays`, `documents`, `targets`) плюс общее ядро `common/`.
+- `library/postprocessing/pipeline/{table}/` — модульные шаги постобработки для таблиц (`activities`, `assays`, `documents`, `targets`) плюс общее ядро `common/`.
 - `library/pipelines/testitem/` — специализированный конвейер тест-айтемов (чтение идентификаторов, ChEMBL, PubChem, финализация).
 - `library/qa/` — профилирование качества, отчёты и вспомогательные хуки (`reporting.py`, `table_quality.py`).
 - `library/orchestration/context.py` — `ETLContext` с менеджментом клиентов, лимитов запросов и общими ресурсами для CLI-скриптов.
@@ -43,7 +43,7 @@
 
 ## 3. Модель данных (Star Schema)
 
-Факт-таблица `activity_fact` связывает измерения `assay_dim`, `target_dim`, `document_dim`, `testitem_dim` по ключам `assay_chembl_id`, `target_chembl_id`, `document_chembl_id`, `molecule_chembl_id`. Схемы поддерживаются Pandera-валидацией и модульной постобработкой (`library/postprocess/{table}/schema.py`).
+Факт-таблица `activity_fact` связывает измерения `assay_dim`, `target_dim`, `document_dim`, `testitem_dim` по ключам `assay_chembl_id`, `target_chembl_id`, `document_chembl_id`, `molecule_chembl_id`. Схемы поддерживаются Pandera-валидацией и модульной постобработкой (`library/postprocessing/pipeline/{table}/schema.py`).
 
 ```mermaid
 graph LR
@@ -86,13 +86,13 @@ graph TD
 ```
 
 - `scripts/` используют `library.orchestration.context.ETLContext` для переиспользования клиентов и ограничения запросов (`chembl`, `pubchem`, `openalex_crossref`).
-- Постобработка вызывается через `library.postprocess.common.run_steps`, шаги описаны в `config/pipeline/*.yaml` и могут переопределяться переменными окружения.
+- Постобработка вызывается через `library.postprocessing.pipeline.common.run_steps`, шаги описаны в `config/pipeline/*.yaml` и могут переопределяться переменными окружения.
 - QA-хуки (`library.qa.reporting.build_table_quality_hook`) генерируют CSV/JSON отчёты (`*_quality_report_table.csv`, `*.quality.json`) и интегрируются в логи `*_pipeline_done`.
-- `library.postprocess.common.collect_postprocess_metrics` создаёт JSON `<table>.postprocess.report.json` с метриками (`rows`, `columns`, `duration_s`, `steps`, extras по таблице).
+- `library.postprocessing.pipeline.common.collect_postprocess_metrics` создаёт JSON `<table>.postprocess.report.json` с метриками (`rows`, `columns`, `duration_s`, `steps`, extras по таблице).
 
 ### 4.2 Активности — `scripts/get_activity_data.py`
 
-- Основные этапы: чтение идентификаторов → пакетная загрузка через `run_activity_pipeline` → нормализация (`library.postprocess.activities.steps`) → Pandera (`library.schemas.activities`) → QA.
+- Основные этапы: чтение идентификаторов → пакетная загрузка через `run_activity_pipeline` → нормализация (`library.postprocessing.pipeline.activities.steps`) → Pandera (`library.schemas.activities`) → QA.
 - CLI параметры: `--input-csv`, `--output-csv`, `--final-out`, `--timeout`, `--limit`, `--offset`, `--batch-size`, `--workers`, `--dry-run`, `--skip-existing`, `--force`.
 - Пример запуска:
   ```bash
@@ -104,7 +104,7 @@ graph TD
 
 ### 4.3 Ассеи — `scripts/get_assay_data.py`
 
-- Использует `run_assay_pipeline` для загрузки ChEMBL, слияния словарей и шагов `library.postprocess.assays.steps`.
+- Использует `run_assay_pipeline` для загрузки ChEMBL, слияния словарей и шагов `library.postprocessing.pipeline.assays.steps`.
 - CLI параметры: `--input-csv`, `--output-csv`, `--final-out`, `--timeout`, `--limit`, `--offset`, `--batch-size`, `--skip-existing`.
 - Пример:
   ```bash
@@ -124,7 +124,7 @@ graph TD
       --input data/documents.ids.csv --final-out output/documents.csv \
       --openalex-rps 2 --crossref-rps 1
   ```
-- Постобработка: `library/postprocess/documents/steps` (нормализация полей, заполнение годов, дедупликация идентификаторов).
+- Постобработка: `library/postprocessing/pipeline/documents/steps` (нормализация полей, заполнение годов, дедупликация идентификаторов).
 
 ### 4.5 Цели — `scripts/get_target_data.py`
 
@@ -137,7 +137,7 @@ graph TD
       --chembl-out tmp/targets.chembl.csv --uniprot-out tmp/targets.uniprot.csv \
       --disable-gtop --chunk-size 25
   ```
-- Постобработка: `library/postprocess/targets/steps` с агрегацией синонимов и сортировкой по `target_chembl_id`.
+- Постобработка: `library/postprocessing/pipeline/targets/steps` с агрегацией синонимов и сортировкой по `target_chembl_id`.
 
 ### 4.6 Тест-айтемы — `scripts/get_testitem_data.py`
 
@@ -167,9 +167,9 @@ graph LR
 
 | Компонент | Метрики / Артефакты | Реализация |
 |-----------|---------------------|------------|
-| Pandera валидация | Обязательные/опциональные колонки, типы, правила nullable | `library/schemas/*.py`, `library/postprocess/{table}/schema.py`. |
+| Pandera валидация | Обязательные/опциональные колонки, типы, правила nullable | `library/schemas/*.py`, `library/postprocessing/pipeline/{table}/schema.py`. |
 | Table Quality профилирование | `row_count`, `non_null_ratio`, `pattern_*`, `numeric_*`, `bool_like_ratio`, `distinct_ratio` | `library/qa/table_quality.py` через хук `build_table_quality_hook`. |
-| Postprocess metrics | `rows`, `columns`, `duration_s`, `steps`, `validation.schema`, extras (`input_rows`, `ambiguous_classifications`) | `library/postprocess/common/utils.collect_postprocess_metrics`. |
+| Postprocess metrics | `rows`, `columns`, `duration_s`, `steps`, `validation.schema`, extras (`input_rows`, `ambiguous_classifications`) | `library/postprocessing/pipeline/common/utils.collect_postprocess_metrics`. |
 | Логирование этапов | события `*_pipeline_done`, `quality_report_*`, failure-case CSV | `library.qa.reporting` и `library.utils.logging`. |
 | Тестовый контур | `reports/test_report.json`, `reports/test_summary.md`, success-rate ≥95 % | Pytest + json-report, консолидируется `tools/make_md_summary.py`. |
 
@@ -179,30 +179,30 @@ graph LR
 
 ## 6. Нормализация и постобработка
 
-Модульная система управляется YAML-конфигами (`config/pipeline/*.yaml`). `library.postprocess.common.run_steps` исполняет цепочки шагов, применяет `infer_pipeline_version` и пишет артефакты (`*.postprocess.report.json`).
+Модульная система управляется YAML-конфигами (`config/pipeline/*.yaml`). `library.postprocessing.pipeline.common.run_steps` исполняет цепочки шагов, применяет `infer_pipeline_version` и пишет артефакты (`*.postprocess.report.json`).
 
 ### 6.1 Активности
 
-- Шаги: `normalize_activity_records` → `enrich_activity_quality` → `finalize_activity_records` (`library/postprocess/activities/steps.py`).
-- Схема: `library/postprocess/activities/schema.py`, контролирует типы идентификаторов (`Int64`, `string`) и обязательность ключей.
+- Шаги: `normalize_activity_records` → `enrich_activity_quality` → `finalize_activity_records` (`library/postprocessing/pipeline/activities/steps.py`).
+- Схема: `library/postprocessing/pipeline/activities/schema.py`, контролирует типы идентификаторов (`Int64`, `string`) и обязательность ключей.
 - Конфигурация: `config/pipeline/activities.yaml` (параметры `relation_normalization`, `enforce_uppercase_units`).
 
 ### 6.2 Ассеи
 
-- Шаги: `normalize_assay_metadata`, `enrich_assay_flags`, `finalize_assay_records` (`library/postprocess/assays/steps.py`).
-- Схема: `library/postprocess/assays/schema.py`, включает проверки BAO-кодов и confirmatory-флага.
+- Шаги: `normalize_assay_metadata`, `enrich_assay_flags`, `finalize_assay_records` (`library/postprocessing/pipeline/assays/steps.py`).
+- Схема: `library/postprocessing/pipeline/assays/schema.py`, включает проверки BAO-кодов и confirmatory-флага.
 - Конфигурация: `config/pipeline/assays.yaml` (параметры `uppercase_categories`, `confirmatory_terms`).
 
 ### 6.3 Документы
 
-- Шаги: `normalize_document_fields`, `enrich_document_publication_year`, `finalize_document_records` (`library/postprocess/documents/steps.py`).
-- Схема: `library/postprocess/documents/schema.py`, следит за уникальностью `document_chembl_id` и заполнением DOI/годов.
+- Шаги: `normalize_document_fields`, `enrich_document_publication_year`, `finalize_document_records` (`library/postprocessing/pipeline/documents/steps.py`).
+- Схема: `library/postprocessing/pipeline/documents/schema.py`, следит за уникальностью `document_chembl_id` и заполнением DOI/годов.
 - Конфигурация: `config/pipeline/documents.yaml` (`normalise_unicode`, `fallback_year`, `ensure_unique_ids`).
 
 ### 6.4 Цели
 
-- Шаги: `normalize_target_fields`, `enrich_target_synonyms`, `finalize_target_records` (`library/postprocess/targets/steps.py`).
-- Схема: `library/postprocess/targets/schema.py`, проверяет `target_type`, `organism`, агрегированные синонимы.
+- Шаги: `normalize_target_fields`, `enrich_target_synonyms`, `finalize_target_records` (`library/postprocessing/pipeline/targets/steps.py`).
+- Схема: `library/postprocessing/pipeline/targets/schema.py`, проверяет `target_type`, `organism`, агрегированные синонимы.
 - Конфигурация: `config/pipeline/targets.yaml` (`normalize_taxonomy`, `synonym_sources`, `sort_by`).
 
 ### 6.5 Тест-айтемы

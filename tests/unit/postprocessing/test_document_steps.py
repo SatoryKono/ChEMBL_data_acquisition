@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from library.postprocess.documents.steps import (
+from library.postprocessing.pipeline.documents.steps import (
     enrich_document_publication_year,
     finalize_document_records,
     normalize_document_fields,

@@ -6,7 +6,7 @@ from textwrap import dedent
 
 import pandas as pd
 
-from library.postprocess.documents.schema import DOCUMENT_SCHEMA
+from library.postprocessing.pipeline.documents.schema import DOCUMENT_SCHEMA
 from scripts import make_document_postprocessing as cli
 
 
@@ -71,12 +71,12 @@ def test_make_document_postprocessing__uses_cli_pipeline_override(
             pipeline_version: "override-2024"
             enabled_steps:
               - name: normalize_document_fields
-                callable: "library.postprocess.documents.steps:normalize_document_fields"
+                callable: "library.postprocessing.pipeline.documents.steps:normalize_document_fields"
                 params:
                   trim_whitespace: false
                   normalise_unicode: false
               - name: finalize_document_records
-                callable: "library.postprocess.documents.steps:finalize_document_records"
+                callable: "library.postprocessing.pipeline.documents.steps:finalize_document_records"
                 params:
                   enforce_schema: true
                   ensure_unique_ids: true
@@ -136,12 +136,12 @@ def test_make_document_postprocessing__resolves_pipeline_version_from_defaults(
             """
             enabled_steps:
               - name: normalize_document_fields
-                callable: "library.postprocess.documents.steps:normalize_document_fields"
+                callable: "library.postprocessing.pipeline.documents.steps:normalize_document_fields"
                 params:
                   trim_whitespace: false
                   normalise_unicode: false
               - name: finalize_document_records
-                callable: "library.postprocess.documents.steps:finalize_document_records"
+                callable: "library.postprocessing.pipeline.documents.steps:finalize_document_records"
                 params:
                   enforce_schema: true
                   ensure_unique_ids: true

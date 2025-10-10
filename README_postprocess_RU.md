@@ -47,9 +47,9 @@
 
 ### Декларативная конфигурация конвейеров
 
-Актуальный список шагов для каждого домена постобработки хранится в `config/pipeline/<domain>.yaml`. Эти YAML-файлы описывают версию конвейера, отражаемую в метаданных, включённые шаги и предметные параметры, которые могут потребляться документацией и хуками оркестрации. Вызываемые объекты задаются через dotted-пути (например, `library.postprocess.activities.steps:normalize_activity_records`) и резолвятся лениво функцией `load_pipeline_config`. 【F:config/pipeline/activities.yaml†L1-L34】【F:library/postprocess/common/config.py†L22-L170】
+Актуальный список шагов для каждого домена постобработки хранится в `config/pipeline/<domain>.yaml`. Эти YAML-файлы описывают версию конвейера, отражаемую в метаданных, включённые шаги и предметные параметры, которые могут потребляться документацией и хуками оркестрации. Вызываемые объекты задаются через dotted-пути (например, `library.postprocessing.pipeline.activities.steps:normalize_activity_records`) и резолвятся лениво функцией `load_pipeline_config`. 【F:config/pipeline/activities.yaml†L1-L34】【F:library/postprocessing/pipeline/common/config.py†L22-L170】
 
-Переменные окружения могут переопределять значения YAML через плейсхолдеры `${VAR}` или `${VAR:-default}`. Например, `${CHEMBL_ACTIVITY_PIPELINE_VERSION:-auto}` использует установленную версию библиотеки, если `CHEMBL_ACTIVITY_PIPELINE_VERSION` не задана. Аналогично `${POSTPROCESS_LOG_LEVEL:-INFO}` определяет уровень логирования, который подхватывает оркестрация. Загрузчик раскрывает плейсхолдеры в безопасном UTF-8-режиме и нормализует значения `auto`/пусто, чтобы вернуться к `get_pipeline_version()`. 【F:library/postprocess/common/config.py†L64-L170】【F:library/postprocess/activities/steps.py†L67-L104】
+Переменные окружения могут переопределять значения YAML через плейсхолдеры `${VAR}` или `${VAR:-default}`. Например, `${CHEMBL_ACTIVITY_PIPELINE_VERSION:-auto}` использует установленную версию библиотеки, если `CHEMBL_ACTIVITY_PIPELINE_VERSION` не задана. Аналогично `${POSTPROCESS_LOG_LEVEL:-INFO}` определяет уровень логирования, который подхватывает оркестрация. Загрузчик раскрывает плейсхолдеры в безопасном UTF-8-режиме и нормализует значения `auto`/пусто, чтобы вернуться к `get_pipeline_version()`. 【F:library/postprocessing/pipeline/common/config.py†L64-L170】【F:library/postprocessing/pipeline/activities/steps.py†L67-L104】
 
 Доступные переопределения:
 
@@ -91,7 +91,7 @@ python -m scripts.make_activity_postprocessing --input data/raw/activities.csv -
 
 Та же схема применяется к assay, document, target и test item.
 
-Каждый модуль шагов импортирует свою конфигурацию, экспортирует `PIPELINE_CONFIG` и строит `PIPELINE_STEPS` напрямую на основе YAML, поэтому будущие дополнения не потребуют правок в коде. 【F:library/postprocess/assays/steps.py†L1-L76】【F:library/postprocess/documents/steps.py†L1-L82】【F:library/postprocess/targets/steps.py†L1-L80】
+Каждый модуль шагов импортирует свою конфигурацию, экспортирует `PIPELINE_CONFIG` и строит `PIPELINE_STEPS` напрямую на основе YAML, поэтому будущие дополнения не потребуют правок в коде. 【F:library/postprocessing/pipeline/assays/steps.py†L1-L76】【F:library/postprocessing/pipeline/documents/steps.py†L1-L82】【F:library/postprocessing/pipeline/targets/steps.py†L1-L80】
 
 ## Поток выполнения
 

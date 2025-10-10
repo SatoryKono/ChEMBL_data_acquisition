@@ -10,12 +10,12 @@ from functools import lru_cache
 import pandas as pd
 
 from library.pipelines.common.metadata import get_pipeline_version
-from library.postprocess.common import run_steps
-from library.postprocess.common.config import (
+from library.postprocessing.pipeline.common import run_steps
+from library.postprocessing.pipeline.common.config import (
     load_pipeline_config,
     normalize_pipeline_version,
 )
-from library.postprocess.common.logging import PipelineRunMetrics
+from library.postprocessing.pipeline.common.logging import PipelineRunMetrics
 from library.resources.dictionaries import DictionaryManifestError, get_resource
 
 from .schema import TARGET_SCHEMA, validate_targets
