@@ -8,6 +8,7 @@ from library.resources import dictionaries
 
 
 @pytest.mark.integration
+@pytest.mark.smoke
 def test_dictionary_manifest__bundled_resources_validate() -> None:
     """Ensure the checked-in manifest matches the bundled resources."""
 
