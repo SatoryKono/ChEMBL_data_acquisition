@@ -24,7 +24,11 @@ from .chembl_target import normalize_reaction_ec_numbers
 
 @dataclass(slots=True)
 class TargetPipelineOptions:
-    """Configuration options for executing the target pipeline."""
+    """Configuration options for executing the target pipeline.
+
+    ``skip_existing`` is set by the unified ``get_data`` CLI when ``--skip-existing``
+    is requested so cached target exports are preserved during incremental runs.
+    """
 
     input_csv: Path
     output_csv: Path
