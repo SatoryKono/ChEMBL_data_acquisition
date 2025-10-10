@@ -93,8 +93,36 @@ from library.pipelines.testitem import (
 )
 from library.postprocess.common import (
     PostprocessResult,
+    PostprocessingPipelineConfig,
     SUPPORTED_TABLES as POSTPROCESS_SUPPORTED_TABLES,
+    get_csv_runtime_config as get_postprocess_csv_config,
+    get_pipeline_config as load_postprocess_pipeline_config,
     run_postprocessing_pipeline,
+)
+from library.postprocessing.activities import (
+    ACTIVITY_SCHEMA,
+    run_activity_pipeline as run_activity_postprocess,
+    validate_activities,
+)
+from library.postprocessing.assays import (
+    ASSAY_SCHEMA,
+    run_assay_pipeline as run_assay_postprocess,
+    validate_assays,
+)
+from library.postprocessing.documents import (
+    DOCUMENT_SCHEMA,
+    run_document_pipeline as run_document_postprocess,
+    validate_documents,
+)
+from library.postprocessing.targets import (
+    TARGET_SCHEMA,
+    run_target_pipeline as run_target_postprocess,
+    validate_targets,
+)
+from library.postprocessing.testitem import (
+    TESTITEM_SCHEMA,
+    run_testitem_pipeline as run_testitem_postprocess,
+    validate_testitems,
 )
 from library.reporting.run_manifest import load_output_report, merge_run_output
 
@@ -112,6 +140,42 @@ DEFAULT_OUTPUT_STEMS: Mapping[str, str] = {
 _PIPELINE_STEPS = DEFAULT_PIPELINE_STEPS
 _DEFAULT_INPUT_FILES = DEFAULT_INPUT_FILES
 _DEFAULT_OUTPUT_STEMS = DEFAULT_OUTPUT_STEMS
+
+
+@dataclass(frozen=True)
+class _PostprocessHandlers:
+    runner: Callable[..., tuple[Any, Any]]
+    validator: Callable[..., Any]
+    schema: Any
+
+
+_POSTPROCESS_HANDLERS: dict[str, _PostprocessHandlers] = {
+    "activities": _PostprocessHandlers(
+        runner=run_activity_postprocess,
+        validator=validate_activities,
+        schema=ACTIVITY_SCHEMA,
+    ),
+    "assays": _PostprocessHandlers(
+        runner=run_assay_postprocess,
+        validator=validate_assays,
+        schema=ASSAY_SCHEMA,
+    ),
+    "documents": _PostprocessHandlers(
+        runner=run_document_postprocess,
+        validator=validate_documents,
+        schema=DOCUMENT_SCHEMA,
+    ),
+    "targets": _PostprocessHandlers(
+        runner=run_target_postprocess,
+        validator=validate_targets,
+        schema=TARGET_SCHEMA,
+    ),
+    "testitems": _PostprocessHandlers(
+        runner=run_testitem_postprocess,
+        validator=validate_testitems,
+        schema=TESTITEM_SCHEMA,
+    ),
+}
 
 
 _UNLINK_MAX_ATTEMPTS = 5
@@ -1084,6 +1148,14 @@ def _run_postprocess_hook(
         table = _resolve_postprocess_table(step, final_output)
     if table is None:
         return None
+    handlers = _POSTPROCESS_HANDLERS.get(table)
+    if handlers is None:
+        _LOGGER.warning(
+            "postprocess_handlers_missing",
+            step=step.name,
+            table=table,
+        )
+        return None
     destination = final_output.with_name(f"output_postprocessed.{table}.csv")
     _LOGGER.info(
         "postprocess_start",
@@ -1092,22 +1164,43 @@ def _run_postprocess_hook(
         input=str(final_output),
         output=str(destination),
     )
-    result = run_postprocessing_pipeline(
-        table,
-        final_output,
-        output_path=destination,
+    pipeline_cfg = load_postprocess_pipeline_config(table, None)
+    csv_cfg = get_postprocess_csv_config(pipeline_cfg)
+    runtime_config = PostprocessingPipelineConfig(
+        pipeline_config=pipeline_cfg,
+        csv_runtime_config=csv_cfg,
+        runner=handlers.runner,
+        validator=handlers.validator,
+        schema=handlers.schema,
         logger=_LOGGER,
     )
+    pipeline_result = run_postprocessing_pipeline(
+        table,
+        final_output,
+        destination,
+        runtime_config,
+    )
+    metrics = pipeline_result.metrics
+    report_path = pipeline_result.report_path
+    if metrics is None:
+        raise RuntimeError(f"postprocess metrics missing for table {table}")
+    if report_path is None:
+        raise RuntimeError(f"postprocess report missing for table {table}")
     _LOGGER.info(
         "postprocess_done",
         step=step.name,
         table=table,
-        output=str(result.output_path),
-        report=str(result.report_path),
-        rows=result.metrics.output_rows,
-        columns=result.metrics.output_columns,
+        output=str(pipeline_result.output_path),
+        report=str(report_path),
+        rows=int(metrics.output_rows),
+        columns=int(metrics.output_columns),
     )
-    return result
+    return PostprocessResult(
+        table=table,
+        output_path=pipeline_result.output_path,
+        report_path=report_path,
+        metrics=metrics,
+    )
 
 
 def _cleanup_failed_step(

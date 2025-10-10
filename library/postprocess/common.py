@@ -224,6 +224,7 @@ class PostprocessingPipelineResult:
     dataframe: "pd.DataFrame"
     metrics: "PipelineRunMetrics | None"
     output_path: Path
+    report_path: Path | None
 
 def _write_metrics_report(
     table: str,
@@ -291,16 +292,19 @@ def run_postprocessing_pipeline(
         logger=logger,
     )
 
+    report_path: Path | None = None
+
     # Write metrics report after exporting CSV
     if metrics is not None:
-        _write_metrics_report(
+        report_path = _write_metrics_report(
             table_name, metrics, resolved_output, logger
         )
-    
+
     return PostprocessingPipelineResult(
         dataframe=validated,
         metrics=metrics,
         output_path=resolved_output,
+        report_path=report_path,
     )
 
 def generate_metrics_report(
