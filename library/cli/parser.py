@@ -876,6 +876,19 @@ def prepare_io_paths(
     args.raw_out = resolved_raw
     args._auto_raw_out_generated = bool(auto_raw and resolved_raw is not None)
 
+    checkpoint_value = getattr(args, "checkpoint", None)
+    if checkpoint_value is argparse.SUPPRESS:
+        checkpoint_value = None
+    resolved_checkpoint = _resolve_file(
+        checkpoint_value,
+        directory=output_dir,
+        base=base_path,
+    )
+    if resolved_checkpoint is not None:
+        args.checkpoint = resolved_checkpoint
+    else:
+        args.checkpoint = None
+
     if date_str is not None:
         args.date = date_str
 
