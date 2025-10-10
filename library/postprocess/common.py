@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-import logging
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Callable, Mapping, Any
 
 import pandas as pd
 
 from library import io
 from library.common.csv_utils import write_csv_chunks_deterministic
+from library.common.logging_setup import Logger
 from library.postprocessing.activities import ACTIVITY_SCHEMA, run_activity_pipeline
 from library.postprocessing.assays import ASSAY_SCHEMA, run_assay_pipeline
 from library.postprocessing.common.config import PipelineConfig, load_pipeline_config
@@ -27,9 +26,6 @@ from library.postprocessing.targets import TARGET_SCHEMA, run_target_pipeline
 from library.postprocessing.testitem import TESTITEM_SCHEMA, run_testitem_pipeline
 
 __all__ = ["PostprocessResult", "SUPPORTED_TABLES", "run_postprocessing_pipeline"]
-
-
-_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -85,7 +81,7 @@ def _resolve_domain(table: str) -> _DomainResources:
         raise ValueError(f"unsupported postprocess table: {table!r}") from exc
 
 
-def _load_input_frame(table: str, path: Path, csv_cfg: CsvRuntimeConfig, logger: logging.Logger) -> pd.DataFrame:
+def _load_input_frame(table: str, path: Path, csv_cfg: CsvRuntimeConfig, logger: Logger) -> pd.DataFrame:
     prefix = _event_prefix(table)
     logger.info(
         f"{prefix}_load_start",
@@ -106,7 +102,7 @@ def run_postprocess_steps(
     runner: Callable[..., tuple[pd.DataFrame, PipelineRunMetrics]],
     pipeline_version: str | None,
     *,
-    logger,
+    logger: Logger,
 ) -> tuple[pd.DataFrame, PipelineRunMetrics]:
     """Execute postprocessing ``runner`` for ``table``."""
 
@@ -134,7 +130,7 @@ def validate_postprocess_frame(
     schema: DataFrameSchema,
     pipeline_version: str | None,
     *,
-    logger,
+    logger: Logger,
 ) -> pd.DataFrame:
     """Validate ``df`` using ``validator`` aligned with ``schema``."""
 
@@ -173,7 +169,7 @@ def _write_output_frame(
     output_path: Path,
     csv_cfg: CsvRuntimeConfig,
     schema: DataFrameSchema,
-    logger: logging.Logger,
+    logger: Logger,
 ) -> Path:
     """Persist ``df`` deterministically to ``output_path``."""
 
@@ -210,12 +206,12 @@ def _write_output_frame(
 class PostprocessingPipelineConfig:
     """Configuration bundle required to execute a postprocessing pipeline."""
 
-    pipeline_config: PipelineConfig
-    csv_runtime_config: CsvRuntimeConfig
-    runner: Callable[..., tuple[pd.DataFrame, PipelineRunMetrics]]
-    validator: Callable[..., pd.DataFrame]
-    schema: DataFrameSchema
-    logger: Any
+    pipeline_config: "PipelineConfig"
+    csv_runtime_config: "CsvRuntimeConfig"
+    runner: Callable[..., tuple["pd.DataFrame", "PipelineRunMetrics"]]
+    validator: Callable[..., "pd.DataFrame"]
+    schema: "DataFrameSchema"
+    logger: Logger
     pipeline_version: str | None = None
 
 @dataclass(slots=True)
@@ -231,7 +227,7 @@ def _write_metrics_report(
     table: str,
     metrics: PipelineRunMetrics,
     output_path: Path,
-    logger: logging.Logger,
+    logger: Logger,
 ) -> Path:
     report_path = output_path.parent / f"{table}.postprocess.report.json"
     payload = build_report_payload(
@@ -316,7 +312,7 @@ def generate_metrics_report(
     *,
     pipeline_version: str | None,
     extras: Mapping[str, Any] | None,
-    logger,
+    logger: Logger,
     pipeline_metrics: PipelineRunMetrics | None = None,
 ) -> tuple[PipelineRunMetrics | None, Path | None]:
     """Create a structured metrics report for ``table``."""
@@ -412,7 +408,7 @@ def ensure_pipeline_version_column(
 
 
 def load_input_frame(
-    table: str, path: Path | str, csv_cfg: CsvRuntimeConfig, *, logger: logging.Logger
+    table: str, path: Path | str, csv_cfg: CsvRuntimeConfig, *, logger: Logger
 ) -> pd.DataFrame:
     """Read ``path`` into a DataFrame honouring ``csv_cfg`` options."""
 
@@ -426,7 +422,7 @@ def export_postprocess_frame(
     csv_cfg: CsvRuntimeConfig,
     schema: DataFrameSchema,
     *,
-    logger: logging.Logger,
+    logger: Logger,
 ) -> Path:
     """Persist ``df`` deterministically to ``output_path``."""
 
