@@ -12,15 +12,15 @@ import pandas as pd
 
 from library import io
 from library.common.csv_utils import write_csv_chunks_deterministic
-from library.postprocess.common.config import PipelineConfig, load_pipeline_config
-from library.postprocess.common.logging import (
+from library.postprocessing.pipeline.common.config import PipelineConfig, load_pipeline_config
+from library.postprocessing.pipeline.common.logging import (
     PipelineRunMetrics,
     build_report_payload,
     dump_report,
 )
-from library.postprocess.common.schema import DataFrameSchema
-from library.postprocess.common.types import SchemaValidationError
-from library.postprocess.common.utils import collect_postprocess_metrics
+from library.postprocessing.pipeline.common.schema import DataFrameSchema
+from library.postprocessing.pipeline.common.types import SchemaValidationError
+from library.postprocessing.pipeline.common.utils import collect_postprocess_metrics
 
 LOG_DIR_ENV = "CHEMBL_POSTPROCESS_LOG_DIR"
 DEFAULT_LOG_DIR = Path("logs")

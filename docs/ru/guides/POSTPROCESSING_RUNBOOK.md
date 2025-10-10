@@ -101,9 +101,9 @@ PY
 ### Метрики модульной постобработки
 
 После записи канонического CSV и вспомогательных артефактов оркестратор
-подгружает выгрузку и запускает `library.postprocess.targets.run_target_pipeline`
+подгружает выгрузку и запускает `library.postprocessing.pipeline.targets.run_target_pipeline`
 через `collect_postprocess_metrics`. Модульная цепочка проверяет компактную
-схему (`library/postprocess/targets/schema.py`), где представлены `target_class`,
+схему (`library/postprocessing/pipeline/targets/schema.py`), где представлены `target_class`,
 `protein_family`, `synonyms` и `pipeline_version`. DataFrame не сохраняется, но
 его метрики (число строк/колонок, идентификатор схемы, тайминги) попадают в
 `target.postprocess.report.json` рядом с манифестом. QA-дашборды могут читать

@@ -2,19 +2,19 @@
 pipeline_version: "${CHEMBL_DOCUMENT_PIPELINE_VERSION:-auto}"
 enabled_steps:
   - name: normalize_document_fields
-    callable: "library.postprocess.documents.steps:normalize_document_fields"
+    callable: "library.postprocessing.pipeline.documents.steps:normalize_document_fields"
     description: "Normalize document metadata and harmonise citation fields."
     params:
       trim_whitespace: true
       normalise_unicode: true
   - name: enrich_document_publication_year
-    callable: "library.postprocess.documents.steps:enrich_document_publication_year"
+    callable: "library.postprocessing.pipeline.documents.steps:enrich_document_publication_year"
     description: "Backfill publication year using DOI lookups and heuristics."
     params:
       fallback_year: 1900
       prefer_doi_year: true
   - name: finalize_document_records
-    callable: "library.postprocess.documents.steps:finalize_document_records"
+    callable: "library.postprocessing.pipeline.documents.steps:finalize_document_records"
     description: "Enforce schema ordering and deterministic identifier dtypes."
     params:
       enforce_schema: true

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pandas as pd
 
-from library.postprocess.testitem.schema import TESTITEM_SCHEMA
+from library.postprocessing.pipeline.testitem.schema import TESTITEM_SCHEMA
 from scripts import make_testitem_postprocessing as cli
 
 

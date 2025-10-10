@@ -25,10 +25,10 @@ from library.cli.logging import setup_cli_logging
 from library.cli.parser import path_argument
 from library.cli_utils import resolve_invocation
 from library.common.log import logger
-from library.postprocess.assays.schema import ASSAY_SCHEMA, validate_assays
-from library.postprocess.assays.steps import run_assay_pipeline
-from library.postprocess.common.logging import PipelineRunMetrics
-from library.postprocess.common.types import SchemaValidationError, StepError
+from library.postprocessing.pipeline.assays.schema import ASSAY_SCHEMA, validate_assays
+from library.postprocessing.pipeline.assays.steps import run_assay_pipeline
+from library.postprocessing.pipeline.common.logging import PipelineRunMetrics
+from library.postprocessing.pipeline.common.types import SchemaValidationError, StepError
 
 if __package__:
     from ._postprocess_common import (

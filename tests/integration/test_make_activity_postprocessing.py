@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pandas as pd
 
-from library.postprocess.activities.schema import ACTIVITY_SCHEMA
+from library.postprocessing.pipeline.activities.schema import ACTIVITY_SCHEMA
 from scripts import make_activity_postprocessing as cli
 
 

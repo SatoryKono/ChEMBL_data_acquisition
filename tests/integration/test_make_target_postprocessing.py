@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pandas as pd
 
-from library.postprocess.targets.schema import TARGET_SCHEMA
+from library.postprocessing.pipeline.targets.schema import TARGET_SCHEMA
 from scripts import make_target_postprocessing as cli
 
 

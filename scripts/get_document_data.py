@@ -89,9 +89,9 @@ from library.pipelines.document.service import (
     FallbackDoiMetrics,
     FallbackDoiState,
 )
-from library.postprocess.common import collect_postprocess_metrics
-from library.postprocess.common.logging import PipelineRunMetrics
-from library.postprocess.documents import (
+from library.postprocessing.pipeline.common import collect_postprocess_metrics
+from library.postprocessing.pipeline.common.logging import PipelineRunMetrics
+from library.postprocessing.pipeline.documents import (
     run_document_pipeline as run_document_postprocess,
 )
 from library.postprocessing import document as document_export_postprocessing

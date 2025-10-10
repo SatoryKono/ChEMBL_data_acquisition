@@ -173,11 +173,11 @@ flowchart TD
 
 ### S10_postprocess_normalize
 - **Функция/блок:** `run_activity_postprocess` step `normalize_activity_records`
-- **Назначение:** QA-постпроцесс — нормализация метаданных после записи (используется только для отчёта). 【F:scripts/get_activity_data.py†L1446-L1451】【F:library/postprocess/activities/steps.py†L41-L72】
+- **Назначение:** QA-постпроцесс — нормализация метаданных после записи (используется только для отчёта). 【F:scripts/get_activity_data.py†L1446-L1451】【F:library/postprocessing/pipeline/activities/steps.py†L41-L72】
 - **Вход:** `pd.read_csv(output.activities_*.csv)` (deterministic порядок/тип строк).
 - **Выход:** Normalized DataFrame с приведёнными регистрами (аналог S04, но в отчёте). Метрики фиксируются в `PipelineRunMetrics`.
 - **Операция:**
-  - *type: normalize* — strip, collapse whitespace, uppercase `standard_type` и relation, units uppercase (по конфигу). 【F:library/postprocess/activities/steps.py†L55-L70】
+  - *type: normalize* — strip, collapse whitespace, uppercase `standard_type` и relation, units uppercase (по конфигу). 【F:library/postprocessing/pipeline/activities/steps.py†L55-L70】
 - **Зависимости:** `config/pipeline/activities.yaml` (параметры шага). 【F:config/pipeline/activities.yaml†L1-L21】
 - **Псевдокод:**
   1. `normalised = df.copy(); normalised.columns = lower(strip)`
@@ -186,12 +186,12 @@ flowchart TD
 
 ### S11_postprocess_quality
 - **Функция/блок:** `enrich_activity_quality`
-- **Назначение:** определить `quality_flag` на основании `data_validity_comment` для отчётности QA. 【F:library/postprocess/activities/steps.py†L88-L118】
+- **Назначение:** определить `quality_flag` на основании `data_validity_comment` для отчётности QA. 【F:library/postprocessing/pipeline/activities/steps.py†L88-L118】
 - **Вход:** DataFrame после S10.
 - **Выход:** Добавлена колонка `quality_flag` (bool); при отсутствии комментариев — базовое значение `default_quality_flag`.
 - **Операция:**
   - *type: derive* — компиляция regex паттерна из `quality_terms` (по YAML), поиск (case-insensitive) в `data_validity_comment` -> bool.
-  - *Missing handling:* при отсутствии колонки комментария флаг заполняется базовым значением. 【F:library/postprocess/activities/steps.py†L96-L117】
+  - *Missing handling:* при отсутствии колонки комментария флаг заполняется базовым значением. 【F:library/postprocessing/pipeline/activities/steps.py†L96-L117】
 - **Зависимости:** `config/pipeline/activities.yaml` (`quality_terms`, `default_quality_flag`).
 - **Псевдокод:**
   1. `effective_terms = prepare_terms(config)`
@@ -201,17 +201,17 @@ flowchart TD
 
 ### S12_postprocess_finalize
 - **Функция/блок:** `finalize_activity_records`
-- **Назначение:** привести идентификаторы к `Int64`, валидировать Pandera `ACTIVITY_SCHEMA`, зафиксировать порядок колонок и pipeline_version в отчётных метриках. 【F:library/postprocess/activities/steps.py†L121-L157】【F:library/postprocess/activities/schema.py†L1-L45】
+- **Назначение:** привести идентификаторы к `Int64`, валидировать Pandera `ACTIVITY_SCHEMA`, зафиксировать порядок колонок и pipeline_version в отчётных метриках. 【F:library/postprocessing/pipeline/activities/steps.py†L121-L157】【F:library/postprocessing/pipeline/activities/schema.py†L1-L45】
 - **Вход:** DataFrame после S11.
 - **Выход:** Валидация `ACTIVITY_SCHEMA`, упорядоченные колонки, bool/string типы согласованы.
 - **Операция:**
-  - *type: normalize/validate* — `activity_id` → nullable Int64; ключевые string колонки → `string`; Pandera валидация. 【F:library/postprocess/activities/steps.py†L129-L156】
+  - *type: normalize/validate* — `activity_id` → nullable Int64; ключевые string колонки → `string`; Pandera валидация. 【F:library/postprocessing/pipeline/activities/steps.py†L129-L156】
 - **Зависимости:** `ACTIVITY_SCHEMA`, `validate_activities` (postprocess).
 - **Псевдокод:**
   1. `prepared = df.copy()`
   2. `coerce activity_id, string columns`
   3. `if enforce_schema: validate_activities`
-- **Критерии успешности:** Pandera валидация проходит; `PipelineRunMetrics.validation` заполнен. 【F:library/postprocess/common/runner.py†L250-L286】
+- **Критерии успешности:** Pandera валидация проходит; `PipelineRunMetrics.validation` заполнен. 【F:library/postprocessing/pipeline/common/runner.py†L250-L286】
 
 ### S13_ext_read_input
 - **Функция/блок:** `helpers.read_csv_strict`
@@ -484,7 +484,7 @@ flowchart TD
 | `config/dictionary/_activity/citation_fraction.csv` | `N` (число активностей) | `K_min_significant` | Выявление документов с высокой цитируемостью. 【F:library/postprocessing/activity_extended.py†L317-L333】【F:library/postprocessing/activity_extended.py†L914-L932】 |
 | `config/dictionary/targets_type.csv` (или `_target/targets_type.csv`) | `target_chembl_id` | `IUPHAR_class`, `IUPHAR_subclass`, `multifunctional_enzyme`, `unicellular_organism`, `gene_index`, `taxon_index`, `sortorder.target` | Классификация целей и таксономия. 【F:library/postprocessing/activity_extended.py†L332-L407】【F:library/postprocessing/activity_extended.py†L1037-L1073】 |
 | `library/schemas/ActivitiesSchema` | — | типы и обязательность колонок | Основная Pandera-схема пайплайна. 【F:library/schemas/activities.py†L12-L70】 |
-| `library/postprocess/activities/ACTIVITY_SCHEMA` | — | порядок, dtype, сортировка | QA-постпроцесс, определяет финальный порядок столбцов и сортировку. 【F:library/postprocess/activities/schema.py†L1-L45】 |
+| `library/postprocessing/pipeline/activities/ACTIVITY_SCHEMA` | — | порядок, dtype, сортировка | QA-постпроцесс, определяет финальный порядок столбцов и сортировку. 【F:library/postprocessing/pipeline/activities/schema.py†L1-L45】 |
 
 ## 5. Инварианты и проверки (чек-лист)
 - Обязательные поля `ActivitiesSchema` присутствуют после S01; их отсутствие ведёт к предупреждению и заполнению NA. 【F:scripts/get_activity_data.py†L1043-L1067】
