@@ -253,7 +253,7 @@ def test_calculate_success_rate__counts_passed_and_xfailed() -> None:
 
 
 @pytest.mark.unit
-def test_calculate_success_rate__all_skipped_return_unity() -> None:
+def test_calculate_success_rate__all_skipped_return_zero() -> None:
     summary = {
         "total": 3,
         "passed": 0,
@@ -266,7 +266,7 @@ def test_calculate_success_rate__all_skipped_return_unity() -> None:
 
     success_rate = run_tests._calculate_success_rate(summary)
 
-    assert success_rate == pytest.approx(1.0)
+    assert success_rate == pytest.approx(0.0)
 
 
 @pytest.mark.unit
@@ -387,6 +387,99 @@ def test_main__returns_exit_code_one_when_quality_gate_fails(
 
     payload = json.loads(report_file.read_text(encoding="utf-8"))
     assert payload["summary"]["success_rate"] == pytest.approx(0.94)
+    assert captured_configs and captured_configs[-1].level == "INFO"
+
+
+@pytest.mark.unit
+def test_main__zero_tests_trigger_quality_gate_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    reports_dir = tmp_path / "reports"
+    coverage_dir = reports_dir / "coverage"
+    raw_report_file = reports_dir / "pytest_raw_report.json"
+    report_file = reports_dir / "test_report.json"
+    summary_file = reports_dir / "test_summary.md"
+
+    monkeypatch.setattr(run_tests, "ROOT_DIR", tmp_path, raising=False)
+    monkeypatch.setattr(run_tests, "REPORTS_DIR", reports_dir, raising=False)
+    monkeypatch.setattr(run_tests, "RAW_REPORT_FILE", raw_report_file, raising=False)
+    monkeypatch.setattr(run_tests, "REPORT_FILE", report_file, raising=False)
+    monkeypatch.setattr(run_tests, "SUMMARY_FILE", summary_file, raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_DIR", coverage_dir, raising=False)
+    monkeypatch.setattr(
+        run_tests, "COVERAGE_XML", coverage_dir / "coverage.xml", raising=False
+    )
+    monkeypatch.setattr(
+        run_tests, "COVERAGE_HTML", coverage_dir / "html", raising=False
+    )
+
+    base_command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "--json-report",
+        "--json-report-file",
+        str(raw_report_file),
+    ]
+    monkeypatch.setattr(run_tests, "_BASE_PYTEST_COMMAND", base_command, raising=False)
+    monkeypatch.setattr(
+        run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False
+    )
+    monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
+
+    captured_commands: list[list[str]] = []
+
+    def _fake_run_pytest(command: Sequence[str]) -> int:
+        captured_commands.append(list(command))
+        return 0
+
+    monkeypatch.setattr(run_tests, "run_pytest", _fake_run_pytest)
+    monkeypatch.setattr(
+        run_tests, "_load_raw_report", lambda: {"tests": [], "duration": 0.0}
+    )
+
+    captured_configs: list[LoggerConfig] = []
+
+    def _fake_configure_logger(cfg: LoggerConfig) -> object:
+        captured_configs.append(cfg)
+        return object()
+
+    log_path = tmp_path / "logs" / "run_tests.log"
+
+    @contextmanager
+    def _fake_setup(script_name: str, log_cfg: LoggerConfig, date: str | None = None):
+        assert script_name == "run_tests"
+        cloned_cfg = LoggerConfig(
+            level=log_cfg.level,
+            run_id=log_cfg.run_id,
+            redact_secrets=log_cfg.redact_secrets,
+            stream=log_cfg.stream,
+            handlers=list(log_cfg.handlers),
+            logger_name=log_cfg.logger_name,
+        )
+        yield SimpleNamespace(
+            log_path=log_path,
+            log_cfg=cloned_cfg,
+            console_stream=None,
+        )
+
+    monkeypatch.setattr(run_tests, "configure_logger", _fake_configure_logger)
+    monkeypatch.setattr(run_tests, "setup_cli_logging", _fake_setup)
+
+    caplog.set_level(logging.ERROR)
+
+    exit_code = run_tests.main([])
+
+    assert exit_code == run_tests.QUALITY_FAILURE_EXIT_CODE
+    assert captured_commands, "run_pytest should be invoked"
+    assert "below the required 95.00% threshold" in caplog.text
+
+    payload = json.loads(report_file.read_text(encoding="utf-8"))
+    summary = payload["summary"]
+    assert summary["total"] == 0
+    assert summary["success_rate"] == pytest.approx(0.0)
     assert captured_configs and captured_configs[-1].level == "INFO"
 
 
