@@ -225,9 +225,9 @@ def _calculate_success_rate(summary: Mapping[str, int | float]) -> float:
     passed = int(summary.get("passed", 0) or 0)
     xfailed = int(summary.get("xfailed", 0) or 0)
 
-    executed_total = total - skipped
-    if executed_total <= 0:
-        return 1.0
+    executed_total = max(0, total - skipped)
+    if executed_total == 0:
+        return 0.0
 
     successes = passed + xfailed
     ratio = successes / executed_total
