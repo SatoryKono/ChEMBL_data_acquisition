@@ -10,7 +10,7 @@ import platform
 import shlex
 import subprocess
 import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -21,6 +21,11 @@ import pytest
 from library.cli import configure_logger, create_logger_config
 from library.cli.logging import setup_cli_logging
 from library.cli_utils import resolve_invocation
+from library.reporting.test_summary import (
+    DEFAULT_REPO_SLUG,
+    build_summary_markdown,
+    normalise_message as _normalise_message,
+)
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_REPORTS_DIR = ROOT_DIR / "reports"
@@ -42,7 +47,7 @@ try:
     DEFAULT_MARKDOWN_ARG = str(DEFAULT_SUMMARY_FILE.relative_to(ROOT_DIR))
 except ValueError:  # pragma: no cover - defensive fallback
     DEFAULT_MARKDOWN_ARG = str(DEFAULT_SUMMARY_FILE)
-REPO_SLUG = "SatoryKono/ChEMBL_data_acquisition"
+REPO_SLUG = DEFAULT_REPO_SLUG
 QUALITY_THRESHOLD_PERCENT = 95.0
 QUALITY_FAILURE_EXIT_CODE = 1
 VALIDATION_FAILURE_EXIT_CODE = 11
@@ -131,19 +136,6 @@ def _load_raw_report() -> dict[str, Any]:
         return json.loads(RAW_REPORT_FILE.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return {}
-
-
-def _normalise_message(raw: Any) -> str:
-    if raw is None:
-        return ""
-    if isinstance(raw, str):
-        return raw.strip()
-    if isinstance(raw, Iterable) and not isinstance(raw, bytes | bytearray):
-        joined = "\n".join(str(part) for part in raw)
-        return joined.strip()
-    return str(raw).strip()
-
-
 def _extract_section_message(section: dict[str, Any]) -> str:
     for key in ("longrepr", "message"):
         if key in section:
@@ -444,69 +436,6 @@ def validate_report_file(path: Path) -> None:
     except json.JSONDecodeError as exc:
         raise ValueError(f"Report file {path} contains invalid JSON") from exc
     validate_structured_report(payload)
-
-
-def build_summary_markdown(report: dict[str, Any]) -> str:
-    meta = report.get("meta", {})
-    summary = report.get("summary", {})
-    tests = report.get("tests", [])
-
-    repo = meta.get("repo", REPO_SLUG)
-    commit = meta.get("commit", "unknown")
-    branch = meta.get("branch", "unknown")
-    timestamp = meta.get("ts_utc", datetime.now(UTC).isoformat())
-    duration = float(meta.get("duration_sec", 0.0) or 0.0)
-    success_rate = float(summary.get("success_rate", 0.0) or 0.0)
-    success_rate_pct = success_rate * 100.0
-
-    lines = [
-        "# Test Summary",
-        "",
-        f"- Repo: `{repo}`",
-        f"- Commit: {commit}",
-        f"- Branch: {branch}",
-        f"- Timestamp (UTC): {timestamp}",
-        f"- Duration: {duration:.2f} s",
-        f"- Success rate: {success_rate_pct:.2f}%",
-        "",
-        "| total | passed | failed | skipped | xfailed | xpassed | error |",
-        "|------:|-------:|-------:|--------:|--------:|--------:|------:|",
-        "| {total:5d} | {passed:5d} | {failed:5d} | {skipped:6d} | {xfailed:6d} | {xpassed:6d} | {error:5d} |".format(
-            total=summary.get("total", 0),
-            passed=summary.get("passed", 0),
-            failed=summary.get("failed", 0),
-            skipped=summary.get("skipped", 0),
-            xfailed=summary.get("xfailed", 0),
-            xpassed=summary.get("xpassed", 0),
-            error=summary.get("error", 0),
-        ),
-        "",
-        "## Failed / Error details",
-    ]
-
-    failure_rows = []
-    for test in tests:
-        status = str(test.get("status", "")).lower()
-        if status not in {"failed", "error"}:
-            continue
-        nodeid = str(test.get("nodeid", "<unknown>"))
-        message = _normalise_message(test.get("error"))
-        failure_rows.append((nodeid, status, message))
-
-    if not failure_rows:
-        lines.append("- None")
-    else:
-        for nodeid, status, message in failure_rows:
-            lines.append(f"- `{nodeid}` ({status})")
-            display_message = message or "<no message>"
-            lines.append("  ```")
-            lines.extend(f"  {line}" for line in display_message.splitlines())
-            lines.append("  ```")
-
-    lines.append("")
-    return "\n".join(lines)
-
-
 def write_summary(report: dict[str, Any], destination: Path) -> None:
     destination.write_text(build_summary_markdown(report), encoding="utf-8")
 

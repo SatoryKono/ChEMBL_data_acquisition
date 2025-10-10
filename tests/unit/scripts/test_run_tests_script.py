@@ -201,49 +201,6 @@ def test_build_structured_report__injects_placeholder_on_startup_failure() -> No
     placeholder = structured["tests"][0]
     assert placeholder["status"] == "error"
     assert "code 2" in placeholder["error"]
-
-
-@pytest.mark.unit
-def test_build_summary_markdown__renders_error_messages_from_json() -> None:
-    report = {
-        "meta": {
-            "repo": "demo/repo",
-            "commit": "abc123",
-            "branch": "feature",
-            "ts_utc": "2025-01-01T00:00:00+00:00",
-            "duration_sec": 3.14,
-        },
-        "summary": {
-            "total": 1,
-            "passed": 0,
-            "failed": 1,
-            "skipped": 0,
-            "xfailed": 0,
-            "xpassed": 0,
-            "error": 0,
-            "success_rate": 0.0,
-        },
-        "tests": [
-            {
-                "nodeid": "tests/unit/test_example.py::test_failure",
-                "status": "failed",
-                "duration_ms": 123.0,
-                "stdout": "",
-                "stderr": "",
-                "log": [],
-                "error": "AssertionError: boom\nline 1\nline 2",
-            }
-        ],
-    }
-
-    summary_md = run_tests.build_summary_markdown(report)
-
-    assert "- `tests/unit/test_example.py::test_failure` (failed)" in summary_md
-    assert summary_md.count("```") == 2
-    assert "AssertionError: boom" in summary_md
-    assert "line 1" in summary_md and "line 2" in summary_md
-
-
 @pytest.mark.unit
 def test_calculate_success_rate__counts_passed_and_xfailed() -> None:
     summary = {

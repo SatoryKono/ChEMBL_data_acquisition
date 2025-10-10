@@ -38,11 +38,12 @@ from library.common.log import logger
 from library.config import Config, _serialize_paths
 from library.integration import chembl_library as cl
 from library.orchestration import ETLContext
-from library.pipelines.assay import postprocessing as ap
+from library.pipelines.assay import AssayPipelineOptions, postprocessing as ap
 from library.pipelines.assay.chembl_assay import ASSAY_COLUMNS, MAX_ASSAY_CHUNK_SIZE
 from library.pipelines.common import (
     ChunkedFetchConfig,
     CsvWriterConfig,
+    PipelineRunResult,
     add_pipeline_metadata,
     prepare_chunked_pipeline,
 )
@@ -59,6 +60,7 @@ __all__ = [
     "ap",
     "configure_logger",
     "main",
+    "run_assay_service",
     "run",
     "run_chembl",
     "run_cli_command",
@@ -535,6 +537,65 @@ def _generate_assay_postprocess_metrics(
         logger=logger,
         pipeline_version=get_pipeline_version(),
         report_extras=extras,
+    )
+
+
+def _update_assay_config_from_options(
+    cfg: Config, options: AssayPipelineOptions
+) -> None:
+    """Apply programmatic overrides from ``options`` to ``cfg``."""
+
+    pipelines = cfg.sources.chembl.pipelines
+    section = pipelines.assay
+    updates: dict[str, object] = {"offset": options.offset}
+    if options.limit is not None:
+        updates["limit"] = options.limit
+    if options.timeout is not None:
+        updates["timeout"] = options.timeout
+    if options.batch_size is not None:
+        updates["batch_size"] = options.batch_size
+    pipelines.assay = section.model_copy(update=updates)
+
+
+def run_assay_service(
+    config: Config, options: AssayPipelineOptions
+) -> PipelineRunResult:
+    """Execute the assay pipeline using typed ``options``."""
+
+    output_path = Path(options.output_csv)
+    if options.skip_existing and output_path.exists() and not options.force:
+        return PipelineRunResult(
+            exit_code=0,
+            output_path=output_path,
+            executed=False,
+            reason="skip_existing",
+            written=False,
+        )
+
+    cfg = config.model_copy(deep=True)
+    _update_assay_config_from_options(cfg, options)
+
+    args = argparse.Namespace(
+        input_csv=Path(options.input_csv),
+        final_out=output_path,
+        output_csv=output_path,
+        limit=options.limit,
+        offset=options.offset,
+        timeout=options.timeout or cfg.assay.timeout,
+        batch_size=options.batch_size or cfg.assay.batch_size,
+        skip_existing=options.skip_existing,
+        force=options.force,
+    )
+
+    exit_code = run(cfg, args)
+    reason = None if exit_code == 0 else "pipeline_failed"
+    written = None if exit_code != 0 else True
+    return PipelineRunResult(
+        exit_code=exit_code,
+        output_path=output_path,
+        executed=True,
+        reason=reason,
+        written=written,
     )
 
 
