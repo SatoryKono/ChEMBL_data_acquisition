@@ -65,11 +65,31 @@ def test_compute_backoff_delay__adds_jitter_before_cap() -> None:
     attempt = 2
     base_delay = retry_cfg.backoff_factor * (2 ** (attempt - 1))
     expected = min(
-        base_delay + jitter_expected(retry_cfg.backoff_factor),
+        base_delay + jitter_expected(base_delay),
         retry_cfg.backoff_cap,
     )
 
     assert compute_backoff_delay(attempt, retry_cfg, jitter=jitter) == pytest.approx(
+        expected
+    )
+
+
+@pytest.mark.parametrize(
+    ("attempt", "expected"),
+    [
+        (1, 1.0 + 0.25),
+        (2, 2.0 + 0.5),
+        (3, 4.0 + 1.0),
+        (4, 8.0 + 2.0),
+    ],
+)
+def test_compute_backoff_delay__growth_with_fixed_jitter(attempt: int, expected: float) -> None:
+    retry_cfg = RetryCfg(backoff_factor=1.0, backoff_cap=None)
+
+    def _jitter(base_delay: float) -> float:
+        return base_delay * 0.25
+
+    assert compute_backoff_delay(attempt, retry_cfg, jitter=_jitter) == pytest.approx(
         expected
     )
 
