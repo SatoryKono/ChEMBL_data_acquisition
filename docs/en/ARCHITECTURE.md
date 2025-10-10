@@ -113,7 +113,7 @@ graph TD
   Testitem --> Quality
 ```
 
-*Pipelines marked `library.pipelines.*` share orchestrator scaffolding that normalises API payloads, enriches records, and hands the results off to exporters. The test item pipeline now lives in `library.pipelines.testitem`; a compatibility shim `library.testitem_pipeline` remains for legacy imports—see the [test item pipeline module migration guide](guides/MIGRATION_TESTITEM_PIPELINE.md) for details.*
+*Pipelines marked `library.pipelines.*` share orchestrator scaffolding that normalises API payloads, enriches records, and hands the results off to exporters. The test item pipeline now lives in `library.pipelines.testitem`.*
 
 ## How pipelines collaborate
 
