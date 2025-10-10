@@ -99,7 +99,7 @@ def get_assay_data_main(argv: Sequence[str] | None = None) -> int:
 def get_data_main(argv: Sequence[str] | None = None) -> int:
     """Entry point for the orchestrating ``get-data`` CLI."""
 
-    return _dispatch("scripts.get_data", argv)
+    return _dispatch("library.cli.commands.get_data", argv)
 
 
 def get_document_data_main(argv: Sequence[str] | None = None) -> int:
