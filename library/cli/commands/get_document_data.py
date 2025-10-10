@@ -80,13 +80,13 @@ from library.pipelines.document.service import (
     FallbackDoiMetrics,
     FallbackDoiState,
 )
+from library.postprocessing import document as document_export_postprocessing
 from library.postprocessing.common import collect_postprocess_metrics
 from library.postprocessing.common.logging import PipelineRunMetrics
+from library.postprocessing.document import preprocess_documents_csv
 from library.postprocessing.documents import (
     run_document_pipeline as run_document_postprocess,
 )
-from library.postprocessing import document as document_export_postprocessing
-from library.postprocessing.document import preprocess_documents_csv
 from library.qa.reporting import build_table_quality_hook
 from library.qa.table_quality import TableQualityProfiler
 from library.reporting.run_manifest import (
