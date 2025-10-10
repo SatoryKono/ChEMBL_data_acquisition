@@ -37,7 +37,6 @@ import logging
 import os
 import shutil
 import time
-import uuid
 from collections import deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -50,6 +49,7 @@ from typing import IO, Any
 from pydantic import ValidationError
 
 from library.cli.logging import setup_cli_logging
+from library.cli_utils import resolve_invocation
 from library.clients import ChemblClient
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
 from library.config import (
@@ -124,6 +124,7 @@ _WINDOWS_SHARING_VIOLATION = 32
 _DEFAULT_DATE_ENV = "CHEMBL_DA_DEFAULT_DATE"
 _DEFAULT_DATE_ENV_ALIAS = "CHEMBL_DA_DEFAULT_DATE_PREFIX"
 _DEFAULT_DATE_PREFIX = "19700101"
+_RUN_ID_ENV = "CHEMBL_DA_RUN_ID"
 
 
 @dataclass(frozen=True)
@@ -397,6 +398,110 @@ def _ensure_date_prefix(args: argparse.Namespace, *, base_path: Path) -> str:
     return default_prefix
 
 
+def _normalise_descriptor_path(path: Path) -> str:
+    try:
+        return str(path.expanduser().resolve())
+    except OSError:
+        return str(path.expanduser())
+
+
+def _canonical_run_descriptor(
+    args: argparse.Namespace, *, base_path: Path
+) -> str:
+    """Return a canonical description of the invocation for run hashing."""
+
+    invocation = getattr(args, "invocation", None)
+    if isinstance(invocation, Sequence) and invocation:
+        parts = [str(part) for part in invocation]
+    else:
+        parts = [str(part) for part in resolve_invocation("get_data", None)]
+
+    resolved_base = base_path.expanduser().resolve()
+    parts.append(f"base_path={_normalise_descriptor_path(resolved_base)}")
+
+    input_dir = getattr(args, "input_dir", Path("input"))
+    output_dir = getattr(args, "output_dir", Path("output"))
+    resolved_input = _resolve_path(resolved_base, Path(input_dir))
+    resolved_output = _resolve_path(resolved_base, Path(output_dir))
+    parts.append(f"input_dir={_normalise_descriptor_path(resolved_input)}")
+    parts.append(f"output_dir={_normalise_descriptor_path(resolved_output)}")
+
+    config_candidate = getattr(args, "config", None) or DEFAULT_CONFIG_PATH
+    config_path = Path(config_candidate)
+    parts.append(f"config={_normalise_descriptor_path(config_path)}")
+
+    registry_value = getattr(args, "pipeline_registry", None)
+    if registry_value not in (None, argparse.SUPPRESS):
+        registry_path = Path(registry_value)
+        parts.append(f"pipeline_registry={_normalise_descriptor_path(registry_path)}")
+
+    date_prefix = getattr(args, "date_prefix", None)
+    if date_prefix is not None:
+        parts.append(f"date_prefix={date_prefix}")
+
+    desired_level = getattr(args, "log_level", "INFO")
+    parts.append(f"log_level={str(desired_level).upper()}")
+
+    limit_value = getattr(args, "limit", None)
+    parts.append(f"limit={limit_value}")
+
+    bool_fields = (
+        "force",
+        "skip_existing",
+        "dry_run",
+        "verbose",
+        "print_config",
+    )
+    for field in bool_fields:
+        parts.append(f"{field}={bool(getattr(args, field, False))}")
+
+    input_overrides = _parse_overrides(getattr(args, "override_input", None))
+    if input_overrides:
+        resolved_items: list[str] = []
+        for key, value in sorted(input_overrides.items()):
+            candidate = Path(value)
+            if candidate.expanduser().is_absolute():
+                resolved_value = _normalise_descriptor_path(candidate)
+            else:
+                resolved_value = _normalise_descriptor_path(resolved_input / candidate)
+            resolved_items.append(f"{key}={resolved_value}")
+        parts.extend(f"override_input:{entry}" for entry in resolved_items)
+
+    output_overrides = _parse_overrides(getattr(args, "override_output_stem", None))
+    if output_overrides:
+        parts.extend(
+            f"override_output:{key}={value}" for key, value in sorted(output_overrides.items())
+        )
+
+    subcommand_overrides = _parse_overrides(
+        getattr(args, "override_subcommand", None), allow_empty_value=True
+    )
+    if subcommand_overrides:
+        parts.extend(
+            f"override_subcommand:{key}={value}" for key, value in sorted(subcommand_overrides.items())
+        )
+
+    return "\n".join(parts)
+
+
+def _hash_run_descriptor(descriptor: str) -> str:
+    digest = hashlib.sha256(descriptor.encode("utf-8")).hexdigest()
+    return digest[:32]
+
+
+def _resolve_run_id(args: argparse.Namespace, *, descriptor: str) -> str:
+    cli_value = getattr(args, "run_id", None)
+    env_value = os.environ.get(_RUN_ID_ENV)
+    for candidate in (cli_value, env_value):
+        if candidate in (None, argparse.SUPPRESS):
+            continue
+        text = str(candidate).strip()
+        if not text:
+            raise ValueError("run identifier must not be empty")
+        return text
+    return _hash_run_descriptor(descriptor)
+
+
 def _configure_logging(
     level_name: str,
     *,
@@ -411,7 +516,11 @@ def _configure_logging(
     if normalised not in valid_levels:
         raise ValueError(f"invalid log level: {level_name}")
 
-    resolved_run_id = run_id or uuid.uuid4().hex
+    if run_id is None:
+        raise ValueError("run_id must be provided")
+    resolved_run_id = str(run_id).strip()
+    if not resolved_run_id:
+        raise ValueError("run_id must be provided")
 
     extra_handlers = list(handlers) if handlers is not None else []
 
@@ -536,7 +645,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=[],
         help="Override the CLI subcommand used to invoke a pipeline step",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--run-id",
+        default=None,
+        help="Override the computed run identifier",
+    )
+
+    parsed = parser.parse_args(argv)
+    if not hasattr(parsed, "invocation"):
+        parsed.invocation = resolve_invocation(parser.prog, argv)
+    return parsed
 
 
 def _prepare_config(
@@ -1256,6 +1374,7 @@ def _write_run_manifest(
     duration_seconds: float,
     exit_code: int,
     steps: Sequence[dict[str, Any]],
+    run_id: str | None = None,
 ) -> None:
     """Persist the manifest for the pipeline execution."""
 
@@ -1279,6 +1398,9 @@ def _write_run_manifest(
         },
         "steps": list(steps),
     }
+
+    if run_id is not None:
+        manifest["run"]["run_id"] = run_id
 
     reports_dir = cfg.base_path / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -1754,6 +1876,8 @@ def run_pipeline(
 
     run_completed_at = datetime.now(UTC)
     duration_seconds = time.perf_counter() - run_started_clock
+    logger_cfg = getattr(_LOGGER, "_cfg", None)
+    manifest_run_id = getattr(logger_cfg, "run_id", None)
     _write_run_manifest(
         cfg,
         run_started_at=run_started_at,
@@ -1761,6 +1885,7 @@ def run_pipeline(
         duration_seconds=duration_seconds,
         exit_code=overall_status,
         steps=manifest_entries,
+        run_id=manifest_run_id,
     )
 
     _LOGGER.info("pipeline_done", stage="pipeline", exit_code=overall_status)
@@ -1783,7 +1908,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         _ensure_date_prefix(args, base_path=resolved_base_path)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
-    base_cfg = LoggerConfig(level=desired_level, run_id=uuid.uuid4().hex)
+    try:
+        descriptor = _canonical_run_descriptor(args, base_path=resolved_base_path)
+        resolved_run_id = _resolve_run_id(args, descriptor=descriptor)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    base_cfg = LoggerConfig(level=desired_level, run_id=resolved_run_id)
     log_directory = resolved_base_path / "logs"
     status = 1
 
