@@ -71,6 +71,12 @@ python scripts/get_data.py \
 | `--override-output-stem ШАГ=СТЕМ` | Подменить префикс выходного файла для шага без правки реестра (влияет на имя CSV и sidecar-артефактов). |
 | `--override-subcommand ШАГ=ПОДКОМАНДА` | Переключить подкоманду CLI для шага (например, запустить `get_target_data` только в режиме `chembl` при частичном перезапуске). |
 
+> ℹ️ Переопределения работают как из CLI, так и при программном запуске через
+> `library.cli.commands.get_data`. `PipelineRunConfig` хранит обновлённые
+> `input_files`, `output_stems` и `subcommands`, а `library.orchestration.workflow`
+> использует эти значения при последовательном выполнении шагов, поэтому вручную
+> собранный план поведёт себя так же, как команда CLI.
+
 Оркестратор останавливается при первом ненулевом коде возврата и логирует время
 выполнения каждого шага.
 
@@ -83,6 +89,34 @@ SHA256-суммы артефактов. Файл создаётся даже п�
 позволяет проанализировать промежуточные результаты. Если шаг завершился
 ошибкой, все последующие помечаются как `blocked` с причиной
 `dependency_failed`, чтобы явно отразить зависимость в манифесте.
+
+### Частичный запуск документного шага
+
+Чтобы перезапустить только документы, не затрагивая остальные этапы, зафиксируйте
+нужный режим через `--override-subcommand` и при необходимости переименуйте
+выходные файлы. Например, ChEMBL-часть:
+
+```bash
+python scripts/get_data.py \
+  --base-path /data/chembl \
+  --input-dir input --output-dir exports \
+  --config /data/chembl/config.yaml \
+  --date 20250101 \
+  --override-subcommand document=chembl \
+  --override-output-stem document=document_chembl
+```
+
+Аналогичный запуск в режиме PubMed меняет только одно значение:
+
+```bash
+python scripts/get_data.py \
+  --base-path /data/chembl \
+  --input-dir input --output-dir exports \
+  --config /data/chembl/config.yaml \
+  --date 20250101 \
+  --override-subcommand document=pubmed \
+  --override-output-stem document=document_pubmed
+```
 
 ## Конвейер документов `get_document_data`
 
