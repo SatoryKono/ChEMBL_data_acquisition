@@ -786,6 +786,61 @@ def test_run_pipeline__propagates_step_failure(
 
 
 @pytest.mark.unit
+def test_run_pipeline__fails_when_output_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _make_config(tmp_path)
+
+    def _build_options(
+        _: get_data.PipelineRunConfig, input_path: Path, output_path: Path
+    ) -> SimpleNamespace:
+        return SimpleNamespace(input_csv=input_path, output_csv=output_path)
+
+    def _runner(_: get_data.Config, options: SimpleNamespace) -> PipelineRunResult:
+        return PipelineRunResult(
+            exit_code=0,
+            output_path=Path(options.output_csv),
+            executed=True,
+            reason=None,
+            written=False,
+        )
+
+    steps = (
+        get_data.PipelineStep(
+            name="document",
+            main=lambda _: 0,
+            input_filename="document.csv",
+            output_stem="documents",
+        ),
+    )
+
+    apis = {"document": get_data.PipelineApi(_build_options, _runner)}
+
+    stream = io.StringIO()
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="unit")
+    )
+    monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+    monkeypatch.setattr(get_data, "_PIPELINE_APIS", apis, raising=False)
+
+    status = get_data.run_pipeline(cfg, steps=steps)
+
+    assert status == 1
+
+    manifest = _load_manifest(cfg)
+    step_entry = manifest["steps"][0]
+    assert step_entry["status"] == "failed"
+    assert step_entry["exit_code"] == 1
+    assert step_entry["reason"] == "output_missing"
+    assert step_entry["output"]["exists"] is False
+
+    records = parse_log_lines(stream.getvalue())
+    events = list(iter_events(records))
+    assert "step_output_missing" in events
+    assert "postprocess_input_missing" not in events
+
+
+@pytest.mark.unit
 def test_run_pipeline__handles_step_exception(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

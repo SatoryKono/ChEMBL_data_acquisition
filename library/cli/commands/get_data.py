@@ -2150,7 +2150,48 @@ def run_pipeline(
                 return result
 
             entry["status"] = result.status
+            output_existed = final_output.exists() or working_output.exists()
             _finalize_step_success(final_output, working_output, sentinel_path)
+            if (
+                result.executed
+                and result.exit_code == 0
+                and not output_existed
+                and not final_output.exists()
+            ):
+                entry.update(
+                    {
+                        "status": "failed",
+                        "exit_code": 1,
+                        "executed": True,
+                        "reason": "output_missing",
+                    }
+                )
+                _LOGGER.error(
+                    "step_output_missing",
+                    step=step.name,
+                    path=str(final_output),
+                )
+                _cleanup_failed_step(
+                    final_output,
+                    working_output,
+                    sentinel_path,
+                    executed=True,
+                )
+                _complete_manifest_entry(
+                    entry,
+                    final_output=final_output,
+                    working_output=working_output,
+                    started_at=step_started_clock,
+                )
+                overall_status = 1
+                failed_index = index
+                last_executed_index = index
+                return StepExecutionResult(
+                    exit_code=1,
+                    executed=True,
+                    status="failed",
+                    reason="output_missing",
+                )
             postprocess_result: PostprocessResult | None = None
             postprocess_table = _resolve_postprocess_table(step, final_output)
             if result.executed and postprocess_table is not None:
