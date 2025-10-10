@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
-from types import SimpleNamespace
+import uuid
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from library.cli import create_logger_config
 from library.cli import parser as parser_module
 from library.cli.parser import apply_config_overrides
 from library.config import ConfigMetadata
@@ -149,3 +151,30 @@ def test_apply_config_overrides__uses_default_config_when_none(monkeypatch):
         == str(parser_module.DEFAULT_CONFIG_PATH)
         for event, payload in spy.events
     )
+
+
+@pytest.mark.unit
+def test_create_logger_config__default_run_id_is_unique(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Random defaults should keep concurrent CLI runs distinguishable."""
+
+    sequence = iter((uuid.UUID(int=1), uuid.UUID(int=2)))
+    monkeypatch.setattr("library.cli.parser.uuid.uuid4", lambda: next(sequence))
+
+    first = create_logger_config("info")
+    second = create_logger_config("info")
+
+    assert first.run_id != second.run_id
+    # Ensure generated identifiers remain valid UUID strings for downstream use.
+    uuid.UUID(first.run_id)
+    uuid.UUID(second.run_id)
+
+
+@pytest.mark.unit
+def test_create_logger_config__respects_explicit_run_id() -> None:
+    """Callers may supply deterministic identifiers for reproducible tests."""
+
+    cfg = create_logger_config("warn", run_id="deterministic-run")
+
+    assert cfg.run_id == "deterministic-run"
