@@ -54,13 +54,14 @@ def _load_manifest(cfg: get_data.PipelineRunConfig) -> dict[str, object]:
 @pytest.mark.unit
 def test_parse_args__defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CHEMBL_DA_BASE_PATH", raising=False)
+    monkeypatch.delenv("CHEMBL_DA_DEFAULT_DATE_PREFIX", raising=False)
+    monkeypatch.delenv("CHEMBL_DA_DEFAULT_DATE", raising=False)
     args = get_data._parse_args([])
     assert args.base_path == Path("data")
     assert args.input_dir == Path("input")
     assert args.output_dir == Path("output")
     assert args.config == get_data.DEFAULT_CONFIG_PATH
-    expected_prefix = get_data.datetime.now(get_data.UTC).strftime("%Y%m%d")
-    assert args.date_prefix == expected_prefix
+    assert args.date_prefix is None
     assert args.log_level == "INFO"
     assert args.verbose is False
     assert args.limit is None
@@ -124,6 +125,88 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
     assert args.override_input == ["document=document_custom.csv"]
     assert args.override_output_stem == ["target=custom_targets"]
     assert args.override_subcommand == ["target=sync"]
+
+
+@pytest.mark.unit
+def test_ensure_date_prefix__config_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_path = tmp_path / "workspace"
+    base_path.mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text(
+        "local:\n  io:\n    default_date_prefix: '19990102'\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("CHEMBL_DA_BASE_PATH", raising=False)
+    monkeypatch.delenv("CHEMBL_DA_DEFAULT_DATE_PREFIX", raising=False)
+    monkeypatch.delenv("CHEMBL_DA_DEFAULT_DATE", raising=False)
+    args = get_data._parse_args(
+        [
+            "--base-path",
+            str(base_path),
+            "--config",
+            str(config_path),
+        ]
+    )
+    assert args.date_prefix is None
+    resolved = base_path.resolve()
+    prefix = get_data._ensure_date_prefix(args, base_path=resolved)
+    assert prefix == "19990102"
+    assert args.date_prefix == "19990102"
+
+
+@pytest.mark.unit
+def test_ensure_date_prefix__env_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_path = tmp_path / "workspace"
+    base_path.mkdir()
+    monkeypatch.setenv("CHEMBL_DA_DEFAULT_DATE_PREFIX", "19981231")
+    args = get_data._parse_args([
+        "--base-path",
+        str(base_path),
+    ])
+    resolved = base_path.resolve()
+    prefix = get_data._ensure_date_prefix(args, base_path=resolved)
+    assert prefix == "19981231"
+    assert args.date_prefix == "19981231"
+
+
+@pytest.mark.unit
+def test_ensure_date_prefix__missing_config_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_path = tmp_path / "workspace"
+    base_path.mkdir()
+    missing_config = base_path / "absent.yaml"
+    monkeypatch.delenv("CHEMBL_DA_DEFAULT_DATE_PREFIX", raising=False)
+    monkeypatch.delenv("CHEMBL_DA_DEFAULT_DATE", raising=False)
+    args = get_data._parse_args([
+        "--base-path",
+        str(base_path),
+        "--config",
+        str(missing_config),
+    ])
+    resolved = base_path.resolve()
+    prefix = get_data._ensure_date_prefix(args, base_path=resolved)
+    assert prefix == get_data._DEFAULT_DATE_PREFIX
+    assert args.date_prefix == get_data._DEFAULT_DATE_PREFIX
+
+
+@pytest.mark.unit
+def test_ensure_date_prefix__invalid_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_path = tmp_path / "workspace"
+    base_path.mkdir()
+    monkeypatch.setenv("CHEMBL_DA_DEFAULT_DATE", "invalid")
+    args = get_data._parse_args([
+        "--base-path",
+        str(base_path),
+    ])
+    with pytest.raises(ValueError):
+        get_data._ensure_date_prefix(args, base_path=base_path.resolve())
 
 
 @pytest.mark.unit

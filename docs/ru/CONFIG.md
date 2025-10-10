@@ -185,6 +185,7 @@ system:
 | `keep_na_markers` | `false` | Сохранять NA вместо удаления. |
 | `exist_ok` | `true` | Создавать каталоги при отсутствии. |
 | `output_stamp_mode` | `omit` | Управляет именами: `omit` оставляет `output.<stem>.csv`, `require` требует явный `--date`. |
+| `default_date_prefix` | `20240101` | Дата по умолчанию при отсутствии `--date` (можно переопределить `CHEMBL_DA_DEFAULT_DATE_PREFIX`). |
 
 ### `local.init`
 

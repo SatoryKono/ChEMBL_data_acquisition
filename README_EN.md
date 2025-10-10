@@ -80,6 +80,12 @@ python scripts/get_data.py \
   --date $(date -u +%Y%m%d)
 ```
 
+> 💡 When `--date` is omitted the orchestrator injects a deterministic value from
+> `local.io.default_date_prefix` (the default in `config/config.yaml` is
+> `20240101`). Temporary runs can override it via the environment variable
+> `CHEMBL_DA_DEFAULT_DATE_PREFIX` (the `CHEMBL_DA_DEFAULT_DATE` alias is also
+> supported).
+
 ## Quality gates
 
 Every merge request must satisfy the deterministic quality gates enforced in CI.

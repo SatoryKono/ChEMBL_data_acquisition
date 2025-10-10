@@ -703,6 +703,7 @@ class IoCfg(_BoolModel):
     exist_ok: bool = True
     keep_na_markers: bool = False
     output_stamp_mode: str = Field(default="omit")
+    default_date_prefix: str | None = None
 
     @field_validator("exist_ok", mode="before")
     @classmethod
@@ -719,6 +720,24 @@ class IoCfg(_BoolModel):
             if candidate in {"omit", "require"}:
                 return candidate
         raise ValueError("output_stamp_mode must be 'omit' or 'require'")
+
+    @field_validator("default_date_prefix", mode="before")
+    @classmethod
+    def _normalize_default_date(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            if not _DATE_PREFIX_PATTERN.fullmatch(stripped):
+                raise ValueError(
+                    "default_date_prefix must match YYYYMMDD (eight digits)"
+                )
+            return stripped
+        raise TypeError(
+            "default_date_prefix must be provided as a string or null"
+        )
 
 
 class LogCfg(_BaseModel):
@@ -1488,6 +1507,9 @@ def build_alias_map(
     return mapping
 
 
+_DATE_PREFIX_PATTERN = re.compile(r"^\d{8}$")
+
+
 _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_BASE": ["sources", "chembl", "api", "chembl_base"],
     "CHEMBL_DA_BURST": ["sources", "chembl", "api", "burst"],
@@ -1503,6 +1525,8 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
         "cache_path",
     ],
     "CHEMBL_DA_DICT_DIR": ["local", "resources", "dictionary_dir"],
+    "CHEMBL_DA_DEFAULT_DATE": ["local", "io", "default_date_prefix"],
+    "CHEMBL_DA_DEFAULT_DATE_PREFIX": ["local", "io", "default_date_prefix"],
     "CHEMBL_DA_GLOBAL_BURST": ["system", "rate", "global_burst"],
     "CHEMBL_DA_GLOBAL_RPS": ["system", "rate", "global_rps"],
     "CHEMBL_DA_IUPHAR_FAMILY_CSV": ["local", "resources", "iuphar_family_csv"],

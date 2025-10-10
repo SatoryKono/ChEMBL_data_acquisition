@@ -21,8 +21,9 @@ CSV artefacts under the chosen output directory:
 - `IUPHAR.output.target_<YYYYMMDD>.csv` — normalised IUPHAR classifications and
   synonym lists rebuilt from the canonical target export.
 
-The `<YYYYMMDD>` suffix is inherited from the CLI `--date` argument or the
-automatic stamp derived from the execution date.
+The `<YYYYMMDD>` suffix comes from the CLI `--date` argument or the deterministic
+default configured via `local.io.default_date_prefix` (overridable with
+`CHEMBL_DA_DEFAULT_DATE_PREFIX`).
 
 ## Organism enrichment post-processing
 
