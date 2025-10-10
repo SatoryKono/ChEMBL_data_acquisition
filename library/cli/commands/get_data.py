@@ -35,7 +35,7 @@ from datetime import UTC, datetime
 from fnmatch import fnmatch
 from heapq import heappop, heappush
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, Optional
 
 from pydantic import ValidationError
 
@@ -90,6 +90,11 @@ from library.pipelines.testitem import (
 )
 from library.pipelines.testitem import (
     run_pipeline as run_testitem_pipeline,
+)
+from library.postprocess.common import (
+    PostprocessResult,
+    SUPPORTED_TABLES as POSTPROCESS_SUPPORTED_TABLES,
+    run_postprocessing_pipeline,
 )
 from library.reporting.run_manifest import load_output_report, merge_run_output
 
@@ -1045,6 +1050,55 @@ def _finalize_step_success(
         _remove_path(sentinel_path)
 
 
+def _resolve_postprocess_table(step: PipelineStep, final_output: Path) -> Optional[str]:
+    """Return the postprocess table identifier for ``step`` if supported."""
+
+    table = getattr(step, "output_stem", "")
+    if not table or table not in POSTPROCESS_SUPPORTED_TABLES:
+        return None
+    if final_output.suffix.lower() != ".csv":
+        return None
+    return str(table)
+
+
+def _run_postprocess_hook(
+    step: PipelineStep,
+    final_output: Path,
+    *,
+    table: Optional[str] = None,
+) -> Optional[PostprocessResult]:
+    """Execute the post-processing pipeline for ``step`` when available."""
+
+    if table is None:
+        table = _resolve_postprocess_table(step, final_output)
+    if table is None:
+        return None
+    destination = final_output.with_name(f"output_postprocessed.{table}.csv")
+    _LOGGER.info(
+        "postprocess_start",
+        step=step.name,
+        table=table,
+        input=str(final_output),
+        output=str(destination),
+    )
+    result = run_postprocessing_pipeline(
+        table,
+        final_output,
+        output_path=destination,
+        logger=_LOGGER,
+    )
+    _LOGGER.info(
+        "postprocess_done",
+        step=step.name,
+        table=table,
+        output=str(result.output_path),
+        report=str(result.report_path),
+        rows=result.metrics.output_rows,
+        columns=result.metrics.output_columns,
+    )
+    return result
+
+
 def _cleanup_failed_step(
     final_output: Path,
     working_output: Path,
@@ -1289,16 +1343,31 @@ def _describe_sidecars(
 ) -> list[dict[str, Any]]:
     """Return manifest metadata for sidecars associated with ``final_output``."""
 
-    include_patterns = (
+    include_patterns = [
         f"*{final_output.name}",
         f"*{final_output.with_suffix('').name}",
         f"*{working_output.name}",
         f"*{working_output.with_suffix('').name}",
-    )
+    ]
+    stem = final_output.stem
+    table_candidate: Optional[str] = None
+    if stem.startswith("output."):
+        remainder = stem[len("output.") :]
+        if "_" in remainder:
+            table_candidate = remainder.split("_", 1)[0]
+        elif remainder:
+            table_candidate = remainder
+    if table_candidate:
+        include_patterns.extend(
+            [
+                f"*output_postprocessed.{table_candidate}.csv",
+                f"*{table_candidate}.postprocess.report.json",
+            ]
+        )
     sidecars = _discover_sidecars(
         final_output,
         working_output,
-        include_patterns=include_patterns,
+        include_patterns=tuple(include_patterns),
     )
     described: list[dict[str, Any]] = []
     for artefact in sorted(sidecars.values(), key=lambda item: str(item.destination)):
@@ -1857,6 +1926,57 @@ def run_pipeline(
 
             entry["status"] = result.status
             _finalize_step_success(final_output, working_output, sentinel_path)
+            postprocess_result: Optional[PostprocessResult] = None
+            postprocess_table = _resolve_postprocess_table(step, final_output)
+            if result.executed and postprocess_table is not None:
+                try:
+                    postprocess_result = _run_postprocess_hook(
+                        step,
+                        final_output,
+                        table=postprocess_table,
+                    )
+                except Exception as exc:  # pragma: no cover - defensive guard
+                    entry.update(
+                        {
+                            "status": "failed",
+                            "exit_code": 1,
+                            "reason": "postprocess_failed",
+                        }
+                    )
+                    _LOGGER.exception(
+                        "postprocess_failed",
+                        step=step.name,
+                        table=postprocess_table,
+                        input=str(final_output),
+                        error=str(exc),
+                    )
+                    _cleanup_failed_step(
+                        final_output,
+                        working_output,
+                        sentinel_path,
+                        executed=True,
+                    )
+                    _complete_manifest_entry(
+                        entry,
+                        final_output=final_output,
+                        working_output=working_output,
+                        started_at=step_started_clock,
+                    )
+                    overall_status = 1
+                    failed_index = index
+                    return StepExecutionResult(
+                        exit_code=1,
+                        executed=True,
+                        status="failed",
+                        reason="postprocess_failed",
+                    )
+            if postprocess_result is not None:
+                entry["postprocess"] = {
+                    "output": str(postprocess_result.output_path),
+                    "report": str(postprocess_result.report_path),
+                    "rows": postprocess_result.metrics.output_rows,
+                    "columns": postprocess_result.metrics.output_columns,
+                }
             _complete_manifest_entry(
                 entry,
                 final_output=final_output,
