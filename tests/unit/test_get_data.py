@@ -73,6 +73,7 @@ def test_parse_args__defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert args.override_input == []
     assert args.override_output_stem == []
     assert args.override_subcommand == []
+    assert args.run_id is None
 
 
 @pytest.mark.unit
@@ -107,6 +108,8 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
             "target=custom_targets",
             "--override-subcommand",
             "target=sync",
+            "--run-id",
+            "explicit",
         ]
     )
     assert args.base_path == base
@@ -125,6 +128,7 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
     assert args.override_input == ["document=document_custom.csv"]
     assert args.override_output_stem == ["target=custom_targets"]
     assert args.override_subcommand == ["target=sync"]
+    assert args.run_id == "explicit"
 
 
 @pytest.mark.unit
@@ -524,7 +528,9 @@ def test_run_pipeline__propagates_step_failure(tmp_path: Path, monkeypatch: pyte
     assert second["exit_code"] == 2
     assert second["reason"] == "non_zero_exit"
     assert second["output"]["exists"] is False
-    assert third["status"] == "pending"
+    assert third["status"] == "blocked"
+    assert third["executed"] is False
+    assert third["reason"] == "dependency_failed"
 
     records = parse_log_lines(stream.getvalue())
     events = list(iter_events(records))
