@@ -51,6 +51,37 @@ def test_ensure_output_directories__cleans_existing_outputs(
 
 
 @pytest.mark.unit
+def test_ensure_output_directories__cleans_directories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reports_dir = tmp_path / "reports"
+    coverage_dir = reports_dir / "coverage"
+    coverage_html_dir = coverage_dir / "html"
+    raw_report_file = reports_dir / "pytest_raw_report.json"
+    report_file = reports_dir / "custom_report.json"
+    summary_file = reports_dir / "custom_summary.md"
+
+    monkeypatch.setattr(run_tests, "REPORTS_DIR", reports_dir, raising=False)
+    monkeypatch.setattr(run_tests, "RAW_REPORT_FILE", raw_report_file, raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_DIR", coverage_dir, raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_HTML", coverage_html_dir, raising=False)
+
+    coverage_dir.mkdir(parents=True)
+    coverage_html_dir.mkdir(parents=True)
+    stale_html = coverage_html_dir / "index.html"
+    stale_html.write_text("<html></html>", encoding="utf-8")
+    stale_xml = coverage_dir / "coverage.xml"
+    stale_xml.write_text("<xml />", encoding="utf-8")
+
+    run_tests.ensure_output_directories(report_file, summary_file)
+
+    assert coverage_dir.exists()
+    assert coverage_html_dir.exists()
+    assert list(coverage_dir.iterdir()) == [coverage_html_dir]
+    assert list(coverage_html_dir.iterdir()) == []
+
+
+@pytest.mark.unit
 def test_run_tests__verbose_creates_debug_log(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
