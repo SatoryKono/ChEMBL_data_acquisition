@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,6 +12,7 @@ from library.cli import parser as cli_parser
 from library.config import ConfigMetadata
 from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS
 from scripts import get_target_data
+from scripts.get_target_data import ParameterLogEntry
 
 
 class _ConfigStub(SimpleNamespace):
@@ -43,6 +45,14 @@ def _make_stub_config() -> _ConfigStub:
         local=SimpleNamespace(io=io_cfg),
         io=io_cfg,
     )
+
+
+@pytest.mark.unit
+def test_get_target_data_script__import_smoke():
+    module = importlib.import_module("scripts.get_target_data")
+
+    assert module.__name__ == "scripts.get_target_data"
+    assert hasattr(module, "_resolve_target_parameters")
 
 
 @pytest.mark.unit
@@ -111,6 +121,35 @@ def test_resolve_target_parameters__all_global_fallback():
     assert cfg.target.all.chunk_size == 9
     assert cfg.target.chembl.chunk_size == 9
     assert cfg.target.chembl.limit == 4
+
+
+@pytest.mark.unit
+def test_resolve_target_parameters__all_prefixed_sources():
+    cfg = _make_stub_config()
+    cfg.target.all.timeout = 17.5
+    parser, _ = get_target_data.build_parser()
+    args = parser.parse_args(["all", "--chembl-column", "pref_name"])
+
+    entries = get_target_data._resolve_target_parameters("all", cfg, args)
+
+    def _find(scope: str, name: str) -> ParameterLogEntry:
+        for entry in entries:
+            if entry.scope == scope and entry.name == name:
+                return entry
+        raise AssertionError(f"missing entry for {scope}.{name}")
+
+    global_timeout = _find("all", "timeout")
+    assert global_timeout.value == pytest.approx(17.5)
+    assert global_timeout.source == "config"
+
+    chembl_timeout = _find("all.chembl.timeout", "timeout")
+    assert chembl_timeout.value == pytest.approx(17.5)
+    assert chembl_timeout.source == "config"
+
+    chembl_column = _find("all.chembl.column", "column")
+    assert chembl_column.value == "pref_name"
+    assert chembl_column.source == "cli"
+    assert args.chembl_column == "pref_name"
 
 
 @pytest.mark.unit
