@@ -37,6 +37,54 @@ class IUPHARData:
 
     target_df: pd.DataFrame
     family_df: pd.DataFrame
+    _target_cache: dict[str, pd.Series | None] = field(
+        init=False, repr=False, default_factory=dict
+    )
+    _family_cache: dict[str, pd.Series | None] = field(
+        init=False, repr=False, default_factory=dict
+    )
+    _target_df_by_id: pd.DataFrame = field(init=False, repr=False)
+    _family_df_by_id: pd.DataFrame = field(init=False, repr=False)
+    _family_by_target: dict[str, pd.Series] = field(
+        init=False, repr=False, default_factory=dict
+    )
+
+    def __post_init__(self) -> None:
+        """Initialise lookup tables used for fast record access."""
+
+        if "target_id" in self.target_df.columns:
+            self._target_df_by_id = self.target_df.set_index(
+                "target_id", drop=False
+            )
+        else:
+            self._target_df_by_id = self.target_df
+
+        if "family_id" in self.family_df.columns:
+            self._family_df_by_id = self.family_df.set_index(
+                "family_id", drop=False
+            )
+        else:
+            self._family_df_by_id = self.family_df
+
+        self._target_cache = {}
+        self._family_cache = {}
+
+        self._family_by_target = {}
+        if "target_id" in self.family_df.columns:
+            target_column = self.family_df["target_id"].fillna("")
+            for idx, raw_value in target_column.items():
+                if not raw_value:
+                    continue
+                identifiers = [
+                    value.strip()
+                    for value in str(raw_value).split("|")
+                    if value and value.strip()
+                ]
+                if not identifiers:
+                    continue
+                row = self.family_df.iloc[idx]
+                for identifier in identifiers:
+                    self._family_by_target.setdefault(identifier, row)
 
     @classmethod
     def from_files(
@@ -75,14 +123,14 @@ class IUPHARData:
                 break
             visited.add(current)
             chain.append(current)
-            parent_series = self.family_df.loc[
-                self.family_df["family_id"] == current, "parent_family_id"
-            ]
-            if parent_series.empty:
+            try:
+                record = self._family_df_by_id.loc[current]
+            except KeyError:
                 break
-            parent = (
-                str(parent_series.iloc[0]) if pd.notna(parent_series.iloc[0]) else ""
-            )
+            if isinstance(record, pd.DataFrame):
+                record = record.iloc[0]
+            parent_value = record.get("parent_family_id")
+            parent = str(parent_value) if pd.notna(parent_value) else ""
             if not parent:
                 break
             current = parent
@@ -415,23 +463,25 @@ class IUPHARData:
 
     def from_target_record(self, target_id: str) -> pd.Series | None:
         """Return the raw target record for ``target_id`` if present."""
-        rows = self.target_df[self.target_df["target_id"] == target_id]
-        if rows.empty:
+        if not target_id:
             return None
-        return rows.iloc[0]
+        if target_id in self._target_cache:
+            return self._target_cache[target_id]
+        try:
+            record = self._target_df_by_id.loc[target_id]
+        except KeyError:
+            self._target_cache[target_id] = None
+            return None
+        if isinstance(record, pd.DataFrame):
+            record = record.iloc[0]
+        self._target_cache[target_id] = record
+        return record
 
     def from_target_family_record(self, target_id: str) -> pd.Series | None:
         """Return the family record associated with ``target_id``."""
-        mask = (
-            self.family_df["target_id"]
-            .fillna("")
-            .str.split("|")
-            .apply(lambda ids: target_id in ids)
-        )
-        rows = self.family_df[mask]
-        if rows.empty:
+        if not target_id:
             return None
-        return rows.iloc[0]
+        return self._family_by_target.get(target_id)
 
     def from_target_name(self, target_id: str) -> str:
         """Return the IUPHAR target name for ``target_id``."""
@@ -496,10 +546,19 @@ class IUPHARData:
 
     def from_family_record(self, family_id: str) -> pd.Series | None:
         """Return the raw family record for ``family_id`` if present."""
-        rows = self.family_df[self.family_df["family_id"] == family_id]
-        if rows.empty:
+        if not family_id:
             return None
-        return rows.iloc[0]
+        if family_id in self._family_cache:
+            return self._family_cache[family_id]
+        try:
+            record = self._family_df_by_id.loc[family_id]
+        except KeyError:
+            self._family_cache[family_id] = None
+            return None
+        if isinstance(record, pd.DataFrame):
+            record = record.iloc[0]
+        self._family_cache[family_id] = record
+        return record
 
     def from_family_parent(self, family_id: str) -> str:
         """Return the parent family identifier for ``family_id``."""
