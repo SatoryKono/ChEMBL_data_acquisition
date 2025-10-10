@@ -4,6 +4,9 @@
 - Блокирующие дефекты CLI устранены: `scripts/check_determinism.py` собирается без
   синтаксических ошибок и корректно обрабатывает dry-run/real-run режимы, что
   подтверждено текущей реализацией скрипта.【F:scripts/check_determinism.py†L133-L215】
+- Синтаксическая ошибка в `_resolve_parameter` модуля `get_target_data` исправлена,
+  CLI снова импортируется без `invalid-syntax` и проходит проверку компиляции.
+  【F:library/cli/commands/get_target_data.py†L492-L520】
 - Smoke-команды зависят от подготовки окружения: без установки пакета и dev-
   зависимостей `python scripts/run_tests.py` и `pytest -q --disable-warnings`
   завершаются на импорте, поэтому перед запуском проверок требуется

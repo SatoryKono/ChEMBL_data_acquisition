@@ -489,7 +489,7 @@ def run_target_postprocess_if_requested(
     return result
 
 
-def _resolve_parameter((
+def _resolve_parameter(
     namespace: argparse.Namespace,
     cfg_section: Any,
     *,
