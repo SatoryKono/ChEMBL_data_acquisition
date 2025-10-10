@@ -661,6 +661,13 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=0,
         help="Number of identifiers to skip before processing",
     )
+    parser.add_argument(
+        "--postprocess",
+        dest="postprocess",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable assay postprocessing after the main pipeline",
+    )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg
 
