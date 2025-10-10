@@ -12,7 +12,7 @@ from library.cli.activity_api import (
     run_activity_pipeline,
 )
 
-
+# (no content needed here; conflict marker removed)
 __all__ = (
     "ActivityCommandOptions",
     "MAX_ACTIVITY_CHUNK_SIZE",
@@ -38,6 +38,5 @@ def _bootstrap_entrypoint_exports() -> None:
     except Exception:  # pragma: no cover - defensive guard
         # Import side effects should never break command module import.
         pass
-
 
 _bootstrap_entrypoint_exports()
