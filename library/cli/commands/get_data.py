@@ -129,10 +129,11 @@ class PipelineApi:
 def _build_document_options(
     cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> DocumentPipelineOptions:
+    mode = cfg.subcommand_for("document") or "all"
     return DocumentPipelineOptions(
         input_csv=input_path,
         output_csv=output_path,
-        mode="all",
+        mode=mode,
         limit=cfg.limit,
         force=cfg.force,
     )
