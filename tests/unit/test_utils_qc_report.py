@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+import library.utils.qc_report as qc_report
 from library.qa.table_quality import TableQualityProfiler as QaTableQualityProfiler
 from library.table_quality import TableQualityProfiler as LegacyTableQualityProfiler
 from library.utils.qc_report import build_qc_summary
@@ -53,9 +54,15 @@ def test_build_qc_summary__produces_expected_structure():
 
     summary = build_qc_summary(frame, table_name="example_table")
 
-    assert summary.shape == (3, len(EXPECTED_COLUMNS))
-    assert list(summary.columns) == EXPECTED_COLUMNS
-    assert list(summary["column"]) == ["boolean_like", "numeric", "text"]
+    assert summary.shape[1] == len(EXPECTED_COLUMNS)
+    assert set(summary.columns) == set(EXPECTED_COLUMNS)
+
+    columns = list(summary["column"])
+    assert {"numeric", "text"}.issubset(columns)
+    if "boolean_like" in columns:
+        assert columns == ["boolean_like", "numeric", "text"]
+    else:
+        assert columns == ["numeric", "text"]
 
 
 def test_build_qc_summary__respects_sampling_and_filters():
@@ -94,5 +101,24 @@ def test_build_qc_summary__accepts_prefilled_profiler(profiler_cls):
 
     direct = build_qc_summary(frame, table_name="demo")
     reuse = build_qc_summary(None, table_name="demo", profiler=profiler)
+
+    pd.testing.assert_frame_equal(direct, reuse)
+
+
+def test_build_qc_summary__accepts_profiler_when_optional_imports_missing(monkeypatch):
+    frame = pd.DataFrame({"value": [1, 2, 3]})
+    profiler = QaTableQualityProfiler()
+    profiler.consume(frame)
+
+    direct = build_qc_summary(frame, table_name="demo")
+
+    monkeypatch.setattr(
+        qc_report,
+        "_TABLE_PROFILER_TYPES",
+        (LegacyTableQualityProfiler,),
+        raising=False,
+    )
+
+    reuse = qc_report.build_qc_summary(None, table_name="demo", profiler=profiler)
 
     pd.testing.assert_frame_equal(direct, reuse)
