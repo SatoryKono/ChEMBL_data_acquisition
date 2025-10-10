@@ -29,13 +29,14 @@ require_python_version()
 def _default_run_id(level: str) -> str:
     """Return a unique run identifier for ``level``."""
 
-    # ``level`` is currently unused but retained in the signature so that
-    # callers may request a run identifier that depends on the log level in the
-    # future without modifying the public API. The default should remain
-    # unpredictable so concurrent CLI runs stay distinguishable when a custom
-    # ``run_id`` is not supplied.
-    _ = level
-    return uuid.uuid4().hex
+    # Mix a random component with the log level so that subsequent calls using
+    # the same level still receive distinct identifiers while retaining the
+    # ability to derive deterministic IDs in tests by providing ``run_id``
+    # explicitly. ``uuid5`` is used to keep the final value in canonical UUID
+    # form for downstream validation.
+    random_component = uuid.uuid4().hex
+    seed = f"chembl-data-acquisition|{level.upper()}|{random_component}"
+    return uuid.uuid5(uuid.NAMESPACE_URL, seed).hex
 
 
 _RUN_ID_ENV = "CHEMBL_DA_RUN_ID"
