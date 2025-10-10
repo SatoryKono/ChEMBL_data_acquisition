@@ -1430,6 +1430,23 @@ def _write_run_manifest(
             )
 
     if not alias_removed:
+        alias_tmp = latest_alias.with_name(f"{latest_alias.name}.tmp")
+        try:
+            alias_tmp.write_bytes(manifest_path.read_bytes())
+            os.replace(alias_tmp, latest_alias)
+        except OSError as exc:
+            try:
+                alias_tmp.unlink(missing_ok=True)
+            except OSError:  # pragma: no cover - best effort cleanup
+                pass
+            _LOGGER.error(
+                "manifest_alias_fallback_failed",
+                path=str(latest_alias),
+                temp_path=str(alias_tmp),
+                target=str(manifest_path),
+                error=str(exc),
+            )
+            raise RuntimeError("failed to update run manifest alias") from exc
         return
 
     try:

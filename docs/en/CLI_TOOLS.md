@@ -12,7 +12,7 @@ for debugging.
 | `library.utils.cli_tools.chunk_io_main` | `python -m library.utils.cli_tools.chunk_io_main --input data.csv --final-out copy.csv` | Stream CSV files in deterministic order. |
 | `library.utils.cli_tools.csv_utils_main` | `python -m library.utils.cli_tools.csv_utils_main --input data.csv --final-out clean.csv` | Re-serialise CSVs with consistent ordering. |
 | `library.utils.cli_tools.dtype_inspector_main` | `python -m library.utils.cli_tools.dtype_inspector_main --log-level INFO` | Inspect pandas dtypes emitted by pipelines. |
-| `library.utils.cli_tools.get_activities` | `python -m library.utils.cli_tools.get_activities --limit 10 --output-csv output/activities_smoke.csv` | Generate synthetic activity rows and emit deterministic CSV + `.meta.yaml` artefacts for smoke runs. |
+| `library.utils.cli_tools.get_activities` | `python -m library.utils.cli_tools.get_activities --limit 10 --final-out output/activities_smoke.csv` | Generate synthetic activity rows and emit deterministic CSV + `.meta.yaml` artefacts for smoke runs. |
 | `library.utils.cli_tools.get_document_type` | `python -m library.utils.cli_tools.get_document_type --input docs.csv` | Classify document rows with bundled heuristics. |
 | `library.utils.cli_tools.get_input_initialisation` | `python -m library.utils.cli_tools.get_input_initialisation --same-doc a.xlsx --all-doc b.xlsx` | Merge Excel workbooks into canonical CSV. |
 | `library.utils.cli_tools.mapper_batch_main` | `python -m library.utils.cli_tools.mapper_batch_main --input ids.csv --final-out mapped.csv` | Batch mapping from ChEMBL IDs to UniProt accessions. |

@@ -96,10 +96,37 @@ _INPUT_NAME_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 
+def _normalise_input_filename(filename: str) -> str:
+    """Return ``filename`` stripped of temp prefixes/suffixes for matching."""
+
+    # Temporary files are often written using a leading ``.`` to keep them
+    # hidden.  The canonical exports never start with a dot so we can drop any
+    # leading ones before validating the name.
+    trimmed = filename.lstrip(".")
+
+    # Some orchestrators persist intermediate artefacts with compound suffixes
+    # such as ``.csv.tmp`` or ``.csv_normalized``.  Only the segment up to the
+    # first ``.csv`` is relevant for the naming rules so we normalise the value
+    # accordingly while preserving the original case.
+    lower_trimmed = trimmed.lower()
+    csv_index = lower_trimmed.find(".csv")
+    if csv_index != -1:
+        trimmed = trimmed[: csv_index + 4]
+
+    return trimmed
+
+
 def _matches_expected_input_name(filename: str) -> bool:
     """Return ``True`` when ``filename`` matches a supported input pattern."""
 
-    return any(pattern.match(filename) for pattern, _ in _INPUT_NAME_RULES)
+    if any(pattern.match(filename) for pattern, _ in _INPUT_NAME_RULES):
+        return True
+
+    normalised = _normalise_input_filename(filename)
+    if normalised == filename:
+        return False
+
+    return any(pattern.match(normalised) for pattern, _ in _INPUT_NAME_RULES)
 
 
 def _supported_patterns_text() -> str:

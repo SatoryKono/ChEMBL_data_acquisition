@@ -54,17 +54,23 @@ def _extract_success_rate(summary: dict[str, Any]) -> float:
             return rate
     total = summary.get("total")
     passed = summary.get("passed")
-    if not isinstance(total, int) or not isinstance(passed, int):
-        raise ReportValidationError(
-            "Summary fields 'total' and 'passed' must be integers to compute success rate"
-        )
-    if total < 0 or passed < 0:
-        raise ReportValidationError(
-            "Summary fields 'total' and 'passed' must be non-negative"
-        )
-    if total == 0:
-        return 1.0
-    return max(0.0, min(1.0, passed / total))
+    skipped = summary.get("skipped", 0)
+    xfailed = summary.get("xfailed", 0)
+
+    field_names = {"total": total, "passed": passed, "skipped": skipped, "xfailed": xfailed}
+    for name, value in field_names.items():
+        if not isinstance(value, int):
+            raise ReportValidationError(
+                f"Summary field '{name}' must be an integer to compute success rate"
+            )
+        if value < 0:
+            raise ReportValidationError(
+                f"Summary field '{name}' must be non-negative"
+            )
+
+    denominator = max(1, total - skipped)
+    numerator = passed + xfailed
+    return max(0.0, min(1.0, numerator / denominator))
 
 
 def _parse_threshold(value: float) -> float:

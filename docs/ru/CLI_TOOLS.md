@@ -11,7 +11,7 @@
 | `library.utils.cli_tools.chunk_io_main` | `python -m library.utils.cli_tools.chunk_io_main --input data.csv --final-out copy.csv` | Потоковая обработка CSV с сохранением порядка. |
 | `library.utils.cli_tools.csv_utils_main` | `python -m library.utils.cli_tools.csv_utils_main --input data.csv --final-out clean.csv` | Перезапись CSV с детерминированным порядком. |
 | `library.utils.cli_tools.dtype_inspector_main` | `python -m library.utils.cli_tools.dtype_inspector_main --log-level INFO` | Просмотр типов pandas. |
-| `library.utils.cli_tools.get_activities` | `python -m library.utils.cli_tools.get_activities --limit 10 --output-csv output/activities_smoke.csv` | Синтетические активности с записью детерминированного CSV и `.meta.yaml` для smoke-запусков. |
+| `library.utils.cli_tools.get_activities` | `python -m library.utils.cli_tools.get_activities --limit 10 --final-out output/activities_smoke.csv` | Синтетические активности с записью детерминированного CSV и `.meta.yaml` для smoke-запусков. |
 | `library.utils.cli_tools.get_document_type` | `python -m library.utils.cli_tools.get_document_type --input docs.csv` | Классификация документов. |
 | `library.utils.cli_tools.get_input_initialisation` | `python -m library.utils.cli_tools.get_input_initialisation --same-doc a.xlsx --all-doc b.xlsx` | Объединение Excel-шаблонов. |
 | `library.utils.cli_tools.mapper_batch_main` | `python -m library.utils.cli_tools.mapper_batch_main --input ids.csv --final-out mapped.csv` | Пакетное сопоставление ChEMBL↔UniProt. |

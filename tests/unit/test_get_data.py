@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import io
+from datetime import UTC, datetime
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
@@ -183,6 +184,48 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
     assert args.override_output_stem == ["target=custom_targets"]
     assert args.override_subcommand == ["target=sync"]
     assert args.run_id == "explicit"
+
+
+@pytest.mark.unit
+def test_write_run_manifest__fallback_on_unlink_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _make_config(tmp_path)
+    reports_dir = cfg.base_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    alias_path = reports_dir / "run_manifest.json"
+    alias_path.write_text("stale", encoding="utf-8")
+
+    original_unlink = Path.unlink
+
+    def fail_unlink(self: Path, *args, **kwargs):
+        if self == alias_path:
+            raise OSError("simulated unlink failure")
+        return original_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_unlink)
+
+    run_started_at = datetime(2024, 1, 1, tzinfo=UTC)
+
+    get_data._write_run_manifest(
+        cfg,
+        run_started_at=run_started_at,
+        run_completed_at=run_started_at,
+        duration_seconds=0.0,
+        exit_code=0,
+        steps=[],
+    )
+
+    manifest_files = sorted(
+        p
+        for p in reports_dir.glob("run_*.json")
+        if p.name != "run_manifest.json"
+    )
+    assert len(manifest_files) == 1
+    manifest_content = manifest_files[0].read_text(encoding="utf-8")
+
+    assert alias_path.read_text(encoding="utf-8") == manifest_content
+    assert not alias_path.with_name("run_manifest.json.tmp").exists()
 
 
 @pytest.mark.unit
