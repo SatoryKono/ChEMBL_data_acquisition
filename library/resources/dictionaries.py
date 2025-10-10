@@ -634,10 +634,16 @@ def list_resource_names(
     return tuple(names)
 
 
-def list_resources() -> Mapping[str, DictionaryResource]:
-    """Return a mapping with all resources declared in the manifest."""
+def list_resources(*, base_dir: Path | None = None) -> Mapping[str, DictionaryResource]:
+    """Return a mapping with all resources declared in the manifest.
 
-    return _load_manifest()
+    Parameters
+    ----------
+    base_dir:
+        Optional dictionary directory override used in tests.
+    """
+
+    return _load_manifest(base_dir)
 
 
 def get_resource(name: str, *, base_dir: Path | None = None) -> DictionaryResource:
