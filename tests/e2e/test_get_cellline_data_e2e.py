@@ -4,7 +4,9 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+import yaml
 
+from library.common import run_context as run_context_module
 from library.config import Config
 from library.pipelines.cellline import CellLinePipelineOptions, run_cellline_pipeline
 from library.pipelines.cellline.chembl import CELL_LINE_COLUMN_ORDER
@@ -92,6 +94,14 @@ def test_get_cellline_data_main_success(
     monkeypatch: pytest.MonkeyPatch,
     cellline_payloads: dict[str, dict[str, object]],
 ) -> None:
+    get_timestamp_utc.cache_clear()
+
+    def _reset_context() -> None:
+        run_context_module.set_current(None)
+        get_timestamp_utc.cache_clear()
+
+    monkeypatch.addfinalizer(_reset_context)
+
     input_csv = tmp_path / "cellline.csv"
     input_csv.write_text(
         "cell_chembl_id\nCHEMBL3307636\nCHEMBL3307790\n",
@@ -129,6 +139,8 @@ def test_get_cellline_data_main_success(
 
     monkeypatch.setattr(get_cellline_data, "setup_cli_logging", fake_setup_cli_logging)
 
+    monkeypatch.setenv("CHEMBL_DA_RUN_ID", "cellline-test-run-1")
+
     exit_code = get_cellline_data.main(
         [
             "--input",
@@ -152,6 +164,14 @@ def test_get_cellline_data_main_success(
     ).replace({"": pd.NA})
     df = df.reindex(columns=CELL_LINE_COLUMN_ORDER)
 
+    first_timestamp_values = df["timestamp_utc"].dropna().unique()
+    assert len(first_timestamp_values) == 1
+    first_timestamp = first_timestamp_values[0]
+    meta_path = Path(f"{output_csv}.meta.yaml")
+    meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert meta["generated_at"] == first_timestamp
+    assert get_timestamp_utc() == first_timestamp
+
     expected = pd.DataFrame(
         [
             {
@@ -167,7 +187,7 @@ def test_get_cellline_data_main_success(
                 "clo_id": "CLO_0001001",
                 "efo_id": "EFO_0001663",
                 "pipeline_version": get_pipeline_version(),
-                "timestamp_utc": get_timestamp_utc(),
+                "timestamp_utc": first_timestamp,
             },
             {
                 "cell_chembl_id": "CHEMBL3307790",
@@ -182,15 +202,56 @@ def test_get_cellline_data_main_success(
                 "clo_id": pd.NA,
                 "efo_id": pd.NA,
                 "pipeline_version": get_pipeline_version(),
-                "timestamp_utc": get_timestamp_utc(),
+                "timestamp_utc": first_timestamp,
             },
         ]
     )
     expected = expected.astype("string")
     pd.testing.assert_frame_equal(df.astype("string"), expected)
 
+    base_without_timestamp = df.drop(columns=["timestamp_utc"])
+
+    second_output = tmp_path / "output_second.csv"
+    monkeypatch.setenv("CHEMBL_DA_RUN_ID", "cellline-test-run-2")
+    exit_code_second = get_cellline_data.main(
+        [
+            "--input",
+            str(input_csv),
+            "--final-out",
+            str(second_output),
+            "--limit",
+            "2",
+            "--offset",
+            "0",
+        ]
+    )
+
+    assert exit_code_second == 0
+    assert second_output.exists()
+
+    second_df = pd.read_csv(
+        second_output,
+        dtype=str,
+        keep_default_na=False,
+    ).replace({"": pd.NA})
+    second_df = second_df.reindex(columns=CELL_LINE_COLUMN_ORDER)
+
+    second_timestamp_values = second_df["timestamp_utc"].dropna().unique()
+    assert len(second_timestamp_values) == 1
+    second_timestamp = second_timestamp_values[0]
+    assert second_timestamp != first_timestamp
+    second_meta_path = Path(f"{second_output}.meta.yaml")
+    second_meta = yaml.safe_load(second_meta_path.read_text(encoding="utf-8"))
+    assert second_meta["generated_at"] == second_timestamp
+    assert get_timestamp_utc() == second_timestamp
+
+    pd.testing.assert_frame_equal(
+        second_df.drop(columns=["timestamp_utc"]).astype("string"),
+        base_without_timestamp.astype("string"),
+    )
+
     summary_events = [
         event for event in logger_stub.events if event[1] == "cellline_pipeline_summary"
     ]
     assert summary_events
-    assert summary_events[0][2]["status"] == "OK"
+    assert {event[2]["status"] for event in summary_events} == {"OK"}
