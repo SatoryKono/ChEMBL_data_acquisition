@@ -5,6 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from library.qa.table_quality import TableQualityProfiler as QaTableQualityProfiler
+from library.table_quality import TableQualityProfiler as LegacyTableQualityProfiler
 from library.utils.data_correlation import build_correlation_matrix
 
 
@@ -41,9 +43,16 @@ def test_build_correlation_matrix__returns_empty_for_empty_frame():
     assert correlation.columns.tolist() == []
 
 
-def test_build_correlation_matrix__accepts_prefilled_profiler():
+@pytest.mark.parametrize(
+    "profiler_cls",
+    [
+        pytest.param(QaTableQualityProfiler, id="qa"),
+        pytest.param(LegacyTableQualityProfiler, id="legacy"),
+    ],
+)
+def test_build_correlation_matrix__accepts_prefilled_profiler(profiler_cls):
     frame = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [0.5, 1.0, 1.5]})
-    profiler = TableQualityProfiler()
+    profiler = profiler_cls()
     profiler.consume(frame)
 
     direct = build_correlation_matrix(frame, table_name="demo")
