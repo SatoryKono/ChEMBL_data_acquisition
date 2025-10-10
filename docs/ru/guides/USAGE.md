@@ -265,7 +265,10 @@ get-testitem-data --input data/input/testitem.csv \
 ```
 
 Пайплайн объединяет молекулы из ChEMBL с данными PubChem, нормализует результат и
-записывает стандартный комплект файлов.
+по умолчанию сохраняет три CSV: датасет, `*_quality_report_table.csv` и
+`*_data_correlation_report_table.csv`. Флаг `--emit-legacy-artifacts` включает
+наследуемые диагностические файлы (failure cases, `.meta.yaml`, отчёты
+постобработки). 【F:library/pipelines/testitem/cli.py†L864-L1186】【F:library/cli/commands/get_testitem_data.py†L564-L738】
 
 ## Вспомогательные утилиты
 

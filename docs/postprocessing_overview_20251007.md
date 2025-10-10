@@ -128,7 +128,7 @@
 ### Основные функции постобработки
 
 * `run_testitem_pipeline` — orchestrator, который собирает чанки ChEMBL, добавляет родительские идентификаторы (`prepare_parent_enrichment`, `run_parent_enrichment`), интегрирует PubChem (`augment_pubchem`), применяет дополнительное обогащение (`apply_testitem_enrichment`) и передаёт поток в `finalize_output`. Пакет тест-айтемов теперь оформлен как `library/pipelines/testitem`, а CLI-обёртка живёт в модуле `library/pipelines/testitem/cli.py`; каждый шаг защищён `StageWatchdog` и `StageExecutionBudget`, что предотвращает зависания и логирует длительные операции.【F:library/pipelines/testitem/cli.py†L651-L858】
-* `finalize_output` — выполняет нормализацию `normalize_testitems`, добавляет служебные поля (`add_pipeline_metadata`), выравнивает DataFrame по `TestitemsSchema`, валидирует (через `validate_testitems`) и накапливает ошибки в `SidecarErrors`. Также создаёт failure CSV, мета-файл (`write_meta_yaml`) и запускает QA-хук `build_table_quality_hook`. На выходе формирует детерминированный CSV через `write_csv_chunks_deterministic`. Реализация доступна в `library/pipelines/testitem/cli.py`.【F:library/pipelines/testitem/cli.py†L861-L1136】
+* `finalize_output` — выполняет нормализацию `normalize_testitems`, добавляет служебные поля (`add_pipeline_metadata`), выравнивает DataFrame по `TestitemsSchema`, валидирует (через `validate_testitems`) и накапливает ошибки в `SidecarErrors`. Итоговый шаг собирает единый DataFrame, строит отчёты качества (`library.utils.qc_report`, `library.utils.data_correlation`) и сохраняет три стандартных CSV через `io.save_standard_outputs`. Наследуемые артефакты (failure CSV, `.meta.yaml`, QA-хук) включаются только при `--emit-legacy-artifacts`. Реализация доступна в `library/pipelines/testitem/cli.py`.【F:library/pipelines/testitem/cli.py†L864-L1186】
 * `normalize_testitems` — стандартизирует идентификаторы (upper-case), заменяет спецсимволы, приводит отношения/единицы измерения к нормализованным значениям, сохраняя оригинальные типы. Используется внутри `_process_chunk` до валидации для предотвращения дрейфа данных; функция экспортируется из `library/pipelines/testitem/cli.py`.【F:library/pipelines/testitem/cli.py†L946-L1015】
 * `validate_testitems` — ленивый режим pandera: ошибки добавляются в sidecar, pipeline продолжает работу, что позволяет QA анализировать проблемные записи без остановки выгрузки. Модуль в `library/pipelines/testitem/cli.py` отвечает за валидацию и публикацию sidecar-артефактов.【F:library/pipelines/testitem/cli.py†L972-L1014】
 * `write_meta_yaml` — сохраняет метаданные (hash, статистику родителей, отсутствующие идентификаторы) для трассировки последовательных запусков и доступен через `library/pipelines/testitem/cli.py`.【F:library/pipelines/testitem/cli.py†L1097-L1104】
@@ -141,14 +141,14 @@
 | Нормализация чанков | `normalize_testitems` | `molecule_chembl_id`, `relation`, `standard_units` | Очистка + стандартизация | Сохраняет dtype, фиксирует пробелы/микро-символы. |
 | Родительский lookup | `prepare_parent_enrichment`, `run_parent_enrichment` | `_MOLECULE_HIERARCHY_COLUMNS` | Привязка parent IDs | Использует локальный каталог (`config/molecule_catalog`). |
 | PubChem обогащение | `augment_pubchem` | `pubchem_cid` | Доп. идентификаторы | Управляет временем через `StageWatchdog`. |
-| Финализация | `finalize_output` | поля `TestitemsSchema` | Валидированный CSV + QA | Пишет failure cases, мета и quality отчёт. |
+| Финализация | `finalize_output` | поля `TestitemsSchema` | Валидированный CSV + QA | По умолчанию пишет датасет + QA/корреляцию; legacy-файлы (`failure_cases`, `.meta.yaml`, QA-хук) включаются через `--emit-legacy-artifacts`. |
 | Метаданные | `write_meta_yaml` | `rows_total`, `parent_lookup_*` | Sidecar .meta.yaml | Фиксирует источники parent lookup (CACHE/SYNC). |
 | QA | `build_table_quality_hook`, `analyze_table_quality` | CSV путь | Quality report | Может быть фатальным при `fatal_on_error`. |
 
 ### Назначение и контроль качества
 
 * Используются кеши PubChem (`PUBCHEM_CID_CACHE_ENCODING`) и каталоги родителей для воспроизводимости: `update_parent_catalog_cache` обновляет локальные справочники, а `load_molecule_hierarchy_lookup` позволяет оффлайн-трассировку соответствий. Все вспомогательные шаги импортируются из нового пространства имён `library/pipelines/testitem`.【F:scripts/get_testitem_data.py†L28-L120】【F:library/pipelines/testitem/cli.py†L651-L858】
-* QA-хуки формируют `*_failure_cases.csv` и аналитические отчёты, что обеспечивает 100% покрытие ключевых сценариев тестового контура (валидность схемы, деградационные случаи, идемпотентность повторных запусков).
+* QA-хуки сохраняют failure cases, `.meta.yaml` и дополнительные отчёты только при запуске с `--emit-legacy-artifacts`, что позволяет включать тяжёлые диагностики по требованию.
 
 ## Словари, схемы и QC-флаги
 

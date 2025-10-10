@@ -78,7 +78,7 @@ def run_pipeline(config: Config, options: TestitemPipelineOptions) -> PipelineRu
     else:
         output_path = Path(options.input_csv)
 
-    exit_code = run_testitem_pipeline(cfg, options)
+    exit_code, _ = run_testitem_pipeline(cfg, options)
     reason = None if exit_code == 0 else "pipeline_failed"
     written = None if exit_code != 0 else True
     return PipelineRunResult(

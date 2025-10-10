@@ -284,6 +284,8 @@ CSV и проверяет схему из `library/postprocessing/targets/schema
 
 Схема: [`library/schemas/testitems.py`](../../library/schemas/testitems.py).
 
+По умолчанию формируются три CSV-артефакта: основной датасет, `*_quality_report_table.csv` и `*_data_correlation_report_table.csv`. Для диагностики можно добавить наследуемые файлы (`*_failure_cases.csv`, `.meta.yaml`, отчёты постобработки) через флаг `--emit-legacy-artifacts`. 【F:library/pipelines/testitem/cli.py†L864-L1186】【F:library/cli/commands/get_testitem_data.py†L564-L738】
+
 | Колонка | Тип | Описание |
 |---------|-----|----------|
 | `molecule_chembl_id` | string | Основной идентификатор. |

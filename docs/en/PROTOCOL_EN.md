@@ -100,7 +100,7 @@ Key schema definitions are enforced by Pandera models:
 
 - Fetch stages defined in `library/pipelines/testitem/cli.py` (identifier read, ChEMBL enrichment, PubChem enrichment, final export). 【F:library/pipelines/testitem/cli.py†L651-L1136】
 - Flags: `--input`, `--final-out`, `--batch-size`, `--timeout`, `--limit`, `--offset`, `--request-limit`, `--config`. 【F:library/cli/commands/get_testitem_data.py†L646-L714】
-- Produces additional artefacts: `<stem>_failure_cases.csv`, QA JSON, `.meta.yaml`. 【F:library/pipelines/testitem/cli.py†L1023-L1134】
+- Default outputs: deterministic dataset CSV plus the table quality and data correlation reports. Pass `--emit-legacy-artifacts` to restore the legacy bundle (`<stem>_failure_cases.csv`, metadata `.meta.yaml`, postprocess manifests) for diagnostics. 【F:library/pipelines/testitem/cli.py†L864-L1186】【F:library/cli/commands/get_testitem_data.py†L564-L738】
 
 ### 4.6 Activity pipeline `scripts/get_activity_data.py`
 
@@ -137,7 +137,7 @@ Post-processing is driven by YAML definitions in `config/pipeline/*.yaml` and ex
 | Assay | `normalize_assay_metadata` → `enrich_assay_flags` → `finalize_assay_records` | `library/postprocessing/assays/schema.py` | Enriches BAO categories from dictionaries. 【F:library/postprocessing/assays/steps.py†L20-L73】 |
 | Document | `normalize_document_fields` → `enrich_document_publication_year` → `finalize_document_records` | `config/schema/document.yaml` | Schema groups maintained in YAML to avoid drift. 【F:config/schema/document.yaml†L1-L200】 |
 | Target | `normalize_target_fields` → `enrich_target_synonyms` → `finalize_target_records` | `library/postprocessing/targets/schema.py` | Preserves `AddCellularitySmart ` column for backwards compatibility. 【F:library/postprocessing/targets/steps.py†L24-L76】 |
-| Test item | `prepare_parent_enrichment` → `run_parent_enrichment` → `finalize_output` | `library/schemas/testitems.py` | Emits QA and failure-case CSVs when validation is non-fatal. 【F:library/pipelines/testitem/cli.py†L820-L1136】 |
+| Test item | `prepare_parent_enrichment` → `run_parent_enrichment` → `finalize_output` | `library/schemas/testitems.py` | Emits the dataset plus QA/correlation reports; legacy failure-case and metadata artefacts are opt-in via `--emit-legacy-artifacts`. 【F:library/pipelines/testitem/cli.py†L864-L1186】【F:library/cli/commands/get_testitem_data.py†L564-L738】 |
 
 ---
 
