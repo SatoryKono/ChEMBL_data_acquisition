@@ -8,6 +8,7 @@ scoring logic.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from itertools import islice
 from pathlib import Path
 
 import pandas as pd
@@ -210,12 +211,146 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger_inst.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
 
-    df_in = pd.read_csv(
-        args.input_csv,
-        sep=args.sep,
-        encoding=args.encoding,
-        nrows=limit_cfg,
+    marker_values = list(cfg.io.na_markers or ())
+    keep_markers = bool(getattr(cfg.io, "keep_na_markers", False))
+    na_values = marker_values if marker_values and not keep_markers else None
+
+    def _normalise_candidates(
+        primary: str | None,
+        default: str | None,
+        fallbacks: Sequence[str] | None,
+    ) -> list[str]:
+        seen: set[str] = set()
+        values: list[str] = []
+
+        def _append(value: str | None) -> None:
+            if value is None:
+                return
+            candidate = str(value).strip()
+            if not candidate:
+                return
+            key = candidate.lower()
+            if key in seen:
+                return
+            seen.add(key)
+            values.append(candidate)
+
+        _append(primary)
+        _append(default)
+        if fallbacks:
+            for item in fallbacks:
+                _append(item)
+        return values
+
+    encoding_candidates = _normalise_candidates(
+        getattr(args, "encoding", None),
+        getattr(cfg.io, "csv_encoding", None),
+        getattr(cfg.io, "csv_fallback_encodings", None),
     )
+    if not encoding_candidates:
+        encoding_candidates.append("utf-8")
+
+    separator_candidates = _normalise_candidates(
+        getattr(args, "sep", None),
+        getattr(cfg.io, "csv_sep", None),
+        getattr(cfg.io, "csv_fallback_separators", None),
+    )
+    if not separator_candidates:
+        separator_candidates.append(",")
+
+    required_columns = ("chembl_id",)
+
+    def _read_frame(separator: str, encoding_value: str | None) -> pd.DataFrame:
+        read_kwargs = {
+            "cfg": cfg.io,
+            "sep": separator,
+            "encoding": encoding_value,
+            "na_values": na_values,
+        }
+        if limit_cfg is None:
+            frame = io.read_csv(args.input_csv, **read_kwargs)
+            if not isinstance(frame, pd.DataFrame):
+                frame = pd.concat(list(frame), ignore_index=True)
+            result = frame
+        else:
+            reader = io.read_csv(args.input_csv, chunksize=limit_cfg, **read_kwargs)
+            if isinstance(reader, pd.DataFrame):
+                result = reader.iloc[:limit_cfg].reset_index(drop=True)
+            else:
+                columns: Sequence[str] = []
+                engine = getattr(reader, "_engine", None)
+                if engine is not None:
+                    columns = list(getattr(engine, "names", ()) or ())
+                try:
+                    chunk = next(islice(reader, 1), None)
+                finally:
+                    reader.close()
+                if chunk is None:
+                    result = pd.DataFrame(columns=columns)
+                else:
+                    result = chunk.reset_index(drop=True)
+        missing_required = [
+            column for column in required_columns if column not in result.columns
+        ]
+        if missing_required:
+            raise ValueError(
+                "missing columns after reading CSV: " + ", ".join(missing_required)
+            )
+        if limit_cfg is not None:
+            return result.iloc[:limit_cfg].reset_index(drop=True)
+        return result
+
+    df_in: pd.DataFrame | None = None
+    used_encoding: str | None = None
+    used_separator: str | None = None
+    last_error: BaseException | None = None
+
+    for separator in separator_candidates:
+        for encoding_candidate in encoding_candidates:
+            try:
+                candidate_frame = _read_frame(separator, encoding_candidate)
+            except SystemExit as exc:
+                last_error = exc
+                continue
+            except ValueError as exc:
+                logger_inst.debug(
+                    "csv_candidate_invalid",
+                    separator=separator,
+                    encoding=encoding_candidate,
+                    error=str(exc),
+                )
+                last_error = exc
+                continue
+            used_encoding = encoding_candidate
+            used_separator = separator
+            df_in = candidate_frame
+            break
+        if df_in is not None:
+            break
+
+    if df_in is None:
+        if isinstance(last_error, SystemExit):
+            raise last_error
+    
+        if last_error is not None:
+            raise SystemExit(1) from last_error
+        raise SystemExit(1)
+
+    primary_encoding = encoding_candidates[0] if encoding_candidates else None
+    primary_separator = separator_candidates[0] if separator_candidates else None
+    if (
+        used_encoding is not None
+        and primary_encoding is not None
+        and used_encoding.lower() != primary_encoding.lower()
+    ):
+        logger_inst.info("csv_encoding_fallback_used", encoding=used_encoding)
+    if (
+        used_separator is not None
+        and primary_separator is not None
+        and used_separator != primary_separator
+    ):
+        logger_inst.info("csv_separator_fallback_used", separator=used_separator)
+
     if limit_cfg is not None:
         logger_inst.info("process_limit", limit=len(df_in))
     df_out = classify_dataframe(
