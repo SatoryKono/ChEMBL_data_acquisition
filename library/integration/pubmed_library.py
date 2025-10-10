@@ -180,7 +180,11 @@ def _stream_pubmed_batches(
             )
             limiter.acquire()
             semsch_list = fetch_semantic_scholar_batch(
-                session, batch_pmids, delay, cfg=semantic_scholar_cfg
+                session,
+                batch_pmids,
+                delay,
+                cfg=semantic_scholar_cfg,
+                retry_cfg=retry_cfg,
             )
             semsch_map = {s.get("scholar.PMID"): s for s in semsch_list}
             combined_records: list[dict[str, str]] = []
@@ -189,11 +193,19 @@ def _stream_pubmed_batches(
                 semsch = semsch_map.get(pmid, {})
 
                 openalex = fetch_openalex(
-                    session, pmid, cfg=openalex_cfg, limiter=openalex_limiter
+                    session,
+                    pmid,
+                    cfg=openalex_cfg,
+                    limiter=openalex_limiter,
+                    retry_cfg=retry_cfg,
                 )
                 doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
                 crossref = fetch_crossref(
-                    session, doi, cfg=crossref_cfg, limiter=crossref_limiter
+                    session,
+                    doi,
+                    cfg=crossref_cfg,
+                    limiter=crossref_limiter,
+                    retry_cfg=retry_cfg,
                 )
 
                 combined = merge_records(pubmed, semsch, openalex, crossref)

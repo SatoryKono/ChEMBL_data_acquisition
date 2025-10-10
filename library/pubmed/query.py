@@ -183,9 +183,17 @@ def fetch_semantic_scholar(
     pmid: str,
     sleep: float,
     cfg: SemanticScholarCfg | None = None,
+    *,
+    retry_cfg: RetryCfg | None = None,
 ) -> dict[str, str]:
     """Retrieve Semantic Scholar metadata for ``pmid``."""
-    return semantic_client.fetch_semantic_scholar(session, pmid, sleep, cfg=cfg)
+    return semantic_client.fetch_semantic_scholar(
+        session,
+        pmid,
+        sleep,
+        cfg=cfg,
+        retry_cfg=retry_cfg,
+    )
 
 
 def fetch_semantic_scholar_batch(
@@ -193,9 +201,17 @@ def fetch_semantic_scholar_batch(
     pmids: list[str],
     sleep: float,
     cfg: SemanticScholarCfg | None = None,
+    *,
+    retry_cfg: RetryCfg | None = None,
 ) -> list[dict[str, str]]:
     """Retrieve Semantic Scholar metadata for multiple PMIDs."""
-    return semantic_client.fetch_semantic_scholar_batch(session, pmids, sleep, cfg=cfg)
+    return semantic_client.fetch_semantic_scholar_batch(
+        session,
+        pmids,
+        sleep,
+        cfg=cfg,
+        retry_cfg=retry_cfg,
+    )
 
 
 def fetch_openalex(
@@ -204,6 +220,7 @@ def fetch_openalex(
     *,
     cfg: OpenAlexCfg,
     limiter: RateLimiter | None = None,
+    retry_cfg: RetryCfg | None = None,
 ) -> dict[str, str]:
     """Retrieve OpenAlex metadata for ``pmid``."""
     raw, error = openalex_client.fetch_openalex(
@@ -211,6 +228,7 @@ def fetch_openalex(
         pmid,
         cfg=cfg,
         limiter=limiter,
+        retry_cfg=retry_cfg,
     )
 
     if error or not isinstance(raw, dict):
@@ -253,6 +271,7 @@ def fetch_crossref(
     *,
     cfg: CrossRefCfg,
     limiter: RateLimiter | None = None,
+    retry_cfg: RetryCfg | None = None,
 ) -> dict[str, str]:
     """Retrieve Crossref metadata for a given DOI."""
 
@@ -271,6 +290,7 @@ def fetch_crossref(
         doi,
         cfg=cfg,
         limiter=limiter,
+        retry_cfg=retry_cfg,
     )
 
     if error or not isinstance(raw, dict):

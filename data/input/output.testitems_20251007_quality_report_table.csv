@@ -1,0 +1,31 @@
+﻿column,non_null,non_empty,empty_pct,unique_cnt,unique_pct_of_non_empty,pattern_cov_doi,pattern_cov_issn,pattern_cov_isbn,pattern_cov_url,pattern_cov_email,bool_like_cov,numeric_cov,numeric_min,numeric_p50,numeric_p95,numeric_max,numeric_mean,numeric_std,date_cov,date_min,date_p50,date_max,text_len_min,text_len_p50,text_len_p95,text_len_max,guessed_roles,top_values
+molecule_chembl_id,10,10,0.0,10,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,11.0,12.0,13.0,13.0,identifier-like,CHEMBL105457 (1); CHEMBL1255588 (1); CHEMBL129482 (1)
+parent_molecule_chembl_id,9,9,0.09999999999999998,9,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,11.0,12.0,12.6,13.0,identifier-like,CHEMBL105457 (1); CHEMBL1255588 (1); CHEMBL129482 (1)
+salt_chembl_id,0,0,1.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,,,,,categorical,
+natural_product,0,0,1.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,,,,,categorical,
+prodrug,0,0,1.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,,,,,categorical,
+polymer_flag,0,0,1.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,,,,,categorical,
+black_box_warning,10,10,0.0,1,0.1,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0,1970-01-01 00:00:00.000000000,1970-01-01 00:00:00.000000000,1970-01-01 00:00:00.000000000,1.0,1.0,1.0,1.0,date|numeric|free-text,0 (10)
+first_approval,0,0,1.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,,,,,categorical,
+max_phase,2,2,0.8,2,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.2,1.0,1.5,1.95,2.0,1.5,0.5,0.2,1970-01-01 00:00:00.000000001,1970-01-01 00:00:00.000000001,1970-01-01 00:00:00.000000002,3.0,3.0,3.0,3.0,identifier-like,2.0 (1); 1.0 (1)
+canonical_smiles,10,10,0.0,10,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,31.0,54.0,82.19999999999999,84.0,identifier-like,C[C@H]1OC[C@@H](C[N+](C)(C)C)O1 (1); CC(C)(C)[C@@]1(O)CCN2C[C@@H]3c4ccccc4CCc4cccc(c43)[C@H]2C1 (1); Oc1cc(O)c2c(c1)O[C@@H](c1ccc(O)c(O)c1)[C@@H](O)C2 (1)
+standard_inchi,10,10,0.0,10,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,79.0,145.5,205.84999999999997,218.0,identifier-like,"InChI=1S/C8H18NO2/c1-7-10-6-8(11-7)5-9(2,3)4/h7-8H,5-6H2,1-4 (1); InChI=1S/C25H31NO/c1-24(2,3)25(27)13-14-26-16-21-19-9-5-4-7- (1); InChI=1S/C15H14O6/c16-8-4-11(18)9-6-13(20)15(21-14(9)5-8)7-1 (1)"
+standard_inchi_key,10,10,0.0,10,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,27.0,27.0,27.0,27.0,identifier-like,COSSAOQSSXDIQW-JGVFFNPUSA-N (1); ZZJYIKPMDIWRSN-TZBSWOFLSA-N (1); PFTAWBLQPZVEMU-ZFWWWQNUSA-N (1)
+molecule_type,10,10,0.0,1,0.1,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,14.0,14.0,14.0,14.0,free-text,Small molecule (10)
+oral,10,10,0.0,1,0.1,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,5.0,5.0,5.0,5.0,numeric|free-text,False (10)
+parenteral,10,10,0.0,1,0.1,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,5.0,5.0,5.0,5.0,numeric|free-text,False (10)
+pref_name,4,4,0.6,4,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,8.0,13.5,27.749999999999993,30.0,identifier-like,(+)-EPICATECHIN (1); CALANOLIDE A (1); (+)-EHNA (1)
+pubchem_canonical_smiles,0,0,1.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,,,,,categorical,
+pubchem_cid,10,10,0.0,10,1.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0,20353.0,272403.0,32679438.299999956,51026481.0,7275560.1,15100139.90373945,1.0,1970-01-01 00:00:00.000020353,1970-01-01 00:00:00.000272403,1970-01-01 00:00:00.051026481,5.0,6.0,8.0,8.0,date|numeric|identifier-like,657347 (1); 37461 (1); 182232 (1)
+pubchem_inchi,10,10,0.0,10,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,79.0,145.5,205.84999999999997,218.0,identifier-like,"InChI=1S/C8H18NO2/c1-7-10-6-8(11-7)5-9(2,3)4/h7-8H,5-6H2,1-4 (1); InChI=1S/C25H31NO/c1-24(2,3)25(27)13-14-26-16-21-19-9-5-4-7- (1); InChI=1S/C15H14O6/c16-8-4-11(18)9-6-13(20)15(21-14(9)5-8)7-1 (1)"
+pubchem_inchikey,10,10,0.0,10,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,27.0,27.0,27.0,27.0,identifier-like,COSSAOQSSXDIQW-JGVFFNPUSA-N (1); ZZJYIKPMDIWRSN-TZBSWOFLSA-N (1); PFTAWBLQPZVEMU-ZFWWWQNUSA-N (1)
+pubchem_isomeric_smiles,0,0,1.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,,,,,categorical,
+pubchem_iupac_name,10,10,0.0,10,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,39.0,104.0,174.99999999999994,193.0,identifier-like,"trimethyl-[[(2S,4R)-2-methyl-1,3-dioxolan-4-yl]methyl]azaniu (1); (1R,6R,8R)-6-tert-butyl-3-azapentacyclo[11.8.1.03,8.09,22.01 (1); (2S,3S)-2-(3,4-dihydroxyphenyl)-3,4-dihydro-2H-chromene-3,5, (1)"
+pubchem_molecular_formula,10,10,0.0,10,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,8.0,8.5,10.0,10.0,identifier-like,C8H18NO2+ (1); C25H31NO (1); C15H14O6 (1)
+structure_type,10,10,0.0,1,0.1,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,3.0,3.0,3.0,3.0,free-text,MOL (10)
+topical,10,10,0.0,1,0.1,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,5.0,5.0,5.0,5.0,numeric|free-text,False (10)
+pipeline_version,10,10,0.0,1,0.1,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,5.0,5.0,5.0,5.0,free-text,0.1.3 (10)
+timestamp_utc,10,10,0.0,1,0.1,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,1.0,2025-10-07 00:19:00.419380000,2025-10-07 00:19:00.419379968,2025-10-07 00:19:00.419380000,32.0,32.0,32.0,32.0,date|free-text,2025-10-07T00:19:00.419380+00:00 (10)
+molecule_structures.canonical_smiles,0,0,1.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,,,,,categorical,
+molecule_structures.standard_inchi,0,0,1.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,,,,,categorical,
+molecule_structures.standard_inchi_key,0,0,1.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,,,,,categorical,

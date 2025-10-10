@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 import requests
 
-from ..config.models import CrossRefCfg
+from ..config.models import CrossRefCfg, RetryCfg
 from ..common.log import logger
 from ..common.rate_limiter import RateLimiter, get_limiter
 from .pubmed import _do_request
@@ -21,6 +21,7 @@ def fetch_crossref(
     *,
     cfg: CrossRefCfg,
     limiter: RateLimiter | None = None,
+    retry_cfg: RetryCfg | None = None,
 ) -> tuple[dict[str, Any] | str | None, str]:
     """Request Crossref metadata for ``doi``."""
 
@@ -40,6 +41,7 @@ def fetch_crossref(
         delay,
         retries=cfg.retries,
         timeout=timeout,
+        retry_cfg=retry_cfg,
     )
     if error:
         logger.info("request_fail", extra={"stage": "request_fail", "url": url})

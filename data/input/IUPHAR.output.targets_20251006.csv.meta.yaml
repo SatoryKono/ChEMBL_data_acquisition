@@ -1,0 +1,26 @@
+generated_at: '2025-10-07T00:00:52.144794+00:00'
+git_sha: 4eb711bce854d454af77580f1188709f64ccca49
+command: scripts\get_target_data.py --input data\input\target.csv all --limit 1
+columns:
+- target_chembl_id
+- guidetopharmacology_id
+- iuphar_target_id
+- iuphar_family_id
+- iuphar_type
+- iuphar_class
+- iuphar_subclass
+- iuphar_chain
+- iuphar_name
+- iuphar_synonyms
+dtypes:
+  target_chembl_id: string
+  guidetopharmacology_id: string
+  iuphar_target_id: string
+  iuphar_family_id: string
+  iuphar_type: string
+  iuphar_class: string
+  iuphar_subclass: string
+  iuphar_chain: string
+  iuphar_name: string
+  iuphar_synonyms: object
+config: {}

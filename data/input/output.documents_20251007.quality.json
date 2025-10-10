@@ -1,0 +1,21 @@
+{
+  "rows_total": 10,
+  "doi_coverage": 0.0,
+  "publication_class_counts": {
+    "unknown": 9,
+    "experimental": 1
+  },
+  "error_counts": {
+    "pubmed": 10,
+    "semantic_scholar": 10,
+    "openalex": 10,
+    "crossref": 10
+  },
+  "error_placeholder_counts": {
+    "pubmed": 0,
+    "semantic_scholar": 0,
+    "openalex": 0,
+    "crossref": 0,
+    "unknown": 0
+  }
+}
