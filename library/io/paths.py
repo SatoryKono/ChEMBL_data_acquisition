@@ -43,16 +43,21 @@ def default_output_path(
 
     inp = Path(input_path)
 
-    cfg_prefix = getattr(cfg, "default_date_prefix", None)
-    if isinstance(cfg_prefix, str):
-        cfg_prefix = cfg_prefix.strip() or None
-    if cfg_prefix is not None:
-        date_str = cfg_prefix
-    else:
-        if isinstance(date, str):
-            candidate = date.strip()
-            date_str = candidate or datetime.now(UTC).strftime("%Y%m%d")
-        else:
-            date_str = datetime.now(UTC).strftime("%Y%m%d")
+    date_str: str | None = None
+
+    if isinstance(date, str):
+        candidate = date.strip()
+        if candidate:
+            date_str = candidate
+
+    if date_str is None:
+        cfg_prefix = getattr(cfg, "default_date_prefix", None)
+        if isinstance(cfg_prefix, str):
+            candidate = cfg_prefix.strip()
+            if candidate:
+                date_str = candidate
+
+    if date_str is None:
+        date_str = datetime.now(UTC).strftime("%Y%m%d")
 
     return Path(cfg.output_dir) / f"output.{inp.stem}_{date_str}.csv"
