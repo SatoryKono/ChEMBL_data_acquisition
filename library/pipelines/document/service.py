@@ -876,7 +876,7 @@ class DocumentPipeline:
         pending: set[Future[list[dict[str, str]]]] = set()
 
         def _iter_pending(
-            futures: Iterable[Future[list[dict[str, str]]]]
+            futures: Iterable[Future[list[dict[str, str]]]],
         ) -> Iterator[Future[list[dict[str, str]]]]:
             """Yield completed futures without copying the ``futures`` collection."""
 

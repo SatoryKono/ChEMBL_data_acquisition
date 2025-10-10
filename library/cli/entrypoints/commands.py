@@ -14,6 +14,7 @@ corresponding implementation from :mod:`library.cli.commands` or the legacy
 :func:`library.cli.commands._run` to preserve the historical command-line
 behaviour (including optional ``argv`` injection for tests).
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence

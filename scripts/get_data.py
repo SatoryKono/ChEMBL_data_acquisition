@@ -345,8 +345,7 @@ def _normalise_date_prefix(value: str) -> str:
         raise ValueError("date prefix must not be empty when resolved automatically")
     if not candidate.isdigit() or len(candidate) != 8:
         raise ValueError(
-            "date prefix must be an eight digit YYYYMMDD string, got"
-            f" {value!r}"
+            "date prefix must be an eight digit YYYYMMDD string, got" f" {value!r}"
         )
     return candidate
 
@@ -390,11 +389,11 @@ def _ensure_date_prefix(args: argparse.Namespace, *, base_path: Path) -> str:
         stripped = current.strip()
         if not stripped:
             raise ValueError("--date must not be an empty string")
-        setattr(args, "date_prefix", stripped)
+        args.date_prefix = stripped
         return stripped
 
     default_prefix = _resolve_default_date_prefix(args, base_path=base_path)
-    setattr(args, "date_prefix", default_prefix)
+    args.date_prefix = default_prefix
     return default_prefix
 
 
@@ -405,9 +404,7 @@ def _normalise_descriptor_path(path: Path) -> str:
         return str(path.expanduser())
 
 
-def _canonical_run_descriptor(
-    args: argparse.Namespace, *, base_path: Path
-) -> str:
+def _canonical_run_descriptor(args: argparse.Namespace, *, base_path: Path) -> str:
     """Return a canonical description of the invocation for run hashing."""
 
     invocation = getattr(args, "invocation", None)
@@ -470,7 +467,8 @@ def _canonical_run_descriptor(
     output_overrides = _parse_overrides(getattr(args, "override_output_stem", None))
     if output_overrides:
         parts.extend(
-            f"override_output:{key}={value}" for key, value in sorted(output_overrides.items())
+            f"override_output:{key}={value}"
+            for key, value in sorted(output_overrides.items())
         )
 
     subcommand_overrides = _parse_overrides(
@@ -478,7 +476,8 @@ def _canonical_run_descriptor(
     )
     if subcommand_overrides:
         parts.extend(
-            f"override_subcommand:{key}={value}" for key, value in sorted(subcommand_overrides.items())
+            f"override_subcommand:{key}={value}"
+            for key, value in sorted(subcommand_overrides.items())
         )
 
     return "\n".join(parts)

@@ -13,46 +13,34 @@ import math
 import numbers
 import os
 import sys
-from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
+from collections.abc import (
+    Callable,
+    Iterable,
+    Iterator,
+    Mapping,
+    MutableMapping,
+    Sequence,
+)
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from datetime import datetime as _datetime
+from enum import Enum
 from functools import partial
 from itertools import islice
 from pathlib import Path
 from threading import Condition, Lock
-from datetime import datetime as _datetime, timezone
 from time import perf_counter, sleep
-from enum import Enum
 from typing import Any, cast
 from urllib.parse import urlsplit
 
 import pandas as pd
 import requests
 
-from library import cli, io
-from library.cli import logging as cli_logging
-
-_DEFAULT_LOGGING_DATE_FUNC = cli_logging._current_date_str
-from library.clients.chembl import ChemblClient
-from library.integration import chembl_library as cl
-
-try:  # pragma: no cover - urllib3 is part of requests dependency chain
-    from urllib3.exceptions import NameResolutionError as _Urllib3NameResolutionError
-except Exception:  # pragma: no cover - defensive fallback for alternative stacks
-    _Urllib3NameResolutionError = None  # type: ignore
-from library.cli import (
-    Logger,
-    LoggerConfig,
-    positive_int,
-)
-from library.cli import (
-    build_parser as base_parser,
-)
-from library.cli.base import PipelineCLIBase
-
 import library.cli.logging as cli_logging
-from library.cli.logging import CLILoggingContext
-
+from library import cli, io
+from library.cli import Logger, LoggerConfig, positive_int
+from library.cli import build_parser as base_parser
+from library.cli.base import PipelineCLIBase
 from library.cli.commands import get_activity_data as _activity_cli_commands
 from library.cli.commands.get_activity_data import (
     MIN_ACTIVITY_TIMEOUT,
@@ -60,29 +48,19 @@ from library.cli.commands.get_activity_data import (
     run_activity_pipeline,
 )
 from library.cli.logging import CLILoggingContext
-from library.cli_utils import (  # noqa: E402
-    PipelineError,
-    resolve_invocation,
-)
-from library.cli_utils import (
-    run_cli_command as _run_cli_command,
-    # file_sha256 is not explicitly exported by library.cli_utils, so import directly if needed
-)
-from library.common.csv_utils import (
-    write_csv_chunks_deterministic,  # re-exported for tests
-)
+from library.cli_utils import PipelineError, resolve_invocation
+from library.cli_utils import run_cli_command as _run_cli_command
+from library.clients.chembl import ChemblClient
+from library.common.csv_utils import write_csv_chunks_deterministic
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 from library.common.log import logger
 from library.config import Config, _serialize_paths
-from library.io.metadata import (
-    write_meta_yaml as _cli_write_meta_yaml,
-)
+from library.integration import chembl_library as cl
+from library.io.metadata import write_meta_yaml as _cli_write_meta_yaml
 from library.metadata import file_sha256 as _metadata_file_sha256
 from library.orchestration import ETLContext
 from library.pipelines.activity import run as activity_run
-from library.pipelines.assay.chembl_assay import (
-    ACTIVITY_COLUMNS,
-)
+from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS
 from library.pipelines.common import (
     ChunkedFetchConfig,
     CsvWriterConfig,
@@ -107,6 +85,13 @@ from library.schemas import (
 )
 from library.validation import validate_activities
 
+_DEFAULT_LOGGING_DATE_FUNC = cli_logging._current_date_str
+
+try:  # pragma: no cover - urllib3 is part of requests dependency chain
+    from urllib3.exceptions import NameResolutionError as _Urllib3NameResolutionError
+except Exception:  # pragma: no cover - defensive fallback for alternative stacks
+    _Urllib3NameResolutionError = None  # type: ignore[assignment]
+
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
@@ -120,23 +105,24 @@ PROGRAM_NAME = Path(__file__).with_suffix("").name
 # Historically :mod:`scripts.get_activity_data` imported ``datetime`` directly
 # which allowed monkeypatching via ``get_activity_data.datetime``. Restoring the
 # binding keeps that contract intact after the CLI refactor.
-datetime = _datetime
+datetime = _datetime  # noqa: F811 - preserve compatibility alias
 clock: Callable[[], float] = perf_counter
 
 
 def _current_utc_datetime() -> _datetime:
     """Return the current UTC timestamp using the overridable clock."""
 
-    candidate = datetime.now(timezone.utc)
+    candidate = datetime.now(UTC)
     if candidate.tzinfo is None:
-        return candidate.replace(tzinfo=timezone.utc)
-    return candidate.astimezone(timezone.utc)
+        return candidate.replace(tzinfo=UTC)
+    return candidate.astimezone(UTC)
 
 
 def _current_date_token() -> str:
     """Return the YYYYMMDD date string derived from :data:`datetime`."""
 
     return _current_utc_datetime().strftime("%Y%m%d")
+
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
     invocation = getattr(args, "invocation", None)
@@ -599,7 +585,9 @@ def _emit_completion_message(
         logger.info("pipeline_skip_existing", output=str(output_path))
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
-            events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
+            events_attr.append(
+                ("info", "pipeline_skip_existing", {"output": str(output_path)})
+            )
         return
 
     payload: dict[str, object] = {

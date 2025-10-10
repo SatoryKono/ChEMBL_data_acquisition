@@ -1,6 +1,7 @@
 """Unified entry points for all first-party console scripts."""
 
-from .activity import ActivityPipelineCLI, build_parser, main as activity_main
+from .activity import ActivityPipelineCLI, build_parser
+from .activity import main as activity_main
 from .commands import (
     check_determinism_main,
     chunk_io_main,

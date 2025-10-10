@@ -81,7 +81,6 @@ _SCRIPT_CASES = (
 )
 
 
-<<<<<<< HEAD
 def _run_logging_case(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -91,15 +90,6 @@ def _run_logging_case(
     date_override: str | None,
     datetime_cls: type[datetime] | None = None,
 ) -> tuple[Path, list[dict[str, Any]]]:
-=======
-@pytest.mark.e2e
-@pytest.mark.parametrize(
-    "case", _SCRIPT_CASES, ids=lambda c: _program_name_from_module(c["module"])
-)
-def test_cli_logging__creates_log_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: dict[str, Any]
-) -> None:
->>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
     base_path = tmp_path
     log_dir = base_path / "logs"
     log_dir.mkdir(parents=True)
@@ -117,20 +107,10 @@ def test_cli_logging__creates_log_file(
 
     monkeypatch.chdir(base_path)
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
-<<<<<<< HEAD
     if date_override is not None:
-        monkeypatch.setattr("library.cli.logging._current_date_str", lambda: date_override)
-=======
-    monkeypatch.setattr("library.cli.logging._current_date_str", lambda: "20240102")
-
-    class _FixedDateTime(datetime):
-        @classmethod
-        def now(cls, tz=None):  # type: ignore[override]
-            tzinfo = tz or UTC
-            return datetime(2024, 1, 2, 0, 0, tzinfo=tzinfo)
-
-    monkeypatch.setattr(get_activity_data, "datetime", _FixedDateTime)
->>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
+        monkeypatch.setattr(
+            "library.cli.logging._current_date_str", lambda: date_override
+        )
 
     module = case["module"]
     prefix = case["prefix"]
@@ -233,14 +213,16 @@ def test_cli_logging__creates_log_file(
 
 
 @pytest.mark.e2e
-@pytest.mark.parametrize("case", _SCRIPT_CASES, ids=lambda c: _program_name_from_module(c["module"]))
+@pytest.mark.parametrize(
+    "case", _SCRIPT_CASES, ids=lambda c: _program_name_from_module(c["module"])
+)
 def test_cli_logging__creates_log_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: dict[str, Any]
 ) -> None:
     class _FixedDateTime(datetime):
         @classmethod
         def now(cls, tz=None):  # type: ignore[override]
-            tzinfo = tz or timezone.utc
+            tzinfo = tz or UTC
             return datetime(2024, 1, 2, 0, 0, tzinfo=tzinfo)
 
     datetime_cls = _FixedDateTime if case["module"] is get_activity_data else None
@@ -283,10 +265,10 @@ def test_cli_logging__uses_datetime_hook_for_default_date(
     class _FixedDateTime(datetime):
         @classmethod
         def now(cls, tz=None):  # type: ignore[override]
-            tzinfo = tz or timezone.utc
+            tzinfo = tz or UTC
             return datetime(2024, 1, 2, 0, 0, tzinfo=tzinfo)
 
-    expected_date = _FixedDateTime.now(timezone.utc).strftime("%Y%m%d")
+    expected_date = _FixedDateTime.now(UTC).strftime("%Y%m%d")
 
     log_path, events = _run_logging_case(
         tmp_path,
