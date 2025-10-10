@@ -20,7 +20,9 @@ def _build_run_config(
     output_dir.mkdir()
     config_path = base_path / "config.yaml"
     config_path.write_text("{}", encoding="utf-8")
-    subcommands = {step.name: step.subcommand for step in steps}
+    subcommands = get_data.PipelineSubcommands.from_mapping(
+        {step.name: step.subcommand for step in steps}
+    )
     return get_data.PipelineRunConfig(
         base_path=base_path,
         input_dir=input_dir,
@@ -33,8 +35,12 @@ def _build_run_config(
         skip_existing=False,
         dry_run=False,
         rerun_postprocess=False,
-        input_files={step.name: step.input_filename for step in steps},
-        output_stems={step.name: step.output_stem for step in steps},
+        input_files=get_data.PipelineInputFiles.from_mapping(
+            {step.name: step.input_filename for step in steps}
+        ),
+        output_stems=get_data.PipelineOutputStems.from_mapping(
+            {step.name: step.output_stem for step in steps}
+        ),
         subcommands=subcommands,
     )
 

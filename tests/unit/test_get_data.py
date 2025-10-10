@@ -26,11 +26,15 @@ def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
     output_dir = base_path / "output"
     input_dir.mkdir()
     output_dir.mkdir()
-    input_files = dict(get_data.DEFAULT_INPUT_FILES)
-    output_stems = dict(get_data.DEFAULT_OUTPUT_STEMS)
-    subcommands = {
-        step.name: step.subcommand for step in get_data.DEFAULT_PIPELINE_STEPS
-    }
+    input_files = get_data.PipelineInputFiles.from_mapping(
+        dict(get_data.DEFAULT_INPUT_FILES)
+    )
+    output_stems = get_data.PipelineOutputStems.from_mapping(
+        dict(get_data.DEFAULT_OUTPUT_STEMS)
+    )
+    subcommands = get_data.PipelineSubcommands.from_mapping(
+        dict(get_data.DEFAULT_SUBCOMMANDS)
+    )
     for _name, filename in input_files.items():
         target = input_dir / filename
         target.write_text("id\nplaceholder\n", encoding="utf-8")
@@ -680,9 +684,9 @@ def test_run_pipeline__fails_when_directories_missing_and_exist_ok_false(
         force=False,
         skip_existing=False,
         dry_run=False,
-        input_files={},
-        output_stems={},
-        subcommands={},
+        input_files=get_data.PipelineInputFiles.from_mapping({}),
+        output_stems=get_data.PipelineOutputStems.from_mapping({}),
+        subcommands=get_data.PipelineSubcommands.from_mapping({}),
     )
 
     monkeypatch.setattr(get_data, "load_config", lambda *_, **__: cfg, raising=False)
