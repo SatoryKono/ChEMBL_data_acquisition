@@ -8,7 +8,14 @@ from typing import Tuple
 
 import pandas as pd
 
-from ..table_quality import TableQualityProfiler, _apply_sampling_and_filters
+try:
+    # ``library.qa.table_quality`` is the canonical location used by the CLI
+    # pipelines.  Importing from there ensures that callers sharing profiler
+    # instances (e.g. :mod:`library.cli.commands.get_document_data`) provide
+    # the exact same class that this helper expects.
+    from ..qa.table_quality import TableQualityProfiler, _apply_sampling_and_filters
+except ImportError:  # pragma: no cover - legacy compatibility fallback
+    from ..table_quality import TableQualityProfiler, _apply_sampling_and_filters
 
 
 def _validate_table_name(table_name: str) -> str:
