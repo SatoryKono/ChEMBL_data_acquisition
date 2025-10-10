@@ -818,11 +818,27 @@ def test_run_chembl__delegates_to_run_activity_pipeline(monkeypatch):
     monkeypatch.setattr(module, "run_activity_pipeline", fake_pipeline)
     monkeypatch.setattr(module, "_load_activity_entrypoint", lambda: _StubEntrypoint())
 
-    result = module.run_chembl("cfg", option=True)
+    cli_args = argparse.Namespace(
+        input_csv="input.csv",
+        output_csv="output.csv",
+        final_out="final.csv",
+        offset=0,
+        skip_existing=False,
+        force=False,
+        dry_run=False,
+        invocation=None,
+    )
+
+    result = module.run_chembl("cfg", cli_args)
 
     assert result == "sentinel"
-    assert called["args"] == ("cfg",)
-    assert called["kwargs"] == {"option": True}
+    assert called["kwargs"] == {}
+    assert called["args"][0] == "cfg"
+    assert isinstance(called["args"][1], module.ActivityCommandOptions)
+    options = called["args"][1]
+    assert options.input_csv == "input.csv"
+    assert options.output_csv == "output.csv"
+    assert options.final_output == "final.csv"
 
 
 @pytest.mark.unit
@@ -842,11 +858,23 @@ def test_run_chembl__import_failure_falls_back_to_pipeline(monkeypatch):
     monkeypatch.setattr(module, "run_activity_pipeline", fake_pipeline)
     monkeypatch.setattr(module, "_load_activity_entrypoint", _raise_import_error)
 
-    result = module.run_chembl("cfg", option=True)
+    cli_args = argparse.Namespace(
+        input_csv="input.csv",
+        output_csv="output.csv",
+        final_out="final.csv",
+        offset=0,
+        skip_existing=False,
+        force=False,
+        dry_run=False,
+        invocation=None,
+    )
+
+    result = module.run_chembl("cfg", cli_args)
 
     assert result == "fallback"
-    assert calls["args"] == ("cfg",)
-    assert calls["kwargs"] == {"option": True}
+    assert calls["kwargs"] == {}
+    assert calls["args"][0] == "cfg"
+    assert isinstance(calls["args"][1], module.ActivityCommandOptions)
 
 
 @pytest.mark.unit
