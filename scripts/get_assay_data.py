@@ -56,9 +56,9 @@ from library.pipelines.common import (
     prepare_chunked_pipeline,
 )
 from library.pipelines.common.metadata import get_pipeline_version
-from library.postprocess.assays import run_assay_pipeline as run_assay_postprocess
-from library.postprocess.common import collect_postprocess_metrics
-from library.postprocess.common.logging import PipelineRunMetrics
+from library.postprocessing.assays import run_assay_pipeline as run_assay_postprocess
+from library.postprocessing.common import collect_postprocess_metrics
+from library.postprocessing.common.logging import PipelineRunMetrics
 from library.postprocessing import enrich_assay_metadata
 from library.qa.reporting import build_table_quality_hook
 from library.schemas import AssaysSchema, normalize_assays

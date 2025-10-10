@@ -138,10 +138,10 @@
 ### Дополнительная классификация (пост-обработка)
 
 Модульная пост-обработка таргетов
-(`library.postprocess.targets.run_target_pipeline`) формирует агрегированное
+(`library.postprocessing.targets.run_target_pipeline`) формирует агрегированное
 представление для QA-метрик и сервисов, которым нужны компактные
 классификационные поля. Хелпер запускается автоматически после записи основного
-CSV и проверяет схему из `library/postprocess/targets/schema.py`.
+CSV и проверяет схему из `library/postprocessing/targets/schema.py`.
 
 | Колонка | Описание |
 |---------|----------|
