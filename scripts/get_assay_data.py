@@ -303,6 +303,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         client = context.chembl_client
 
         retry_cfg = cfg.retry
+        jitter = retry_cfg.build_jitter()
         chunk_failures = ChunkFailureTracker()
 
         def fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
@@ -361,7 +362,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                             chunk_failures.add_failure(current, error_message)
                             break
 
-                        delay = compute_backoff_delay(attempt, retry_cfg)
+                        delay = compute_backoff_delay(attempt, retry_cfg, jitter=jitter)
                         logger.warning(
                             "assay_fetch_retry",
                             extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
