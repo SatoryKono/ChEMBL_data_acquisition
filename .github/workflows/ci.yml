@@ -61,16 +61,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install dependencies
-        run: |
-          pip install -r requirements-lock.txt
-          pip install .[dev]
-      - name: Install pre-commit hooks
-        run: pre-commit install --install-hooks
+      - name: Cache pre-commit environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: ${{ runner.os }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pre-commit-
       - name: Run pre-commit hooks
+        uses: pre-commit/action@v3.0.1
         env:
           SKIP: pytest
-        run: pre-commit run --all-files --show-diff-on-failure --color always
+        with:
+          extra_args: --all-files --show-diff-on-failure --color always
 
   tests:
     name: Test suite

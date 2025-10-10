@@ -63,6 +63,14 @@ pre-commit install
 
 ### Pre-commit hooks
 
+To enable the Git hooks locally install the runner once and register it for this
+repository:
+
+```bash
+pip install pre-commit  # already included in `pip install .[dev]`
+pre-commit install
+```
+
 The repository ships a curated [`pre-commit`](https://pre-commit.com/)\
 configuration that formats code, lints YAML/TOML files and validates static
 metadata before every commit. After installing the development dependencies run
