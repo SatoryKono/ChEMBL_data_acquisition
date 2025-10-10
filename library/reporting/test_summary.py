@@ -26,7 +26,7 @@ def normalise_message(raw: Any) -> str:
         return ""
     if isinstance(raw, str):
         return raw.strip()
-    if isinstance(raw, Iterable) and not isinstance(raw, (bytes, bytearray)):
+    if isinstance(raw, Iterable) and not isinstance(raw, bytes | bytearray):
         joined = "\n".join(str(part) for part in raw)
         return joined.strip()
     return str(raw).strip()
@@ -55,7 +55,7 @@ def validate_summary_report(report: dict[str, Any]) -> None:
             )
 
     success_rate = summary.get("success_rate")
-    if not isinstance(success_rate, (int, float)):
+    if not isinstance(success_rate, int | float):
         raise ValueError("Summary field 'success_rate' must be numeric")
 
     tests = report.get("tests")

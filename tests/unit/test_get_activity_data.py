@@ -30,7 +30,7 @@ def test_wrapper_module__reflects_command_updates(monkeypatch):
     sentinel = object()
     monkeypatch.setattr(command_module, "_sentinel_for_test", sentinel, raising=False)
 
-    assert getattr(wrapper_module, "_sentinel_for_test") is sentinel
+    assert wrapper_module._sentinel_for_test is sentinel
 
 
 def _make_pref_name_frame() -> pd.DataFrame:

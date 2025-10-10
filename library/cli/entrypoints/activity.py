@@ -30,6 +30,7 @@ from itertools import islice
 from pathlib import Path
 from threading import Condition, Lock
 from time import perf_counter, sleep
+from types import ModuleType
 from typing import Any, cast
 from urllib.parse import urlsplit
 
@@ -40,13 +41,14 @@ import library.cli.logging as cli_logging
 from library import cli, io
 from library.cli import Logger, LoggerConfig, positive_int
 from library.cli import build_parser as base_parser
-from library.cli.base import PipelineCLIBase
-from library.cli.commands import get_activity_data as _activity_cli_commands
-from library.cli.commands.get_activity_data import (
+from library.cli.activity_api import (
     MIN_ACTIVITY_TIMEOUT,
     ActivityCommandOptions,
+    ensure_entrypoint_exports,
     run_activity_pipeline,
 )
+from library.cli.base import PipelineCLIBase
+from library.cli.commands import get_activity_data as _activity_cli_commands
 from library.cli.logging import CLILoggingContext
 from library.cli_utils import PipelineError, resolve_invocation
 from library.cli_utils import run_cli_command as _run_cli_command
@@ -2112,6 +2114,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Delegate to :class:`ActivityPipelineCLI` for backwards compatibility."""
 
     return _CLI.main(argv)
+
+
+ensure_entrypoint_exports(cast(ModuleType, sys.modules[__name__]))
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

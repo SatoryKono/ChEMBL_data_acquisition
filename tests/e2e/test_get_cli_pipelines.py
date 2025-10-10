@@ -100,8 +100,8 @@ def test_cli_wrappers__monkeypatch_parent_catalog(monkeypatch: pytest.MonkeyPatc
     sentinel = object()
     monkeypatch.setattr(module, "_warm_parent_catalog", sentinel, raising=False)
 
-    assert getattr(module, "_warm_parent_catalog") is sentinel
-    assert getattr(module._MODULE, "_warm_parent_catalog") is sentinel
+    assert module._warm_parent_catalog is sentinel
+    assert module._MODULE._warm_parent_catalog is sentinel
 
 
 @pytest.mark.parametrize(

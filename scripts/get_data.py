@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterable
 from importlib import import_module
 from types import ModuleType
-from typing import Iterable
 
 # ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if __package__ in {None, ""}:

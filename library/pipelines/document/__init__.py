@@ -10,6 +10,7 @@ from library.config import Config
 from library.pipelines.common import PipelineRunResult
 
 from . import pipeline, postprocessing, type_classifier, type_terms
+from .service import run_document_service
 from .chembl_document import get_documents
 
 
@@ -41,9 +42,7 @@ class DocumentPipelineOptions:
 def run_pipeline(config: Config, options: DocumentPipelineOptions) -> PipelineRunResult:
     """Run the document pipeline using programmatic options."""
 
-    from scripts import get_document_data as document_cli  # Lazy import to avoid cycles
-
-    return document_cli.run_document_service(config, options)
+    return run_document_service(config, options)
 
 
 __all__ = [

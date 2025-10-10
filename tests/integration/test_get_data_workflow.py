@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib
 import io
 from collections.abc import Callable
 from dataclasses import replace
@@ -20,9 +19,6 @@ from scripts import get_target_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_lines
 from tests.helpers.manifests import list_manifest_files, load_latest_manifest
-
-
-get_data = importlib.import_module("library.cli.commands.get_data")
 
 
 def _build_stub_api(
@@ -648,7 +644,7 @@ def test_run_pipeline__document_override_invokes_selected_mode(
     modes: list[str] = []
 
     def _fake_run_document_pipeline(config: Config, options: object) -> PipelineRunResult:
-        mode = getattr(options, "mode")
+        mode = options.mode
         modes.append(mode)
         assert mode == "chembl"
         destination = Path(options.output_csv)

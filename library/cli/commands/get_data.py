@@ -92,37 +92,53 @@ from library.pipelines.testitem import (
     run_pipeline as run_testitem_pipeline,
 )
 from library.postprocess.common import (
-    PostprocessResult,
-    PostprocessingPipelineConfig,
     SUPPORTED_TABLES as POSTPROCESS_SUPPORTED_TABLES,
-    get_csv_runtime_config as get_postprocess_csv_config,
-    get_pipeline_config as load_postprocess_pipeline_config,
+)
+from library.postprocess.common import (
+    PostprocessingPipelineConfig,
+    PostprocessResult,
     run_postprocessing_pipeline,
+)
+from library.postprocess.common import (
+    get_csv_runtime_config as get_postprocess_csv_config,
+)
+from library.postprocess.common import (
+    get_pipeline_config as load_postprocess_pipeline_config,
 )
 from library.postprocessing.activities import (
     ACTIVITY_SCHEMA,
-    run_activity_pipeline as run_activity_postprocess,
     validate_activities,
+)
+from library.postprocessing.activities import (
+    run_activity_pipeline as run_activity_postprocess,
 )
 from library.postprocessing.assays import (
     ASSAY_SCHEMA,
-    run_assay_pipeline as run_assay_postprocess,
     validate_assays,
+)
+from library.postprocessing.assays import (
+    run_assay_pipeline as run_assay_postprocess,
 )
 from library.postprocessing.documents import (
     DOCUMENT_SCHEMA,
-    run_document_pipeline as run_document_postprocess,
     validate_documents,
+)
+from library.postprocessing.documents import (
+    run_document_pipeline as run_document_postprocess,
 )
 from library.postprocessing.targets import (
     TARGET_SCHEMA,
-    run_target_pipeline as run_target_postprocess,
     validate_targets,
+)
+from library.postprocessing.targets import (
+    run_target_pipeline as run_target_postprocess,
 )
 from library.postprocessing.testitem import (
     TESTITEM_SCHEMA,
-    run_testitem_pipeline as run_testitem_postprocess,
     validate_testitems,
+)
+from library.postprocessing.testitem import (
+    run_testitem_pipeline as run_testitem_postprocess,
 )
 from library.reporting.run_manifest import load_output_report, merge_run_output
 
@@ -1207,7 +1223,7 @@ def _finalize_step_success(
         _remove_path(sentinel_path)
 
 
-def _resolve_postprocess_table(step: PipelineStep, final_output: Path) -> Optional[str]:
+def _resolve_postprocess_table(step: PipelineStep, final_output: Path) -> str | None:
     """Return the postprocess table identifier for ``step`` if supported."""
 
     table = getattr(step, "output_stem", "")
@@ -1222,8 +1238,8 @@ def _run_postprocess_hook(
     step: PipelineStep,
     final_output: Path,
     *,
-    table: Optional[str] = None,
-) -> Optional[PostprocessResult]:
+    table: str | None = None,
+) -> PostprocessResult | None:
     """Execute the post-processing pipeline for ``step`` when available."""
 
     if table is None:
@@ -1536,7 +1552,7 @@ def _describe_sidecars(
         f"*{working_output.with_suffix('').name}",
     ]
     stem = final_output.stem
-    table_candidate: Optional[str] = None
+    table_candidate: str | None = None
     if stem.startswith("output."):
         remainder = stem[len("output.") :]
         if "_" in remainder:
@@ -2112,7 +2128,7 @@ def run_pipeline(
 
             entry["status"] = result.status
             _finalize_step_success(final_output, working_output, sentinel_path)
-            postprocess_result: Optional[PostprocessResult] = None
+            postprocess_result: PostprocessResult | None = None
             postprocess_table = _resolve_postprocess_table(step, final_output)
             if result.executed and postprocess_table is not None:
                 try:
