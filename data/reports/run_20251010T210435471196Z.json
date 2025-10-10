@@ -1,8 +1,8 @@
 {
   "run": {
-    "started_at": "2025-10-10T21:07:00.794794+00:00",
-    "completed_at": "2025-10-10T21:07:21.694619+00:00",
-    "duration_sec": 20.899804,
+    "started_at": "2025-10-10T21:04:35.471196+00:00",
+    "completed_at": "2025-10-10T21:05:02.807066+00:00",
+    "duration_sec": 27.335503,
     "exit_code": 1,
     "status": "failed",
     "date_prefix": "20240101",
@@ -24,9 +24,9 @@
       "exit_code": 1,
       "executed": true,
       "reason": "exception",
-      "started_at": "2025-10-10T21:07:00.877931+00:00",
-      "completed_at": "2025-10-10T21:07:21.690588+00:00",
-      "duration_sec": 20.812625,
+      "started_at": "2025-10-10T21:04:35.515752+00:00",
+      "completed_at": "2025-10-10T21:05:02.772849+00:00",
+      "duration_sec": 27.256557,
       "output": {
         "path": "C:\\Users\\HP3168\\Documents\\GitHub\\ChEMBL_data_acquisition\\data\\output\\output.documents_20240101.csv",
         "exists": false,
