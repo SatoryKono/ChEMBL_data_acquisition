@@ -120,8 +120,10 @@ def test_main__metadata_equivalent_runs_pass(
         observed_input: Path,
         *,
         dry_run: bool,
+        timeout: float | None,
     ) -> CompletedProcess[str]:
         del dry_run
+        assert timeout == pytest.approx(600.0)
         _write_run_payload(destination, payload, base_metadata)
         runs.append((limit, destination, observed_input))
         return CompletedProcess(args=["python"], returncode=0, stdout="ok\n", stderr="")
@@ -179,8 +181,10 @@ def test_main__metadata_mismatch_returns_error(
         observed_input: Path,
         *,
         dry_run: bool,
+        timeout: float | None,
     ) -> CompletedProcess[str]:
         del dry_run
+        assert timeout == pytest.approx(600.0)
         metadata = metadata_runs[len(runs)]
         _write_run_payload(destination, payload, metadata)
         runs.append((limit, destination, observed_input))
@@ -221,8 +225,10 @@ def test_main__dry_run_without_outputs_fails(
         observed_input: Path,
         *,
         dry_run: bool,
+        timeout: float | None,
     ) -> CompletedProcess[str]:
         assert dry_run is True
+        assert timeout == pytest.approx(600.0)
         assert observed_input == input_csv
         assert limit == 2
         # Intentionally do not create destination to emulate --dry-run behaviour.
@@ -234,7 +240,7 @@ def test_main__dry_run_without_outputs_fails(
         ["--limit", "2", "--input", str(input_csv), "--dry-run"]
     )
 
-    assert exit_code == 1
+    assert exit_code == 2
 
     captured = capsys.readouterr()
     assert "--no-dry-run" in captured.err
@@ -271,6 +277,7 @@ def test_main__dry_run_with_outputs_succeeds(
         observed_input: Path,
         *,
         dry_run: bool,
+        timeout: float | None,
     ) -> CompletedProcess[str]:
         _write_run_payload(destination, payload, metadata)
         runs.append((limit, destination, observed_input, dry_run))
@@ -294,6 +301,58 @@ def test_main__dry_run_with_outputs_succeeds(
         assert limit == 2
         assert observed_input == input_csv
         assert dry_run is True
+
+    for directory in created_dirs:
+        assert not directory.exists()
+
+
+def test_main__activity_timeout_reports_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Timeouts during pipeline execution must be reported as errors."""
+
+    input_csv = tmp_path / "activity.csv"
+    input_csv.write_text("activity_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    created_dirs = _patch_mkdtemp(tmp_path, monkeypatch)
+
+    observed_timeouts: list[float] = []
+
+    def _fake_run(
+        cmd,
+        *,
+        text,
+        capture_output,
+        env,
+        cwd,
+        timeout,
+    ):
+        del cmd, text, capture_output, env, cwd
+        observed_timeouts.append(timeout)
+        raise subprocess.TimeoutExpired(
+            cmd="python",
+            timeout=timeout,
+            output="partial stdout",
+            stderr="partial stderr",
+        )
+
+    monkeypatch.setattr(check_determinism.subprocess, "run", _fake_run)
+
+    exit_code = check_determinism.main(
+        ["--input", str(input_csv), "--timeout", "123"]
+    )
+
+    assert exit_code == 1
+
+    captured = capsys.readouterr()
+    assert "first run timed out after 123.0 seconds" in captured.err
+    assert "partial stdout:" in captured.err
+    assert "partial stderr:" in captured.err
+    assert captured.out == ""
+
+    assert observed_timeouts == [123.0]
 
     for directory in created_dirs:
         assert not directory.exists()
@@ -398,10 +457,11 @@ def test_run_activity__passes_dry_run_flag(monkeypatch, tmp_path: Path) -> None:
 
     captured: dict[str, object] = {}
 
-    def _fake_run(cmd, *, text, capture_output, env, cwd):
+    def _fake_run(cmd, *, text, capture_output, env, cwd, timeout):
         captured["cmd"] = cmd
         captured["env"] = env
         captured["cwd"] = cwd
+        captured["timeout"] = timeout
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     monkeypatch.setattr(check_determinism.subprocess, "run", _fake_run)
@@ -414,7 +474,9 @@ def test_run_activity__passes_dry_run_flag(monkeypatch, tmp_path: Path) -> None:
         destination=destination,
         input_csv=input_csv,
         dry_run=True,
+        timeout=123,
     )
 
     assert "cmd" in captured, "subprocess.run must be invoked"
     assert captured["cmd"].count("--dry-run") == 1
+    assert captured["timeout"] == 123
