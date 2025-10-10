@@ -67,12 +67,12 @@ from library.pipelines.common import (
     add_pipeline_metadata,
 )
 from library.pipelines.common.metadata import get_pipeline_version
+from library.postprocessing import helpers as postprocessing_helpers
 from library.postprocessing.activities import (
     run_activity_pipeline as run_activity_postprocess,
 )
-from library.postprocessing.common import collect_postprocess_metrics
-from library.postprocessing import helpers as postprocessing_helpers
 from library.postprocessing.activity_extended import process_activity_extended
+from library.postprocessing.common import collect_postprocess_metrics
 from library.processing.activity import (
     apply_activity_annotations,
     compute_activity_bounds,
