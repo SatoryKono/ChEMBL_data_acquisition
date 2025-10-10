@@ -39,7 +39,7 @@ class DocumentCfg:
                 msg = "chunk_size must be a positive integer"
                 raise ValueError(msg)
         if self.sleep is not None:
-            if not isinstance(self.sleep, (int, float)) or isinstance(self.sleep, bool):
+            if not isinstance(self.sleep, int | float) or isinstance(self.sleep, bool):
                 msg = "sleep must be a real number when provided"
                 raise TypeError(msg)
             if self.sleep < 0:
@@ -53,7 +53,7 @@ class DocumentCfg:
                 msg = "workers must be a positive integer"
                 raise ValueError(msg)
         if self.timeout is not None:
-            if not isinstance(self.timeout, (int, float)) or isinstance(
+            if not isinstance(self.timeout, int | float) or isinstance(
                 self.timeout, bool
             ):
                 msg = "timeout must be a real number when provided"

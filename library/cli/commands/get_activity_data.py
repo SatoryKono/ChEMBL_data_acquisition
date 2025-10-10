@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 import importlib
 import sys
-from functools import wraps
 from collections.abc import Callable, Sequence
+from functools import wraps
 from types import ModuleType
 from typing import cast
 
@@ -12,11 +12,10 @@ from library.common.log import logger
 from library.common.logging_setup import Logger
 from library.config import Config
 from library.pipelines.activity.runner import (
-    MAX_ACTIVITY_CHUNK_SIZE,
-    MIN_ACTIVITY_TIMEOUT,
     ActivityCommandOptions,
-    register_activity_pipeline_hooks,
     resolve_activity_pipeline_hooks,
+)
+from library.pipelines.activity.runner import (
     run_activity_pipeline as _run_activity_pipeline,
 )
 
@@ -135,10 +134,10 @@ def _publish_compat_exports() -> ModuleType:
 
             return result
 
-        setattr(_emit_completion_message_with_skip, "_commands_skip_wrapper", True)
-        setattr(entrypoint, "_emit_completion_message", _emit_completion_message_with_skip)
+        _emit_completion_message_with_skip._commands_skip_wrapper = True
+        entrypoint._emit_completion_message = _emit_completion_message_with_skip
 
-    setattr(entrypoint, "_activity_cli_commands", entrypoint)
+    entrypoint._activity_cli_commands = entrypoint
     return entrypoint
 
 

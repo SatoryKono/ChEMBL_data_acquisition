@@ -29,8 +29,8 @@ import inspect
 import os
 import sys
 import tempfile
-from dataclasses import dataclass
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from itertools import chain, islice
 from numbers import Integral, Real
 from pathlib import Path
@@ -66,7 +66,8 @@ from library.integration import chembl_library as cl
 from library.orchestration import ETLContext
 from library.pipelines.common import PipelineRunResult, add_pipeline_metadata
 from library.pipelines.common.metadata import get_pipeline_version
-from library.pipelines.document import DocumentPipelineOptions, postprocessing as dp
+from library.pipelines.document import DocumentPipelineOptions
+from library.pipelines.document import postprocessing as dp
 from library.pipelines.document.pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
     DocumentQualityAccumulator,
@@ -81,16 +82,17 @@ from library.pipelines.document.service import (
     FallbackDoiMetrics,
     FallbackDoiState,
 )
+from library.postprocessing import document as document_export_postprocessing
 from library.postprocessing.common import collect_postprocess_metrics
 from library.postprocessing.common.logging import PipelineRunMetrics
 from library.postprocessing.common.types import SchemaValidationError, StepError
-from library.postprocessing import document as document_export_postprocessing
 from library.postprocessing.document import preprocess_documents_csv
 from library.postprocessing.documents import (
     run_document_pipeline as run_document_postprocess,
+)
+from library.postprocessing.documents import (
     steps as document_steps,
 )
-from library.postprocessing.documents import steps as document_steps
 from library.qa.reporting import build_table_quality_hook
 from library.qa.table_quality import TableQualityProfiler
 from library.reporting.run_manifest import (
@@ -717,7 +719,7 @@ def _finalise_export(
                 logger=logger,
                 extras=postprocess_extras,
             )
-        except (ImportError, AttributeError):
+        except ImportError:
             pass
         except (
             AttributeError,
