@@ -677,28 +677,20 @@ def _merge_pubchem_properties(
     preserve_mask = skip_mask | prefer_local_mask
     if preserve_mask.any():
         existing_columns = [
-            column
-            for column in PUBCHEM_COLUMNS
-            if column in frame.columns and column in pubchem_df.columns
+            column for column in PUBCHEM_COLUMNS if column in frame.columns
         ]
         if existing_columns:
             original_existing = frame[existing_columns].astype("string")
-            intersecting_columns = [
-                column for column in existing_columns if column in pubchem_df.columns
-            ]
-            if intersecting_columns:
-                pubchem_df[intersecting_columns] = (
-                    pubchem_df[intersecting_columns]
-                    .astype("string")
-                    .mask(preserve_mask, original_existing[intersecting_columns])
-                )
-            missing_columns = [
-                column
-                for column in existing_columns
-                if column not in pubchem_df.columns
-            ]
-            if missing_columns:
-                pubchem_df[missing_columns] = original_existing[missing_columns]
+            for column in existing_columns:
+                if column not in pubchem_df.columns:
+                    pubchem_df[column] = pd.Series(
+                        pd.NA, index=pubchem_df.index, dtype="string"
+                    )
+            pubchem_df[existing_columns] = (
+                pubchem_df[existing_columns]
+                .astype("string")
+                .mask(preserve_mask, original_existing)
+            )
 
     return pubchem_df.convert_dtypes()
 
