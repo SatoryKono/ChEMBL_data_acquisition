@@ -49,6 +49,15 @@ def default_output_path(
     """
 
     inp = Path(input_path)
+    stem = inp.stem
+    prefix = "output."
+    if stem.startswith(prefix):
+        stripped = stem
+        # Avoid generating names like ``output.output.<stem>`` when the
+        # source filename already carries the canonical prefix.
+        while stripped.startswith(prefix) and len(stripped) > len(prefix):
+            stripped = stripped[len(prefix) :]
+        stem = stripped or stem
 
     # Determine the stamp mode
     mode = stamp_mode or getattr(cfg, "output_stamp_mode", None) or "date"
@@ -71,7 +80,7 @@ def default_output_path(
 
     # Short-circuit for "omit" mode (no date in filename)
     if normalized_mode == "omit":
-        return Path(cfg.output_dir) / f"output.{inp.stem}.csv"
+        return Path(cfg.output_dir) / f"output.{stem}.csv"
 
     # For "require" mode, a date must be present, from caller
     if normalized_mode == "require" and date_str is None:
@@ -89,4 +98,4 @@ def default_output_path(
     if date_str is None:
         date_str = datetime.now(UTC).strftime("%Y%m%d")
 
-    return Path(cfg.output_dir) / f"output.{inp.stem}_{date_str}.csv"
+    return Path(cfg.output_dir) / f"output.{stem}_{date_str}.csv"
