@@ -174,6 +174,7 @@ class PipelineMetrics:
 class RunPipelineResult(int):
     """Return value exposing the exit code alongside output artefact paths."""
 
+    exit_code: int
     dataset_path: Path | None
     artifacts: StandardOutputArtifacts | None
 
@@ -184,6 +185,7 @@ class RunPipelineResult(int):
         artifacts: StandardOutputArtifacts | None = None,
     ) -> "RunPipelineResult":
         obj = int.__new__(cls, exit_code)
+        obj.exit_code = exit_code
         obj.dataset_path = dataset_path
         obj.artifacts = artifacts
         return obj
