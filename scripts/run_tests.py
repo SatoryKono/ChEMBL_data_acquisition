@@ -8,6 +8,7 @@ import logging
 import os
 import platform
 import shlex
+import shutil
 import subprocess
 import sys
 from collections.abc import Mapping, MutableMapping, Sequence
@@ -98,15 +99,40 @@ def _relative_to_root(path: Path) -> str:
         return str(path)
 
 
+def _clear_directory(directory: Path) -> None:
+    """Remove all files and subdirectories inside ``directory``."""
+
+    if not directory.exists():
+        return
+
+    for entry in directory.iterdir():
+        try:
+            if entry.is_dir():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
+        except FileNotFoundError:  # pragma: no cover - race condition safety
+            continue
+
+
 def ensure_output_directories(report_file: Path, summary_file: Path) -> None:
     """Ensure directories for structured outputs exist."""
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    if COVERAGE_DIR.exists():
+        _clear_directory(COVERAGE_DIR)
     COVERAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+    if COVERAGE_HTML.exists():
+        _clear_directory(COVERAGE_HTML)
     COVERAGE_HTML.mkdir(parents=True, exist_ok=True)
 
     for path in (report_file, summary_file, RAW_REPORT_FILE):
-        path.parent.mkdir(parents=True, exist_ok=True)
+        parent = path.parent
+        if parent not in {REPORTS_DIR, COVERAGE_DIR, COVERAGE_HTML} and parent.exists():
+            _clear_directory(parent)
+        parent.mkdir(parents=True, exist_ok=True)
         if path.exists():
             try:
                 path.unlink()
