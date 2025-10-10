@@ -41,7 +41,7 @@ def collect_postprocess_metrics(
     if not output_path.exists():
         logger.warning(
             f"{event_prefix}_report_missing_output",
-            output=str(output_path),
+            output_postprocessed=str(output_path),
         )
         return None, None
 
@@ -56,7 +56,7 @@ def collect_postprocess_metrics(
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning(
             f"{event_prefix}_report_load_failed",
-            output=str(output_path),
+            output_postprocessed=str(output_path),
             error=str(exc),
         )
         return None, None
@@ -72,7 +72,7 @@ def collect_postprocess_metrics(
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning(
             f"{event_prefix}_report_generation_failed",
-            output=str(output_path),
+            output_postprocessed=str(output_path),
             error=str(exc),
         )
         return None, None
@@ -82,7 +82,7 @@ def collect_postprocess_metrics(
     payload = logging_utils.build_report_payload(
         table=table,
         metrics=metrics,
-        output_path=str(output_path),
+        output_postprocessed=str(output_path),
         extras=report_extras,
     )
     logging_utils.dump_report(report_path, payload)
