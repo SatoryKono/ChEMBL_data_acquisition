@@ -16,7 +16,7 @@ endif
 
 init: $(PYTHON_BIN)
 
-$(PYTHON_BIN): requirements.txt pyproject.toml
+$(PYTHON_BIN): requirements.txt pyproject.toml $(wildcard .python-version)
 	@if [ -f .python-version ]; then \
 		$(PYTHON) -c "import pathlib, sys; expected = pathlib.Path('.python-version').read_text().strip(); actual = '.'.join(map(str, sys.version_info[:3])); assert actual == expected, f'Python {expected} required, but {actual} found'"; \
 	fi
