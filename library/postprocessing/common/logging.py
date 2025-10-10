@@ -285,14 +285,14 @@ def build_report_payload(
     table: str,
     metrics: PipelineRunMetrics,
     *,
-    output_path: str | None = None,
+    output_postprocessed: str | None = None,
     extras: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return a JSON payload representing the collected metrics."""
 
     payload = {
         "table": table,
-        "output_path": output_path,
+        "output_postprocessed": output_postprocessed,
         "metrics": metrics.to_dict(),
     }
     if extras:

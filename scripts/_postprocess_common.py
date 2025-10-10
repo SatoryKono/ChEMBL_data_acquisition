@@ -198,7 +198,7 @@ def export_postprocess_frame(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     logger.info(
         f"{prefix}_export_start",
-        output=str(output_path),
+        output_postprocessed=str(output_path),
         rows=int(df.shape[0]),
         columns=int(df.shape[1]),
         encoding=csv_cfg.encoding,
@@ -222,7 +222,9 @@ def export_postprocess_frame(
         chunksize=csv_cfg.chunksize,
     )
 
-    logger.info(f"{prefix}_export_done", output=str(output_path))
+    logger.info(
+        f"{prefix}_export_done", output_postprocessed=str(output_path)
+    )
     return output_path
 
 
@@ -245,7 +247,7 @@ def generate_metrics_report(
         payload = build_report_payload(
             table=table,
             metrics=pipeline_metrics,
-            output_path=str(output_path),
+            output_postprocessed=str(output_path),
             extras=extras,
         )
         dump_report(report_path, payload)
@@ -254,6 +256,7 @@ def generate_metrics_report(
             report=str(report_path),
             rows=pipeline_metrics.output_rows,
             columns=pipeline_metrics.output_columns,
+            output_postprocessed=str(output_path),
         )
         return pipeline_metrics, report_path
 
@@ -274,9 +277,12 @@ def generate_metrics_report(
             report=str(report_path),
             rows=metrics.output_rows,
             columns=metrics.output_columns,
+            output_postprocessed=str(output_path),
         )
     else:
-        logger.info(f"{prefix}_report_skipped", output=str(output_path))
+        logger.info(
+            f"{prefix}_report_skipped", output_postprocessed=str(output_path)
+        )
     return metrics, report_path
 
 
