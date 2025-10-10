@@ -48,6 +48,9 @@ from .config import Config, ConfigError, ensure_dirs, print_config
 from .config.loader import DEFAULT_CONFIG_PATH
 from .metadata import Stats, file_sha256, record_quality_failure, write_meta_yaml
 from .sidecar import SidecarErrors
+from .table_quality import TableQualityProfiler
+from .io import save_standard_outputs, StandardOutputArtifacts
+from .utils.qc_report import build_reports_from_profiler
 
 __all__ = [
     "PipelineError",
@@ -66,6 +69,7 @@ __all__ = [
     "Validator",
     "Writer",
     "normalise_definition",
+    "RunPipelineResult",
 ]
 
 
@@ -144,6 +148,26 @@ class PipelineMetrics:
         if extra:
             stats.update(extra)
         return stats
+
+
+class RunPipelineResult(int):
+    """Return value exposing the exit code alongside output artefact paths."""
+
+    __slots__ = ("dataset_path", "artifacts")
+
+    dataset_path: Path | None
+    artifacts: StandardOutputArtifacts | None
+
+    def __new__(
+        cls,
+        exit_code: int,
+        dataset_path: Path | None,
+        artifacts: StandardOutputArtifacts | None = None,
+    ) -> "RunPipelineResult":
+        obj = int.__new__(cls, exit_code)
+        obj.dataset_path = dataset_path
+        obj.artifacts = artifacts
+        return obj
 
 
 def _callable_name(func: Callable[..., object]) -> str:
@@ -387,6 +411,51 @@ def _as_iterable(
         yield from source
 
 
+def _resolve_standard_output_naming(
+    output_path: Path,
+    *,
+    cfg: Config | None,
+    command: str | None,
+    invocation: Sequence[str],
+) -> tuple[str, str]:
+    """Return ``(table_name, date_tag)`` derived from legacy output paths."""
+
+    stem = output_path.stem
+    remainder = stem
+    if remainder.startswith("output."):
+        remainder = remainder.split("output.", 1)[1]
+
+    table_name = remainder
+    date_tag: str | None = None
+    if "_" in remainder:
+        candidate_name, candidate_suffix = remainder.rsplit("_", 1)
+        if candidate_suffix.isdigit():
+            table_name = candidate_name or table_name
+            date_tag = candidate_suffix
+        else:
+            table_name = remainder
+    if not table_name:
+        table_name = "dataset"
+
+    if date_tag is None:
+        io_cfg = getattr(cfg, "io", None) if cfg is not None else None
+        default_prefix = getattr(io_cfg, "default_date_prefix", None)
+        seed_parts: list[str] = []
+        if command:
+            seed_parts.append(command)
+        if invocation:
+            seed_parts.extend(invocation)
+        seed_parts.append(str(output_path))
+        generated_at = compute_generated_at(
+            date_token=default_prefix,
+            run_id=str(output_path),
+            seed_parts=seed_parts,
+        )
+        date_tag = generated_at.split("T", 1)[0].replace("-", "")
+
+    return table_name, date_tag
+
+
 def run_pipeline(
     *,
     definition: PipelineDefinition | None = None,
@@ -395,8 +464,10 @@ def run_pipeline(
     failure_path: Path,
     cfg: Config | None = None,
     logger: Logger | None = None,
+    emit_standard_outputs: bool = True,
+    emit_legacy_artifacts: bool = True,
     **legacy_kwargs: object,
-) -> int:
+) -> RunPipelineResult:
     """Execute a data pipeline and write deterministic CSV output.
 
     Parameters
@@ -418,19 +489,34 @@ def run_pipeline(
         Optional application configuration forwarded to sidecar metadata.
     logger:
         Optional logger.  Defaults to :data:`library.common.log.logger` when omitted.
+    emit_standard_outputs:
+        When ``True`` the validated dataset is materialised via
+        :func:`library.io.save_standard_outputs` together with QC reports.
+    emit_legacy_artifacts:
+        When ``True`` the historical deterministic writer and sidecar artefacts are
+        produced.
     legacy_kwargs:
         Deprecated keyword arguments matching the historical signature. When
         provided they are converted into a :class:`PipelineDefinition`.
 
     Returns
     -------
-    int
-        Zero on success, one when validation fails or ``writer`` raises an
-        exception.  ``PipelineError`` exceptions raised by ``fetcher`` are
+    RunPipelineResult
+        Exit code enriched with the dataset path and optional standard output
+        artefacts.  Zero indicates success while non-zero codes signal validation
+        or writer failures. ``PipelineError`` exceptions raised by ``fetcher`` are
         converted into a non-zero return code.
     """
 
     use_logger = logger or default_logger
+
+    standard_outputs_enabled = bool(emit_standard_outputs)
+    legacy_outputs_enabled = bool(emit_legacy_artifacts)
+    if not standard_outputs_enabled and not legacy_outputs_enabled:
+        raise ValueError(
+            "run_pipeline requires at least one of emit_standard_outputs or "
+            "emit_legacy_artifacts to be enabled"
+        )
 
     definition = normalise_definition(definition, legacy_kwargs)
 
@@ -449,6 +535,13 @@ def run_pipeline(
     invocation_tuple = tuple(str(part) for part in (definition.invocation or ()))
     command = definition.command
     dictionary_resources = tuple(definition.dictionary_resources or ()) or None
+
+    profiler: TableQualityProfiler | None = (
+        TableQualityProfiler() if standard_outputs_enabled else None
+    )
+    collected_chunks: list[pd.DataFrame] | None = [] if standard_outputs_enabled else None
+    standard_artifacts: StandardOutputArtifacts | None = None
+    dataset_path: Path | None = None
 
     # NOTE:
     # ``output_path`` and ``failure_path`` are provided as keyword-only
@@ -489,10 +582,10 @@ def run_pipeline(
     try:
         iterable = _as_iterable(fetcher())
     except PipelineError:
-        return 1
+        return RunPipelineResult(1, None)
     except Exception as exc:  # pragma: no cover - exercised in integration tests
         use_logger.error("fetch_failed", error=str(exc), exc_info=exc)
-        return 1
+        return RunPipelineResult(1, None)
 
     class _AbortPipeline(RuntimeError):
         """Internal exception raised to abort processing early."""
@@ -760,47 +853,64 @@ def run_pipeline(
             Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
         return 1
 
+    prepared_first: pd.DataFrame | None = None
     if first_chunk is not None:
-        first_chunk = _prepare_chunk(first_chunk)
+        prepared_first = _prepare_chunk(first_chunk)
+        if profiler is not None:
+            profiler.consume(prepared_first)
+        if collected_chunks is not None:
+            collected_chunks.append(prepared_first)
 
     def _iter_chunks() -> Iterator[pd.DataFrame]:
-        if first_chunk is not None:
-            yield first_chunk
+        if prepared_first is not None:
+            yield prepared_first
         for chunk in chunk_iterator:
-            yield _prepare_chunk(chunk)
+            prepared = _prepare_chunk(chunk)
+            if profiler is not None:
+                profiler.consume(prepared)
+            if collected_chunks is not None:
+                collected_chunks.append(prepared)
+            yield prepared
 
     csv_path: Path | None = None
+    chunk_stream = _iter_chunks()
     try:
-        csv_path = writer(
-            _iter_chunks(),
-            output_path,
-            col_order or None,
-            resolved_keys,
-        )
+        if legacy_outputs_enabled:
+            csv_path = writer(
+                chunk_stream,
+                output_path,
+                col_order or None,
+                resolved_keys,
+            )
+        else:
+            for _ in chunk_stream:
+                pass
     except _AbortPipeline as abort_exc:
         if total_failures:
             errors.save(failure_path, cfg=cfg)
         else:
             failure_path.unlink(missing_ok=True)
             Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
-        output_path.unlink(missing_ok=True)
-        Path(str(output_path) + ".meta.yaml").unlink(missing_ok=True)
-        return abort_exc.code
+        if legacy_outputs_enabled:
+            output_path.unlink(missing_ok=True)
+            Path(str(output_path) + ".meta.yaml").unlink(missing_ok=True)
+        return RunPipelineResult(abort_exc.code, dataset_path)
     except Exception as exc:
         if total_failures:
             errors.save(failure_path, cfg=cfg)
         else:
             failure_path.unlink(missing_ok=True)
             Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
-        output_path.unlink(missing_ok=True)
-        Path(str(output_path) + ".meta.yaml").unlink(missing_ok=True)
+        if legacy_outputs_enabled:
+            output_path.unlink(missing_ok=True)
+            Path(str(output_path) + ".meta.yaml").unlink(missing_ok=True)
         use_logger.error(
             "write_fail",
             error=str(exc),
             path=str(output_path),
             exc_info=exc,
         )
-        return 1
+        return RunPipelineResult(1, dataset_path)
 
     if optional_column_order:
         present_columns.update(optional_cols_added)
@@ -817,11 +927,66 @@ def run_pipeline(
             columns=sorted(missing_optional),
         )
 
-    if csv_path is None:
+    if standard_outputs_enabled and exit_code == 0:
+        frames_to_merge = list(collected_chunks or [])
+        if frames_to_merge:
+            dataset_frame = pd.concat(frames_to_merge, ignore_index=True)
+        else:
+            empty_columns = list(col_order) if col_order else sorted(all_columns)
+            dataset_frame = pd.DataFrame(columns=empty_columns)
+        if col_order:
+            dataset_frame = dataset_frame.reindex(columns=col_order)
+        elif all_columns and list(dataset_frame.columns) != sorted(all_columns):
+            dataset_frame = dataset_frame.reindex(columns=sorted(all_columns))
+
+        active_profiler = profiler or TableQualityProfiler()
+        quality_report, correlation_report = build_reports_from_profiler(
+            active_profiler
+        )
+
+        io_cfg = getattr(cfg, "io", None) if cfg is not None else None
+        if io_cfg is None:
+            raise ValueError(
+                "emit_standard_outputs requires a configuration with an 'io' section"
+            )
+
+        table_name, date_tag = _resolve_standard_output_naming(
+            output_path,
+            cfg=cfg,
+            command=command_str,
+            invocation=invocation_tuple,
+        )
+
+        standard_artifacts = save_standard_outputs(
+            dataset_frame,
+            quality_report,
+            correlation_report,
+            table_name=table_name,
+            date_tag=date_tag,
+            cfg=io_cfg,
+        )
+        use_logger.info(
+            "standard_outputs_written",
+            dataset=str(standard_artifacts.dataset),
+            quality_report=str(standard_artifacts.quality_report),
+            correlation_report=str(standard_artifacts.correlation_report),
+        )
+        dataset_path = standard_artifacts.dataset
+
+    if dataset_path is None and csv_path is not None:
+        dataset_path = csv_path
+
+    if legacy_outputs_enabled and csv_path is None:
         use_logger.error(
             "write_fail", error="writer returned None", path=str(output_path)
         )
-        return 1
+        return RunPipelineResult(1, dataset_path)
+
+    if dataset_path is None:
+        use_logger.error(
+            "write_fail", error="no dataset produced", path=str(output_path)
+        )
+        return RunPipelineResult(1, dataset_path)
 
     if stats_extra_config is None:
         extra_stats: StatsExtraMapping | None = None
@@ -834,9 +999,10 @@ def run_pipeline(
         extra_stats = dict(cast(StatsExtra | StatsExtraMapping, stats_extra_config))
 
     stats = metrics.build_stats(
-        output_sha256=file_sha256(csv_path),
+        output_sha256=file_sha256(dataset_path),
         extra=extra_stats,
     )
+    stats["dataset_path"] = str(dataset_path)
 
     if stats_callback is not None:
         try:
@@ -846,50 +1012,53 @@ def run_pipeline(
 
     resolved_invocation = invocation_tuple
 
-    extra_metadata: dict[str, object] = {}
-    if failed_metadata_hooks:
-        extra_metadata["metadata_hook_failures"] = sorted(failed_metadata_hooks)
+    meta_path: Path | None = None
+    if legacy_outputs_enabled and csv_path is not None:
+        extra_metadata: dict[str, object] = {}
+        if failed_metadata_hooks:
+            extra_metadata["metadata_hook_failures"] = sorted(failed_metadata_hooks)
 
-    meta_path = write_meta_yaml(
-        csv_path=csv_path,
-        command=command_str,
-        config_subset=config_snapshot,
-        inputs=inputs,
-        stats=stats,
-        schema=schema_name,
-        invocation=resolved_invocation or None,
-        extra_metadata=extra_metadata or None,
-        dictionary_resources=dictionary_resources,
-    )
-
-    doc_quality_cfg = getattr(getattr(cfg, "system", None), "doc_quality", None)
-    fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
-
-    try:
-        table_quality(csv_path)
-    except Exception as exc:
-        tb = traceback.format_exc()
-        record_quality_failure(
-            meta_path,
-            error=str(exc),
-            error_type=exc.__class__.__name__,
-            traceback=tb,
-            fatal=fatal_quality_error,
+        meta_path = write_meta_yaml(
+            csv_path=csv_path,
+            command=command_str,
+            config_subset=config_snapshot,
+            inputs=inputs,
+            stats=stats,
+            schema=schema_name,
+            invocation=resolved_invocation or None,
+            extra_metadata=extra_metadata or None,
+            dictionary_resources=dictionary_resources,
         )
-        log_kwargs = {
-            "error": str(exc),
-            "error_type": exc.__class__.__name__,
-            "path": str(csv_path),
-            "traceback": tb,
-        }
-        if fatal_quality_error:
-            log_kwargs["fatal"] = True
-            exit_code = 1
-        use_logger.warning("quality_report_failed", **log_kwargs)
+
+        doc_quality_cfg = getattr(getattr(cfg, "system", None), "doc_quality", None)
+        fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
+
+        try:
+            table_quality(csv_path)
+        except Exception as exc:
+            tb = traceback.format_exc()
+            record_quality_failure(
+                meta_path,
+                error=str(exc),
+                error_type=exc.__class__.__name__,
+                traceback=tb,
+                fatal=fatal_quality_error,
+            )
+            log_kwargs = {
+                "error": str(exc),
+                "error_type": exc.__class__.__name__,
+                "path": str(csv_path),
+                "traceback": tb,
+            }
+            if fatal_quality_error:
+                log_kwargs["fatal"] = True
+                exit_code = 1
+            use_logger.warning("quality_report_failed", **log_kwargs)
 
     if exit_code == 0:
-        use_logger.info("write_done", rows=metrics.rows_kept, path=str(csv_path))
-    return exit_code
+        write_path = dataset_path or csv_path or output_path
+        use_logger.info("write_done", rows=metrics.rows_kept, path=str(write_path))
+    return RunPipelineResult(exit_code, dataset_path, standard_artifacts)
 
 
 def build_parser() -> argparse.ArgumentParser:

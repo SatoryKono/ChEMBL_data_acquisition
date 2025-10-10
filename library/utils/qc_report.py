@@ -96,6 +96,36 @@ def _build_reports_from_profiler(
     return quality_report, numeric_candidates
 
 
+def build_reports_from_profiler(
+    profiler: TableQualityProfiler,
+    *,
+    correlation_method: str = "pearson",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return QC and correlation reports derived from ``profiler``.
+
+    Parameters
+    ----------
+    profiler:
+        Populated :class:`~library.table_quality.TableQualityProfiler` instance.
+    correlation_method:
+        Pandas correlation method forwarded to :meth:`pandas.DataFrame.corr`.
+
+    Returns
+    -------
+    tuple[pandas.DataFrame, pandas.DataFrame]
+        Pair of quality summary and correlation matrix DataFrames.
+    """
+
+    quality_report, numeric_candidates = _build_reports_from_profiler(profiler)
+    if numeric_candidates:
+        correlation_report = pd.DataFrame(numeric_candidates).corr(
+            method=correlation_method
+        )
+    else:
+        correlation_report = pd.DataFrame()
+    return quality_report, correlation_report
+
+
 def build_qc_summary(
     frame: pd.DataFrame,
     *,
