@@ -1092,14 +1092,14 @@ def finalize_output(
     exclude_columns = getattr(doc_quality_cfg, "exclude_columns", None)
     sample_rows = getattr(doc_quality_cfg, "sample_rows", None)
 
-    quality_report = qc_report.build_qc_summary(
+    quality_report = qc_report.generate_qc_report(
         dataset_frame,
         table_name=table_name,
         include_columns=include_columns,
         exclude_columns=exclude_columns,
         sample_rows=sample_rows,
     )
-    correlation_report = data_correlation.build_correlation_matrix(
+    correlation_report = data_correlation.generate_correlation_report(
         dataset_frame,
         table_name=table_name,
         include_columns=include_columns,
@@ -1112,8 +1112,8 @@ def finalize_output(
     try:
         artifacts = io.save_standard_outputs(
             dataset_frame,
-            quality_report,
             correlation_report,
+            quality_report,
             table_name=table_name,
             date_tag=date_tag,
             cfg=output_cfg,

@@ -97,3 +97,26 @@ def build_correlation_matrix(
         return pd.DataFrame()
 
     return pd.DataFrame(numeric_candidates).corr(method=method)
+
+
+def generate_correlation_report(
+    frame: pd.DataFrame,
+    *,
+    table_name: str,
+    include_columns: Sequence[str] | None = None,
+    exclude_columns: Sequence[str] | None = None,
+    sample_rows: int | None = None,
+    method: str = "pearson",
+    profiler: TableQualityProfilerLike | None = None,
+) -> pd.DataFrame:
+    """Return the numeric correlation matrix for ``frame`` using defaults."""
+
+    return build_correlation_matrix(
+        frame,
+        table_name=table_name,
+        include_columns=include_columns,
+        exclude_columns=exclude_columns,
+        sample_rows=sample_rows,
+        method=method,
+        profiler=profiler,
+    )

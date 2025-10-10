@@ -215,3 +215,28 @@ def build_qc_summary(
 
     quality_report, _ = _build_reports_from_profiler(profiler_instance)
     return quality_report
+
+
+def generate_qc_report(
+    frame: pd.DataFrame,
+    *,
+    table_name: str,
+    include_columns: Sequence[str] | None = None,
+    exclude_columns: Sequence[str] | None = None,
+    sample_rows: int | None = None,
+    profiler: TableQualityProfilerLike | None = None,
+) -> pd.DataFrame:
+    """Return a deterministic quality-control report for ``frame``.
+
+    The helper mirrors :func:`build_qc_summary` while providing a concise
+    interface for callers that only require the default configuration.
+    """
+
+    return build_qc_summary(
+        frame,
+        table_name=table_name,
+        include_columns=include_columns,
+        exclude_columns=exclude_columns,
+        sample_rows=sample_rows,
+        profiler=profiler,
+    )

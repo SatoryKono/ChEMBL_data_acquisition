@@ -1007,8 +1007,8 @@ def run_pipeline(
 
         standard_artifacts = save_standard_outputs(
             dataset_frame,
-            quality_report,
             correlation_report,
+            quality_report,
             table_name=table_name,
             date_tag=date_tag,
             cfg=io_cfg,

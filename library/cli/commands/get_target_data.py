@@ -72,7 +72,8 @@ from library.pipelines.target import protein_classification as pc
 from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
 from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS, ModeDefaults
 from library.qa.reporting import build_table_quality_hook, is_quality_enabled
-from library.utils import build_correlation_matrix, build_qc_summary
+from library.utils.data_correlation import generate_correlation_report
+from library.utils.qc_report import generate_qc_report
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
 from library.validation import ValidationResult, validate_targets
@@ -3740,18 +3741,18 @@ def validate_and_write(
         sortable_keys = [col for col in key_columns if col in final_df.columns]
         if sortable_keys:
             final_df = final_df.sort_values(by=sortable_keys).reset_index(drop=True)
-    quality_summary = build_qc_summary(
+    quality_summary = generate_qc_report(
         final_df,
         table_name=inferred_table_name,
     )
-    correlation_matrix = build_correlation_matrix(
+    correlation_matrix = generate_correlation_report(
         final_df,
         table_name=inferred_table_name,
     )
     artifacts = io.save_standard_outputs(
         final_df,
-        quality_summary,
         correlation_matrix,
+        quality_summary,
         table_name=inferred_table_name,
         date_tag=inferred_date_tag,
         cfg=output_io_cfg,

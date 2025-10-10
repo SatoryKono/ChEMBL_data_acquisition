@@ -19,26 +19,26 @@ def _sample_frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
             "value": [1, 2],
         }
     )
-    quality = pd.DataFrame(
-        {
-            "column": ["identifier", "value"],
-            "non_null": [2, 2],
-        }
-    )
     correlation = pd.DataFrame(
         {
             "identifier": [1.0, 0.0],
             "value": [0.0, 1.0],
         }
     )
-    return dataset, quality, correlation
+    quality = pd.DataFrame(
+        {
+            "column": ["identifier", "value"],
+            "non_null": [2, 2],
+        }
+    )
+    return dataset, correlation, quality
 
 
 @pytest.mark.unit
 def test_save_standard_outputs__writes_expected_csvs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _sample_frames
 ) -> None:
-    dataset, quality, correlation = _sample_frames
+    dataset, correlation, quality = _sample_frames
 
     captured: dict[str, pd.DataFrame] = {}
 
@@ -62,35 +62,35 @@ def test_save_standard_outputs__writes_expected_csvs(
 
     artefacts = output_writer.save_standard_outputs(
         dataset,
-        quality,
         correlation,
+        quality,
         table_name="documents",
         date_tag="20240101",
         cfg=cfg,
     )
 
-    expected_names = [
-        "output.documents_20240101.csv",
-        "output.documents_20240101_quality_report_table.csv",
-        "output.documents_20240101_data_correlation_report_table.csv",
-    ]
+    expected_names = {
+        "dataset": "output.documents_20240101.csv",
+        "correlation": "_output.documents_20240101_data_correlation_report.csv",
+        "quality": "_output.documents_20240101_quality_report.csv",
+    }
 
-    assert sorted(captured) == expected_names
-    assert artefacts.dataset.name == expected_names[0]
-    assert artefacts.quality_report.name == expected_names[1]
-    assert artefacts.correlation_report.name == expected_names[2]
+    assert set(captured) == set(expected_names.values())
+    assert artefacts.dataset.name == expected_names["dataset"]
+    assert artefacts.correlation_report.name == expected_names["correlation"]
+    assert artefacts.quality_report.name == expected_names["quality"]
 
     output_files = sorted(p.name for p in tmp_path.glob("*.csv"))
-    assert output_files == expected_names
+    assert set(output_files) == set(expected_names.values())
 
     pd.testing.assert_frame_equal(
         pd.read_csv(artefacts.dataset), dataset
     )
     pd.testing.assert_frame_equal(
-        pd.read_csv(artefacts.quality_report), quality
+        pd.read_csv(artefacts.correlation_report), correlation
     )
     pd.testing.assert_frame_equal(
-        pd.read_csv(artefacts.correlation_report), correlation
+        pd.read_csv(artefacts.quality_report), quality
     )
 
 
@@ -99,14 +99,14 @@ def test_save_standard_outputs__fails_when_directory_missing(tmp_path: Path) -> 
     cfg = IoCfg(output_dir=tmp_path / "missing", exist_ok=False)
 
     dataset = pd.DataFrame({"id": [1]})
-    quality = pd.DataFrame({"column": ["id"]})
     correlation = pd.DataFrame({"id": [1.0]})
+    quality = pd.DataFrame({"column": ["id"]})
 
     with pytest.raises(FileNotFoundError):
         output_writer.save_standard_outputs(
             dataset,
-            quality,
             correlation,
+            quality,
             table_name="demo",
             date_tag="20240101",
             cfg=cfg,
