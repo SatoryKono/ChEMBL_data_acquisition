@@ -20,6 +20,7 @@ from library.cli import (
     configure_logger,
 )
 from library.common.log import logger
+from library.common.metadata import Stats, file_sha256, write_meta_yaml
 from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.pipelines.document.type_classifier import compute_scores, decide_label
 
@@ -224,7 +225,38 @@ def main(argv: Sequence[str] | None = None) -> int:
         thresholds=cfg.doc_type.thresholds,
     )
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    df_out.to_csv(output, index=False, sep=args.sep, encoding=args.encoding)
+    output_path = io.write_csv(
+        df_out,
+        output,
+        cfg=cfg,
+        sep=args.sep,
+        encoding=args.encoding,
+        key_cols=["chembl_id"],
+    )
+    rows_total = len(df_in.index)
+    rows_kept = len(df_out.index)
+    stats: Stats = {
+        "rows_total": rows_total,
+        "rows_kept": rows_kept,
+        "rows_dropped": rows_total - rows_kept,
+        "output_sha256": file_sha256(output_path),
+    }
+    invocation = list(argv) if argv is not None else None
+    write_meta_yaml(
+        output_path,
+        command="library.utils.cli_tools.get_document_type",
+        config_subset={
+            "doc_type": cfg.doc_type.to_dict(),
+            "io": {
+                "csv_sep": args.sep,
+                "csv_encoding": args.encoding,
+            },
+        },
+        inputs={"input_csv": str(args.input_csv)},
+        stats=stats,
+        schema="document_type",
+        invocation=invocation,
+    )
     logger_inst.info("pipeline_done", run_id=log_cfg.run_id)
     return 0
 
