@@ -4,9 +4,7 @@ import argparse
 import importlib
 from collections.abc import Callable, Sequence
 from types import ModuleType
-from typing import cast
-
-from library.cli.entrypoints import activity as _activity_entrypoint
+from typing import TYPE_CHECKING, cast
 from library.common.log import logger
 from library.common.logging_setup import Logger
 from library.config import Config
@@ -65,10 +63,16 @@ def run_activity_pipeline(
     )
 
 
+if TYPE_CHECKING:
+    from library.cli.entrypoints import activity as _activity_entrypoint
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Execute the activity pipeline CLI."""
 
-    return _activity_entrypoint.main(argv)
+    from library.cli.entrypoints import activity as activity_entrypoint
+
+    return activity_entrypoint.main(argv)
 
 
 __all__ = [
