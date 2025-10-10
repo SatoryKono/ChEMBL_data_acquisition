@@ -84,6 +84,7 @@ from library.pipelines.document.service import (
 from library.postprocessing.common import collect_postprocess_metrics
 from library.postprocessing.common.logging import PipelineRunMetrics
 from library.postprocessing.common.types import SchemaValidationError, StepError
+from library.postprocessing import document as document_export_postprocessing
 from library.postprocessing.document import preprocess_documents_csv
 from library.postprocessing.documents import (
     run_document_pipeline as run_document_postprocess,
@@ -700,6 +701,10 @@ def _finalise_export(
 
     if expected_postprocess_path.exists() and not rerun_postprocess:
         postprocessed_path = expected_postprocess_path
+        logger.info(
+            "document_export_postprocess_written",
+            path=str(postprocessed_path),
+        )
     else:
         postprocess_extras: Mapping[str, object] | None = None
         if partial_run:
@@ -712,6 +717,7 @@ def _finalise_export(
                 extras=postprocess_extras,
             )
         except (
+            AttributeError,
             SchemaValidationError,
             StepError,
             OSError,
@@ -724,12 +730,14 @@ def _finalise_export(
                 exc_info=exc,
                 path=str(csv_path),
             )
-            exit_code = 1
-        logger.info(
-            "document_export_postprocess_written",
-            path=str(postprocessed_path),
-        )
-    else:
+            postprocessed_path = None
+        else:
+            logger.info(
+                "document_export_postprocess_written",
+                path=str(postprocessed_path),
+            )
+
+    if postprocessed_path is None:
         try:
             postprocessed_path = document_export_postprocessing.postprocess_export_file(
                 csv_path,
