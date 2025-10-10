@@ -40,6 +40,7 @@ class ActivityPipelineOptions:
     dry_run: bool = False
     skip_existing: bool = False
     force: bool = False
+    emit_legacy_artifacts: bool = False
 
 
 def _update_activity_config(
@@ -100,6 +101,7 @@ def run_pipeline(config: Config, options: ActivityPipelineOptions) -> PipelineRu
         dry_run=options.dry_run,
         skip_existing=options.skip_existing,
         force=options.force,
+        emit_legacy_artifacts=options.emit_legacy_artifacts,
     )
 
     exit_code = run_activity_pipeline(cfg, helper_options)

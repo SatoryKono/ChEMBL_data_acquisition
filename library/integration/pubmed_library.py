@@ -406,7 +406,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         key_columns=["PubMed.PMID"],
         table_quality=table_quality,
     )
-    exit_code = run_pipeline(
+    execution = run_pipeline(
         definition=definition,
         fetcher=fetcher,
         output_path=output_path,
@@ -414,6 +414,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         cfg=cfg,
         logger=logger,
     )
+    exit_code = int(execution.exit_code)
+    dataset_path = execution.dataset_path or output_path
+    output_path = Path(dataset_path)
     if output_path.exists():
         rows_total = stats_tracker["rows_total"]
         rows_kept = stats_tracker["rows_kept"]
