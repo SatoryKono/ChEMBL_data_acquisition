@@ -79,8 +79,9 @@ def run_activity_pipeline(
             fetch_failure_path.unlink(missing_ok=True)
             Path(f"{fetch_failure_path}.meta.yaml").unlink(missing_ok=True)
 
-    exit_code = int(execution.exit_code)
-    dataset_path = execution.dataset_path or output_path
+    exit_code_attr = getattr(execution, "exit_code", None)
+    exit_code = int(exit_code_attr if exit_code_attr is not None else execution)
+    dataset_path = getattr(execution, "dataset_path", None) or output_path
     reason = None if exit_code == 0 else "pipeline_failed"
     written = True if exit_code == 0 else None
     return PipelineRunResult(
