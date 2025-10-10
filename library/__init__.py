@@ -24,6 +24,7 @@ from .parser_schema import CSVExportArgs
 
 _LAZY_SUBMODULES = {
     "io",
+    "postprocess",
     "qa",
     "schemas",
     "validation",
@@ -76,6 +77,7 @@ __all__ = [
     "UNKNOWN_TERMS",
     "compute_scores",
     "decide_label",
+    "postprocess",
     "io",
     "qa",
     "schemas",
