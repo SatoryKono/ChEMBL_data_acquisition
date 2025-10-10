@@ -469,11 +469,15 @@ def _iter_name_tokens(value: object, *, split: bool) -> Iterable[str]:
     return tokens
 
 
-def _normalise_series(series: pd.Series | None) -> pd.Series:
+def _normalise_series(
+    series: pd.Series | None, *, index: pd.Index | None = None
+) -> pd.Series:
     """Return a ``StringDtype`` series mirroring ``helpers.normalise_text``."""
 
     if series is None:
-        return pd.Series(dtype="string")
+        if index is None:
+            return pd.Series(dtype="string")
+        return pd.Series("", index=index, dtype="string")
 
     result = series.astype("string")
     result = result.fillna("")
@@ -491,12 +495,16 @@ def _build_names_table(frame: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=TARGET_NAMES_COLUMNS, dtype="string")
 
     column_set = set(frame.columns)
-    target_ids = _normalise_series(frame.get("target_chembl_id"))
+    target_ids = _normalise_series(
+        frame.get("target_chembl_id"), index=frame.index
+    )
     valid_mask = target_ids != ""
     if not bool(valid_mask.any()):
         return pd.DataFrame(columns=TARGET_NAMES_COLUMNS, dtype="string")
 
-    uniprot_ids = _normalise_series(frame.get("uniprot_id_primary"))
+    uniprot_ids = _normalise_series(
+        frame.get("uniprot_id_primary"), index=frame.index
+    )
     base = pd.DataFrame(
         {
             "target_chembl_id": target_ids[valid_mask],
