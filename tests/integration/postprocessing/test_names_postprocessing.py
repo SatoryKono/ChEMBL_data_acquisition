@@ -13,7 +13,7 @@ import pytest
 
 import library
 
-from . import assert_meta_and_header
+from . import assert_csv_header
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -264,7 +264,7 @@ def test_process_target_names_helper__writes_byte_identical_output(
     output_path = Path(result["path"])
 
     produced = pd.read_csv(output_path, dtype="string")
-    assert_meta_and_header(output_path, names.TARGET_NAMES_COLUMNS)
+    assert_csv_header(output_path, names.TARGET_NAMES_COLUMNS)
 
     expected_records = [
         ("CHEMBL100", "P11111", "Alpha", "chembl_preferred", "pref_name"),
@@ -345,7 +345,7 @@ def test_process_target_names_helper__summary_counts(tmp_path: Path) -> None:
     frame.to_csv(input_path, index=False)
 
     result = names.process_target_names(input_path)
-    assert_meta_and_header(Path(result["path"]), names.TARGET_NAMES_COLUMNS)
+    assert_csv_header(Path(result["path"]), names.TARGET_NAMES_COLUMNS)
 
     summary = result["summary"]
     assert summary["rows_before"] == 2
@@ -385,7 +385,7 @@ def test_process_target_names_helper__verbose_logs_summary(
     assert payload["path"] == str(Path(result["path"]))
     assert payload["rows"] == 1
     assert Path(result["path"]).name.startswith("names.output.target_20250101.csv")
-    assert_meta_and_header(Path(result["path"]), names.TARGET_NAMES_COLUMNS)
+    assert_csv_header(Path(result["path"]), names.TARGET_NAMES_COLUMNS)
 
 
 @pytest.mark.unit
@@ -407,7 +407,7 @@ def test_process_target_names_helper__stable_sorting_of_duplicates(
     result = names.process_target_names(input_path)
     output_path = Path(result["path"])
     produced = pd.read_csv(output_path, dtype="string")
-    assert_meta_and_header(output_path, names.TARGET_NAMES_COLUMNS)
+    assert_csv_header(output_path, names.TARGET_NAMES_COLUMNS)
 
     subset = produced[produced["name"] == "BRCA1"]
     assert list(subset["source_column"]) == ["gene_symbol", "gene_symbol_list"]

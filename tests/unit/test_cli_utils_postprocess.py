@@ -10,6 +10,7 @@ import pandas as pd
 from library.cli.pipeline_definition import PipelineDefinition
 from library.cli.utils import _PostprocessHandlers, run_pipeline
 from library.postprocess.common import PostprocessingPipelineResult
+from library.reporting.run_manifest import PipelineOutputReport
 
 
 class _LoggerStub:
@@ -45,7 +46,7 @@ def _fetcher_stub():  # pragma: no cover - helper
 
 
 def test_run_pipeline__triggers_postprocessing_on_known_table(monkeypatch, tmp_path):
-    captured: dict[str, Path] = {}
+    captured: dict[str, object] = {}
 
     class _MetricsStub:
         pipeline_version = "stub-version"
@@ -91,6 +92,26 @@ def test_run_pipeline__triggers_postprocessing_on_known_table(monkeypatch, tmp_p
         lambda: runtime_stub,
     )
 
+    def _fake_finalise(**kwargs):
+        captured["finalise_kwargs"] = kwargs
+        csv_path = Path(kwargs["csv_path"])
+        stats = {
+            "rows_total": kwargs.get("rows_total", 0),
+            "rows_kept": kwargs.get("rows_kept", 0),
+            "rows_dropped": kwargs.get("rows_total", 0) - kwargs.get("rows_kept", 0),
+            "output_sha256": "stub",
+        }
+        extra_stats = kwargs.get("stats_extra") or {}
+        stats.update(extra_stats)
+        return PipelineOutputReport(
+            csv_path=csv_path,
+            stats=stats,
+            meta_path=csv_path.with_name(csv_path.name + ".meta.yaml"),
+            meta_sha256="meta",
+        )
+
+    monkeypatch.setattr("library.cli.utils.finalise_csv_output", _fake_finalise)
+
     definition = PipelineDefinition(
         schema=None,
         schema_name="DummySchema",
@@ -122,8 +143,11 @@ def test_run_pipeline__triggers_postprocessing_on_known_table(monkeypatch, tmp_p
     assert captured["input"] == output_path
     assert captured["output"].name == "output_postprocessed.activities_sample.csv"
     assert captured["output"].exists()
-    meta_path = output_path.with_name(output_path.name + ".meta.yaml")
-    assert "output_postprocessed" in meta_path.read_text(encoding="utf-8")
+    finalise_kwargs = captured["finalise_kwargs"]
+    assert finalise_kwargs is not None
+    extra_metadata = finalise_kwargs.get("extra_metadata") or {}
+    assert extra_metadata.get("output_postprocessed") == str(captured["output"])
+    assert "postprocess_metrics" in extra_metadata
 
 
 def test_run_pipeline__skips_postprocessing_when_disabled(monkeypatch, tmp_path):
@@ -151,6 +175,26 @@ def test_run_pipeline__skips_postprocessing_when_disabled(monkeypatch, tmp_path)
     output_path = tmp_path / "output.activities_sample.csv"
     failure_path = tmp_path / "failures.csv"
 
+    captured: dict[str, object] = {}
+
+    def _fake_finalise(**kwargs):
+        captured["finalise_kwargs"] = kwargs
+        csv_path = Path(kwargs["csv_path"])
+        stats = {
+            "rows_total": kwargs.get("rows_total", 0),
+            "rows_kept": kwargs.get("rows_kept", 0),
+            "rows_dropped": kwargs.get("rows_total", 0) - kwargs.get("rows_kept", 0),
+            "output_sha256": "stub",
+        }
+        return PipelineOutputReport(
+            csv_path=csv_path,
+            stats=stats,
+            meta_path=csv_path.with_name(csv_path.name + ".meta.yaml"),
+            meta_sha256="meta",
+        )
+
+    monkeypatch.setattr("library.cli.utils.finalise_csv_output", _fake_finalise)
+
     logger = _LoggerStub()
     exit_code = run_pipeline(
         definition=definition,
@@ -167,5 +211,6 @@ def test_run_pipeline__skips_postprocessing_when_disabled(monkeypatch, tmp_path)
         message == "[INFO] Postprocessing skipped (flag --postprocess not set)"
         for message, _ in logger.messages
     )
-    meta_path = output_path.with_name(output_path.name + ".meta.yaml")
-    assert "output_postprocessed" not in meta_path.read_text(encoding="utf-8")
+    finalise_kwargs = captured.get("finalise_kwargs") or {}
+    extra_metadata = finalise_kwargs.get("extra_metadata") or {}
+    assert "output_postprocessed" not in extra_metadata

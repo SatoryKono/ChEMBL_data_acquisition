@@ -176,6 +176,9 @@ def test_get_activities_cli_wrapper__script_entrypoint(
         header = handle.readline().strip()
     assert header.replace("\ufeff", "") == "activity_id"
 
+    # Validate output file is not empty
+    assert output_csv.stat().st_size > 0
+
     # 2. Validate metadata file existence and contents
     meta_path = output_csv.with_suffix(output_csv.suffix + ".meta.yaml")
     assert meta_path.exists()

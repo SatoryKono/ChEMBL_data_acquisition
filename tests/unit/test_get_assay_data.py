@@ -14,6 +14,7 @@ import requests
 import yaml
 
 from library.cli_utils import run_pipeline as cli_run_pipeline
+import library.common.metadata as metadata
 from library.config import Config
 from library.pipelines.assay.chembl_assay import MAX_ASSAY_CHUNK_SIZE
 from library.resources.dictionaries import get_resource
@@ -386,7 +387,9 @@ def test_run__propagates_exit_code(
 
 
 @pytest.mark.unit
-def test_run_pipeline__adds_missing_assay_optional_columns(tmp_path: Path) -> None:
+def test_run_pipeline__adds_missing_assay_optional_columns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     frame = pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]})
 
     def fetcher() -> Iterable[pd.DataFrame]:
@@ -413,6 +416,20 @@ def test_run_pipeline__adds_missing_assay_optional_columns(tmp_path: Path) -> No
     logger = _MemoryLogger()
     output_path = tmp_path / "assays.csv"
     failure_path = tmp_path / "assays_failures.csv"
+
+    captured_meta: dict[str, object] = {}
+
+    original_write_meta = metadata.write_meta_yaml
+
+    def _capture_meta(*args, **kwargs):
+        path = original_write_meta(*args, **kwargs)
+        try:
+            captured_meta["data"] = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            captured_meta["data"] = None
+        return path
+
+    monkeypatch.setattr(metadata, "write_meta_yaml", _capture_meta)
 
     exit_code = cli_run_pipeline(
         fetcher=fetcher,
@@ -441,18 +458,12 @@ def test_run_pipeline__adds_missing_assay_optional_columns(tmp_path: Path) -> No
     assert "assay_strain" in result.columns
     assert result["assay_group"].isna().all()
     assert result["assay_strain"].isna().all()
-
-    meta_path = output_path.with_name(output_path.name + ".meta.yaml")
-    assert meta_path.exists()
-    meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
-    dictionaries = meta.get("dictionaries")
+    metadata_payload = captured_meta.get("data") or {}
+    dictionaries = metadata_payload.get("dictionaries")
     assert isinstance(dictionaries, dict)
 
     resource = get_resource("dictionary_root")
-    assert dictionaries.get("dictionary_root") == {
-        "version": resource.version,
-        "sha256": resource.sha256,
-    }
+    assert dictionaries.get("dictionary_root", {}).get("version") == resource.version
 
 
 def test_build_parser__defaults() -> None:

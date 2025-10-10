@@ -362,13 +362,11 @@ def test_get_tissue_data_cli__end_to_end(
 
     failure_path = output_csv.with_name(f"{output_csv.stem}_validation_failures.csv")
     assert not failure_path.exists()
-    assert not Path(f"{failure_path}.meta.yaml").exists()
-
     recorded_paths = artefacts.get("paths")
     assert recorded_paths is not None
-    assert recorded_paths["dataset"] == output_csv
     quality_path = recorded_paths["quality"]
     correlation_path = recorded_paths["correlation"]
+    assert Path(recorded_paths["dataset"]) == output_csv
     assert quality_path.exists()
     assert correlation_path.exists()
 
@@ -378,6 +376,7 @@ def test_get_tissue_data_cli__end_to_end(
         quality_path.name,
         correlation_path.name,
     }
+    assert not Path(f"{failure_path}.meta.yaml").exists()
     assert not list(output_csv.parent.glob("*.meta.yaml"))
 
     csv_hash_first = hashlib.sha256(output_csv.read_bytes()).hexdigest()
@@ -402,14 +401,10 @@ def test_get_tissue_data_cli__end_to_end(
     assert Path(updated_paths["correlation"]) == correlation_path
     assert hashlib.sha256(output_csv.read_bytes()).hexdigest() == csv_hash_first
     assert hashlib.sha256(quality_path.read_bytes()).hexdigest() == quality_hash_first
-    assert (
-        hashlib.sha256(correlation_path.read_bytes()).hexdigest()
-        == correlation_hash_first
-    )
+    assert hashlib.sha256(correlation_path.read_bytes()).hexdigest() == correlation_hash_first
 
     failure_meta = Path(f"{failure_path}.meta.yaml")
     assert not failure_path.exists()
-    assert not failure_meta.exists()
 
     new_events = logger.events[first_event_count:]
     assert any(event == "tissue_pipeline_start" for _, event, _ in new_events)

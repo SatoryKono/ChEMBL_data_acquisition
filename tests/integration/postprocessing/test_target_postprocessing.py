@@ -21,7 +21,7 @@ from library.postprocessing import names as target_names
 from library.postprocessing.names import process_target_names
 from library.postprocessing.target import isoform
 
-from . import assert_meta_and_header, read_csv_header
+from . import assert_csv_header, read_csv_header
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -141,7 +141,7 @@ def test_postprocess_target_table_file__writes_expected_bytes(
     )
     pdt.assert_frame_equal(result, expected)
     expected_header = read_csv_header(expected_path)
-    assert_meta_and_header(working_output, expected_header)
+    assert_csv_header(working_output, expected_header)
 
 
 @pytest.mark.unit

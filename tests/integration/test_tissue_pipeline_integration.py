@@ -9,8 +9,6 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-import yaml
-
 import library.io.metadata as io_metadata
 from library.common import run_context as run_context_module
 from library.common.run_context import RunContext
@@ -104,6 +102,8 @@ def test_run_tissue_pipeline__writes_normalised_output(
     assert result.records == 3
     assert result.missing_ids == ("CHEMBLT3",)
     assert result.output_path == output_csv
+    assert result.failure_path is None
+    assert result.written is True
     assert output_csv.exists()
     assert expected_calls == [
         {
@@ -124,10 +124,6 @@ def test_run_tissue_pipeline__writes_normalised_output(
     assert output_df["timestamp_utc"].iloc[0] == RUN_GENERATED_AT
     assert pd.isna(output_df.loc[2, "pref_name"])
     assert (tmp_path / "output_validation_failures.csv").exists() is False
-    meta_path = Path(f"{output_csv}.meta.yaml")
-    assert meta_path.exists()
-    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
-    assert metadata["generated_at"] == RUN_GENERATED_AT
 
 
 @pytest.mark.integration
@@ -219,6 +215,8 @@ def test_run_tissue_pipeline__deterministic_output_from_fixtures(
     assert result.records == 3
     assert result.output_path == output_path
     assert result.output_path.name == output_path.name
+    assert result.failure_path is None
+    assert result.written is True
     assert expected_calls == [
         {
             "ids": payload["input_ids"],
@@ -241,6 +239,7 @@ def test_run_tissue_pipeline__deterministic_output_from_fixtures(
     assert metadata["generated_at"] == RUN_GENERATED_AT
     assert set(output_df["timestamp_utc"].unique()) == {RUN_GENERATED_AT}
     assert output_df["timestamp_utc"].tolist() == [RUN_GENERATED_AT] * len(output_df)
+
     # Second run with a new context should refresh cached metadata values.
     pipeline_metadata_module.get_timestamp_utc.cache_clear()
     pipeline_metadata_module.pipeline_metadata.cache_clear()

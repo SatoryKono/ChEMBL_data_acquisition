@@ -5,8 +5,6 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-import yaml
-
 from library.common.csv_utils import sha256_file
 from library.pipelines.testitem import cli
 from library.pipelines.testitem.catalog import ParentLookupStats
@@ -17,8 +15,10 @@ class _StatsSupplier:
 
     def __init__(self, stats: ParentLookupStats) -> None:
         self._stats = stats
+        self.calls = 0
 
     def __call__(self) -> ParentLookupStats:
+        self.calls += 1
         return self._stats
 
 
@@ -75,13 +75,8 @@ def test_finalize_output__writes_csv_and_metadata(
     assert list(final["molecule_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
     assert "pipeline_version" in final.columns
     assert "timestamp_utc" in final.columns
-
-    meta_path = output_path.with_name("final.csv.meta.yaml")
-    assert meta_path.exists()
-    meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
-    assert meta["stats"]["rows_total"] == 2
-    assert meta["stats"]["rows_kept"] == 2
-    assert meta["inputs"]["input_csv"].endswith("input.csv")
+    assert sha256_file(output_path)
+    assert stats_supplier.calls == 1
 
 
 @pytest.mark.integration

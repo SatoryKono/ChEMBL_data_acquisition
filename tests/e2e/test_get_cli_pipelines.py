@@ -15,6 +15,7 @@ from library import cli_utils
 from library.cli.base import PipelineCLIBase
 from library.config import Config
 from library.pipelines.common import PipelineRunResult
+from library.reporting.run_manifest import PipelineOutputReport
 from scripts import (
     get_activity_data,
     get_assay_data,
@@ -436,6 +437,7 @@ def test_get_document_type_main__writes_meta(
     )
 
     captured: dict[str, object] = {}
+    finalise_payload: dict[str, object] = {}
 
     def _stub_write_csv(
         frame: pd.DataFrame,
@@ -508,6 +510,24 @@ def test_get_document_type_main__writes_meta(
     monkeypatch.setattr(get_document_type.io, "write_csv", _stub_write_csv)
     monkeypatch.setattr(get_document_type, "write_meta_yaml", lambda *_, **__: None)
 
+    def _fake_finalise(**kwargs):
+        finalise_payload["kwargs"] = kwargs
+        csv_path = Path(kwargs["csv_path"])
+        stats = {
+            "rows_total": kwargs.get("rows_total", 0),
+            "rows_kept": kwargs.get("rows_kept", 0),
+            "rows_dropped": kwargs.get("rows_total", 0) - kwargs.get("rows_kept", 0),
+            "output_sha256": "stub",
+        }
+        return PipelineOutputReport(
+            csv_path=csv_path,
+            stats=stats,
+            meta_path=csv_path.with_name(csv_path.name + ".meta.yaml"),
+            meta_sha256="meta",
+        )
+
+    monkeypatch.setattr("library.cli.utils.finalise_csv_output", _fake_finalise)
+
     invocation = ["--input", str(input_csv), "--final-out", str(output_csv)]
     exit_code = get_document_type.main(invocation)
 
@@ -533,6 +553,13 @@ def test_get_document_type_main__writes_meta(
         correlation_path.name,
     }
     assert not list(output_csv.parent.glob("*.meta.yaml"))
+
+    finalise_kwargs = finalise_payload.get("kwargs") or {}
+    assert finalise_kwargs.get("schema") == "document_type"
+    assert finalise_kwargs.get("rows_total") == len(frame)
+    assert finalise_kwargs.get("rows_kept") == len(frame)
+    assert finalise_kwargs.get("command")
+    assert finalise_kwargs.get("invocation") == tuple(invocation)
 
 @pytest.mark.e2e
 def test_get_testitem_run_success(
