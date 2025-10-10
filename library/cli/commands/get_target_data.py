@@ -2186,8 +2186,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg,
             logger=logger,
         )
-        exit_code = int(execution.exit_code)
-        dataset_path = execution.dataset_path or raw_destination
+        exit_code_attr = getattr(execution, "exit_code", None)
+        exit_code = int(exit_code_attr if exit_code_attr is not None else execution)
+        dataset_path = getattr(execution, "dataset_path", None) or raw_destination
         raw_destination = Path(dataset_path)
         if exit_code != 0:
             return exit_code
@@ -2491,8 +2492,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             "target_iuphar_family",
         ),
     )
-    exit_code = int(execution.exit_code)
-    dataset_path = execution.dataset_path or raw_output
+    exit_code_attr = getattr(execution, "exit_code", None)
+    exit_code = int(exit_code_attr if exit_code_attr is not None else execution)
+    dataset_path = getattr(execution, "dataset_path", None) or raw_output
     raw_output = Path(dataset_path)
 
     if not _finalize_raw_dump_writer(
