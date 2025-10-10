@@ -8,6 +8,7 @@ from typing import Tuple, TYPE_CHECKING
 
 import pandas as pd
 
+from ..common.log import logger
 from ..table_quality import (
     TableQualityProfiler as _LegacyTableQualityProfiler,
     _apply_sampling_and_filters,
@@ -185,25 +186,32 @@ def build_qc_summary(
     """Return the quality-control summary DataFrame for ``frame``."""
 
     _validate_table_name(table_name)
+
+    profiler_instance: TableQualityProfilerLike | None = None
     if profiler is not None:
-        if not _is_table_profiler_instance(profiler):
-            raise TypeError("profiler must be a TableQualityProfiler instance")
-        quality_report, _ = _build_reports_from_profiler(profiler)
-        return quality_report
+        if _is_table_profiler_instance(profiler):
+            profiler_instance = profiler
+        else:
+            logger.warning(
+                "table_quality_profiler_invalid",
+                table_name=table_name,
+                profiler_type=type(profiler).__name__,
+            )
 
-    if frame is None:
-        raise ValueError("frame is required when profiler is not provided")
+    if profiler_instance is None:
+        if frame is None:
+            raise ValueError("frame is required when profiler is not provided")
 
-    filtered = _prepare_filtered_frame(
-        frame,
-        table_name=table_name,
-        sample_rows=sample_rows,
-        include_columns=include_columns,
-        exclude_columns=exclude_columns,
-    )
+        filtered = _prepare_filtered_frame(
+            frame,
+            table_name=table_name,
+            sample_rows=sample_rows,
+            include_columns=include_columns,
+            exclude_columns=exclude_columns,
+        )
 
-    profiler = TableQualityProfiler()
-    profiler.consume(filtered)
+        profiler_instance = TableQualityProfiler()
+        profiler_instance.consume(filtered)
 
-    quality_report, _ = _build_reports_from_profiler(profiler)
+    quality_report, _ = _build_reports_from_profiler(profiler_instance)
     return quality_report
