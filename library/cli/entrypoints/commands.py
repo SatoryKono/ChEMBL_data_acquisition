@@ -86,7 +86,7 @@ def get_activity_data_main(argv: Sequence[str] | None = None) -> int:
     if not _has_date_override(raw_args):
         raw_args.extend(["--date", _cli_logging._current_date_str()])
 
-    return _dispatch("get_activity_data", raw_args)
+    return _dispatch("library.cli.commands.get_activity_data", raw_args)
 
 
 def get_assay_data_main(argv: Sequence[str] | None = None) -> int:
@@ -98,7 +98,7 @@ def get_assay_data_main(argv: Sequence[str] | None = None) -> int:
 def get_data_main(argv: Sequence[str] | None = None) -> int:
     """Entry point for the orchestrating ``get-data`` CLI."""
 
-    return _dispatch("scripts.get_data", argv)
+    return _dispatch("library.cli.commands.get_data", argv)
 
 
 def get_document_data_main(argv: Sequence[str] | None = None) -> int:

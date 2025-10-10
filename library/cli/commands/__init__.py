@@ -16,6 +16,7 @@ def _resolve_module(module: str) -> ModuleType:
 
     last_error: ModuleNotFoundError | None = None
     for candidate in (
+        "library.cli.commands." + module,
         "library.utils.cli_tools." + module,
         "scripts." + module,
     ):
