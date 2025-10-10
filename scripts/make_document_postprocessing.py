@@ -5,11 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 from collections.abc import Mapping, Sequence
-from importlib import import_module, util
 from pathlib import Path
-from types import ModuleType
-
-import pandas as pd
 
 # ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if __package__ in {None, ""}:
@@ -31,7 +27,6 @@ from library.postprocessing.common.config import (
     PipelineConfig,
     normalize_pipeline_version,
 )
-from library.postprocessing.common.logging import PipelineRunMetrics
 from library.postprocessing.common.types import SchemaValidationError, StepError
 from library.postprocessing.documents import (
     run_document_pipeline as run_document_postprocess,
@@ -40,45 +35,40 @@ from library.postprocessing.documents import steps as document_steps
 from library.postprocessing.documents.schema import DOCUMENT_SCHEMA, validate_documents
 
 
-def _load_postprocess_common_module() -> ModuleType:
-    """Return the ``_postprocess_common`` module regardless of execution mode."""
-
-    candidate_names: list[str] = []
-    package = __package__ or ""
-
-    if package:
-        candidate_names.append(f"{package}._postprocess_common")
-    candidate_names.append("scripts._postprocess_common")
-    candidate_names.append("_postprocess_common")
-
-    seen: set[str] = set()
-    for module_name in candidate_names:
-        if module_name in seen:
-            continue
-        seen.add(module_name)
-        spec = util.find_spec(module_name)
-        if spec is None:
-            continue
-        return import_module(module_name)
-
-    raise ModuleNotFoundError(
-        "Unable to locate the '_postprocess_common' helpers for the document postprocessing CLI.",
+try:
+    from library.postprocess.common import (
+        DEFAULT_LOG_DIR,
+        LOG_DIR_ENV,
+        PostprocessingPipelineConfig,
+        generate_metrics_report,
+        get_csv_runtime_config,
+        get_default_log_level,
+        get_pipeline_config,
+        run_postprocessing_pipeline,
     )
-
-
-_postprocess_common = _load_postprocess_common_module()
-
-CsvRuntimeConfig = _postprocess_common.CsvRuntimeConfig
-DEFAULT_LOG_DIR = _postprocess_common.DEFAULT_LOG_DIR
-LOG_DIR_ENV = _postprocess_common.LOG_DIR_ENV
-export_postprocess_frame = _postprocess_common.export_postprocess_frame
-generate_metrics_report = _postprocess_common.generate_metrics_report
-get_csv_runtime_config = _postprocess_common.get_csv_runtime_config
-get_default_log_level = _postprocess_common.get_default_log_level
-get_pipeline_config = _postprocess_common.get_pipeline_config
-load_input_frame = _postprocess_common.load_input_frame
-run_postprocess_steps = _postprocess_common.run_postprocess_steps
-validate_postprocess_frame = _postprocess_common.validate_postprocess_frame
+except ImportError:  # pragma: no cover - fallback for direct execution
+    if __package__:
+        from ._postprocess_common import (  # type: ignore
+            DEFAULT_LOG_DIR,
+            LOG_DIR_ENV,
+            PostprocessingPipelineConfig,
+            generate_metrics_report,
+            get_csv_runtime_config,
+            get_default_log_level,
+            get_pipeline_config,
+            run_postprocessing_pipeline,
+        )
+    else:
+        from _postprocess_common import (  # type: ignore
+            DEFAULT_LOG_DIR,
+            LOG_DIR_ENV,
+            PostprocessingPipelineConfig,
+            generate_metrics_report,
+            get_csv_runtime_config,
+            get_default_log_level,
+            get_pipeline_config,
+            run_postprocessing_pipeline,
+        )
 
 from uuid import NAMESPACE_URL, uuid5
 
@@ -128,62 +118,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override the run identifier used for logging",
     )
     return parser
-
-
-def load_output_data(path: Path, csv_cfg: CsvRuntimeConfig) -> pd.DataFrame:
-    """Load the raw document export frame using the configured runtime settings."""
-
-    return load_input_frame(TABLE_NAME, path, csv_cfg, logger=logger)
-
-
-def apply_postprocessing_steps(
-    df: pd.DataFrame,
-    *,
-    pipeline_version: str | None,
-) -> tuple[pd.DataFrame, PipelineRunMetrics]:
-    """Execute the configured document postprocessing pipeline."""
-
-    return run_postprocess_steps(
-        TABLE_NAME,
-        df,
-        run_document_postprocess,
-        pipeline_version,
-        logger=logger,
-    )
-
-
-def validate_output_schema(
-    df: pd.DataFrame,
-    *,
-    pipeline_version: str | None,
-) -> pd.DataFrame:
-    """Validate and reorder the DataFrame according to the document schema."""
-
-    return validate_postprocess_frame(
-        TABLE_NAME,
-        df,
-        validate_documents,
-        DOCUMENT_SCHEMA,
-        pipeline_version,
-        logger=logger,
-    )
-
-
-def save_output_data(
-    df: pd.DataFrame,
-    output_path: Path,
-    csv_cfg: CsvRuntimeConfig,
-) -> Path:
-    """Persist ``df`` deterministically to ``output_path``."""
-
-    return export_postprocess_frame(
-        TABLE_NAME,
-        df,
-        output_path,
-        csv_cfg,
-        DOCUMENT_SCHEMA,
-        logger=logger,
-    )
 
 
 def resolve_pipeline_version(
@@ -278,22 +212,29 @@ def run(args: argparse.Namespace) -> int:
         encoding=csv_cfg.encoding,
     )
 
-    metrics: PipelineRunMetrics | None = None
+    pipeline_runtime = PostprocessingPipelineConfig(
+        pipeline_config=pipeline_config,
+        csv_runtime_config=csv_cfg,
+        runner=run_document_postprocess,
+        validator=validate_documents,
+        schema=DOCUMENT_SCHEMA,
+        logger=logger,
+        pipeline_version=resolved_pipeline_version,
+    )
 
     try:
-        frame = load_output_data(input_path, csv_cfg)
-        processed, metrics = apply_postprocessing_steps(
-            frame,
-            pipeline_version=resolved_pipeline_version,
+        result = run_postprocessing_pipeline(
+            TABLE_NAME,
+            input_path,
+            output_path,
+            pipeline_runtime,
         )
-        effective_version = metrics.pipeline_version if metrics else None
-        validated = validate_output_schema(
-            processed,
-            pipeline_version=effective_version,
-        )
-        save_output_data(validated, output_path, csv_cfg)
+        metrics = result.metrics
     except (SchemaValidationError, StepError) as exc:
         logger.exception(f"{event_prefix}_failed", exc=exc)
+        return 1
+    except FileNotFoundError:
+        logger.error(f"{event_prefix}_input_missing", input=str(input_path))
         return 1
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception(f"{event_prefix}_unexpected_error", exc=exc)
