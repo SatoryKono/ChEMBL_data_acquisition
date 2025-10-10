@@ -1490,6 +1490,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return path_obj
 
     doc_quality_cfg = cfg.system.doc_quality
+    fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
+
     if emit_legacy:
         table_quality = build_table_quality_hook(
             doc_quality_cfg,
@@ -1516,11 +1518,15 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             try:
                 quality_result = quality_hook(dataset_frame)
             except Exception as exc:  # pragma: no cover - defensive guard
-                logger.warning(
-                    "activity_quality_generation_failed",
-                    error=str(exc),
-                    path=str(dataset_csv),
-                )
+                log_payload = {
+                    "error": str(exc),
+                    "path": str(dataset_csv),
+                }
+                if fatal_quality_error:
+                    log_payload["fatal"] = True
+                logger.warning("activity_quality_generation_failed", **log_payload)
+                if fatal_quality_error:
+                    raise
             else:
                 if (
                     isinstance(quality_result, tuple)
@@ -1774,9 +1780,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         Path(fetch_failure_path).unlink(missing_ok=True)
         Path(f"{fetch_failure_path}.meta.yaml").unlink(missing_ok=True)
 
-    if exit_code == 0:
-        if dataset_path is not None:
+    if exit_code == 0 and dataset_path is not None:
+        try:
             standard_artifacts = _persist_standard_outputs(Path(dataset_path))
+        except Exception:
+            exit_code = 1
+            dataset_path = None
+        else:
             standard_dataset = standard_artifacts.dataset
             if not emit_legacy and standard_dataset != Path(dataset_path):
                 Path(dataset_path).unlink(missing_ok=True)
@@ -1784,6 +1794,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             output_path = dataset_path
             args.final_out = output_path
             args.output_csv = output_path
+
+    if exit_code == 0:
         logger.info(
             f"Merged data checkpoint: wrote merged activity records to '{output_path}'."
         )

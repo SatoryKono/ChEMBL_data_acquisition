@@ -478,6 +478,72 @@ def test_run_chembl__standard_outputs_created_without_legacy(
     assert not fetch_failure.exists()
 
 
+@pytest.mark.unit
+def test_run_chembl__quality_failure_respects_fatal_flag(
+    cfg: Config,
+    minimal_args: argparse.Namespace,
+    monkeypatch: pytest.MonkeyPatch,
+    logger_stub: _MemoryLogger,
+) -> None:
+    cfg.assay.limit = 1
+    cfg.system.doc_quality.fatal_on_error = True
+
+    df = pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]})
+    df.to_csv(minimal_args.final_out, index=False, encoding="utf-8")
+
+    monkeypatch.setattr(
+        get_assay_data.io,
+        "read_ids",
+        lambda *_args, **_kwargs: iter(["CHEMBL1"]),
+    )
+
+    def fake_prepare_chunked_pipeline(**_kwargs: object):
+        def fetcher() -> Iterable[pd.DataFrame]:
+            yield df
+
+        def writer(**_writer_kwargs: object) -> Path:
+            return minimal_args.final_out
+
+        return fetcher, writer
+
+    monkeypatch.setattr(
+        get_assay_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline
+    )
+
+    def fake_run_pipeline(**_kwargs: object) -> PipelineExecutionResult:
+        df.to_csv(minimal_args.final_out, index=False, encoding="utf-8")
+        return PipelineExecutionResult(exit_code=0, dataset_path=minimal_args.final_out)
+
+    monkeypatch.setattr(get_assay_data, "run_pipeline", fake_run_pipeline)
+
+    def fail_save_standard_outputs(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError(
+            "standard outputs should not be persisted after fatal QA failure"
+        )
+
+    monkeypatch.setattr(
+        get_assay_data.io, "save_standard_outputs", fail_save_standard_outputs
+    )
+
+    def failing_quality_hook(*_args: object, **_kwargs: object):
+        def _hook(_frame: pd.DataFrame) -> None:
+            raise RuntimeError("quality hook failed")
+
+        return _hook
+
+    monkeypatch.setattr(
+        get_assay_data, "build_table_quality_hook", failing_quality_hook
+    )
+
+    exit_code = get_assay_data.run_chembl(cfg, minimal_args)
+
+    assert exit_code == 1
+    assert any(
+        event == "assay_quality_generation_failed" and payload.get("fatal")
+        for _, event, payload in logger_stub.events
+    )
+
+
 def test_run__skip_existing_returns_zero(
     cfg: Config,
     minimal_args: argparse.Namespace,

@@ -9,6 +9,8 @@ import importlib
 from pathlib import Path
 from typing import Any
 
+from types import SimpleNamespace
+
 import pandas as pd
 import pytest
 
@@ -248,6 +250,115 @@ def test_emit_completion_message__streamed_metrics(
     assert metrics["text"] == "value"
     assert metrics["flag"] == 1
     assert metrics["other"] == "repr-object"
+
+
+@pytest.mark.unit
+def test_run_chembl__quality_failure_respects_fatal_flag(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg.system.doc_quality.fatal_on_error = True
+
+    input_csv = tmp_path / "activity.csv"
+    input_csv.write_text("activity_id\nACT1\n", encoding="utf-8")
+    output_csv = tmp_path / "output.csv"
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=output_csv,
+        output_csv=output_csv,
+        skip_existing=False,
+        force=False,
+        emit_legacy_artifacts=False,
+        offset=0,
+        limit=None,
+        timeout=None,
+        batch_size=None,
+        workers=None,
+        dry_run=False,
+        postprocess=False,
+        date=None,
+        invocation=None,
+    )
+
+    class LoggerStub:
+        def __init__(self) -> None:
+            self.events: list[tuple[str, str, dict[str, Any]]] = []
+
+        def info(self, event: str, *args: object, **payload: Any) -> None:
+            data = dict(payload)
+            if args:
+                data["args"] = args
+            self.events.append(("info", event, data))
+
+        def warning(self, event: str, *args: object, **payload: Any) -> None:
+            data = dict(payload)
+            if args:
+                data["args"] = args
+            self.events.append(("warning", event, data))
+
+        def error(self, event: str, *args: object, **payload: Any) -> None:
+            data = dict(payload)
+            if args:
+                data["args"] = args
+            self.events.append(("error", event, data))
+
+        def debug(self, event: str, *args: object, **payload: Any) -> None:
+            data = dict(payload)
+            if args:
+                data["args"] = args
+            self.events.append(("debug", event, data))
+
+        def exception(self, event: str, *args: object, **payload: Any) -> None:
+            data = dict(payload)
+            if args:
+                data["args"] = args
+            self.events.append(("exception", event, data))
+
+    logger_stub = LoggerStub()
+    monkeypatch.setattr(activity, "logger", logger_stub)
+
+    context = SimpleNamespace(limit=1, limited_ids=["ACT1"], processed_ids=1)
+    monkeypatch.setattr(
+        activity,
+        "prepare_activity_context",
+        lambda *_args, **_kwargs: context,
+    )
+
+    def fake_run_activity_pipeline(**_kwargs: Any) -> SimpleNamespace:
+        df = pd.DataFrame({"activity_id": ["ACT1"]})
+        df.to_csv(output_csv, index=False, encoding="utf-8")
+        return SimpleNamespace(exit_code=0, output_path=output_csv)
+
+    monkeypatch.setattr(
+        activity_run,
+        "run_activity_pipeline",
+        fake_run_activity_pipeline,
+    )
+
+    def fail_save_standard_outputs(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError(
+            "standard outputs should not be persisted after fatal QA failure"
+        )
+
+    monkeypatch.setattr(activity.io, "save_standard_outputs", fail_save_standard_outputs)
+
+    def failing_quality_hook(*_args: object, **_kwargs: object):
+        def _hook(_frame: pd.DataFrame) -> None:
+            raise RuntimeError("quality check failed")
+
+        return _hook
+
+    monkeypatch.setattr(activity, "build_table_quality_hook", failing_quality_hook)
+
+    exit_code = activity.run_chembl(cfg, args)
+
+    assert exit_code == 1
+    assert any(
+        event == "activity_quality_generation_failed" and payload.get("fatal")
+        for _, event, payload in logger_stub.events
+    )
 
 
 @pytest.mark.unit
