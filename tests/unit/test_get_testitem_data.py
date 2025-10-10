@@ -322,8 +322,132 @@ def test_run__success_logs_completion(
     assert exit_code == 0
     assert (
         "info",
+        "Postprocessing skipped (flag --postprocess not set)",
+        {},
+    ) in logger_stub.events
+    assert (
+        "info",
         "testitem_pipeline_done",
         {"output": str(output_csv)},
+    ) in logger_stub.events
+
+
+def test_run__postprocess_enabled_runs_pipeline(
+    cfg: Config,
+    tmp_path: Path,
+    logger_stub: _MemoryLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("id\nCHEMBL1\n", encoding="utf-8")
+    output_csv = tmp_path / "output.testitems.csv"
+    output_csv.write_text("id,name\nCHEMBL1,Example\n", encoding="utf-8")
+
+    postprocessed_csv = output_csv.with_name("output_postprocessed.testitems.csv")
+    report_path = tmp_path / "testitems.postprocess.report.json"
+
+    class DummyMetrics:
+        pipeline_version = "v1"
+        validation = type("Validation", (), {"schema": "TestitemPostprocess"})()
+
+        def summary(self) -> dict[str, object]:
+            return {
+                "pipeline_version": self.pipeline_version,
+                "rows": 1,
+                "columns": 2,
+                "duration_s": 0.5,
+                "steps": 3,
+            }
+
+    dummy_report_path = report_path
+
+    class DummyResult:
+        metrics = DummyMetrics()
+        output_path = postprocessed_csv
+        report_path = dummy_report_path
+
+    pipeline_cfg = type("PipelineCfg", (), {"pipeline_version": "v1"})()
+    csv_cfg = type("CsvCfg", (), {})()
+    captured: dict[str, object] = {}
+
+    def fake_get_pipeline_config(table: str, override: object) -> object:
+        captured["pipeline_table"] = table
+        captured["pipeline_override"] = override
+        return pipeline_cfg
+
+    def fake_get_csv_runtime_config(config: object) -> object:
+        assert config is pipeline_cfg
+        return csv_cfg
+
+    def fake_run_postprocessing_pipeline(
+        table: str,
+        input_path: Path,
+        destination: Path,
+        runtime_cfg: object,
+    ) -> DummyResult:
+        captured.update(
+            postprocess_table=table,
+            postprocess_input=input_path,
+            postprocess_output=destination,
+            runtime_cfg=runtime_cfg,
+        )
+        return DummyResult()
+
+    def fake_runner(frame, *, pipeline_version: str | None = None, logger=None):  # type: ignore[no-untyped-def]
+        return frame, DummyMetrics()
+
+    def fake_validator(frame):  # type: ignore[no-untyped-def]
+        return frame
+
+    import library.postprocess as postprocess_mod
+    import library.postprocessing.testitem as postprocess_testitem
+
+    monkeypatch.setattr(postprocess_mod, "get_pipeline_config", fake_get_pipeline_config)
+    monkeypatch.setattr(postprocess_mod, "get_csv_runtime_config", fake_get_csv_runtime_config)
+    monkeypatch.setattr(
+        postprocess_mod,
+        "run_postprocessing_pipeline",
+        fake_run_postprocessing_pipeline,
+    )
+    monkeypatch.setattr(postprocess_testitem, "run_testitem_pipeline", fake_runner)
+    monkeypatch.setattr(postprocess_testitem, "validate_testitems", fake_validator)
+    monkeypatch.setattr(postprocess_testitem, "TESTITEM_SCHEMA", object())
+
+    monkeypatch.setattr(get_testitem_data, "run_chembl", lambda *_: 0)
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=output_csv,
+        skip_existing=False,
+        force=False,
+        postprocess=True,
+        config=None,
+    )
+
+    exit_code = get_testitem_data.run(cfg, args)
+
+    assert exit_code == 0
+    expected_destination = postprocessed_csv
+    assert captured["postprocess_table"] == "testitems"
+    assert captured["postprocess_input"] == output_csv
+    assert captured["postprocess_output"] == expected_destination
+    assert captured["runtime_cfg"].pipeline_config is pipeline_cfg
+    assert captured["runtime_cfg"].csv_runtime_config is csv_cfg
+
+    assert (
+        "info",
+        "testitem_pipeline_done",
+        {
+            "output": str(output_csv),
+            "postprocess_output": str(postprocessed_csv),
+            "postprocess_pipeline_version": "v1",
+            "postprocess_rows": 1,
+            "postprocess_columns": 2,
+            "postprocess_duration_s": 0.5,
+            "postprocess_steps": 3,
+            "postprocess_schema": "TestitemPostprocess",
+            "postprocess_report": str(report_path),
+        },
     ) in logger_stub.events
 
 
