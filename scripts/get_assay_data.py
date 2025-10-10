@@ -1,23 +1,9 @@
-"""Command line interface for retrieving ChEMBL assay data.
-
-The script provides a reusable :func:`main` entry point together with helper
-functions that unit tests import directly. Functions return explicit exit codes
-instead of terminating the interpreter to make orchestration easier.
-"""
+"""Compatibility wrapper exposing :mod:`library.cli.commands.get_assay_data`."""
 
 from __future__ import annotations
 
-# ruff: noqa: E402  # bootstrap alters import order for script compatibility
-if __package__ in {None, ""}:
-    from _bootstrap import bootstrap_cli
-else:  # pragma: no cover - executed when imported as a package module
-    from ._bootstrap import bootstrap_cli
-
-bootstrap_cli(__package__, __file__)
-del bootstrap_cli
-
-import argparse
 import sys
+from importlib import import_module
 from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from functools import partial
@@ -677,6 +663,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     return _CLI.main(argv)
 
+_module = import_module("library.cli.commands.get_assay_data")
+sys.modules[__name__] = _module
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
-    raise SystemExit(main())
+    raise SystemExit(_module.main())

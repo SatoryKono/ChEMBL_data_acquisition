@@ -88,7 +88,7 @@ class PipelineStep:
 _DEFAULT_DEFINITIONS: tuple[PipelineStepDefinition, ...] = (
     {
         "name": "document",
-        "callable": "scripts.get_document_data:main",
+        "callable": "library.cli.commands.get_document_data:main",
         "input": "document.csv",
         "output": "documents",
         "extra_args": ["--mode", "all"],
@@ -96,7 +96,7 @@ _DEFAULT_DEFINITIONS: tuple[PipelineStepDefinition, ...] = (
     },
     {
         "name": "target",
-        "callable": "scripts.get_target_data:main",
+        "callable": "library.cli.commands.get_target_data:main",
         "input": "target.csv",
         "output": "targets",
         "subcommand": "all",
@@ -105,21 +105,21 @@ _DEFAULT_DEFINITIONS: tuple[PipelineStepDefinition, ...] = (
     },
     {
         "name": "assay",
-        "callable": "scripts.get_assay_data:main",
+        "callable": "library.cli.commands.get_assay_data:main",
         "input": "assay.csv",
         "output": "assays",
         "produces": ["assays"],
     },
     {
         "name": "testitem",
-        "callable": "scripts.get_testitem_data:main",
+        "callable": "library.cli.commands.get_testitem_data:main",
         "input": "testitem.csv",
         "output": "testitems",
         "produces": ["testitems"],
     },
     {
         "name": "activity",
-        "callable": "scripts.get_activity_data:main",
+        "callable": "library.cli.entrypoints.activity:main",
         "input": "activity.csv",
         "output": "activities",
         "flags": {"dry_run": True},
