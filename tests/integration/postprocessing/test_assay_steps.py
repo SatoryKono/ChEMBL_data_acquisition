@@ -10,7 +10,7 @@ from library.postprocessing.assays.steps import (
 )
 
 
-@pytest.mark.postprocessing
+@pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
 def test_normalize_assay_metadata__default_normalization() -> None:
     frame = pd.DataFrame(
@@ -29,7 +29,7 @@ def test_normalize_assay_metadata__default_normalization() -> None:
     assert str(result["assay_type"].dtype) == "string"
 
 
-@pytest.mark.postprocessing
+@pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
 def test_normalize_assay_metadata__respects_disabled_flags() -> None:
     frame = pd.DataFrame(
@@ -53,7 +53,7 @@ def test_normalize_assay_metadata__respects_disabled_flags() -> None:
     assert str(result["assay_type"].dtype) == "string"
 
 
-@pytest.mark.postprocessing
+@pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
 def test_normalize_assay_metadata__ignores_unknown_parameters() -> None:
     frame = pd.DataFrame(
@@ -75,7 +75,7 @@ def test_normalize_assay_metadata__ignores_unknown_parameters() -> None:
     pd.testing.assert_frame_equal(result, expected)
 
 
-@pytest.mark.postprocessing
+@pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
 def test_enrich_assay_flags__applies_custom_terms() -> None:
     frame = pd.DataFrame(
@@ -93,7 +93,7 @@ def test_enrich_assay_flags__applies_custom_terms() -> None:
     assert result["is_confirmatory"].tolist() == [True, False]
 
 
-@pytest.mark.postprocessing
+@pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
 def test_finalize_assay_records__normalizes_identifiers() -> None:
     frame = pd.DataFrame(

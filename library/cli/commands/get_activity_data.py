@@ -18,6 +18,7 @@ from library.pipelines.activity.runner import (
     run_activity_pipeline as _run_activity_pipeline,
 )
 
+
 def _sync_pipeline_logger(current_logger: Logger) -> None:
     """Align the shared pipeline logger with ``current_logger`` when possible."""
 
@@ -69,7 +70,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     activity_entrypoint = importlib.import_module(
         "library.cli.entrypoints.activity"
     )
-    entry_main = cast(Callable[[Sequence[str] | None], int], getattr(activity_entrypoint, "main"))
+    entry_main = cast(Callable[[Sequence[str] | None], int], activity_entrypoint.main)
     return entry_main(argv)
 
 

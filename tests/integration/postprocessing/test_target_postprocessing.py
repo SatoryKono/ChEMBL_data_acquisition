@@ -20,7 +20,7 @@ from library.postprocessing import names as target_names
 from library.postprocessing.names import process_target_names
 from library.postprocessing.target import isoform
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _load_postprocessing_cellularity_module():
@@ -61,7 +61,7 @@ from library.schemas.targets import CELLULARITY_COLUMN_NAME, TARGETS_COLUMN_ORDE
 INPUT_FILE = "target_postprocess_power_query_input.csv"
 EXPECTED_FILE = "target_postprocess_power_query_expected.csv"
 
-_ROOT = Path(__file__).resolve().parents[2]
+_ROOT = Path(__file__).resolve().parents[3]
 
 if "library.postprocessing" not in sys.modules:
     postprocessing_pkg = types.ModuleType("library.postprocessing")

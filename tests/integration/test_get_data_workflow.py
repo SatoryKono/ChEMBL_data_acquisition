@@ -529,7 +529,7 @@ def test_pipeline_subset__retry_after_failure(
 
     attempts = {"count": 0}
     dictionary_path = (
-        Path(__file__).resolve().parents[1] / "data" / "assay_dictionary.csv"
+        Path(__file__).resolve().parents[1] / "resources" / "pipeline_inputs" / "assay_dictionary.csv"
     )
 
     def _on_execute(rows: pd.DataFrame, destination: Path) -> int:

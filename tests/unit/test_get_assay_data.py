@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,25 @@ def logger_stub(monkeypatch: pytest.MonkeyPatch) -> _MemoryLogger:
     logger = _MemoryLogger()
     monkeypatch.setattr(get_assay_data, "logger", logger)
     return logger
+
+
+@pytest.mark.unit
+def test_wrapper_module__exposes_command_public_api() -> None:
+    """The compatibility shim must surface the command module attributes."""
+
+    command_module = importlib.import_module("library.cli.commands.get_assay_data")
+
+    assert get_assay_data is command_module
+    assert get_assay_data.__all__ == command_module.__all__
+
+    for symbol in [
+        "MAX_ASSAY_CHUNK_SIZE",
+        "ASSAY_MAX_IDS_PER_REQUEST",
+        "_ASSAY_MAX_IDS_PER_REQUEST",
+        "ASSAY_OUTPUT_DROP_COLUMNS",
+        "_ASSAY_OUTPUT_DROP_COLUMNS",
+    ]:
+        assert getattr(get_assay_data, symbol) is getattr(command_module, symbol)
 
 
 @pytest.mark.unit

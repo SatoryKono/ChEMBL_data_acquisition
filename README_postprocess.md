@@ -118,7 +118,7 @@ This mirrors the CLI-to-library execution path described in the [Architecture ov
 
 ## Testing expectations
 
-The pytest suite is partitioned into `tests/unit/`, `tests/integration/`, `tests/postprocessing/` and `tests/e2e/` to mirror the pipeline layers above. Each directory enforces deterministic fixtures, strict naming conventions (`test_<module>.py`, `test_<unit_of_work>__<case>`) and coverage of the key QA checklist (schema validation, normalisation, enrichment, logging, export invariants, degradation paths and idempotence). 【F:tests/README.md†L1-L88】
+The pytest suite is partitioned into `tests/unit/`, `tests/integration/`, `tests/integration/postprocessing/` and `tests/e2e/` to mirror the pipeline layers above. Each directory enforces deterministic fixtures, strict naming conventions (`test_<module>.py`, `test_<unit_of_work>__<case>`) and coverage of the key QA checklist (schema validation, normalisation, enrichment, logging, export invariants, degradation paths and idempotence). 【F:tests/README.md†L1-L88】
 
 Pytest defaults (`-q --disable-warnings --maxfail=1 --durations=10`) are configured in `pytest.ini`; combine them with markers (`unit`, `integration`, `e2e`) to scope local runs. 【F:pytest.ini†L1-L6】
 

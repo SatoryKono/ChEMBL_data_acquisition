@@ -32,7 +32,10 @@ from library.cli.parser import path_argument
 from library.cli_utils import resolve_invocation
 from library.common.log import logger
 from library.pipelines.common.metadata import get_pipeline_version
-from library.postprocessing.common.config import PipelineConfig, normalize_pipeline_version
+from library.postprocessing.common.config import (
+    PipelineConfig,
+    normalize_pipeline_version,
+)
 from library.postprocessing.common.logging import PipelineRunMetrics
 from library.postprocessing.common.types import SchemaValidationError, StepError
 from library.postprocessing.targets import (
