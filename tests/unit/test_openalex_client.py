@@ -99,6 +99,7 @@ def test_fetch_openalex__timeout_logged(
 ) -> None:
     pmid = "18737330"
     url = _expected_url(cfg, pmid)
+    cfg = cfg.copy(update={"retries": 0})
 
     with requests.Session() as session:
         with responses.RequestsMock(assert_all_requests_are_fired=True) as rs:
