@@ -1,11 +1,11 @@
 from __future__ import annotations
+
 import py_compile
 import re
 import tempfile
 from pathlib import Path
 
 import pytest
-
 
 _MERGE_CONFLICT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^<<<<<<< ", re.MULTILINE),
