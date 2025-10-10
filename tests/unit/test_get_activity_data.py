@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import sys
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Condition, Event, Lock
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import pandas as pd
@@ -19,6 +20,41 @@ from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS
 from library.pipelines.common import PipelineRunResult
 from library.postprocessing import activity_extended
 from scripts import get_activity_data
+
+
+def test_command_module_run_chembl__delegates_to_entrypoint(monkeypatch):
+    module_name = "library.cli.entrypoints.activity"
+    stub_module = ModuleType(module_name)
+    calls: dict[str, object] = {}
+
+    def _run(cfg, args):
+        calls["cfg"] = cfg
+        calls["args"] = args
+        return 123
+
+    def _emit(*args, **kwargs):
+        calls["emit"] = (args, kwargs)
+
+    stub_module.run_chembl = _run  # type: ignore[attr-defined]
+    stub_module._emit_completion_message = _emit  # type: ignore[attr-defined]
+    stub_module.__all__ = ("run_chembl", "_emit_completion_message")
+
+    import library.cli.activity_api as activity_api
+
+    monkeypatch.setattr(activity_api, "_ENTRYPOINT_MODULE_CACHE", None)
+    monkeypatch.setitem(sys.modules, module_name, stub_module)
+
+    command_module = importlib.reload(
+        importlib.import_module("library.cli.commands.get_activity_data")
+    )
+
+    result = command_module.run_chembl("cfg", "args")
+    command_module._emit_completion_message(1, mode="test")
+
+    assert result == 123
+    assert calls["cfg"] == "cfg"
+    assert calls["args"] == "args"
+    assert calls["emit"] == ((1,), {"mode": "test"})
 
 
 def test_wrapper_module__reflects_command_updates(monkeypatch):

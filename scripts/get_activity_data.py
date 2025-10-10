@@ -75,6 +75,7 @@ def _load_activity_module() -> ModuleType:
 
 
 _MODULE = _load_activity_module()
+_MODULE._synchronise_wrapper_module()
 __all__ = _export_module_api(_MODULE)
 
 
@@ -105,7 +106,9 @@ class _Adapter(ModuleType):
         return __dir__()
 
 
-sys.modules[__name__].__class__ = _Adapter
+module_proxy = sys.modules[__name__]
+if module_proxy is not _MODULE:
+    module_proxy.__class__ = _Adapter
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
