@@ -9,6 +9,7 @@ import traceback
 from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from functools import lru_cache
 from itertools import chain, islice
 from pathlib import Path
@@ -20,7 +21,6 @@ from pandera.errors import SchemaErrors
 
 from library import io
 from library.clients import pubchem as pc
-from library.common.csv_utils import write_csv_chunks_deterministic
 from library.common.log import logger
 from library.common.metadata import (
     Stats,
@@ -42,6 +42,7 @@ from library.orchestration import ETLContext
 from library.qa.reporting import build_table_quality_hook
 from library.qa.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
+from library.utils import data_correlation, qc_report
 
 from .catalog import (
     PARENT_LOOKUP_SOURCE_SKIPPED,
@@ -87,6 +88,7 @@ class TestitemPipelineOptions:
     output_csv: Path | None = None
     limit: int | None = None
     offset: int | None = None
+    emit_legacy_artifacts: bool = False
 
 
 def _is_placeholder_user_agent(user_agent: str | None) -> bool:
@@ -648,7 +650,7 @@ def apply_testitem_enrichment(
 def run_testitem_pipeline(
     cfg: Config,
     options: TestitemPipelineOptions,
-) -> int:
+) -> tuple[int, io.StandardOutputArtifacts | None]:
     """Execute compound retrieval from the ChEMBL API and augment with PubChem data."""
 
     limit = options.limit if options.limit is not None else cfg.testitem.limit
@@ -693,7 +695,7 @@ def run_testitem_pipeline(
             offset=offset,
         )
         if read_status != 0 or read_result is None:
-            return read_status
+            return read_status, None
 
         fetch_status, chunk_iter, requested_ids = fetch_testitems(
             read_result.ids_iter,
@@ -707,7 +709,7 @@ def run_testitem_pipeline(
             retry_cfg=cfg.testitem.batch_retry,
         )
         if fetch_status != 0 or chunk_iter is None:
-            return fetch_status
+            return fetch_status, None
 
         requested_unique: OrderedDict[str, str] = OrderedDict()
         for identifier in requested_ids:
@@ -833,22 +835,24 @@ def run_testitem_pipeline(
             )
         )
 
+        artifacts: io.StandardOutputArtifacts | None = None
         try:
-            exit_code = finalize_output(
+            exit_code, artifacts = finalize_output(
                 _processed_chunks(),
                 cfg=cfg,
                 output=output_path,
                 parent_stats_supplier=_parent_stats_supplier,
                 input_csv=input_csv,
                 missing_ids=missing_ids,
+                emit_legacy_artifacts=options.emit_legacy_artifacts,
             )
         except TestitemPipelineStageError as exc:
-            return exc.code
+            return exc.code, None
 
     if limit is not None:
         logger.info("process_limit", limit=min(limit, rows_counter))
 
-    return exit_code
+    return exit_code, artifacts
 
 
 def finalize_output(
@@ -859,7 +863,8 @@ def finalize_output(
     parent_stats_supplier: Callable[[], ParentLookupStats],
     input_csv: Path,
     missing_ids: Sequence[str] | None = None,
-) -> int:
+    emit_legacy_artifacts: bool = False,
+) -> tuple[int, io.StandardOutputArtifacts | None]:
     """Normalise, validate, and persist the final dataset from ``chunks``."""
 
     schema_model, normalizer = _load_testitem_schema()
@@ -868,7 +873,6 @@ def finalize_output(
     optional_cols = set(schema_model.columns) - required_cols
     col_order = schema_cols
     key_cols = ["molecule_chembl_id"]
-    csv_chunksize = cfg.io.csv_chunksize
 
     rows_total = 0
     rows_written = 0
@@ -994,12 +998,12 @@ def finalize_output(
         try:
             prepared_chunks.append(_process_chunk(empty))
         except TestitemPipelineStageError:
-            return 1
+            return 1, None
     else:
         try:
             prepared_chunks.append(_process_chunk(first_raw))
         except TestitemPipelineStageError:
-            return 1
+            return 1, None
 
     def _validated_chunks() -> Iterator[pd.DataFrame]:
         for chunk in prepared_chunks:
@@ -1017,7 +1021,7 @@ def finalize_output(
             "validation_skipped",
             missing_columns=sorted(missing_required),
         )
-        return 1
+        return 1, None
 
     validated_chunks_list = list(_validated_chunks())
 
@@ -1037,34 +1041,103 @@ def finalize_output(
 
     if failure_count:
         failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
-        failure_cases.save(failure_path, cfg=cfg)
-        logger.error(
-            "validation_failed",
-            failures=failure_count,
-            path=str(failure_path),
-        )
+        if emit_legacy_artifacts:
+            failure_cases.save(failure_path, cfg=cfg)
+            logger.error(
+                "validation_failed",
+                failures=failure_count,
+                path=str(failure_path),
+            )
+        else:
+            logger.error("validation_failed", failures=failure_count)
 
     if exit_code != 0:
-        return exit_code
+        return exit_code, None
+
+    def _resolve_table_name_and_tag(path: Path) -> tuple[str, str]:
+        stem = path.stem
+        remainder = stem.split("output.", 1)[-1] if stem.startswith("output.") else stem
+        candidate_table, sep, candidate_tag = remainder.rpartition("_")
+        if sep and len(candidate_tag) == 8 and candidate_tag.isdigit():
+            table_name_candidate = candidate_table or remainder
+            return table_name_candidate or "testitems", candidate_tag
+        return (remainder or "testitems", datetime.now(UTC).strftime("%Y%m%d"))
+
+    table_name, date_tag = _resolve_table_name_and_tag(output)
+
+    def _build_output_cfg(target: Path) -> IoCfg:
+        target_dir = target.parent
+        io_cfg = cfg.io
+        if Path(io_cfg.output_dir) != target_dir:
+            return io_cfg.model_copy(update={"output_dir": target_dir})
+        return io_cfg
+
+    dataset_frame: pd.DataFrame
+    if validated_chunks_list:
+        dataset_frame = pd.concat(validated_chunks_list, ignore_index=True)
+    else:
+        dataset_frame = pd.DataFrame(columns=list(expected_columns) or col_order)
+
+    ordered_columns = [column for column in col_order if column in dataset_frame.columns]
+    extra_columns = [
+        column for column in dataset_frame.columns if column not in ordered_columns
+    ]
+    dataset_frame = dataset_frame.reindex(
+        columns=ordered_columns + extra_columns,
+        copy=False,
+    )
+
+    doc_quality_cfg = cfg.system.doc_quality
+    include_columns = getattr(doc_quality_cfg, "include_columns", None)
+    exclude_columns = getattr(doc_quality_cfg, "exclude_columns", None)
+    sample_rows = getattr(doc_quality_cfg, "sample_rows", None)
+
+    quality_report = qc_report.build_qc_summary(
+        dataset_frame,
+        table_name=table_name,
+        include_columns=include_columns,
+        exclude_columns=exclude_columns,
+        sample_rows=sample_rows,
+    )
+    correlation_report = data_correlation.build_correlation_matrix(
+        dataset_frame,
+        table_name=table_name,
+        include_columns=include_columns,
+        exclude_columns=exclude_columns,
+        sample_rows=sample_rows,
+    )
+
+    output_cfg = _build_output_cfg(output)
 
     try:
-        csv_path = write_csv_chunks_deterministic(
-            validated_chunks_list,
-            output,
-            col_order=col_order,
-            key_cols=key_cols,
-            chunksize=csv_chunksize,
-            sort_chunksize=csv_chunksize,
-            sep=cfg.io.csv_sep,
-            encoding=cfg.io.csv_encoding,
-            cfg=cfg,
+        artifacts = io.save_standard_outputs(
+            dataset_frame,
+            quality_report,
+            correlation_report,
+            table_name=table_name,
+            date_tag=date_tag,
+            cfg=output_cfg,
+            key_columns=key_cols,
         )
-        logger.info("write_done", rows=rows_written, path=str(csv_path))
-    except TestitemPipelineStageError:
-        return 1
     except (OSError, ValueError) as exc:
         logger.error("write_fail", error=str(exc), path=str(output))
-        return 1
+        return 1, None
+
+    logger.info(
+        "write_done",
+        rows=rows_written,
+        dataset=str(artifacts.dataset),
+        quality_report=str(artifacts.quality_report),
+        correlation_report=str(artifacts.correlation_report),
+    )
+
+    if not emit_legacy_artifacts:
+        for path in (
+            artifacts.dataset,
+            artifacts.quality_report,
+            artifacts.correlation_report,
+        ):
+            Path(f"{path}.meta.yaml").unlink(missing_ok=True)
 
     rows_dropped = rows_total - rows_written
     parent_stats = parent_stats_supplier()
@@ -1074,7 +1147,7 @@ def finalize_output(
         "rows_total": rows_total,
         "rows_kept": rows_written,
         "rows_dropped": rows_dropped,
-        "output_sha256": file_sha256(csv_path),
+        "output_sha256": file_sha256(artifacts.dataset),
         "parent_lookup_source": parent_stats.source,
         "parent_lookup_missing": parent_stats.missing,
         "parent_lookup_hierarchy_attached": parent_stats.hierarchy_attached,
@@ -1093,8 +1166,13 @@ def finalize_output(
             meta_key="parent_lookup_failed_ids",
         )
 
+    logger.info("testitem_stats", **stats)
+
+    if not emit_legacy_artifacts:
+        return exit_code, artifacts
+
     meta_path = write_meta_yaml(
-        csv_path=csv_path,
+        csv_path=artifacts.dataset,
         command=" ".join(sys.argv),
         config_subset=_serialize_paths(cfg.to_dict()),
         inputs={"input_csv": str(input_csv)},
@@ -1102,15 +1180,14 @@ def finalize_output(
         schema="TestitemsSchema",
     )
 
-    doc_quality_cfg = cfg.system.doc_quality
     fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
     table_quality = build_table_quality_hook(
         doc_quality_cfg,
-        table_name=output.with_suffix(""),
-        destination=output.parent,
+        table_name=artifacts.dataset.with_suffix(""),
+        destination=artifacts.dataset.parent,
     )
     try:
-        table_quality(csv_path)
+        table_quality(artifacts.dataset)
     except Exception as exc:
         tb = traceback.format_exc()
         record_quality_failure(
@@ -1123,13 +1200,13 @@ def finalize_output(
         log_kwargs = {
             "error": str(exc),
             "error_type": exc.__class__.__name__,
-            "path": str(output),
+            "path": str(artifacts.dataset),
             "traceback": tb,
         }
         if fatal_quality_error:
             log_kwargs["fatal"] = True
         logger.warning("quality_report_failed", **log_kwargs)
         if fatal_quality_error:
-            return 1
+            return 1, None
 
-    return exit_code
+    return exit_code, artifacts

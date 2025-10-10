@@ -241,7 +241,9 @@ get-testitem-data --input data/input/testitem.csv \
 ```
 
 After downloading molecules from ChEMBL, the pipeline enriches unique SMILES with
-PubChem properties, merges the results, and exports the combined dataset.
+PubChem properties, merges the results, and exports the combined dataset. By default
+only the dataset plus QA/correlation CSVs are written; pass `--emit-legacy-artifacts`
+to restore failure-case dumps and metadata sidecars when debugging a run. 【F:library/pipelines/testitem/cli.py†L864-L1186】【F:library/cli/commands/get_testitem_data.py†L564-L738】
 
 ## Helper utilities
 

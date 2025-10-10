@@ -557,8 +557,18 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         output_csv=output_path,
         limit=getattr(args, "limit", None),
         offset=getattr(args, "offset", None),
+        emit_legacy_artifacts=getattr(args, "emit_legacy_artifacts", False),
     )
-    return run_testitem_pipeline(cfg, options)
+    pipeline_result = run_testitem_pipeline(cfg, options)
+    if isinstance(pipeline_result, tuple) and len(pipeline_result) == 2:
+        exit_code, artifacts = pipeline_result
+    else:  # pragma: no cover - backward compatibility with legacy shims
+        exit_code = int(pipeline_result)
+        artifacts = None
+    if artifacts is not None:
+        args.output_csv = artifacts.dataset
+        setattr(args, "_testitem_artifacts", artifacts)
+    return exit_code
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
@@ -642,7 +652,12 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     if exit_code == 0:
         raw_output = Path(getattr(args, "output_csv", output_path))
         postprocess_enabled = bool(getattr(args, "postprocess", False))
+        emit_legacy = bool(getattr(args, "emit_legacy_artifacts", False))
         payload: dict[str, object] = {"output": str(output_path)}
+        artifacts = getattr(args, "_testitem_artifacts", None)
+        if artifacts is not None:
+            payload["quality_report"] = str(artifacts.quality_report)
+            payload["correlation_report"] = str(artifacts.correlation_report)
 
         if not postprocess_enabled:
             logger.info("Postprocessing skipped (flag --postprocess not set)")
@@ -729,9 +744,13 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                             payload["postprocess_schema"] = validation.schema
 
                     if postprocess_result.report_path is not None:
-                        payload["postprocess_report"] = str(
-                            postprocess_result.report_path
-                        )
+                        if not emit_legacy:
+                            postprocess_result.report_path.unlink(missing_ok=True)
+                            postprocess_result.report_path = None
+                        else:
+                            payload["postprocess_report"] = str(
+                                postprocess_result.report_path
+                            )
 
         if not postprocess_error:
             logger.info("testitem_pipeline_done", **payload)
@@ -787,6 +806,16 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Enable test item postprocessing after the main pipeline",
+    )
+    parser.add_argument(
+        "--emit-legacy-artifacts",
+        dest="emit_legacy_artifacts",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Persist legacy artefacts such as failure cases, metadata YAML files "
+            "and postprocess manifests"
+        ),
     )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg

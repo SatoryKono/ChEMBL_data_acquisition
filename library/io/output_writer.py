@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Sequence
 
 import pandas as pd
 
@@ -41,6 +42,7 @@ def save_standard_outputs(
     table_name: str,
     date_tag: str,
     cfg: IoCfg,
+    key_columns: Sequence[str] | None = None,
 ) -> StandardOutputArtifacts:
     """Persist canonical output artefacts and return their locations.
 
@@ -58,6 +60,9 @@ def save_standard_outputs(
         Deterministic UTC date string appended to filenames.
     cfg:
         Active IO configuration controlling output directory handling.
+    key_columns:
+        Optional sequence of columns used for deterministic ordering of the
+        dataset export. When omitted the first column of ``dataset`` is used.
 
     Returns
     -------
@@ -73,22 +78,31 @@ def save_standard_outputs(
     quality_path = output_dir / f"{stem}_quality_report_table.csv"
     correlation_path = output_dir / f"{stem}_data_correlation_report_table.csv"
 
-    def _write(frame: pd.DataFrame, path: Path) -> None:
-        key_cols = sorted(frame.columns)
-        col_order = list(frame.columns)
-        write_csv_deterministic(
-            frame,
-            path,
-            key_cols=key_cols,
-            col_order=col_order if col_order else None,
-            sep=cfg.csv_sep,
-            encoding=cfg.csv_encoding,
-            cfg=cfg,
-        )
+    key_cols = list(key_columns or [])
+    if not key_cols and not dataset.empty:
+        key_cols = [str(dataset.columns[0])]
 
-    _write(dataset, dataset_path)
-    _write(quality_report, quality_path)
-    _write(correlation_report, correlation_path)
+    write_csv_deterministic(
+        dataset,
+        dataset_path,
+        key_cols=key_cols,
+        cfg=cfg,
+    )
+    write_csv_deterministic(
+        quality_report,
+        quality_path,
+        key_cols=list(quality_report.columns[:1]),
+        cfg=cfg,
+    )
+    corr_key_cols: list[str] = []
+    if not correlation_report.empty:
+        corr_key_cols = [str(correlation_report.columns[0])]
+    write_csv_deterministic(
+        correlation_report,
+        correlation_path,
+        key_cols=corr_key_cols,
+        cfg=cfg,
+    )
 
     return StandardOutputArtifacts(
         dataset=dataset_path,
