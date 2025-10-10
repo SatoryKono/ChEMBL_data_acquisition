@@ -71,8 +71,8 @@ def test_save_standard_outputs__writes_expected_csvs(
 
     expected_names = {
         "dataset": "output.documents_20240101.csv",
-        "correlation": "_output.documents_20240101_data_correlation_report.csv",
-        "quality": "_output.documents_20240101_quality_report.csv",
+        "correlation": "output.documents_20240101_data_correlation_report_table.csv",
+        "quality": "output.documents_20240101_quality_report_table.csv",
     }
 
     assert set(captured) == set(expected_names.values())

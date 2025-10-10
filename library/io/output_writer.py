@@ -78,8 +78,11 @@ def save_standard_outputs(
 
     stem = f"output.{table_name}_{date_tag}"
     dataset_path = output_dir / f"{stem}.csv"
-    correlation_path = output_dir / f"_output.{table_name}_{date_tag}_data_correlation_report.csv"
-    quality_path = output_dir / f"_output.{table_name}_{date_tag}_quality_report.csv"
+    correlation_path = (
+        output_dir
+        / f"{stem}_data_correlation_report_table.csv"
+    )
+    quality_path = output_dir / f"{stem}_quality_report_table.csv"
 
     key_cols = list(key_columns or [])
     if not key_cols and not dataset.empty:
