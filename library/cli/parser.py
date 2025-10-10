@@ -161,6 +161,7 @@ def add_common_arguments(
     date_default: str | None | object = None if defaults else argparse.SUPPRESS
     force_default: bool | object = False if defaults else argparse.SUPPRESS
     skip_default: bool | object = False if defaults else argparse.SUPPRESS
+    emit_legacy_default: bool | object = False if defaults else argparse.SUPPRESS
     if defaults:
         run_id_default: str | object = os.environ.get(_RUN_ID_ENV) or None
     else:
@@ -217,6 +218,16 @@ def add_common_arguments(
         dest="date",
         default=date_default,
         help="Date prefix used when constructing default outputs",
+    )
+    parser.add_argument(
+        "--emit-legacy-artifacts",
+        dest="emit_legacy_artifacts",
+        action="store_true",
+        default=emit_legacy_default,
+        help=(
+            "Persist legacy artefacts such as raw exports, metadata sidecars and"
+            " manifest snapshots"
+        ),
     )
     parser.add_argument(
         "--force",
