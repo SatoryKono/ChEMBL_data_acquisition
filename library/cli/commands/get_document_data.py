@@ -710,12 +710,15 @@ def _finalise_export(
         if partial_run:
             postprocess_extras = {"partial_run": True}
 
+        pipeline_succeeded = False
         try:
             postprocessed_path, _ = _run_document_postprocess_pipeline(
                 csv_path,
                 logger=logger,
                 extras=postprocess_extras,
             )
+        except (ImportError, AttributeError):
+            pass
         except (
             AttributeError,
             SchemaValidationError,
@@ -757,6 +760,28 @@ def _finalise_export(
                 "document_export_postprocess_written",
                 path=str(postprocessed_path),
             )
+            pipeline_succeeded = True
+
+        if not pipeline_succeeded:
+            try:
+                postprocessed_path = document_export_postprocessing.postprocess_export_file(
+                    csv_path,
+                    cfg=cfg.io,
+                )
+            except (OSError, ValueError, pd.errors.ParserError) as exc:
+                logger.error(
+                    "document_export_postprocess_failed",
+                    error=str(exc),
+                    exc_info=exc,
+                    path=str(csv_path),
+                )
+                postprocessed_path = None
+                exit_code = 1
+            else:
+                logger.info(
+                    "document_export_postprocess_written",
+                    path=str(postprocessed_path),
+                )
 
     if missing_required:
         logger.warning(
