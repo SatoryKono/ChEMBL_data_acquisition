@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
 
 import pytest
 
@@ -11,6 +10,7 @@ from library.orchestration.workflow import (
     temporary_output_path,
 )
 from library.pipelines.registry import PipelineStep
+
 
 @dataclass
 class _ConfigStub:
@@ -71,7 +71,7 @@ def test_execute_workflow__passes_resolved_paths(tmp_path: Path) -> None:
         output_stem="documents",
     )
 
-    calls: List[tuple[_ConfigStub, Path, Path, Path]] = []
+    calls: list[tuple[_ConfigStub, Path, Path, Path]] = []
 
     def runner(
         cfg_arg: _ConfigStub,

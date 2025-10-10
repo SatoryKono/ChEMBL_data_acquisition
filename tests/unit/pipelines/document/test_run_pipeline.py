@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import copy
 import sys
-from types import ModuleType, SimpleNamespace
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -25,7 +25,7 @@ class _DummySection:
         for key, value in extra.items():
             setattr(self, key, value)
 
-    def model_copy(self, update: dict[str, object] | None = None) -> "_DummySection":
+    def model_copy(self, update: dict[str, object] | None = None) -> _DummySection:
         update = update or {}
         data = dict(self.__dict__)
 
@@ -85,7 +85,7 @@ class _DummyConfig:
             keep_na_markers=False,
         )
 
-    def model_copy(self, *, deep: bool = False) -> "_DummyConfig":
+    def model_copy(self, *, deep: bool = False) -> _DummyConfig:
         # The real config uses pydantic's copy mechanism. A deepcopy is sufficient
         # for these tests and keeps the API compatible.
         return copy.deepcopy(self)
@@ -97,12 +97,12 @@ def _install_fake_cli(monkeypatch: pytest.MonkeyPatch, exit_code: int) -> None:
     def _runner(*_: object, **__: object) -> int:
         return exit_code
 
-    setattr(module, "run_all", _runner)
-    setattr(module, "run_chembl", _runner)
-    setattr(module, "run_pubmed", _runner)
+    module.run_all = _runner
+    module.run_chembl = _runner
+    module.run_pubmed = _runner
     package = ModuleType("scripts")
     package.__path__ = []  # type: ignore[attr-defined]
-    setattr(package, "get_document_data", module)
+    package.get_document_data = module
     monkeypatch.setitem(sys.modules, "scripts", package)
     monkeypatch.setitem(sys.modules, "scripts.get_document_data", module)
 
