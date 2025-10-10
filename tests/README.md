@@ -67,6 +67,7 @@ The command executes `pytest` with the default configuration, writes the full pr
 
 The generated JSON/Markdown files are git-ignored; CI publishes them together with the coverage directory as the `test-reports-<python-version>` artefact so that the latest results can be downloaded directly from GitHub Actions.
 
+To guard against stalled executions, the wrapper accepts a `--pytest-timeout <seconds>` flag (or the `CHEMBL_DA_PYTEST_TIMEOUT` environment variable) that aborts the pytest run once the limit is exceeded. When triggered, the subprocess is terminated, the partial output is logged and the wrapper returns a non-zero exit code.
 
 To focus on a subset, forward additional arguments to pytest after the `--` separator, for example `python -m scripts.run_tests -- -m unit`. Combine `--verbose` with the forwarding flag to observe detailed DEBUG events in both the console and the generated log file.
 

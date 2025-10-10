@@ -13,6 +13,7 @@ import sys
 from collections.abc import Mapping, MutableMapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+import threading
 from typing import Any, cast
 from uuid import NAMESPACE_URL, uuid5
 
@@ -77,6 +78,9 @@ _DEFAULT_TEST_TARGETS: tuple[str, ...] = tuple(
     str(path) for path in TEST_DIRECTORIES if path.exists()
 )
 
+PYTEST_TIMEOUT_ENV_VAR = "CHEMBL_DA_PYTEST_TIMEOUT"
+_PROCESS_TERMINATION_TIMEOUT = 5.0
+
 
 logger = logging.getLogger("run_tests")
 
@@ -107,7 +111,22 @@ def ensure_output_directories(report_file: Path, summary_file: Path) -> None:
                 pass
 
 
-def run_pytest(command: Sequence[str]) -> int:
+def _stream_process_output(process: subprocess.Popen[str]) -> None:
+    """Stream stdout from ``process`` to the configured logger."""
+
+    stdout = process.stdout
+    if stdout is None:  # pragma: no cover - defensive fallback
+        return
+    with stdout:
+        for raw_line in stdout:
+            line = raw_line.rstrip()
+            if line:
+                logger.info(line)
+            else:
+                logger.info("")
+
+
+def run_pytest(command: Sequence[str], *, timeout: float | None = None) -> int:
     """Execute ``command`` and stream output through the configured logger."""
 
     logger.debug(
@@ -122,16 +141,35 @@ def run_pytest(command: Sequence[str]) -> int:
         bufsize=1,
     )
 
-    assert process.stdout is not None  # for mypy; Popen(..., stdout=PIPE)
-    with process.stdout:
-        for raw_line in process.stdout:
-            line = raw_line.rstrip()
-            if line:
-                logger.info(line)
-            else:
-                logger.info("")
+    stream_thread = threading.Thread(
+        target=_stream_process_output, args=(process,), daemon=True
+    )
+    stream_thread.start()
 
-    return_code = process.wait()
+    timed_out = False
+    try:
+        return_code = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        logger.error(
+            "Pytest command exceeded timeout of %s seconds; terminating process",
+            timeout,
+        )
+        process.kill()
+        try:
+            return_code = process.wait(timeout=_PROCESS_TERMINATION_TIMEOUT)
+        except subprocess.TimeoutExpired:  # pragma: no cover - defensive fallback
+            logger.error(
+                "Pytest process did not exit after kill; waiting without timeout"
+            )
+            return_code = process.wait()
+    finally:
+        stream_thread.join(timeout=_PROCESS_TERMINATION_TIMEOUT)
+        if stream_thread.is_alive():  # pragma: no cover - defensive fallback
+            logger.debug("Pytest output stream thread is still running after join")
+
+    if timed_out:
+        logger.error("Pytest run aborted due to timeout")
     if return_code != 0:
         logger.error("Pytest exited with non-zero status: %s", return_code)
     else:
@@ -516,6 +554,16 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Override the run identifier used for logging",
     )
     parser.add_argument(
+        "--pytest-timeout",
+        dest="pytest_timeout",
+        type=float,
+        default=None,
+        help=(
+            "Maximum number of seconds to allow pytest to run before forcing termination. "
+            "Can also be provided via the CHEMBL_DA_PYTEST_TIMEOUT environment variable."
+        ),
+    )
+    parser.add_argument(
         "pytest_args",
         nargs=argparse.REMAINDER,
         help="Arguments forwarded to pytest (use '--' before them)",
@@ -570,6 +618,27 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         ensure_output_directories(report_path, summary_path)
 
+        timeout_value = args.pytest_timeout
+        if timeout_value is None:
+            env_timeout = os.environ.get(PYTEST_TIMEOUT_ENV_VAR)
+            if env_timeout:
+                try:
+                    timeout_value = float(env_timeout)
+                except ValueError:
+                    logger.warning(
+                        "Ignoring invalid %s value: %r",
+                        PYTEST_TIMEOUT_ENV_VAR,
+                        env_timeout,
+                    )
+        if timeout_value is not None and timeout_value <= 0:
+            logger.warning(
+                "Ignoring non-positive pytest timeout value: %s",
+                timeout_value,
+            )
+            timeout_value = None
+        if timeout_value is not None:
+            logger.info("Pytest timeout configured to %.2f seconds", timeout_value)
+
         pytest_command = list(_BASE_PYTEST_COMMAND)
         pytest_command.extend(
             [
@@ -582,7 +651,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         pytest_command.extend(_DEFAULT_TEST_TARGETS)
         pytest_command.extend(_extract_pytest_args(args.pytest_args))
 
-        exit_code = run_pytest(pytest_command)
+        exit_code = run_pytest(pytest_command, timeout=timeout_value)
 
         structured: dict[str, Any] | None = None
         validation_exit_code: int | None = None
