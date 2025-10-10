@@ -174,7 +174,7 @@ class PipelineMetrics:
 class RunPipelineResult(int):
     """Return value exposing the exit code alongside output artefact paths."""
 
-    __slots__ = ("_exit_code", "_dataset_path", "_artifacts")
+    _STATE: dict[int, tuple[int, Path | None, StandardOutputArtifacts | None]] = {}
 
     def __new__(
         cls,
@@ -183,36 +183,51 @@ class RunPipelineResult(int):
         artifacts: StandardOutputArtifacts | None = None,
     ) -> "RunPipelineResult":
         obj = int.__new__(cls, exit_code)
-        obj._exit_code = exit_code
-        obj._dataset_path = dataset_path
-        obj._artifacts = artifacts
+        cls._STATE[id(obj)] = (exit_code, dataset_path, artifacts)
         return obj
+
+    @classmethod
+    def _lookup_state(
+        cls, instance: "RunPipelineResult"
+    ) -> tuple[int, Path | None, StandardOutputArtifacts | None]:
+        return cls._STATE.get(id(instance), (int(instance), None, None))
+
+    def __del__(self) -> None:  # pragma: no cover - best effort cleanup
+        self._STATE.pop(id(self), None)
+
+    def __reduce__(self) -> tuple[type, tuple[int, Path | None, StandardOutputArtifacts | None]]:
+        return (
+            self.__class__,
+            self._lookup_state(self),
+        )
 
     @property
     def exit_code(self) -> int:
         """Return the pipeline exit code.
 
         ``RunPipelineResult`` subclasses :class:`int` to preserve backwards
-        compatibility with historical callers.  On some Python builds assigning
-        attributes to ``int`` subclasses is not supported which previously
-        resulted in ``AttributeError`` when accessing ``exit_code``.  Storing the
-        value in ``__slots__`` and exposing it via a property keeps the legacy
-        behaviour while guaranteeing attribute access across platforms.
+        compatibility with historical callers.  Some Python builds (notably
+        Windows) forbid attribute assignment on :class:`int` subclasses, which
+        previously caused import-time failures.  Keeping the metadata in a class
+        level registry avoids that limitation while retaining the legacy API.
         """
 
-        return getattr(self, "_exit_code", int(self))
+        return self._lookup_state(self)[0]
 
     @property
     def dataset_path(self) -> Path | None:
         """Return the resolved dataset path if available."""
 
-        return getattr(self, "_dataset_path", None)
+        return self._lookup_state(self)[1]
 
     @property
     def artifacts(self) -> StandardOutputArtifacts | None:
         """Return generated standard output artefacts when present."""
 
-        return getattr(self, "_artifacts", None)
+        return self._lookup_state(self)[2]
+
+    def __bool__(self) -> bool:  # pragma: no cover - bool(int) already tested elsewhere
+        return bool(int(self))
 
 
 def _callable_name(func: Callable[..., object]) -> str:
