@@ -100,13 +100,18 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             )
             return 1
         ensure_dirs(cfg)
+        checkpoint_value = getattr(args, "checkpoint", None)
+        if checkpoint_value in (None, argparse.SUPPRESS):
+            checkpoint_path = None
+        else:
+            checkpoint_path = Path(checkpoint_value)
         rows = process_csv_chunks(
             args.input_csv,
             output,
             cfg=cfg.io,
             chunk_size=args.chunk_size,
             limit=args.limit,
-            checkpoint_path=args.checkpoint,
+            checkpoint_path=checkpoint_path,
             sep=args.sep,
             encoding=args.encoding,
             ensure_directory=False,
