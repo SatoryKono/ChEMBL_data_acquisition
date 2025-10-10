@@ -55,21 +55,21 @@ dev = [
 ]
 
 [project.scripts]
-get-data = "scripts.get_data:main"
-get-activity-data = "library.cli.commands.get_activity_data:main"
-get-assay-data = "library.cli.commands.get_assay_data:main"
-get-target-data = "library.cli.commands.get_target_data:main"
-get-document-data = "library.cli.commands.get_document_data:main"
-get-document-type = "library.utils.cli_tools.get_document_type:main"
-get-input-initialisation = "library.utils.cli_tools.get_input_initialisation:main"
-get-testitem-data = "library.cli.commands.get_testitem_data:main"
-csv-utils = "library.utils.cli_tools.csv_utils_main:main"
-mapper = "library.utils.cli_tools.mapper_main:main"
-table-quality = "library.utils.cli_tools.table_quality_main:main"
-chunk-io = "library.utils.cli_tools.chunk_io_main:main"
-get-activities = "library.utils.cli_tools.get_activities:main"
-check-determinism = "library.utils.cli_tools.check_determinism:main"
-make-md-summary = "tools.make_md_summary:main"
+get-data = "library.cli.entrypoints:get_data_main"
+get-activity-data = "library.cli.entrypoints:get_activity_data_main"
+get-assay-data = "library.cli.entrypoints:get_assay_data_main"
+get-target-data = "library.cli.entrypoints:get_target_data_main"
+get-document-data = "library.cli.entrypoints:get_document_data_main"
+get-document-type = "library.cli.entrypoints:get_document_type_main"
+get-input-initialisation = "library.cli.entrypoints:get_input_initialisation_main"
+get-testitem-data = "library.cli.entrypoints:get_testitem_data_main"
+csv-utils = "library.cli.entrypoints:csv_utils_main"
+mapper = "library.cli.entrypoints:mapper_main"
+table-quality = "library.cli.entrypoints:table_quality_main"
+chunk-io = "library.cli.entrypoints:chunk_io_main"
+get-activities = "library.cli.entrypoints:get_activities_main"
+check-determinism = "library.cli.entrypoints:check_determinism_main"
+make-md-summary = "library.cli.entrypoints:make_md_summary_main"
 
 [tool.setuptools]
 include-package-data = true
