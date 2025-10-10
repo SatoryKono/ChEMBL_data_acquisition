@@ -73,9 +73,22 @@ def save_standard_outputs(
     quality_path = output_dir / f"{stem}_quality_report_table.csv"
     correlation_path = output_dir / f"{stem}_data_correlation_report_table.csv"
 
-    write_csv_deterministic(dataset, dataset_path, cfg=cfg)
-    write_csv_deterministic(quality_report, quality_path, cfg=cfg)
-    write_csv_deterministic(correlation_report, correlation_path, cfg=cfg)
+    def _write(frame: pd.DataFrame, path: Path) -> None:
+        key_cols = sorted(frame.columns)
+        col_order = list(frame.columns)
+        write_csv_deterministic(
+            frame,
+            path,
+            key_cols=key_cols,
+            col_order=col_order if col_order else None,
+            sep=cfg.csv_sep,
+            encoding=cfg.csv_encoding,
+            cfg=cfg,
+        )
+
+    _write(dataset, dataset_path)
+    _write(quality_report, quality_path)
+    _write(correlation_report, correlation_path)
 
     return StandardOutputArtifacts(
         dataset=dataset_path,
