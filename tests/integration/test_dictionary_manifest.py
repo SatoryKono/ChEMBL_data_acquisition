@@ -2,19 +2,30 @@
 
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
+
 import pytest
 
+from config.paths import DICTIONARY_DIR
 from library.resources import dictionaries
+
+
+def _copy_dictionary_bundle(tmp_path: Path) -> Path:
+    destination = tmp_path / "dictionary"
+    shutil.copytree(DICTIONARY_DIR, destination)
+    return destination
 
 
 @pytest.mark.integration
 @pytest.mark.smoke
-def test_dictionary_manifest__bundled_resources_validate() -> None:
+def test_dictionary_manifest__bundled_resources_validate(tmp_path: Path) -> None:
     """Ensure the checked-in manifest matches the bundled resources."""
 
+    dictionary_root = _copy_dictionary_bundle(tmp_path)
     dictionaries._env_checksum_allowlist.cache_clear()
     try:
-        resources = dictionaries.list_resources()
+        resources = dictionaries.list_resources(base_dir=dictionary_root)
     finally:
         dictionaries._env_checksum_allowlist.cache_clear()
 

@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 
 import pytest
 import yaml
 
+from config.paths import DICTIONARY_DIR
 from library.resources import dictionaries
+
+
+@pytest.fixture()
+def dictionary_bundle(tmp_path: Path) -> Path:
+    destination = tmp_path / "dictionary"
+    shutil.copytree(DICTIONARY_DIR, destination)
+    return destination
 
 
 @pytest.mark.unit
@@ -113,10 +122,12 @@ def test_compute_sha256__normalises_crlf_in_non_utf8_files(tmp_path: Path) -> No
 
 
 @pytest.mark.unit
-def test_manifest_allows_windows_textmode_checksum() -> None:
+def test_manifest_allows_windows_textmode_checksum(
+    dictionary_bundle: Path,
+) -> None:
     """Ensure the dictionary manifest accepts all known Windows hash variants."""
 
-    manifest_path = Path("config/dictionary/manifest.yaml")
+    manifest_path = dictionary_bundle / "manifest.yaml"
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
 
     sha256_values = set(manifest["resources"]["dictionary_root"]["sha256"])
