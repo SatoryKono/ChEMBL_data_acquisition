@@ -310,7 +310,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         for encoding_candidate in encoding_candidates:
             try:
                 candidate_frame = _read_frame(separator, encoding_candidate)
-            except SystemExit as exc:
+            except io.CsvReadError as exc:
+                logger_inst.debug(
+                    "csv_candidate_read_failed",
+                    separator=separator,
+                    encoding=encoding_candidate,
+                    error=str(exc.original_error),
+                )
                 last_error = exc
                 continue
             except ValueError as exc:
@@ -330,12 +336,29 @@ def main(argv: Sequence[str] | None = None) -> int:
             break
 
     if df_in is None:
-        if isinstance(last_error, SystemExit):
-            raise last_error
-    
+        if isinstance(last_error, io.CsvReadError):
+            logger_inst.error(
+                "input_read_failed",
+                path=str(args.input_csv),
+                error=str(last_error.original_error),
+            )
+            logger_inst.info("pipeline_fail", run_id=log_cfg.run_id)
+            return 1
         if last_error is not None:
-            raise SystemExit(1) from last_error
-        raise SystemExit(1)
+            logger_inst.error(
+                "input_read_failed",
+                path=str(args.input_csv),
+                error=str(last_error),
+            )
+            logger_inst.info("pipeline_fail", run_id=log_cfg.run_id)
+            return 1
+        logger_inst.error(
+            "input_read_failed",
+            path=str(args.input_csv),
+            error="no CSV candidate succeeded",
+        )
+        logger_inst.info("pipeline_fail", run_id=log_cfg.run_id)
+        return 1
 
     primary_encoding = encoding_candidates[0] if encoding_candidates else None
     primary_separator = separator_candidates[0] if separator_candidates else None

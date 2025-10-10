@@ -312,6 +312,13 @@ def run(args: argparse.Namespace) -> int:
             pipeline_runtime,
         )
         metrics = result.metrics
+    except io.CsvReadError as exc:
+        logger.error(
+            f"{event_prefix}_input_read_failed",
+            input=str(input_path),
+            error=str(exc.original_error),
+        )
+        return 1
     except (SchemaValidationError, StepError) as exc:
         logger.exception(f"{event_prefix}_failed", exc=exc)
         return 1

@@ -33,6 +33,26 @@ def _get_validation_module() -> _validation_module:
     return _validation_mod
 
 
+class CsvReadError(Exception):
+    """Raised when :func:`read_csv` fails to load an input file."""
+
+    def __init__(
+        self,
+        path: Path,
+        original_error: Exception,
+        *,
+        encoding: str | None = None,
+    ) -> None:
+        message = f"failed to read CSV at {path}"
+        if encoding:
+            message += f" (encoding={encoding})"
+        message += f": {original_error}"
+        super().__init__(message)
+        self.path = path
+        self.encoding = encoding
+        self.original_error = original_error
+
+
 class _EncodingDecodeError(Exception):
     """Wrap :class:`UnicodeDecodeError` with the attempted encoding."""
 
@@ -299,14 +319,16 @@ def read_csv(
             parse_dates=list(parse_dates) if parse_dates is not None else None,
             chunksize=chunksize,
         )
-    except (FileNotFoundError, pd.errors.ParserError, UnicodeError) as exc:
+    except FileNotFoundError:
+        raise
+    except (pd.errors.ParserError, UnicodeError) as exc:
         logger.error(
             "read_fail",
             path=str(path_obj),
             encoding=encoding,
             error=str(exc),
         )
-        raise SystemExit(1) from exc
+        raise CsvReadError(path_obj, exc, encoding=encoding) from exc
     if chunksize is not None:
         return df
     if schema is not None:

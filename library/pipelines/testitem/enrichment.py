@@ -26,7 +26,15 @@ class _SourceFrames:
 def _read_source(path: Path, *, io_cfg: IoCfg) -> pd.DataFrame:
     """Read a CSV file using the shared I/O configuration."""
 
-    return io.read_csv(path, cfg=io_cfg, dtype=pd.StringDtype())
+    try:
+        return io.read_csv(path, cfg=io_cfg, dtype=pd.StringDtype())
+    except io.CsvReadError as exc:
+        logger.error(
+            "testitem_enrichment_source_read_failed",
+            path=str(path),
+            error=str(exc.original_error),
+        )
+        raise
 
 
 def _normalise_ids(series: pd.Series) -> pd.Series:
