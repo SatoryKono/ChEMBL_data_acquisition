@@ -20,6 +20,13 @@ Fetch PubMed metadata for identifiers listed in ``pmids.csv``::
 
 The input file must contain a ``PMID`` column.
 
+By default the command writes the canonical dataset together with quality-control
+and correlation summaries using :func:`library.io.save_standard_outputs`.  The
+artefacts are timestamped with the UTC date in ``YYYYMMDD`` format and stored in
+``cfg.io.output_dir``.  Legacy sidecar files (failure CSVs, metadata YAML and
+``.quality.json``) are only emitted when ``--emit-legacy-artifacts`` is
+enabled.
+
 """
 
 from __future__ import annotations
@@ -34,6 +41,7 @@ from dataclasses import dataclass
 from itertools import chain, islice
 from numbers import Integral, Real
 from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any
 
 import pandas as pd
@@ -90,6 +98,7 @@ from library.reporting.run_manifest import (
     QualityReportError,
     finalise_csv_output,
 )
+from library.utils import build_correlation_matrix, build_qc_summary
 from library.schemas import DocumentsSchema, normalize_documents
 from library.schemas.document_spec import DOCUMENT_EXPORT_COLUMNS
 from library.validation import validate_documents
@@ -442,10 +451,13 @@ class FinaliseExportResult:
     """Outcome of ``_finalise_export`` including postprocess artefact details."""
 
     exit_code: int
-    csv_path: Path
+    artifacts: io.StandardOutputArtifacts | None = None
+    legacy_csv_path: Path | None = None
+    failure_path: Path | None = None
     postprocess_path: Path | None = None
     postprocess_metrics: object | None = None
     postprocess_report: Path | None = None
+    date_tag: str | None = None
 
 
 def _run_documents_postprocess(
@@ -526,8 +538,10 @@ def _finalise_export(
     rerun_postprocess: bool = False,
     postprocess_enabled: bool = False,
     postprocess_config_path: Path | str | None = None,
+    emit_legacy_artifacts: bool = False,
+    date_tag: str | None = None,
 ) -> FinaliseExportResult:
-    """Validate input frames and write CSV/metadata artefacts."""
+    """Validate input frames and persist standard pipeline artefacts."""
 
     if isinstance(df, pd.DataFrame):
         frames_iterable: Iterable[pd.DataFrame] = (df,)
@@ -621,39 +635,73 @@ def _finalise_export(
                 quality_summary.consume(chunk)
                 yield chunk
 
-    export_generator = _validated_chunks()
+    validated_chunks = list(_validated_chunks())
 
-    key_cols: list[str] = []
-    if key_columns:
-        for column in key_columns:
-            mapped = _EXPORT_COLUMN_RENAMES.get(column, column)
-            if mapped in _EXPORT_COLUMNS and mapped not in key_cols:
-                key_cols.append(mapped)
-    if not key_cols:
-        for candidate in _EXPORT_SORT_FALLBACK:
-            if candidate in _EXPORT_COLUMNS:
-                key_cols = [candidate]
-                break
-    if not key_cols:
-        key_cols = [_EXPORT_COLUMNS[0]]
-
-    col_order = list(_EXPORT_COLUMNS)
-    try:
-        csv_path = write_csv_chunks_deterministic(
-            export_generator,
-            output,
-            cfg=cfg,
-            key_cols=key_cols,
-            col_order=col_order,
-            chunksize=stream_chunk,
-            merge_chunksize=stream_chunk,
-            sort_chunksize=stream_chunk,
-            sep=cfg.io.csv_sep,
-            encoding=cfg.io.csv_encoding,
+    if validated_chunks:
+        if len(validated_chunks) == 1:
+            export_frame = validated_chunks[0].copy()
+        else:
+            export_frame = pd.concat(validated_chunks, ignore_index=True)
+            export_frame = export_frame.reindex(columns=list(_EXPORT_COLUMNS), fill_value="")
+    else:  # pragma: no cover - defensive guard
+        export_frame = build_dataframe(
+            add_pipeline_metadata(pd.DataFrame()),
+            columns=DOCUMENT_SCHEMA_COLUMNS,
+            fill_missing=False,
         )
-    except OSError as exc:
-        logger.error("csv_write_failed", error=str(exc), exc_info=exc, path=str(output))
-        return FinaliseExportResult(exit_code=1, csv_path=Path(output))
+        export_frame = dataframe_to_strings(export_frame, skip=_NUMERIC_EXPORT_COLUMNS)
+        export_frame = _prepare_export_frame(export_frame)
+
+    table_name = output.stem or DEFAULT_OUTPUT_STEM
+    resolved_date_tag = date_tag or datetime.now(timezone.utc).strftime("%Y%m%d")
+
+    try:
+        quality_report = build_qc_summary(
+            export_frame,
+            table_name=table_name,
+            profiler=quality_profiler,
+        )
+        correlation_report = build_correlation_matrix(
+            export_frame,
+            table_name=table_name,
+            profiler=quality_profiler,
+        )
+    except ValueError as exc:  # pragma: no cover - validation guard
+        logger.error(
+            "document_quality_build_failed",
+            error=str(exc),
+            exc_info=exc,
+            table=table_name,
+        )
+        return FinaliseExportResult(exit_code=1, date_tag=resolved_date_tag)
+
+    try:
+        artifacts = io.save_standard_outputs(
+            export_frame,
+            quality_report,
+            correlation_report,
+            table_name=table_name,
+            date_tag=resolved_date_tag,
+            cfg=cfg.io,
+        )
+    except (OSError, ValueError) as exc:
+        logger.error(
+            "document_standard_outputs_failed",
+            error=str(exc),
+            exc_info=exc,
+            table=table_name,
+        )
+        return FinaliseExportResult(exit_code=1, date_tag=resolved_date_tag)
+
+    csv_path = artifacts.dataset
+
+    logger.info(
+        "document_standard_outputs_written",
+        dataset=str(artifacts.dataset),
+        quality_report=str(artifacts.quality_report),
+        correlation_report=str(artifacts.correlation_report),
+        date_tag=resolved_date_tag,
+    )
 
     postprocessed_path: Path | None = None
     postprocess_metrics: object | None = None
@@ -663,7 +711,7 @@ def _finalise_export(
         logger.info("[INFO] Postprocessing skipped (flag --postprocess not set)")
     else:
         postprocess_extras: Mapping[str, object] | None = None
-        if partial_run:
+        if emit_legacy_artifacts and partial_run:
             postprocess_extras = {"partial_run": True}
 
         destination = csv_path.with_name("output_postprocessed.documents.csv")
@@ -717,7 +765,109 @@ def _finalise_export(
             columns=sorted(missing_optional),
         )
 
-    errors.save(failure_path)
+    legacy_failure_path: Path | None = None
+    legacy_csv_path: Path | None = None
+
+    if emit_legacy_artifacts:
+        errors.save(failure_path, cfg=cfg)
+        legacy_failure_path = failure_path if failure_path.exists() else None
+
+        key_cols: list[str] = []
+        if key_columns:
+            for column in key_columns:
+                mapped = _EXPORT_COLUMN_RENAMES.get(column, column)
+                if mapped in _EXPORT_COLUMNS and mapped not in key_cols:
+                    key_cols.append(mapped)
+        if not key_cols:
+            for candidate in _EXPORT_SORT_FALLBACK:
+                if candidate in _EXPORT_COLUMNS:
+                    key_cols = [candidate]
+                    break
+        if not key_cols:
+            key_cols = [_EXPORT_COLUMNS[0]]
+
+        try:
+            legacy_csv_path = _write_export_chunks(
+                validated_chunks,
+                output,
+                cfg=cfg,
+                key_cols=key_cols,
+                chunk_size=stream_chunk,
+            )
+        except OSError as exc:
+            logger.error(
+                "csv_write_failed",
+                error=str(exc),
+                exc_info=exc,
+                path=str(output),
+            )
+            exit_code = 1
+            legacy_csv_path = None
+        else:
+            logger.info("legacy_write_done", rows=rows_kept, path=str(legacy_csv_path))
+
+        if legacy_csv_path is not None:
+            doc_quality_cfg = getattr(cfg.system, "doc_quality", None)
+            quality_hook = build_table_quality_hook(
+                doc_quality_cfg,
+                table_name=legacy_csv_path.with_suffix(""),
+                destination=legacy_csv_path.parent,
+            )
+            try:
+                finalise_csv_output(
+                    csv_path=legacy_csv_path,
+                    rows_total=rows_total,
+                    rows_kept=rows_kept,
+                    command=" ".join(sys.argv),
+                    config_subset=_serialize_paths(cfg.to_dict()),
+                    inputs={"input_csv": str(input_csv)},
+                    schema="DocumentsSchema",
+                    quality_summary=quality_summary,
+                    quality_builder=build_quality_report,
+                    quality_path=legacy_csv_path.with_suffix(".quality.json"),
+                    quality_profiler=quality_profiler,
+                    quality_hook=quality_hook,
+                )
+            except QualityReportError as exc:
+                destination = exc.path or legacy_csv_path.with_suffix(".quality.json")
+                logger.error(
+                    "quality_report_write_failed",
+                    error=str(exc),
+                    exc_info=exc,
+                    path=str(destination),
+                )
+                return FinaliseExportResult(
+                    exit_code=1,
+                    artifacts=artifacts,
+                    legacy_csv_path=legacy_csv_path,
+                    failure_path=legacy_failure_path,
+                    postprocess_path=postprocessed_path,
+                    postprocess_metrics=postprocess_metrics,
+                    postprocess_report=postprocess_report,
+                    date_tag=resolved_date_tag,
+                )
+            except QualityAnalysisError as exc:
+                logger.exception(
+                    "quality_report_generation_failed",
+                    error=str(exc),
+                    exc=exc,
+                )
+                return FinaliseExportResult(
+                    exit_code=1,
+                    artifacts=artifacts,
+                    legacy_csv_path=legacy_csv_path,
+                    failure_path=legacy_failure_path,
+                    postprocess_path=postprocessed_path,
+                    postprocess_metrics=postprocess_metrics,
+                    postprocess_report=postprocess_report,
+                    date_tag=resolved_date_tag,
+                )
+    else:
+        logger.debug(
+            "legacy_artifacts_skipped",
+            flag="--emit-legacy-artifacts",
+            output=str(output),
+        )
 
     rows_dropped = rows_total - rows_kept
     logger.info(
@@ -729,61 +879,15 @@ def _finalise_export(
     if exit_code == 0:
         logger.info("write_done", rows=rows_kept, path=str(csv_path))
 
-    doc_quality_cfg = getattr(cfg.system, "doc_quality", None)
-    quality_hook = build_table_quality_hook(
-        doc_quality_cfg,
-        table_name=csv_path.with_suffix(""),
-        destination=csv_path.parent,
-    )
-    try:
-        finalise_csv_output(
-            csv_path=csv_path,
-            rows_total=rows_total,
-            rows_kept=rows_kept,
-            command=" ".join(sys.argv),
-            config_subset=_serialize_paths(cfg.to_dict()),
-            inputs={"input_csv": str(input_csv)},
-            schema="DocumentsSchema",
-            quality_summary=quality_summary,
-            quality_builder=build_quality_report,
-            quality_path=csv_path.with_suffix(".quality.json"),
-            quality_profiler=quality_profiler,
-            quality_hook=quality_hook,
-        )
-    except QualityReportError as exc:
-        destination = exc.path or csv_path.with_suffix(".quality.json")
-        logger.error(
-            "quality_report_write_failed",
-            error=str(exc),
-            exc_info=exc,
-            path=str(destination),
-        )
-        return FinaliseExportResult(
-            exit_code=1,
-            csv_path=csv_path,
-            postprocess_path=postprocessed_path,
-            postprocess_metrics=postprocess_metrics,
-            postprocess_report=postprocess_report,
-        )
-    except QualityAnalysisError as exc:
-        logger.exception(
-            "quality_report_generation_failed",
-            error=str(exc),
-            exc=exc,
-        )
-        return FinaliseExportResult(
-            exit_code=1,
-            csv_path=csv_path,
-            postprocess_path=postprocessed_path,
-            postprocess_metrics=postprocess_metrics,
-            postprocess_report=postprocess_report,
-        )
     return FinaliseExportResult(
         exit_code=exit_code,
-        csv_path=csv_path,
+        artifacts=artifacts,
+        legacy_csv_path=legacy_csv_path,
+        failure_path=legacy_failure_path,
         postprocess_path=postprocessed_path,
         postprocess_metrics=postprocess_metrics,
         postprocess_report=postprocess_report,
+        date_tag=resolved_date_tag,
     )
 
 
@@ -803,11 +907,22 @@ def _log_document_completion(
     metrics = None
     postprocess_path: Path | None = None
     report_path: Path | None = None
+    dataset_path: Path | None = None
+    quality_report_path: Path | None = None
+    correlation_path: Path | None = None
+    legacy_csv_path: Path | None = None
+    date_tag = None
 
     if finalise_result is not None:
         postprocess_path = finalise_result.postprocess_path
         metrics = finalise_result.postprocess_metrics
         report_path = finalise_result.postprocess_report
+        legacy_csv_path = finalise_result.legacy_csv_path
+        date_tag = finalise_result.date_tag
+        if finalise_result.artifacts is not None:
+            dataset_path = finalise_result.artifacts.dataset
+            quality_report_path = finalise_result.artifacts.quality_report
+            correlation_path = finalise_result.artifacts.correlation_report
 
     if postprocess_enabled and postprocess_path is not None:
         extras_payload["postprocess_output"] = str(postprocess_path)
@@ -818,10 +933,22 @@ def _log_document_completion(
     if metrics is not None and getattr(metrics, "pipeline_version", None) is not None:
         pipeline_version_value = metrics.pipeline_version
 
+    primary_output = postprocess_path or dataset_path or output_path
+
     payload: dict[str, object] = {
-        "output_postprocessed": str(postprocess_path or output_path),
+        "output_postprocessed": str(primary_output),
         "pipeline_version": pipeline_version_value,
     }
+    if dataset_path is not None:
+        payload["standard_dataset"] = str(dataset_path)
+    if quality_report_path is not None:
+        payload["standard_quality_report"] = str(quality_report_path)
+    if correlation_path is not None:
+        payload["standard_correlation_report"] = str(correlation_path)
+    if date_tag is not None:
+        payload["standard_date_tag"] = date_tag
+    if legacy_csv_path is not None:
+        payload["legacy_output"] = str(legacy_csv_path)
     if extras_payload:
         payload.update(extras_payload)
     if metrics is not None:
@@ -1058,6 +1185,10 @@ def run_pubmed(
             rerun_postprocess=bool(getattr(args, "rerun_postprocess", False)),
             postprocess_enabled=bool(getattr(args, "postprocess", False)),
             postprocess_config_path=getattr(args, "config", None),
+            emit_legacy_artifacts=bool(
+                getattr(args, "emit_legacy_artifacts", False)
+            ),
+            date_tag=getattr(args, "_standard_date_tag", None),
         )
         exit_code = finalise_result.exit_code
     except (FileNotFoundError, ValueError, OSError) as exc:
@@ -1078,11 +1209,16 @@ def run_pubmed(
         )
     if limit_counter is not None:
         logger.info("process_limit", limit=limit_counter())
+    output_dataset = (
+        finalise_result.artifacts.dataset
+        if finalise_result.artifacts is not None
+        else output_path
+    )
     if exit_code == 0:
         _log_document_completion(
             "document_pubmed_done",
             cfg=cfg,
-            output_path=output_path,
+            output_path=output_dataset,
             logger=logger,
             extras={"mode": "pubmed"},
             finalise_result=finalise_result,
@@ -1091,7 +1227,7 @@ def run_pubmed(
     else:
         logger.error(
             "document_pubmed_failed",
-            output=str(output_path),
+            output=str(output_dataset),
             exit_code=exit_code,
         )
     return exit_code
@@ -1258,16 +1394,25 @@ def run_chembl(
             rerun_postprocess=bool(getattr(args, "rerun_postprocess", False)),
             postprocess_enabled=bool(getattr(args, "postprocess", False)),
             postprocess_config_path=getattr(args, "config", None),
+            emit_legacy_artifacts=bool(
+                getattr(args, "emit_legacy_artifacts", False)
+            ),
+            date_tag=getattr(args, "_standard_date_tag", None),
         )
         exit_code = finalise_result.exit_code
         if exit_code == 0:
             extras: dict[str, object] = {"mode": "chembl"}
             if partial_run:
                 extras["partial_run"] = True
+            output_dataset = (
+                finalise_result.artifacts.dataset
+                if finalise_result.artifacts is not None
+                else output_path
+            )
             _log_document_completion(
                 "document_chembl_done",
                 cfg=cfg,
-                output_path=output_path,
+                output_path=output_dataset,
                 logger=logger,
                 extras=extras,
                 finalise_result=finalise_result,
@@ -1276,7 +1421,11 @@ def run_chembl(
         else:
             logger.error(
                 "document_chembl_failed",
-                output=str(output_path),
+                output=str(
+                    finalise_result.artifacts.dataset
+                    if finalise_result.artifacts is not None
+                    else output_path
+                ),
                 exit_code=exit_code,
             )
         if limit_counter is not None:
@@ -1514,6 +1663,10 @@ def run_all(
             rerun_postprocess=bool(getattr(args, "rerun_postprocess", False)),
             postprocess_enabled=bool(getattr(args, "postprocess", False)),
             postprocess_config_path=getattr(args, "config", None),
+            emit_legacy_artifacts=bool(
+                getattr(args, "emit_legacy_artifacts", False)
+            ),
+            date_tag=getattr(args, "_standard_date_tag", None),
         )
         exit_code = finalise_result.exit_code
         if fallback_state is not None:
@@ -1528,10 +1681,15 @@ def run_all(
             extras: dict[str, object] = {"mode": "all"}
             if partial_run:
                 extras["partial_run"] = True
+            output_dataset = (
+                finalise_result.artifacts.dataset
+                if finalise_result.artifacts is not None
+                else output_path
+            )
             _log_document_completion(
                 "document_all_done",
                 cfg=cfg,
-                output_path=output_path,
+                output_path=output_dataset,
                 logger=logger,
                 extras=extras,
                 finalise_result=finalise_result,
@@ -1540,7 +1698,11 @@ def run_all(
         else:
             logger.error(
                 "document_all_failed",
-                output=str(output_path),
+                output=str(
+                    finalise_result.artifacts.dataset
+                    if finalise_result.artifacts is not None
+                    else output_path
+                ),
                 exit_code=exit_code,
             )
         return exit_code
@@ -1637,6 +1799,8 @@ def run_all(
         rerun_postprocess=bool(getattr(args, "rerun_postprocess", False)),
         postprocess_enabled=bool(getattr(args, "postprocess", False)),
         postprocess_config_path=getattr(args, "config", None),
+        emit_legacy_artifacts=bool(getattr(args, "emit_legacy_artifacts", False)),
+        date_tag=getattr(args, "_standard_date_tag", None),
     )
     exit_code = finalise_result.exit_code
     if fallback_state is not None:
@@ -1651,10 +1815,15 @@ def run_all(
         extras: dict[str, object] = {"mode": "all"}
         if partial_run:
             extras["partial_run"] = True
+        output_dataset = (
+            finalise_result.artifacts.dataset
+            if finalise_result.artifacts is not None
+            else output_path
+        )
         _log_document_completion(
             "document_all_done",
             cfg=cfg,
-            output_path=output_path,
+            output_path=output_dataset,
             logger=logger,
             extras=extras,
             finalise_result=finalise_result,
@@ -1663,7 +1832,11 @@ def run_all(
     else:
         logger.error(
             "document_all_failed",
-            output=str(output_path),
+            output=str(
+                finalise_result.artifacts.dataset
+                if finalise_result.artifacts is not None
+                else output_path
+            ),
             exit_code=exit_code,
         )
     return exit_code
@@ -1702,6 +1875,15 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
     args.output_csv = output_path
+    standard_date_tag = datetime.now(timezone.utc).strftime("%Y%m%d")
+    setattr(args, "_standard_date_tag", standard_date_tag)
+    emit_legacy = bool(getattr(args, "emit_legacy_artifacts", False))
+
+    table_name = output_path.stem or DEFAULT_OUTPUT_STEM
+    output_dir_value = getattr(cfg.io, "output_dir", None)
+    output_dir = Path(output_dir_value) if output_dir_value else output_path.parent
+    canonical_dataset = output_dir / f"output.{table_name}_{standard_date_tag}.csv"
+
     mode = getattr(args, "mode", None)
     if mode in (None, ""):
         mode = getattr(args, "command", None)
@@ -1722,9 +1904,13 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         cfg.api.timeout_read = float(chembl_timeout_override)
     if pubmed_timeout_override is not None:
         cfg.pubmed.timeout_read = float(pubmed_timeout_override)
-    if args.skip_existing and output_path.exists() and not args.force:
-        logger.info("pipeline_skip_existing", output=str(output_path))
-        return 0
+    if args.skip_existing and not args.force:
+        if emit_legacy and output_path.exists():
+            logger.info("pipeline_skip_existing", output=str(output_path))
+            return 0
+        if (not emit_legacy) and canonical_dataset.exists():
+            logger.info("pipeline_skip_existing", output=str(canonical_dataset))
+            return 0
     if hasattr(args, "func") and getattr(args, "func", None) is None:
         logger.error(
             "missing_subcommand_handler",
@@ -1781,6 +1967,14 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help=(
             "Rebuild stage-aligned exports even if a previous run already produced "
             "them"
+        ),
+    )
+    parser.add_argument(
+        "--emit-legacy-artifacts",
+        action="store_true",
+        help=(
+            "Write legacy CSV sidecars and metadata in addition to the standard "
+            "outputs saved under io.output_dir"
         ),
     )
 

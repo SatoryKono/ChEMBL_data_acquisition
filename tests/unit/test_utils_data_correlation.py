@@ -35,3 +35,14 @@ def test_build_correlation_matrix__returns_empty_when_no_numeric():
 
     assert correlation.empty
     assert list(correlation.columns) == []
+
+
+def test_build_correlation_matrix__accepts_prefilled_profiler():
+    frame = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [0.5, 1.0, 1.5]})
+    profiler = TableQualityProfiler()
+    profiler.consume(frame)
+
+    direct = build_correlation_matrix(frame, table_name="demo")
+    reuse = build_correlation_matrix(None, table_name="demo", profiler=profiler)
+
+    pd.testing.assert_frame_equal(direct, reuse)
