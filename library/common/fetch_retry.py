@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from itertools import islice
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ class _ChunkFailure:
 
     chunk_ids: list[str]
     error: str
+    sidecar_row: dict[str, Any]
 
 
 class ChunkFailureTracker:
@@ -32,34 +34,32 @@ class ChunkFailureTracker:
         """Record a failed chunk fetch attempt."""
 
         ids = [str(identifier) for identifier in chunk_ids]
-        failure = _ChunkFailure(chunk_ids=ids, error=error)
+        sidecar_row = {
+            "chunk_ids": ",".join(ids),
+            "chunk_size": len(ids),
+            "error": error,
+        }
+        self._sidecar.add_error(sidecar_row)
+        failure = _ChunkFailure(chunk_ids=ids, error=error, sidecar_row=sidecar_row)
         self._failures.append(failure)
-        self._sidecar.add_error(
-            {
-                "chunk_ids": ",".join(ids),
-                "chunk_size": len(ids),
-                "error": error,
-            }
-        )
 
     def stats(self) -> dict[str, Any]:
         """Return aggregated statistics for persisted metadata files."""
 
         if not self._failures:
             return {}
-        unique_ids = sorted(
-            {
-                identifier
-                for failure in self._failures
-                for identifier in failure.chunk_ids
-            }
+        unique_ids = dict.fromkeys(
+            identifier
+            for failure in self._failures
+            for identifier in failure.chunk_ids
         )
         total_unique_ids = len(unique_ids)
         truncated = total_unique_ids > _CHUNK_FAILURE_IDS_LIMIT
         if truncated:
-            reported_ids = list(unique_ids[:_CHUNK_FAILURE_IDS_LIMIT])
+            reported_ids = list(islice(unique_ids.keys(), _CHUNK_FAILURE_IDS_LIMIT))
         else:
-            reported_ids = list(unique_ids)
+            reported_ids = list(unique_ids.keys())
+        self._update_sidecar_summary(total_unique_ids, truncated)
         return {
             "chunk_fetch_failure_chunks": len(self._failures),
             "chunk_fetch_failure_ids": reported_ids,
@@ -71,6 +71,7 @@ class ChunkFailureTracker:
         """Write recorded failures to ``path`` and emit metadata sidecar."""
 
         if self._failures:
+            self.stats()
             self._sidecar.save(path, cfg=cfg)
             return
         path.unlink(missing_ok=True)
@@ -80,6 +81,11 @@ class ChunkFailureTracker:
         """Return ``True`` when at least one failure has been recorded."""
 
         return bool(self._failures)
+
+    def _update_sidecar_summary(self, total: int, truncated: bool) -> None:
+        for failure in self._failures:
+            failure.sidecar_row["chunk_fetch_failure_ids_total"] = total
+            failure.sidecar_row["chunk_fetch_failure_ids_truncated"] = truncated
 
 
 def compute_backoff_delay(
