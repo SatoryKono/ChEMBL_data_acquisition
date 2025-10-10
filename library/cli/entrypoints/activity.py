@@ -763,6 +763,16 @@ def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
     if cleaned.empty:
         return {}
 
+    try:
+        cleaned = cleaned.astype(
+            {"assay_chembl_id": "string", "src_assay_id": "string"}, copy=False
+        )
+    except (TypeError, ValueError):
+        cleaned = cleaned.assign(
+            assay_chembl_id=cleaned["assay_chembl_id"].astype("string"),
+            src_assay_id=cleaned["src_assay_id"].astype("string"),
+        )
+
     cleaned = cleaned.assign(
         assay_chembl_id=cleaned["assay_chembl_id"].str.strip(),
         src_assay_id=cleaned["src_assay_id"].str.strip(),
