@@ -16,7 +16,9 @@ import sys
 import traceback
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextvars import ContextVar
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
@@ -36,51 +38,6 @@ from ..common.log import logger as default_logger
 from ..common.metadata import record_quality_failure
 from ..common.sidecar import SidecarErrors
 from ..config import DEFAULT_CONFIG_PATH, Config, ConfigError, ensure_dirs, print_config
-from ..postprocess.common import (
-    PostprocessingPipelineConfig,
-    run_postprocessing_pipeline,
-)
-from ..postprocess.common import (
-    get_csv_runtime_config as get_postprocess_csv_config,
-)
-from ..postprocess.common import (
-    get_pipeline_config as load_postprocess_pipeline_config,
-)
-from ..postprocessing.activities import (
-    ACTIVITY_SCHEMA,
-    validate_activities,
-)
-from ..postprocessing.activities import (
-    run_activity_pipeline as run_activity_postprocess,
-)
-from ..postprocessing.assays import (
-    ASSAY_SCHEMA,
-    validate_assays,
-)
-from ..postprocessing.assays import (
-    run_assay_pipeline as run_assay_postprocess,
-)
-from ..postprocessing.documents import (
-    DOCUMENT_SCHEMA,
-    validate_documents,
-)
-from ..postprocessing.documents import (
-    run_document_pipeline as run_document_postprocess,
-)
-from ..postprocessing.targets import (
-    TARGET_SCHEMA,
-    validate_targets,
-)
-from ..postprocessing.targets import (
-    run_target_pipeline as run_target_postprocess,
-)
-from ..postprocessing.testitem import (
-    TESTITEM_SCHEMA,
-    validate_testitems,
-)
-from ..postprocessing.testitem import (
-    run_testitem_pipeline as run_testitem_postprocess,
-)
 from ..reporting.run_manifest import finalise_csv_output
 from .pipeline_definition import (
     Fetcher,
@@ -94,35 +51,6 @@ class _PostprocessHandlers:
     runner: Callable[..., tuple[pd.DataFrame, object]]
     validator: Callable[..., pd.DataFrame]
     schema: object
-
-
-_POSTPROCESS_HANDLERS: dict[str, _PostprocessHandlers] = {
-    "activities": _PostprocessHandlers(
-        runner=run_activity_postprocess,
-        validator=validate_activities,
-        schema=ACTIVITY_SCHEMA,
-    ),
-    "assays": _PostprocessHandlers(
-        runner=run_assay_postprocess,
-        validator=validate_assays,
-        schema=ASSAY_SCHEMA,
-    ),
-    "documents": _PostprocessHandlers(
-        runner=run_document_postprocess,
-        validator=validate_documents,
-        schema=DOCUMENT_SCHEMA,
-    ),
-    "targets": _PostprocessHandlers(
-        runner=run_target_postprocess,
-        validator=validate_targets,
-        schema=TARGET_SCHEMA,
-    ),
-    "testitems": _PostprocessHandlers(
-        runner=run_testitem_postprocess,
-        validator=validate_testitems,
-        schema=TESTITEM_SCHEMA,
-    ),
-}
 
 
 _POSTPROCESS_TABLE_ALIASES = {
@@ -139,6 +67,97 @@ _POSTPROCESS_TABLE_ALIASES = {
 }
 
 
+@dataclass(frozen=True)
+class _PostprocessRuntime:
+    pipeline_config_factory: Callable[..., object]
+    run_pipeline: Callable[..., object]
+    load_pipeline_config: Callable[[str, Path | str | None], object]
+    get_csv_runtime_config: Callable[[object], object]
+    handlers: Mapping[str, _PostprocessHandlers]
+
+
+@dataclass(frozen=True)
+class _PostprocessOptions:
+    enabled: bool
+    config_override: Path | str | None
+
+
+_POSTPROCESS_OPTIONS: ContextVar[_PostprocessOptions] = ContextVar(
+    "_POSTPROCESS_OPTIONS", default=_PostprocessOptions(False, None)
+)
+
+
+@lru_cache(maxsize=1)
+def _load_postprocess_runtime() -> _PostprocessRuntime:
+    from ..postprocess.common import (
+        PostprocessingPipelineConfig,
+        get_csv_runtime_config as get_postprocess_csv_config,
+        get_pipeline_config as load_postprocess_pipeline_config,
+        run_postprocessing_pipeline,
+    )
+    from ..postprocessing.activities import (
+        ACTIVITY_SCHEMA,
+        run_activity_pipeline as run_activity_postprocess,
+        validate_activities,
+    )
+    from ..postprocessing.assays import (
+        ASSAY_SCHEMA,
+        run_assay_pipeline as run_assay_postprocess,
+        validate_assays,
+    )
+    from ..postprocessing.documents import (
+        DOCUMENT_SCHEMA,
+        run_document_pipeline as run_document_postprocess,
+        validate_documents,
+    )
+    from ..postprocessing.targets import (
+        TARGET_SCHEMA,
+        run_target_pipeline as run_target_postprocess,
+        validate_targets,
+    )
+    from ..postprocessing.testitem import (
+        TESTITEM_SCHEMA,
+        run_testitem_pipeline as run_testitem_postprocess,
+        validate_testitems,
+    )
+
+    handlers: dict[str, _PostprocessHandlers] = {
+        "activities": _PostprocessHandlers(
+            runner=run_activity_postprocess,
+            validator=validate_activities,
+            schema=ACTIVITY_SCHEMA,
+        ),
+        "assays": _PostprocessHandlers(
+            runner=run_assay_postprocess,
+            validator=validate_assays,
+            schema=ASSAY_SCHEMA,
+        ),
+        "documents": _PostprocessHandlers(
+            runner=run_document_postprocess,
+            validator=validate_documents,
+            schema=DOCUMENT_SCHEMA,
+        ),
+        "targets": _PostprocessHandlers(
+            runner=run_target_postprocess,
+            validator=validate_targets,
+            schema=TARGET_SCHEMA,
+        ),
+        "testitems": _PostprocessHandlers(
+            runner=run_testitem_postprocess,
+            validator=validate_testitems,
+            schema=TESTITEM_SCHEMA,
+        ),
+    }
+
+    return _PostprocessRuntime(
+        pipeline_config_factory=PostprocessingPipelineConfig,
+        run_pipeline=run_postprocessing_pipeline,
+        load_pipeline_config=load_postprocess_pipeline_config,
+        get_csv_runtime_config=get_postprocess_csv_config,
+        handlers=handlers,
+    )
+
+
 def _extract_output_token(path: Path) -> str | None:
     name = path.name
     if name.startswith("output.") and name.endswith(".csv"):
@@ -151,23 +170,33 @@ def _resolve_postprocess_table(token: str) -> str | None:
     return _POSTPROCESS_TABLE_ALIASES.get(base)
 
 
-def _maybe_run_postprocessing(csv_path: Path, logger: Logger) -> None:
+def _maybe_run_postprocessing(
+    csv_path: Path,
+    logger: Logger,
+    *,
+    postprocess_enabled: bool,
+    config_override: Path | str | None,
+) -> "PostprocessingPipelineResult" | None:
     token = _extract_output_token(csv_path)
     if not token:
-        return
+        return None
 
     table = _resolve_postprocess_table(token)
     if table is None:
-        return
+        return None
 
-    handlers = _POSTPROCESS_HANDLERS.get(table)
-    if handlers is None:
-        return
+    if not postprocess_enabled:
+        logger.info("[INFO] Postprocessing skipped (flag --postprocess not set)")
+        return None
 
     try:
-        pipeline_cfg = load_postprocess_pipeline_config(table, None)
-        csv_cfg = get_postprocess_csv_config(pipeline_cfg)
-        runtime = PostprocessingPipelineConfig(
+        runtime = _load_postprocess_runtime()
+        handlers = runtime.handlers.get(table)
+        if handlers is None:
+            return None
+        pipeline_cfg = runtime.load_pipeline_config(table, config_override)
+        csv_cfg = runtime.get_csv_runtime_config(pipeline_cfg)
+        pipeline_config = runtime.pipeline_config_factory(
             pipeline_config=pipeline_cfg,
             csv_runtime_config=csv_cfg,
             runner=handlers.runner,
@@ -176,11 +205,11 @@ def _maybe_run_postprocessing(csv_path: Path, logger: Logger) -> None:
             logger=logger,
         )
         destination = csv_path.with_name(f"output_postprocessed.{token}.csv")
-        result = run_postprocessing_pipeline(
+        result = runtime.run_pipeline(
             table,
             csv_path,
             destination,
-            runtime,
+            pipeline_config,
         )
     except Exception:
         logger.exception(
@@ -196,6 +225,8 @@ def _maybe_run_postprocessing(csv_path: Path, logger: Logger) -> None:
             input=str(csv_path),
             output=str(result.output_path),
         )
+        return result
+
 
 
 def _callable_name(func: Callable[..., object]) -> str:
@@ -290,6 +321,7 @@ def run_cli_command(
     mapping: Mapping[str, str],
     run: Callable[[Config, argparse.Namespace], int],
     logger: Logger | None = None,
+    postprocess_enabled: bool | None = None,
 ) -> int:
     """Execute CLI boilerplate shared by data acquisition commands."""
 
@@ -400,7 +432,27 @@ def run_cli_command(
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
 
-    exit_code = run(cfg, args)
+    if postprocess_enabled is None:
+        postprocess_enabled = bool(getattr(args, "postprocess", False))
+
+    postprocess_config: Path | str | None
+    config_attr = getattr(args, "config", None)
+    if isinstance(config_attr, (str, Path)):
+        postprocess_config = config_attr
+    else:
+        postprocess_config = config_path
+
+    token = _POSTPROCESS_OPTIONS.set(
+        _PostprocessOptions(
+            enabled=postprocess_enabled,
+            config_override=postprocess_config,
+        )
+    )
+    try:
+        exit_code = run(cfg, args)
+    finally:
+        _POSTPROCESS_OPTIONS.reset(token)
+
     if exit_code == 0:
         use_logger.info("pipeline_done", run_id=log_cfg.run_id)
     else:
@@ -427,6 +479,8 @@ def run_pipeline(
     failure_path: Path,
     cfg: Config | None = None,
     logger: Logger | None = None,
+    postprocess_enabled: bool | None = None,
+    postprocess_config: Path | str | None = None,
     **legacy_kwargs: object,
 ) -> int:
     """Execute a data pipeline and write deterministic CSV output.
@@ -465,6 +519,18 @@ def run_pipeline(
     use_logger = logger or default_logger
 
     definition = normalise_definition(definition, legacy_kwargs)
+
+    context_options = _POSTPROCESS_OPTIONS.get()
+    effective_postprocess_enabled = (
+        postprocess_enabled
+        if postprocess_enabled is not None
+        else context_options.enabled
+    )
+    effective_postprocess_config = (
+        postprocess_config
+        if postprocess_config is not None
+        else context_options.config_override
+    )
 
     schema = definition.schema
     schema_name = definition.schema_name
@@ -777,12 +843,50 @@ def run_pipeline(
         )
         return 1
 
-    extra_stats = stats_extra() if callable(stats_extra) else stats_extra
     resolved_invocation = invocation_tuple
 
     extra_metadata: dict[str, object] = {}
     if failed_metadata_hooks:
         extra_metadata["metadata_hook_failures"] = sorted(failed_metadata_hooks)
+
+    postprocess_result: "PostprocessingPipelineResult" | None = None
+    if exit_code == 0:
+        try:
+            postprocess_result = _maybe_run_postprocessing(
+                csv_path,
+                use_logger,
+                postprocess_enabled=effective_postprocess_enabled,
+                config_override=effective_postprocess_config,
+            )
+        except Exception:
+            exit_code = 1
+
+    stats_source = stats_extra() if callable(stats_extra) else stats_extra
+    stats_payload: dict[str, object] = dict(stats_source or {})
+
+    if postprocess_result is not None:
+        postprocess_metadata: dict[str, object] = {
+            "output_postprocessed": str(postprocess_result.output_path),
+        }
+        if postprocess_result.report_path is not None:
+            postprocess_metadata["postprocess_report"] = str(
+                postprocess_result.report_path
+            )
+        metrics = postprocess_result.metrics
+        if metrics is not None:
+            summary = dict(metrics.summary())
+            postprocess_metadata["postprocess_metrics"] = summary
+            pipeline_version = getattr(metrics, "pipeline_version", None)
+            if pipeline_version is not None:
+                postprocess_metadata["postprocess_pipeline_version"] = (
+                    pipeline_version
+                )
+                stats_payload.setdefault(
+                    "postprocess_pipeline_version", pipeline_version
+                )
+            for key, value in summary.items():
+                stats_payload[f"postprocess_{key}"] = value
+        extra_metadata.update(postprocess_metadata)
 
     report = finalise_csv_output(
         csv_path=csv_path,
@@ -792,7 +896,7 @@ def run_pipeline(
         config_subset=config_snapshot,
         inputs=inputs,
         schema=schema_name,
-        stats_extra=extra_stats or None,
+        stats_extra=stats_payload or None,
         invocation=resolved_invocation or None,
         extra_metadata=extra_metadata or None,
     )
@@ -830,12 +934,6 @@ def run_pipeline(
             log_kwargs["fatal"] = True
             exit_code = 1
         use_logger.warning("quality_report_failed", **log_kwargs)
-
-    if exit_code == 0:
-        try:
-            _maybe_run_postprocessing(csv_path, use_logger)
-        except Exception:
-            exit_code = 1
 
     if exit_code == 0:
         use_logger.info("write_done", rows=rows_kept, path=str(csv_path))

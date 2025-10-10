@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pandas as pd
 
 from library.cli.pipeline_definition import PipelineDefinition
-from library.cli.utils import run_pipeline
+from library.cli.utils import _PostprocessHandlers, run_pipeline
 from library.postprocess.common import PostprocessingPipelineResult
 
 
@@ -47,25 +47,48 @@ def _fetcher_stub():  # pragma: no cover - helper
 def test_run_pipeline__triggers_postprocessing_on_known_table(monkeypatch, tmp_path):
     captured: dict[str, Path] = {}
 
+    class _MetricsStub:
+        pipeline_version = "stub-version"
+
+        def summary(self) -> dict[str, int]:
+            return {"rows": 0, "columns": 0}
+
     def _fake_postprocess(table: str, input_path: Path, output_path: Path, config):
         captured["table"] = table
         captured["input"] = Path(input_path)
         captured["output"] = Path(output_path)
         output_path = Path(output_path)
         output_path.write_text("postprocessed", encoding="utf-8")
-        metrics = SimpleNamespace(output_rows=0, output_columns=0)
         report_path = output_path.parent / "activities.postprocess.report.json"
         report_path.write_text("{}", encoding="utf-8")
         return PostprocessingPipelineResult(
             dataframe=pd.DataFrame(),
-            metrics=metrics,
+            metrics=_MetricsStub(),
             output_path=output_path,
             report_path=report_path,
         )
 
+    runtime_stub = SimpleNamespace(
+        pipeline_config_factory=lambda **kwargs: SimpleNamespace(**kwargs),
+        run_pipeline=_fake_postprocess,
+        load_pipeline_config=lambda table, override: SimpleNamespace(
+            table=table, override=override
+        ),
+        get_csv_runtime_config=lambda _cfg: SimpleNamespace(
+            separator=",", encoding="utf-8", chunksize=1
+        ),
+        handlers={
+            "activities": _PostprocessHandlers(
+                runner=lambda *args, **kwargs: (pd.DataFrame(), _MetricsStub()),
+                validator=lambda df: df,
+                schema=object(),
+            )
+        },
+    )
+
     monkeypatch.setattr(
-        "library.cli.utils.run_postprocessing_pipeline",
-        _fake_postprocess,
+        "library.cli.utils._load_postprocess_runtime",
+        lambda: runtime_stub,
     )
 
     definition = PipelineDefinition(
@@ -91,6 +114,7 @@ def test_run_pipeline__triggers_postprocessing_on_known_table(monkeypatch, tmp_p
         failure_path=failure_path,
         cfg=None,
         logger=_LoggerStub(),
+        postprocess_enabled=True,
     )
 
     assert exit_code == 0
@@ -98,3 +122,50 @@ def test_run_pipeline__triggers_postprocessing_on_known_table(monkeypatch, tmp_p
     assert captured["input"] == output_path
     assert captured["output"].name == "output_postprocessed.activities_sample.csv"
     assert captured["output"].exists()
+    meta_path = output_path.with_name(output_path.name + ".meta.yaml")
+    assert "output_postprocessed" in meta_path.read_text(encoding="utf-8")
+
+
+def test_run_pipeline__skips_postprocessing_when_disabled(monkeypatch, tmp_path):
+    def _unexpected_runtime():
+        raise AssertionError("postprocess runtime should not load when disabled")
+
+    monkeypatch.setattr(
+        "library.cli.utils._load_postprocess_runtime",
+        _unexpected_runtime,
+    )
+
+    definition = PipelineDefinition(
+        schema=None,
+        schema_name="DummySchema",
+        writer=_writer_stub,
+        validators=(),
+        metadata_hooks=(),
+        command="test",
+        config_snapshot={},
+        inputs={},
+        key_columns=(),
+        table_quality=lambda path: None,
+    )
+
+    output_path = tmp_path / "output.activities_sample.csv"
+    failure_path = tmp_path / "failures.csv"
+
+    logger = _LoggerStub()
+    exit_code = run_pipeline(
+        definition=definition,
+        fetcher=_fetcher_stub,
+        output_path=output_path,
+        failure_path=failure_path,
+        cfg=None,
+        logger=logger,
+        postprocess_enabled=False,
+    )
+
+    assert exit_code == 0
+    assert any(
+        message == "[INFO] Postprocessing skipped (flag --postprocess not set)"
+        for message, _ in logger.messages
+    )
+    meta_path = output_path.with_name(output_path.name + ".meta.yaml")
+    assert "output_postprocessed" not in meta_path.read_text(encoding="utf-8")
