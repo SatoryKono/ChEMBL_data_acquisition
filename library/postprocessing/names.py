@@ -469,36 +469,76 @@ def _iter_name_tokens(value: object, *, split: bool) -> Iterable[str]:
     return tokens
 
 
+def _normalise_series(series: pd.Series | None) -> pd.Series:
+    """Return a ``StringDtype`` series mirroring ``helpers.normalise_text``."""
+
+    if series is None:
+        return pd.Series(dtype="string")
+
+    result = series.astype("string")
+    result = result.fillna("")
+    # ``StringDtype`` preserves ``<NA>`` so use ``fillna`` before trimming.
+    result = result.str.strip()
+    lowered = result.str.lower()
+    result = result.mask(lowered.isin({"none", "nan"}), "")
+    return result.fillna("").astype("string")
+
+
 def _build_names_table(frame: pd.DataFrame) -> pd.DataFrame:
     """Project ``frame`` onto the long-form target names table."""
 
-    records: list[dict[str, Any]] = []
-    column_set = set(frame.columns)
-
-    for idx, row in frame.iterrows():
-        target_id = helpers.normalise_text(row.get("target_chembl_id"))
-        if not target_id:
-            continue
-        uniprot_id = helpers.normalise_text(row.get("uniprot_id_primary"))
-        for column, label in NAME_COLUMN_SOURCES:
-            if column not in column_set:
-                continue
-            split = column in PIPE_SPLIT_COLUMNS
-            for token in _iter_name_tokens(row.get(column), split=split):
-                records.append(
-                    {
-                        "target_chembl_id": target_id,
-                        "uniprot_id_primary": uniprot_id,
-                        "name": token,
-                        "name_type": label,
-                        "source_column": column,
-                    }
-                )
-
-    names_df = pd.DataFrame.from_records(records, columns=TARGET_NAMES_COLUMNS)
-    if names_df.empty:
+    if frame.empty:
         return pd.DataFrame(columns=TARGET_NAMES_COLUMNS, dtype="string")
 
+    column_set = set(frame.columns)
+    target_ids = _normalise_series(frame.get("target_chembl_id"))
+    valid_mask = target_ids != ""
+    if not bool(valid_mask.any()):
+        return pd.DataFrame(columns=TARGET_NAMES_COLUMNS, dtype="string")
+
+    uniprot_ids = _normalise_series(frame.get("uniprot_id_primary"))
+    base = pd.DataFrame(
+        {
+            "target_chembl_id": target_ids[valid_mask],
+            "uniprot_id_primary": uniprot_ids[valid_mask],
+        }
+    )
+
+    chunks: list[pd.DataFrame] = []
+    for column, label in NAME_COLUMN_SOURCES:
+        if column not in column_set:
+            continue
+
+        column_values = frame.loc[valid_mask, column]
+        if column in PIPE_SPLIT_COLUMNS:
+            tokens = (
+                column_values.astype("string")
+                .fillna("")
+                .str.split("|")
+                .explode()
+            )
+            tokens = _normalise_series(tokens)
+            if tokens.empty:
+                continue
+            lowered = tokens.str.lower()
+            tokens = tokens[(tokens != "") & (~lowered.isin(EMPTY_TOKEN_MARKERS))]
+        else:
+            tokens = _normalise_series(column_values)
+            tokens = tokens[tokens != ""]
+
+        if tokens.empty:
+            continue
+
+        chunk = base.loc[tokens.index].copy()
+        chunk["name"] = tokens.astype("string")
+        chunk["name_type"] = label
+        chunk["source_column"] = column
+        chunks.append(chunk)
+
+    if not chunks:
+        return pd.DataFrame(columns=TARGET_NAMES_COLUMNS, dtype="string")
+
+    names_df = pd.concat(chunks, ignore_index=True)
     names_df = helpers.ensure_string_columns(names_df, TARGET_NAMES_COLUMNS)
     names_df = names_df.drop_duplicates().sort_values(
         by=["target_chembl_id", "name", "name_type"], kind="mergesort"
