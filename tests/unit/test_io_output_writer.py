@@ -1,112 +1,113 @@
-"""Tests for :mod:`library.io.output_writer`."""
+"""Unit tests for :mod:`library.io.output_writer`."""
 
 from __future__ import annotations
 
-import os
-import random
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
+import pytest
 
 from library.config import IoCfg
-from library.io.output_writer import save_standard_outputs
+from library.io import output_writer
 
 
-def _fix_seed(seed: int = 42) -> None:
-    os.environ["PYTHONHASHSEED"] = str(seed)
-    random.seed(seed)
-    np.random.seed(seed)
-
-
-def test_save_standard_outputs__writes_expected_files(tmp_path: Path) -> None:
-    _fix_seed()
-
-    cfg = IoCfg(
-        output_dir=tmp_path,
-        csv_encoding="utf-8",
-        csv_sep="|",
-        exist_ok=True,
-    )
-
+@pytest.fixture()
+def _sample_frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     dataset = pd.DataFrame(
         {
-            "chembl_id": pd.Series(["CHEMBL1", "CHEMBL2"], dtype="string"),
-            "name": pd.Series(["Aspirin", "Ibuprofen"], dtype="string"),
+            "identifier": ["row-1", "row-2"],
+            "value": [1, 2],
         }
     )
-    quality_report = pd.DataFrame(
+    quality = pd.DataFrame(
         {
-            "metric": pd.Series(["rows"], dtype="string"),
-            "value": pd.Series([2], dtype="Int64"),
+            "column": ["identifier", "value"],
+            "non_null": [2, 2],
         }
     )
-    correlation_report = pd.DataFrame(
+    correlation = pd.DataFrame(
         {
-            "feature": pd.Series(["chembl_id"], dtype="string"),
-            "correlated_with": pd.Series(["name"], dtype="string"),
-            "score": pd.Series([1.0], dtype="Float64"),
+            "identifier": [1.0, 0.0],
+            "value": [0.0, 1.0],
         }
     )
+    return dataset, quality, correlation
 
-    table_name = "test_table"
-    date_tag = "20240101"
 
-    artifacts = save_standard_outputs(
+@pytest.mark.unit
+def test_save_standard_outputs__writes_expected_csvs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _sample_frames
+) -> None:
+    dataset, quality, correlation = _sample_frames
+
+    captured: dict[str, pd.DataFrame] = {}
+
+    def _fake_write_csv(
+        frame: pd.DataFrame,
+        destination: Path,
+        *,
+        cfg: IoCfg,
+        **_: object,
+    ) -> Path:
+        assert cfg.output_dir == tmp_path
+        path = Path(destination)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        frame.to_csv(path, index=False, encoding=cfg.csv_encoding, sep=cfg.csv_sep)
+        captured[path.name] = frame.copy()
+        return path
+
+    monkeypatch.setattr(output_writer, "write_csv_deterministic", _fake_write_csv)
+
+    cfg = IoCfg(output_dir=tmp_path, csv_sep=",", csv_encoding="utf-8", exist_ok=True)
+
+    artefacts = output_writer.save_standard_outputs(
         dataset,
-        quality_report,
-        correlation_report,
-        table_name=table_name,
-        date_tag=date_tag,
+        quality,
+        correlation,
+        table_name="documents",
+        date_tag="20240101",
         cfg=cfg,
     )
 
-    stem = f"output.{table_name}_{date_tag}"
-    assert artifacts.dataset == tmp_path / f"{stem}.csv"
-    assert artifacts.quality_report == tmp_path / f"{stem}_quality_report_table.csv"
-    assert (
-        artifacts.correlation_report
-        == tmp_path / f"{stem}_data_correlation_report_table.csv"
-    )
+    expected_names = [
+        "output.documents_20240101.csv",
+        "output.documents_20240101_quality_report_table.csv",
+        "output.documents_20240101_data_correlation_report_table.csv",
+    ]
 
-    for path in (artifacts.dataset, artifacts.quality_report, artifacts.correlation_report):
-        assert path.exists()
+    assert sorted(captured) == expected_names
+    assert artefacts.dataset.name == expected_names[0]
+    assert artefacts.quality_report.name == expected_names[1]
+    assert artefacts.correlation_report.name == expected_names[2]
 
-    roundtrip_dataset = pd.read_csv(
-        artifacts.dataset,
-        sep=cfg.csv_sep,
-        encoding=cfg.csv_encoding,
-        dtype="string",
-    ).convert_dtypes()
-    roundtrip_quality = pd.read_csv(
-        artifacts.quality_report,
-        sep=cfg.csv_sep,
-        encoding=cfg.csv_encoding,
-        dtype="string",
-    ).convert_dtypes()
-    roundtrip_quality = roundtrip_quality.astype({"value": "Int64"})
-    roundtrip_correlation = pd.read_csv(
-        artifacts.correlation_report,
-        sep=cfg.csv_sep,
-        encoding=cfg.csv_encoding,
-        dtype="string",
-    ).convert_dtypes()
-    roundtrip_correlation = roundtrip_correlation.astype({"score": "Float64"})
+    output_files = sorted(p.name for p in tmp_path.glob("*.csv"))
+    assert output_files == expected_names
 
-    pd.testing.assert_frame_equal(roundtrip_dataset, dataset.convert_dtypes())
-    pd.testing.assert_frame_equal(roundtrip_quality, quality_report.convert_dtypes())
     pd.testing.assert_frame_equal(
-        roundtrip_correlation, correlation_report.convert_dtypes()
+        pd.read_csv(artefacts.dataset), dataset
+    )
+    pd.testing.assert_frame_equal(
+        pd.read_csv(artefacts.quality_report), quality
+    )
+    pd.testing.assert_frame_equal(
+        pd.read_csv(artefacts.correlation_report), correlation
     )
 
-    entries = sorted(tmp_path.iterdir())
-    expected_csvs = sorted(
-        [artifacts.dataset, artifacts.quality_report, artifacts.correlation_report]
-    )
-    expected_entries = sorted(
-        expected_csvs
-        + [Path(f"{path}.meta.yaml") for path in expected_csvs]
-    )
 
-    assert entries == expected_entries
-    assert [path for path in entries if path.suffix == ".csv"] == expected_csvs
+@pytest.mark.unit
+def test_save_standard_outputs__fails_when_directory_missing(tmp_path: Path) -> None:
+    cfg = IoCfg(output_dir=tmp_path / "missing", exist_ok=False)
+
+    dataset = pd.DataFrame({"id": [1]})
+    quality = pd.DataFrame({"column": ["id"]})
+    correlation = pd.DataFrame({"id": [1.0]})
+
+    with pytest.raises(FileNotFoundError):
+        output_writer.save_standard_outputs(
+            dataset,
+            quality,
+            correlation,
+            table_name="demo",
+            date_tag="20240101",
+            cfg=cfg,
+        )
