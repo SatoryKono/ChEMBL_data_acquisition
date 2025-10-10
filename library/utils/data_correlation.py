@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-import warnings
 
 import pandas as pd
 
@@ -46,7 +45,6 @@ def build_correlation_matrix(
     """Return the numeric correlation matrix for ``frame`` without file output."""
 
     _validate_table_name(table_name)
-<<<<<<< HEAD
 
     profiler_instance: TableQualityProfilerLike | None = None
     if profiler is not None:
@@ -60,19 +58,6 @@ def build_correlation_matrix(
             )
 
     if profiler_instance is None:
-=======
-    fallback_to_frame = False
-    invalid_profiler_type: type | None = None
-    if profiler is not None:
-        if _is_table_profiler_instance(profiler):
-            _, numeric_candidates = _build_reports_from_profiler(profiler)
-        elif frame is None:
-            raise TypeError("profiler must be a TableQualityProfiler instance")
-        else:
-            fallback_to_frame = True
-            invalid_profiler_type = type(profiler)
-    if profiler is None or fallback_to_frame:
->>>>>>> origin/codex/fix-profiler-type-error-in-get_data.py-x6jpcd
         if frame is None:
             raise ValueError("frame is required when profiler is not provided")
         filtered = _prepare_filtered_frame(
@@ -86,18 +71,7 @@ def build_correlation_matrix(
         profiler_instance = TableQualityProfiler()
         profiler_instance.consume(filtered)
 
-<<<<<<< HEAD
     _, numeric_candidates = _build_reports_from_profiler(profiler_instance)
-=======
-        _, numeric_candidates = _build_reports_from_profiler(profiler)
-        if fallback_to_frame:
-            warnings.warn(
-                "Ignoring incompatible profiler %r; falling back to frame data"
-                % (invalid_profiler_type.__name__ if invalid_profiler_type else "unknown"),
-                RuntimeWarning,
-                stacklevel=2,
-            )
->>>>>>> origin/codex/fix-profiler-type-error-in-get_data.py-x6jpcd
     if not numeric_candidates:
         return pd.DataFrame()
 
