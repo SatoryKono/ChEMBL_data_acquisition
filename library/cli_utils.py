@@ -171,63 +171,42 @@ class PipelineMetrics:
         return stats
 
 
-class RunPipelineResult(int):
+@dataclass(slots=True, frozen=True)
+class RunPipelineResult:
     """Return value exposing the exit code alongside output artefact paths."""
 
-    _STATE: dict[int, tuple[int, Path | None, StandardOutputArtifacts | None]] = {}
+    exit_code: int
+    dataset_path: Path | None
+    artifacts: StandardOutputArtifacts | None = None
 
-    def __new__(
-        cls,
-        exit_code: int,
-        dataset_path: Path | None,
-        artifacts: StandardOutputArtifacts | None = None,
-    ) -> "RunPipelineResult":
-        obj = int.__new__(cls, exit_code)
-        cls._STATE[id(obj)] = (exit_code, dataset_path, artifacts)
-        return obj
+    def __int__(self) -> int:
+        """Return the stored exit code.
 
-    @classmethod
-    def _lookup_state(
-        cls, instance: "RunPipelineResult"
-    ) -> tuple[int, Path | None, StandardOutputArtifacts | None]:
-        return cls._STATE.get(id(instance), (int(instance), None, None))
-
-    def __del__(self) -> None:  # pragma: no cover - best effort cleanup
-        self._STATE.pop(id(self), None)
-
-    def __reduce__(self) -> tuple[type, tuple[int, Path | None, StandardOutputArtifacts | None]]:
-        return (
-            self.__class__,
-            self._lookup_state(self),
-        )
-
-    @property
-    def exit_code(self) -> int:
-        """Return the pipeline exit code.
-
-        ``RunPipelineResult`` subclasses :class:`int` to preserve backwards
-        compatibility with historical callers.  Some Python builds (notably
-        Windows) forbid attribute assignment on :class:`int` subclasses, which
-        previously caused import-time failures.  Keeping the metadata in a class
-        level registry avoids that limitation while retaining the legacy API.
+        ``RunPipelineResult`` used to subclass :class:`int` directly.  Python
+        3.13 on Windows tightened the rules around ``int`` subclasses with
+        custom slots which caused import-time failures.  Storing the exit code
+        explicitly keeps the legacy semantics while avoiding those platform
+        specific crashes.
         """
 
-        return self._lookup_state(self)[0]
+        return int(self.exit_code)
 
-    @property
-    def dataset_path(self) -> Path | None:
-        """Return the resolved dataset path if available."""
+    def __index__(self) -> int:  # pragma: no cover - mirrors __int__
+        return int(self.exit_code)
 
-        return self._lookup_state(self)[1]
+    def __bool__(self) -> bool:  # pragma: no cover - mirrors bool(int)
+        return bool(self.exit_code)
 
-    @property
-    def artifacts(self) -> StandardOutputArtifacts | None:
-        """Return generated standard output artefacts when present."""
-
-        return self._lookup_state(self)[2]
-
-    def __bool__(self) -> bool:  # pragma: no cover - bool(int) already tested elsewhere
-        return bool(int(self))
+    def __eq__(self, other: object) -> bool:  # pragma: no cover - trivial delegation
+        if isinstance(other, RunPipelineResult):
+            return (
+                self.exit_code == other.exit_code
+                and self.dataset_path == other.dataset_path
+                and self.artifacts == other.artifacts
+            )
+        if isinstance(other, int):
+            return self.exit_code == other
+        return NotImplemented
 
 
 def _callable_name(func: Callable[..., object]) -> str:
