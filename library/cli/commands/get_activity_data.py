@@ -18,9 +18,16 @@ __all__ = (
     "MAX_ACTIVITY_CHUNK_SIZE",
     "MIN_ACTIVITY_TIMEOUT",
     "register_activity_pipeline_hooks",
+    "run_chembl",
     "run_activity_pipeline",
     "main",
 )
+
+
+def run_chembl(*args, **kwargs):
+    """Backward compatible alias delegating to :func:`run_activity_pipeline`."""
+
+    return run_activity_pipeline(*args, **kwargs)
 
 
 def _bootstrap_entrypoint_exports() -> None:
