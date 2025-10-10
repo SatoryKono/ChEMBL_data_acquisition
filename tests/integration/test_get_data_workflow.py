@@ -79,11 +79,15 @@ def _prepare_environment(tmp_path: Path) -> get_data.PipelineRunConfig:
     output_dir.mkdir()
     config_path = base_path / "config.yaml"
     config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
-    input_files = dict(get_data.DEFAULT_INPUT_FILES)
-    output_stems = dict(get_data.DEFAULT_OUTPUT_STEMS)
-    subcommands = {
-        step.name: step.subcommand for step in get_data.DEFAULT_PIPELINE_STEPS
-    }
+    input_files = get_data.PipelineInputFiles.from_mapping(
+        dict(get_data.DEFAULT_INPUT_FILES)
+    )
+    output_stems = get_data.PipelineOutputStems.from_mapping(
+        dict(get_data.DEFAULT_OUTPUT_STEMS)
+    )
+    subcommands = get_data.PipelineSubcommands.from_mapping(
+        dict(get_data.DEFAULT_SUBCOMMANDS)
+    )
     return get_data.PipelineRunConfig(
         base_path=base_path,
         input_dir=input_dir,
