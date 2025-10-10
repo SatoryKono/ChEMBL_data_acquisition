@@ -174,9 +174,7 @@ class PipelineMetrics:
 class RunPipelineResult(int):
     """Return value exposing the exit code alongside output artefact paths."""
 
-    exit_code: int
-    dataset_path: Path | None
-    artifacts: StandardOutputArtifacts | None
+    __slots__ = ("_exit_code", "_dataset_path", "_artifacts")
 
     def __new__(
         cls,
@@ -185,10 +183,36 @@ class RunPipelineResult(int):
         artifacts: StandardOutputArtifacts | None = None,
     ) -> "RunPipelineResult":
         obj = int.__new__(cls, exit_code)
-        obj.exit_code = exit_code
-        obj.dataset_path = dataset_path
-        obj.artifacts = artifacts
+        obj._exit_code = exit_code
+        obj._dataset_path = dataset_path
+        obj._artifacts = artifacts
         return obj
+
+    @property
+    def exit_code(self) -> int:
+        """Return the pipeline exit code.
+
+        ``RunPipelineResult`` subclasses :class:`int` to preserve backwards
+        compatibility with historical callers.  On some Python builds assigning
+        attributes to ``int`` subclasses is not supported which previously
+        resulted in ``AttributeError`` when accessing ``exit_code``.  Storing the
+        value in ``__slots__`` and exposing it via a property keeps the legacy
+        behaviour while guaranteeing attribute access across platforms.
+        """
+
+        return getattr(self, "_exit_code", int(self))
+
+    @property
+    def dataset_path(self) -> Path | None:
+        """Return the resolved dataset path if available."""
+
+        return getattr(self, "_dataset_path", None)
+
+    @property
+    def artifacts(self) -> StandardOutputArtifacts | None:
+        """Return generated standard output artefacts when present."""
+
+        return getattr(self, "_artifacts", None)
 
 
 def _callable_name(func: Callable[..., object]) -> str:
