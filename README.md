@@ -61,6 +61,11 @@ pip install .[dev]
 pre-commit install
 ```
 
+> ℹ️ Development dependencies in `pyproject.toml`, `requirements-dev.txt` and
+> `requirements-lock.txt` are updated together. This keeps local toolchains
+> reproducible: adjust the version bounds in the project metadata first, then
+> regenerate the lock file so all three sources stay in sync.
+
 ### Pre-commit hooks
 
 The repository ships a curated [`pre-commit`](https://pre-commit.com/)\

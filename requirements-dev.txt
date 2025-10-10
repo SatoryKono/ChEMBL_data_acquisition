@@ -1,7 +1,7 @@
 .[dev]
-# Ensure type stubs are available even when extras are not expanded by the
-# environment consuming this file.
-pandas-stubs>=2.2.3.241126,<3.0
+# Ensure type stubs stay aligned with the optional dev extra and the lock file
+# even when extras are not expanded by the environment consuming this file.
+pandas-stubs>=2.3.2.250926,<3.0
 types-cachetools>=5.5.0.20240820,<6.0
 types-jsonschema>=4.23.0.20240813,<5.0
 types-openpyxl>=3.1.5.20240822,<4.0
@@ -10,4 +10,3 @@ types-python-dateutil>=2.9.0.20241003,<3.0
 types-requests>=2.32.0.20241016,<3.0
 types-tabulate>=0.9.0.20241207,<0.10
 types-urllib3>=1.26.25.14,<1.27
-pandas-stubs>=2.3.2.250926,<3.0
