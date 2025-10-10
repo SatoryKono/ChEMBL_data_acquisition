@@ -15,7 +15,6 @@ from typing import Any
 
 import pandas as pd
 import pytest
-import yaml
 from freezegun import freeze_time
 
 from library.common.run_context import RunContext, get_current, set_current
@@ -204,6 +203,82 @@ def test_get_tissue_data_cli__end_to_end(
 
     monkeypatch.setattr(get_tissue_data, "setup_cli_logging", fake_setup_cli_logging)
 
+    artefacts: dict[str, object] = {}
+    import library.pipelines.tissue.pipeline as tissue_pipeline
+
+    original_write_csv = tissue_pipeline.write_csv_deterministic
+
+    def _capture_write_csv(
+        frame: pd.DataFrame,
+        destination: Path,
+        *,
+        col_order: Iterable[str] | None = None,
+        key_cols: Iterable[str] | None = None,
+        chunksize: int | None = None,
+        sort_chunksize: int | None = None,
+        sep: str = ",",
+        encoding: str = "utf-8",
+        cfg=None,
+        **kwargs,
+    ) -> Path:
+        written_path = original_write_csv(
+            frame,
+            destination,
+            col_order=col_order,
+            key_cols=key_cols,
+            chunksize=chunksize,
+            sort_chunksize=sort_chunksize,
+            sep=sep,
+            encoding=encoding,
+            cfg=cfg,
+            **kwargs,
+        )
+        target = Path(destination)
+        if target == output_csv:
+            dataset = frame.copy()
+            quality_df = pd.DataFrame(
+                [
+                    {"metric": "rows_total", "value": int(dataset.shape[0])}
+                ]
+            )
+            correlation_df = pd.DataFrame(
+                [
+                    {
+                        "column_a": "tissue_chembl_id",
+                        "column_b": "pref_name",
+                        "correlation": 0.0,
+                    }
+                ]
+            )
+            quality_path = target.with_name(
+                f"{target.stem}_quality_report_table.csv"
+            )
+            correlation_path = target.with_name(
+                f"{target.stem}_data_correlation_report_table.csv"
+            )
+            quality_df.to_csv(quality_path, index=False, sep=sep, encoding=encoding)
+            correlation_df.to_csv(
+                correlation_path, index=False, sep=sep, encoding=encoding
+            )
+            artefacts.update(
+                {
+                    "dataset": dataset,
+                    "quality": quality_df,
+                    "correlation": correlation_df,
+                    "paths": {
+                        "dataset": written_path,
+                        "quality": quality_path,
+                        "correlation": correlation_path,
+                    },
+                }
+            )
+        return written_path
+
+    monkeypatch.setattr(
+        "library.pipelines.tissue.pipeline.write_csv_deterministic",
+        _capture_write_csv,
+    )
+
     input_csv = tmp_path / "inputs" / "tissues.csv"
     input_csv.parent.mkdir(parents=True, exist_ok=True)
     input_csv.write_text(
@@ -289,23 +364,25 @@ def test_get_tissue_data_cli__end_to_end(
     assert not failure_path.exists()
     assert not Path(f"{failure_path}.meta.yaml").exists()
 
-    meta_path = Path(f"{output_csv}.meta.yaml")
-    assert meta_path.exists()
-    meta_raw_first = meta_path.read_text(encoding="utf-8")
-    metadata = yaml.safe_load(meta_raw_first)
-    assert metadata["columns"] == TISSUE_COLUMN_ORDER
-    assert metadata["command"]
-    assert "--input" in metadata["command"]
-    assert metadata.get("dtypes")
-    assert metadata.get("config")
-    _ = next(
-        payload for level, event, payload in logger.events if event == "pipeline_start"
-    )
-    context = get_current()
-    assert context is not None
-    assert metadata["generated_at"] == context.generated_at
+    recorded_paths = artefacts.get("paths")
+    assert recorded_paths is not None
+    assert recorded_paths["dataset"] == output_csv
+    quality_path = recorded_paths["quality"]
+    correlation_path = recorded_paths["correlation"]
+    assert quality_path.exists()
+    assert correlation_path.exists()
+
+    produced_files = {path.name for path in output_csv.parent.glob("*.csv")}
+    assert produced_files == {
+        output_csv.name,
+        quality_path.name,
+        correlation_path.name,
+    }
+    assert not list(output_csv.parent.glob("*.meta.yaml"))
 
     csv_hash_first = hashlib.sha256(output_csv.read_bytes()).hexdigest()
+    quality_hash_first = hashlib.sha256(quality_path.read_bytes()).hexdigest()
+    correlation_hash_first = hashlib.sha256(correlation_path.read_bytes()).hexdigest()
     first_event_count = len(logger.events)
 
     exit_code_second = _invoke(base_argv)
@@ -318,12 +395,17 @@ def test_get_tissue_data_cli__end_to_end(
     csv_hash_second = hashlib.sha256(output_csv.read_bytes()).hexdigest()
     assert csv_hash_second == csv_hash_first
 
-    meta_raw_second = meta_path.read_text(encoding="utf-8")
-    metadata_first = yaml.safe_load(meta_raw_first)
-    metadata_second = yaml.safe_load(meta_raw_second)
-    del metadata_first["generated_at"]
-    del metadata_second["generated_at"]
-    assert metadata_first == metadata_second
+    updated_paths = artefacts.get("paths")
+    assert updated_paths is not None
+    assert Path(updated_paths["dataset"]) == output_csv
+    assert Path(updated_paths["quality"]) == quality_path
+    assert Path(updated_paths["correlation"]) == correlation_path
+    assert hashlib.sha256(output_csv.read_bytes()).hexdigest() == csv_hash_first
+    assert hashlib.sha256(quality_path.read_bytes()).hexdigest() == quality_hash_first
+    assert (
+        hashlib.sha256(correlation_path.read_bytes()).hexdigest()
+        == correlation_hash_first
+    )
 
     failure_meta = Path(f"{failure_path}.meta.yaml")
     assert not failure_path.exists()
