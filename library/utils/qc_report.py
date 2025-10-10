@@ -97,16 +97,26 @@ def _build_reports_from_profiler(
 
 
 def build_qc_summary(
-    frame: pd.DataFrame,
+    frame: pd.DataFrame | None,
     *,
     table_name: str = "table",
     include_columns: Sequence[str] | None = None,
     exclude_columns: Sequence[str] | None = None,
     sample_rows: int | None = None,
+    profiler: TableQualityProfiler | None = None,
 ) -> pd.DataFrame:
     """Return the quality-control summary DataFrame for ``frame``."""
 
     _validate_table_name(table_name)
+    if profiler is not None:
+        if not isinstance(profiler, TableQualityProfiler):
+            raise TypeError("profiler must be a TableQualityProfiler instance")
+        quality_report, _ = _build_reports_from_profiler(profiler)
+        return quality_report
+
+    if frame is None:
+        raise ValueError("frame is required when profiler is not provided")
+
     filtered = _prepare_filtered_frame(
         frame,
         table_name=table_name,

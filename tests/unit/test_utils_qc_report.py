@@ -76,3 +76,14 @@ def test_build_qc_summary__respects_sampling_and_filters():
     roles_value = summary.loc[0, "guessed_roles"]
     roles = roles_value.split("|") if roles_value else []
     assert roles == ["identifier-like"]
+
+
+def test_build_qc_summary__accepts_prefilled_profiler():
+    frame = pd.DataFrame({"value": [1, 2, 3]})
+    profiler = TableQualityProfiler()
+    profiler.consume(frame)
+
+    direct = build_qc_summary(frame, table_name="demo")
+    reuse = build_qc_summary(None, table_name="demo", profiler=profiler)
+
+    pd.testing.assert_frame_equal(direct, reuse)
