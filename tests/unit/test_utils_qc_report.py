@@ -5,6 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from library.qa.table_quality import TableQualityProfiler as QaTableQualityProfiler
+from library.table_quality import TableQualityProfiler as LegacyTableQualityProfiler
 from library.utils.qc_report import build_qc_summary
 
 
@@ -78,9 +80,16 @@ def test_build_qc_summary__respects_sampling_and_filters():
     assert roles == ["identifier-like"]
 
 
-def test_build_qc_summary__accepts_prefilled_profiler():
+@pytest.mark.parametrize(
+    "profiler_cls",
+    [
+        pytest.param(QaTableQualityProfiler, id="qa"),
+        pytest.param(LegacyTableQualityProfiler, id="legacy"),
+    ],
+)
+def test_build_qc_summary__accepts_prefilled_profiler(profiler_cls):
     frame = pd.DataFrame({"value": [1, 2, 3]})
-    profiler = TableQualityProfiler()
+    profiler = profiler_cls()
     profiler.consume(frame)
 
     direct = build_qc_summary(frame, table_name="demo")
