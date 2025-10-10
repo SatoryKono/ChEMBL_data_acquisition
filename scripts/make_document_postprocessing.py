@@ -209,7 +209,7 @@ def run(args: argparse.Namespace) -> int:
         f"{event_prefix}_start",
         input=str(input_path),
         output_postprocessed=str(output_path),
-        separator=csv_cfg.sep,
+        separator=csv_cfg.separator,
         encoding=csv_cfg.encoding,
     )
 
