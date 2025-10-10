@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import warnings
 
 import pandas as pd
 import pytest
@@ -107,6 +108,38 @@ def test_matches_expected_input_name__supports_modern_exports(filename: str) -> 
     """Modern aggregated exports are accepted for isoform processing."""
 
     assert isoform._matches_expected_input_name(filename)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "filename",
+    [
+        ".output.targets_20251005.csv.tmp",
+        "output.targets_20251005.csv.tmp",
+        "output.targets_20251005.csv_normalized",
+    ],
+)
+def test_matches_expected_input_name__normalises_temporary_variants(
+    filename: str,
+) -> None:
+    """Temporary artefacts created during exports are treated as canonical."""
+
+    assert isoform._matches_expected_input_name(filename)
+
+
+@pytest.mark.unit
+def test_resolve_input_path__temporary_export_emits_no_warning(tmp_path: Path) -> None:
+    """Temporary exports with compound suffixes are accepted without warnings."""
+
+    input_path = tmp_path / ".output.targets_20251005.csv.tmp"
+    input_path.write_text("target_chembl_id\n", encoding="utf-8")
+
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        resolved = isoform._resolve_input_path(input_path)
+
+    assert resolved == input_path
+    assert not captured
 
 
 @pytest.mark.unit
