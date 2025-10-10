@@ -274,7 +274,7 @@ def test_configure_logging__delegates_to_configure_logger(monkeypatch: pytest.Mo
 @pytest.mark.unit
 def test_configure_logging__invalid_level() -> None:
     with pytest.raises(ValueError):
-        get_data._configure_logging("invalid")
+        get_data._configure_logging("invalid", run_id="test")
 
 
 @pytest.mark.unit
@@ -529,6 +529,7 @@ def test_run_pipeline__dry_run_manifest(tmp_path: Path, monkeypatch: pytest.Monk
     assert not executions
 
     manifest = _load_manifest(cfg)
+    assert manifest["run"]["run_id"] == "unit"
     assert manifest["run"]["dry_run"] is True
     assert manifest["run"]["exit_code"] == 0
     step_entries = manifest["steps"]

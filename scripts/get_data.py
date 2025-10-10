@@ -34,6 +34,7 @@ import argparse
 import hashlib
 import json
 import logging
+import os
 import shutil
 import time
 import uuid
@@ -324,10 +325,94 @@ def _validate_override_keys(
         raise ValueError(f"unknown {kind} override for step(s): {joined}")
 
 
+def _safe_resolve_path(path: Path) -> Path:
+    """Return ``path`` resolved where possible without requiring existence."""
+
+    expanded = path.expanduser()
+    try:
+        return expanded.resolve()
+    except OSError:
+        return expanded
+
+
+def _canonical_run_descriptor(args: argparse.Namespace) -> str:
+    """Return a canonical string describing CLI inputs for run identification."""
+
+    base_path = _safe_resolve_path(Path(args.base_path))
+    input_dir = _safe_resolve_path(_resolve_path(base_path, Path(args.input_dir)))
+    output_dir = _safe_resolve_path(_resolve_path(base_path, Path(args.output_dir)))
+    config_candidate = getattr(args, "config", None) or DEFAULT_CONFIG_PATH
+    config_path = _safe_resolve_path(Path(config_candidate))
+    pipeline_registry = getattr(args, "pipeline_registry", None)
+    registry_path = (
+        _safe_resolve_path(Path(pipeline_registry)) if pipeline_registry is not None else None
+    )
+
+    entries: list[str] = [
+        f"base_path={base_path}",
+        f"input_dir={input_dir}",
+        f"output_dir={output_dir}",
+        f"config_path={config_path}",
+        f"date_prefix={getattr(args, 'date_prefix', '')}",
+        f"limit={getattr(args, 'limit', None)}",
+        f"force={bool(getattr(args, 'force', False))}",
+        f"skip_existing={bool(getattr(args, 'skip_existing', False))}",
+        f"dry_run={bool(getattr(args, 'dry_run', False))}",
+        f"print_config={bool(getattr(args, 'print_config', False))}",
+        f"verbose={bool(getattr(args, 'verbose', False))}",
+        f"log_level={str(getattr(args, 'log_level', '')).upper()}",
+    ]
+
+    if registry_path is not None:
+        entries.append(f"pipeline_registry={registry_path}")
+
+    input_overrides = _parse_overrides(getattr(args, "override_input", None))
+    output_overrides = _parse_overrides(getattr(args, "override_output_stem", None))
+    subcommand_overrides = _parse_overrides(
+        getattr(args, "override_subcommand", None), allow_empty_value=True
+    )
+
+    for name, mapping in (
+        ("override_input", input_overrides),
+        ("override_output_stem", output_overrides),
+        ("override_subcommand", subcommand_overrides),
+    ):
+        if mapping:
+            rendered = ",".join(f"{key}={value}" for key, value in sorted(mapping.items()))
+            entries.append(f"{name}={rendered}")
+
+    invocation = getattr(args, "invocation", None)
+    if isinstance(invocation, Sequence) and invocation:
+        invocation_str = " ".join(str(part) for part in invocation)
+        entries.append(f"invocation={invocation_str}")
+
+    return "\n".join(sorted(entries))
+
+
+def _resolve_run_id(args: argparse.Namespace) -> str:
+    """Determine the run identifier honouring CLI and environment overrides."""
+
+    cli_candidate = getattr(args, "run_id", None)
+    env_candidate = os.environ.get("CHEMBL_DA_RUN_ID")
+
+    for candidate in (cli_candidate, env_candidate):
+        if not isinstance(candidate, str):
+            continue
+        trimmed = candidate.strip()
+        if trimmed:
+            return trimmed
+
+    descriptor = _canonical_run_descriptor(args)
+    if not descriptor:
+        msg = "unable to derive run identifier from arguments"
+        raise ValueError(msg)
+    return uuid.uuid5(uuid.NAMESPACE_URL, descriptor).hex
+
+
 def _configure_logging(
     level_name: str,
     *,
-    run_id: str | None = None,
+    run_id: str,
     stream: IO[str] | None = None,
     handlers: Iterable[logging.Handler] | None = None,
 ) -> Logger:
@@ -338,14 +423,15 @@ def _configure_logging(
     if normalised not in valid_levels:
         raise ValueError(f"invalid log level: {level_name}")
 
-    resolved_run_id = run_id or uuid.uuid4().hex
+    if not run_id:
+        raise ValueError("run_id must not be empty")
 
     extra_handlers = list(handlers) if handlers is not None else []
 
     return configure_logger(
         LoggerConfig(
             level=normalised,
-            run_id=resolved_run_id,
+            run_id=run_id,
             stream=stream,
             handlers=extra_handlers,
         )
@@ -395,6 +481,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--log-level",
         default="INFO",
         help="Logging verbosity for the orchestrator and child pipelines",
+    )
+    parser.add_argument(
+        "--run-id",
+        default=None,
+        help="Override the derived run identifier used for logging and manifests",
     )
     parser.add_argument(
         "--verbose",
@@ -1171,6 +1262,9 @@ def _write_run_manifest(
 ) -> None:
     """Persist the manifest for the pipeline execution."""
 
+    logger_cfg = getattr(_LOGGER, "_cfg", None)
+    run_id = getattr(logger_cfg, "run_id", "") if logger_cfg is not None else ""
+
     manifest = {
         "run": {
             "started_at": run_started_at.isoformat(),
@@ -1179,6 +1273,7 @@ def _write_run_manifest(
             "exit_code": exit_code,
             "status": "success" if exit_code == 0 else "failed",
             "date_prefix": cfg.date_prefix,
+            "run_id": run_id,
             "base_path": str(cfg.base_path),
             "input_dir": str(cfg.input_dir),
             "output_dir": str(cfg.output_dir),
@@ -1678,6 +1773,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command-line entry point for the orchestration script."""
 
     args = _parse_args(argv)
+    run_id = _resolve_run_id(args)
+    setattr(args, "run_id", run_id)
     desired_level = (
         "DEBUG" if getattr(args, "verbose", False) else str(args.log_level).upper()
     )
@@ -1685,7 +1782,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit(f"invalid log level: {args.log_level}")
 
     script_name = Path(__file__).with_suffix("").name
-    base_cfg = LoggerConfig(level=desired_level, run_id=uuid.uuid4().hex)
+    base_cfg = LoggerConfig(level=desired_level, run_id=run_id)
     resolved_base_path = Path(args.base_path).expanduser().resolve()
     log_directory = resolved_base_path / "logs"
     status = 1
@@ -1699,7 +1796,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             logger = _configure_logging(
                 logging_ctx.log_cfg.level,
-                run_id=logging_ctx.log_cfg.run_id,
+                run_id=run_id,
                 stream=logging_ctx.console_stream,
                 handlers=logging_ctx.log_cfg.handlers,
             )
