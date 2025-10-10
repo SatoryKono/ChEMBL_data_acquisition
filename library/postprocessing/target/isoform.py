@@ -130,6 +130,12 @@ def _matches_expected_input_name(filename: str) -> bool:
     return any(pattern.match(normalised) for pattern, _ in _INPUT_NAME_RULES)
 
 
+def _has_csv_suffix(path: Path) -> bool:
+    """Return ``True`` when ``path`` contains a ``.csv`` suffix."""
+
+    return any(suffix.lower() == ".csv" for suffix in path.suffixes)
+
+
 def _supported_patterns_text() -> str:
     """Return a human-readable list of accepted filename templates."""
 
@@ -571,7 +577,7 @@ def _resolve_output_path(
 
     base_name = normalise_export_basename(input_path)
     if frame is not None and _should_force_canonical(base_name):
-        if input_path.suffix.lower() != ".csv" and _matches_expected_input_name(
+        if not _has_csv_suffix(input_path) and _matches_expected_input_name(
             input_path.name
         ):
             warnings.warn(
