@@ -1132,10 +1132,24 @@ def _raw_output_path(base: Path) -> Path:
     return base.with_name(f"{base.stem}{RAW_SUFFIX}{suffix}")
 
 
-def _prepare_raw_destination(destination: Path) -> None:
+def _ensure_parent_directory(path: Path, *, cfg: Config) -> None:
+    """Ensure the parent directory for ``path`` exists or raise an error."""
+
+    parent = path.parent
+    if parent.exists():
+        if not parent.is_dir():
+            raise NotADirectoryError(f"{parent} is not a directory")
+        return
+    if cfg.io.exist_ok:
+        parent.mkdir(parents=True, exist_ok=True)
+    else:
+        raise FileNotFoundError(f"{parent} does not exist")
+
+
+def _prepare_raw_destination(destination: Path, *, cfg: Config) -> None:
     """Ensure the raw dump destination can be written to safely."""
 
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_parent_directory(destination, cfg=cfg)
     if not destination.exists():
         return
 
@@ -1177,7 +1191,7 @@ class _RawDumpStreamWriter:
         self._rows_written = 0
         self._columns: list[str] | None = None
         self._frames: list[pd.DataFrame] | None = [] if self._is_parquet else None
-        _prepare_raw_destination(destination)
+        _prepare_raw_destination(destination, cfg=cfg)
         self._destination_opened = False
 
     @property
@@ -2373,7 +2387,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         destination = base_output
         if raw_destination != destination:
-            destination.parent.mkdir(parents=True, exist_ok=True)
+            _ensure_parent_directory(destination, cfg=cfg)
             try:
                 shutil.copy2(raw_destination, destination)
             except OSError as exc:
@@ -3562,7 +3576,7 @@ def fetch_iuphar(
             "missing_iuphar_output_file",
             path=str(output_csv),
         )
-        output_csv.parent.mkdir(parents=True, exist_ok=True)
+        _ensure_parent_directory(output_csv, cfg=cfg)
         empty_iuphar = pd.DataFrame({"uniprot_id": pd.Series(dtype=object)})
         write_csv_deterministic(
             empty_iuphar,
