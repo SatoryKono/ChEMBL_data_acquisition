@@ -574,8 +574,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         exit_code_int = 1
         dataset_path: Path | None = None
     else:
-        exit_code_int = int(execution.exit_code)
-        dataset_path = execution.dataset_path
+        exit_code_attr = getattr(execution, "exit_code", None)
+        exit_code_int = int(exit_code_attr if exit_code_attr is not None else execution)
+        dataset_path = getattr(execution, "dataset_path", None)
 
     if exit_code_int == 0 and dataset_path is not None:
         standard_artifacts = _persist_standard_outputs(dataset_path)
