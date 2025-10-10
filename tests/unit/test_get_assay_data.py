@@ -198,17 +198,17 @@ def test_run_chembl__successful_execution(
 
     def fake_save_standard_outputs(
         dataset: pd.DataFrame,
-        quality: pd.DataFrame,
         correlation: pd.DataFrame,
+        quality: pd.DataFrame,
         **_: object,
     ) -> StandardOutputArtifacts:
-        del dataset, quality, correlation
+        del dataset, correlation, quality
         return StandardOutputArtifacts(
             dataset=minimal_args.final_out,
-            quality_report=minimal_args.final_out.with_name("quality.csv"),
             correlation_report=minimal_args.final_out.with_name(
                 "correlation.csv"
             ),
+            quality_report=minimal_args.final_out.with_name("quality.csv"),
         )
 
     monkeypatch.setattr(get_assay_data.io, "read_ids", fake_read_ids)
@@ -339,16 +339,16 @@ def test_run_chembl__splits_chunk_on_timeout(
 
     def fake_save_standard_outputs(
         dataset: pd.DataFrame,
-        quality: pd.DataFrame,
         correlation: pd.DataFrame,
+        quality: pd.DataFrame,
         **_: object,
     ) -> StandardOutputArtifacts:
         return StandardOutputArtifacts(
             dataset=minimal_args.final_out,
-            quality_report=minimal_args.final_out.with_name("quality.csv"),
             correlation_report=minimal_args.final_out.with_name(
                 "correlation.csv"
             ),
+            quality_report=minimal_args.final_out.with_name("quality.csv"),
         )
 
     monkeypatch.setattr(get_assay_data.io, "read_ids", fake_read_ids)
@@ -392,12 +392,14 @@ def test_run_chembl__standard_outputs_created_without_legacy(
 
     save_calls: list[tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]] = []
 
-    def fake_save_standard_outputs(dataset, quality, correlation, **kwargs: object):
-        save_calls.append((dataset, quality, correlation))
+    def fake_save_standard_outputs(
+        dataset, correlation, quality, **kwargs: object
+    ) -> StandardOutputArtifacts:
+        save_calls.append((dataset, correlation, quality))
         return StandardOutputArtifacts(
             dataset=minimal_args.final_out,
-            quality_report=minimal_args.final_out.with_name("quality.csv"),
             correlation_report=minimal_args.final_out.with_name("correlation.csv"),
+            quality_report=minimal_args.final_out.with_name("quality.csv"),
         )
 
     class FakeTracker:

@@ -98,7 +98,8 @@ from library.reporting.run_manifest import (
     QualityReportError,
     finalise_csv_output,
 )
-from library.utils import build_correlation_matrix, build_qc_summary
+from library.utils.data_correlation import generate_correlation_report
+from library.utils.qc_report import generate_qc_report
 from library.schemas import DocumentsSchema, normalize_documents
 from library.schemas.document_spec import DOCUMENT_EXPORT_COLUMNS
 from library.validation import validate_documents
@@ -656,12 +657,12 @@ def _finalise_export(
     resolved_date_tag = date_tag or datetime.now(timezone.utc).strftime("%Y%m%d")
 
     try:
-        quality_report = build_qc_summary(
+        quality_report = generate_qc_report(
             export_frame,
             table_name=table_name,
             profiler=quality_profiler,
         )
-        correlation_report = build_correlation_matrix(
+        correlation_report = generate_correlation_report(
             export_frame,
             table_name=table_name,
             profiler=quality_profiler,
@@ -678,8 +679,8 @@ def _finalise_export(
     try:
         artifacts = io.save_standard_outputs(
             export_frame,
-            quality_report,
             correlation_report,
+            quality_report,
             table_name=table_name,
             date_tag=resolved_date_tag,
             cfg=cfg.io,

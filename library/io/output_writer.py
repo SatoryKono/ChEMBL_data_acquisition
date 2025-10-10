@@ -17,18 +17,21 @@ class StandardOutputArtifacts:
     """Paths of the primary dataset and accompanying QA reports."""
 
     dataset: Path
-    quality_report: Path
     correlation_report: Path
+    quality_report: Path
 
 
-def _ensure_output_directory(path: Path, *, cfg: IoCfg) -> None:
+def _ensure_output_directory(path: Path, *, cfg: IoCfg | None = None) -> None:
     """Create ``path`` when missing if permitted by :class:`IoCfg`."""
 
     if path.exists():
         if not path.is_dir():
             raise NotADirectoryError(f"{path} is not a directory")
         return
-    if cfg.exist_ok:
+    exist_ok = True
+    if cfg is not None:
+        exist_ok = cfg.exist_ok
+    if exist_ok:
         path.mkdir(parents=True, exist_ok=True)
     else:
         raise FileNotFoundError(f"{path} does not exist")
@@ -36,12 +39,12 @@ def _ensure_output_directory(path: Path, *, cfg: IoCfg) -> None:
 
 def save_standard_outputs(
     dataset: pd.DataFrame,
-    quality_report: pd.DataFrame,
     correlation_report: pd.DataFrame,
+    quality_report: pd.DataFrame,
     *,
     table_name: str,
     date_tag: str,
-    cfg: IoCfg,
+    cfg: IoCfg | None = None,
     key_columns: Sequence[str] | None = None,
 ) -> StandardOutputArtifacts:
     """Persist canonical output artefacts and return their locations.
@@ -50,10 +53,10 @@ def save_standard_outputs(
     ----------
     dataset:
         Final merged dataset for the pipeline.
-    quality_report:
-        Quality control summary table.
     correlation_report:
         Data correlation insights produced during QA.
+    quality_report:
+        Quality control summary table.
     table_name:
         Resolved name of the output table (e.g. ``"document"``).
     date_tag:
@@ -70,13 +73,13 @@ def save_standard_outputs(
         Absolute paths for the dataset, quality report and correlation report.
     """
 
-    output_dir = Path(cfg.output_dir)
+    output_dir = Path(cfg.output_dir) if cfg is not None else Path("data/output")
     _ensure_output_directory(output_dir, cfg=cfg)
 
     stem = f"output.{table_name}_{date_tag}"
     dataset_path = output_dir / f"{stem}.csv"
-    quality_path = output_dir / f"{stem}_quality_report_table.csv"
-    correlation_path = output_dir / f"{stem}_data_correlation_report_table.csv"
+    correlation_path = output_dir / f"_output.{table_name}_{date_tag}_data_correlation_report.csv"
+    quality_path = output_dir / f"_output.{table_name}_{date_tag}_quality_report.csv"
 
     key_cols = list(key_columns or [])
     if not key_cols and not dataset.empty:
@@ -106,6 +109,6 @@ def save_standard_outputs(
 
     return StandardOutputArtifacts(
         dataset=dataset_path,
-        quality_report=quality_path,
         correlation_report=correlation_path,
+        quality_report=quality_path,
     )

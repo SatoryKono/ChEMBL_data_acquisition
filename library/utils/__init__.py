@@ -6,15 +6,17 @@ from importlib import import_module
 from typing import Any
 
 from . import atomic, bootstrap
-from .data_correlation import build_correlation_matrix
-from .qc_report import build_qc_summary
+from .data_correlation import build_correlation_matrix, generate_correlation_report
+from .qc_report import build_qc_summary, generate_qc_report
 
 __all__ = [
     "atomic",
     "bootstrap",
     "config",
     "build_qc_summary",
+    "generate_qc_report",
     "build_correlation_matrix",
+    "generate_correlation_report",
 ]
 
 

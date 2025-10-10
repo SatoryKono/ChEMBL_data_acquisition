@@ -13,7 +13,6 @@ import math
 import numbers
 import os
 import sys
-import tempfile
 from collections.abc import (
     Callable,
     Iterable,
@@ -83,6 +82,8 @@ from library.processing.activity import (
     compute_activity_bounds,
 )
 from library.qa.reporting import build_table_quality_hook
+from library.utils.data_correlation import generate_correlation_report
+from library.utils.qc_report import generate_qc_report
 from library.schemas import (
     ActivitiesSchema,
     configure_activity_schema,
@@ -1507,27 +1508,31 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         quality_report = pd.DataFrame()
         correlation_report = pd.DataFrame()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            quality_hook = build_table_quality_hook(
-                doc_quality_cfg,
-                table_name=dataset_csv.with_suffix(""),
-                destination=tmpdir,
+        table_label = dataset_csv.with_suffix("")
+        try:
+            correlation_report = generate_correlation_report(
+                dataset_frame,
+                table_name=str(table_label),
             )
-            try:
-                quality_result = quality_hook(dataset_frame)
-            except Exception as exc:  # pragma: no cover - defensive guard
-                logger.warning(
-                    "activity_quality_generation_failed",
-                    error=str(exc),
-                    path=str(dataset_csv),
-                )
-            else:
-                if (
-                    isinstance(quality_result, tuple)
-                    and len(quality_result) == 2
-                    and all(isinstance(frame, pd.DataFrame) for frame in quality_result)
-                ):
-                    quality_report, correlation_report = quality_result
+        except Exception as exc:  # pragma: no cover - defensive guard
+            logger.warning(
+                "activity_correlation_generation_failed",
+                error=str(exc),
+                path=str(dataset_csv),
+            )
+            correlation_report = pd.DataFrame()
+        try:
+            quality_report = generate_qc_report(
+                dataset_frame,
+                table_name=str(table_label),
+            )
+        except Exception as exc:  # pragma: no cover - defensive guard
+            logger.warning(
+                "activity_quality_generation_failed",
+                error=str(exc),
+                path=str(dataset_csv),
+            )
+            quality_report = pd.DataFrame()
         base = dataset_csv.stem
         if base.startswith("output."):
             base = base[len("output.") :]
@@ -1539,8 +1544,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         table_name_value = table_name_candidate or DEFAULT_OUTPUT_STEM
         artifacts = io.save_standard_outputs(
             dataset_frame,
-            quality_report,
             correlation_report,
+            quality_report,
             table_name=table_name_value,
             date_tag=date_tag,
             cfg=cfg.io,
