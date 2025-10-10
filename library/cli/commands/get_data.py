@@ -135,6 +135,7 @@ def _build_document_options(
         mode="all",
         limit=cfg.limit,
         force=cfg.force,
+        skip_existing=cfg.skip_existing,
     )
 
 
@@ -148,6 +149,7 @@ def _build_target_options(
         command=command,
         limit=cfg.limit,
         force=cfg.force,
+        skip_existing=cfg.skip_existing,
     )
 
 
@@ -159,6 +161,7 @@ def _build_assay_options(
         output_csv=output_path,
         limit=cfg.limit,
         force=cfg.force,
+        skip_existing=cfg.skip_existing,
     )
 
 
@@ -181,6 +184,8 @@ def _build_activity_options(
         output_csv=output_path,
         limit=cfg.limit,
         force=cfg.force,
+        skip_existing=cfg.skip_existing,
+        dry_run=cfg.dry_run,
     )
 
 
