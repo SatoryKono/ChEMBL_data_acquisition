@@ -60,7 +60,8 @@ from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.orchestration import ETLContext
 from library.pipelines.common import PipelineRunResult, add_pipeline_metadata
 from library.pipelines.common.metadata import get_pipeline_version
-from library.pipelines.target import TargetPipelineOptions, postprocessing as tp
+from library.pipelines.target import TargetPipelineOptions
+from library.pipelines.target import postprocessing as tp
 from library.pipelines.target import protein_classification as pc
 from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
 from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS, ModeDefaults

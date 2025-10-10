@@ -3,9 +3,9 @@ from __future__ import annotations
 import argparse
 import importlib
 import io
-from datetime import UTC, datetime
 from collections.abc import Sequence
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,8 +17,6 @@ from library.pipelines.common import PipelineRunResult
 from tests.helpers.logs import iter_events, parse_log_lines
 from tests.helpers.manifests import load_latest_manifest
 
-
-get_data = importlib.import_module("library.cli.commands.get_data")
 
 def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
     base_path = tmp_path
@@ -616,7 +614,7 @@ def test_override_subcommand__document_pipeline_uses_selected_mode(
     captured: list[str] = []
 
     def _runner(_: get_data.Config, options: object) -> PipelineRunResult:
-        mode = getattr(options, "mode")
+        mode = options.mode
         captured.append(mode)
         destination = Path(options.output_csv)
         destination.parent.mkdir(parents=True, exist_ok=True)

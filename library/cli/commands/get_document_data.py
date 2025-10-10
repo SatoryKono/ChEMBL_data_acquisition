@@ -29,8 +29,8 @@ import inspect
 import os
 import sys
 import tempfile
-from dataclasses import dataclass
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from itertools import chain, islice
 from numbers import Integral, Real
 from pathlib import Path
@@ -64,9 +64,10 @@ from library.config import (
 from library.document_defaults import ALL_DEFAULTS, CHEMBL_DEFAULTS, PUBMED_DEFAULTS
 from library.integration import chembl_library as cl
 from library.orchestration import ETLContext
-from library.pipelines.common import PipelineRunResult, add_pipeline_metadata
+from library.pipelines.common import add_pipeline_metadata
 from library.pipelines.common.metadata import get_pipeline_version
-from library.pipelines.document import DocumentPipelineOptions, postprocessing as dp
+from library.pipelines.document import DocumentPipelineOptions
+from library.pipelines.document import postprocessing as dp
 from library.pipelines.document.pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
     DocumentQualityAccumulator,
@@ -80,17 +81,19 @@ from library.pipelines.document.service import (
     DocumentPipeline,
     FallbackDoiMetrics,
     FallbackDoiState,
+    run_document_service,
 )
+from library.postprocessing import document as document_export_postprocessing
 from library.postprocessing.common import collect_postprocess_metrics
 from library.postprocessing.common.logging import PipelineRunMetrics
 from library.postprocessing.common.types import SchemaValidationError, StepError
-from library.postprocessing import document as document_export_postprocessing
 from library.postprocessing.document import preprocess_documents_csv
 from library.postprocessing.documents import (
     run_document_pipeline as run_document_postprocess,
+)
+from library.postprocessing.documents import (
     steps as document_steps,
 )
-from library.postprocessing.documents import steps as document_steps
 from library.qa.reporting import build_table_quality_hook
 from library.qa.table_quality import TableQualityProfiler
 from library.reporting.run_manifest import (
@@ -717,7 +720,7 @@ def _finalise_export(
                 logger=logger,
                 extras=postprocess_extras,
             )
-        except (ImportError, AttributeError):
+        except ImportError:
             pass
         except (
             AttributeError,
@@ -1739,19 +1742,6 @@ def run_all(
     return exit_code
 
 
-def _update_document_config_from_options(
-    cfg: Config, options: DocumentPipelineOptions
-) -> None:
-    """Apply ``options`` to the document pipeline section of ``cfg``."""
-
-    pipelines = cfg.sources.chembl.pipelines.document
-    section = getattr(pipelines, options.mode)
-    updates: dict[str, object] = {"offset": options.offset}
-    if options.limit is not None:
-        updates["limit"] = options.limit
-    setattr(pipelines, options.mode, section.model_copy(update=updates))
-
-
 MODE_HANDLERS: Mapping[
     str, Callable[[Config, argparse.Namespace, DocumentPipeline], int]
 ] = {
@@ -1759,61 +1749,6 @@ MODE_HANDLERS: Mapping[
     "pubmed": run_pubmed,
     "all": run_all,
 }
-
-
-def run_document_service(
-    config: Config, options: DocumentPipelineOptions
-) -> PipelineRunResult:
-    """Execute the document pipeline using typed ``options``."""
-
-    output_path = Path(options.output_csv)
-    if options.skip_existing and output_path.exists() and not options.force:
-        return PipelineRunResult(
-            exit_code=0,
-            output_path=output_path,
-            executed=False,
-            reason="skip_existing",
-            written=False,
-        )
-
-    cfg = config.model_copy(deep=True)
-    _update_document_config_from_options(cfg, options)
-
-    args = argparse.Namespace(
-        input_csv=Path(options.input_csv),
-        final_out=output_path,
-        output_csv=output_path,
-        skip_existing=options.skip_existing,
-        force=options.force,
-        limit=options.limit,
-        offset=options.offset,
-        fallback_doi_enabled=options.fallback_doi_enabled,
-        fallback_doi_path=options.fallback_doi_path,
-        fallback_doi_overwrite=options.fallback_doi_overwrite,
-        fallback_doi_delimiter=options.fallback_doi_delimiter,
-        fallback_doi_encoding=options.fallback_doi_encoding,
-        fallback_doi_col_pmid=options.fallback_doi_col_pmid,
-        fallback_doi_col_doi=options.fallback_doi_col_doi,
-        mode=options.mode,
-        command=options.mode,
-    )
-    args.rerun_postprocess = options.rerun_postprocess
-
-    handler = MODE_HANDLERS.get(options.mode)
-    if handler is None:  # pragma: no cover - defensive guard
-        msg = f"unsupported document pipeline mode: {options.mode}"
-        raise ValueError(msg)
-
-    pipeline = DocumentPipeline(cfg)
-    exit_code = int(handler(cfg, args, pipeline=pipeline))
-    reason = None if exit_code == 0 else "pipeline_failed"
-    return PipelineRunResult(
-        exit_code=exit_code,
-        output_path=output_path,
-        executed=True,
-        reason=reason,
-        written=exit_code == 0,
-    )
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:

@@ -12,6 +12,7 @@ from library.cli.activity_api import (
     run_activity_pipeline,
 )
 
+
 __all__ = (
     "ActivityCommandOptions",
     "MAX_ACTIVITY_CHUNK_SIZE",

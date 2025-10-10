@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterable
 from importlib import import_module
 from types import ModuleType
-from typing import Iterable
 
 
 def _export_module_api(module: ModuleType, *, extra: Iterable[str] = ()) -> tuple[str, ...]:

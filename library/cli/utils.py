@@ -36,38 +36,52 @@ from ..common.log import logger as default_logger
 from ..common.metadata import record_quality_failure
 from ..common.sidecar import SidecarErrors
 from ..config import DEFAULT_CONFIG_PATH, Config, ConfigError, ensure_dirs, print_config
-from ..reporting.run_manifest import finalise_csv_output
 from ..postprocess.common import (
     PostprocessingPipelineConfig,
-    get_csv_runtime_config as get_postprocess_csv_config,
-    get_pipeline_config as load_postprocess_pipeline_config,
     run_postprocessing_pipeline,
+)
+from ..postprocess.common import (
+    get_csv_runtime_config as get_postprocess_csv_config,
+)
+from ..postprocess.common import (
+    get_pipeline_config as load_postprocess_pipeline_config,
 )
 from ..postprocessing.activities import (
     ACTIVITY_SCHEMA,
-    run_activity_pipeline as run_activity_postprocess,
     validate_activities,
+)
+from ..postprocessing.activities import (
+    run_activity_pipeline as run_activity_postprocess,
 )
 from ..postprocessing.assays import (
     ASSAY_SCHEMA,
-    run_assay_pipeline as run_assay_postprocess,
     validate_assays,
+)
+from ..postprocessing.assays import (
+    run_assay_pipeline as run_assay_postprocess,
 )
 from ..postprocessing.documents import (
     DOCUMENT_SCHEMA,
-    run_document_pipeline as run_document_postprocess,
     validate_documents,
+)
+from ..postprocessing.documents import (
+    run_document_pipeline as run_document_postprocess,
 )
 from ..postprocessing.targets import (
     TARGET_SCHEMA,
-    run_target_pipeline as run_target_postprocess,
     validate_targets,
+)
+from ..postprocessing.targets import (
+    run_target_pipeline as run_target_postprocess,
 )
 from ..postprocessing.testitem import (
     TESTITEM_SCHEMA,
-    run_testitem_pipeline as run_testitem_postprocess,
     validate_testitems,
 )
+from ..postprocessing.testitem import (
+    run_testitem_pipeline as run_testitem_postprocess,
+)
+from ..reporting.run_manifest import finalise_csv_output
 from .pipeline_definition import (
     Fetcher,
     PipelineDefinition,
