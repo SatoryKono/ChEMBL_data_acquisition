@@ -95,6 +95,7 @@ def _prepare_environment(tmp_path: Path) -> get_data.PipelineRunConfig:
         force=False,
         skip_existing=False,
         dry_run=False,
+        rerun_postprocess=False,
         input_files=input_files,
         output_stems=output_stems,
         subcommands=subcommands,

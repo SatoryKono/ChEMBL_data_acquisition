@@ -29,6 +29,7 @@ import inspect
 import os
 import sys
 import tempfile
+from dataclasses import dataclass
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from itertools import chain, islice
 from numbers import Integral, Real
@@ -482,6 +483,14 @@ def _maybe_run_document_postprocessing(
         )
 
 
+@dataclass(slots=True)
+class FinaliseExportResult:
+    """Outcome of ``_finalise_export`` including postprocess artefact details."""
+
+    exit_code: int
+    postprocess_path: Path | None = None
+
+
 def _finalise_export(
     df: pd.DataFrame | Iterable[pd.DataFrame],
     output: Path,
@@ -491,7 +500,8 @@ def _finalise_export(
     key_columns: Sequence[str] | None = None,
     chunk_size: int | None = None,
     partial_run: bool = False,
-) -> int:
+    rerun_postprocess: bool = False,
+) -> FinaliseExportResult:
     """Validate input frames and write CSV/metadata artefacts."""
 
     if isinstance(df, pd.DataFrame):
@@ -620,24 +630,36 @@ def _finalise_export(
         logger.error("csv_write_failed", error=str(exc), exc_info=exc, path=str(output))
         return 1
 
-    try:
-        postprocessed_path = document_export_postprocessing.postprocess_export_file(
-            csv_path,
-            cfg=cfg.io,
-        )
-    except (OSError, ValueError, pd.errors.ParserError) as exc:
-        logger.error(
-            "document_export_postprocess_failed",
-            error=str(exc),
-            exc_info=exc,
-            path=str(csv_path),
-        )
-        exit_code = 1
-    else:
+    expected_postprocess_path = document_export_postprocessing.resolve_default_destination(
+        csv_path
+    )
+    postprocessed_path: Path | None
+    if expected_postprocess_path.exists() and not rerun_postprocess:
+        postprocessed_path = expected_postprocess_path
         logger.info(
             "document_export_postprocess_written",
             path=str(postprocessed_path),
         )
+    else:
+        try:
+            postprocessed_path = document_export_postprocessing.postprocess_export_file(
+                csv_path,
+                cfg=cfg.io,
+            )
+        except (OSError, ValueError, pd.errors.ParserError) as exc:
+            logger.error(
+                "document_export_postprocess_failed",
+                error=str(exc),
+                exc_info=exc,
+                path=str(csv_path),
+            )
+            postprocessed_path = None
+            exit_code = 1
+        else:
+            logger.info(
+                "document_export_postprocess_written",
+                path=str(postprocessed_path),
+            )
 
     if missing_required:
         logger.warning(
@@ -713,15 +735,15 @@ def _finalise_export(
             exc_info=exc,
             path=str(destination),
         )
-        return 1
+        return FinaliseExportResult(exit_code=1, postprocess_path=postprocessed_path)
     except QualityAnalysisError as exc:
         logger.exception(
             "quality_report_generation_failed",
             error=str(exc),
             exc=exc,
         )
-        return 1
-    return exit_code
+        return FinaliseExportResult(exit_code=1, postprocess_path=postprocessed_path)
+    return FinaliseExportResult(exit_code=exit_code, postprocess_path=postprocessed_path)
 
 
 def _generate_document_postprocess_metrics(
@@ -753,14 +775,19 @@ def _log_document_completion(
     output_path: Path,
     logger: Logger,
     extras: Mapping[str, object] | None = None,
+    postprocess_path: Path | None = None,
 ) -> None:
     """Log pipeline completion details and write the postprocess report."""
+
+    extras_payload: dict[str, object] = dict(extras) if extras else {}
+    if postprocess_path is not None:
+        extras_payload["postprocess_output"] = str(postprocess_path)
 
     metrics, report_path = _generate_document_postprocess_metrics(
         cfg,
         output_path,
         logger=logger,
-        extras=extras,
+        extras=extras_payload,
     )
     pipeline_version_value = (
         metrics.pipeline_version
@@ -772,8 +799,8 @@ def _log_document_completion(
         "output": str(output_path),
         "pipeline_version": pipeline_version_value,
     }
-    if extras:
-        payload.update(extras)
+    if extras_payload:
+        payload.update(extras_payload)
     if metrics is not None:
         summary = metrics.summary()
         if summary.get("rows") is not None:
@@ -992,7 +1019,7 @@ def run_pubmed(
             frame_iter = _iter_with_fallback()
 
         normalised_frames = (normalize_documents(frame) for frame in frame_iter)
-        exit_code = _finalise_export(
+        finalise_result = _finalise_export(
             normalised_frames,
             output,
             cfg,
@@ -1000,7 +1027,9 @@ def run_pubmed(
             key_columns=["document_chembl_id"],
             chunk_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
             partial_run=partial_run,
+            rerun_postprocess=bool(getattr(args, "rerun_postprocess", False)),
         )
+        exit_code = finalise_result.exit_code
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error(
             "pubmed_pipeline_failed",
@@ -1026,6 +1055,7 @@ def run_pubmed(
             output_path=output_path,
             logger=logger,
             extras={"mode": "pubmed"},
+            postprocess_path=finalise_result.postprocess_path,
         )
     else:
         logger.error(
@@ -1180,7 +1210,7 @@ def run_chembl(
             df["doi"] = df["doi"].map(normalise_doi)
         output = output_path
         df = normalize_documents(df)
-        exit_code = _finalise_export(
+        finalise_result = _finalise_export(
             df,
             output,
             cfg,
@@ -1188,7 +1218,9 @@ def run_chembl(
             key_columns=["document_chembl_id"],
             chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
             partial_run=partial_run,
+            rerun_postprocess=bool(getattr(args, "rerun_postprocess", False)),
         )
+        exit_code = finalise_result.exit_code
         if exit_code == 0:
             extras: dict[str, object] = {"mode": "chembl"}
             if partial_run:
@@ -1199,6 +1231,7 @@ def run_chembl(
                 output_path=output_path,
                 logger=logger,
                 extras=extras,
+                postprocess_path=finalise_result.postprocess_path,
             )
         else:
             logger.error(
@@ -1424,7 +1457,7 @@ def run_all(
                 how="left",
             )
         processed = normalize_documents(processed)
-        exit_code = _finalise_export(
+        finalise_result = _finalise_export(
             processed,
             output,
             cfg,
@@ -1432,7 +1465,9 @@ def run_all(
             key_columns=["document_chembl_id"],
             chunk_size=getattr(args, "chembl_chunk_size", all_defaults.chunk_size),
             partial_run=partial_run,
+            rerun_postprocess=bool(getattr(args, "rerun_postprocess", False)),
         )
+        exit_code = finalise_result.exit_code
         if fallback_state is not None:
             logger.info(
                 "fallback_doi_metrics",
@@ -1451,6 +1486,7 @@ def run_all(
                 output_path=output_path,
                 logger=logger,
                 extras=extras,
+                postprocess_path=finalise_result.postprocess_path,
             )
         else:
             logger.error(
@@ -1541,7 +1577,7 @@ def run_all(
             how="left",
         )
     processed = normalize_documents(processed)
-    exit_code = _finalise_export(
+    finalise_result = _finalise_export(
         processed,
         output,
         cfg,
@@ -1549,7 +1585,9 @@ def run_all(
         key_columns=["document_chembl_id"],
         chunk_size=getattr(args, "chembl_chunk_size", all_defaults.chunk_size),
         partial_run=partial_run,
+        rerun_postprocess=bool(getattr(args, "rerun_postprocess", False)),
     )
+    exit_code = finalise_result.exit_code
     if fallback_state is not None:
         logger.info(
             "fallback_doi_metrics",
@@ -1568,6 +1606,7 @@ def run_all(
             output_path=output_path,
             logger=logger,
             extras=extras,
+            postprocess_path=finalise_result.postprocess_path,
         )
     else:
         logger.error(
@@ -1636,6 +1675,7 @@ def run_document_service(
         mode=options.mode,
         command=options.mode,
     )
+    args.rerun_postprocess = options.rerun_postprocess
 
     handler = MODE_HANDLERS.get(options.mode)
     if handler is None:  # pragma: no cover - defensive guard
@@ -1745,6 +1785,14 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
+    parser.add_argument(
+        "--rerun-postprocess",
+        action="store_true",
+        help=(
+            "Rebuild stage-aligned exports even if a previous run already produced "
+            "them"
+        ),
+    )
 
     pipeline_group = parser.add_argument_group("Pipeline selection")
     pipeline_group.add_argument(

@@ -32,6 +32,7 @@ def _build_run_config(
         force=False,
         skip_existing=False,
         dry_run=False,
+        rerun_postprocess=False,
         input_files={step.name: step.input_filename for step in steps},
         output_stems={step.name: step.output_stem for step in steps},
         subcommands=subcommands,

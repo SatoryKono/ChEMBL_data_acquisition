@@ -105,7 +105,9 @@ def test_main_pubmed__without_fallback_csv(
 
     def _fake_finalise(frames, output, cfg, **kwargs):  # type: ignore[override]
         emitted_frames.extend(list(frames))
-        return 0
+        return get_document_data.FinaliseExportResult(
+            exit_code=0, postprocess_path=Path(output)
+        )
 
     monkeypatch.setattr(DocumentPipeline, "fetch_pubmed_records", _fake_fetch)
     monkeypatch.setattr(get_document_data, "_finalise_export", _fake_finalise)
@@ -165,7 +167,9 @@ def test_main_pubmed__with_fallback_csv(
     monkeypatch.setattr(
         get_document_data,
         "_finalise_export",
-        lambda frames, *_args, **_kwargs: 0,
+        lambda frames, *_args, **_kwargs: get_document_data.FinaliseExportResult(
+            exit_code=0, postprocess_path=output_path
+        ),
     )
     monkeypatch.setattr(get_document_data, "normalize_documents", lambda frame: frame)
 
@@ -222,7 +226,9 @@ def test_main_pubmed__skip_existing_conflict(
     monkeypatch.setattr(
         get_document_data,
         "_finalise_export",
-        lambda frames, *_args, **_kwargs: 0,
+        lambda frames, *_args, **_kwargs: get_document_data.FinaliseExportResult(
+            exit_code=0, postprocess_path=output_path
+        ),
     )
     monkeypatch.setattr(get_document_data, "normalize_documents", lambda frame: frame)
 
