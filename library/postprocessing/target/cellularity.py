@@ -150,7 +150,8 @@ class Cellularity:
 
         if isinstance(tax_id, (float, np.floating)) and pd.isna(tax_id):
             return []
-        values = list(self.fetcher(tax_id, email))  # type: ignore[arg-type]
+        fetcher = self.fetcher or self._fetch_lineage_default
+        values = list(fetcher(tax_id, email))
         return values
 
     def _fetch_lineage_default(self, tax_id: Any, email: str | None) -> list[str]:

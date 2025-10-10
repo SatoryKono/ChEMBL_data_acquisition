@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 from collections.abc import Callable, Sequence
+from types import ModuleType
+from typing import cast
 
 from library.config import Config
 from library.common.log import logger
+from library.common.logging_setup import Logger
 from library.pipelines.activity.runner import (
     ActivityCommandOptions,
     MIN_ACTIVITY_TIMEOUT,
@@ -14,22 +18,25 @@ from library.pipelines.activity.runner import (
 
 from . import _run
 
-def _sync_pipeline_logger(logger: object) -> None:
-    """Align the shared pipeline logger with ``logger`` when possible."""
+def _sync_pipeline_logger(current_logger: Logger) -> None:
+    """Align the shared pipeline logger with ``current_logger`` when possible."""
 
-    try:
-        from library.common import log as _common_log
-
-        _common_log.logger = logger  # type: ignore[assignment]
-    except Exception:  # pragma: no cover - defensive
-        pass
-
-    try:
-        from library.pipelines.activity import runner as activity_runner
-
-        activity_runner.logger = logger  # type: ignore[assignment]
-    except Exception:  # pragma: no cover - defensive
-        pass
+    modules: Sequence[tuple[str, str]] = (
+        ("library.common.log", "logger"),
+        ("library.pipelines.activity.runner", "logger"),
+    )
+    for module_name, attribute in modules:
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:  # pragma: no cover - defensive
+            continue
+        module_typed = cast(ModuleType, module)
+        if getattr(module_typed, attribute, None) is current_logger:
+            continue
+        try:
+            setattr(module_typed, attribute, current_logger)
+        except Exception:  # pragma: no cover - defensive
+            continue
 
 
 def run_activity_pipeline(

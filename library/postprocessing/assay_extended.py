@@ -246,11 +246,8 @@ def _latest_target_export(target_dir: Path) -> Path:
 def _parse_accessions(payload: object) -> list[str]:
     if payload is None:
         return []
-    try:
-        if pd.isna(payload):  # type: ignore[arg-type]
-            return []
-    except TypeError:
-        pass
+    if helpers.is_missing_scalar(payload):
+        return []
     text = str(payload).strip()
     if not text:
         return []

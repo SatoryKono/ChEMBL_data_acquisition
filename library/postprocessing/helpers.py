@@ -13,11 +13,12 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from collections.abc import Mapping
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, TypeGuard
 from xml.etree import ElementTree
 
 import pandas as pd
 from pandas.errors import ParserError
+from pandas._typing import Scalar
 
 import numpy as np
 
@@ -40,6 +41,22 @@ ENCODING_FALLBACKS: tuple[str, ...] = (
     "iso-8859-1",
 )
 CSV_SEPARATORS: tuple[str, ...] = (",", "\t", ";")
+
+
+def _is_scalar_like(value: object) -> TypeGuard[Scalar]:
+    """Return ``True`` when ``value`` is a pandas scalar."""
+
+    return bool(pd.api.types.is_scalar(value))
+
+
+def is_missing_scalar(value: object | None) -> bool:
+    """Return ``True`` when ``value`` should be treated as a missing scalar."""
+
+    if value is None:
+        return True
+    if _is_scalar_like(value):
+        return bool(pd.isna(value))
+    return False
 
 
 def normalise_export_basename(path: Path) -> str:
@@ -89,11 +106,8 @@ def normalise_text(value: object | None) -> str:
     if isinstance(value, str):
         text = value.strip()
         return text
-    try:
-        if pd.isna(value):  # type: ignore[arg-type]
-            return ""
-    except TypeError:
-        pass
+    if is_missing_scalar(value):
+        return ""
     text = str(value).strip()
     return "" if text.lower() in {"none", "nan"} else text
 
@@ -198,7 +212,7 @@ def _coerce_logical_series(series: pd.Series) -> pd.Series:
         return series
 
     def convert(value: object) -> object:
-        if pd.isna(value):
+        if is_missing_scalar(value):
             return pd.NA
         if isinstance(value, (bool, np.bool_)):
             return bool(value)
