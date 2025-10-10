@@ -6,7 +6,7 @@ import sys
 from collections.abc import Iterable
 from importlib import import_module
 from types import ModuleType
-from typing import Iterable, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 # ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if TYPE_CHECKING:
@@ -50,7 +50,18 @@ def _export_module_api(module: ModuleType, *, extra: Iterable[str] = ()) -> tupl
 
 
 def _load_module() -> ModuleType:
-    return import_module("library.cli.commands.get_data")
+    try:
+        return import_module("library.cli.commands.get_data")
+    except ModuleNotFoundError as exc:  # pragma: no cover - import guard
+        missing = exc.name or "dependency"
+        message = (
+            f"Missing required dependency '{missing}'.\n"
+            "Install the project requirements before running this command, for example:\n"
+            "  pip install -r requirements.txt\n"
+            "  # or\n"
+            "  pip install -e .[dev]\n"
+        )
+        raise SystemExit(message) from exc
 
 
 _MODULE = _load_module()
