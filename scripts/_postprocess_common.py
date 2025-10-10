@@ -6,12 +6,13 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Callable, Mapping, Sequence
 
 import pandas as pd
 
 from library import io
 from library.common.csv_utils import write_csv_chunks_deterministic
+from library.common.logging_setup import Logger
 from library.postprocess.common import *  # noqa: F401,F403
 from library.postprocessing.common.config import PipelineConfig, load_pipeline_config
 from library.postprocessing.common.logging import (
@@ -94,7 +95,7 @@ def load_input_frame(
     path: Path,
     csv_cfg: CsvRuntimeConfig,
     *,
-    logger,
+    logger: Logger,
 ) -> pd.DataFrame:
     """Load the raw output frame for ``table`` from ``path``."""
 
@@ -122,7 +123,7 @@ def run_postprocess_steps(
     runner: Callable[..., tuple[pd.DataFrame, PipelineRunMetrics]],
     pipeline_version: str | None,
     *,
-    logger,
+    logger: Logger,
 ) -> tuple[pd.DataFrame, PipelineRunMetrics]:
     """Execute postprocessing ``runner`` for ``table``."""
 
@@ -150,7 +151,7 @@ def validate_postprocess_frame(
     schema: DataFrameSchema,
     pipeline_version: str | None,
     *,
-    logger,
+    logger: Logger,
 ) -> pd.DataFrame:
     """Validate ``df`` using ``validator`` aligned with ``schema``."""
 
@@ -190,7 +191,7 @@ def export_postprocess_frame(
     csv_cfg: CsvRuntimeConfig,
     schema: DataFrameSchema,
     *,
-    logger,
+    logger: Logger,
 ) -> Path:
     """Persist ``df`` deterministically to ``output_path``."""
 
@@ -237,7 +238,7 @@ def generate_metrics_report(
     *,
     pipeline_version: str | None,
     extras: Mapping[str, Any] | None,
-    logger,
+    logger: Logger,
     pipeline_metrics: PipelineRunMetrics | None = None,
 ) -> tuple[PipelineRunMetrics | None, Path | None]:
     """Create a structured metrics report for ``table``."""
