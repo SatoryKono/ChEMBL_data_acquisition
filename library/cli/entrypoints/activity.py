@@ -47,6 +47,7 @@ from library.cli import (
     build_parser as base_parser,
 )
 from library.cli.base import PipelineCLIBase
+import library.cli.logging as cli_logging
 from library.cli.logging import CLILoggingContext
 from library.cli.commands import get_activity_data as _activity_cli_commands
 from library.cli.commands.get_activity_data import (
@@ -1947,6 +1948,13 @@ class ActivityPipelineCLI(PipelineCLIBase):
             stripped = value.strip()
             if stripped:
                 return stripped
+        try:
+            original = getattr(cli_logging, "_ORIGINAL_CURRENT_DATE_STR", None)
+            current = cli_logging._current_date_str
+            if original is not None and current is not original:
+                return current()
+        except Exception:
+            pass
         try:
             return _current_date_token()
         except Exception:  # pragma: no cover - defensive against custom hooks
