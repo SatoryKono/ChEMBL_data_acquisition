@@ -31,6 +31,7 @@ def _make_stub_config() -> _ConfigStub:
     io_cfg = SimpleNamespace(
         output_stamp_mode="omit",
         output_dir=Path("output").resolve(),
+        default_date_prefix="19991231",
     )
     return _ConfigStub(
         target=SimpleNamespace(
@@ -203,6 +204,8 @@ def test_run_logs_parameter_sources__default_sources(monkeypatch, tmp_path):
     parser, _ = get_target_data.build_parser()
     args = parser.parse_args(["chembl"])
     cfg = _make_stub_config()
+    cfg.io.output_dir = tmp_path
+    cfg.local.io.output_dir = tmp_path
 
     input_path = tmp_path / "targets.csv"
     input_path.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
@@ -218,6 +221,11 @@ def test_run_logs_parameter_sources__default_sources(monkeypatch, tmp_path):
 
     result = get_target_data.run(cfg, args)
     assert result == 0
+    expected_output = (
+        tmp_path
+        / f"output.{get_target_data.DEFAULT_OUTPUT_STEM}_{cfg.io.default_date_prefix}.csv"
+    )
+    assert args.final_out == expected_output
     cli_logs = [kwargs for event, kwargs in logged if event == "cli_parameter"]
     assert cli_logs
     assert {entry["source"] for entry in cli_logs} == {"default"}

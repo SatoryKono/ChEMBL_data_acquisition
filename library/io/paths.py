@@ -8,7 +8,12 @@ from pathlib import Path
 from ..config import IoCfg
 
 
-def default_output_path(input_path: str | Path, cfg: IoCfg) -> Path:
+def default_output_path(
+    input_path: str | Path,
+    cfg: IoCfg,
+    *,
+    date: str | None = None,
+) -> Path:
     """Construct a deterministic output path based on the input file name.
 
     Parameters
@@ -19,6 +24,10 @@ def default_output_path(input_path: str | Path, cfg: IoCfg) -> Path:
     cfg : IoCfg
         IO configuration containing the destination directory for derived
         artefacts.
+    date : str, optional keyword-only
+        Date prefix explicitly supplied by the caller. When omitted, the
+        function falls back to ``cfg.default_date_prefix`` or generates a
+        ``YYYYMMDD`` string for the current UTC date.
 
     Returns
     -------
@@ -33,5 +42,17 @@ def default_output_path(input_path: str | Path, cfg: IoCfg) -> Path:
     """
 
     inp = Path(input_path)
-    date_str = datetime.now(UTC).strftime("%Y%m%d")
+
+    cfg_prefix = getattr(cfg, "default_date_prefix", None)
+    if isinstance(cfg_prefix, str):
+        cfg_prefix = cfg_prefix.strip() or None
+    if cfg_prefix is not None:
+        date_str = cfg_prefix
+    else:
+        if isinstance(date, str):
+            candidate = date.strip()
+            date_str = candidate or datetime.now(UTC).strftime("%Y%m%d")
+        else:
+            date_str = datetime.now(UTC).strftime("%Y%m%d")
+
     return Path(cfg.output_dir) / f"output.{inp.stem}_{date_str}.csv"

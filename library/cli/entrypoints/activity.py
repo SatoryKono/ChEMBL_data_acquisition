@@ -1153,7 +1153,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 args.final_out = output_path
             args.output_csv = output_path
         else:
-            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            output_path = Path(
+                io.default_output_path(
+                    args.input_csv,
+                    cfg.io,
+                    date=getattr(args, "date", None),
+                )
+            )
             args.final_out = output_path
             args.output_csv = output_path
     else:

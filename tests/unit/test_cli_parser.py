@@ -11,6 +11,7 @@ import pytest
 
 from library.cli import parser as parser_module
 from library.cli.parser import apply_config_overrides
+from library.io.paths import default_output_path
 from library.config import ConfigMetadata
 
 
@@ -181,3 +182,28 @@ def test_create_logger_config__explicit_run_id_retained():
     cfg = parser_module.create_logger_config("info", run_id="custom-id")
 
     assert cfg.run_id == "custom-id"
+
+
+@pytest.mark.unit
+def test_default_output_path__uses_config_prefix(tmp_path: Path) -> None:
+    cfg = SimpleNamespace(
+        output_dir=tmp_path,
+        default_date_prefix="19991231",
+    )
+
+    output_path = default_output_path(tmp_path / "input.csv", cfg)
+
+    assert output_path == tmp_path / "output.input_19991231.csv"
+
+
+@pytest.mark.unit
+def test_default_output_path__falls_back_to_explicit_date(tmp_path: Path) -> None:
+    cfg = SimpleNamespace(output_dir=tmp_path, default_date_prefix=None)
+
+    output_path = default_output_path(
+        tmp_path / "input.csv",
+        cfg,
+        date="20240615",
+    )
+
+    assert output_path == tmp_path / "output.input_20240615.csv"

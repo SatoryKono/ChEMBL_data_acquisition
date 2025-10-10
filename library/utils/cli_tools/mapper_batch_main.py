@@ -75,7 +75,11 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             else:
                 logger.warning("uniprot_id_missing", chembl_id=cid)
         df["mapping_uniprot_id"] = df[args.column].map(mappings).fillna("")
-        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+        output = args.output_csv or io.default_output_path(
+            args.input_csv,
+            cfg.io,
+            date=getattr(args, "date", None),
+        )
         try:
             io.write_csv(
                 df,

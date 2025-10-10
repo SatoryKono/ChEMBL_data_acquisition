@@ -83,7 +83,12 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     output_path = Path(
-        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+        args.output_csv
+        or io.default_output_path(
+            args.input_csv,
+            cfg.io,
+            date=getattr(args, "date", None),
+        )
     )
     args.output_csv = output_path
 

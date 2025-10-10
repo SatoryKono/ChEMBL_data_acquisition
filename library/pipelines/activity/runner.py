@@ -172,7 +172,13 @@ def run_activity_pipeline(
         if legacy_output is not None:
             output_path = legacy_output
         else:
-            output_path = Path(io.default_output_path(args.input_csv, effective_cfg.io))
+            output_path = Path(
+                io.default_output_path(
+                    args.input_csv,
+                    effective_cfg.io,
+                    date=getattr(options, "date", None),
+                )
+            )
         args.final_out = output_path
         args.output_csv = output_path
     else:
