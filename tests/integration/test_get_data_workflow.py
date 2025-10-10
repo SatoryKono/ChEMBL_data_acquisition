@@ -920,33 +920,26 @@ def test_pipeline_subset__target_postprocess_sidecars(
         destination.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
         return destination
 
-    def _fake_organism(source: Path, *, cfg: Config) -> Path:
-        call_order.append("organism")
-        return _sidecar_path(source, "organism.")
-
-    def _fake_isoform(
+    def _fake_postprocess(
         source: Path,
         *,
         cfg: Config,
+        args: argparse.Namespace | None,
         context: get_target_data.IsoformPostprocessContext | None = None,
         ambiguous_classifications: int | None = None,
-    ) -> Path:
-        call_order.append("isoform")
-        return _sidecar_path(source, "isoform.")
-
-    def _fake_names(source: Path, *, cfg: Config) -> Path:
-        call_order.append("names")
-        return _sidecar_path(source, "name.")
-
-    def _fake_iuphar(source: Path, *, verbose: bool = True) -> Path:
-        call_order.append("iuphar")
-        return _sidecar_path(source, "IUPHAR.")
+    ) -> None:
+        call_order.append("postprocess")
+        _sidecar_path(source, "postprocessed.")
 
     def _stub_run_all(cfg_obj: Config, args: argparse.Namespace) -> int:
         working_output = Path(args.final_out)
         working_output.parent.mkdir(parents=True, exist_ok=True)
         working_output.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
-        get_target_data._postprocess_target_exports(working_output, cfg=cfg_obj)
+        get_target_data.run_target_postprocess_if_requested(
+            working_output,
+            cfg=cfg_obj,
+            args=args,
+        )
         return 0
 
     stream = io.StringIO()
@@ -966,17 +959,14 @@ def test_pipeline_subset__target_postprocess_sidecars(
     monkeypatch.setattr(get_target_data, "run_all", _stub_run_all)
     monkeypatch.setattr(
         get_target_data,
-        "_postprocess_organism_export",
-        _fake_organism,
+        "run_target_postprocess_if_requested",
+        _fake_postprocess,
     )
-    monkeypatch.setattr(get_target_data, "_postprocess_isoform_export", _fake_isoform)
-    monkeypatch.setattr(get_target_data, "_postprocess_names_export", _fake_names)
-    monkeypatch.setattr(get_target_data, "_postprocess_iuphar_export", _fake_iuphar)
 
     status = get_data.run_pipeline(cfg, steps=(step,))
 
     assert status == 0
-    assert call_order == ["organism", "isoform", "names", "iuphar"]
+    assert call_order == ["postprocess"]
 
     final_output = step.expected_output(cfg)
     assert final_output.exists()

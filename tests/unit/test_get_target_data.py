@@ -642,162 +642,43 @@ def test_run__delegates_to_handler(
     assert exit_code == 4
 
 
-def test_postprocess_organism_export__success(
+def test_run_target_postprocess_if_requested__disabled_flag_logs_skip(
     cfg: Config,
     tmp_path: Path,
     logger_stub: _MemoryLogger,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    source = tmp_path / "output.target_20250101.csv"
+    source = tmp_path / "output.targets_20250101.csv"
     source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
 
-    output_path = tmp_path / "organism.output.target_20250101.csv"
-
-    def _fake_postprocess(path: str) -> str:
-        assert path == str(source)
-        output_path.write_text(
-            "target_chembl_id,target_type\nCHEMBL1,Multicellular\n", encoding="utf-8"
-        )
-        return str(output_path)
-
-    monkeypatch.setattr(
-        get_target_data.target_pp, "postprocess_target_table", _fake_postprocess
+    result = get_target_data.run_target_postprocess_if_requested(
+        source,
+        cfg=cfg,
+        args=argparse.Namespace(postprocess=False),
     )
-
-    result = get_target_data._postprocess_organism_export(source, cfg=cfg)
-
-    assert result == output_path
-    assert (
-        "info",
-        "target_organism_postprocess_done",
-        {"path": str(output_path), "source": str(source)},
-    ) in logger_stub.events
-
-
-def test_postprocess_organism_export__failure(
-    cfg: Config,
-    tmp_path: Path,
-    logger_stub: _MemoryLogger,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    source = tmp_path / "output.target_20250101.csv"
-    source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
-
-    def _failing_postprocess(path: str) -> str:
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(
-        get_target_data.target_pp, "postprocess_target_table", _failing_postprocess
-    )
-
-    result = get_target_data._postprocess_organism_export(source, cfg=cfg)
 
     assert result is None
     assert (
-        "exception",
-        "target_organism_postprocess_failed",
-        {"path": str(source), "error": "boom"},
-    ) in logger_stub.events
-
-
-def test_postprocess_isoform_export__runs_for_custom_name(
-    cfg: Config,
-    tmp_path: Path,
-    logger_stub: _MemoryLogger,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    source = tmp_path / "custom_export.csv"
-    source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
-
-    called: list[tuple[tuple[object, ...], dict[str, object]]] = []
-
-    def _record(*args: object, **kwargs: object) -> str:
-        called.append((args, dict(kwargs)))
-        return str(source)
-
-    monkeypatch.setattr(get_target_data.target_pp, "process_targets", _record)
-
-    result = get_target_data._postprocess_isoform_export(source, cfg=cfg)
-
-    assert result == source
-    assert called == [((str(source),), {"verbose": True})]
-    assert (
         "info",
-        "target_isoform_postprocess_done",
-        {"path": str(source), "source": str(source)},
+        "Postprocessing skipped (flag --postprocess not set)",
+        {},
     ) in logger_stub.events
 
 
-@pytest.mark.parametrize(
-    "filename",
-    ["output.target_20250101.csv", "targets.csv"],
-)
-def test_postprocess_target_exports__chains_helpers(
+def test_run_target_postprocess_if_requested__skips_unsupported_export(
     cfg: Config,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    filename: str,
-) -> None:
-    source = tmp_path / filename
-    source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
-
-    call_order: list[str] = []
-
-    def _fake_organism(path: Path, *, cfg: Config) -> Path:
-        assert Path(path) == source
-        call_order.append("organism")
-        return source
-
-    def _fake_isoform(
-        path: Path,
-        *,
-        cfg: Config,
-        context: get_target_data.IsoformPostprocessContext | None = None,
-        ambiguous_classifications: int | None = None,
-    ) -> Path | None:
-        assert Path(path) == source
-        call_order.append("isoform")
-        return source
-
-    def _fake_names(path: Path, *, cfg: Config) -> Path:
-        assert Path(path) == source
-        call_order.append("names")
-        return source
-
-    def _fake_iuphar(path: Path, *, verbose: bool = True) -> Path:
-        assert Path(path) == source
-        call_order.append("iuphar")
-        return source
-
-    monkeypatch.setattr(get_target_data, "_postprocess_organism_export", _fake_organism)
-    monkeypatch.setattr(get_target_data, "_postprocess_isoform_export", _fake_isoform)
-    monkeypatch.setattr(get_target_data, "_postprocess_names_export", _fake_names)
-    monkeypatch.setattr(get_target_data, "_postprocess_iuphar_export", _fake_iuphar)
-
-    get_target_data._postprocess_target_exports(source, cfg=cfg)
-
-    assert call_order == ["organism", "isoform", "names", "iuphar"]
-
-
-def test_postprocess_target_exports__skips_for_uniprot_suffix(
-    cfg: Config,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     logger_stub: _MemoryLogger,
 ) -> None:
     source = tmp_path / "output.targets_20250101_uniprot.csv"
     source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
 
-    def _unexpected(*_: object, **__: object) -> None:  # pragma: no cover - defensive
-        raise AssertionError("post-processing should be skipped")
+    result = get_target_data.run_target_postprocess_if_requested(
+        source,
+        cfg=cfg,
+        args=argparse.Namespace(postprocess=True),
+    )
 
-    monkeypatch.setattr(get_target_data, "_postprocess_organism_export", _unexpected)
-    monkeypatch.setattr(get_target_data, "_postprocess_isoform_export", _unexpected)
-    monkeypatch.setattr(get_target_data, "_postprocess_names_export", _unexpected)
-    monkeypatch.setattr(get_target_data, "_postprocess_iuphar_export", _unexpected)
-
-    get_target_data._postprocess_target_exports(source, cfg=cfg)
-
+    assert result is None
     assert (
         "info",
         "target_postprocess_skipped",
@@ -805,36 +686,107 @@ def test_postprocess_target_exports__skips_for_uniprot_suffix(
     ) in logger_stub.events
 
 
-def test_postprocess_iuphar_export__missing_columns_logs_warning(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, logger_stub: _MemoryLogger
+def test_run_target_postprocess_if_requested__invokes_pipeline(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logger_stub: _MemoryLogger,
 ) -> None:
-    source = tmp_path / "output.target_20250101.csv"
+    import library.postprocess as postprocess_module
+    import library.postprocessing.targets as targets_postprocess
+
+    source = tmp_path / "output.targets_20250101.csv"
+    destination = source.with_name("output_postprocessed.targets.csv")
     source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
 
-    class _StubError(RuntimeError):
-        pass
+    report_path = destination.parent / "targets.postprocess.report.json"
 
-    def _raise_error(*_: object, **__: object) -> None:
-        raise _StubError("Input CSV is missing required columns: foo")
+    class _Result:
+        def __init__(self) -> None:
+            self.output_path = destination
+            self.report_path = report_path
+            self.metrics = SimpleNamespace(
+                summary=lambda: {
+                    "rows": 1,
+                    "columns": 2,
+                    "steps": 3,
+                    "duration_s": 0.5,
+                },
+                pipeline_version="1.0.0",
+                validation=None,
+            )
 
-    monkeypatch.setattr(get_target_data, "_IUPHAR_IMPORT_ERROR", None)
+    pipeline_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _fake_run_postprocessing_pipeline(*args: object, **kwargs: object) -> _Result:
+        pipeline_calls.append((args, dict(kwargs)))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(
+            "target_chembl_id,pref_name\nCHEMBL1,Alpha\n",
+            encoding="utf-8",
+        )
+        report_path.write_text("{}", encoding="utf-8")
+        return _Result()
+
+    class _RuntimeConfig:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
     monkeypatch.setattr(
-        get_target_data,
-        "iuphar_pp",
-        SimpleNamespace(
-            process_iuphar_targets=_raise_error,
-            IUPHARPostProcessingError=_StubError,
-        ),
+        postprocess_module,
+        "PostprocessingPipelineConfig",
+        _RuntimeConfig,
+    )
+    monkeypatch.setattr(
+        postprocess_module,
+        "get_pipeline_config",
+        lambda table, override: SimpleNamespace(params={}, pipeline_version="1.0.0"),
+    )
+    monkeypatch.setattr(
+        postprocess_module,
+        "get_csv_runtime_config",
+        lambda *_: SimpleNamespace(separator=",", encoding="utf-8", chunksize=10000),
+    )
+    monkeypatch.setattr(
+        postprocess_module,
+        "run_postprocessing_pipeline",
+        _fake_run_postprocessing_pipeline,
     )
 
-    result = get_target_data._postprocess_iuphar_export(source)
+    def _dummy_runner(df: object, *, pipeline_version: object | None = None, logger=None):
+        return df, SimpleNamespace(
+            summary=lambda: {
+                "rows": 1,
+                "columns": 2,
+                "steps": 3,
+                "duration_s": 0.5,
+            },
+            pipeline_version=pipeline_version or "1.0.0",
+            validation=None,
+        )
 
-    assert result is None
-    assert (
-        "warning",
-        "target_iuphar_postprocess_missing_columns",
-        {"path": str(source), "error": "Input CSV is missing required columns: foo"},
-    ) in logger_stub.events
+    monkeypatch.setattr(targets_postprocess, "run_target_pipeline", _dummy_runner)
+    monkeypatch.setattr(targets_postprocess, "validate_targets", lambda df, **_: df)
+
+    result = get_target_data.run_target_postprocess_if_requested(
+        source,
+        cfg=cfg,
+        args=argparse.Namespace(postprocess=True),
+    )
+
+    assert isinstance(result, _Result)
+    assert pipeline_calls and pipeline_calls[0][0][0] == "targets"
+    assert pipeline_calls[0][0][1] == source
+    assert pipeline_calls[0][0][2] == destination
+
+    events = [event for event in logger_stub.events if event[1] == "target_postprocess_done"]
+    assert events
+    _, _, payload = events[0]
+    assert payload["path"] == str(destination)
+    assert payload["postprocess_rows"] == 1
+    assert payload["postprocess_columns"] == 2
+    assert payload["postprocess_steps"] == 3
+    assert payload["postprocess_duration_s"] == 0.5
 
 
 def test_finalize_raw_dump_writer__missing_method(
