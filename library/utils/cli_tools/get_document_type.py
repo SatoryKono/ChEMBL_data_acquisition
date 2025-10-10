@@ -319,6 +319,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
                 last_error = exc
                 continue
+            except FileNotFoundError as exc:
+                last_error = exc
+                break
             except ValueError as exc:
                 logger_inst.debug(
                     "csv_candidate_invalid",
@@ -331,6 +334,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             used_encoding = encoding_candidate
             used_separator = separator
             df_in = candidate_frame
+            break
+        if isinstance(last_error, FileNotFoundError):
             break
         if df_in is not None:
             break
