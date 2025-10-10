@@ -164,12 +164,11 @@ def _retry_delay(
     delay = min_delay
 
     if retry_cfg is not None and retry_cfg.backoff_factor > 0:
-        backoff = compute_backoff_delay(attempt, retry_cfg)
-        if jitter is not None:
-            jitter_value = jitter(retry_cfg.backoff_factor)
-        else:
+        backoff = compute_backoff_delay(attempt, retry_cfg, jitter=jitter)
+        candidate = backoff
+        if jitter is None:
             jitter_value = random.uniform(0.0, retry_cfg.backoff_factor)
-        candidate = backoff + jitter_value
+            candidate = backoff + jitter_value
         if retry_cfg.backoff_cap is not None:
             candidate = min(candidate, retry_cfg.backoff_cap)
         delay = max(delay, candidate)

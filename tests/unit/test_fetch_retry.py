@@ -6,26 +6,67 @@ from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_dela
 from library.config import RetryCfg
 
 
-def test_compute_backoff_delay__deterministic_with_seed() -> None:
+def test_compute_backoff_delay__deterministic_with_cached_jitter() -> None:
     retry_cfg = RetryCfg(backoff_factor=1.25, backoff_cap=None, jitter_seed=7)
-    delays_first = [compute_backoff_delay(attempt, retry_cfg) for attempt in range(1, 5)]
+    jitter = retry_cfg.build_jitter()
+    assert jitter is not None
+    delays_first = [
+        compute_backoff_delay(attempt, retry_cfg, jitter=jitter)
+        for attempt in range(1, 5)
+    ]
 
     retry_cfg_same_seed = RetryCfg(backoff_factor=1.25, backoff_cap=None, jitter_seed=7)
-    delays_second = [compute_backoff_delay(attempt, retry_cfg_same_seed) for attempt in range(1, 5)]
+    jitter_same_seed = retry_cfg_same_seed.build_jitter()
+    assert jitter_same_seed is not None
+    delays_second = [
+        compute_backoff_delay(attempt, retry_cfg_same_seed, jitter=jitter_same_seed)
+        for attempt in range(1, 5)
+    ]
 
     assert delays_first == delays_second
 
 
+def test_compute_backoff_delay__jitter_sequence_restarts_with_same_seed() -> None:
+    retry_cfg = RetryCfg(backoff_factor=1.0, backoff_cap=None, jitter_seed=17)
+    jitter = retry_cfg.build_jitter()
+    assert jitter is not None
+
+    attempts = range(1, 5)
+    first_run = [
+        compute_backoff_delay(attempt, retry_cfg, jitter=jitter)
+        for attempt in attempts
+    ]
+
+    base_delays = [retry_cfg.backoff_factor * (2 ** (attempt - 1)) for attempt in attempts]
+    jitter_offsets = [value - base for value, base in zip(first_run, base_delays, strict=True)]
+
+    assert jitter_offsets[0] != pytest.approx(jitter_offsets[1])
+
+    jitter_repeat = retry_cfg.build_jitter()
+    assert jitter_repeat is not None
+    second_run = [
+        compute_backoff_delay(attempt, retry_cfg, jitter=jitter_repeat)
+        for attempt in attempts
+    ]
+
+    assert first_run == second_run
+
+
 def test_compute_backoff_delay__adds_jitter_before_cap() -> None:
     retry_cfg = RetryCfg(backoff_factor=2.0, backoff_cap=3.5, jitter_seed=11)
-    jitter = RetryCfg(backoff_factor=2.0, backoff_cap=3.5, jitter_seed=11).build_jitter()
+    jitter = retry_cfg.build_jitter()
     assert jitter is not None
+    jitter_expected = retry_cfg.build_jitter()
+    assert jitter_expected is not None
 
     attempt = 2
     base_delay = retry_cfg.backoff_factor * (2 ** (attempt - 1))
-    expected = min(base_delay + jitter(retry_cfg.backoff_factor), retry_cfg.backoff_cap)
+    expected = min(
+        base_delay + jitter_expected(retry_cfg.backoff_factor),
+        retry_cfg.backoff_cap,
+    )
 
-    assert compute_backoff_delay(attempt, retry_cfg) == pytest.approx(expected)
+    assert compute_backoff_delay(attempt, retry_cfg, jitter=jitter) == pytest.approx(expected)
 
 
 def test_chunk_failure_tracker_stats__returns_fresh_mapping_when_empty() -> None:

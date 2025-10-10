@@ -1317,6 +1317,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         client = context.chembl_client
 
         retry_cfg = cfg.retry
+        jitter = retry_cfg.build_jitter()
         chunk_failures = ChunkFailureTracker()
         http_diagnostics = _gather_http_diagnostics(cfg, client)
         if http_diagnostics:
@@ -1433,7 +1434,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                             )
                             chunk_failures.add_failure(id_list, error_message)
                             raise PipelineError("chunk_fetch_failed")  # noqa: B904
-                        delay = compute_backoff_delay(attempt, retry_cfg)
+                        delay = compute_backoff_delay(attempt, retry_cfg, jitter=jitter)
                         logger.warning(
                             "activity_fetch_retry",
                             extra=last_error_extra,
