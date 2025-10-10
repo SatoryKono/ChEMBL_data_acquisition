@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Mapping, Any
 
 import pandas as pd
 
@@ -12,7 +12,7 @@ from library import io
 from library.common.csv_utils import write_csv_chunks_deterministic
 from library.postprocessing.activities import ACTIVITY_SCHEMA, run_activity_pipeline
 from library.postprocessing.assays import ASSAY_SCHEMA, run_assay_pipeline
-from library.postprocessing.common.config import load_pipeline_config
+from library.postprocessing.common.config import PipelineConfig, load_pipeline_config
 from library.postprocessing.common.logging import (
     PipelineRunMetrics,
     build_report_payload,
@@ -20,6 +20,7 @@ from library.postprocessing.common.logging import (
 )
 from library.postprocessing.common.schema import DataFrameSchema
 from library.postprocessing.common.types import SchemaValidationError
+from library.postprocessing.common.utils import collect_postprocess_metrics
 from library.postprocessing.documents import DOCUMENT_SCHEMA, run_document_pipeline
 from library.postprocessing.targets import TARGET_SCHEMA, run_target_pipeline
 from library.postprocessing.testitem import TESTITEM_SCHEMA, run_testitem_pipeline
@@ -47,6 +48,10 @@ _DOMAIN_RESOURCES: dict[str, _DomainResources] = {
 }
 
 SUPPORTED_TABLES: tuple[str, ...] = tuple(sorted(_DOMAIN_RESOURCES))
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_LOG_DIR: Path = (_PROJECT_ROOT / "logs").resolve()
+LOG_DIR_ENV = "CHEMBL_POSTPROCESS_LOG_DIR"
 
 
 @dataclass(frozen=True)
@@ -77,16 +82,6 @@ def _resolve_domain(table: str) -> _DomainResources:
         return _DOMAIN_RESOURCES[table]
     except KeyError as exc:  # pragma: no cover - defensive guard
         raise ValueError(f"unsupported postprocess table: {table!r}") from exc
-
-
-def _load_csv_runtime_config(table: str, override: Path | None) -> tuple[CsvRuntimeConfig, str | None]:
-    config = load_pipeline_config(table, override)
-    params = dict(config.params or {})
-    io_params = dict(params.get("io", {}) or {})
-    separator = str(io_params.get("csv_sep", ","))
-    encoding = str(io_params.get("encoding", "utf-8-sig"))
-    chunksize = int(io_params.get("chunksize", 10000))
-    return CsvRuntimeConfig(separator=separator, encoding=encoding, chunksize=chunksize), config.pipeline_version
 
 
 def _load_input_frame(table: str, path: Path, csv_cfg: CsvRuntimeConfig, logger: logging.Logger) -> pd.DataFrame:
@@ -209,11 +204,6 @@ def _write_output_frame(
     logger.info(f"{prefix}_export_done", output=str(output_path))
     return output_path
 
-
-from dataclasses import dataclass
-from pathlib import Path
-import logging
-from typing import Callable, Any, Mapping
 
 @dataclass(slots=True)
 class PostprocessingPipelineConfig:
@@ -347,7 +337,7 @@ def generate_metrics_report(
     metrics, report_path = collect_postprocess_metrics(
         table=table,
         output_path=output_path,
-        csv_sep=csv_cfg.sep,
+        csv_sep=csv_cfg.separator,
         csv_encoding=csv_cfg.encoding,
         output_dir=output_path.parent,
         runner=runner,
@@ -384,3 +374,84 @@ __all__ = [
     "run_postprocessing_pipeline",
     "validate_postprocess_frame",
 ]
+
+
+def event_prefix(table: str) -> str:
+    """Return the structured logging prefix for ``table`` postprocess events."""
+
+    return _event_prefix(table)
+
+
+def ensure_pipeline_version_column(
+    df: pd.DataFrame, pipeline_version: str | None
+) -> pd.DataFrame:
+    """Ensure that ``df`` exposes a string ``pipeline_version`` column."""
+
+    prepared = df.copy(deep=True)
+
+    if "pipeline_version" in prepared.columns:
+        prepared["pipeline_version"] = prepared["pipeline_version"].astype("string")
+    else:
+        prepared.insert(
+            len(prepared.columns),
+            "pipeline_version",
+            pd.Series(pd.NA, index=prepared.index, dtype="string"),
+        )
+
+    if pipeline_version:
+        prepared["pipeline_version"] = (
+            prepared["pipeline_version"].fillna(str(pipeline_version)).astype("string")
+        )
+
+    return prepared
+
+
+def load_input_frame(
+    table: str, path: Path | str, csv_cfg: CsvRuntimeConfig, *, logger: logging.Logger
+) -> pd.DataFrame:
+    """Read ``path`` into a DataFrame honouring ``csv_cfg`` options."""
+
+    return _load_input_frame(table, Path(path), csv_cfg, logger)
+
+
+def export_postprocess_frame(
+    table: str,
+    df: pd.DataFrame,
+    output_path: Path | str,
+    csv_cfg: CsvRuntimeConfig,
+    schema: DataFrameSchema,
+    *,
+    logger: logging.Logger,
+) -> Path:
+    """Persist ``df`` deterministically to ``output_path``."""
+
+    return _write_output_frame(table, df, Path(output_path), csv_cfg, schema, logger)
+
+
+def get_pipeline_config(table: str, override: Path | str | None = None) -> PipelineConfig:
+    """Return the declarative pipeline configuration for ``table``."""
+
+    resolved_override = None if override is None else Path(override)
+    return load_pipeline_config(table, resolved_override)
+
+
+def get_csv_runtime_config(pipeline_config: PipelineConfig) -> CsvRuntimeConfig:
+    """Derive runtime CSV parameters from ``pipeline_config``."""
+
+    params = dict(pipeline_config.params or {})
+    io_params = dict(params.get("io", {}) or {})
+    separator = str(io_params.get("csv_sep", ","))
+    encoding = str(io_params.get("encoding", "utf-8-sig"))
+    chunksize = int(io_params.get("chunksize", 10000))
+    return CsvRuntimeConfig(separator=separator, encoding=encoding, chunksize=chunksize)
+
+
+def get_default_log_level(pipeline_config: PipelineConfig) -> str:
+    """Return the default log level declared in ``pipeline_config``."""
+
+    params = dict(pipeline_config.params or {})
+    defaults = dict(params.get("defaults", {}) or {})
+    level = defaults.get("log_level")
+    if isinstance(level, str) and level.strip():
+        return level.strip()
+    return "INFO"
