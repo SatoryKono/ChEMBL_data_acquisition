@@ -659,6 +659,16 @@ def get_resource_path(name: str, *, base_dir: Path | None = None) -> Path:
     return get_resource(name, base_dir=base_dir).path
 
 
+def _as_path(value: object) -> Path | None:
+    """Return ``Path`` for path-like ``value`` or ``None`` otherwise."""
+
+    if isinstance(value, os.PathLike):
+        return Path(os.fspath(value))
+    if isinstance(value, bytes):
+        return Path(os.fspath(value))
+    return None
+
+
 def resolve_resource_reference(value: object) -> Path | object:
     """Resolve manifest keys in configuration values.
 
@@ -674,7 +684,7 @@ def resolve_resource_reference(value: object) -> Path | object:
             return get_resource_path(value)
         except KeyError:
             return Path(value)
-    try:
-        return Path(value)  # type: ignore[arg-type]
-    except TypeError:
-        return value
+    candidate = _as_path(value)
+    if candidate is not None:
+        return candidate
+    return value

@@ -15,13 +15,14 @@ import math
 import numbers
 import os
 import sys
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from itertools import islice
 from pathlib import Path
 from threading import Condition, Lock
 from time import perf_counter, sleep
+from enum import Enum
 from typing import Any, cast
 from urllib.parse import urlsplit
 
@@ -172,8 +173,15 @@ def _ensure_command_logger_sync() -> None:
 _ensure_command_logger_sync()
 
 
-_CACHE_MISS = object()
-_CACHE_IN_PROGRESS = object()
+class _CacheState(Enum):
+    MISS = "miss"
+    IN_PROGRESS = "in-progress"
+
+
+CacheValue = str | None | _CacheState
+
+_CACHE_MISS = _CacheState.MISS
+_CACHE_IN_PROGRESS = _CacheState.IN_PROGRESS
 
 
 _ACTIVITY_REQUIRED_COLUMNS: tuple[str, ...] = tuple(
@@ -544,6 +552,7 @@ def _emit_completion_message(
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
             events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
+        return
 
     payload: dict[str, object] = {
         "output": str(output_path) if output_path is not None else None,
@@ -753,7 +762,7 @@ def _ensure_molecule_pref_name(
     *,
     cfg: Config,
     client: ChemblClient,
-    cache: dict[str, str | None],
+    cache: MutableMapping[str, CacheValue],
     cache_condition: Condition,
     chunk_failures: ChunkFailureTracker | None = None,
     wait_timeout: float | None = None,
@@ -795,7 +804,7 @@ def _ensure_molecule_pref_name(
                 continue
             if current is not _CACHE_MISS:
                 continue
-            cache[cache_key] = _CACHE_IN_PROGRESS  # type: ignore[assignment]
+            cache[cache_key] = _CACHE_IN_PROGRESS
             pending.append(cache_key)
 
     if pending:
@@ -1300,7 +1309,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     last_error_extra: dict[str, object] | None = None
     last_error_context: dict[str, object] = {}
 
-    pref_name_cache: dict[str, str | None] = {}
+    pref_name_cache: dict[str, CacheValue] = {}
     pref_name_cache_lock = Lock()
     pref_name_cache_condition = Condition(pref_name_cache_lock)
 
