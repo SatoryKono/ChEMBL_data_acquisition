@@ -24,6 +24,17 @@ def _make_cfg(tmp_path: Path) -> SimpleNamespace:
 
 
 @pytest.mark.unit
+def test_run_pipeline_result__exposes_attributes() -> None:
+    dataset = Path("/tmp/dataset.csv")
+    result = RunPipelineResult(0, dataset, None)
+
+    assert int(result) == 0
+    assert result.exit_code == 0
+    assert result.dataset_path == dataset
+    assert result.artifacts is None
+
+
+@pytest.mark.unit
 def test_run_pipeline__persists_standard_outputs(tmp_path: Path) -> None:
     frame = pd.DataFrame({"identifier": ["row-1", "row-2"], "value": [1, 2]})
 
