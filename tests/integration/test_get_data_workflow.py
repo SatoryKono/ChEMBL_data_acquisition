@@ -984,6 +984,8 @@ def test_pipeline_subset__target_postprocess_sidecars(
         "isoform": final_output.with_name(f"isoform.{final_output.name}"),
         "names": final_output.with_name(f"name.{final_output.name}"),
         "iuphar": final_output.with_name(f"IUPHAR.{final_output.name}"),
+        "postprocessed": final_output.with_name("output_postprocessed.targets.csv"),
+        "report": final_output.with_name("targets.postprocess.report.json"),
     }
     for path in sidecars.values():
         assert path.exists()
@@ -992,8 +994,12 @@ def test_pipeline_subset__target_postprocess_sidecars(
     assert step_entry["status"] == "success"
     assert step_entry["output"]["exists"] is True
     recorded_sidecars = {item["path"]: item for item in step_entry["sidecars"]}
-    assert len(recorded_sidecars) == 4
+    assert len(recorded_sidecars) == len(sidecars)
     for path in sidecars.values():
         meta = recorded_sidecars[str(path)]
         assert meta["exists"] is True
         assert meta["checksum_sha256"]
+    postprocess_meta = step_entry.get("postprocess")
+    assert postprocess_meta is not None
+    assert postprocess_meta["output"] == str(sidecars["postprocessed"])
+    assert postprocess_meta["report"] == str(sidecars["report"])
