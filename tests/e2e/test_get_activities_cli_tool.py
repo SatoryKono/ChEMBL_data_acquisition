@@ -65,3 +65,47 @@ def test_get_activities_cli__subprocess_execution(
 
     record_property("artifact_csv", str(csv_path))
     record_property("artifact_hash", digest)
+
+
+@pytest.mark.e2e
+def test_get_activities_cli_wrapper__script_entrypoint(tmp_path: Path) -> None:
+    limit = 4
+    project_root = Path(__file__).resolve().parents[2]
+
+    env = os.environ.copy()
+    pythonpath_parts = [str(project_root)]
+    existing = env.get("PYTHONPATH")
+    if existing:
+        pythonpath_parts.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
+
+    output_csv = tmp_path / "activities.csv"
+    command = [
+        sys.executable,
+        "scripts/get_activities.py",
+        "--limit",
+        str(limit),
+        "--final-out",
+        str(output_csv),
+    ]
+
+    completed = subprocess.run(
+        command,
+        cwd=project_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert (
+        completed.returncode == 0
+    ), f"CLI wrapper execution failed: {completed.stderr or completed.stdout}"
+
+    assert output_csv.exists()
+    with output_csv.open("r", encoding="utf-8") as handle:
+        header = handle.readline().strip()
+    assert header.replace("\ufeff", "") == "activity_id"
+
+    meta_path = output_csv.with_suffix(output_csv.suffix + ".meta.yaml")
+    assert meta_path.exists()
