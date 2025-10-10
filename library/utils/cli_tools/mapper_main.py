@@ -12,17 +12,14 @@ from urllib.error import URLError
 import pandas as pd
 
 from library import cli, io
-from library.cli import (
-    LoggerConfig,
-    configure_logger,
-    positive_int,
-)
+from library.cli import LoggerConfig, positive_int
 from library.cli import (
     build_parser as base_parser,
 )
 from library.common.log import logger
-from library.config import Config, ConfigError, ensure_dirs, print_config
+from library.config import Config
 from library.integration.mapper_batch_library import map_chembl_ids_to_uniprot
+from library.utils.cli_tools import run_cli_tool
 
 SUMMARY_SAMPLE_LIMIT = 5
 
@@ -224,53 +221,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     -----
     Relative paths honour ``--base-path``, ``--input-dir`` and ``--output-dir``.
     """
-    parser, log_cfg = build_parser()
+    def _prepare(
+        parser: argparse.ArgumentParser,
+        args: argparse.Namespace,
+        invocation: Sequence[str] | None,
+    ) -> argparse.Namespace:
+        del parser, invocation
+        input_path = getattr(args, "input_csv", None)
+        output_stem = Path(input_path).stem if input_path else None
+        cli.prepare_io_paths(args, output_stem=output_stem)
+        return args
 
-    args = parser.parse_args(argv)
-    input_path = getattr(args, "input_csv", None)
-    output_stem = Path(input_path).stem if input_path else None
-    cli.prepare_io_paths(args, output_stem=output_stem)
-    run_id_value = getattr(args, "run_id", None)
-    if isinstance(run_id_value, str):
-        run_id_value = run_id_value.strip() or None
-    if run_id_value is not None:
-        log_cfg.run_id = run_id_value
-    log_cfg.level = args.log_level
-    logger = configure_logger(log_cfg)
-    logger.info("pipeline_start", run_id=log_cfg.run_id)
-    try:
-        cfg: Config = cli.apply_config_overrides(args, parser, args.config)
-    except (ConfigError, FileNotFoundError, ValueError) as exc:
-        logger.error(
-            "config_error",
-            error=str(exc),
-            config=str(args.config),
-        )
-        logger.info("pipeline_fail", run_id=log_cfg.run_id)
-        return 1
-
-    try:
-        if args.print_config:
-            print_config(cfg)
-            configure_logger(log_cfg)
-            logger.info("pipeline_done", run_id=log_cfg.run_id)
-            return 0
-        ensure_dirs(cfg)
-        logger = configure_logger(log_cfg)
-    except (ValueError, TypeError) as exc:
-        logger.error("config_error", error=str(exc), config=str(args.config))
-        logger.info("pipeline_fail", run_id=log_cfg.run_id)
-        return 1
-    except (FileNotFoundError, NotADirectoryError) as exc:
-        logger.error("setup_fail", error=str(exc))
-        logger.info("pipeline_fail", run_id=log_cfg.run_id)
-        return 1
-    exit_code: int = args.func(cfg, args)
-    if exit_code == 0:
-        logger.info("pipeline_done", run_id=log_cfg.run_id)
-    else:
-        logger.info("pipeline_fail", run_id=log_cfg.run_id)
-    return exit_code
+    return run_cli_tool(
+        build_parser=build_parser,
+        run=run,
+        argv=argv,
+        mapping={},
+        logger=logger,
+        prepare=_prepare,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
