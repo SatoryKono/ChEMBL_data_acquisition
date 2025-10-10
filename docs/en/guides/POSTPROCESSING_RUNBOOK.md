@@ -118,7 +118,7 @@ artefacts.
    as failed in the orchestrator manifest (`reports/run_<timestamp>.json`, with
    `reports/run_manifest.json` pointing at the latest run).
 2. **Schema validation.** Downstream tests under
-   `tests/postprocessing/test_target_postprocessing.py` assert structure and
+   `tests/integration/postprocessing/test_target_postprocessing.py` assert structure and
    key invariants for organism and isoform exports. Keep fixtures in sync when
    altering column sets.
 3. **Idempotency.** Helper functions never mutate the source CSV. Outputs are

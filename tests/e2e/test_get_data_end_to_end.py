@@ -261,7 +261,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     input_dir.mkdir()
     output_dir.mkdir()
 
-    fixture_dir = Path(__file__).resolve().parents[1] / "data"
+    fixture_dir = Path(__file__).resolve().parents[1] / "resources" / "pipeline_inputs"
     for stem in ("document", "target", "assay", "testitem", "activity"):
         shutil.copy(fixture_dir / f"{stem}.csv", input_dir / f"{stem}.csv")
 
@@ -676,7 +676,7 @@ def test_get_data_end_to_end__blocked_steps_after_failure(
     input_dir.mkdir()
     output_dir.mkdir()
 
-    fixture_dir = Path(__file__).resolve().parents[1] / "data"
+    fixture_dir = Path(__file__).resolve().parents[1] / "resources" / "pipeline_inputs"
     for stem in ("document", "target", "assay", "testitem", "activity"):
         shutil.copy(fixture_dir / f"{stem}.csv", input_dir / f"{stem}.csv")
 
@@ -816,7 +816,7 @@ def test_get_data_end_to_end__blocked_steps_after_failure(
 
 
 _ASSAY_DICTIONARY_PATH = (
-    Path(__file__).resolve().parents[1] / "data" / "assay_dictionary.csv"
+    Path(__file__).resolve().parents[1] / "resources" / "pipeline_inputs" / "assay_dictionary.csv"
 )
 
 

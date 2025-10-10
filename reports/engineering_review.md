@@ -87,7 +87,7 @@
 3. Разрулить `tests/e2e/test_cli_logging_setup.py`, привести тест к параметризованной форме и обновить фикстуры (проверка: `pytest tests/e2e/test_cli_logging_setup.py`).
 
 ### PR 2: `fix/merge-conflicts-postprocessing`
-4. Удалить конфликтные маркеры в `library/postprocessing/helpers.py`, вернуть корректные импорты и типизацию (проверка: `pytest tests/postprocessing`).
+4. Удалить конфликтные маркеры в `library/postprocessing/helpers.py`, вернуть корректные импорты и типизацию (проверка: `pytest tests/integration/postprocessing`).
 5. Восстановить `tests/unit/test_fetch_retry.py`, убедиться, что jitter детерминирован (проверка: `pytest tests/unit/test_fetch_retry.py`).
 
 ### PR 3: `fix/e2e-entrypoints`

@@ -22,7 +22,7 @@ def _ensure_parent(path: Path) -> None:
 def test_get_assay_cli__enrichment_quality(
     tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    data_dir = Path(__file__).resolve().parents[1] / "data"
+    data_dir = Path(__file__).resolve().parents[1] / "resources" / "pipeline_inputs"
     input_csv = tmp_path / "assay.csv"
     input_csv.write_text(
         (data_dir / "assay.csv").read_text(encoding="utf-8"), encoding="utf-8"

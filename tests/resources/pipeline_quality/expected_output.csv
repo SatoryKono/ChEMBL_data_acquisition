@@ -1,0 +1,5 @@
+molecule_chembl_id,name,preferred_name,smiles,category_normalized,score,has_smiles,is_high_score,source
+CHEMBL1,Aspirin,Acetylsalicylic acid,CC(=O)OC1=CC=CC=C1C(=O)O,analgesic,0.9,true,false,test-fixture
+CHEMBL2,Duplicate,,CC(=O)O,analgesic,0.5,true,false,test-fixture
+CHEMBL3,"Beta, Beta",Benzene,C1=CC=CC=C1,stimulant,1.2,true,true,test-fixture
+CHEMBL4,Undefined,Undefined,,modulator,0.0,false,false,test-fixture

@@ -1,0 +1,6 @@
+molecule_chembl_id,name,smiles,category,score
+ CHEMBL1 ,Aspirin ,CC(=O)OC1=CC=CC=C1C(=O)O,Analgesic,0.9
+CHEMBL2,Unknown,,Unknown,
+CHEMBL2,Duplicate,CC(=O)O,Analgesic,0.5
+CHEMBL3,"Beta, Beta",C1=CC=CC=C1,  stimulant  ,1.2
+CHEMBL4,,N/A,AGONIST,

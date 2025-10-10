@@ -10,7 +10,7 @@ import pytest
 from library.postprocessing import enrich_assay_metadata
 
 
-@pytest.mark.postprocessing
+@pytest.mark.integration
 @pytest.mark.usefixtures("deterministic_env")
 def test_enrich_assay_metadata__fills_missing_fields(tmp_path: Path) -> None:
     dictionary_root = tmp_path
@@ -89,7 +89,7 @@ def test_enrich_assay_metadata__fills_missing_fields(tmp_path: Path) -> None:
     assert str(result["year"].dtype) == "Int64"
 
 
-@pytest.mark.postprocessing
+@pytest.mark.integration
 def test_enrich_assay_metadata__missing_taxonomy_dir_logs_warning(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
