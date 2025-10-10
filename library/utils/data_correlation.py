@@ -48,30 +48,27 @@ def build_correlation_matrix(
     _validate_table_name(table_name)
 
     profiler_instance: TableQualityProfilerLike | None = None
+    fallback_to_frame = False
+    invalid_profiler_type: type | None = None
+
     if profiler is not None:
         if _is_table_profiler_instance(profiler):
             profiler_instance = profiler
-        else:
-            logger.warning(
-                "table_quality_profiler_invalid",
-                table_name=table_name,
-                profiler_type=type(profiler).__name__,
-            )
-
-    if profiler_instance is None:
-    fallback_to_frame = False
-    invalid_profiler_type: type | None = None
-    if profiler is not None:
-        if _is_table_profiler_instance(profiler):
-            _, numeric_candidates = _build_reports_from_profiler(profiler)
         elif frame is None:
             raise TypeError("profiler must be a TableQualityProfiler instance")
         else:
             fallback_to_frame = True
             invalid_profiler_type = type(profiler)
-    if profiler is None or fallback_to_frame:
+            logger.warning(
+                "table_quality_profiler_invalid",
+                table_name=table_name,
+                profiler_type=invalid_profiler_type.__name__,
+            )
+
+    if profiler_instance is None:
         if frame is None:
             raise ValueError("frame is required when profiler is not provided")
+
         filtered = _prepare_filtered_frame(
             frame,
             table_name=table_name,
@@ -83,15 +80,19 @@ def build_correlation_matrix(
         profiler_instance = TableQualityProfiler()
         profiler_instance.consume(filtered)
 
-    _, numeric_candidates = _build_reports_from_profiler(profiler_instance)
-        _, numeric_candidates = _build_reports_from_profiler(profiler)
         if fallback_to_frame:
             warnings.warn(
                 "Ignoring incompatible profiler %r; falling back to frame data"
-                % (invalid_profiler_type.__name__ if invalid_profiler_type else "unknown"),
+                % (
+                    invalid_profiler_type.__name__
+                    if invalid_profiler_type is not None
+                    else "unknown"
+                ),
                 RuntimeWarning,
                 stacklevel=2,
             )
+
+    _, numeric_candidates = _build_reports_from_profiler(profiler_instance)
     if not numeric_candidates:
         return pd.DataFrame()
 
