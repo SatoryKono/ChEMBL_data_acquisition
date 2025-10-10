@@ -18,9 +18,6 @@ from library.pipelines.activity.runner import (
     run_activity_pipeline as _run_activity_pipeline,
 )
 
-from . import _run
-
-
 def _sync_pipeline_logger(current_logger: Logger) -> None:
     """Align the shared pipeline logger with ``current_logger`` when possible."""
 
@@ -67,20 +64,13 @@ def run_activity_pipeline(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run scripts.get_activity_data.
+    """Delegate to :mod:`library.cli.entrypoints.activity` without circular imports."""
 
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code returned by the script.
-    """
-
-    return _run("get_activity_data", argv)
+    activity_entrypoint = importlib.import_module(
+        "library.cli.entrypoints.activity"
+    )
+    entry_main = cast(Callable[[Sequence[str] | None], int], getattr(activity_entrypoint, "main"))
+    return entry_main(argv)
 
 
 __all__ = [
