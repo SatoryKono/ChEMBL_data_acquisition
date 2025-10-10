@@ -1786,6 +1786,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         except Exception:
             exit_code = 1
             dataset_path = None
+            for attr in ("final_out", "output_csv"):
+                if hasattr(args, attr):
+                    setattr(args, attr, None)
         else:
             standard_dataset = standard_artifacts.dataset
             if not emit_legacy and standard_dataset != Path(dataset_path):
