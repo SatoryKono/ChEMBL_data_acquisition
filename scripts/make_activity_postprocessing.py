@@ -33,10 +33,10 @@ from library.cli.logging import setup_cli_logging
 from library.cli.parser import path_argument
 from library.cli_utils import resolve_invocation
 from library.common.log import logger
-from library.postprocess.activities.schema import ACTIVITY_SCHEMA, validate_activities
-from library.postprocess.activities.steps import run_activity_pipeline
-from library.postprocess.common.logging import PipelineRunMetrics
-from library.postprocess.common.types import SchemaValidationError, StepError
+from library.postprocessing.activities.schema import ACTIVITY_SCHEMA, validate_activities
+from library.postprocessing.activities.steps import run_activity_pipeline
+from library.postprocessing.common.logging import PipelineRunMetrics
+from library.postprocessing.common.types import SchemaValidationError, StepError
 
 try:
     from ._postprocess_common import (

@@ -56,9 +56,9 @@ from library.integration import chembl_library as cl
 from library.document_defaults import ALL_DEFAULTS, CHEMBL_DEFAULTS, PUBMED_DEFAULTS
 from library.pipelines.document import postprocessing as dp
 from library.postprocessing import document as document_export_postprocessing
-from library.postprocess.documents import run_document_pipeline as run_document_postprocess
-from library.postprocess.common import collect_postprocess_metrics
-from library.postprocess.common.logging import PipelineRunMetrics
+from library.postprocessing.documents import run_document_pipeline as run_document_postprocess
+from library.postprocessing.common import collect_postprocess_metrics
+from library.postprocessing.common.logging import PipelineRunMetrics
 from library.orchestration import ETLContext
 from library.cli import (
     ConfigMetadata,

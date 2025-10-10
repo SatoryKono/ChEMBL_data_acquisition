@@ -32,14 +32,14 @@ from library.cli.logging import setup_cli_logging
 from library.cli.parser import path_argument
 from library.cli_utils import resolve_invocation
 from library.common.log import logger
-from library.postprocess.common.config import PipelineConfig, normalize_pipeline_version
-from library.postprocess.common.logging import PipelineRunMetrics
-from library.postprocess.common.types import SchemaValidationError, StepError
-from library.postprocess.targets import (
+from library.postprocessing.common.config import PipelineConfig, normalize_pipeline_version
+from library.postprocessing.common.logging import PipelineRunMetrics
+from library.postprocessing.common.types import SchemaValidationError, StepError
+from library.postprocessing.targets import (
     run_target_pipeline as run_target_postprocess,
 )
-from library.postprocess.targets import steps as target_steps
-from library.postprocess.targets.schema import TARGET_SCHEMA, validate_targets
+from library.postprocessing.targets import steps as target_steps
+from library.postprocessing.targets.schema import TARGET_SCHEMA, validate_targets
 from library.pipelines.common.metadata import get_pipeline_version
 
 _postprocess_common = import_module(f"{package_name}._postprocess_common")

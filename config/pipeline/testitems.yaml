@@ -2,16 +2,16 @@
 pipeline_version: "${CHEMBL_TESTITEM_PIPELINE_VERSION:-auto}"
 enabled_steps:
   - name: normalize_testitem_records
-    callable: "library.postprocess.testitem.steps:normalize_testitem_records"
+    callable: "library.postprocessing.testitem.steps:normalize_testitem_records"
     description: "Normalise identifiers, canonical names and boolean flags."
     params:
       uppercase_identifiers: true
       coerce_booleans: true
   - name: enrich_testitem_annotations
-    callable: "library.postprocess.testitem.steps:enrich_testitem_annotations"
+    callable: "library.postprocessing.testitem.steps:enrich_testitem_annotations"
     description: "Fill optional annotation columns with deterministic defaults."
   - name: finalize_testitem_records
-    callable: "library.postprocess.testitem.steps:finalize_testitem_records"
+    callable: "library.postprocessing.testitem.steps:finalize_testitem_records"
     description: "Validate schema expectations and stabilise column ordering."
     params:
       enforce_schema: true

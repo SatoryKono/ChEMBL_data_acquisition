@@ -6,9 +6,9 @@ from typing import Sequence
 
 import pandas as pd
 
-from library.postprocess.common import run_steps
-from library.postprocess.common.logging import PipelineRunMetrics
-from library.postprocess.common.config import (
+from library.postprocessing.common import run_steps
+from library.postprocessing.common.logging import PipelineRunMetrics
+from library.postprocessing.common.config import (
     load_pipeline_config,
     normalize_pipeline_version,
 )

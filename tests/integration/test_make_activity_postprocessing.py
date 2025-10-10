@@ -5,7 +5,7 @@ import json
 
 import pandas as pd
 
-from library.postprocess.activities.schema import ACTIVITY_SCHEMA
+from library.postprocessing.activities.schema import ACTIVITY_SCHEMA
 
 from scripts import make_activity_postprocessing as cli
 

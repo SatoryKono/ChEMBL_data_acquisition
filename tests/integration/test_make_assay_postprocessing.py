@@ -5,7 +5,7 @@ import json
 
 import pandas as pd
 
-from library.postprocess.assays.schema import ASSAY_SCHEMA
+from library.postprocessing.assays.schema import ASSAY_SCHEMA
 
 from scripts import make_assay_postprocessing as cli
 
