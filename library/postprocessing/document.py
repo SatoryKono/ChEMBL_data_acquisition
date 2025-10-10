@@ -517,6 +517,12 @@ def _build_default_destination(source: Path | str) -> Path:
     return source_path.with_name(f"{DEFAULT_OUTPUT_PREFIX}{base_name}")
 
 
+def resolve_default_destination(source: Path | str) -> Path:
+    """Public helper returning the default destination for ``source``."""
+
+    return _build_default_destination(source)
+
+
 def postprocess_export_file(
     input_path: Path | str,
     *,
@@ -1479,6 +1485,7 @@ __all__ = [
     "STAGE_REMOVED1_COLUMNS",
     "preprocess_document_export",
     "postprocess_export_file",
+    "resolve_default_destination",
     "normalize_journal",
     "pad2",
     "pad4",

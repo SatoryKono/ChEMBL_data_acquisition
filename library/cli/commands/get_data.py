@@ -143,6 +143,7 @@ def _build_document_options(
         limit=cfg.limit,
         force=cfg.force,
         skip_existing=cfg.skip_existing,
+        rerun_postprocess=cfg.rerun_postprocess,
     )
 
 
@@ -219,6 +220,7 @@ class PipelineRunConfig:
     force: bool
     skip_existing: bool
     dry_run: bool
+    rerun_postprocess: bool
     input_files: Mapping[str, str]
     output_stems: Mapping[str, str]
     subcommands: Mapping[str, str | None]
@@ -608,6 +610,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Skip pipeline execution when the output file is present",
     )
     parser.add_argument(
+        "--rerun-postprocess",
+        action="store_true",
+        help=(
+            "Rebuild stage-aligned exports even if previous runs already produced "
+            "them"
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help=(
@@ -698,6 +708,7 @@ def _prepare_config(
         force=args.force,
         skip_existing=args.skip_existing,
         dry_run=dry_run,
+        rerun_postprocess=bool(getattr(args, "rerun_postprocess", False)),
         input_files=input_files,
         output_stems=output_stems,
         subcommands=subcommands,

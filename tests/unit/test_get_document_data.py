@@ -459,14 +459,14 @@ def test_finalise_export__qa_mismatch_sets_exit_code(
         fail_postprocessing,
     )
 
-    exit_code = get_document_data._finalise_export(
+    result = get_document_data._finalise_export(
         frame,
         output_csv,
         cfg,
         input_csv=input_csv,
     )
 
-    assert exit_code == 1
+    assert result.exit_code == 1
     assert (
         "error",
         "document_postprocess_qa_mismatch",
@@ -560,7 +560,7 @@ def test_finalise_export__partial_run_skips_qa(
         fake_preprocess,
     )
 
-    exit_code = get_document_data._finalise_export(
+    result = get_document_data._finalise_export(
         frame,
         output_csv,
         cfg,
@@ -569,11 +569,161 @@ def test_finalise_export__partial_run_skips_qa(
         partial_run=True,
     )
 
-    assert exit_code == 0
+    assert result.exit_code == 0
     assert captured.get("run_qa") is False
     assert captured.get("base_path") == str(data_dir)
     assert (
         "info",
         "document_postprocess_qa_skipped_partial",
         {"output": str(output_csv), "reason": "partial_run"},
+    ) in logger_stub.events
+
+
+def test_finalise_export__reuses_postprocess_when_rerun_disabled(
+    cfg: Config,
+    tmp_path: Path,
+    logger_stub: _MemoryLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_csv = tmp_path / "output.document_20250101.csv"
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("document_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    frame = get_document_data.build_dataframe(
+        [{"document_chembl_id": "CHEMBL1"}],
+        columns=get_document_data.DOCUMENT_SCHEMA_COLUMNS,
+        fill_missing=False,
+    )
+
+    def fake_write_csv_chunks(
+        chunks: Iterable[pd.DataFrame],
+        path: Path,
+        **kwargs: Any,
+    ) -> Path:
+        frames = list(chunks)
+        combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        resolved = Path(path)
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        combined.to_csv(resolved, index=False)
+        return resolved
+
+    monkeypatch.setattr(
+        get_document_data,
+        "write_csv_chunks_deterministic",
+        fake_write_csv_chunks,
+    )
+    monkeypatch.setattr(get_document_data, "finalise_csv_output", lambda **_: None)
+
+    expected_post = get_document_data.document_export_postprocessing.resolve_default_destination(
+        output_csv
+    )
+    expected_post.parent.mkdir(parents=True, exist_ok=True)
+    expected_post.write_text("header\n", encoding="utf-8")
+
+    call_count = 0
+
+    def _unexpected_postprocess(path: Path, *, cfg: Any) -> Path:  # noqa: ARG001
+        nonlocal call_count
+        call_count += 1
+        return Path(path)
+
+    monkeypatch.setattr(
+        get_document_data.document_export_postprocessing,
+        "postprocess_export_file",
+        _unexpected_postprocess,
+    )
+
+    result = get_document_data._finalise_export(
+        frame,
+        output_csv,
+        cfg,
+        input_csv=input_csv,
+        rerun_postprocess=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.postprocess_path == expected_post
+    assert call_count == 0
+    assert (
+        "info",
+        "document_export_postprocess_written",
+        {"path": str(expected_post)},
+    ) in logger_stub.events
+
+
+def test_finalise_export__rerun_enabled_invokes_postprocess(
+    cfg: Config,
+    tmp_path: Path,
+    logger_stub: _MemoryLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_csv = tmp_path / "output.document_20250101.csv"
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("document_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    frame = get_document_data.build_dataframe(
+        [{"document_chembl_id": "CHEMBL1"}],
+        columns=get_document_data.DOCUMENT_SCHEMA_COLUMNS,
+        fill_missing=False,
+    )
+
+    def fake_write_csv_chunks(
+        chunks: Iterable[pd.DataFrame],
+        path: Path,
+        **kwargs: Any,
+    ) -> Path:
+        frames = list(chunks)
+        combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        resolved = Path(path)
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        combined.to_csv(resolved, index=False)
+        return resolved
+
+    monkeypatch.setattr(
+        get_document_data,
+        "write_csv_chunks_deterministic",
+        fake_write_csv_chunks,
+    )
+    monkeypatch.setattr(get_document_data, "finalise_csv_output", lambda **_: None)
+
+    generated_post = output_csv.with_name("preprocessed_output.document_20250101.csv")
+
+    def fake_postprocess(path: Path, *, cfg: Any) -> Path:  # noqa: ARG001
+        generated_post.write_text("header\n", encoding="utf-8")
+        return generated_post
+
+    call_count = 0
+
+    def counting_postprocess(path: Path, *, cfg: Any) -> Path:  # noqa: ARG001
+        nonlocal call_count
+        call_count += 1
+        return fake_postprocess(path, cfg=cfg)
+
+    monkeypatch.setattr(
+        get_document_data.document_export_postprocessing,
+        "postprocess_export_file",
+        counting_postprocess,
+    )
+
+    # Create an existing file to confirm rerun still executes the postprocess stage.
+    generated_post.parent.mkdir(parents=True, exist_ok=True)
+    generated_post.write_text("old\n", encoding="utf-8")
+
+    result = get_document_data._finalise_export(
+        frame,
+        output_csv,
+        cfg,
+        input_csv=input_csv,
+        rerun_postprocess=True,
+    )
+
+    assert result.exit_code == 0
+    assert result.postprocess_path == generated_post
+    assert call_count == 1
+    assert (
+        "info",
+        "document_export_postprocess_written",
+        {"path": str(generated_post)},
     ) in logger_stub.events

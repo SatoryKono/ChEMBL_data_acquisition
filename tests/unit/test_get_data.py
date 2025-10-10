@@ -47,6 +47,7 @@ def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
         force=False,
         skip_existing=False,
         dry_run=False,
+        rerun_postprocess=False,
         input_files=input_files,
         output_stems=output_stems,
         subcommands=subcommands,
@@ -60,7 +61,7 @@ def _load_manifest(cfg: get_data.PipelineRunConfig) -> dict[str, object]:
 
 @pytest.mark.unit
 def test_build_document_options__forwards_skip_existing(tmp_path: Path) -> None:
-    cfg = replace(_make_config(tmp_path), skip_existing=True)
+    cfg = replace(_make_config(tmp_path), skip_existing=True, rerun_postprocess=True)
     options = get_data._build_document_options(
         cfg,
         cfg.input_path("document"),
@@ -68,6 +69,7 @@ def test_build_document_options__forwards_skip_existing(tmp_path: Path) -> None:
     )
     assert options.skip_existing is True
     assert options.force is cfg.force
+    assert options.rerun_postprocess is True
 
 
 @pytest.mark.unit
@@ -119,6 +121,7 @@ def test_parse_args__defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert args.config == get_data.DEFAULT_CONFIG_PATH
     assert args.date_prefix is None
     assert args.log_level == "INFO"
+    assert args.rerun_postprocess is False
     assert args.verbose is False
     assert args.limit is None
     assert args.force is False
