@@ -560,7 +560,7 @@ def write_csv_deterministic(
 
     write_meta_yaml(
         out_path,
-        cfg,
+        config=cfg,
         columns=list(work.columns),
         dtypes={col: work.dtypes[col].name for col in work.columns},
         generated_at=_metadata_generated_at(),
