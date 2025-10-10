@@ -618,10 +618,10 @@ def apply_config_overrides(
         base_path_arg = getattr(args, "base_path", None)
         if isinstance(base_path_arg, Path):
             config_base_path = base_path_arg
-        elif base_path_arg in (None, argparse.SUPPRESS):
+        elif base_path_arg is None or base_path_arg is argparse.SUPPRESS:
             config_base_path = None
         else:
-            config_base_path = Path(base_path_arg)
+            config_base_path = Path(os.fspath(base_path_arg))
 
         load_result = load_config(
             selected_config_path,
