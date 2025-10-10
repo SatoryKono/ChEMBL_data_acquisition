@@ -130,8 +130,6 @@ def ensure_output_directories(report_file: Path, summary_file: Path) -> None:
 
     for path in (report_file, summary_file, RAW_REPORT_FILE):
         parent = path.parent
-        if parent not in {REPORTS_DIR, COVERAGE_DIR, COVERAGE_HTML} and parent.exists():
-            _clear_directory(parent)
         parent.mkdir(parents=True, exist_ok=True)
         if path.exists():
             try:
