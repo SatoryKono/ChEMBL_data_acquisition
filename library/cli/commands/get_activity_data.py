@@ -78,16 +78,60 @@ def run_chembl(*args: Any, **kwargs: Any) -> int:
     relied on the direct pipeline invocation helper.
     """
 
+    def _coerce_activity_options(value: Any) -> Any:
+        if isinstance(value, ActivityCommandOptions):
+            return value
+        if isinstance(value, argparse.Namespace):
+            output_csv = getattr(value, "output_csv", None)
+            final_output = getattr(value, "final_output", None)
+            if final_output is None:
+                final_output = getattr(value, "final_out", None)
+            return ActivityCommandOptions(
+                input_csv=getattr(value, "input_csv"),
+                output_csv=output_csv,
+                final_output=final_output,
+                limit=getattr(value, "limit", None),
+                offset=getattr(value, "offset", 0),
+                timeout=getattr(value, "timeout", None),
+                batch_size=getattr(value, "batch_size", None),
+                workers=getattr(value, "workers", None),
+                dry_run=getattr(value, "dry_run", False),
+                skip_existing=getattr(value, "skip_existing", False),
+                force=getattr(value, "force", False),
+                invocation=getattr(value, "invocation", None),
+            )
+        return value
+
+    def _normalise_arguments(
+        call_args: tuple[Any, ...], call_kwargs: dict[str, Any]
+    ) -> tuple[tuple[Any, ...], dict[str, Any]]:
+        if call_args:
+            normalised_args = tuple(_coerce_activity_options(arg) for arg in call_args)
+        else:
+            normalised_args = call_args
+
+        if call_kwargs:
+            normalised_kwargs = {
+                key: _coerce_activity_options(value)
+                for key, value in call_kwargs.items()
+            }
+        else:
+            normalised_kwargs = call_kwargs
+
+        return normalised_args, normalised_kwargs
+
     try:
         entrypoint = _load_activity_entrypoint()
     except Exception:  # pragma: no cover - defensive fallback
-        return run_activity_pipeline(*args, **kwargs)
+        normalised_args, normalised_kwargs = _normalise_arguments(args, kwargs)
+        return run_activity_pipeline(*normalised_args, **normalised_kwargs)
 
     entrypoint_run = getattr(entrypoint, "run_chembl", None)
     if callable(entrypoint_run):
         return entrypoint_run(*args, **kwargs)
 
-    return run_activity_pipeline(*args, **kwargs)
+    normalised_args, normalised_kwargs = _normalise_arguments(args, kwargs)
+    return run_activity_pipeline(*normalised_args, **normalised_kwargs)
 
 
 def _emit_completion_message(*args: Any, **kwargs: Any) -> None:
