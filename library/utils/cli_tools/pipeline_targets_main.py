@@ -35,6 +35,7 @@ from library.cli import (
     configure_logger,
     path_argument,
 )
+from library.cli.run_context import compute_generated_at
 from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.io.paths import default_output_path
 from library.io.readers import read_ids
@@ -601,7 +602,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         updated_run_id = run_id_value
     else:
         updated_run_id = log_cfg.run_id
-    log_cfg = replace(log_cfg, level=args.log_level, run_id=updated_run_id)
+    resolved_run_id = str(updated_run_id)
+    log_level_value = str(args.log_level)
+    new_generated_at = compute_generated_at(
+        date_token=None,
+        run_id=resolved_run_id,
+        seed_parts=("create_logger_config", log_level_value.upper()),
+    )
+    log_cfg = replace(
+        log_cfg,
+        level=log_level_value,
+        run_id=resolved_run_id,
+        generated_at=new_generated_at,
+    )
     logger_inst = configure_logger(log_cfg)
     pipeline_logger = logger_inst.bind(stage="pipeline")
     pipeline_logger.info("pipeline_start")
