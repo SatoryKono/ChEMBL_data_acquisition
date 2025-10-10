@@ -9,13 +9,23 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from library.reporting.test_summary import (
+
+# Ensure the repository root is importable when the script is executed directly
+# via ``python tools/make_md_summary.py`` from a fresh checkout.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+
+from library.reporting.test_summary import (  # noqa: E402  - depends on path tweak above
     build_summary_markdown,
     validate_summary_report,
 )
 
 DEFAULT_INPUT = Path("reports/test_report.json")
 DEFAULT_OUTPUT = Path("reports/test_summary.md")
+
+
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=("Render a Markdown summary from a structured pytest JSON report.")
