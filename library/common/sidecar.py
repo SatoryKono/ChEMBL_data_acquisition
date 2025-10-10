@@ -105,7 +105,7 @@ class SidecarErrors:
             self._headers_written = False
             self._needs_rewrite = False
 
-        write_meta_yaml(path, config=cfg, columns=fieldnames)
+        write_meta_yaml(path, cfg=cfg, columns=fieldnames)
         self._errors.clear()
         self._fieldnames.clear()
 
