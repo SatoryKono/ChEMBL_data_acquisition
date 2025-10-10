@@ -9,7 +9,7 @@ for debugging.
 | Module | Example command | Purpose |
 |--------|-----------------|---------|
 | `library.utils.cli_tools.check_determinism` | `python -m library.utils.cli_tools.check_determinism --baseline out1 --candidate out2` | Compare CSV hashes between runs. |
-| `library.utils.cli_tools.chunk_io_main` | `python -m library.utils.cli_tools.chunk_io_main --input data.csv --final-out copy.csv` | Stream CSV files in deterministic order. |
+| `library.utils.cli_tools.chunk_io_main` | `python -m library.utils.cli_tools.chunk_io_main --input data.csv --final-out copy.csv` | Stream CSV files in deterministic order with Unix newlines. |
 | `library.utils.cli_tools.csv_utils_main` | `python -m library.utils.cli_tools.csv_utils_main --input data.csv --final-out clean.csv` | Re-serialise CSVs with consistent ordering. |
 | `library.utils.cli_tools.dtype_inspector_main` | `python -m library.utils.cli_tools.dtype_inspector_main --log-level INFO` | Inspect pandas dtypes emitted by pipelines. |
 | `library.utils.cli_tools.get_activities` | `python -m library.utils.cli_tools.get_activities --limit 10 --final-out output/activities_smoke.csv` | Generate synthetic activity rows and emit deterministic CSV + `.meta.yaml` artefacts for smoke runs. |

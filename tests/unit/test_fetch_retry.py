@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+
 import pytest
 
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
@@ -133,3 +135,42 @@ def test_chunk_failure_tracker_stats__limits_reported_ids() -> None:
     assert (
         len(stats["chunk_fetch_failure_ids"]) < stats["chunk_fetch_failure_ids_total"]
     )
+
+
+def test_chunk_failure_tracker_stats__preserves_first_hundred_ids_and_total() -> None:
+    tracker = ChunkFailureTracker()
+
+    all_identifiers = [f"ID{index:03d}" for index in range(150)]
+    duplicated_stream: list[str] = []
+    for position, identifier in enumerate(all_identifiers):
+        duplicated_stream.append(identifier)
+        if position % 10 == 0:
+            duplicated_stream.append(identifier)
+
+    chunk_size = 4
+    for start in range(0, len(duplicated_stream), chunk_size):
+        chunk = duplicated_stream[start : start + chunk_size]
+        tracker.add_failure(chunk, "boom")
+
+    stats = tracker.stats()
+
+    assert stats["chunk_fetch_failure_ids"] == all_identifiers[:100]
+    assert stats["chunk_fetch_failure_ids_total"] == len(all_identifiers)
+    assert stats["chunk_fetch_failure_ids_truncated"] is True
+
+
+def test_chunk_failure_tracker_save__sidecar_includes_truncation_metadata(tmp_path) -> None:
+    tracker = ChunkFailureTracker()
+
+    for index in range(120):
+        tracker.add_failure([f"ID{index:03d}"], "boom")
+
+    path = tmp_path / "failures.csv"
+    tracker.save(path)
+
+    with path.open("r", newline="", encoding="utf8") as fh:
+        rows = list(csv.DictReader(fh))
+
+    assert rows, "expected tracker.save to create sidecar entries"
+    assert rows[0]["chunk_fetch_failure_ids_total"] == "120"
+    assert rows[0]["chunk_fetch_failure_ids_truncated"] == "True"

@@ -47,7 +47,16 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 encoding=args.encoding,
                 dtype=str,
             )
-        except (FileNotFoundError, pd.errors.ParserError, UnicodeError) as exc:
+        except io.CsvReadError as exc:
+            logger.error(
+                "input_read_failed",
+                error=str(exc.original_error),
+                path=str(args.input_csv),
+                encoding=args.encoding,
+                sep=args.sep,
+            )
+            return 1
+        except FileNotFoundError as exc:
             logger.error(
                 "input_read_failed",
                 error=str(exc),

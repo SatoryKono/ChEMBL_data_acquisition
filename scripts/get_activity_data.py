@@ -48,16 +48,31 @@ def _export_module_api(module: ModuleType, *, extra: Iterable[str] = ()) -> tupl
         ordered = list(exported)
     return tuple(ordered)
 
-
 def _augment_activity_module(module: ModuleType) -> tuple[str, ...]:
     """Install backwards compatible exports on the activity CLI module."""
 
-    from library.pipelines.activity import runner as activity_runner
+    extra_exports: dict[str, object] = {}
 
-    extra_exports: dict[str, object] = {
-        "MAX_ACTIVITY_CHUNK_SIZE": activity_runner.MAX_ACTIVITY_CHUNK_SIZE,
-        "register_activity_pipeline_hooks": activity_runner.register_activity_pipeline_hooks,
-    }
+    try:  # pragma: no cover - defensive guard for optional dependencies
+        from library.pipelines.activity import runner as activity_runner
+    except Exception:  # pragma: no cover - ensure import failures do not break CLI
+        activity_runner = None
+    else:
+        extra_exports.update(
+            {
+                "MAX_ACTIVITY_CHUNK_SIZE": activity_runner.MAX_ACTIVITY_CHUNK_SIZE,
+                "register_activity_pipeline_hooks": activity_runner.register_activity_pipeline_hooks,
+            }
+        )
+
+    try:  # pragma: no cover - defensive guard for optional dependencies
+        from library.cli.entrypoints import activity as activity_entrypoint
+    except Exception:  # pragma: no cover - the entrypoint may not be importable during tests
+        activity_entrypoint = None
+    else:
+        emit_completion = getattr(activity_entrypoint, "_emit_completion_message", None)
+        if emit_completion is not None:
+            extra_exports.setdefault("_emit_completion_message", emit_completion)
 
     for name, value in extra_exports.items():
         setattr(module, name, value)
@@ -66,7 +81,7 @@ def _augment_activity_module(module: ModuleType) -> tuple[str, ...]:
     missing = tuple(name for name in extra_exports if name not in existing_all)
     if missing:
         module.__all__ = existing_all + missing  # type: ignore[attr-defined]
-    return tuple(getattr(module, "__all__", ()))
+    return tuple(extra_exports)
 
 
 def _load_activity_module() -> ModuleType:
@@ -75,8 +90,9 @@ def _load_activity_module() -> ModuleType:
 
 
 _MODULE = _load_activity_module()
+_EXTRA_EXPORTS = _augment_activity_module(_MODULE)
 _MODULE._synchronise_wrapper_module()
-__all__ = _export_module_api(_MODULE)
+__all__ = _export_module_api(_MODULE, extra=_EXTRA_EXPORTS)
 
 
 def __getattr__(name: str) -> object:

@@ -58,7 +58,7 @@ same arguments as their `python -m …` equivalents.
 | `csv-utils` | `library.utils.cli_tools.csv_utils_main:main` | Deterministic CSV re-serialisation helpers. |
 | `mapper` | `library.utils.cli_tools.mapper_main:main` | Interactive UniProt/ChEMBL mapper. |
 | `table-quality` | `library.utils.cli_tools.table_quality_main:main` | Generate column-level quality profiles. |
-| `chunk-io` | `library.utils.cli_tools.chunk_io_main:main` | Stream CSV chunks while keeping ordering stable. |
+| `chunk-io` | `library.utils.cli_tools.chunk_io_main:main` | Stream CSV chunks while keeping ordering stable and Unix newlines. |
 | `get-input-initialisation` | `library.utils.cli_tools.get_input_initialisation:main` | Merge Excel initialisation workbooks. |
 | `get-activities` | `library.utils.cli_tools.get_activities:main` | Emit synthetic activity rows and deterministic CSV + `.meta.yaml` artefacts for smoke tests. |
 | `check-determinism` | `library.utils.cli_tools.check_determinism:main` | Compare CSV hashes across runs. |

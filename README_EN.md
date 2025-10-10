@@ -61,6 +61,11 @@ pip install .[dev]
 pre-commit install
 ```
 
+> 📌 Need a specific interpreter? Create a `.python-version` file with the
+> required `major.minor.patch`. `make init` reads the file when present and
+> aborts early if the active `python` binary does not match, so you can enforce
+> the same runtime locally and in CI.
+
 Inspect the orchestrator and pipeline-specific flags:
 
 ```bash

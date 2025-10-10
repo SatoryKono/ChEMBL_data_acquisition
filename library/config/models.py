@@ -280,13 +280,16 @@ TESTITEM_FIELD_DEFAULTS: tuple[str, ...] = (
     "topical",
     "black_box_warning",
     "structure_type",
-    "pubchem_cid",
-    "pubchem_iupac_name",
-    "pubchem_molecular_formula",
-    "pubchem_isomeric_smiles",
-    "pubchem_canonical_smiles",
-    "pubchem_inchi",
-    "pubchem_inchikey",
+    "molecule_structures.canonical_smiles",
+    "molecule_structures.standard_inchi",
+    "molecule_structures.standard_inchi_key",
+    "pubchem.cid",
+    "pubchem.iupac_name",
+    "pubchem.molecular_formula",
+    "pubchem.isomeric_smiles",
+    "pubchem.canonical_smiles",
+    "pubchem.inchi",
+    "pubchem.inchikey",
 )
 
 
