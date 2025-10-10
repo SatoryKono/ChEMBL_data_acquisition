@@ -36,7 +36,12 @@ def _metadata_path(csv_path: Path) -> Path:
 
 
 def _run_activity(
-    limit: int, destination: Path, input_csv: Path, *, dry_run: bool
+    limit: int,
+    destination: Path,
+    input_csv: Path,
+    *,
+    dry_run: bool,
+    timeout: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.setdefault("PYTHONHASHSEED", "0")
@@ -60,6 +65,7 @@ def _run_activity(
         capture_output=True,
         env=env,
         cwd=str(repo_root),
+        timeout=timeout,
     )
 
 
@@ -94,6 +100,27 @@ def _report_process_failure(
             sys.stderr.write("\n")
 
 
+def _report_process_timeout(
+    label: str, exc: subprocess.TimeoutExpired
+) -> None:
+    timeout_value = exc.timeout
+    sys.stderr.write(f"{label} timed out after {timeout_value} seconds\n")
+
+    output = getattr(exc, "output", None)
+    if output:
+        sys.stderr.write("partial stdout:\n")
+        sys.stderr.write(output)
+        if not output.endswith("\n"):
+            sys.stderr.write("\n")
+
+    stderr = getattr(exc, "stderr", None)
+    if stderr:
+        sys.stderr.write("partial stderr:\n")
+        sys.stderr.write(stderr)
+        if not stderr.endswith("\n"):
+            sys.stderr.write("\n")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -123,6 +150,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_false",
         help="Explicitly disable dry-run mode (default).",
     )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=600.0,
+        help="Timeout in seconds for each pipeline run (default: 600).",
+    )
     parser.set_defaults(dry_run=False)
 
     args = parser.parse_args(argv)
@@ -144,12 +177,32 @@ def main(argv: list[str] | None = None) -> int:
         else:
             input_csv = _default_input_csv(tmp_dir)
 
-        first_run = _run_activity(args.limit, first, input_csv, dry_run=args.dry_run)
+        try:
+            first_run = _run_activity(
+                args.limit,
+                first,
+                input_csv,
+                dry_run=args.dry_run,
+                timeout=args.timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            _report_process_timeout("first run", exc)
+            return 1
         if first_run.returncode != 0:
             _report_process_failure("first run", first_run)
             return 1
 
-        second_run = _run_activity(args.limit, second, input_csv, dry_run=args.dry_run)
+        try:
+            second_run = _run_activity(
+                args.limit,
+                second,
+                input_csv,
+                dry_run=args.dry_run,
+                timeout=args.timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            _report_process_timeout("second run", exc)
+            return 1
         if second_run.returncode != 0:
             _report_process_failure("second run", second_run)
             return 1
