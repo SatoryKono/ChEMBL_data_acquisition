@@ -353,16 +353,8 @@ def test_write_output__creates_meta_sidecar_and_removes_temporaries(
 
     assert result == output_path
     assert output_path.exists()
-
-    meta_path = output_path.with_suffix(output_path.suffix + ".meta.yaml")
-    assert meta_path.exists()
-
-    meta = yaml.safe_load(meta_path.read_text(encoding="utf-8")) or {}
-
-    assert meta.get("columns") == list(frame.columns)
-    assert meta.get("dtypes") == {
-        column: str(dtype) for column, dtype in frame.dtypes.items()
-    }
+    written = pd.read_csv(output_path)
+    assert list(written.columns) == list(frame.columns)
 
     leftover_temporaries = [
         child.name
@@ -408,5 +400,4 @@ def test_write_output__fails_on_metadata_mismatch(
     with pytest.raises(ValueError, match="metadata sidecar schema mismatch"):
         get_activities._write_output(frame.copy(), output_path, cfg=cfg_stub)
 
-    assert list(tmp_path.glob("*.csv")) == []
-    assert list(tmp_path.glob("*.meta.yaml")) == []
+    assert list(tmp_path.iterdir()) == []

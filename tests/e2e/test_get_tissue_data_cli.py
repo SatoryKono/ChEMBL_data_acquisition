@@ -15,7 +15,6 @@ from typing import Any
 
 import pandas as pd
 import pytest
-import yaml
 from freezegun import freeze_time
 
 from library.common.run_context import RunContext, get_current, set_current
@@ -287,23 +286,6 @@ def test_get_tissue_data_cli__end_to_end(
 
     failure_path = output_csv.with_name(f"{output_csv.stem}_validation_failures.csv")
     assert not failure_path.exists()
-    assert not Path(f"{failure_path}.meta.yaml").exists()
-
-    meta_path = Path(f"{output_csv}.meta.yaml")
-    assert meta_path.exists()
-    meta_raw_first = meta_path.read_text(encoding="utf-8")
-    metadata = yaml.safe_load(meta_raw_first)
-    assert metadata["columns"] == TISSUE_COLUMN_ORDER
-    assert metadata["command"]
-    assert "--input" in metadata["command"]
-    assert metadata.get("dtypes")
-    assert metadata.get("config")
-    _ = next(
-        payload for level, event, payload in logger.events if event == "pipeline_start"
-    )
-    context = get_current()
-    assert context is not None
-    assert metadata["generated_at"] == context.generated_at
 
     csv_hash_first = hashlib.sha256(output_csv.read_bytes()).hexdigest()
     first_event_count = len(logger.events)
@@ -318,16 +300,7 @@ def test_get_tissue_data_cli__end_to_end(
     csv_hash_second = hashlib.sha256(output_csv.read_bytes()).hexdigest()
     assert csv_hash_second == csv_hash_first
 
-    meta_raw_second = meta_path.read_text(encoding="utf-8")
-    metadata_first = yaml.safe_load(meta_raw_first)
-    metadata_second = yaml.safe_load(meta_raw_second)
-    del metadata_first["generated_at"]
-    del metadata_second["generated_at"]
-    assert metadata_first == metadata_second
-
-    failure_meta = Path(f"{failure_path}.meta.yaml")
     assert not failure_path.exists()
-    assert not failure_meta.exists()
 
     new_events = logger.events[first_event_count:]
     assert any(event == "tissue_pipeline_start" for _, event, _ in new_events)

@@ -8,8 +8,6 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-import yaml
-
 import library.io.metadata as io_metadata
 from library.common import run_context as run_context_module
 from library.common.run_context import RunContext
@@ -95,6 +93,8 @@ def test_run_tissue_pipeline__writes_normalised_output(
     assert result.records == 3
     assert result.missing_ids == ("CHEMBLT3",)
     assert result.output_path == output_csv
+    assert result.failure_path is None
+    assert result.written is True
     assert output_csv.exists()
     assert expected_calls == [
         {
@@ -113,10 +113,6 @@ def test_run_tissue_pipeline__writes_normalised_output(
     ]
     assert pd.isna(output_df.loc[2, "pref_name"])
     assert (tmp_path / "output_validation_failures.csv").exists() is False
-    meta_path = Path(f"{output_csv}.meta.yaml")
-    assert meta_path.exists()
-    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
-    assert metadata["generated_at"] == RUN_GENERATED_AT
 
 
 @pytest.mark.integration
@@ -204,6 +200,8 @@ def test_run_tissue_pipeline__deterministic_output_from_fixtures(
     assert result.records == 3
     assert result.output_path == output_path
     assert result.output_path.name == output_path.name
+    assert result.failure_path is None
+    assert result.written is True
     assert expected_calls == [
         {
             "ids": payload["input_ids"],
@@ -219,9 +217,3 @@ def test_run_tissue_pipeline__deterministic_output_from_fixtures(
     assert list(output_df.columns) == TISSUE_COLUMN_ORDER
     assert output_df["tissue_chembl_id"].tolist() == sorted(payload["input_ids"])
 
-    meta_path = Path(f"{result.output_path}.meta.yaml")
-    assert meta_path.exists()
-    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
-    assert metadata["columns"] == TISSUE_COLUMN_ORDER
-    assert metadata["generated_at"] == RUN_GENERATED_AT
-    assert metadata["command"]

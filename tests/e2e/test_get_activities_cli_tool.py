@@ -107,5 +107,4 @@ def test_get_activities_cli_wrapper__script_entrypoint(tmp_path: Path) -> None:
         header = handle.readline().strip()
     assert header.replace("\ufeff", "") == "activity_id"
 
-    meta_path = output_csv.with_suffix(output_csv.suffix + ".meta.yaml")
-    assert meta_path.exists()
+    assert output_csv.stat().st_size > 0

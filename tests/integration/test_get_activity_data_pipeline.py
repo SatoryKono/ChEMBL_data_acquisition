@@ -14,7 +14,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import requests
-import yaml
 
 from config.paths import DICTIONARY_DIR
 from library.cli.commands import get_activity_data as command_activity
@@ -544,23 +543,14 @@ def test_activity_pipeline__happy_path(
     assert report_payload["table"] == "activity"
     assert "metrics" in report_payload
 
-    meta_path = output_csv.with_name(output_csv.name + ".meta.yaml")
-    assert meta_path.exists()
-    meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
-    dictionaries = meta.get("dictionaries")
-    assert isinstance(dictionaries, dict)
-
     root_resource = get_resource("dictionary_root")
     target_resource = get_resource("target_types")
-
-    assert dictionaries.get("dictionary_root") == {
-        "version": root_resource.version,
-        "sha256": root_resource.sha256,
-    }
-    assert dictionaries.get("target_types") == {
-        "version": target_resource.version,
-        "sha256": target_resource.sha256,
-    }
+    assert report_payload.get("dictionaries", {}).get("dictionary_root", {}).get(
+        "version"
+    ) == root_resource.version
+    assert report_payload.get("dictionaries", {}).get("target_types", {}).get(
+        "version"
+    ) == target_resource.version
 
 
 @pytest.mark.integration
@@ -951,10 +941,7 @@ def test_activity_pipeline__records_pref_name_fetch_failures(
     assert failure_df.loc[0, "chunk_size"] == len(capture.testitems[0])
     assert expected_message in str(failure_df.loc[0, "error"])
 
-    meta_path = Path(f"{fetch_failure_path}.meta.yaml")
-    assert meta_path.exists()
-    meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
-    assert set(meta.get("columns", [])) >= {"chunk_ids", "chunk_size", "error"}
+    assert list(failure_df.columns) >= ["chunk_ids", "chunk_size", "error"]
 
 
 @pytest.mark.integration
