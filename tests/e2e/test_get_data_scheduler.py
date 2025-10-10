@@ -7,10 +7,12 @@ import pytest
 
 from library.pipelines.common import PipelineRunResult
 from scripts import get_data
-from tests.helpers.manifests import load_latest_manifest, list_manifest_files
+from tests.helpers.manifests import list_manifest_files, load_latest_manifest
 
 
-def _build_run_config(tmp_path: Path, steps: tuple[get_data.PipelineStep, ...]) -> get_data.PipelineRunConfig:
+def _build_run_config(
+    tmp_path: Path, steps: tuple[get_data.PipelineStep, ...]
+) -> get_data.PipelineRunConfig:
     base_path = tmp_path
     input_dir = base_path / "input"
     output_dir = base_path / "output"
@@ -37,7 +39,9 @@ def _build_run_config(tmp_path: Path, steps: tuple[get_data.PipelineStep, ...]) 
 
 
 def _make_pipeline_api(name: str, executed: list[str]) -> get_data.PipelineApi:
-    def _builder(cfg: get_data.PipelineRunConfig, input_path: Path, output_path: Path) -> SimpleNamespace:
+    def _builder(
+        cfg: get_data.PipelineRunConfig, input_path: Path, output_path: Path
+    ) -> SimpleNamespace:
         return SimpleNamespace(input_csv=input_path, output_csv=output_path)
 
     def _runner(config: object, options: SimpleNamespace) -> PipelineRunResult:
@@ -56,7 +60,9 @@ def _make_pipeline_api(name: str, executed: list[str]) -> get_data.PipelineApi:
 
 
 @pytest.mark.e2e
-def test_scheduler__selective_run_respects_dependencies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scheduler__selective_run_respects_dependencies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     steps = (
         get_data.PipelineStep(
             name="audit",
@@ -90,7 +96,12 @@ def test_scheduler__selective_run_respects_dependencies(tmp_path: Path, monkeypa
         {step.name: _make_pipeline_api(step.name, executed) for step in steps},
         raising=False,
     )
-    monkeypatch.setattr(get_data, "load_config", lambda *args, **kwargs: SimpleNamespace(), raising=False)
+    monkeypatch.setattr(
+        get_data,
+        "load_config",
+        lambda *args, **kwargs: SimpleNamespace(),
+        raising=False,
+    )
 
     status = get_data.run_pipeline(cfg, steps=steps)
     assert status == 0
@@ -110,7 +121,9 @@ def test_scheduler__selective_run_respects_dependencies(tmp_path: Path, monkeypa
 
 
 @pytest.mark.e2e
-def test_scheduler__fails_on_missing_external_dependency(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scheduler__fails_on_missing_external_dependency(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     steps = (
         get_data.PipelineStep(
             name="audit",
@@ -142,7 +155,12 @@ def test_scheduler__fails_on_missing_external_dependency(tmp_path: Path, monkeyp
         {step.name: _make_pipeline_api(step.name, executed) for step in steps},
         raising=False,
     )
-    monkeypatch.setattr(get_data, "load_config", lambda *args, **kwargs: SimpleNamespace(), raising=False)
+    monkeypatch.setattr(
+        get_data,
+        "load_config",
+        lambda *args, **kwargs: SimpleNamespace(),
+        raising=False,
+    )
 
     status = get_data.run_pipeline(cfg, steps=steps)
     assert status == 1
@@ -152,7 +170,9 @@ def test_scheduler__fails_on_missing_external_dependency(tmp_path: Path, monkeyp
     assert len(manifests) == 1
     _, manifest = load_latest_manifest(cfg.base_path)
     assert manifest["run"]["status"] == "failed"
-    transform_entry = next(entry for entry in manifest["steps"] if entry["name"] == "transform")
+    transform_entry = next(
+        entry for entry in manifest["steps"] if entry["name"] == "transform"
+    )
     assert transform_entry["status"] == "failed"
     assert transform_entry["reason"] == "dependency_missing"
     assert transform_entry["executed"] is False

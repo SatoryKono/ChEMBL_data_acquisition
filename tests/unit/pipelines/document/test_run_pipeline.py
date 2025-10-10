@@ -108,7 +108,9 @@ def _install_fake_cli(monkeypatch: pytest.MonkeyPatch, exit_code: int) -> None:
 
 
 @pytest.mark.unit
-def test_run_pipeline__sets_written_flag_on_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_pipeline__sets_written_flag_on_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _install_fake_cli(monkeypatch, exit_code=0)
     cfg = _DummyConfig()
     input_csv = tmp_path / "input.csv"

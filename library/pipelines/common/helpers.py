@@ -26,7 +26,6 @@ from ...cli.pipeline_definition import normalise_definition
 from ...cli_utils import run_pipeline
 from ...clients import _chunked
 
-
 Chunk = TypeVar("Chunk", bound=pd.DataFrame)
 
 

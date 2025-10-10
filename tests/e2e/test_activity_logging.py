@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -27,7 +27,9 @@ def test_activity_logging__relative_env_base_anchored_to_repo_root(
 
     output_path = tmp_path / "output.csv"
     config_path = tmp_path / "config.yaml"
-    config_path.write_text("io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n", encoding="utf-8")
+    config_path.write_text(
+        "io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n", encoding="utf-8"
+    )
 
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", relative_base)
     monkeypatch.setattr("library.cli.logging._current_date_str", lambda: "20240102")

@@ -1,8 +1,9 @@
 """Utilities for declaratively defining and validating DataFrame schemas."""
+
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Iterable, Mapping, Sequence
 
 import pandas as pd
 
@@ -36,7 +37,9 @@ def _missing_columns(df: pd.DataFrame, expected: Iterable[str]) -> list[str]:
     return [col for col in expected if col not in df.columns]
 
 
-def validate_schema(df: pd.DataFrame, schema: DataFrameSchema, *, context: str) -> pd.DataFrame:
+def validate_schema(
+    df: pd.DataFrame, schema: DataFrameSchema, *, context: str
+) -> pd.DataFrame:
     """Validate ``df`` against ``schema`` and return a defensive copy."""
 
     missing_required = _missing_columns(df, schema.required_columns)
@@ -55,12 +58,16 @@ def validate_schema(df: pd.DataFrame, schema: DataFrameSchema, *, context: str) 
             if isinstance(expected_type, str):
                 expected_name = expected_type
                 if dtype.name != expected_type:
-                    mismatched.append(f"{column} (expected {expected_name}, got {dtype})")
+                    mismatched.append(
+                        f"{column} (expected {expected_name}, got {dtype})"
+                    )
             else:
                 expected_dtype = pd.api.types.pandas_dtype(expected_type)
                 expected_name = str(expected_dtype)
                 if not pd.api.types.is_dtype_equal(dtype, expected_dtype):
-                    mismatched.append(f"{column} (expected {expected_name}, got {dtype})")
+                    mismatched.append(
+                        f"{column} (expected {expected_name}, got {dtype})"
+                    )
         if mismatched:
             raise SchemaValidationError(
                 context,
@@ -70,14 +77,20 @@ def validate_schema(df: pd.DataFrame, schema: DataFrameSchema, *, context: str) 
     ordered_df = df.copy(deep=True)
 
     if schema.column_order:
-        ordered_columns = [col for col in schema.column_order if col in ordered_df.columns]
-        remaining = sorted(col for col in ordered_df.columns if col not in ordered_columns)
+        ordered_columns = [
+            col for col in schema.column_order if col in ordered_df.columns
+        ]
+        remaining = sorted(
+            col for col in ordered_df.columns if col not in ordered_columns
+        )
         ordered_df = ordered_df.loc[:, ordered_columns + remaining]
 
     if schema.sort_by:
         sort_cols = [col for col in schema.sort_by if col in ordered_df.columns]
         if sort_cols:
-            ordered_df = ordered_df.sort_values(sort_cols, kind="mergesort").reset_index(drop=True)
+            ordered_df = ordered_df.sort_values(
+                sort_cols, kind="mergesort"
+            ).reset_index(drop=True)
 
     return ordered_df
 

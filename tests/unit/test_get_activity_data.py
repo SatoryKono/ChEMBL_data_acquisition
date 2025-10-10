@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Condition, Event, Lock
-from typing import Any, Iterable, Sequence
 from types import SimpleNamespace
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -50,19 +50,23 @@ def test_build_parser__captures_run_id_env(monkeypatch, tmp_path):
     monkeypatch.setenv("CHEMBL_DA_RUN_ID", "env-run")
     parser, log_cfg = get_activity_data.build_parser()
 
-    args = parser.parse_args(["--input", str(tmp_path / "activity.csv"), "--limit", "0"])
+    args = parser.parse_args(
+        ["--input", str(tmp_path / "activity.csv"), "--limit", "0"]
+    )
 
-    assert getattr(args, "run_id") == "env-run"
+    assert args.run_id == "env-run"
     assert log_cfg.run_id == "env-run"
 
 
 class _DummyClient:
     """Minimal context manager emulating :class:`ChemblClient`."""
 
-    def __init__(self, *args, **kwargs) -> None:  # pragma: no cover - interface compatibility
+    def __init__(
+        self, *args, **kwargs
+    ) -> None:  # pragma: no cover - interface compatibility
         pass
 
-    def __enter__(self) -> "_DummyClient":  # pragma: no cover - trivial helper
+    def __enter__(self) -> _DummyClient:  # pragma: no cover - trivial helper
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - trivial helper
@@ -83,7 +87,7 @@ class _ApiStub:
         *,
         update: Mapping[str, Any] | None = None,
         deep: bool | None = None,  # noqa: ARG002 - signature compatibility
-    ) -> "_ApiStub":
+    ) -> _ApiStub:
         data = dict(self.__dict__)
         if update:
             data.update(update)
@@ -121,7 +125,9 @@ class _RecordingLogger:
         ([42.0, 0], ("42.0", "0")),
     ],
 )
-def test_args_invocation__cases(invocation: Iterable[object] | None, expected: tuple[str, ...]) -> None:
+def test_args_invocation__cases(
+    invocation: Iterable[object] | None, expected: tuple[str, ...]
+) -> None:
     namespace = argparse.Namespace(invocation=invocation)
     assert get_activity_data._args_invocation(namespace) == expected
 
@@ -244,7 +250,9 @@ def test_ensure_molecule_pref_name__concurrent_single_fetch(monkeypatch) -> None
         assert cache["CHEMBL2"] == "name-CHEMBL2"
 
 
-def test_ensure_molecule_pref_name__applies_testitem_retry_overrides(monkeypatch) -> None:
+def test_ensure_molecule_pref_name__applies_testitem_retry_overrides(
+    monkeypatch,
+) -> None:
     cfg = SimpleNamespace(
         api=_ApiStub(retries=2, backoff_factor=0.5),
         testitem=SimpleNamespace(
@@ -403,7 +411,9 @@ def test_run__skip_existing_matrix(
             assert input_path == args.input_csv
             return output_path
 
-        monkeypatch.setattr(get_activity_data.io, "default_output_path", fake_default_output_path)
+        monkeypatch.setattr(
+            get_activity_data.io, "default_output_path", fake_default_output_path
+        )
 
     if has_existing:
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -442,7 +452,9 @@ def test_run__skip_existing_matrix(
         (["--workers", "0"], "chunk size must be a positive integer"),
     ],
 )
-def test_main__invalid_cli_options(argv, expected_substring, monkeypatch, tmp_path, capsys) -> None:
+def test_main__invalid_cli_options(
+    argv, expected_substring, monkeypatch, tmp_path, capsys
+) -> None:
     input_csv = tmp_path / "activity.csv"
     input_csv.write_text("activity_id\nACT1\n", encoding="utf-8")
     full_args = ["--input", str(input_csv), *argv]
@@ -450,7 +462,9 @@ def test_main__invalid_cli_options(argv, expected_substring, monkeypatch, tmp_pa
     monkeypatch.setattr(
         get_activity_data,
         "run",
-        lambda *args, **kwargs: pytest.fail("run should not be invoked for invalid CLI"),
+        lambda *args, **kwargs: pytest.fail(
+            "run should not be invoked for invalid CLI"
+        ),
     )
 
     with pytest.raises(SystemExit) as exc_info:
@@ -461,9 +475,7 @@ def test_main__invalid_cli_options(argv, expected_substring, monkeypatch, tmp_pa
     assert expected_substring in captured.err
 
 
-@pytest.mark.parametrize(
-    "argv", [["--limit"], ["--workers"], ["--timeout"]]
-)
+@pytest.mark.parametrize("argv", [["--limit"], ["--workers"], ["--timeout"]])
 def test_main__missing_cli_option_values(argv, monkeypatch, tmp_path, capsys) -> None:
     input_csv = tmp_path / "activity.csv"
     input_csv.write_text("activity_id\nACT1\n", encoding="utf-8")
@@ -552,7 +564,9 @@ def test_run_chembl__offset_and_workers(monkeypatch, cfg, tmp_path) -> None:
         lambda: ValueError("malformed CSV"),
     ],
 )
-def test_run_chembl__read_ids_failures(error_factory, cfg, tmp_path, monkeypatch) -> None:
+def test_run_chembl__read_ids_failures(
+    error_factory, cfg, tmp_path, monkeypatch
+) -> None:
     args = _make_args(tmp_path)
 
     def _raise(*_args, **_kwargs):
@@ -596,14 +610,18 @@ def test_run_chembl__pipeline_failure_logs_error(cfg, tmp_path, monkeypatch) -> 
     assert "activity_pipeline_failed" in error_events
 
 
-def test_prepare_activity_context__skip_read_avoids_io(cfg, tmp_path, monkeypatch) -> None:
+def test_prepare_activity_context__skip_read_avoids_io(
+    cfg, tmp_path, monkeypatch
+) -> None:
     args = _make_args(tmp_path)
     cfg.activity.limit = None
 
     monkeypatch.setattr(
         get_activity_data.io,
         "read_ids",
-        lambda *_args, **_kwargs: pytest.fail("read_ids should not execute when skip_read=True"),
+        lambda *_args, **_kwargs: pytest.fail(
+            "read_ids should not execute when skip_read=True"
+        ),
     )
 
     context = get_activity_data.prepare_activity_context(cfg, args, skip_read=True)

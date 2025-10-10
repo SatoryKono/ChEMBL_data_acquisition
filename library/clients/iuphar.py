@@ -12,7 +12,7 @@ from __future__ import annotations
 import io
 import random
 import threading
-from collections.abc import Iterable, Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
@@ -72,7 +72,7 @@ def _get_or_create_session_locked() -> Session:
     if session is None:
         session = _session_factory()
         _sessions.add(session)
-        setattr(_session_local, "session", session)
+        _session_local.session = session
     return session
 
 
@@ -89,6 +89,7 @@ def _session_context() -> Iterator[Session]:
             _active_requests -= 1
             if _active_requests == 0:
                 _session_condition.notify_all()
+
 
 EXPECTED_TARGET_COLUMNS: tuple[str, ...] = (
     "target_id",

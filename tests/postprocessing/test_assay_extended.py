@@ -53,7 +53,7 @@ def test_enrich_assay_metadata__fills_missing_fields(tmp_path: Path) -> None:
         {
             "target_chembl_id": ["CHEMBLT1", "CHEMBLT2"],
             "target_components": [
-                "[{\"accession\": \"Q99999\"}, {\"accession\": \"P12345\"}]",
+                '[{"accession": "Q99999"}, {"accession": "P12345"}]',
                 "[]",
             ],
         }

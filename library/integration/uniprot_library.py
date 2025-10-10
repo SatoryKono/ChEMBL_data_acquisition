@@ -47,12 +47,16 @@ import requests
 from ..clients.uniprot import (
     UniProtFetchError,
     fetch_uniprot,
+)
+from ..clients.uniprot import (
     get_session as get_uniprot_session,
+)
+from ..clients.uniprot import (
     init_session as init_uniprot_session,
 )
-from ..config import IupharCfg, UniprotCfg
 from ..common.log import logger
 from ..common.rate_limiter import get_limiter
+from ..config import IupharCfg, UniprotCfg
 
 _DEFAULT_UNIPROT_DATA_DIR = Path("uniprot")
 
@@ -207,7 +211,9 @@ class _CircuitBreaker:
         if state.open:
             if now < state.opened_until:
                 remaining = state.opened_until - now
-                return _CircuitDecision(False, remaining=remaining if remaining > 0 else 0.0)
+                return _CircuitDecision(
+                    False, remaining=remaining if remaining > 0 else 0.0
+                )
             state.open = False
             state.reset_pending = True
 
@@ -448,8 +454,6 @@ def extract_uniprotkb_id(
         if isinstance(primary, str) and primary:
             return primary
     return default
-
-
 
 
 def extract_secondary_accessions(data: Any) -> list[str]:
@@ -1040,7 +1044,7 @@ def _fetch_gtop_endpoint(
             raw_content_type = response.headers.get("Content-Type")
             content_type = raw_content_type if isinstance(raw_content_type, str) else ""
             body = response.content
-            if isinstance(body, (bytes, bytearray)):
+            if isinstance(body, bytes | bytearray):
                 body_is_empty = not body.strip()
             elif isinstance(body, str):
                 body_is_empty = not body.strip()
@@ -1473,8 +1477,8 @@ def collect_info(
     _update_gtop_metadata(result, cfg=gtop_cfg)
     result.update(activity)
     uni_protkb_id = extract_uniprotkb_id(data)
-    fallback_uniprotkb_id = (
-        uni_protkb_id or extract_uniprotkb_id(data, allow_primary=True)
+    fallback_uniprotkb_id = uni_protkb_id or extract_uniprotkb_id(
+        data, allow_primary=True
     )
     result["uniProtkbId"] = uni_protkb_id
     result["uniProtkbIdFallback"] = fallback_uniprotkb_id or uid

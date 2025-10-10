@@ -30,7 +30,7 @@ class _StubResponse:
     def __post_init__(self) -> None:
         self.headers = self.headers or {}
 
-    def __enter__(self) -> "_StubResponse":  # pragma: no cover - context API
+    def __enter__(self) -> _StubResponse:  # pragma: no cover - context API
         return self
 
     def __exit__(

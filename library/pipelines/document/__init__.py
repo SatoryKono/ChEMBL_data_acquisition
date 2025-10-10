@@ -9,6 +9,7 @@ from typing import Literal
 
 from library.config import Config
 from library.pipelines.common import PipelineRunResult
+
 from . import pipeline, postprocessing, type_classifier, type_terms
 from .chembl_document import get_documents
 
@@ -115,12 +116,12 @@ def run_pipeline(config: Config, options: DocumentPipelineOptions) -> PipelineRu
 
 
 __all__ = [
-  "DocumentPipelineOptions",
-  "PipelineRunResult",
-  "get_documents",
-  "pipeline",
-  "postprocessing",
-  "run_pipeline",
-  "type_classifier",
-  "type_terms",
+    "DocumentPipelineOptions",
+    "PipelineRunResult",
+    "get_documents",
+    "pipeline",
+    "postprocessing",
+    "run_pipeline",
+    "type_classifier",
+    "type_terms",
 ]

@@ -22,7 +22,9 @@ def test_absolutise_path_value__avoids_duplicate_config_segment(tmp_path, value)
 
     resolved = _absolutise_path_value(value, base_dir)
 
-    expected = (project_root / "config" / "dictionary" / "_testitem" / "molecule_hierarchy.csv").resolve()
+    expected = (
+        project_root / "config" / "dictionary" / "_testitem" / "molecule_hierarchy.csv"
+    ).resolve()
     if isinstance(resolved, Path):
         assert resolved == expected
     else:

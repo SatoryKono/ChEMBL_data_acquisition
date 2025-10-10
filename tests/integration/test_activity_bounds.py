@@ -35,13 +35,17 @@ def test_compute_activity_bounds__preserves_standard_ranges() -> None:
     populated = result.dropna(subset=["standard_lower_value", "standard_upper_value"])
     pd.testing.assert_series_equal(
         populated["lower_value"].reset_index(drop=True),
-        pd.to_numeric(populated["standard_lower_value"], errors="coerce").reset_index(drop=True),
+        pd.to_numeric(populated["standard_lower_value"], errors="coerce").reset_index(
+            drop=True
+        ),
         check_names=False,
         check_dtype=False,
     )
     pd.testing.assert_series_equal(
         populated["upper_value"].reset_index(drop=True),
-        pd.to_numeric(populated["standard_upper_value"], errors="coerce").reset_index(drop=True),
+        pd.to_numeric(populated["standard_upper_value"], errors="coerce").reset_index(
+            drop=True
+        ),
         check_names=False,
         check_dtype=False,
     )

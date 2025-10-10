@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import argparse
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -31,7 +31,7 @@ class _SpyLogger:
     def error(self, *args: object, **kwargs: object) -> None:  # pragma: no cover
         return None
 
-    def bind(self, **kwargs: object) -> "_SpyLogger":  # pragma: no cover
+    def bind(self, **kwargs: object) -> _SpyLogger:  # pragma: no cover
         return self
 
 
@@ -53,6 +53,7 @@ def test_apply_config_overrides__missing_config_attribute(
 
     spy = _SpyLogger()
     monkeypatch.setattr(parser_module, "logger", spy)
+
     def _load_stub(*_args, **_kwargs):
         cfg = SimpleNamespace(
             sources=SimpleNamespace(
@@ -85,8 +86,7 @@ def test_apply_config_overrides__missing_config_attribute(
         for name, payload in (spy.events)
         if name == event_name
         and payload.get("argument") == "column"
-        and payload.get("path")
-        == "sources.chembl.pipelines.target.all.legacy_column"
+        and payload.get("path") == "sources.chembl.pipelines.target.all.legacy_column"
     ]
     assert matching, f"expected {event_name!r} log entry not found in {spy.events!r}"
 
@@ -146,8 +146,8 @@ def test_apply_config_overrides__uses_default_config_when_none(monkeypatch):
     assert calls["path"] == parser_module.DEFAULT_CONFIG_PATH
     assert args.config == parser_module.DEFAULT_CONFIG_PATH
     assert any(
-        event == "config_default_path_used" and payload.get("config")
-        == str(parser_module.DEFAULT_CONFIG_PATH)
+        event == "config_default_path_used"
+        and payload.get("config") == str(parser_module.DEFAULT_CONFIG_PATH)
         for event, payload in spy.events
     )
 

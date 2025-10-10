@@ -1,4 +1,5 @@
 """Target postprocessing pipeline."""
+
 from .schema import TARGET_SCHEMA, validate_targets
 from .steps import (
     PIPELINE_STEPS,

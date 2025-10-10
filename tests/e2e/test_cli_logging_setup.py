@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +81,7 @@ _SCRIPT_CASES = (
 )
 
 
+<<<<<<< HEAD
 def _run_logging_case(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -90,13 +91,24 @@ def _run_logging_case(
     date_override: str | None,
     datetime_cls: type[datetime] | None = None,
 ) -> tuple[Path, list[dict[str, Any]]]:
+=======
+@pytest.mark.e2e
+@pytest.mark.parametrize(
+    "case", _SCRIPT_CASES, ids=lambda c: _program_name_from_module(c["module"])
+)
+def test_cli_logging__creates_log_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: dict[str, Any]
+) -> None:
+>>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
     base_path = tmp_path
     log_dir = base_path / "logs"
     log_dir.mkdir(parents=True)
     monkeypatch.setattr("library.cli.logging._DEFAULT_LOG_DIR", log_dir)
 
     config_path = base_path / "config.yaml"
-    config_path.write_text("io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n", encoding="utf-8")
+    config_path.write_text(
+        "io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n", encoding="utf-8"
+    )
 
     input_path = base_path / "input.csv"
     input_path.write_text("identifier\nCHEMBL1\n", encoding="utf-8")
@@ -105,8 +117,20 @@ def _run_logging_case(
 
     monkeypatch.chdir(base_path)
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
+<<<<<<< HEAD
     if date_override is not None:
         monkeypatch.setattr("library.cli.logging._current_date_str", lambda: date_override)
+=======
+    monkeypatch.setattr("library.cli.logging._current_date_str", lambda: "20240102")
+
+    class _FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            tzinfo = tz or UTC
+            return datetime(2024, 1, 2, 0, 0, tzinfo=tzinfo)
+
+    monkeypatch.setattr(get_activity_data, "datetime", _FixedDateTime)
+>>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
 
     module = case["module"]
     prefix = case["prefix"]
@@ -178,7 +202,9 @@ def _run_logging_case(
     if input_flag:
         argv.extend([input_flag, str(input_path)])
     if output_flag:
-        target_output = output_path if output_flag != "--final-out" else base_path / "targets.csv"
+        target_output = (
+            output_path if output_flag != "--final-out" else base_path / "targets.csv"
+        )
         argv.extend([output_flag, str(target_output)])
     argv.extend(extra_args)
 
@@ -193,7 +219,9 @@ def _run_logging_case(
     if not log_files:
         fallback_dir = base_path / "logs"
         log_files = sorted(
-            path for path in fallback_dir.glob("*.log") if path.name.startswith(expected_prefix)
+            path
+            for path in fallback_dir.glob("*.log")
+            if path.name.startswith(expected_prefix)
         )
     assert len(log_files) == 1
     log_path = log_files[0]
@@ -239,9 +267,7 @@ def test_cli_logging__creates_log_file(
     assert expected_events.issubset(event_names)
 
     record_entry = next(
-        record
-        for record in events
-        if record.get("event") == f"{prefix}_records"
+        record for record in events if record.get("event") == f"{prefix}_records"
     )
     data = record_entry.get("data", {})
     assert data.get("processed") == 2

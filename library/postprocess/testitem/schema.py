@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import pandas as pd
 
 from library.postprocess.common import DataFrameSchema, validate_schema
-
 
 BOOLEAN_COLUMNS: Sequence[str] = (
     "natural_product",
@@ -115,4 +114,3 @@ def validate_testitems(df: pd.DataFrame, *, context: str = "testitems") -> pd.Da
 
 
 __all__ = ["BOOLEAN_COLUMNS", "TESTITEM_SCHEMA", "validate_testitems"]
-

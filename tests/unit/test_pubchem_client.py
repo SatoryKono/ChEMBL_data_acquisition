@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 
@@ -15,7 +16,7 @@ class _DummyResponse:
     headers: dict[str, Any]
     payload: dict[str, Any] | None = None
 
-    def __enter__(self) -> "_DummyResponse":
+    def __enter__(self) -> _DummyResponse:
         return self
 
     def __exit__(
@@ -39,9 +40,7 @@ class _DummySession:
         self._response_factory = response_factory
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
 
-    def request(
-        self, method: str, url: str, **kwargs: Any
-    ) -> _DummyResponse:
+    def request(self, method: str, url: str, **kwargs: Any) -> _DummyResponse:
         self.calls.append((method, url, kwargs))
         return self._response_factory()
 
@@ -66,7 +65,9 @@ def test_make_request__caches_server_error_results(
     )
 
     sleep_calls: list[float] = []
-    monkeypatch.setattr(pubchem, "sleep", lambda seconds: sleep_calls.append(float(seconds)))
+    monkeypatch.setattr(
+        pubchem, "sleep", lambda seconds: sleep_calls.append(float(seconds))
+    )
     limiter = _DummyLimiter()
     monkeypatch.setattr(pubchem, "get_limiter", lambda *_args, **_kwargs: limiter)
 
@@ -95,7 +96,11 @@ def test_make_request__caches_server_error_results(
     entry = cache.get(pubchem._build_cache_key("GET", url))
     assert entry is not None
     assert entry.outcome == "server_error"
-    assert entry.details == {"reason": "server_error", "status": 503, "retry_after": 30.0}
+    assert entry.details == {
+        "reason": "server_error",
+        "status": 503,
+        "retry_after": 30.0,
+    }
 
     second_result = pubchem.make_request(url, cfg)
 
@@ -105,7 +110,9 @@ def test_make_request__caches_server_error_results(
     assert sleep_calls == [30.0]
 
 
-def test_make_request__invalid_identifier_cached(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_make_request__invalid_identifier_cached(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     cfg = PubChemCfg()
 
     url = (

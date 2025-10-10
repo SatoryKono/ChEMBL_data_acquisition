@@ -11,7 +11,9 @@ from library.postprocessing import activity_extended
 
 
 @pytest.mark.unit
-def test_resolve_dictionary_root__defaults_to_config_directory(monkeypatch, tmp_path: Path) -> None:
+def test_resolve_dictionary_root__defaults_to_config_directory(
+    monkeypatch, tmp_path: Path
+) -> None:
     """Default dictionary root should always match the config package resource."""
 
     monkeypatch.chdir(tmp_path)

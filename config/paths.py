@@ -1,4 +1,5 @@
 """Shared filesystem paths for configuration resources."""
+
 from __future__ import annotations
 
 from pathlib import Path

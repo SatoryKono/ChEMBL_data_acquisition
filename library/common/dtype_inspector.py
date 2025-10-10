@@ -23,9 +23,10 @@ from collections.abc import Mapping, Sequence
 
 import pandas as pd
 
-from ..integration import chembl_library as cl
 from library.orchestration import ETLContext
+
 from ..config import Config
+from ..integration import chembl_library as cl
 from .log import logger
 
 # Default sample identifiers for each dataset.  These are deliberately minimal

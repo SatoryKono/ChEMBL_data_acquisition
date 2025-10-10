@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-
 import random
-
 from collections.abc import Callable, Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
-
 from typing import Any
 
 import requests
 
 from ..common.fetch_retry import compute_backoff_delay
-from ..config.models import PubMedCfg, RetryCfg
 from ..common.log import logger
 from ..common.rate_limiter import sleep
+from ..config.models import PubMedCfg, RetryCfg
 
 __all__ = [
     "PubMedClient",
@@ -71,8 +68,8 @@ def _retry_after_delay(headers: Mapping[str, str]) -> float | None:
         except (TypeError, ValueError, OverflowError):
             return None
         if retry_at.tzinfo is None:
-            retry_at = retry_at.replace(tzinfo=timezone.utc)
-        now = datetime.now(timezone.utc)
+            retry_at = retry_at.replace(tzinfo=UTC)
+        now = datetime.now(UTC)
         return max((retry_at - now).total_seconds(), 0.0)
     else:
         return max(seconds, 0.0)
@@ -231,7 +228,6 @@ def _do_request(
                 sleep(retry_delay)
         else:
             logger.info(event, extra=extra)
-
 
         try:
             status_code, text, content, parse_error, headers = _make_request(

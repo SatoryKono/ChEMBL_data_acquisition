@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 import pandas as pd
 
@@ -59,7 +59,10 @@ def prepare_targets_for_schema(
 
     extras: dict[str, pd.Series] = {}
 
-    if "uniprot_id_primary" not in prepared.columns and "uniprot_id" in prepared.columns:
+    if (
+        "uniprot_id_primary" not in prepared.columns
+        and "uniprot_id" in prepared.columns
+    ):
         extras["uniprot_id_primary"] = prepared["uniprot_id"].astype(object)
 
     if "mapping_uniprot_id" in prepared.columns:

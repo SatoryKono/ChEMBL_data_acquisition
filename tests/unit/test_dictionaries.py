@@ -25,7 +25,9 @@ def test_compute_sha256__stable_across_path_separators(tmp_path, monkeypatch):
 
     original_relative_to = Path.relative_to
 
-    def _relative_to_windows(self: Path, other: Path):  # pragma: no cover - behaviour covered via assertion
+    def _relative_to_windows(
+        self: Path, other: Path
+    ):  # pragma: no cover - behaviour covered via assertion
         return PureWindowsPath(original_relative_to(self, other))
 
     monkeypatch.setattr(Path, "relative_to", _relative_to_windows)
@@ -40,7 +42,9 @@ def test_compute_sha256__independent_of_rglob_order(tmp_path, monkeypatch):
 
     original_rglob = Path.rglob
 
-    def _reversed_rglob(self: Path, pattern: str):  # pragma: no cover - behaviour asserted below
+    def _reversed_rglob(
+        self: Path, pattern: str
+    ):  # pragma: no cover - behaviour asserted below
         return iter(list(original_rglob(self, pattern))[::-1])
 
     monkeypatch.setattr(Path, "rglob", _reversed_rglob)
@@ -125,7 +129,9 @@ def test_parse_manifest__accepts_known_checksum_variants(
         """,
     )
     (tmp_path / "placeholder.txt").write_text("data", encoding="utf-8")
-    monkeypatch.setattr(dictionaries, "_compute_sha256", lambda path, value=checksum: value)
+    monkeypatch.setattr(
+        dictionaries, "_compute_sha256", lambda path, value=checksum: value
+    )
 
     # Act
     dictionaries._env_checksum_allowlist.cache_clear()
@@ -161,7 +167,9 @@ def test_parse_manifest__env_allowlist_accepts_unknown_checksum(tmp_path, monkey
     with pytest.raises(dictionaries.DictionaryManifestError):
         dictionaries._parse_manifest(base_dir=tmp_path)
 
-    monkeypatch.setenv("CHEMBL_DICTIONARY_CHECKSUM_ALLOWLIST", f"{resource_name}=override")
+    monkeypatch.setenv(
+        "CHEMBL_DICTIONARY_CHECKSUM_ALLOWLIST", f"{resource_name}=override"
+    )
     dictionaries._env_checksum_allowlist.cache_clear()
     resources = dictionaries._parse_manifest(base_dir=tmp_path)
 

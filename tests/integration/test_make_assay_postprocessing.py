@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
+from datetime import UTC, datetime
 
 import pandas as pd
 
 from library.postprocess.assays.schema import ASSAY_SCHEMA
-
 from scripts import make_assay_postprocessing as cli
 
 
@@ -31,7 +30,9 @@ def test_make_assay_postprocessing__end_to_end(tmp_path, monkeypatch):
     assert exit_code == 0
 
     result = pd.read_csv(output_path)
-    expected_columns = [col for col in ASSAY_SCHEMA.column_order if col in result.columns]
+    expected_columns = [
+        col for col in ASSAY_SCHEMA.column_order if col in result.columns
+    ]
     assert list(result.columns) == expected_columns
     assert result["assay_chembl_id"].tolist() == ["CHEMBL2", "CHEMBL3"]
     assert result["assay_type"].tolist() == ["CONFIRMATORY", "PRIMARY"]
@@ -46,7 +47,7 @@ def test_make_assay_postprocessing__end_to_end(tmp_path, monkeypatch):
     assert payload["table"] == "assays"
     assert payload["metrics"]["output"]["rows"] == len(result)
 
-    date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    date_str = datetime.now(UTC).strftime("%Y%m%d")
     log_path = log_dir / f"make_assay_postprocessing_{date_str}.log"
     assert log_path.exists()
 
@@ -54,4 +55,3 @@ def test_make_assay_postprocessing__end_to_end(tmp_path, monkeypatch):
     second_exit = cli.main(["--input", str(input_path), "--output", str(output_path)])
     assert second_exit == 0
     assert output_path.read_bytes() == snapshot
-
