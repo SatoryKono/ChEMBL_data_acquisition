@@ -59,3 +59,38 @@ def test_build_correlation_matrix__accepts_prefilled_profiler(profiler_cls):
     reuse = build_correlation_matrix(None, table_name="demo", profiler=profiler)
 
     pd.testing.assert_frame_equal(direct, reuse)
+
+
+def test_build_correlation_matrix__accepts_duck_typed_profiler():
+    frame = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [0.5, 1.0, 1.5]})
+    profiler = LegacyTableQualityProfiler()
+    profiler.consume(frame)
+
+    direct = build_correlation_matrix(frame, table_name="demo")
+
+    class ProfilerProxy:
+        def __init__(self, delegate):
+            self._delegate = delegate
+            self._columns = delegate._columns
+            self._accumulators = delegate._accumulators
+
+        def __getattr__(self, name):
+            return getattr(self._delegate, name)
+
+    proxy = ProfilerProxy(profiler)
+
+    reuse = build_correlation_matrix(None, table_name="demo", profiler=proxy)
+
+    pd.testing.assert_frame_equal(direct, reuse)
+
+
+def test_build_correlation_matrix__reprofiles_when_profiler_invalid(multi_numeric_frame):
+    expected = build_correlation_matrix(multi_numeric_frame, table_name="fallback")
+
+    fallback = build_correlation_matrix(
+        multi_numeric_frame,
+        table_name="fallback",
+        profiler=object(),
+    )
+
+    pd.testing.assert_frame_equal(expected, fallback)

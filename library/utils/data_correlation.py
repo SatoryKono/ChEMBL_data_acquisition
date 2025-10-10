@@ -6,11 +6,13 @@ from collections.abc import Sequence
 
 import pandas as pd
 
+from ..common.log import logger
 from ..table_quality import TableQualityProfiler as _LegacyTableQualityProfiler
 from .qc_report import (
     TableQualityProfilerLike,
     _TABLE_PROFILER_TYPES,
     _build_reports_from_profiler,
+    _is_table_profiler_instance,
     _prepare_filtered_frame,
     _validate_table_name,
 )
@@ -43,11 +45,19 @@ def build_correlation_matrix(
     """Return the numeric correlation matrix for ``frame`` without file output."""
 
     _validate_table_name(table_name)
+
+    profiler_instance: TableQualityProfilerLike | None = None
     if profiler is not None:
-        if not isinstance(profiler, _TABLE_PROFILER_TYPES):
-            raise TypeError("profiler must be a TableQualityProfiler instance")
-        _, numeric_candidates = _build_reports_from_profiler(profiler)
-    else:
+        if _is_table_profiler_instance(profiler):
+            profiler_instance = profiler
+        else:
+            logger.warning(
+                "table_quality_profiler_invalid",
+                table_name=table_name,
+                profiler_type=type(profiler).__name__,
+            )
+
+    if profiler_instance is None:
         if frame is None:
             raise ValueError("frame is required when profiler is not provided")
         filtered = _prepare_filtered_frame(
@@ -58,10 +68,10 @@ def build_correlation_matrix(
             exclude_columns=exclude_columns,
         )
 
-        profiler = TableQualityProfiler()
-        profiler.consume(filtered)
+        profiler_instance = TableQualityProfiler()
+        profiler_instance.consume(filtered)
 
-        _, numeric_candidates = _build_reports_from_profiler(profiler)
+    _, numeric_candidates = _build_reports_from_profiler(profiler_instance)
     if not numeric_candidates:
         return pd.DataFrame()
 
