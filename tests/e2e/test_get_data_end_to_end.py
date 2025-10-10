@@ -200,57 +200,6 @@ def _failing_target_transform(
     raise RuntimeError("target_forced_failure")
 
 
-def _make_report_writer(step_count: int) -> Callable[[Path], None]:
-    def _writer(working_output: Path) -> None:
-        base_dir = working_output.parent.parent
-        reports_dir = base_dir / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        run_id = get_data._LOGGER._cfg.run_id or "unknown"
-        timestamp = dt.datetime.now(UTC).isoformat()
-        payload = {
-            "meta": {
-                "repo": "SatoryKono/ChEMBL_data_acquisition",
-                "commit": "0000000",
-                "branch": "test",
-                "ts_utc": timestamp,
-                "run_id": run_id,
-                "python": "3.11",
-                "pytest": "7.0",
-                "duration_sec": 0.0,
-            },
-            "summary": {
-                "total": step_count,
-                "passed": step_count,
-                "failed": 0,
-                "skipped": 0,
-                "xfailed": 0,
-                "xpassed": 0,
-                "error": 0,
-                "success_rate": 1.0,
-            },
-            "tests": [],
-        }
-        (reports_dir / "test_report.json").write_text(
-            json.dumps(payload, indent=2), encoding="utf-8"
-        )
-        summary_md = (
-            "# Test Summary\n\n"
-            "- Repo: `SatoryKono/ChEMBL_data_acquisition`\n"
-            "- Commit: 0000000\n"
-            "- Branch: test\n"
-            f"- Timestamp (UTC): {timestamp}\n"
-            "- Duration: 0.0 s\n"
-            "- Success rate: 100.00%\n\n"
-            "| total | passed | failed | skipped | xfailed | xpassed | error |\n"
-            "|------:|-------:|-------:|--------:|--------:|--------:|------:|\n"
-            f"|{step_count:6d}|{step_count:7d}|{0:7d}|{0:8d}|{0:8d}|{0:8d}|{0:6d}|\n"
-            "\n## Failed / Error details\n"
-        )
-        (reports_dir / "test_summary.md").write_text(summary_md, encoding="utf-8")
-
-    return _writer
-
-
 @pytest.mark.e2e
 def test_get_data_end_to_end__miniature_pipeline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -292,6 +241,56 @@ def test_get_data_end_to_end__miniature_pipeline(
         )
 
     monkeypatch.setattr(get_data, "configure_logger", _configure_logger_stub)
+
+    def _make_report_writer(step_count: int) -> Callable[[Path], None]:
+        def _writer(working_output: Path) -> None:
+            base_dir = working_output.parent.parent
+            reports_dir = base_dir / "reports"
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            run_id = observed_run_ids[-1] if observed_run_ids else "unknown"
+            timestamp = "2020-01-01T00:00:00+00:00"
+            payload = {
+                "meta": {
+                    "repo": "SatoryKono/ChEMBL_data_acquisition",
+                    "commit": "0000000",
+                    "branch": "test",
+                    "ts_utc": timestamp,
+                    "run_id": run_id,
+                    "python": "3.11",
+                    "pytest": "7.0",
+                    "duration_sec": 0.0,
+                },
+                "summary": {
+                    "total": step_count,
+                    "passed": step_count,
+                    "failed": 0,
+                    "skipped": 0,
+                    "xfailed": 0,
+                    "xpassed": 0,
+                    "error": 0,
+                    "success_rate": 1.0,
+                },
+                "tests": [],
+            }
+            (reports_dir / "test_report.json").write_text(
+                json.dumps(payload, indent=2), encoding="utf-8"
+            )
+            summary_md = (
+                "# Test Summary\n\n"
+                "- Repo: `SatoryKono/ChEMBL_data_acquisition`\n"
+                "- Commit: 0000000\n"
+                "- Branch: test\n"
+                f"- Timestamp (UTC): {timestamp}\n"
+                "- Duration: 0.0 s\n"
+                "- Success rate: 100.00%\n\n"
+                "| total | passed | failed | skipped | xfailed | xpassed | error |\n"
+                "|------:|-------:|-------:|--------:|--------:|--------:|------:|\n"
+                f"|{step_count:6d}|{step_count:7d}|{0:7d}|{0:8d}|{0:8d}|{0:8d}|{0:6d}|\n"
+                "\n## Failed / Error details\n"
+            )
+            (reports_dir / "test_summary.md").write_text(summary_md, encoding="utf-8")
+
+        return _writer
 
     report_writer = _make_report_writer(5)
     stub_steps = (

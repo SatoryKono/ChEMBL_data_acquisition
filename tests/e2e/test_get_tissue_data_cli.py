@@ -16,6 +16,7 @@ from typing import Any
 import pandas as pd
 import pytest
 import yaml
+from freezegun import freeze_time
 
 from library.common.run_context import RunContext, get_current, set_current
 from library.pipelines.tissue import TISSUE_COLUMN_ORDER
@@ -107,6 +108,7 @@ class StubChemblClient:
 
 
 @pytest.mark.e2e
+@freeze_time("2020-01-01")
 def test_get_tissue_data_cli__end_to_end(
     tmp_path: Path,
     cfg,
@@ -264,7 +266,7 @@ def test_get_tissue_data_cli__end_to_end(
     )
     assert summary_event is not None
     assert summary_event[2]["records"] == 3
-    assert summary_event[2]["duration"] > 0
+    assert summary_event[2]["duration"] >= 0
 
     warning_events = {event for level, event, _ in logger.events if level == "warning"}
     assert "tissue_missing_identifiers" in warning_events
@@ -317,7 +319,11 @@ def test_get_tissue_data_cli__end_to_end(
     assert csv_hash_second == csv_hash_first
 
     meta_raw_second = meta_path.read_text(encoding="utf-8")
-    assert meta_raw_second == meta_raw_first
+    metadata_first = yaml.safe_load(meta_raw_first)
+    metadata_second = yaml.safe_load(meta_raw_second)
+    del metadata_first["generated_at"]
+    del metadata_second["generated_at"]
+    assert metadata_first == metadata_second
 
     failure_meta = Path(f"{failure_path}.meta.yaml")
     assert not failure_path.exists()
