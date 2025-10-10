@@ -509,13 +509,10 @@ def _build_names_table(frame: pd.DataFrame) -> pd.DataFrame:
         helpers.normalise_text
     )
     if "uniprot_id_primary" in working.columns:
-        working["uniprot_id_primary"] = working["uniprot_id_primary"].map(
-            helpers.normalise_text
-        )
+        uniprot_ids = working["uniprot_id_primary"].map(helpers.normalise_text)
     else:
-        working["uniprot_id_primary"] = pd.Series(
-            "", index=working.index, dtype="string"
-        )
+        uniprot_ids = pd.Series("", index=working.index, dtype="string")
+    working["uniprot_id_primary"] = uniprot_ids
 
     working = working[working["target_chembl_id"] != ""].copy()
     if working.empty:
