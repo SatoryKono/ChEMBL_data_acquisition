@@ -48,6 +48,7 @@ from library.config import (
     Config,
     ConfigError,
     ConfigLoaderError,
+    ensure_dirs,
     load_config,
     print_config,
 )
@@ -681,9 +682,6 @@ def _prepare_config(
         raise FileNotFoundError(f"input directory not found: {input_dir}")
     if not config_path.exists():
         raise FileNotFoundError(f"configuration file not found: {config_path}")
-    if not dry_run:
-        output_dir.mkdir(parents=True, exist_ok=True)
-
     return PipelineRunConfig(
         base_path=base_path,
         input_dir=input_dir,
@@ -1570,6 +1568,13 @@ def run_pipeline(
         base_config = load_config(cfg.config_path, base_path=cfg.base_path)
     except (ConfigError, ConfigLoaderError, ValidationError) as exc:
         _LOGGER.error("config_load_failed", error=str(exc), exc_info=exc)
+        _LOGGER.info("pipeline_done", stage="pipeline", exit_code=1)
+        return 1
+    try:
+        if not cfg.dry_run:
+            ensure_dirs(base_config)
+    except (FileNotFoundError, NotADirectoryError, OSError) as exc:
+        _LOGGER.error("config_directory_error", error=str(exc), exc_info=exc)
         _LOGGER.info("pipeline_done", stage="pipeline", exit_code=1)
         return 1
     overall_status = 0
