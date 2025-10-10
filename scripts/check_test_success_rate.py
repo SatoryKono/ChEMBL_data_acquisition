@@ -52,12 +52,18 @@ def _extract_success_rate(summary: dict[str, Any]) -> float:
             rate = rate / 100.0
         if 0.0 <= rate <= 1.0:
             return rate
-    total = summary.get("total")
-    passed = summary.get("passed")
-    skipped = summary.get("skipped", 0)
-    xfailed = summary.get("xfailed", 0)
+    total_raw = summary.get("total")
+    passed_raw = summary.get("passed")
+    skipped_raw = summary.get("skipped", 0)
+    xfailed_raw = summary.get("xfailed", 0)
 
-    field_names = {"total": total, "passed": passed, "skipped": skipped, "xfailed": xfailed}
+    field_names = {
+        "total": total_raw,
+        "passed": passed_raw,
+        "skipped": skipped_raw,
+        "xfailed": xfailed_raw,
+    }
+    validated: dict[str, int] = {}
     for name, value in field_names.items():
         if not isinstance(value, int):
             raise ReportValidationError(
@@ -67,6 +73,12 @@ def _extract_success_rate(summary: dict[str, Any]) -> float:
             raise ReportValidationError(
                 f"Summary field '{name}' must be non-negative"
             )
+        validated[name] = value
+
+    total = validated["total"]
+    passed = validated["passed"]
+    skipped = validated["skipped"]
+    xfailed = validated["xfailed"]
 
     denominator = max(1, total - skipped)
     numerator = passed + xfailed

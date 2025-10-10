@@ -3,15 +3,6 @@
 
 from __future__ import annotations
 
-# ruff: noqa: E402  # bootstrap alters import order for script compatibility
-if __package__ in {None, ""}:
-    from _bootstrap import bootstrap_cli, ensure_project_root
-else:  # pragma: no cover - executed when imported as a package module
-    from ._bootstrap import bootstrap_cli, ensure_project_root
-
-bootstrap_cli(__package__, __file__)
-del bootstrap_cli
-
 import argparse
 import csv
 import hashlib
@@ -21,6 +12,22 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+# ruff: noqa: E402  # bootstrap alters import order for script compatibility
+if TYPE_CHECKING:
+    from . import _bootstrap as _bootstrap_module
+elif __package__ in {None, ""}:
+    import _bootstrap as _bootstrap_module  # pragma: no cover - CLI fallback
+else:  # pragma: no cover - executed when imported as a package module
+    from . import _bootstrap as _bootstrap_module
+
+bootstrap_cli = _bootstrap_module.bootstrap_cli
+ensure_project_root = _bootstrap_module.ensure_project_root
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+del _bootstrap_module
 
 
 def _hash_file(path: Path) -> str:

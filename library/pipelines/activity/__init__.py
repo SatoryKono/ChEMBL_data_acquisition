@@ -8,6 +8,7 @@ from pathlib import Path
 from library.config import Config
 from library.pipelines.activity.runner import (
     ActivityCommandOptions,
+    MAX_ACTIVITY_CHUNK_SIZE,
     run_activity_pipeline,
 )
 from library.pipelines.common import PipelineRunResult
@@ -119,6 +120,7 @@ __all__ = [
     "annotate_action_properties",
     "build_activity_properties",
     "get_activities",
+    "MAX_ACTIVITY_CHUNK_SIZE",
     "infer_action_type",
     "run_pipeline",
 ]
