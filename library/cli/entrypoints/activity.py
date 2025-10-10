@@ -704,6 +704,39 @@ def _string_blank_mask(series: pd.Series[Any]) -> pd.Series[bool]:
     return values.isna() | stripped.fillna("").eq("")
 
 
+def _normalise_lookup_series(series: pd.Series[Any]) -> pd.Series[str]:
+    """Coerce heterogeneous lookup values to trimmed string dtype."""
+
+    def _coerce(value: Any) -> Any:
+        if pd.isna(value):
+            return pd.NA
+
+        if isinstance(value, str):
+            result = value.strip()
+        elif isinstance(value, bytes):
+            result = value.decode("utf-8", errors="ignore").strip()
+        elif isinstance(value, numbers.Integral) and not isinstance(value, bool):
+            result = str(int(value))
+        elif isinstance(value, numbers.Real):
+            float_value = float(value)
+            if math.isnan(float_value):
+                return pd.NA
+            if float_value.is_integer():
+                result = str(int(float_value))
+            else:
+                result = format(float_value, "g")
+        else:
+            result = str(value).strip()
+
+        if not result:
+            return pd.NA
+
+        return result
+
+    normalised = series.map(_coerce)
+    return normalised.astype("string")
+
+
 def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
     """Return mapping of assay identifiers to ``src_assay_id`` values."""
 
@@ -711,12 +744,13 @@ def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
         return {}
 
     candidate = Path(dictionary_dir) / "_assay" / "assay.csv"
+    read_kwargs: dict[str, Any] = {"low_memory": False}
     try:
-        frame = pd.read_csv(candidate, encoding="utf-8")
+        frame = pd.read_csv(candidate, encoding="utf-8", **read_kwargs)
     except UnicodeDecodeError:
         for encoding in ("utf-8-sig", "cp1252", "latin-1"):
             try:
-                frame = pd.read_csv(candidate, encoding=encoding)
+                frame = pd.read_csv(candidate, encoding=encoding, **read_kwargs)
                 break
             except UnicodeDecodeError:
                 continue
@@ -765,24 +799,12 @@ def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
     if cleaned.empty:
         return {}
 
-    try:
-        cleaned = cleaned.astype(
-            {"assay_chembl_id": "string", "src_assay_id": "string"}, copy=False
-        )
-    except (TypeError, ValueError):
-        cleaned = cleaned.assign(
-            assay_chembl_id=cleaned["assay_chembl_id"].astype("string"),
-            src_assay_id=cleaned["src_assay_id"].astype("string"),
-        )
-
     cleaned = cleaned.assign(
-        assay_chembl_id=cleaned["assay_chembl_id"].str.strip(),
-        src_assay_id=cleaned["src_assay_id"].str.strip(),
+        assay_chembl_id=_normalise_lookup_series(cleaned["assay_chembl_id"]),
+        src_assay_id=_normalise_lookup_series(cleaned["src_assay_id"]),
     )
 
-    cleaned = cleaned[
-        cleaned["assay_chembl_id"].ne("") & cleaned["src_assay_id"].ne("")
-    ]
+    cleaned = cleaned.dropna(subset=["assay_chembl_id", "src_assay_id"])
     if cleaned.empty:
         return {}
 
