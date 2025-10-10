@@ -169,6 +169,38 @@ def test_add_pubchem_data__skips_polymers_when_disallowed(
 
 
 @pytest.mark.integration
+def test_merge_pubchem_properties__preserves_existing_values_on_skip(cfg) -> None:
+    pubchem_cfg = cfg.pubchem
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1"],
+            "pubchem_cid": ["CID1"],
+            "pubchem_iupac_name": ["Existing"],
+            "pubchem_canonical_smiles": ["SMILES"],
+            "pubchem_isomeric_smiles": ["ISMILES"],
+            "pubchem_inchi": ["InChI"],
+            "pubchem_inchikey": ["InChIKey"],
+            "pubchem_molecular_formula": ["C2H4O2"],
+        }
+    )
+
+    skip_mask = pd.Series([True], index=frame.index, dtype="bool")
+    prefer_local_mask = pd.Series([False], index=frame.index, dtype="bool")
+
+    merged = pubchem._merge_pubchem_properties(
+        frame,
+        frame["pubchem_cid"].astype("string"),
+        set(),
+        cfg=pubchem_cfg,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
+    )
+
+    for column in pubchem.PUBCHEM_COLUMNS:
+        assert merged.loc[0, column] == frame.loc[0, column]
+
+
+@pytest.mark.integration
 def test_augment_pubchem__initialises_session_and_reuses_cache(
     tmp_path: Path, cfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:
