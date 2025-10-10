@@ -169,10 +169,12 @@ def test_ensure_date_prefix__env_override(
     base_path = tmp_path / "workspace"
     base_path.mkdir()
     monkeypatch.setenv("CHEMBL_DA_DEFAULT_DATE_PREFIX", "19981231")
-    args = get_data._parse_args([
-        "--base-path",
-        str(base_path),
-    ])
+    args = get_data._parse_args(
+        [
+            "--base-path",
+            str(base_path),
+        ]
+    )
     resolved = base_path.resolve()
     prefix = get_data._ensure_date_prefix(args, base_path=resolved)
     assert prefix == "19981231"
@@ -188,12 +190,14 @@ def test_ensure_date_prefix__missing_config_fallback(
     missing_config = base_path / "absent.yaml"
     monkeypatch.delenv("CHEMBL_DA_DEFAULT_DATE_PREFIX", raising=False)
     monkeypatch.delenv("CHEMBL_DA_DEFAULT_DATE", raising=False)
-    args = get_data._parse_args([
-        "--base-path",
-        str(base_path),
-        "--config",
-        str(missing_config),
-    ])
+    args = get_data._parse_args(
+        [
+            "--base-path",
+            str(base_path),
+            "--config",
+            str(missing_config),
+        ]
+    )
     resolved = base_path.resolve()
     prefix = get_data._ensure_date_prefix(args, base_path=resolved)
     assert prefix == get_data._DEFAULT_DATE_PREFIX
@@ -207,10 +211,12 @@ def test_ensure_date_prefix__invalid_env(
     base_path = tmp_path / "workspace"
     base_path.mkdir()
     monkeypatch.setenv("CHEMBL_DA_DEFAULT_DATE", "invalid")
-    args = get_data._parse_args([
-        "--base-path",
-        str(base_path),
-    ])
+    args = get_data._parse_args(
+        [
+            "--base-path",
+            str(base_path),
+        ]
+    )
     with pytest.raises(ValueError):
         get_data._ensure_date_prefix(args, base_path=base_path.resolve())
 

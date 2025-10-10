@@ -250,7 +250,7 @@ def _normalize_env_errors(
 
 
 def _apply_env_overrides(
-    data: dict[str, Any]
+    data: dict[str, Any],
 ) -> tuple[dict[tuple[str, ...], str], list[str]]:
     prefix = "CHEMBL_DA"
     overrides: dict[tuple[str, ...], str] = {}

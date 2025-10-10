@@ -13,17 +13,13 @@ from __future__ import annotations
 import os
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-<<<<<<< HEAD
-from collections.abc import Mapping
-from typing import Iterable, Sequence, TypeGuard
-=======
->>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
+from typing import TypeGuard
 from xml.etree import ElementTree
 
 import numpy as np
 import pandas as pd
-from pandas.errors import ParserError
 from pandas._typing import Scalar
+from pandas.errors import ParserError
 
 from library.common.csv_utils import write_csv_deterministic
 
@@ -194,7 +190,7 @@ def _normalise_separator_candidates(separators: Sequence[str] | None) -> list[st
 
 
 def _dtype_for_read(
-    schema: Mapping[str, str] | None
+    schema: Mapping[str, str] | None,
 ) -> dict[str, str | pd.api.extensions.ExtensionDtype]:
     if not schema:
         return {}

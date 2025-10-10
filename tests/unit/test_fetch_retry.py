@@ -8,7 +8,6 @@ from library.config import RetryCfg
 
 def test_compute_backoff_delay__deterministic_with_cached_jitter() -> None:
     retry_cfg = RetryCfg(backoff_factor=1.25, backoff_cap=None, jitter_seed=7)
-<<<<<<< HEAD
     jitter = retry_cfg.build_jitter()
     assert jitter is not None
     delays_first = [
@@ -22,15 +21,6 @@ def test_compute_backoff_delay__deterministic_with_cached_jitter() -> None:
     delays_second = [
         compute_backoff_delay(attempt, retry_cfg_same_seed, jitter=jitter_same_seed)
         for attempt in range(1, 5)
-=======
-    delays_first = [
-        compute_backoff_delay(attempt, retry_cfg) for attempt in range(1, 5)
-    ]
-
-    retry_cfg_same_seed = RetryCfg(backoff_factor=1.25, backoff_cap=None, jitter_seed=7)
-    delays_second = [
-        compute_backoff_delay(attempt, retry_cfg_same_seed) for attempt in range(1, 5)
->>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
     ]
 
     assert delays_first == delays_second
@@ -43,12 +33,15 @@ def test_compute_backoff_delay__jitter_sequence_restarts_with_same_seed() -> Non
 
     attempts = range(1, 5)
     first_run = [
-        compute_backoff_delay(attempt, retry_cfg, jitter=jitter)
-        for attempt in attempts
+        compute_backoff_delay(attempt, retry_cfg, jitter=jitter) for attempt in attempts
     ]
 
-    base_delays = [retry_cfg.backoff_factor * (2 ** (attempt - 1)) for attempt in attempts]
-    jitter_offsets = [value - base for value, base in zip(first_run, base_delays, strict=True)]
+    base_delays = [
+        retry_cfg.backoff_factor * (2 ** (attempt - 1)) for attempt in attempts
+    ]
+    jitter_offsets = [
+        value - base for value, base in zip(first_run, base_delays, strict=True)
+    ]
 
     assert jitter_offsets[0] != pytest.approx(jitter_offsets[1])
 
@@ -64,13 +57,7 @@ def test_compute_backoff_delay__jitter_sequence_restarts_with_same_seed() -> Non
 
 def test_compute_backoff_delay__adds_jitter_before_cap() -> None:
     retry_cfg = RetryCfg(backoff_factor=2.0, backoff_cap=3.5, jitter_seed=11)
-<<<<<<< HEAD
     jitter = retry_cfg.build_jitter()
-=======
-    jitter = RetryCfg(
-        backoff_factor=2.0, backoff_cap=3.5, jitter_seed=11
-    ).build_jitter()
->>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
     assert jitter is not None
     jitter_expected = retry_cfg.build_jitter()
     assert jitter_expected is not None
@@ -82,7 +69,9 @@ def test_compute_backoff_delay__adds_jitter_before_cap() -> None:
         retry_cfg.backoff_cap,
     )
 
-    assert compute_backoff_delay(attempt, retry_cfg, jitter=jitter) == pytest.approx(expected)
+    assert compute_backoff_delay(attempt, retry_cfg, jitter=jitter) == pytest.approx(
+        expected
+    )
 
 
 def test_chunk_failure_tracker_stats__returns_fresh_mapping_when_empty() -> None:

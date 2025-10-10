@@ -193,7 +193,9 @@ def _activities_transform(frame: pd.DataFrame, logger: get_data.Logger) -> pd.Da
     ]
 
 
-def _failing_target_transform(frame: pd.DataFrame, logger: get_data.Logger) -> pd.DataFrame:
+def _failing_target_transform(
+    frame: pd.DataFrame, logger: get_data.Logger
+) -> pd.DataFrame:
     _ = frame, logger
     raise RuntimeError("target_forced_failure")
 
@@ -569,7 +571,9 @@ def test_get_data_end_to_end__miniature_pipeline(
     degraded_exit_code, degraded_logs, degraded_run_id = _invoke(degraded_argv)
     assert degraded_exit_code == 1
     assert degraded_run_id not in {first_run_id, verbose_run_id, new_run_id}
-    degraded_events = {record.get("event"): record for record in degraded_logs if "event" in record}
+    degraded_events = {
+        record.get("event"): record for record in degraded_logs if "event" in record
+    }
     assert "document_schema_invalid" in degraded_events
     assert degraded_events["document_schema_invalid"].get("level") == "ERROR"
     assert "workflow_failed" in degraded_events
@@ -611,7 +615,9 @@ def test_get_data_end_to_end__miniature_pipeline(
         new_run_id,
         degraded_run_id,
     }
-    partial_events = {record.get("event"): record for record in partial_logs if "event" in record}
+    partial_events = {
+        record.get("event"): record for record in partial_logs if "event" in record
+    }
     assert "step_exception" in partial_events
     assert (partial_output / f"output.documents_{date_prefix}.csv").exists()
     activity_sentinel = partial_output / f"output.activities_{date_prefix}.csv.failed"
@@ -650,7 +656,9 @@ def test_get_data_end_to_end__miniature_pipeline(
         degraded_run_id,
         partial_run_id,
     }
-    missing_events = {record.get("event"): record for record in missing_logs if "event" in record}
+    missing_events = {
+        record.get("event"): record for record in missing_logs if "event" in record
+    }
     assert missing_events.get("step_input_missing") is not None
     missing_target = missing_output / f"output.targets_{date_prefix}.csv"
     assert not missing_target.exists()
@@ -794,7 +802,10 @@ def test_get_data_end_to_end__blocked_steps_after_failure(
         assert blocked_entry["reason"] == "dependency_failed"
         assert blocked_entry["exit_code"] is None
 
-        final_output = output_dir / f"output.{get_data.DEFAULT_OUTPUT_STEMS[blocked_name]}_{date_prefix}.csv"
+        final_output = (
+            output_dir
+            / f"output.{get_data.DEFAULT_OUTPUT_STEMS[blocked_name]}_{date_prefix}.csv"
+        )
         assert not final_output.exists()
 
     target_sentinel = (
@@ -802,7 +813,11 @@ def test_get_data_end_to_end__blocked_steps_after_failure(
         / f"output.{get_data.DEFAULT_OUTPUT_STEMS['target']}_{date_prefix}.csv.failed"
     )
     assert target_sentinel.exists()
-_ASSAY_DICTIONARY_PATH = Path(__file__).resolve().parents[1] / "data" / "assay_dictionary.csv"
+
+
+_ASSAY_DICTIONARY_PATH = (
+    Path(__file__).resolve().parents[1] / "data" / "assay_dictionary.csv"
+)
 
 
 @lru_cache(maxsize=1)

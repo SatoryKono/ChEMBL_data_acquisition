@@ -742,9 +742,7 @@ class IoCfg(_BoolModel):
                     "default_date_prefix must match YYYYMMDD (eight digits)"
                 )
             return stripped
-        raise TypeError(
-            "default_date_prefix must be provided as a string or null"
-        )
+        raise TypeError("default_date_prefix must be provided as a string or null")
 
 
 class LogCfg(_BaseModel):
