@@ -12,15 +12,25 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-from .common.csv_utils import (
-    sha256_file,
-    write_csv_chunks_deterministic,
-    write_csv_deterministic,
-)
-from .common.logging_setup import Logger, LoggerConfig, configure_logger
-from .common.timing import log_duration
-from .config import Config, load_config
-from .parser_schema import CSVExportArgs
+try:
+    from .common.csv_utils import (
+        sha256_file,
+        write_csv_chunks_deterministic,
+        write_csv_deterministic,
+    )
+    from .common.logging_setup import Logger, LoggerConfig, configure_logger
+    from .common.timing import log_duration
+    from .config import Config, load_config
+    from .parser_schema import CSVExportArgs
+except ModuleNotFoundError as exc:  # pragma: no cover - import guard
+    missing = exc.name or "dependency"
+    raise ModuleNotFoundError(
+        "library package requires additional dependencies. "
+        f"Missing module: '{missing}'. Install project requirements, e.g.\n"
+        "  pip install -r requirements.txt\n"
+        "  # or\n"
+        "  pip install -e .[dev]"
+    ) from exc
 
 _LAZY_SUBMODULES = {
     "io",
