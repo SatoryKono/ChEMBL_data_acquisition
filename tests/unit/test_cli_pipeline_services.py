@@ -11,6 +11,7 @@ from library.pipelines.document import (
     DocumentPipelineOptions,
     run_pipeline as run_document_pipeline,
 )
+from library.pipelines.document import service as document_service
 from library.pipelines.document.service import DocumentPipeline
 from library.pipelines.target import TargetPipelineOptions, run_pipeline as run_target_pipeline
 from scripts import get_assay_data, get_document_data, get_target_data
@@ -49,6 +50,8 @@ def test_run_document_service__invokes_mode_handler(
 
     monkeypatch.setattr(get_document_data, "run_chembl", _fake_run)
     monkeypatch.setitem(get_document_data.MODE_HANDLERS, "chembl", _fake_run)
+
+    monkeypatch.setattr(document_service, "_MODE_HANDLERS_CACHE", None)
 
     result = get_document_data.run_document_service(cfg, options)
 
@@ -93,6 +96,8 @@ def test_run_document_service__skip_existing(
     monkeypatch.setattr(get_document_data, "run_chembl", _fail)
     monkeypatch.setitem(get_document_data.MODE_HANDLERS, "chembl", _fail)
 
+    monkeypatch.setattr(document_service, "_MODE_HANDLERS_CACHE", None)
+
     result = get_document_data.run_document_service(cfg, options)
 
     assert result.exit_code == 0
@@ -118,7 +123,8 @@ def test_document_pipeline_run__delegates_to_service(
         assert opts is options
         return sentinel
 
-    monkeypatch.setattr(get_document_data, "run_document_service", _fake_service)
+    monkeypatch.setattr(document_service, "_MODE_HANDLERS_CACHE", None)
+    monkeypatch.setattr(document_service, "run_document_service", _fake_service)
 
     result = run_document_pipeline(cfg, options)
     assert result is sentinel
