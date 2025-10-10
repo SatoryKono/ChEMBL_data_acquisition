@@ -295,6 +295,13 @@ def build_report_payload(
         "output_postprocessed": output_postprocessed,
         "metrics": metrics.to_dict(),
     }
+
+    # ``output_path`` previously exposed the same value as ``output_postprocessed``
+    # in consumer-facing reports. Keep emitting it for backwards compatibility so
+    # existing readers do not fail with ``KeyError`` while downstream tooling is
+    # updated to the new field name.
+    if output_postprocessed is not None:
+        payload["output_path"] = output_postprocessed
     if extras:
         payload["extras"] = dict(extras)
     return payload
