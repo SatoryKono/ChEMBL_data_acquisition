@@ -143,3 +143,44 @@ def test_run_pipeline__retains_written_flag_on_skip(tmp_path: Path) -> None:
 
     assert result.executed is False
     assert result.written is False
+
+
+@pytest.mark.unit
+def test_run_pipeline__passes_mode_to_cli(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+
+    module = ModuleType("scripts.get_document_data")
+
+    def _runner(cfg: object, args: SimpleNamespace) -> int:
+        captured["cfg"] = cfg
+        captured["args"] = args
+        return 0
+
+    module.run_all = _runner
+    module.run_chembl = _runner
+    module.run_pubmed = _runner
+    package = ModuleType("scripts")
+    package.__path__ = []  # type: ignore[attr-defined]
+    package.get_document_data = module
+    monkeypatch.setitem(sys.modules, "scripts", package)
+    monkeypatch.setitem(sys.modules, "scripts.get_document_data", module)
+
+    cfg = _DummyConfig()
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("molecule_chembl_id,name,smiles\n", encoding="utf-8")
+    options = DocumentPipelineOptions(
+        input_csv=input_csv,
+        output_csv=tmp_path / "output.csv",
+        mode="chembl",
+    )
+
+    result = run_pipeline(cfg, options)
+
+    assert result.exit_code == 0
+    assert captured
+    args = captured["args"]
+    assert isinstance(args, SimpleNamespace)
+    assert args.mode == "chembl"
+    assert args.command == "chembl"
