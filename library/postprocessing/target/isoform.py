@@ -19,6 +19,7 @@ from typing import Any
 import pandas as pd
 
 from ..helpers import normalise_export_basename
+from .main import _DEFAULT_EXPORT_STAMP, _derive_export_stamp, _should_force_canonical
 
 
 def _empty_like(index: pd.Index) -> pd.Series:
@@ -557,13 +558,37 @@ def _resolve_input_path(input_csv: str | Path | None) -> Path:
     return max(matches, key=lambda path: (path.stat().st_mtime, path.name))
 
 
-def _resolve_output_path(input_path: Path, output_csv: str | None) -> Path:
+def _resolve_output_path(
+    input_path: Path,
+    output_csv: str | None,
+    *,
+    frame: pd.DataFrame | None = None,
+) -> Path:
     if output_csv is not None:
         output_path = Path(output_csv)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         return output_path
 
     base_name = normalise_export_basename(input_path)
+    if frame is not None and _should_force_canonical(base_name):
+        if input_path.suffix.lower() != ".csv" and _matches_expected_input_name(
+            input_path.name
+        ):
+            warnings.warn(
+                (
+                    f"Input file '{input_path.name}' does not use the canonical"
+                    " '.csv' extension"
+                    f" ({_supported_patterns_text()}); attempting to proceed "
+                    "because an explicit path was provided."
+                ),
+                UserWarning,
+                stacklevel=2,
+            )
+        stamp = _derive_export_stamp(frame)
+        if not stamp:
+            match = re.search(r"(\d{8})", base_name)
+            stamp = match.group(1) if match else _DEFAULT_EXPORT_STAMP
+        base_name = f"output.target_{stamp}.csv"
     return input_path.with_name(f"isoform.{base_name}")
 
 
@@ -581,8 +606,6 @@ def process_targets(
 
     input_path = _resolve_input_path(input_csv)
 
-    output_path = _resolve_output_path(input_path, output_csv)
-
     frame, encoding_used = _read_csv(input_path, encodings=_DEFAULT_ENCODINGS)
     if verbose:
         print(f"[isoform] read {input_path} using encoding {encoding_used}")
@@ -599,6 +622,7 @@ def process_targets(
     for column in _OUTPUT_COLUMNS:
         prepared[column] = prepared[column].map(_stringify_for_csv)
 
+    output_path = _resolve_output_path(input_path, output_csv, frame=frame)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     prepared.to_csv(
         output_path,
