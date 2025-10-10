@@ -7,6 +7,7 @@ import inspect
 import os
 import sys
 import tempfile
+from importlib import import_module
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from importlib import import_module
 from itertools import chain, islice

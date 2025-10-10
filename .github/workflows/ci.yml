@@ -84,6 +84,8 @@ jobs:
           fi
       - name: Determinism smoke test
         run: python scripts/check_determinism.py --limit 5
+      - name: Deterministic CSV writers
+        run: python -m library.utils.cli_tools.check_determinism --log-level INFO
       - name: Smoke test get_data orchestrator
         run: pytest -k "get_data_main_smoke"
       - name: Smoke CLI entry points
