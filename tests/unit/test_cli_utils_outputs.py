@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pickle
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -32,6 +33,19 @@ def test_run_pipeline_result__exposes_attributes() -> None:
     assert result.exit_code == 0
     assert result.dataset_path == dataset
     assert result.artifacts is None
+
+
+@pytest.mark.unit
+def test_run_pipeline_result__pickle_roundtrip(tmp_path: Path) -> None:
+    dataset = tmp_path / "dataset.csv"
+    result = RunPipelineResult(1, dataset, None)
+
+    restored = pickle.loads(pickle.dumps(result))
+
+    assert isinstance(restored, RunPipelineResult)
+    assert int(restored) == 1
+    assert restored.dataset_path == dataset
+    assert restored.artifacts is None
 
 
 @pytest.mark.unit

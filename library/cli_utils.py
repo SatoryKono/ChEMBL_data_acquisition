@@ -171,10 +171,19 @@ class PipelineMetrics:
         return stats
 
 
+@dataclass(slots=True, frozen=True)
+class _RunPipelineState:
+    """Internal immutable container describing a pipeline execution."""
+
+    exit_code: int
+    dataset_path: Path | None
+    artifacts: StandardOutputArtifacts | None
+
+
 class RunPipelineResult(int):
     """Return value exposing the exit code alongside output artefact paths."""
 
-    _STATE: dict[int, tuple[int, Path | None, StandardOutputArtifacts | None]] = {}
+    _STATE: dict[int, _RunPipelineState] = {}
 
     def __new__(
         cls,
@@ -183,23 +192,22 @@ class RunPipelineResult(int):
         artifacts: StandardOutputArtifacts | None = None,
     ) -> "RunPipelineResult":
         obj = int.__new__(cls, exit_code)
-        cls._STATE[id(obj)] = (exit_code, dataset_path, artifacts)
+        cls._STATE[id(obj)] = _RunPipelineState(exit_code, dataset_path, artifacts)
         return obj
 
     @classmethod
-    def _lookup_state(
-        cls, instance: "RunPipelineResult"
-    ) -> tuple[int, Path | None, StandardOutputArtifacts | None]:
-        return cls._STATE.get(id(instance), (int(instance), None, None))
+    def _lookup_state(cls, instance: "RunPipelineResult") -> _RunPipelineState:
+        state = cls._STATE.get(id(instance))
+        if state is None:
+            return _RunPipelineState(int(instance), None, None)
+        return state
 
     def __del__(self) -> None:  # pragma: no cover - best effort cleanup
         self._STATE.pop(id(self), None)
 
     def __reduce__(self) -> tuple[type, tuple[int, Path | None, StandardOutputArtifacts | None]]:
-        return (
-            self.__class__,
-            self._lookup_state(self),
-        )
+        state = self._lookup_state(self)
+        return (self.__class__, (state.exit_code, state.dataset_path, state.artifacts))
 
     @property
     def exit_code(self) -> int:
@@ -212,19 +220,19 @@ class RunPipelineResult(int):
         level registry avoids that limitation while retaining the legacy API.
         """
 
-        return self._lookup_state(self)[0]
+        return self._lookup_state(self).exit_code
 
     @property
     def dataset_path(self) -> Path | None:
         """Return the resolved dataset path if available."""
 
-        return self._lookup_state(self)[1]
+        return self._lookup_state(self).dataset_path
 
     @property
     def artifacts(self) -> StandardOutputArtifacts | None:
         """Return generated standard output artefacts when present."""
 
-        return self._lookup_state(self)[2]
+        return self._lookup_state(self).artifacts
 
     def __bool__(self) -> bool:  # pragma: no cover - bool(int) already tested elsewhere
         return bool(int(self))
