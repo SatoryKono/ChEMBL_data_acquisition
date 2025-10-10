@@ -1656,6 +1656,16 @@ def run_pipeline(
     for _ in execute_workflow(cfg, prepared_steps):
         pass
 
+    if failed_index is not None:
+        for pending_entry in manifest_entries[failed_index + 1 :]:
+            pending_entry.update(
+                {
+                    "status": "blocked",
+                    "executed": False,
+                    "reason": "dependency_failed",
+                }
+            )
+
     if failed_index is None and last_executed_index + 1 == len(effective_steps):
         _LOGGER.info("workflow_complete")
 
