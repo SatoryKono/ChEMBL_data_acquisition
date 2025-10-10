@@ -16,10 +16,12 @@ import argparse
 import errno
 import math
 import os
+import re
 import shutil
 import stat
 import sys
 import time
+from datetime import datetime, timezone
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -65,6 +67,7 @@ from library.pipelines.target import protein_classification as pc
 from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
 from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS, ModeDefaults
 from library.qa.reporting import build_table_quality_hook, is_quality_enabled
+from library.utils import build_correlation_matrix, build_qc_summary
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
 from library.validation import ValidationResult, validate_targets
@@ -342,6 +345,39 @@ def _is_supported_target_export(path: Path) -> bool:
         canonical=export_name,
     )
     return True
+
+
+_OUTPUT_FILENAME_PATTERN = re.compile(r"^output\.(?P<table>.+)_(?P<date>\d{8})$")
+_STEM_DATE_PATTERN = re.compile(r"^(?P<table>.+)_(?P<date>\d{8})$")
+
+
+def _resolve_output_metadata(
+    output: Path,
+    *,
+    date_hint: str | None = None,
+    table_hint: str | None = None,
+) -> tuple[str, str]:
+    """Return ``(table_name, date_tag)`` derived from ``output`` heuristics."""
+
+    candidates = [output.with_suffix("").name, output.stem]
+    for candidate in candidates:
+        match = _OUTPUT_FILENAME_PATTERN.match(candidate)
+        if match:
+            return match.group("table"), match.group("date")
+        match = _STEM_DATE_PATTERN.match(candidate)
+        if match:
+            table_value = match.group("table")
+            if table_value.startswith("output."):
+                table_value = table_value[len("output.") :]
+            return table_value, match.group("date")
+
+    sanitized_table = (table_hint or output.stem or "targets").strip() or "targets"
+    normalized_table = sanitized_table.replace(" ", "_")
+    if date_hint and re.fullmatch(r"\d{8}", date_hint):
+        resolved_date = date_hint
+    else:
+        resolved_date = datetime.now(timezone.utc).strftime("%Y%m%d")
+    return normalized_table, resolved_date
 
 
 def run_target_postprocess_if_requested(
@@ -1295,7 +1331,8 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             type=path_argument,
             default=raw_default,
             help=(
-                "Location for the raw combined dataset prior to final " "normalisation"
+                "Location for the raw combined dataset prior to final normalisation"
+                " (requires --emit-legacy-artifacts)"
             ),
         )
         parser_obj.add_argument(
@@ -1303,7 +1340,10 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             dest="raw_format",
             choices=("csv", "parquet"),
             default=raw_format_default,
-            help="Format used when writing the raw dataset (default: csv)",
+            help=(
+                "Format used when writing the raw dataset (default: csv). "
+                "Requires --emit-legacy-artifacts"
+            ),
         )
         parser_obj.add_argument(
             "--id-cols",
@@ -1806,6 +1846,8 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
     export_path: Path | None = None
     resolved_export_path: Path | None = None
 
+    emit_legacy = bool(getattr(args, "emit_legacy_artifacts", False))
+
     try:
         df = pd.read_csv(
             args.input_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
@@ -1906,14 +1948,21 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         inputs = {"input_csv": str(args.input_csv)}
         if cfg.target.uniprot.data_dir:
             inputs["data_dir"] = str(cfg.target.uniprot.data_dir)
-        write_meta_yaml(
-            csv_path=csv_path,
-            command=" ".join(sys.argv),
-            config_subset=_serialize_paths(cfg.to_dict()),
-            inputs=inputs,
-            stats=stats,
-            schema="UniProtExport",
-        )
+        if emit_legacy:
+            write_meta_yaml(
+                csv_path=csv_path,
+                command=" ".join(sys.argv),
+                config_subset=_serialize_paths(cfg.to_dict()),
+                inputs=inputs,
+                stats=stats,
+                schema="UniProtExport",
+            )
+        else:
+            logger.info(
+                "legacy_metadata_skipped",
+                path=str(csv_path),
+                reason="emit_legacy_artifacts_disabled",
+            )
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error(
             "uniprot_processing_failed",
@@ -3445,6 +3494,9 @@ def validate_and_write(
     raw_format: str = "csv",
     reindex_raw: bool = True,
     postprocess_context: IsoformPostprocessContext | None = None,
+    table_name: str | None = None,
+    date_tag: str | None = None,
+    emit_legacy_artifacts: bool = False,
 ) -> int:
     """Normalise, validate and export the target table.
 
@@ -3453,9 +3505,18 @@ def validate_and_write(
     df : pandas.DataFrame
         DataFrame produced by :func:`merge_results`.
     output : pathlib.Path
-        Destination CSV path.
+        Desired destination path used as a naming hint for the standard
+        artefacts persisted via :func:`library.io.save_standard_outputs`.
     cfg : Config
         Application configuration providing schema definitions and IO settings.
+    table_name : str, optional
+        Explicit table identifier overriding the value inferred from
+        ``output`` when generating filenames for the canonical artefacts.
+    date_tag : str, optional
+        Eight-digit UTC date tag used for deterministic artefact naming.
+    emit_legacy_artifacts : bool, optional
+        When ``True`` the legacy side outputs (raw exports, metadata sidecars)
+        are produced alongside the standard CSV bundle.
 
     Returns
     -------
@@ -3464,12 +3525,29 @@ def validate_and_write(
         failures when generating table-quality reports.
     """
 
-    logger.info("validate_write_start", output=str(output))
+    output_path = Path(output)
+    inferred_table_name, inferred_date_tag = _resolve_output_metadata(
+        output_path,
+        date_hint=date_tag,
+        table_hint=table_name,
+    )
+    io_cfg = cfg.io
+    if hasattr(io_cfg, "model_copy"):
+        output_io_cfg = io_cfg.model_copy(update={"output_dir": output_path.parent})
+    elif hasattr(io_cfg, "copy"):
+        output_io_cfg = io_cfg.copy(update={"output_dir": output_path.parent})  # type: ignore[arg-type]
+    else:  # pragma: no cover - defensive fallback
+        output_io_cfg = replace(io_cfg, output_dir=output_path.parent)
+    expected_dataset_path = (
+        Path(output_io_cfg.output_dir)
+        / f"output.{inferred_table_name}_{inferred_date_tag}.csv"
+    )
+    logger.info("validate_write_start", output=str(expected_dataset_path))
 
     key_columns = list(id_cols) if id_cols else ["target_chembl_id"]
     input_rows = len(df)
 
-    if raw_out is not None:
+    if emit_legacy_artifacts and raw_out is not None:
         raw_format_value = (raw_format or "csv").lower()
         raw_frame = df.copy()
         raw_order: Sequence[str] | None = TARGETS_COLUMN_ORDER if reindex_raw else None
@@ -3492,6 +3570,12 @@ def validate_and_write(
                 key_cols=key_columns or None,
                 col_order=raw_order,
             )
+    elif raw_out is not None:
+        logger.info(
+            "legacy_raw_export_skipped",
+            path=str(raw_out),
+            reason="emit_legacy_artifacts_disabled",
+        )
 
     normalized = normalize_targets(df)
     normalized_rows = len(normalized)
@@ -3542,7 +3626,9 @@ def validate_and_write(
         try:
             validation = validate_targets(final_df, return_result=True)
         except SchemaErrors as exc:
-            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+            failure_path = expected_dataset_path.with_name(
+                f"{expected_dataset_path.stem}_failure_cases.csv"
+            )
             errors = SidecarErrors()
             for row in exc.failure_cases.to_dict("records"):
                 errors.add_error(row)
@@ -3574,7 +3660,9 @@ def validate_and_write(
             final_df = validation.data
             failure_cases = validation.failure_cases.copy()
             if not failure_cases.empty:
-                failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+                failure_path = expected_dataset_path.with_name(
+                    f"{expected_dataset_path.stem}_failure_cases.csv"
+                )
                 errors = SidecarErrors()
                 for row in failure_cases.to_dict("records"):
                     errors.add_error(row)
@@ -3630,15 +3718,38 @@ def validate_and_write(
     before_dedup = len(final_df)
     final_df = final_df.drop_duplicates()
     logger.info("deduplicated_rows", dropped=before_dedup - len(final_df))
-    final_csv_path = io.write_csv(
-        final_df,
-        output,
-        cfg=cfg,
-        sep=cfg.io.csv_sep,
-        encoding=cfg.io.csv_encoding,
-        col_order=TARGETS_COLUMN_ORDER,
-        key_cols=key_columns or None,
+    export_columns = [col for col in TARGETS_COLUMN_ORDER if col in final_df.columns]
+    export_columns.extend(
+        column for column in final_df.columns if column not in export_columns
     )
+    final_df = final_df.loc[:, export_columns]
+    if key_columns:
+        sortable_keys = [col for col in key_columns if col in final_df.columns]
+        if sortable_keys:
+            final_df = final_df.sort_values(by=sortable_keys).reset_index(drop=True)
+    quality_summary = build_qc_summary(
+        final_df,
+        table_name=inferred_table_name,
+    )
+    correlation_matrix = build_correlation_matrix(
+        final_df,
+        table_name=inferred_table_name,
+    )
+    artifacts = io.save_standard_outputs(
+        final_df,
+        quality_summary,
+        correlation_matrix,
+        table_name=inferred_table_name,
+        date_tag=inferred_date_tag,
+        cfg=output_io_cfg,
+    )
+    logger.info(
+        "standard_outputs_written",
+        dataset=str(artifacts.dataset),
+        quality=str(artifacts.quality_report),
+        correlation=str(artifacts.correlation_report),
+    )
+    final_csv_path = artifacts.dataset
     ambiguous_count = 0
     if "protein_class_pred_rule_id" in final_df.columns:
         ambiguous_count = int(
@@ -3680,14 +3791,14 @@ def validate_and_write(
         logger.info(
             "quality_report_skipped",
             reason="empty_dataframe",
-            table=str(output.with_suffix("")),
+            table=str(final_csv_path.with_suffix("")),
         )
     else:
         doc_quality_cfg = cfg.system.doc_quality
         table_quality = build_table_quality_hook(
             doc_quality_cfg,
-            table_name=output.with_suffix(""),
-            destination=output.parent,
+            table_name=final_csv_path.with_suffix(""),
+            destination=final_csv_path.parent,
         )
         try:
             table_quality(final_df)
@@ -3695,7 +3806,7 @@ def validate_and_write(
             logger.exception(
                 "quality_report_failed",
                 error=str(exc),
-                path=str(output),
+                path=str(final_csv_path),
                 exc=exc,
             )
             return 1
@@ -3709,9 +3820,11 @@ def validate_and_write(
     )
     payload: dict[str, object] = {
         "rows": len(final_df),
-        "output_postprocessed": str(output),
+        "output_postprocessed": str(final_csv_path),
         "pipeline_version": pipeline_version_value,
     }
+    payload["quality_report"] = str(artifacts.quality_report)
+    payload["correlation_report"] = str(artifacts.correlation_report)
     if metrics is not None:
         summary = metrics.summary()
         if summary.get("rows") is not None:
@@ -3775,8 +3888,9 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         else:
             final_output = Path(final_candidate)
 
+        emit_legacy = bool(getattr(args, "emit_legacy_artifacts", False))
         raw_candidate = getattr(args, "raw_out", None)
-        if raw_candidate in (None, argparse.SUPPRESS):
+        if not emit_legacy or raw_candidate in (None, argparse.SUPPRESS):
             raw_output: Path | None = None
         else:
             raw_output = Path(raw_candidate)
@@ -3800,6 +3914,15 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         else:
             key_columns = list(id_cols_value) or ["target_chembl_id"]
 
+        table_hint = getattr(args, "_auto_output_stem", None)
+        raw_date_hint = getattr(args, "date", None)
+        date_hint = raw_date_hint.strip() if isinstance(raw_date_hint, str) else None
+        resolved_table_name, resolved_date_tag = _resolve_output_metadata(
+            final_output,
+            date_hint=date_hint,
+            table_hint=table_hint,
+        )
+
         chembl_df = fetch_chembl(
             cfg,
             args.input_csv,
@@ -3821,6 +3944,9 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             raw_format=raw_format,
             reindex_raw=reindex_raw,
             postprocess_context=IsoformPostprocessContext(args=args),
+            table_name=resolved_table_name,
+            date_tag=resolved_date_tag,
+            emit_legacy_artifacts=emit_legacy,
         )
         return exit_code
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
