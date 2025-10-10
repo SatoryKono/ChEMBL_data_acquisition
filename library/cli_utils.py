@@ -174,8 +174,6 @@ class PipelineMetrics:
 class RunPipelineResult(int):
     """Return value exposing the exit code alongside output artefact paths."""
 
-    __slots__ = ("dataset_path", "artifacts")
-
     dataset_path: Path | None
     artifacts: StandardOutputArtifacts | None
 
