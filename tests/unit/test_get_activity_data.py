@@ -831,22 +831,57 @@ def test_run_chembl__import_failure_falls_back_to_pipeline(monkeypatch):
 
     calls: dict[str, object] = {}
 
-    def fake_pipeline(*args, **kwargs):
-        calls["args"] = args
-        calls["kwargs"] = kwargs
+    def fake_pipeline(cfg, options, *, runner, emit_completion_message):
+        calls["cfg"] = cfg
+        calls["options"] = options
+        calls["runner"] = runner
+        calls["emit"] = emit_completion_message
         return "fallback"
+
+    def fake_runner(cfg, namespace):
+        calls["runner_args"] = (cfg, namespace)
+        return 42
+
+    def fake_emit(*args, **kwargs):
+        calls["emit_args"] = (args, kwargs)
 
     def _raise_import_error():
         raise ModuleNotFoundError("No module named 'library.cli.entrypoints.activity'")
 
     monkeypatch.setattr(module, "run_activity_pipeline", fake_pipeline)
+    monkeypatch.setattr(
+        module,
+        "resolve_activity_pipeline_hooks",
+        lambda: (fake_runner, fake_emit),
+    )
     monkeypatch.setattr(module, "_load_activity_entrypoint", _raise_import_error)
 
-    result = module.run_chembl("cfg", option=True)
+    namespace = argparse.Namespace(
+        input_csv="input.csv",
+        output_csv="output.csv",
+        final_out="output.csv",
+        limit=None,
+        offset=5,
+        timeout=None,
+        batch_size=None,
+        workers=None,
+        dry_run=True,
+        skip_existing=False,
+        force=True,
+        invocation=("run",),
+    )
+
+    result = module.run_chembl("cfg", namespace)
 
     assert result == "fallback"
-    assert calls["args"] == ("cfg",)
-    assert calls["kwargs"] == {"option": True}
+    assert calls["cfg"] == "cfg"
+    assert calls["runner"] is fake_runner
+    assert calls["emit"] is fake_emit
+    options = calls["options"]
+    assert options.input_csv == "input.csv"
+    assert options.offset == 5
+    assert options.dry_run is True
+    assert options.force is True
 
 
 @pytest.mark.unit
