@@ -29,15 +29,15 @@ import os
 import shutil
 import time
 from collections import deque
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, ItemsView, KeysView, Mapping, Sequence, ValuesView
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from fnmatch import fnmatch
 from heapq import heappop, heappush
 from pathlib import Path
-from typing import IO, Any, Optional
+from typing import IO, Any, Generic, Iterator, Optional, TypeVar
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from library.cli.logging import setup_cli_logging
 from library.cli_utils import resolve_invocation
@@ -128,18 +128,86 @@ from library.reporting.run_manifest import load_output_report, merge_run_output
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
 
+
+StepValueT = TypeVar("StepValueT")
+
+
+class _PipelineMapping(BaseModel, Mapping[str, StepValueT], Generic[StepValueT]):
+    """Immutable mapping of pipeline step names to typed values."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    entries: dict[str, StepValueT]
+
+    def __getitem__(self, key: str) -> StepValueT:
+        return self.entries[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.entries)
+
+    def __len__(self) -> int:
+        return len(self.entries)
+
+    def __contains__(self, key: object) -> bool:
+        return key in self.entries
+
+    def get(self, key: str, default: StepValueT | None = None) -> StepValueT | None:
+        return self.entries.get(key, default)
+
+    def items(self) -> ItemsView[str, StepValueT]:
+        return self.entries.items()
+
+    def keys(self) -> KeysView[str]:
+        return self.entries.keys()
+
+    def values(self) -> ValuesView[StepValueT]:
+        return self.entries.values()
+
+    def to_dict(self) -> dict[str, StepValueT]:
+        """Return a shallow copy of the underlying mapping."""
+
+        return dict(self.entries)
+
+    @classmethod
+    def from_mapping(
+        cls, mapping: Mapping[str, StepValueT] | "_PipelineMapping[StepValueT]"
+    ) -> "_PipelineMapping[StepValueT]":
+        if isinstance(mapping, cls):
+            return mapping
+        return cls(entries=dict(mapping))
+
+
+class PipelineInputFiles(_PipelineMapping[str]):
+    """Mapping of pipeline step names to their expected input filenames."""
+
+
+class PipelineOutputStems(_PipelineMapping[str]):
+    """Mapping of pipeline step names to the stem used for output artefacts."""
+
+
+class PipelineSubcommands(_PipelineMapping[str | None]):
+    """Mapping of pipeline step names to optional CLI sub-commands."""
+
+    def get(self, key: str, default: str | None = None) -> str | None:  # type: ignore[override]
+        return super().get(key, default)
+
+
 DEFAULT_PIPELINE_STEPS: tuple[PipelineStep, ...] = load_pipeline_registry()
-DEFAULT_INPUT_FILES: Mapping[str, str] = {
-    step.name: step.input_filename for step in DEFAULT_PIPELINE_STEPS
-}
-DEFAULT_OUTPUT_STEMS: Mapping[str, str] = {
-    step.name: step.output_stem for step in DEFAULT_PIPELINE_STEPS
-}
+DEFAULT_INPUT_FILES: PipelineInputFiles = PipelineInputFiles.from_mapping(
+    {step.name: step.input_filename for step in DEFAULT_PIPELINE_STEPS}
+)
+DEFAULT_OUTPUT_STEMS: PipelineOutputStems = PipelineOutputStems.from_mapping(
+    {step.name: step.output_stem for step in DEFAULT_PIPELINE_STEPS}
+)
+DEFAULT_SUBCOMMANDS: PipelineSubcommands = PipelineSubcommands.from_mapping(
+    {step.name: step.subcommand for step in DEFAULT_PIPELINE_STEPS}
+)
 
 # Backwards compatibility for existing callers/tests that patch the legacy names.
 _PIPELINE_STEPS = DEFAULT_PIPELINE_STEPS
 _DEFAULT_INPUT_FILES = DEFAULT_INPUT_FILES
 _DEFAULT_OUTPUT_STEMS = DEFAULT_OUTPUT_STEMS
+_DEFAULT_SUBCOMMANDS = DEFAULT_SUBCOMMANDS
 
 
 @dataclass(frozen=True)
@@ -188,12 +256,15 @@ _DEFAULT_DATE_PREFIX = "19700101"
 _RUN_ID_ENV = "CHEMBL_DA_RUN_ID"
 
 
+PipelineOptionsT = TypeVar("PipelineOptionsT")
+
+
 @dataclass(frozen=True)
-class PipelineApi:
+class PipelineApi(Generic[PipelineOptionsT]):
     """Describe how to build options and execute a pipeline programmatically."""
 
-    build_options: Callable[[PipelineRunConfig, Path, Path], object]
-    runner: Callable[[Config, object], PipelineRunResult]
+    build_options: Callable[["PipelineRunConfig", Path, Path], PipelineOptionsT]
+    runner: Callable[[Config, PipelineOptionsT], PipelineRunResult]
 
 
 def _build_document_options(
@@ -261,7 +332,7 @@ def _build_activity_options(
     )
 
 
-_PIPELINE_APIS: Mapping[str, PipelineApi] = {
+_PIPELINE_APIS: Mapping[str, PipelineApi[Any]] = {
     "document": PipelineApi(_build_document_options, run_document_pipeline),
     "target": PipelineApi(_build_target_options, run_target_pipeline),
     "assay": PipelineApi(_build_assay_options, run_assay_pipeline),
@@ -285,9 +356,9 @@ class PipelineRunConfig:
     skip_existing: bool
     dry_run: bool
     rerun_postprocess: bool
-    input_files: Mapping[str, str]
-    output_stems: Mapping[str, str]
-    subcommands: Mapping[str, str | None]
+    input_files: PipelineInputFiles
+    output_stems: PipelineOutputStems
+    subcommands: PipelineSubcommands
 
     def input_path(self, name: str) -> Path:
         """Return the fully resolved path for ``name`` in the input directory."""
@@ -306,6 +377,17 @@ class PipelineRunConfig:
         """Return the configured subcommand for ``name`` if available."""
 
         return self.subcommands.get(name)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "input_files", PipelineInputFiles.from_mapping(self.input_files)
+        )
+        object.__setattr__(
+            self, "output_stems", PipelineOutputStems.from_mapping(self.output_stems)
+        )
+        object.__setattr__(
+            self, "subcommands", PipelineSubcommands.from_mapping(self.subcommands)
+        )
 
 
 def _resolve_path(base: Path, candidate: Path) -> Path:
