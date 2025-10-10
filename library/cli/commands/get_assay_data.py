@@ -38,7 +38,8 @@ from library.common.log import logger
 from library.config import Config, _serialize_paths
 from library.integration import chembl_library as cl
 from library.orchestration import ETLContext
-from library.pipelines.assay import AssayPipelineOptions, postprocessing as ap
+from library.pipelines.assay import AssayPipelineOptions
+from library.pipelines.assay import postprocessing as ap
 from library.pipelines.assay.chembl_assay import ASSAY_COLUMNS, MAX_ASSAY_CHUNK_SIZE
 from library.pipelines.common import (
     ChunkedFetchConfig,
