@@ -51,9 +51,9 @@ from .cli.pipeline_definition import (
 __all__ = [
     "PipelineError",
     "MetadataHook",
-    "TableQualityHook",
     "Validator",
     "Writer",
+    "TableQualityHook",
     "resolve_invocation",
     "run_cli_command",
     "run_pipeline",
