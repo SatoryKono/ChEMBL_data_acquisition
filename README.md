@@ -123,6 +123,17 @@ before opening a pull request. When sharing results, commit the code changes and
 attach the generated reports to the PR so reviewers can audit the exact pass
 rate without reproducing the run locally.
 
+### Required CI commands
+
+The continuous-integration pipeline executes the following commands on every
+push and pull request. Local changes must keep them green and deterministic:
+
+1. `python scripts/run_tests.py` — orchestrates the pytest suite and emits both
+   JSON/Markdown reports, failing if the success rate drops below **95 %**.
+2. `ruff check` — validates code style, import order and static analysis rules.
+3. `mypy --strict library` — runs strict type checking across the production
+   modules inside `library/`.
+
 ### Logging contract
 
 All CLI entry points initialise structured logging via the shared bootstrap

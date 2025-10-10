@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from types import SimpleNamespace
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 
@@ -149,3 +150,34 @@ def test_apply_config_overrides__uses_default_config_when_none(monkeypatch):
         == str(parser_module.DEFAULT_CONFIG_PATH)
         for event, payload in spy.events
     )
+
+
+@pytest.mark.unit
+def test_create_logger_config__default_run_id_unique(monkeypatch):
+    """Ensure default run IDs remain unique across invocations."""
+
+    uuid_values = iter(
+        [
+            UUID("00000000-0000-0000-0000-000000000001"),
+            UUID("00000000-0000-0000-0000-000000000002"),
+        ]
+    )
+
+    monkeypatch.setattr(parser_module.uuid, "uuid4", lambda: next(uuid_values))
+
+    first = parser_module.create_logger_config("info")
+    second = parser_module.create_logger_config("info")
+
+    assert first.run_id != second.run_id
+    # Both identifiers should remain parseable as UUIDs for compatibility.
+    UUID(first.run_id)
+    UUID(second.run_id)
+
+
+@pytest.mark.unit
+def test_create_logger_config__explicit_run_id_retained():
+    """User-specified identifiers must bypass the default generation."""
+
+    cfg = parser_module.create_logger_config("info", run_id="custom-id")
+
+    assert cfg.run_id == "custom-id"

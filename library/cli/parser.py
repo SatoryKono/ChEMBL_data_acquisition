@@ -29,12 +29,10 @@ require_python_version()
 def _default_run_id(level: str) -> str:
     """Return a unique run identifier for ``level``."""
 
-    # ``level`` is currently unused but retained in the signature so that
-    # callers may request a run identifier that depends on the log level in the
-    # future without modifying the public API. The default should remain
-    # unpredictable so concurrent CLI runs stay distinguishable when a custom
-    # ``run_id`` is not supplied.
-    _ = level
+    # Accept ``level`` for API compatibility but rely on randomness so that
+    # each invocation yields a distinct identifier unless callers specify a
+    # deterministic ``run_id`` explicitly (e.g. in tests).
+    _ = level  # unused: kept to avoid breaking the call signature
     return uuid.uuid4().hex
 
 
