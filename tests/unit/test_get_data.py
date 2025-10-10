@@ -746,6 +746,108 @@ def test_run_pipeline__handles_step_exception(
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("skip_existing", "dry_run"),
+    [
+        (False, False),
+        (True, False),
+        (False, True),
+        (True, True),
+    ],
+)
+def test_run_step__forwards_skip_and_dry_run_options(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    skip_existing: bool,
+    dry_run: bool,
+) -> None:
+    cfg = replace(
+        _make_config(tmp_path),
+        skip_existing=skip_existing,
+        dry_run=dry_run,
+    )
+    input_path = cfg.input_path("activity")
+    input_path.write_text("activity_id\nA1\n", encoding="utf-8")
+    final_output = cfg.output_path("activity")
+    if final_output.exists():
+        final_output.unlink()
+    working_output = final_output.with_name(f"{final_output.name}.tmp")
+
+    captured_build_args: list[dict[str, object]] = []
+    captured_runner_options: list[dict[str, object]] = []
+
+    def _build_options(
+        run_cfg: get_data.PipelineRunConfig,
+        received_input: Path,
+        received_output: Path,
+    ) -> SimpleNamespace:
+        captured_build_args.append(
+            {
+                "skip_existing": run_cfg.skip_existing,
+                "dry_run": run_cfg.dry_run,
+                "input_path": received_input,
+                "output_path": received_output,
+            }
+        )
+        return SimpleNamespace(
+            input_csv=received_input,
+            output_csv=received_output,
+            skip_existing=run_cfg.skip_existing,
+            dry_run=run_cfg.dry_run,
+        )
+
+    def _runner(_: get_data.Config, options: SimpleNamespace) -> PipelineRunResult:
+        captured_runner_options.append(
+            {
+                "skip_existing": options.skip_existing,
+                "dry_run": options.dry_run,
+            }
+        )
+        destination = Path(options.output_csv)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text("activity_id\nA1\n", encoding="utf-8")
+        return PipelineRunResult(exit_code=0, output_path=destination, executed=True)
+
+    monkeypatch.setattr(
+        get_data,
+        "_PIPELINE_APIS",
+        {"activity": get_data.PipelineApi(_build_options, _runner)},
+        raising=False,
+    )
+
+    step = get_data.PipelineStep(
+        name="activity",
+        main=lambda _: 0,
+        input_filename="activity.csv",
+        output_stem="activities",
+    )
+
+    result = get_data._run_step(
+        step,
+        cfg,
+        SimpleNamespace(),
+        input_path,
+        final_output,
+        working_output,
+    )
+
+    assert result.exit_code == 0
+    assert result.executed is True
+    assert len(captured_build_args) == 1
+    assert len(captured_runner_options) == 1
+    build_call = captured_build_args[0]
+    runner_call = captured_runner_options[0]
+    assert build_call["skip_existing"] is skip_existing
+    assert build_call["dry_run"] is dry_run
+    assert build_call["input_path"] == input_path
+    assert build_call["output_path"] == working_output
+    assert runner_call == {
+        "skip_existing": skip_existing,
+        "dry_run": dry_run,
+    }
+
+
+@pytest.mark.unit
 def test_run_pipeline__dry_run_manifest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
