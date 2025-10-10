@@ -65,9 +65,17 @@ pre-commit install
 
 The repository ships a curated [`pre-commit`](https://pre-commit.com/)\
 configuration that formats code, lints YAML/TOML files and validates static
-metadata before every commit. After installing the development dependencies run
-`pre-commit install` (see the quick start steps above) to register the hooks with
-your local Git clone. To verify the checks manually without committing, execute:
+metadata before every commit. Install the tool once inside your virtual
+environment and register the hooks with your local Git clone:
+
+```bash
+pip install pre-commit
+pre-commit install --install-hooks
+```
+
+If you already executed the quick start commands (`pip install .[dev]`), the
+package is available and only the `pre-commit install --install-hooks` call is
+required. To verify the checks manually without committing, execute:
 
 ```bash
 pre-commit run --all-files

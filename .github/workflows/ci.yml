@@ -41,12 +41,12 @@ jobs:
           library/io/paths.py
       - name: Type check
         run: mypy --strict library
-      - name: Install pre-commit hooks
-        run: pre-commit install --install-hooks
       - name: Run pre-commit hooks
+        uses: pre-commit/action@v3.0.1
         env:
           SKIP: pytest
-        run: pre-commit run --all-files --show-diff-on-failure --color always
+        with:
+          extra_args: --all-files --show-diff-on-failure --color always
       - name: Run tests via scripts/run_tests.py
         id: run-tests
         continue-on-error: true
