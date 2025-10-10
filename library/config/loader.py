@@ -4,28 +4,37 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator, Mapping
+from collections.abc import Mapping as TypingMapping
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Mapping as TypingMapping
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, ValidationError
 
-from ..common.log import logger
+from config.paths import CONFIG_DIR as _CONFIG_DIR
+from config.paths import DEFAULT_CONFIG_PATH as _DEFAULT_CONFIG_PATH
 from library.resources.dictionaries import (
     DictionaryManifestError,
     list_resource_names,
-    list_resources,
 )
-from config.paths import CONFIG_DIR as _CONFIG_DIR
-from config.paths import DEFAULT_CONFIG_PATH as _DEFAULT_CONFIG_PATH
+
+from ..common.log import logger
+from .env import (
+    _apply_env_overrides,
+    _expand_config_placeholders,
+    _normalize_env_errors,
+    _resolve_placeholder_base_path,
+    _set_by_path,
+)
+from .models import (
+    _CONFIG_PATH_FIELDS,
+    Config,
+    ConfigError,
+    ConfigMetadata,
+    ConfigSource,
+)
 from .runtime import configure_rate_limiters
-from .env import _apply_env_overrides
-from .env import _expand_config_placeholders
-from .env import _normalize_env_errors
-from .env import _resolve_placeholder_base_path
-from .env import _set_by_path
-from .models import Config, ConfigError, ConfigMetadata, ConfigSource, _CONFIG_PATH_FIELDS
 
 __all__ = [
     "CONFIG_DIR",
@@ -140,7 +149,7 @@ def _absolutise_path_value(value: Any, base_dir: Path) -> Any:
 
     if value is None:
         return value
-    if isinstance(value, (str, os.PathLike)):
+    if isinstance(value, str | os.PathLike):
         candidate = os.fspath(value)
         if candidate in _dictionary_resource_names():
             return value
@@ -304,7 +313,15 @@ def _upgrade_legacy_config(data: dict[str, Any]) -> None:
         mapping_cfg = sources["uniprot"].setdefault("mapping", {})
         _merge_mapping(mapping_cfg, data.pop("uniprot_mapping"))
 
-    for section in ("activity", "assay", "cellline", "tissue", "testitem", "document", "target"):
+    for section in (
+        "activity",
+        "assay",
+        "cellline",
+        "tissue",
+        "testitem",
+        "document",
+        "target",
+    ):
         if section in data:
             pipelines.setdefault(section, {})
             _merge_mapping(pipelines[section], data.pop(section))

@@ -8,8 +8,6 @@ applications or tests.
 from __future__ import annotations
 
 import argparse
-import math
-import numbers
 import json
 import math
 import numbers
@@ -17,6 +15,7 @@ import os
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from functools import partial
 from itertools import islice
 from pathlib import Path
@@ -47,16 +46,18 @@ from library.cli import (
     build_parser as base_parser,
 )
 from library.cli.base import PipelineCLIBase
-from library.cli.logging import CLILoggingContext
 from library.cli.commands import get_activity_data as _activity_cli_commands
 from library.cli.commands.get_activity_data import (
     MIN_ACTIVITY_TIMEOUT,
     ActivityCommandOptions,
     run_activity_pipeline,
 )
+from library.cli.logging import CLILoggingContext
 from library.cli_utils import (  # noqa: E402
     PipelineError,
     resolve_invocation,
+)
+from library.cli_utils import (
     run_cli_command as _run_cli_command,
     # file_sha256 is not explicitly exported by library.cli_utils, so import directly if needed
 )
@@ -103,6 +104,7 @@ DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
 
+<<<<<<< HEAD
 # ---------------------------------------------------------------------------
 # Compatibility hooks
 # ---------------------------------------------------------------------------
@@ -129,6 +131,8 @@ def _current_date_token() -> str:
     """Return the YYYYMMDD date string derived from :data:`datetime`."""
 
     return _current_utc_datetime().strftime("%Y%m%d")
+=======
+>>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
     invocation = getattr(args, "invocation", None)
@@ -143,6 +147,7 @@ def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
             text = text.replace("\\", "/")
         result.append(text)
     return tuple(result)
+
 
 file_sha256 = _metadata_file_sha256
 write_meta_yaml = _cli_write_meta_yaml
@@ -159,7 +164,11 @@ __all__ = (
     "configure_logger",
     "run_cli_command",
     "datetime",
+<<<<<<< HEAD
     "clock",
+=======
+    "UTC",
+>>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
 )
 
 
@@ -171,7 +180,10 @@ def _ensure_command_logger_sync() -> None:
     except NameError:  # pragma: no cover - defensive guard for refactors
         commands_module = None
 
-    if commands_module is not None and getattr(commands_module, "logger", None) is not logger:
+    if (
+        commands_module is not None
+        and getattr(commands_module, "logger", None) is not logger
+    ):
         try:
             commands_module.logger = logger
         except Exception:  # pragma: no cover - defensive guard
@@ -182,7 +194,10 @@ def _ensure_command_logger_sync() -> None:
     except Exception:  # pragma: no cover - defensive guard for circular imports
         activity_runner = None
 
-    if activity_runner is not None and getattr(activity_runner, "logger", None) is not logger:
+    if (
+        activity_runner is not None
+        and getattr(activity_runner, "logger", None) is not logger
+    ):
         try:
             activity_runner.logger = logger
         except Exception:  # pragma: no cover - defensive guard
@@ -338,12 +353,13 @@ _OUTPUT_ACTIVITY_DROP_COLUMNS: tuple[str, ...] = (
 )
 
 
-
 def _coerce_series_dtype(series: pd.Series[Any], dtype: str) -> pd.Series[Any]:
     """Return ``series`` converted to ``dtype`` where feasible."""
 
     if dtype in {"Float64", "Int64", "boolean"}:
-        converted, _ = _coerce_extended_series(series, dtype, column="_coerce_series_dtype")
+        converted, _ = _coerce_extended_series(
+            series, dtype, column="_coerce_series_dtype"
+        )
         return cast("pd.Series[Any]", converted)
 
     if dtype == "string":
@@ -459,9 +475,8 @@ def _is_name_resolution_error(exc: Exception) -> bool:
 
     if isinstance(exc, requests.exceptions.RequestException):
         for candidate in _iter_exception_chain(exc):
-            if (
-                _Urllib3NameResolutionError is not None
-                and isinstance(candidate, _Urllib3NameResolutionError)
+            if _Urllib3NameResolutionError is not None and isinstance(
+                candidate, _Urllib3NameResolutionError
             ):
                 return True
             message = str(candidate).strip().lower()
@@ -482,7 +497,9 @@ def _is_name_resolution_error(exc: Exception) -> bool:
     return False
 
 
-def _describe_network_failure(cfg: Config, exc: Exception) -> tuple[str | None, str | None]:
+def _describe_network_failure(
+    cfg: Config, exc: Exception
+) -> tuple[str | None, str | None]:
     """Return a human readable hint and host when DNS failures are detected."""
 
     if not _is_name_resolution_error(exc):
@@ -495,6 +512,7 @@ def _describe_network_failure(cfg: Config, exc: Exception) -> tuple[str | None, 
         "or configure offline fixtures for testing environments."
     )
     return hint, host
+
 
 class _StreamingCSVStatistics:
     """Accumulate row and null counters while streaming CSV chunks."""
@@ -572,7 +590,7 @@ def _emit_completion_message(
             elif isinstance(value, numbers.Real):
                 converted = float(value)
                 metrics_payload[key] = None if math.isnan(converted) else converted
-            elif isinstance(value, (str, bool)) or value is None:
+            elif isinstance(value, str | bool) or value is None:
                 metrics_payload[key] = value
             else:
                 metrics_payload[key] = str(value)
@@ -581,8 +599,14 @@ def _emit_completion_message(
         logger.info("pipeline_skip_existing", output=str(output_path))
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
+<<<<<<< HEAD
             events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
         return
+=======
+            events_attr.append(
+                ("info", "pipeline_skip_existing", {"output": str(output_path)})
+            )
+>>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
 
     payload: dict[str, object] = {
         "output": str(output_path) if output_path is not None else None,
@@ -599,7 +623,10 @@ def _emit_completion_message(
 
     logger.info("activity_pipeline_completion", **payload)
 
-_EXTENDED_ACTIVITY_FALLBACKS: dict[str, Callable[[pd.DataFrame], pd.Series[Any] | None]] = {
+
+_EXTENDED_ACTIVITY_FALLBACKS: dict[
+    str, Callable[[pd.DataFrame], pd.Series[Any] | None]
+] = {
     "activity_chembl_id": lambda df: df.get("activity_id"),
     "compound_name": lambda df: df.get("molecule_pref_name"),
     "log_value": lambda df: df.get("pchembl_value"),
@@ -623,7 +650,9 @@ def _coerce_extended_series(
 
     if dtype == "Float64":
         numeric = pd.to_numeric(series, errors="coerce")
-        converted = pd.Series(pd.array(numeric.tolist(), dtype="Float64"), index=series.index)
+        converted = pd.Series(
+            pd.array(numeric.tolist(), dtype="Float64"), index=series.index
+        )
         failures = series.notna() & converted.isna()
         return converted, failures
 
@@ -633,7 +662,9 @@ def _coerce_extended_series(
         if non_integral_mask.any():
             numeric = numeric.mask(non_integral_mask)
         try:
-            converted = pd.Series(pd.array(numeric.tolist(), dtype="Int64"), index=series.index)
+            converted = pd.Series(
+                pd.array(numeric.tolist(), dtype="Int64"), index=series.index
+            )
         except (TypeError, ValueError):
             converted = pd.Series(pd.NA, index=series.index, dtype="Int64")
             failures = pd.Series(True, index=series.index)
@@ -661,7 +692,6 @@ def _coerce_extended_series(
     return converted, failures
 
 
- 
 def _string_like_missing(series: pd.Series[Any]) -> pd.Series[bool]:
     """Return a boolean mask for ``series`` treating blanks as missing."""
 
@@ -670,8 +700,8 @@ def _string_like_missing(series: pd.Series[Any]) -> pd.Series[bool]:
         string_values = series.astype("string")
         mask = mask | string_values.str.strip().fillna("").eq("")
     return mask
- 
- 
+
+
 def _string_blank_mask(series: pd.Series[Any]) -> pd.Series[bool]:
     """Return mask of entries that are null or contain only whitespace."""
 
@@ -734,14 +764,17 @@ def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
         src_assay_id=cleaned["src_assay_id"].str.strip(),
     )
 
-    cleaned = cleaned[cleaned["assay_chembl_id"].ne("") & cleaned["src_assay_id"].ne("")]
+    cleaned = cleaned[
+        cleaned["assay_chembl_id"].ne("") & cleaned["src_assay_id"].ne("")
+    ]
     if cleaned.empty:
         return {}
 
     return {
         str(assay_id): str(src_id)
-        for assay_id, src_id in cleaned[["assay_chembl_id", "src_assay_id"]]
-        .itertuples(index=False, name=None)
+        for assay_id, src_id in cleaned[["assay_chembl_id", "src_assay_id"]].itertuples(
+            index=False, name=None
+        )
     }
 
 
@@ -807,7 +840,9 @@ def _ensure_molecule_pref_name(
     if "molecule_pref_name" in result.columns:
         missing_mask = _string_blank_mask(result["molecule_pref_name"])
     else:
-        result["molecule_pref_name"] = pd.Series(pd.NA, index=result.index, dtype="string")
+        result["molecule_pref_name"] = pd.Series(
+            pd.NA, index=result.index, dtype="string"
+        )
         missing_mask = pd.Series(True, index=result.index, dtype="boolean")
 
     if not missing_mask.any():
@@ -871,7 +906,9 @@ def _ensure_molecule_pref_name(
                 chunk_failures.add_failure(tuple(pending), error_message)
             lookup = pd.DataFrame(columns=["molecule_chembl_id", "pref_name"])
         resolved: set[str] = set()
-        if not lookup.empty and {"molecule_chembl_id", "pref_name"}.issubset(lookup.columns):
+        if not lookup.empty and {"molecule_chembl_id", "pref_name"}.issubset(
+            lookup.columns
+        ):
             mapped = (
                 lookup[["molecule_chembl_id", "pref_name"]]
                 .dropna(subset=["molecule_chembl_id"])
@@ -921,7 +958,9 @@ def _ensure_molecule_pref_name(
                         )
                         break
 
-                wait_interval = remaining if remaining and remaining > 0 else poll_interval
+                wait_interval = (
+                    remaining if remaining and remaining > 0 else poll_interval
+                )
                 cache_condition.wait(timeout=wait_interval)
 
                 if deadline is not None and clock() >= deadline:
@@ -949,13 +988,11 @@ def _ensure_molecule_pref_name(
     replacements = molecule_ids.map(fill_map)
     available = replacements.notna()
     if available.any():
-        result.loc[molecule_ids.index[available], "molecule_pref_name"] = (
-            replacements[available].astype("string")
-        )
+        result.loc[molecule_ids.index[available], "molecule_pref_name"] = replacements[
+            available
+        ].astype("string")
 
     return result
- 
- 
 
 
 def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
@@ -1016,7 +1053,9 @@ def _ensure_extended_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
                                 rows=int(failure_subset.sum()),
                                 mode="existing",
                             )
-                        result.loc[missing_mask, column] = coerced_fallback.loc[missing_mask]
+                        result.loc[missing_mask, column] = coerced_fallback.loc[
+                            missing_mask
+                        ]
             continue
         if fallback is not None:
             candidate = fallback(result)
@@ -1060,13 +1099,16 @@ def _filter_activity_output_columns(
 
     if column_order is None:
         allowed_head: list[str] = [
-            column for column in filtered.columns if column not in _OUTPUT_ACTIVITY_DROP_COLUMNS
+            column
+            for column in filtered.columns
+            if column not in _OUTPUT_ACTIVITY_DROP_COLUMNS
         ]
     else:
         allowed_head = [
             column
             for column in column_order
-            if column in filtered.columns and column not in _OUTPUT_ACTIVITY_DROP_COLUMNS
+            if column in filtered.columns
+            and column not in _OUTPUT_ACTIVITY_DROP_COLUMNS
         ]
 
     extras = [column for column in filtered.columns if column not in allowed_head]
@@ -1123,7 +1165,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             args.final_out = output_path
             args.output_csv = output_path
     else:
-        output_path = Path(str(final_out_attr)) if not isinstance(final_out_attr, str | Path) else Path(final_out_attr)
+        output_path = (
+            Path(str(final_out_attr))
+            if not isinstance(final_out_attr, str | Path)
+            else Path(final_out_attr)
+        )
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
         args.output_csv = output_path
@@ -1187,10 +1233,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     _args_invocation(args)
 
     failure_path = output_path.with_name(f"{output_path.stem}_failure_cases.csv")
-    fetch_failure_path = output_path.with_name(
-        f"{output_path.stem}_fetch_failures.csv"
-    )
-
+    fetch_failure_path = output_path.with_name(f"{output_path.stem}_fetch_failures.csv")
 
     def _compute_bounds(frame: pd.DataFrame) -> pd.DataFrame:
         return compute_activity_bounds(frame, cfg.activity_bounds)
@@ -1219,7 +1262,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             dtype_info = _ACTIVITY_REQUIRED_DTYPES.get(column)
             python_type = getattr(dtype_info, "python_type", None)
             dtype_text = str(dtype_info).lower() if dtype_info is not None else ""
-            if python_type in {float, int} or "float" in dtype_text or "int" in dtype_text:
+            if (
+                python_type in {float, int}
+                or "float" in dtype_text
+                or "int" in dtype_text
+            ):
                 fill_dtype = "Float64"
             elif python_type is str:
                 fill_dtype = "string"
@@ -1259,7 +1306,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     ) -> Path:
         sort_columns = list(key_cols) or sorted(col_order)
         column_order = list(col_order)
-        filtered_order = [column for column in column_order if column in available_columns]
+        filtered_order = [
+            column for column in column_order if column in available_columns
+        ]
 
         drop_candidates = [
             column
@@ -1273,7 +1322,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
 
         whitelist_order = [
-            column for column in filtered_order if column not in _OUTPUT_ACTIVITY_DROP_COLUMNS
+            column
+            for column in filtered_order
+            if column not in _OUTPUT_ACTIVITY_DROP_COLUMNS
         ]
 
         def _stream_filtered_chunks() -> Iterator[pd.DataFrame]:
@@ -1283,13 +1334,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     column_order=filtered_order,
                 )
                 head = [
-                    column for column in whitelist_order if column in filtered_chunk.columns
+                    column
+                    for column in whitelist_order
+                    if column in filtered_chunk.columns
                 ]
                 tail = sorted(
                     column for column in filtered_chunk.columns if column not in head
                 )
                 if head or tail:
-                    ordered_chunk = filtered_chunk.reindex(columns=head + tail, copy=False)
+                    ordered_chunk = filtered_chunk.reindex(
+                        columns=head + tail, copy=False
+                    )
                 else:
                     ordered_chunk = filtered_chunk
                 streaming_stats.update(ordered_chunk)
@@ -1326,8 +1381,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     "Fallback CSV writer stub raised an exception; deterministic export succeeded and execution will continue."
                 )
         return path_obj
-
-
 
     doc_quality_cfg = cfg.system.doc_quality
     table_quality = build_table_quality_hook(
@@ -1410,7 +1463,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                             if key in http_diagnostics:
                                 context[key] = http_diagnostics[key]
                         log_context = {
-                            key: value for key, value in context.items() if key != "chunk_ids"
+                            key: value
+                            for key, value in context.items()
+                            if key != "chunk_ids"
                         }
                         last_error_extra = {
                             "msg": error_message,
@@ -1499,7 +1554,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             writer=writer,
             kwargs={},
             ensure_destination=True,
-
         )
 
         pipeline_stats: dict[str, object] | None = None
@@ -1618,7 +1672,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         else:
             completion_rows = processed_ids
 
-        report_extras: dict[str, object] = {"rows": completion_rows, "processed": processed_ids}
+        report_extras: dict[str, object] = {
+            "rows": completion_rows,
+            "processed": processed_ids,
+        }
         if pipeline_stats is not None:
             report_extras.update(pipeline_stats)
         if summary_snapshot:
@@ -1662,7 +1719,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 pipeline_done_payload["postprocess_steps"] = summary["steps"]
             validation = getattr(postprocess_metrics, "validation", None)
             if validation is not None:
-                pipeline_done_payload["postprocess_schema"] = getattr(validation, "schema", None)
+                pipeline_done_payload["postprocess_schema"] = getattr(
+                    validation, "schema", None
+                )
             if report_path is not None:
                 pipeline_done_payload["postprocess_report"] = str(report_path)
 
@@ -1696,7 +1755,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if chunk_ids:
             details.append(f"chunk_ids={list(chunk_ids)}")
         if context_payload:
-            attempt_info = ", ".join(f"{key}={value}" for key, value in context_payload.items())
+            attempt_info = ", ".join(
+                f"{key}={value}" for key, value in context_payload.items()
+            )
             details.append(attempt_info)
         detail_text = "; ".join(details)
         logger.error(
@@ -1711,6 +1772,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
 
     return exit_code
+
 
 def _generate_activity_postprocess_metrics(
     cfg: Config,
@@ -1755,7 +1817,9 @@ def _coerce_cli_path(value: object) -> Path | str | None:
 
     if value in (None, argparse.SUPPRESS):
         return None
-    return cast(Path | str | None, value)  # ``run_activity_pipeline`` handles conversion to :class:`Path`.
+    return cast(
+        Path | str | None, value
+    )  # ``run_activity_pipeline`` handles conversion to :class:`Path`.
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
@@ -1784,14 +1848,18 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     force = getattr(args, "force", False)
 
     candidate_output = final_output_value or output_csv_value
-    output_path: Path | None = Path(candidate_output) if candidate_output is not None else None
+    output_path: Path | None = (
+        Path(candidate_output) if candidate_output is not None else None
+    )
     preexisting_output = output_path.exists() if output_path is not None else False
 
     if skip_existing and not force and preexisting_output and output_path is not None:
         logger.info("pipeline_skip_existing", output=str(output_path))
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
-            events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
+            events_attr.append(
+                ("info", "pipeline_skip_existing", {"output": str(output_path)})
+            )
         _emit_completion_message(
             output_path=output_path,
             processed_rows=None,
@@ -1826,7 +1894,9 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("pipeline_skip_existing", output=str(output_path))
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
-            events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
+            events_attr.append(
+                ("info", "pipeline_skip_existing", {"output": str(output_path)})
+            )
 
     return exit_code
 
@@ -1862,9 +1932,7 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--limit",
         type=int,
         default=None,
-        help=(
-            "Maximum number of identifiers to process; use 0 to skip processing"
-        ),
+        help=("Maximum number of identifiers to process; use 0 to skip processing"),
     )
     parser.add_argument(
         "--offset",
@@ -1990,8 +2058,12 @@ class ActivityPipelineCLI(PipelineCLIBase):
         alias_path = log_path.with_name(f"{legacy_name}{suffix}")
 
         try:
-            alias_path.write_text(log_path.read_text(encoding="utf-8"), encoding="utf-8")
-        except OSError as exc:  # pragma: no cover - filesystem failures are environment-specific
+            alias_path.write_text(
+                log_path.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+        except (
+            OSError
+        ) as exc:  # pragma: no cover - filesystem failures are environment-specific
             logger.warning(
                 "log_alias_write_failed",
                 source=str(log_path),

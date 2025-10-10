@@ -5,11 +5,10 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from scripts import run_tests
-
 
 _DEPRECATION_MESSAGE = (
     "scripts.run_test_suite is deprecated and will be removed in a future "

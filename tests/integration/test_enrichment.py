@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 import pandas as pd
 import pytest
 
@@ -39,12 +38,18 @@ def test_enrich__attaches_flags_and_parent(
         io_cfg=cfg.io,
     )
 
-    assert list(enriched["parent_molecule_chembl_id"]) == ["CHEMBL10", pd.NA, "CHEMBL30"]
+    assert list(enriched["parent_molecule_chembl_id"]) == [
+        "CHEMBL10",
+        pd.NA,
+        "CHEMBL30",
+    ]
     assert enriched["salt_chembl_id"].tolist() == ["CHEMBL1", pd.NA, "CHEMBL3"]
     assert enriched["natural_product"].dtype == "boolean"
     assert enriched["natural_product"].tolist() == [True, pd.NA, False]
     missing_child_events = [
-        fields for event, fields in events if event == "testitem_enrichment_missing_child_flags"
+        fields
+        for event, fields in events
+        if event == "testitem_enrichment_missing_child_flags"
     ]
     assert missing_child_events == [
         {
@@ -56,10 +61,16 @@ def test_enrich__attaches_flags_and_parent(
 
 
 @pytest.mark.integration
-def test_enrich__handles_unknown_flag_values(tmp_path: Path, cfg, snapshot_resource, caplog) -> None:
+def test_enrich__handles_unknown_flag_values(
+    tmp_path: Path, cfg, snapshot_resource, caplog
+) -> None:
     cfg.testitem_molecule_enrichment.enable = True
-    cfg.testitem_molecule_enrichment.sources.molecule_catalog_path = snapshot_resource / "molecule_catalog.csv"
-    cfg.testitem_molecule_enrichment.sources.molecule_hierarchy_path = snapshot_resource / "molecule_hierarchy.csv"
+    cfg.testitem_molecule_enrichment.sources.molecule_catalog_path = (
+        snapshot_resource / "molecule_catalog.csv"
+    )
+    cfg.testitem_molecule_enrichment.sources.molecule_hierarchy_path = (
+        snapshot_resource / "molecule_hierarchy.csv"
+    )
     cfg.testitem_molecule_enrichment.flags.coerce_to_bool = True
 
     frame = pd.DataFrame(
@@ -78,7 +89,10 @@ def test_enrich__handles_unknown_flag_values(tmp_path: Path, cfg, snapshot_resou
     )
 
     assert enriched["natural_product"].tolist() == [True]
-    assert any("unknown_flag_values" in record.message for record in caplog.records) is False
+    assert (
+        any("unknown_flag_values" in record.message for record in caplog.records)
+        is False
+    )
 
 
 @pytest.mark.integration
@@ -86,8 +100,12 @@ def test_enrich__missing_sources_gracefully_fills_columns(
     tmp_path: Path, cfg, monkeypatch
 ) -> None:
     cfg.testitem_molecule_enrichment.enable = True
-    cfg.testitem_molecule_enrichment.sources.molecule_catalog_path = tmp_path / "missing_catalog.csv"
-    cfg.testitem_molecule_enrichment.sources.molecule_hierarchy_path = tmp_path / "missing_hierarchy.csv"
+    cfg.testitem_molecule_enrichment.sources.molecule_catalog_path = (
+        tmp_path / "missing_catalog.csv"
+    )
+    cfg.testitem_molecule_enrichment.sources.molecule_hierarchy_path = (
+        tmp_path / "missing_hierarchy.csv"
+    )
 
     frame = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
     events: list[str] = []

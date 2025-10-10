@@ -71,7 +71,9 @@ def test_stable_sort__preserves_duplicate_order() -> None:
 
 
 @pytest.mark.unit
-def test_read_csv_with_fallbacks__uses_iso_8859_alias(monkeypatch, tmp_path: Path) -> None:
+def test_read_csv_with_fallbacks__uses_iso_8859_alias(
+    monkeypatch, tmp_path: Path
+) -> None:
     path = tmp_path / "document.csv"
     # 0x81 cannot be decoded using cp1252 but is valid in ISO-8859-1.
     raw = "document_chembl_id\tcompleted\nCHEMBL1\t\u0081\n"

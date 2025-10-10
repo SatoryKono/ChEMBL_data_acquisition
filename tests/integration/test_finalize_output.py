@@ -109,7 +109,10 @@ def test_finalize_output__missing_required_columns_fails(
     )
 
     assert exit_code == 1
-    assert ("validation_skipped", {"missing_columns": ["molecule_chembl_id"]}) in warnings
+    assert (
+        "validation_skipped",
+        {"missing_columns": ["molecule_chembl_id"]},
+    ) in warnings
 
 
 @pytest.mark.integration
@@ -177,7 +180,9 @@ def test_finalize_output__aligns_nullable_numeric_columns(
 
 
 @pytest.mark.integration
-def test_finalize_output__writes_failure_cases(tmp_path: Path, sample_input_csv: Path, cfg) -> None:
+def test_finalize_output__writes_failure_cases(
+    tmp_path: Path, sample_input_csv: Path, cfg
+) -> None:
     cfg.system.doc_quality.enable = False
 
     chunk = pd.DataFrame(
@@ -301,7 +306,9 @@ def test_finalize_output__empty_input_produces_placeholder(
 
 
 @pytest.mark.integration
-def test_finalize_output__idempotent_results(tmp_path: Path, sample_input_csv: Path, cfg) -> None:
+def test_finalize_output__idempotent_results(
+    tmp_path: Path, sample_input_csv: Path, cfg
+) -> None:
     cfg.system.doc_quality.enable = False
 
     chunk = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1", "CHEMBL2"]})

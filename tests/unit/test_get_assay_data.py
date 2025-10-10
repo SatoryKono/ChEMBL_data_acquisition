@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -14,8 +15,8 @@ import yaml
 from library.cli_utils import run_pipeline as cli_run_pipeline
 from library.config import Config
 from library.pipelines.assay.chembl_assay import MAX_ASSAY_CHUNK_SIZE
-from library.schemas import AssaysSchema
 from library.resources.dictionaries import get_resource
+from library.schemas import AssaysSchema
 from scripts import get_assay_data
 
 
@@ -85,7 +86,12 @@ def test_run_chembl__invalid_limit_logs_error(
     ) in logger_stub.events
 
 
-def test_run_chembl__read_ids_failure(cfg: Config, minimal_args: argparse.Namespace, logger_stub: _MemoryLogger, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_chembl__read_ids_failure(
+    cfg: Config,
+    minimal_args: argparse.Namespace,
+    logger_stub: _MemoryLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def fake_read_ids(path: Path, *, column: str, cfg: Any) -> Any:
         raise FileNotFoundError(path)
 
@@ -116,7 +122,7 @@ def test_run_chembl__successful_execution(
         return iter(["CHEMBL1", "CHEMBL2", "CHEMBL3"])
 
     class FakeClient:
-        def __enter__(self) -> "FakeClient":
+        def __enter__(self) -> FakeClient:
             return self
 
         def __exit__(self, exc_type, exc, tb) -> None:
@@ -156,7 +162,9 @@ def test_run_chembl__successful_execution(
     ) -> int:
         del fetcher, output_path, failure_path, kwargs
         if definition.stats_callback is not None:
-            definition.stats_callback({"rows_total": 2, "rows_kept": 2, "rows_dropped": 0})
+            definition.stats_callback(
+                {"rows_total": 2, "rows_kept": 2, "rows_dropped": 0}
+            )
         return 0
 
     monkeypatch.setattr(get_assay_data.io, "read_ids", fake_read_ids)
@@ -165,8 +173,14 @@ def test_run_chembl__successful_execution(
         lambda *args, **kwargs: FakeClient(),
     )
     monkeypatch.setattr(get_assay_data, "ChunkFailureTracker", lambda: tracker)
-    monkeypatch.setattr(get_assay_data.cl, "get_assays", lambda *args, **kwargs: pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]}))
-    monkeypatch.setattr(get_assay_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline)
+    monkeypatch.setattr(
+        get_assay_data.cl,
+        "get_assays",
+        lambda *args, **kwargs: pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]}),
+    )
+    monkeypatch.setattr(
+        get_assay_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline
+    )
     monkeypatch.setattr(get_assay_data, "run_pipeline", fake_run_pipeline)
 
     exit_code = get_assay_data.run_chembl(cfg, minimal_args)
@@ -194,7 +208,7 @@ def test_run_chembl__splits_chunk_on_timeout(
         return iter(["CHEMBL100", "CHEMBL200"])
 
     class FakeClient:
-        def __enter__(self) -> "FakeClient":
+        def __enter__(self) -> FakeClient:
             return self
 
         def __exit__(self, exc_type, exc, tb) -> None:
@@ -271,7 +285,9 @@ def test_run_chembl__splits_chunk_on_timeout(
     )
     monkeypatch.setattr(get_assay_data, "ChunkFailureTracker", lambda: tracker)
     monkeypatch.setattr(get_assay_data.cl, "get_assays", fake_get_assays)
-    monkeypatch.setattr(get_assay_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline)
+    monkeypatch.setattr(
+        get_assay_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline
+    )
     monkeypatch.setattr(get_assay_data, "run_pipeline", fake_run_pipeline)
     monkeypatch.setattr(get_assay_data, "sleep", lambda *_: None)
 
@@ -284,6 +300,7 @@ def test_run_chembl__splits_chunk_on_timeout(
     assert ["CHEMBL200"] in call_history
     assert tracker._failures == []
     assert any(event == "assay_fetch_split" for _, event, _ in logger_stub.events)
+
 
 def test_run__skip_existing_returns_zero(
     cfg: Config,
@@ -338,7 +355,9 @@ def test_run__force_overrides_skip(
     assert calls == ["run"]
 
 
-def test_run__propagates_exit_code(cfg: Config, minimal_args: argparse.Namespace, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run__propagates_exit_code(
+    cfg: Config, minimal_args: argparse.Namespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(get_assay_data, "run_chembl", lambda *_: 7)
 
     exit_code = get_assay_data.run(cfg, minimal_args)

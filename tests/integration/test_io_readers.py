@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from library.io import read_ids
 import library.io.readers as io_readers
+from library.io import read_ids
 
 
 @pytest.mark.integration

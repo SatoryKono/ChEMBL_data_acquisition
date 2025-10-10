@@ -15,9 +15,9 @@ from urllib.parse import urlencode, urljoin
 from library.clients import ChemblClient, _chunked
 from library.utils.atomic import open_atomic
 
-from ..config import ApiCfg, MoleculeCatalogCfg
 from ..common.log import logger
 from ..common.rate_limiter import sleep
+from ..config import ApiCfg, MoleculeCatalogCfg
 
 _DEFAULT_CATALOG_CFG = MoleculeCatalogCfg()
 _PARENT_LOOKUP_FALLBACK_THRESHOLD = 1

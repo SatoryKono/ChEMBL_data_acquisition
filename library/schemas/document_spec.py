@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import pandera.pandas as pa
 import yaml
@@ -85,7 +86,9 @@ def load_document_declaration(path: str | Path | None = None) -> DocumentDeclara
         group_columns: list[ColumnSpec] = []
         for column_data in column_entries:
             if not isinstance(column_data, Mapping):
-                raise TypeError(f"column declaration in group '{group_name}' must be a mapping")
+                raise TypeError(
+                    f"column declaration in group '{group_name}' must be a mapping"
+                )
             column_name = str(column_data.get("name"))
             if not column_name:
                 raise ValueError(f"column in group '{group_name}' is missing a 'name'")

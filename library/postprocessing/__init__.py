@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from .activity_extended import ActivityExtendedError, process_activity_extended
 from .assay_extended import AssayExtendedError, enrich_assay_metadata
-from .document import preprocess_document_export, postprocess_export_file
+from .document import postprocess_export_file, preprocess_document_export
 from .iuphar import process_iuphar_targets
 from .names import process_target_names
-from .target import process_targets, postprocess_target_table
-
+from .target import postprocess_target_table, process_targets
 
 __all__ = [
     "ActivityExtendedError",
@@ -22,4 +21,3 @@ __all__ = [
     "AssayExtendedError",
     "enrich_assay_metadata",
 ]
-

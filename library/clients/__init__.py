@@ -17,32 +17,34 @@ Import rules for higher layers:
 
 from __future__ import annotations
 
+from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Mapping, MutableMapping, Protocol, Sequence
+from typing import Any, Protocol
 
-
-from .pubmed import PubMedClient
-
-
+from .chembl import ChemblClient, _chunked
+from .crossref import fetch_crossref
 from .iuphar import (
     download_gtp_to_hgnc_mapping,
     download_gtp_to_uniprot_mapping,
+)
+from .iuphar import (
     init_session as init_iuphar_session,
+)
+from .iuphar import (
     load_families as load_iuphar_families,
+)
+from .iuphar import (
     load_targets as load_iuphar_targets,
+)
+from .iuphar import (
     query_gene_symbol as query_iuphar_gene_symbol,
 )
-
-
-from .crossref import fetch_crossref
 from .openalex import fetch_openalex
+from .pubmed import PubMedClient
 from .semantic_scholar import (
     fetch_semantic_scholar,
     fetch_semantic_scholar_batch,
 )
-
-from .chembl import ChemblClient, _chunked
-
 
 __all__ = [
     "ChemblClient",

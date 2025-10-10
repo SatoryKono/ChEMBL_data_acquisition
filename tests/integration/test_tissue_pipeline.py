@@ -24,7 +24,9 @@ class _SequentialChemblStub:
         self._payloads = payloads
         self.calls: list[str] = []
 
-    def request_json(self, url: str, *, cfg, timeout: float | None) -> dict[str, object]:
+    def request_json(
+        self, url: str, *, cfg, timeout: float | None
+    ) -> dict[str, object]:
         self.calls.append(url)
         if not self._payloads:
             raise AssertionError("No recorded payload available for request")
@@ -62,7 +64,9 @@ def test_run_tissue_pipeline__replays_recorded_chembl_payloads(
         if isinstance(item, dict) and item.get("tissue_chembl_id")
     }
 
-    requested_ids = pd.read_csv(working_input, dtype="string")["tissue_chembl_id"].tolist()
+    requested_ids = pd.read_csv(working_input, dtype="string")[
+        "tissue_chembl_id"
+    ].tolist()
     expected_missing = tuple(
         identifier for identifier in requested_ids if identifier not in available_ids
     )

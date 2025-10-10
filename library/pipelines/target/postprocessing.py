@@ -13,11 +13,11 @@ import pandas as pd
 
 from library.schemas.targets import CELLULARITY_COLUMN_NAME, TARGETS_COLUMN_ORDER
 
-from . import organism_classification
-from ...config import Config, IoCfg
-from ...postprocessing import helpers as postprocessing_helpers
 from ...common.csv_utils import write_csv_deterministic
 from ...common.log import logger
+from ...config import Config, IoCfg
+from ...postprocessing import helpers as postprocessing_helpers
+from . import organism_classification
 
 # Columns removed in the final export
 REMOVE_COLUMNS: list[str] = []
@@ -112,9 +112,7 @@ BOOL_COLUMNS: list[str] = [
     "propeptide",
 ]
 
-TARGET_WORKBOOK_SCHEMA: dict[str, str] = {
-    column: "Text" for column in TEXT_COLUMNS
-}
+TARGET_WORKBOOK_SCHEMA: dict[str, str] = {column: "Text" for column in TEXT_COLUMNS}
 for column in INT_COLUMNS:
     TARGET_WORKBOOK_SCHEMA[column] = "Int64"
 for column in BOOL_COLUMNS:
@@ -298,9 +296,7 @@ def align_target_columns(df: pd.DataFrame) -> pd.DataFrame:
     aligned["PRINTS"] = _series_or_default(df, "PRINTS")
     aligned["TCDB"] = _series_or_default(df, "TCDB")
     aligned["pref_name"] = _series_or_default(df, "pref_name")
-    aligned[CELLULARITY_COLUMN_NAME] = _series_or_default(
-        df, CELLULARITY_COLUMN_NAME
-    )
+    aligned[CELLULARITY_COLUMN_NAME] = _series_or_default(df, CELLULARITY_COLUMN_NAME)
     aligned["tax_id"] = _series_or_default(df, "tax_id")
     aligned["species_group_flag"] = _series_or_default(df, "species_group_flag")
     aligned["target_components"] = _series_or_default(df, "target_components")
@@ -645,9 +641,8 @@ def finalise_targets(
     genus_missing_mask: pd.Series
     if "genus" in df.columns:
         genus_series = df["genus"].astype("string")
-        genus_missing_mask = (
-            genus_series.isna()
-            | genus_series.str.strip().isin(["", "nan"])
+        genus_missing_mask = genus_series.isna() | genus_series.str.strip().isin(
+            ["", "nan"]
         )
     else:
         genus_missing_mask = pd.Series(True, index=df.index)
@@ -673,12 +668,13 @@ def finalise_targets(
                 df["genus"] = derived
 
             genus_series = df["genus"].astype("string")
-            genus_missing_mask = (
-                genus_series.isna()
-                | genus_series.str.strip().isin(["", "nan"])
+            genus_missing_mask = genus_series.isna() | genus_series.str.strip().isin(
+                ["", "nan"]
             )
             if not genus_missing_mask.any():
-                logger.debug("Filled missing 'genus' values from '%s' column", candidate)
+                logger.debug(
+                    "Filled missing 'genus' values from '%s' column", candidate
+                )
                 break
 
     if "lineage_superkingdom" not in df.columns and "superkingdom" in df.columns:
@@ -742,9 +738,7 @@ def finalise_targets(
     #         )
 
     if "type" in df.columns:
-        logger.debug(
-            "Renaming existing 'type' column to '%s'", CELLULARITY_COLUMN_NAME
-        )
+        logger.debug("Renaming existing 'type' column to '%s'", CELLULARITY_COLUMN_NAME)
         df = df.rename(columns={"type": CELLULARITY_COLUMN_NAME})
 
     df = organism_classification.add_cellularity_smart(

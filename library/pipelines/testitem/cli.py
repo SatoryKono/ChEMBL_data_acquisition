@@ -7,19 +7,28 @@ import threading
 import time
 import traceback
 from collections import OrderedDict, deque
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from itertools import chain, islice
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator, Sequence
+from typing import Any
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
 from library import io
-from library.integration.chembl_client import ChemblClient
 from library.clients import pubchem as pc
+from library.common.csv_utils import write_csv_chunks_deterministic
+from library.common.log import logger
+from library.common.metadata import (
+    Stats,
+    file_sha256,
+    record_quality_failure,
+    write_meta_yaml,
+)
+from library.common.sidecar import SidecarErrors
 from library.config import (
     ApiCfg,
     Config,
@@ -28,16 +37,8 @@ from library.config import (
     TestitemMoleculeEnrichmentCfg,
     _serialize_paths,
 )
-from library.common.csv_utils import write_csv_chunks_deterministic
-from library.common.log import logger
-from library.common.metadata import (
-    Stats,
-    file_sha256,
-    write_meta_yaml,
-    record_quality_failure,
-)
+from library.integration.chembl_client import ChemblClient
 from library.orchestration import ETLContext
-from library.common.sidecar import SidecarErrors
 from library.qa.reporting import build_table_quality_hook
 from library.qa.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
@@ -49,6 +50,7 @@ from .catalog import (
     prepare_parent_enrichment,
     run_parent_enrichment,
 )
+
 try:  # pragma: no cover - exercised during package bootstrap
     from . import testitem_enrichment
 except ImportError:  # pragma: no cover - fallback for partial initialisation
@@ -62,6 +64,7 @@ def _chembl_library() -> Any:
     from library.integration import chembl_library
 
     return chembl_library
+
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
 _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
@@ -321,7 +324,7 @@ class StageWatchdog:
         self._last_activity = time.monotonic()
         self._effective_interval = 0.0
 
-    def __enter__(self) -> "StageWatchdog":
+    def __enter__(self) -> StageWatchdog:
         self.start()
         return self
 
@@ -335,7 +338,9 @@ class StageWatchdog:
         self._timed_out.clear()
         self._last_activity = time.monotonic()
         interval = self._idle_timeout_seconds / 2 if self._idle_timeout_seconds else 0
-        self._effective_interval = max(1.0, min(self._check_interval, interval or self._check_interval))
+        self._effective_interval = max(
+            1.0, min(self._check_interval, interval or self._check_interval)
+        )
         self._thread = threading.Thread(
             target=self._monitor,
             name=f"{self.stage_name}-watchdog",
@@ -384,6 +389,7 @@ class StageWatchdog:
                 self._timed_out.set()
                 return
 
+
 @lru_cache(maxsize=1)
 def _load_chembl_library():
     """Return the ChemBL integration module without creating import cycles."""
@@ -405,7 +411,6 @@ def _load_pipeline_metadata_adder():
 @lru_cache(maxsize=1)
 def _load_testitem_schema():
     """Return the schema model and normalizer lazily to avoid circular imports."""
-
 
     return TestitemsSchema, normalize_testitems
 
@@ -855,9 +860,7 @@ def finalize_output(
 
     schema_model, normalizer = _load_testitem_schema()
     schema_cols = list(schema_model.columns)
-    required_cols = {
-        name for name, col in schema_model.columns.items() if col.required
-    }
+    required_cols = {name for name, col in schema_model.columns.items() if col.required}
     optional_cols = set(schema_model.columns) - required_cols
     col_order = schema_cols
     key_cols = ["molecule_chembl_id"]
@@ -910,7 +913,9 @@ def finalize_output(
         return pandas_dtype
 
     def _ensure_column_alignment(frame: pd.DataFrame) -> None:
-        missing = (expected_columns | columns_to_fill | columns_seen) - set(frame.columns)
+        missing = (expected_columns | columns_to_fill | columns_seen) - set(
+            frame.columns
+        )
         if not missing:
             return
         for column in sorted(missing):
@@ -923,7 +928,9 @@ def finalize_output(
                 empty_values = pd.array([pd.NA] * len(frame.index), dtype=dtype)
                 frame[column] = pd.Series(empty_values, index=frame.index)
             else:
-                placeholder = pd.Series([pd.NA] * len(frame.index), index=frame.index, dtype="object")
+                placeholder = pd.Series(
+                    [pd.NA] * len(frame.index), index=frame.index, dtype="object"
+                )
                 if dtype is not object:
                     placeholder = placeholder.astype(dtype, copy=False)
                 frame[column] = placeholder

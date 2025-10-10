@@ -1,14 +1,16 @@
 """Logging utilities for postprocessing pipelines."""
+
 from __future__ import annotations
 
 import json
 import logging
 import os
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Callable, Mapping, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -18,7 +20,7 @@ _DEFAULT_LOGGER_NAME = "chembl.postprocess"
 def _now_iso() -> str:
     """Return an ISO formatted UTC timestamp."""
 
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _duration_seconds(start: float, end: float | None = None) -> float:
@@ -133,7 +135,9 @@ class PipelineRunMetrics:
     output_rows: int | None = None
     output_columns: int | None = None
 
-    def finalize(self, *, output_rows: int, output_columns: int, duration_s: float) -> None:
+    def finalize(
+        self, *, output_rows: int, output_columns: int, duration_s: float
+    ) -> None:
         """Record terminal metrics once the pipeline has finished."""
 
         self.output_rows = output_rows
@@ -170,7 +174,7 @@ class PipelineRunMetrics:
         }
 
 
-def get_logger(name: Optional[str] = None) -> logging.Logger:
+def get_logger(name: str | None = None) -> logging.Logger:
     """Return a configured logger for postprocessing steps.
 
     The logger defaults to :mod:`chembl.postprocess` and ensures that
@@ -241,7 +245,9 @@ def execute_step(
     output_rows, output_columns = result.shape
     after_columns = list(result.columns)
     after_dtypes = _describe_dtypes(result)
-    diff = compute_schema_diff(before_columns, before_dtypes, after_columns, after_dtypes)
+    diff = compute_schema_diff(
+        before_columns, before_dtypes, after_columns, after_dtypes
+    )
 
     type_change_summary = ", ".join(
         f"{column}: {change['from']} -> {change['to']}"
@@ -295,7 +301,7 @@ def build_report_payload(
 
 
 def dump_report(
-    path: str | "os.PathLike[str]",
+    path: str | os.PathLike[str],
     payload: Mapping[str, Any],
     *,
     indent: int = 2,
@@ -304,7 +310,9 @@ def dump_report(
 
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(payload, indent=indent, sort_keys=True), encoding="utf-8")
+    target.write_text(
+        json.dumps(payload, indent=indent, sort_keys=True), encoding="utf-8"
+    )
 
 
 __all__ = [

@@ -8,13 +8,17 @@ from typing import Any
 
 import pandas as pd
 
+from ...cli import Logger
 from ...cli.pipeline_definition import PipelineDefinition
 from ...cli_utils import run_pipeline
 from ...common.fetch_retry import ChunkFailureTracker
 from ...config import Config
-from ...cli import Logger
-from ..common import ChunkedFetchConfig, CsvWriterConfig, PipelineRunResult, prepare_chunked_pipeline
-
+from ..common import (
+    ChunkedFetchConfig,
+    CsvWriterConfig,
+    PipelineRunResult,
+    prepare_chunked_pipeline,
+)
 
 MetadataHook = Callable[[pd.DataFrame], pd.DataFrame]
 
@@ -56,7 +60,9 @@ def run_activity_pipeline(
             logger=logger,
         )
     except Exception:
-        logger.exception("Activity pipeline execution failed during chunked processing.")
+        logger.exception(
+            "Activity pipeline execution failed during chunked processing."
+        )
         chunk_failures.save(fetch_failure_path, cfg=cfg)
         raise
     else:

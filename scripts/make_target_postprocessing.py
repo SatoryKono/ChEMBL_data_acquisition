@@ -18,10 +18,9 @@ del bootstrap_cli
 
 import argparse
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from importlib import import_module
 from pathlib import Path
-from typing import Sequence
 from uuid import NAMESPACE_URL, uuid5
 
 import pandas as pd
@@ -32,6 +31,7 @@ from library.cli.logging import setup_cli_logging
 from library.cli.parser import path_argument
 from library.cli_utils import resolve_invocation
 from library.common.log import logger
+from library.pipelines.common.metadata import get_pipeline_version
 from library.postprocess.common.config import PipelineConfig, normalize_pipeline_version
 from library.postprocess.common.logging import PipelineRunMetrics
 from library.postprocess.common.types import SchemaValidationError, StepError
@@ -40,7 +40,6 @@ from library.postprocess.targets import (
 )
 from library.postprocess.targets import steps as target_steps
 from library.postprocess.targets.schema import TARGET_SCHEMA, validate_targets
-from library.pipelines.common.metadata import get_pipeline_version
 
 _postprocess_common = import_module(f"{package_name}._postprocess_common")
 
@@ -264,8 +263,16 @@ def run(args: argparse.Namespace) -> int:
     logger.info(
         f"{event_prefix}_done",
         output=str(output_path),
-        rows=int(metrics.output_rows) if metrics and metrics.output_rows is not None else None,
-        columns=int(metrics.output_columns) if metrics and metrics.output_columns is not None else None,
+        rows=(
+            int(metrics.output_rows)
+            if metrics and metrics.output_rows is not None
+            else None
+        ),
+        columns=(
+            int(metrics.output_columns)
+            if metrics and metrics.output_columns is not None
+            else None
+        ),
     )
     return 0
 
@@ -300,11 +307,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         log_dir = DEFAULT_LOG_DIR
 
-    with setup_cli_logging(PROGRAM_NAME, log_cfg, date_str=None, log_dir=log_dir) as logging_ctx:
+    with setup_cli_logging(
+        PROGRAM_NAME, log_cfg, date_str=None, log_dir=log_dir
+    ) as logging_ctx:
         configure_logger(logging_ctx.log_cfg)
-        setattr(args, "_pipeline_config", pipeline_config)
-        setattr(args, "_csv_runtime_config", csv_cfg)
-        setattr(args, "_log_level", log_level)
+        args._pipeline_config = pipeline_config
+        args._csv_runtime_config = csv_cfg
+        args._log_level = log_level
         exit_code = run(args)
 
     return exit_code
@@ -312,4 +321,3 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
     raise SystemExit(main())
-

@@ -3,8 +3,9 @@ from __future__ import annotations
 import logging
 import sys
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 __all__ = ["get_logger", "StructuredLogger"]
 
@@ -20,7 +21,9 @@ def _format_value(value: Any) -> str:
     return repr(value)
 
 
-def _build_message(event: str, message: str | None, kv: Iterable[tuple[str, Any]]) -> str:
+def _build_message(
+    event: str, message: str | None, kv: Iterable[tuple[str, Any]]
+) -> str:
     parts = [message or event]
     for key, value in sorted(kv, key=lambda item: item[0]):
         parts.append(f"{key}={_format_value(value)}")
@@ -41,10 +44,14 @@ class StructuredLogger:
     def name(self) -> str:
         return self._logger.name
 
-    def addHandler(self, handler: logging.Handler) -> None:  # pragma: no cover - delegation helper
+    def addHandler(
+        self, handler: logging.Handler
+    ) -> None:  # pragma: no cover - delegation helper
         self._logger.addHandler(handler)
 
-    def removeHandler(self, handler: logging.Handler) -> None:  # pragma: no cover - delegation helper
+    def removeHandler(
+        self, handler: logging.Handler
+    ) -> None:  # pragma: no cover - delegation helper
         self._logger.removeHandler(handler)
 
     def _log(
@@ -85,7 +92,9 @@ class StructuredLogger:
     def error(self, event: str, *args: Any, **kwargs: Any) -> None:
         self.log(logging.ERROR, event, *args, **kwargs)
 
-    def exception(self, event: str, *args: Any, exc: BaseException | None = None, **kwargs: Any) -> None:
+    def exception(
+        self, event: str, *args: Any, exc: BaseException | None = None, **kwargs: Any
+    ) -> None:
         exc_info = kwargs.pop("exc_info", None)
         if exc_info is None:
             exc_info = exc
@@ -121,7 +130,9 @@ def _configure_handlers(logger: logging.Logger, log_path: Path | None) -> None:
         logger.addHandler(file_handler)
 
 
-def get_logger(name: str, *, log_file: str | Path | None = None, level: int = logging.INFO) -> StructuredLogger:
+def get_logger(
+    name: str, *, log_file: str | Path | None = None, level: int = logging.INFO
+) -> StructuredLogger:
     """Return a structured logger writing to both stdout and ``log_file``."""
 
     logger = _ensure_logger(name)

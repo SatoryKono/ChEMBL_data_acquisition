@@ -1,22 +1,19 @@
 """Transformation steps for the activity postprocessing pipeline."""
+
 from __future__ import annotations
 
 import re
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 import pandas as pd
 
-
-from library.postprocess.common import run_steps
-from library.postprocess.common.logging import PipelineRunMetrics
-
 from library.pipelines.common.metadata import get_pipeline_version
-
+from library.postprocess.common import run_steps
 from library.postprocess.common.config import (
     load_pipeline_config,
     normalize_pipeline_version,
 )
-
+from library.postprocess.common.logging import PipelineRunMetrics
 
 from .schema import ACTIVITY_SCHEMA, validate_activities
 
@@ -29,9 +26,7 @@ def _normalise_string_series(
     """Return ``series`` coerced to ``StringDtype`` with whitespace collapsed."""
 
     normalised = (
-        series.astype("string")
-        .str.strip()
-        .str.replace(r"\s+", " ", regex=True)
+        series.astype("string").str.strip().str.replace(r"\s+", " ", regex=True)
     )
     if uppercase:
         normalised = normalised.str.upper()

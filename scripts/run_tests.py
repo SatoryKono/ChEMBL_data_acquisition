@@ -10,9 +10,10 @@ import platform
 import shlex
 import subprocess
 import sys
-from datetime import datetime, timezone
+from collections.abc import Iterable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 import pytest
@@ -138,7 +139,7 @@ def _normalise_message(raw: Any) -> str:
         return ""
     if isinstance(raw, str):
         return raw.strip()
-    if isinstance(raw, Iterable) and not isinstance(raw, (bytes, bytearray)):
+    if isinstance(raw, Iterable) and not isinstance(raw, bytes | bytearray):
         joined = "\n".join(str(part) for part in raw)
         return joined.strip()
     return str(raw).strip()
@@ -278,8 +279,7 @@ def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, An
 
     if summary["total"] == 0 and exit_code != 0:
         message = (
-            "pytest exited with code"
-            f" {exit_code} before completing the test run"
+            "pytest exited with code" f" {exit_code} before completing the test run"
         )
         tests.append(
             {
@@ -309,7 +309,7 @@ def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, An
         "repo": REPO_SLUG,
         "commit": _git_output("rev-parse", "HEAD"),
         "branch": _git_output("rev-parse", "--abbrev-ref", "HEAD"),
-        "ts_utc": datetime.now(timezone.utc).isoformat(),
+        "ts_utc": datetime.now(UTC).isoformat(),
         "duration_sec": float(raw.get("duration", 0.0) or 0.0),
         "python": platform.python_version(),
         "pytest": pytest.__version__,
@@ -323,7 +323,9 @@ def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, An
     }
 
 
-def _ensure_failure_record(report: dict[str, Any], exit_code: int, reason: str) -> dict[str, Any]:
+def _ensure_failure_record(
+    report: dict[str, Any], exit_code: int, reason: str
+) -> dict[str, Any]:
     summary = report.setdefault("summary", {})
     summary.update(
         total=max(int(summary.get("total", 0) or 0), 1),
@@ -354,7 +356,7 @@ def _ensure_failure_record(report: dict[str, Any], exit_code: int, reason: str) 
     meta.setdefault("repo", REPO_SLUG)
     meta.setdefault("branch", _git_output("rev-parse", "--abbrev-ref", "HEAD"))
     meta.setdefault("commit", _git_output("rev-parse", "HEAD"))
-    meta.setdefault("ts_utc", datetime.now(timezone.utc).isoformat())
+    meta.setdefault("ts_utc", datetime.now(UTC).isoformat())
     meta.setdefault("duration_sec", 0.0)
     meta.setdefault("python", platform.python_version())
     meta.setdefault("pytest", pytest.__version__)
@@ -396,7 +398,7 @@ def validate_structured_report(report: dict[str, Any]) -> None:
             raise ValueError(f"Summary field '{key}' must be a non-negative integer")
 
     success_rate = summary.get("success_rate")
-    if not isinstance(success_rate, (int, float)):
+    if not isinstance(success_rate, int | float):
         raise ValueError("Summary field 'success_rate' must be numeric")
     if not 0.0 <= float(success_rate) <= 1.0:
         raise ValueError("Summary field 'success_rate' must be between 0 and 1")
@@ -412,7 +414,7 @@ def validate_structured_report(report: dict[str, Any]) -> None:
         if "status" not in entry or not isinstance(entry["status"], str):
             raise ValueError(f"Test entry at index {index} missing string 'status'")
         duration = entry.get("duration_ms")
-        if not isinstance(duration, (int, float)) or duration < 0:
+        if not isinstance(duration, int | float) or duration < 0:
             raise ValueError(
                 f"Test entry at index {index} has invalid 'duration_ms' (must be >= 0)"
             )
@@ -453,7 +455,7 @@ def build_summary_markdown(report: dict[str, Any]) -> str:
     repo = meta.get("repo", REPO_SLUG)
     commit = meta.get("commit", "unknown")
     branch = meta.get("branch", "unknown")
-    timestamp = meta.get("ts_utc", datetime.now(timezone.utc).isoformat())
+    timestamp = meta.get("ts_utc", datetime.now(UTC).isoformat())
     duration = float(meta.get("duration_sec", 0.0) or 0.0)
     success_rate = float(summary.get("success_rate", 0.0) or 0.0)
     success_rate_pct = success_rate * 100.0
@@ -708,7 +710,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             success_rate_value = 0.0
 
         success_rate_pct = (
-            success_rate_value * 100.0 if success_rate_value <= 1.0 else success_rate_value
+            success_rate_value * 100.0
+            if success_rate_value <= 1.0
+            else success_rate_value
         )
 
         if success_rate_pct < QUALITY_THRESHOLD_PERCENT:

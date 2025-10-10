@@ -24,7 +24,9 @@ def test_get_assay_cli__enrichment_quality(
 ) -> None:
     data_dir = Path(__file__).resolve().parents[1] / "data"
     input_csv = tmp_path / "assay.csv"
-    input_csv.write_text((data_dir / "assay.csv").read_text(encoding="utf-8"), encoding="utf-8")
+    input_csv.write_text(
+        (data_dir / "assay.csv").read_text(encoding="utf-8"), encoding="utf-8"
+    )
     output_csv = tmp_path / "out" / "assays.csv"
     dictionary_path = data_dir / "assay_dictionary.csv"
 
@@ -34,8 +36,12 @@ def test_get_assay_cli__enrichment_quality(
         dictionary["assay_chembl_id"] = dictionary["assay_chembl_id"].astype("string")
         enriched = frame.merge(dictionary, on="assay_chembl_id", how="left")
         enriched["description"] = enriched["description"].astype("string").str.strip()
-        enriched["description_length"] = enriched["description"].str.len().astype("Int64")
-        enriched["year"] = pd.to_numeric(enriched["year"], errors="coerce").astype("Int64")
+        enriched["description_length"] = (
+            enriched["description"].str.len().astype("Int64")
+        )
+        enriched["year"] = pd.to_numeric(enriched["year"], errors="coerce").astype(
+            "Int64"
+        )
         quality_columns = ["assay_strain", "assay_group", "year", "accession"]
         completeness = 1.0 - enriched[quality_columns].isna().mean()
         if float(completeness.min()) < ASSAY_ENRICHMENT_MIN_RATIO:
@@ -95,17 +101,14 @@ def test_get_assay_cli__clamps_batch_size(
 ) -> None:
     cfg.assay.batch_size = MAX_ASSAY_CHUNK_SIZE * 2
 
-    identifiers = [
-        f"CHEMBL{i}"
-        for i in range(1, MAX_ASSAY_CHUNK_SIZE + 4)
-    ]
+    identifiers = [f"CHEMBL{i}" for i in range(1, MAX_ASSAY_CHUNK_SIZE + 4)]
     request_chunk_sizes: list[int] = []
 
     class _StubChemblClient:
         def __init__(self, *args, **kwargs) -> None:
             del args, kwargs
 
-        def __enter__(self) -> "_StubChemblClient":
+        def __enter__(self) -> _StubChemblClient:
             return self
 
         def __exit__(self, exc_type, exc, tb) -> bool:  # noqa: D401 - context protocol
@@ -126,7 +129,9 @@ def test_get_assay_cli__clamps_batch_size(
             params = parse_qs(parsed.query)
             ids_param = params.get("assay_chembl_id__in")
             if ids_param:
-                identifiers_chunk = [value for value in ids_param[0].split(",") if value]
+                identifiers_chunk = [
+                    value for value in ids_param[0].split(",") if value
+                ]
                 request_chunk_sizes.append(len(identifiers_chunk))
                 return {
                     "assays": [
@@ -207,7 +212,9 @@ def test_get_assay_cli__clamps_batch_size(
         _StubChemblClient,
     )
     monkeypatch.setattr(get_assay_data, "ChunkFailureTracker", _StubChunkFailureTracker)
-    monkeypatch.setattr(get_assay_data, "prepare_chunked_pipeline", _fake_prepare_chunked_pipeline)
+    monkeypatch.setattr(
+        get_assay_data, "prepare_chunked_pipeline", _fake_prepare_chunked_pipeline
+    )
     monkeypatch.setattr(get_assay_data, "run_pipeline", _fake_run_pipeline)
     monkeypatch.setattr(get_assay_data.io, "read_ids", _fake_read_ids)
 

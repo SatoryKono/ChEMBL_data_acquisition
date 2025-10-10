@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(slots=True, frozen=True)
@@ -14,10 +13,10 @@ class RunContext:
     generated_at: str
 
 
-_CURRENT: Optional[RunContext] = None
+_CURRENT: RunContext | None = None
 
 
-def set_current(context: Optional[RunContext]) -> None:
+def set_current(context: RunContext | None) -> None:
     """Record ``context`` as the active :class:`RunContext`.
 
     Parameters
@@ -31,7 +30,7 @@ def set_current(context: Optional[RunContext]) -> None:
     _CURRENT = context
 
 
-def get_current() -> Optional[RunContext]:
+def get_current() -> RunContext | None:
     """Return the active :class:`RunContext`, if any."""
 
     return _CURRENT

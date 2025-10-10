@@ -15,4 +15,3 @@ class PipelineRunResult:
     executed: bool = True
     reason: str | None = None
     written: bool | None = None
-

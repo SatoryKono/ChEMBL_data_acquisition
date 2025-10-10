@@ -1,9 +1,11 @@
 """Shared type hints and dataclasses for postprocessing steps."""
+
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Iterable, Mapping, Optional, Protocol
+from typing import Any, Protocol
 
 import pandas as pd
 
@@ -21,7 +23,7 @@ class StepDefinition:
 
     name: str
     func: StepFn
-    description: Optional[str] = None
+    description: str | None = None
     params: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:  # pragma: no cover - dataclass validation
@@ -34,7 +36,9 @@ class StepDefinition:
 class StepError(RuntimeError):
     """Base error raised when a step fails."""
 
-    def __init__(self, step_name: str, message: str, *, cause: Optional[BaseException] = None):
+    def __init__(
+        self, step_name: str, message: str, *, cause: BaseException | None = None
+    ):
         self.step_name = step_name
         self.cause = cause
         error_message = f"Step '{step_name}' failed: {message}"

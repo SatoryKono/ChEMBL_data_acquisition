@@ -52,13 +52,19 @@ def minimal_args(tmp_path: Path) -> argparse.Namespace:
     )
 
 
-def test_run__unsupported_mode(cfg: Config, minimal_args: argparse.Namespace, logger_stub: _MemoryLogger) -> None:
+def test_run__unsupported_mode(
+    cfg: Config, minimal_args: argparse.Namespace, logger_stub: _MemoryLogger
+) -> None:
     minimal_args.mode = "invalid"
 
     exit_code = get_cellline_data.run(cfg, minimal_args)
 
     assert exit_code == 1
-    assert ("error", "cellline_unsupported_mode", {"mode": "invalid"}) in logger_stub.events
+    assert (
+        "error",
+        "cellline_unsupported_mode",
+        {"mode": "invalid"},
+    ) in logger_stub.events
 
 
 def test_run__skip_existing_returns_zero(
@@ -93,7 +99,11 @@ def test_run__skip_existing_returns_zero(
 
     assert exit_code == 0
     assert not called
-    assert ("info", "pipeline_skip_existing", {"output": str(minimal_args.output_csv)}) in logger_stub.events
+    assert (
+        "info",
+        "pipeline_skip_existing",
+        {"output": str(minimal_args.output_csv)},
+    ) in logger_stub.events
 
 
 def test_run__invokes_pipeline_with_expected_options(
@@ -103,7 +113,9 @@ def test_run__invokes_pipeline_with_expected_options(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def fake_run_pipeline(cfg_arg: Config, options: CellLinePipelineOptions) -> CellLinePipelineResult:
+    def fake_run_pipeline(
+        cfg_arg: Config, options: CellLinePipelineOptions
+    ) -> CellLinePipelineResult:
         captured["cfg"] = cfg_arg
         captured["options"] = options
         return CellLinePipelineResult(
@@ -137,7 +149,9 @@ def test_run__invokes_pipeline_with_expected_options(
     assert options.mode == "chembl"
 
 
-def test_main__limit_zero_short_circuits(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_main__limit_zero_short_circuits(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     called = False
 
     def fake_run_cli_command(*_: object, **__: object) -> int:
@@ -154,7 +168,11 @@ def test_main__limit_zero_short_circuits(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     monkeypatch.setattr(get_cellline_data, "setup_cli_logging", fake_setup_cli_logging)
     monkeypatch.setattr(get_cellline_data, "run_cli_command", fake_run_cli_command)
-    monkeypatch.setattr(get_cellline_data, "cli", SimpleNamespace(prepare_io_paths=lambda *args, **kwargs: None))
+    monkeypatch.setattr(
+        get_cellline_data,
+        "cli",
+        SimpleNamespace(prepare_io_paths=lambda *args, **kwargs: None),
+    )
 
     exit_code = get_cellline_data.main(["--input", str(input_csv), "--limit", "0"])
 
@@ -162,7 +180,9 @@ def test_main__limit_zero_short_circuits(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert called is False
 
 
-def test_main__rejects_negative_offset(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_main__rejects_negative_offset(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     @contextmanager
     def fake_setup_cli_logging(*_: object, **__: object):
         yield SimpleNamespace(log_cfg=None)
@@ -172,7 +192,11 @@ def test_main__rejects_negative_offset(monkeypatch: pytest.MonkeyPatch, tmp_path
 
     monkeypatch.setattr(get_cellline_data, "setup_cli_logging", fake_setup_cli_logging)
     monkeypatch.setattr(get_cellline_data, "run_cli_command", lambda *args, **kwargs: 0)
-    monkeypatch.setattr(get_cellline_data, "cli", SimpleNamespace(prepare_io_paths=lambda *args, **kwargs: None))
+    monkeypatch.setattr(
+        get_cellline_data,
+        "cli",
+        SimpleNamespace(prepare_io_paths=lambda *args, **kwargs: None),
+    )
 
     with pytest.raises(SystemExit):
         get_cellline_data.main(["--input", str(input_csv), "--offset", "-1"])

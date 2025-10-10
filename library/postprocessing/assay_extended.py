@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import functools
 import json
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Sequence
 
 import pandas as pd
 
-from library.common.log import logger
 from config.paths import DICTIONARY_DIR
+from library.common.log import logger
 
 from . import helpers
 
@@ -42,7 +42,7 @@ def _lookup_column_name(frame: pd.DataFrame, *candidates: str) -> str | None:
     return None
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _load_assay_lookup_cached(dictionary_root: str) -> pd.DataFrame:
     root = Path(dictionary_root)
     candidate = root / "_assay" / "assay.csv"
@@ -50,7 +50,7 @@ def _load_assay_lookup_cached(dictionary_root: str) -> pd.DataFrame:
         raise AssayExtendedError(
             "assay.csv not found; expected at "
             f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
-    )
+        )
 
     frame: pd.DataFrame | None = None
     errors: list[str] = []
@@ -84,7 +84,9 @@ def _load_assay_lookup_cached(dictionary_root: str) -> pd.DataFrame:
         "target_chembl_id",
     }
     available = expected & set(frame.columns)
-    subset = frame.loc[:, ["assay_chembl_id", *sorted(available - {"assay_chembl_id"})]].copy()
+    subset = frame.loc[
+        :, ["assay_chembl_id", *sorted(available - {"assay_chembl_id"})]
+    ].copy()
     subset = helpers.sort_power_query(subset, ("assay_chembl_id",))
     rename_map = {
         column: f"{column}_lookup"
@@ -102,7 +104,7 @@ def _load_assay_lookup(dictionary_root: Path) -> pd.DataFrame:
     return _load_assay_lookup_cached(str(dictionary_root.resolve()))
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _load_taxonomy_lookup_cached(dictionary_root: str) -> pd.DataFrame:
     root = Path(dictionary_root)
     candidate = root / "_taxonomy" / "taxonomy.csv"
@@ -143,13 +145,21 @@ def _load_taxonomy_lookup_cached(dictionary_root: str) -> pd.DataFrame:
 
     renamed = frame.rename(columns=resolved)
     required = {"assay_tax_id", "assay_group_taxonomy", "assay_strain_taxonomy"}
-    missing = [column for column in required if column not in renamed.columns and column != "assay_tax_id"]
+    missing = [
+        column
+        for column in required
+        if column not in renamed.columns and column != "assay_tax_id"
+    ]
     for column in missing:
         renamed[column] = pd.Series(dtype="string")
-    subset = renamed.loc[:, ["assay_tax_id", "assay_group_taxonomy", "assay_strain_taxonomy"]].copy()
+    subset = renamed.loc[
+        :, ["assay_tax_id", "assay_group_taxonomy", "assay_strain_taxonomy"]
+    ].copy()
     for column in subset.columns:
         subset[column] = subset[column].astype("string")
-    subset = helpers.sort_power_query(subset, ("assay_tax_id", "assay_group_taxonomy", "assay_strain_taxonomy"))
+    subset = helpers.sort_power_query(
+        subset, ("assay_tax_id", "assay_group_taxonomy", "assay_strain_taxonomy")
+    )
     subset = subset.drop_duplicates(subset=["assay_tax_id"], keep="first")
     return subset
 
@@ -158,7 +168,7 @@ def _load_taxonomy_lookup(dictionary_root: Path) -> pd.DataFrame:
     return _load_taxonomy_lookup_cached(str(dictionary_root.resolve()))
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _load_document_year_lookup_cached(dictionary_root: str) -> pd.DataFrame:
     root = Path(dictionary_root)
     candidate = root / "_document" / "document.csv"
@@ -166,7 +176,7 @@ def _load_document_year_lookup_cached(dictionary_root: str) -> pd.DataFrame:
         raise AssayExtendedError(
             "document.csv not found; expected at "
             f"'{candidate}'. Provide dictionary_dir pointing to the bundled dictionaries."
-    )
+        )
 
     frame: pd.DataFrame | None = None
     errors: list[str] = []
@@ -176,7 +186,9 @@ def _load_document_year_lookup_cached(dictionary_root: str) -> pd.DataFrame:
         except Exception as exc:  # pragma: no cover - defensive
             errors.append(f"sep={sep!r}: {exc!s}")
             continue
-        column = _lookup_column_name(candidate_frame, "document_chembl_id", "chembl.document_chembl_id")
+        column = _lookup_column_name(
+            candidate_frame, "document_chembl_id", "chembl.document_chembl_id"
+        )
         if column is not None:
             frame = candidate_frame.rename(columns={column: "document_chembl_id"})
             break
@@ -202,7 +214,9 @@ def _load_document_year_lookup_cached(dictionary_root: str) -> pd.DataFrame:
     if year_column is None:
         raise AssayExtendedError("document.csv missing a year column")
 
-    subset = frame.loc[:, ["document_chembl_id", year_column]].rename(columns={year_column: "year_document"})
+    subset = frame.loc[:, ["document_chembl_id", year_column]].rename(
+        columns={year_column: "year_document"}
+    )
     subset = helpers.sort_power_query(subset, ("document_chembl_id", "year_document"))
     subset = subset.drop_duplicates(subset=["document_chembl_id"], keep="first")
     subset["document_chembl_id"] = subset["document_chembl_id"].astype("string")
@@ -282,22 +296,35 @@ def _aggregate_accessions(frame: pd.DataFrame) -> pd.DataFrame:
         for accession in _parse_accessions(getattr(row, "target_components", None)):
             records.append((target_id, accession))
     if not records:
-        return pd.DataFrame({"target_chembl_id": pd.Series(dtype="string"), "accession_lookup": pd.Series(dtype="string")})
+        return pd.DataFrame(
+            {
+                "target_chembl_id": pd.Series(dtype="string"),
+                "accession_lookup": pd.Series(dtype="string"),
+            }
+        )
     accessions = pd.DataFrame(records, columns=["target_chembl_id", "accession_lookup"])
-    accessions = helpers.sort_power_query(accessions, ("target_chembl_id", "accession_lookup"))
-    accessions = accessions.drop_duplicates(subset=["target_chembl_id", "accession_lookup"], keep="first")
+    accessions = helpers.sort_power_query(
+        accessions, ("target_chembl_id", "accession_lookup")
+    )
+    accessions = accessions.drop_duplicates(
+        subset=["target_chembl_id", "accession_lookup"], keep="first"
+    )
 
     def _join(series: pd.Series) -> str:
-        tokens = [token for token in series.astype("string") if token and token != "<NA>"]
+        tokens = [
+            token for token in series.astype("string") if token and token != "<NA>"
+        ]
         return "|".join(dict.fromkeys(tokens))
 
-    aggregated = accessions.groupby("target_chembl_id", as_index=False)["accession_lookup"].agg(_join)
+    aggregated = accessions.groupby("target_chembl_id", as_index=False)[
+        "accession_lookup"
+    ].agg(_join)
     aggregated["target_chembl_id"] = aggregated["target_chembl_id"].astype("string")
     aggregated["accession_lookup"] = aggregated["accession_lookup"].astype("string")
     return aggregated
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _load_target_accession_lookup_cached(dictionary_root: str) -> pd.DataFrame:
     root = Path(dictionary_root)
     target_dir = root / "_target"
@@ -305,7 +332,7 @@ def _load_target_accession_lookup_cached(dictionary_root: str) -> pd.DataFrame:
         raise AssayExtendedError(
             "Target dictionary directory not found; expected at "
             f"'{target_dir}'. Provide dictionary_dir pointing to the bundled dictionaries."
-    )
+        )
     export_path = _latest_target_export(target_dir)
     frame = helpers.read_csv_with_fallbacks(export_path)
     if "target_chembl_id" not in frame.columns:
@@ -390,7 +417,7 @@ def enrich_assay_metadata(
         "target_chembl_id": "string",
         "document_chembl_id": "string",
     }
-    for column, dtype in ensure_columns.items():
+    for column, _dtype in ensure_columns.items():
         if column not in result.columns:
             result[column] = pd.Series(pd.NA, index=index, dtype="string")
         else:
@@ -403,15 +430,17 @@ def enrich_assay_metadata(
 
     merged = result.merge(assay_lookup, on="assay_chembl_id", how="left")
     if "assay_tax_id_lookup" in merged.columns:
-        merged["assay_tax_id"] = _coalesce_strings([merged["assay_tax_id"], merged["assay_tax_id_lookup"]])
+        merged["assay_tax_id"] = _coalesce_strings(
+            [merged["assay_tax_id"], merged["assay_tax_id_lookup"]]
+        )
     if "document_chembl_id_lookup" in merged.columns:
         merged["document_chembl_id"] = _coalesce_strings(
             [merged["document_chembl_id"], merged["document_chembl_id_lookup"]]
         )
     if "target_chembl_id_lookup" in merged.columns:
-        merged["target_chembl_id"] = _coalesce_strings([
-            merged["target_chembl_id"], merged["target_chembl_id_lookup"]
-        ])
+        merged["target_chembl_id"] = _coalesce_strings(
+            [merged["target_chembl_id"], merged["target_chembl_id_lookup"]]
+        )
 
     merged = merged.merge(taxonomy_lookup, on="assay_tax_id", how="left")
     merged = merged.merge(document_lookup, on="document_chembl_id", how="left")
@@ -419,12 +448,18 @@ def enrich_assay_metadata(
 
     strain_candidates = [
         merged["assay_strain"],
-        merged.get("assay_strain_taxonomy", pd.Series(pd.NA, index=index, dtype="string")),
-        merged.get("assay_strain_lookup", pd.Series(pd.NA, index=index, dtype="string")),
+        merged.get(
+            "assay_strain_taxonomy", pd.Series(pd.NA, index=index, dtype="string")
+        ),
+        merged.get(
+            "assay_strain_lookup", pd.Series(pd.NA, index=index, dtype="string")
+        ),
     ]
     group_candidates = [
         merged["assay_group"],
-        merged.get("assay_group_taxonomy", pd.Series(pd.NA, index=index, dtype="string")),
+        merged.get(
+            "assay_group_taxonomy", pd.Series(pd.NA, index=index, dtype="string")
+        ),
         merged.get("assay_group_lookup", pd.Series(pd.NA, index=index, dtype="string")),
     ]
     merged["assay_strain"] = _coalesce_strings(strain_candidates)
@@ -433,7 +468,9 @@ def enrich_assay_metadata(
     year_candidates = []
     if "year" in merged.columns:
         year_candidates.append(merged["year"])
-    year_candidates.append(merged.get("year_document", pd.Series(pd.NA, index=index, dtype="string")))
+    year_candidates.append(
+        merged.get("year_document", pd.Series(pd.NA, index=index, dtype="string"))
+    )
     merged["year"] = _coalesce_years(year_candidates)
 
     accession_candidates = [
@@ -445,9 +482,13 @@ def enrich_assay_metadata(
     drop_columns = [
         column
         for column in merged.columns
-        if column.endswith("_lookup") or column.endswith("_taxonomy") or column == "year_document"
+        if column.endswith("_lookup")
+        or column.endswith("_taxonomy")
+        or column == "year_document"
     ]
-    merged = merged.drop(columns=[column for column in drop_columns if column in merged.columns])
+    merged = merged.drop(
+        columns=[column for column in drop_columns if column in merged.columns]
+    )
 
     merged["assay_group"] = merged["assay_group"].astype("string")
     merged["assay_strain"] = merged["assay_strain"].astype("string")

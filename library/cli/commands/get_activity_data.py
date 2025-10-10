@@ -6,20 +6,31 @@ from collections.abc import Callable, Sequence
 from types import ModuleType
 from typing import cast
 
-from library.config import Config
 from library.common.log import logger
+<<<<<<< HEAD
 from library.common.logging_setup import Logger
+=======
+from library.config import Config
+>>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
 from library.pipelines.activity.runner import (
-    ActivityCommandOptions,
     MIN_ACTIVITY_TIMEOUT,
+    ActivityCommandOptions,
     resolve_activity_pipeline_hooks,
+)
+from library.pipelines.activity.runner import (
     run_activity_pipeline as _run_activity_pipeline,
 )
 
 from . import _run
 
+<<<<<<< HEAD
 def _sync_pipeline_logger(current_logger: Logger) -> None:
     """Align the shared pipeline logger with ``current_logger`` when possible."""
+=======
+
+def _sync_pipeline_logger(logger: object) -> None:
+    """Align the shared pipeline logger with ``logger`` when possible."""
+>>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
 
     modules: Sequence[tuple[str, str]] = (
         ("library.common.log", "logger"),

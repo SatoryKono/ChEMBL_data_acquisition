@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import pytest
-
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from library.cli import parser as cli_parser
 from library.config import ConfigMetadata
@@ -95,13 +95,15 @@ def test_resolve_target_parameters__config_precedence():
 def test_resolve_target_parameters__all_global_fallback():
     cfg = _make_stub_config()
     parser, _ = get_target_data.build_parser()
-    args = parser.parse_args([
-        "all",
-        "--chunk-size",
-        "9",
-        "--chembl-limit",
-        "4",
-    ])
+    args = parser.parse_args(
+        [
+            "all",
+            "--chunk-size",
+            "9",
+            "--chembl-limit",
+            "4",
+        ]
+    )
 
     get_target_data._resolve_target_parameters("all", cfg, args)
 
@@ -113,13 +115,15 @@ def test_resolve_target_parameters__all_global_fallback():
 @pytest.mark.unit
 def test_prepare_io_paths__output_alias_sets_final_out(tmp_path):
     parser, _ = get_target_data.build_parser()
-    args = parser.parse_args([
-        "all",
-        "--base-path",
-        str(tmp_path),
-        "--output",
-        "custom.csv",
-    ])
+    args = parser.parse_args(
+        [
+            "all",
+            "--base-path",
+            str(tmp_path),
+            "--output",
+            "custom.csv",
+        ]
+    )
 
     get_target_data.prepare_io_paths(
         args,
@@ -136,33 +140,13 @@ def test_prepare_io_paths__output_alias_sets_final_out(tmp_path):
 @pytest.mark.unit
 def test_prepare_io_paths__default_filename_without_date(tmp_path):
     parser, _ = get_target_data.build_parser()
-    args = parser.parse_args([
-        "all",
-        "--base-path",
-        str(tmp_path),
-    ])
-
-    get_target_data.prepare_io_paths(
-        args,
-        input_default=get_target_data.DEFAULT_INPUT_NAME,
-        output_stem=get_target_data.DEFAULT_OUTPUT_STEM,
+    args = parser.parse_args(
+        [
+            "all",
+            "--base-path",
+            str(tmp_path),
+        ]
     )
-
-    expected = (tmp_path / f"output.{get_target_data.DEFAULT_OUTPUT_STEM}.csv").resolve()
-    assert args.final_out == expected
-    assert getattr(args, "date", None) is None
-
-
-@pytest.mark.unit
-def test_prepare_io_paths__respects_explicit_date(tmp_path):
-    parser, _ = get_target_data.build_parser()
-    args = parser.parse_args([
-        "all",
-        "--base-path",
-        str(tmp_path),
-        "--date",
-        "20250228",
-    ])
 
     get_target_data.prepare_io_paths(
         args,
@@ -171,8 +155,33 @@ def test_prepare_io_paths__respects_explicit_date(tmp_path):
     )
 
     expected = (
-        tmp_path
-        / f"output.{get_target_data.DEFAULT_OUTPUT_STEM}_20250228.csv"
+        tmp_path / f"output.{get_target_data.DEFAULT_OUTPUT_STEM}.csv"
+    ).resolve()
+    assert args.final_out == expected
+    assert getattr(args, "date", None) is None
+
+
+@pytest.mark.unit
+def test_prepare_io_paths__respects_explicit_date(tmp_path):
+    parser, _ = get_target_data.build_parser()
+    args = parser.parse_args(
+        [
+            "all",
+            "--base-path",
+            str(tmp_path),
+            "--date",
+            "20250228",
+        ]
+    )
+
+    get_target_data.prepare_io_paths(
+        args,
+        input_default=get_target_data.DEFAULT_INPUT_NAME,
+        output_stem=get_target_data.DEFAULT_OUTPUT_STEM,
+    )
+
+    expected = (
+        tmp_path / f"output.{get_target_data.DEFAULT_OUTPUT_STEM}_20250228.csv"
     ).resolve()
     assert args.final_out == expected
     assert args.date == "20250228"
@@ -254,7 +263,11 @@ def test_apply_config_overrides__missing_config_attribute(monkeypatch, tmp_path)
     assert isinstance(cfg, _ConfigStub)
     assert args.iuphar_column == TARGET_MODE_DEFAULTS["iuphar"].column
     assert warnings
-    matching = [payload for event, payload in warnings if payload.get("argument") == "iuphar_column"]
+    matching = [
+        payload
+        for event, payload in warnings
+        if payload.get("argument") == "iuphar_column"
+    ]
     assert matching
     assert matching[0]["path"] == "sources.chembl.pipelines.target.iuphar.column"
     assert matching[0]["error"]

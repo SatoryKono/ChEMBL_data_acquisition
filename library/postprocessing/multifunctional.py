@@ -13,4 +13,3 @@ def normalise_multifunctional(series: pd.Series | None) -> pd.Series:
     text = series.astype("string").str.strip().str.lower()
     mapped = text.map({"true": True, "false": False})
     return mapped.astype("boolean")
-

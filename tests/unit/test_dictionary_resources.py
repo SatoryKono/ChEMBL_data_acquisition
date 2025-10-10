@@ -18,9 +18,11 @@ def test_compute_sha256__ignores_crlf_in_files(tmp_path: Path) -> None:
     lf_path.write_text("id,name\n1,example\n", encoding="utf-8")
 
     crlf_path = tmp_path / "crlf.csv"
-    crlf_path.write_bytes("id,name\r\n1,example\r\n".encode("utf-8"))
+    crlf_path.write_bytes(b"id,name\r\n1,example\r\n")
 
-    assert dictionaries._compute_sha256(lf_path) == dictionaries._compute_sha256(crlf_path)
+    assert dictionaries._compute_sha256(lf_path) == dictionaries._compute_sha256(
+        crlf_path
+    )
 
 
 @pytest.mark.unit
@@ -35,11 +37,13 @@ def test_compute_sha256__ignores_crlf_in_directories(tmp_path: Path) -> None:
 
     crlf_dir = tmp_path / "crlf"
     crlf_dir.mkdir()
-    (crlf_dir / "data.csv").write_bytes("a,b\r\n1,2\r\n".encode("utf-8"))
+    (crlf_dir / "data.csv").write_bytes(b"a,b\r\n1,2\r\n")
     (crlf_dir / "nested").mkdir()
-    (crlf_dir / "nested" / "more.csv").write_bytes("x\r\ny\r\n".encode("utf-8"))
+    (crlf_dir / "nested" / "more.csv").write_bytes(b"x\r\ny\r\n")
 
-    assert dictionaries._compute_sha256(lf_dir) == dictionaries._compute_sha256(crlf_dir)
+    assert dictionaries._compute_sha256(lf_dir) == dictionaries._compute_sha256(
+        crlf_dir
+    )
 
 
 @pytest.mark.unit
@@ -103,7 +107,9 @@ def test_compute_sha256__normalises_crlf_in_non_utf8_files(tmp_path: Path) -> No
     crlf_path = tmp_path / "latin1_crlf.csv"
     crlf_path.write_bytes(latin1_bytes_crlf)
 
-    assert dictionaries._compute_sha256(lf_path) == dictionaries._compute_sha256(crlf_path)
+    assert dictionaries._compute_sha256(lf_path) == dictionaries._compute_sha256(
+        crlf_path
+    )
 
 
 @pytest.mark.unit
@@ -133,10 +139,14 @@ def test_manifest_allows_windows_textmode_checksum() -> None:
 
 
 @pytest.mark.unit
-def test_known_checksum_variants__includes_sparse_index_checksum(tmp_path: Path) -> None:
+def test_known_checksum_variants__includes_sparse_index_checksum(
+    tmp_path: Path,
+) -> None:
     """The runtime allow-list should accept the new sparse-index checksum."""
 
-    variants = dictionaries._iter_additional_checksums("dictionary_root", base_dir=tmp_path)
+    variants = dictionaries._iter_additional_checksums(
+        "dictionary_root", base_dir=tmp_path
+    )
 
     assert dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_SPARSE_INDEX_CHECKSUM in variants
@@ -144,8 +154,12 @@ def test_known_checksum_variants__includes_sparse_index_checksum(tmp_path: Path)
     assert dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_NTFS_CHECKSUM in variants
-    assert "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a" in variants
-    assert "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b" in variants
+    assert (
+        "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a" in variants
+    )
+    assert (
+        "ac5176986b0fd769a190182d91c69a2ab5e62606608ccf7d9704413fb39ef55b" in variants
+    )
 
 
 @pytest.mark.unit
@@ -155,16 +169,20 @@ def test_iter_additional_checksums__merges_manifest_allowlist(tmp_path: Path) ->
     allowlist_path = tmp_path / "manifest.allowlist.yaml"
     custom_checksum = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     allowlist_path.write_text(
-        f"dictionary_root:\n  - \"{custom_checksum}\"\n",
+        f'dictionary_root:\n  - "{custom_checksum}"\n',
         encoding="utf-8",
     )
 
-    variants = dictionaries._iter_additional_checksums("dictionary_root", base_dir=tmp_path)
+    variants = dictionaries._iter_additional_checksums(
+        "dictionary_root", base_dir=tmp_path
+    )
 
     assert dictionaries.WINDOWS_SPARSE_INDEX_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_SPARSE_INDEX_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_TEXTMODE_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM in variants
-    assert "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a" in variants
+    assert (
+        "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a" in variants
+    )
     assert custom_checksum in variants

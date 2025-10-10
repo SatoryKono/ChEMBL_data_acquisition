@@ -19,7 +19,11 @@ from library.pipelines.tissue import pipeline as tissue_pipeline
     ],
 )
 def test_read_tissue_identifiers__limit_and_offset(
-    cfg, monkeypatch: pytest.MonkeyPatch, limit: int | None, offset: int, expected: list[str]
+    cfg,
+    monkeypatch: pytest.MonkeyPatch,
+    limit: int | None,
+    offset: int,
+    expected: list[str],
 ) -> None:
     """Ensure identifiers are trimmed and sliced deterministically."""
 
@@ -73,6 +77,9 @@ def test_prepare_tissue_dataframe__fills_missing_and_normalises() -> None:
         "CHEMBLT2",
         "CHEMBLT3",
     ]
-    assert prepared.loc[prepared["tissue_chembl_id"] == "CHEMBLT2", "pref_name"].isna().all()
+    assert (
+        prepared.loc[prepared["tissue_chembl_id"] == "CHEMBLT2", "pref_name"]
+        .isna()
+        .all()
+    )
     assert prepared.dtypes.tolist() == [pd.StringDtype()] * len(TISSUE_BASE_COLUMNS)
-

@@ -49,4 +49,8 @@ def test_prepare_option__metadata_present_respects_snapshot() -> None:
     override_result = prepare_option(metadata, argument="limit", value=100)
 
     assert default_result == {"value": 50, "source": "config", "detail": "config.yaml"}
-    assert override_result == {"value": 100, "source": "config", "detail": "config.yaml"}
+    assert override_result == {
+        "value": 100,
+        "source": "config",
+        "detail": "config.yaml",
+    }

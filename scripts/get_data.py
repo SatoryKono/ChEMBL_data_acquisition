@@ -38,61 +38,68 @@ import os
 import shutil
 import time
 from collections import deque
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from fnmatch import fnmatch
 from heapq import heappop, heappush
 from pathlib import Path
+from typing import IO, Any
 
-from typing import Any, Callable, Iterable, IO, Mapping, Sequence
+from pydantic import ValidationError
 
 from library.cli.logging import setup_cli_logging
 from library.cli_utils import resolve_invocation
 from library.clients import ChemblClient
-from library.orchestration import ETLContext
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
-from pydantic import ValidationError
-
 from library.config import (
+    DEFAULT_CONFIG_PATH,
     Config,
     ConfigError,
     ConfigLoaderError,
-    DEFAULT_CONFIG_PATH,
     load_config,
     print_config,
 )
-from library.pipelines.activity import (
-    ActivityPipelineOptions,
-    run_pipeline as run_activity_pipeline,
-)
-from library.pipelines.assay import (
-    AssayPipelineOptions,
-    run_pipeline as run_assay_pipeline,
-)
+from library.orchestration import ETLContext
 from library.orchestration.workflow import (
     PreparedPipelineStep,
     StepExecutionResult,
     execute_workflow,
     temporary_output_path,
 )
+from library.pipelines.activity import (
+    ActivityPipelineOptions,
+)
+from library.pipelines.activity import (
+    run_pipeline as run_activity_pipeline,
+)
+from library.pipelines.assay import (
+    AssayPipelineOptions,
+)
+from library.pipelines.assay import (
+    run_pipeline as run_assay_pipeline,
+)
 from library.pipelines.common import PipelineRunResult
 from library.pipelines.document import (
     DocumentPipelineOptions,
+)
+from library.pipelines.document import (
     run_pipeline as run_document_pipeline,
 )
 from library.pipelines.registry import PipelineStep, load_pipeline_registry
-
-from library.reporting.run_manifest import load_output_report, merge_run_output
-
 from library.pipelines.target import (
     TargetPipelineOptions,
+)
+from library.pipelines.target import (
     run_pipeline as run_target_pipeline,
 )
 from library.pipelines.testitem import (
     TestitemPipelineOptions,
+)
+from library.pipelines.testitem import (
     run_pipeline as run_testitem_pipeline,
 )
-
+from library.reporting.run_manifest import load_output_report, merge_run_output
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
 
@@ -124,12 +131,12 @@ _RUN_ID_ENV = "CHEMBL_DA_RUN_ID"
 class PipelineApi:
     """Describe how to build options and execute a pipeline programmatically."""
 
-    build_options: Callable[["PipelineRunConfig", Path, Path], object]
+    build_options: Callable[[PipelineRunConfig, Path, Path], object]
     runner: Callable[[Config, object], PipelineRunResult]
 
 
 def _build_document_options(
-    cfg: "PipelineRunConfig", input_path: Path, output_path: Path
+    cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> DocumentPipelineOptions:
     return DocumentPipelineOptions(
         input_csv=input_path,
@@ -141,7 +148,7 @@ def _build_document_options(
 
 
 def _build_target_options(
-    cfg: "PipelineRunConfig", input_path: Path, output_path: Path
+    cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> TargetPipelineOptions:
     command = cfg.subcommand_for("target") or "all"
     return TargetPipelineOptions(
@@ -154,7 +161,7 @@ def _build_target_options(
 
 
 def _build_assay_options(
-    cfg: "PipelineRunConfig", input_path: Path, output_path: Path
+    cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> AssayPipelineOptions:
     return AssayPipelineOptions(
         input_csv=input_path,
@@ -165,7 +172,7 @@ def _build_assay_options(
 
 
 def _build_testitem_options(
-    cfg: "PipelineRunConfig", input_path: Path, output_path: Path
+    cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> TestitemPipelineOptions:
     return TestitemPipelineOptions(
         input_csv=input_path,
@@ -176,7 +183,7 @@ def _build_testitem_options(
 
 
 def _build_activity_options(
-    cfg: "PipelineRunConfig", input_path: Path, output_path: Path
+    cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> ActivityPipelineOptions:
     return ActivityPipelineOptions(
         input_csv=input_path,
@@ -241,7 +248,7 @@ def _resolve_path(base: Path, candidate: Path) -> Path:
     return (base / expanded).resolve()
 
 
-def _resolve_consumed_artifact_path(cfg: "PipelineRunConfig", artefact: str) -> Path:
+def _resolve_consumed_artifact_path(cfg: PipelineRunConfig, artefact: str) -> Path:
     """Return the filesystem path associated with a consumed artefact name."""
 
     candidate = Path(artefact)
@@ -275,7 +282,9 @@ def _parse_overrides(
     return overrides
 
 
-def _resolve_pipeline_steps(args: argparse.Namespace | None = None) -> tuple[PipelineStep, ...]:
+def _resolve_pipeline_steps(
+    args: argparse.Namespace | None = None,
+) -> tuple[PipelineStep, ...]:
     """Load pipeline definitions applying CLI overrides when provided."""
 
     registry_source = getattr(args, "pipeline_registry", None)
@@ -287,9 +296,7 @@ def _resolve_pipeline_steps(args: argparse.Namespace | None = None) -> tuple[Pip
     steps = tuple(steps)
 
     input_overrides = _parse_overrides(getattr(args, "override_input", None))
-    output_overrides = _parse_overrides(
-        getattr(args, "override_output_stem", None)
-    )
+    output_overrides = _parse_overrides(getattr(args, "override_output_stem", None))
     subcommand_overrides = _parse_overrides(
         getattr(args, "override_subcommand", None), allow_empty_value=True
     )
@@ -764,7 +771,10 @@ def _discover_sidecars(
         if include_patterns is None:
             return False
         rel_value = rel_path.as_posix()
-        return any(fnmatch(rel_value, pattern) or fnmatch(name, pattern) for pattern in include_patterns)
+        return any(
+            fnmatch(rel_value, pattern) or fnmatch(name, pattern)
+            for pattern in include_patterns
+        )
 
     def _normalise_relative(path: Path) -> Path:
         parts: list[str] = []
@@ -795,7 +805,9 @@ def _discover_sidecars(
                     next_depth = depth + 1
                     if max_depth is not None and next_depth > max_depth:
                         continue
-                    matches_prefix = any(name.startswith(prefix) for prefix in prefix_candidates)
+                    matches_prefix = any(
+                        name.startswith(prefix) for prefix in prefix_candidates
+                    )
                     matches_pattern = _matches_explicit_patterns(rel_path, name)
                     next_within = within_branch or matches_prefix or matches_pattern
                     if next_within:
@@ -857,7 +869,8 @@ def _remove_path(path: Path) -> None:
                 "unlink_retry_permission",
                 path=str(path),
                 attempt=attempt,
-                error=str(exc), exc_info=exc,
+                error=str(exc),
+                exc_info=exc,
             )
             time.sleep(_UNLINK_RETRY_SLEEP_SECONDS)
             continue
@@ -871,7 +884,8 @@ def _remove_path(path: Path) -> None:
                     "unlink_retry_sharing_violation",
                     path=str(path),
                     attempt=attempt,
-                    error=str(exc), exc_info=exc,
+                    error=str(exc),
+                    exc_info=exc,
                 )
                 time.sleep(_UNLINK_RETRY_SLEEP_SECONDS)
                 continue
@@ -1029,11 +1043,7 @@ def _finalize_step_success(
         working_path.replace(destination)
         _cleanup_empty_directories(original_parent, root=working_dir)
         final_path = sidecar.final_path
-        if (
-            final_path is not None
-            and final_path.exists()
-            and final_path != destination
-        ):
+        if final_path is not None and final_path.exists() and final_path != destination:
             final_parent = final_path.parent
             _remove_path(final_path)
             _cleanup_empty_directories(final_parent, root=final_dir)
@@ -1187,6 +1197,7 @@ def _warm_parent_catalog(cfg: PipelineRunConfig, base_config: Config) -> None:
 
     testitem_cfg = chembl_sources.pipelines.testitem
     _LOGGER.info("parent_catalog_warm_start", **log_kwargs)
+
     def _catalog_client_factory(context: ETLContext) -> ChemblClient:
         return ChemblClient(
             api=chembl_sources.api,
@@ -1210,7 +1221,8 @@ def _warm_parent_catalog(cfg: PipelineRunConfig, base_config: Config) -> None:
         _LOGGER.error(
             "parent_catalog_warm_failed",
             elapsed=elapsed,
-            error=str(exc), exc_info=exc,
+            error=str(exc),
+            exc_info=exc,
             **log_kwargs,
         )
         raise
@@ -1225,7 +1237,6 @@ def _warm_parent_catalog(cfg: PipelineRunConfig, base_config: Config) -> None:
         raise
     elapsed = time.perf_counter() - start_time
     _LOGGER.info("parent_catalog_warm_done", elapsed=elapsed, **log_kwargs)
-
 
 
 def _compute_file_checksum(path: Path, *, chunk_size: int = 65536) -> str:
@@ -1250,20 +1261,24 @@ def _describe_file(path: Path) -> dict[str, Any]:
     except OSError:
         exists = False
     if not exists or not path.is_file():
-        info.update({
-            "exists": False,
-            "size_bytes": None,
-            "checksum_sha256": None,
-        })
+        info.update(
+            {
+                "exists": False,
+                "size_bytes": None,
+                "checksum_sha256": None,
+            }
+        )
         return info
     try:
         stat_result = path.stat()
     except OSError:
-        info.update({
-            "exists": False,
-            "size_bytes": None,
-            "checksum_sha256": None,
-        })
+        info.update(
+            {
+                "exists": False,
+                "size_bytes": None,
+                "checksum_sha256": None,
+            }
+        )
         return info
     info.update(
         {
@@ -1275,7 +1290,9 @@ def _describe_file(path: Path) -> dict[str, Any]:
     return info
 
 
-def _describe_sidecars(final_output: Path, working_output: Path) -> list[dict[str, Any]]:
+def _describe_sidecars(
+    final_output: Path, working_output: Path
+) -> list[dict[str, Any]]:
     """Return manifest metadata for sidecars associated with ``final_output``."""
 
     include_patterns = (
@@ -1327,7 +1344,9 @@ def _complete_manifest_entry(
         merge_run_output(entry, report)
 
 
-def _pending_manifest_entry(step: PipelineStep, cfg: PipelineRunConfig) -> dict[str, Any]:
+def _pending_manifest_entry(
+    step: PipelineStep, cfg: PipelineRunConfig
+) -> dict[str, Any]:
     """Return a manifest entry for ``step`` that has not been executed."""
 
     final_output = step.expected_output(cfg)
@@ -1467,11 +1486,7 @@ def _build_execution_plan(
         for artefact in produced:
             current = produced_by.get(artefact)
             if current is not None and current != step.name:
-                raise ValueError(
-                    "artefact '{artefact}' declared by multiple steps".format(
-                        artefact=artefact
-                    )
-                )
+                raise ValueError(f"artefact '{artefact}' declared by multiple steps")
             produced_by[artefact] = step.name
 
     dependencies: dict[str, set[str]] = {
@@ -1518,9 +1533,7 @@ def _build_execution_plan(
 
     if len(ordered) != len(steps):
         remaining = sorted(name for name, degree in indegree.items() if degree > 0)
-        raise ValueError(
-            "cyclic pipeline dependency detected: " + ", ".join(remaining)
-        )
+        raise ValueError("cyclic pipeline dependency detected: " + ", ".join(remaining))
 
     ordered_steps = tuple(by_name[name] for name in ordered)
     scheduled = set(ordered)
@@ -1533,9 +1546,7 @@ def _build_execution_plan(
                 requirements.append(artefact)
         external[step.name] = tuple(requirements)
 
-    frozen_dependencies = {
-        name: frozenset(deps) for name, deps in dependencies.items()
-    }
+    frozen_dependencies = {name: frozenset(deps) for name, deps in dependencies.items()}
     return PipelineExecutionPlan(
         steps=ordered_steps,
         dependencies=frozen_dependencies,
@@ -1549,7 +1560,6 @@ def run_pipeline(
     *,
     steps: Sequence[PipelineStep] | None = None,
 ) -> int:
-
     """Execute all configured steps and return the resulting exit status."""
 
     effective_steps = tuple(DEFAULT_PIPELINE_STEPS if steps is None else steps)
@@ -1680,7 +1690,9 @@ def run_pipeline(
                                 "reason": "parent_catalog_timeout",
                             }
                         )
-                        _LOGGER.error("parent_catalog_warm_timeout", error=str(exc), exc_info=exc)
+                        _LOGGER.error(
+                            "parent_catalog_warm_timeout", error=str(exc), exc_info=exc
+                        )
                         _complete_manifest_entry(
                             entry,
                             final_output=final_output,
@@ -1705,7 +1717,9 @@ def run_pipeline(
                                 "reason": "parent_catalog_error",
                             }
                         )
-                        _LOGGER.error("parent_catalog_warm_error", error=str(exc), exc_info=exc)
+                        _LOGGER.error(
+                            "parent_catalog_warm_error", error=str(exc), exc_info=exc
+                        )
                         _complete_manifest_entry(
                             entry,
                             final_output=final_output,
@@ -1960,8 +1974,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
     raise SystemExit(main())
 
+
 def _temporary_output_path(output_path: Path) -> Path:
     """Backward compatible alias for :func:`temporary_output_path`."""
 
     return temporary_output_path(output_path)
-

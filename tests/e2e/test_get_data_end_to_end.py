@@ -19,7 +19,6 @@ from scripts import get_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_file, parse_log_lines
 
-
 PipelineFunc = Callable[[list[str]], int]
 
 
@@ -64,9 +63,7 @@ def _build_stub_pipeline(
             )
         frame = frame[selected_columns].copy()
         if key_column not in frame.columns:
-            get_data._LOGGER.error(
-                f"{name}_missing_key_column", column=key_column
-            )
+            get_data._LOGGER.error(f"{name}_missing_key_column", column=key_column)
             return 1
 
         frame[key_column] = frame[key_column].astype("string").str.strip()
@@ -82,7 +79,8 @@ def _build_stub_pipeline(
 
         if transformed[key_column].duplicated().any():
             get_data._LOGGER.error(
-                f"{name}_output_duplicates", count=int(transformed[key_column].duplicated().sum())
+                f"{name}_output_duplicates",
+                count=int(transformed[key_column].duplicated().sum()),
             )
             return 1
 
@@ -159,7 +157,9 @@ def _testitems_transform(frame: pd.DataFrame, logger: get_data.Logger) -> pd.Dat
     frame["preferred_name"] = names.where(~missing, "")
     frame["normalized_name"] = normalized
     frame["is_named"] = (~missing).astype("boolean")
-    return frame[["molecule_chembl_id", "preferred_name", "normalized_name", "is_named"]]
+    return frame[
+        ["molecule_chembl_id", "preferred_name", "normalized_name", "is_named"]
+    ]
 
 
 def _activities_transform(frame: pd.DataFrame, logger: get_data.Logger) -> pd.DataFrame:
@@ -170,10 +170,14 @@ def _activities_transform(frame: pd.DataFrame, logger: get_data.Logger) -> pd.Da
     if "force_failure" in frame.columns and frame["force_failure"].any():
         raise RuntimeError("activity_forced_failure")
     cleaned = values.fillna("")
-    numeric = pd.to_numeric(cleaned.replace("", pd.NA), errors="coerce").astype("Float64")
+    numeric = pd.to_numeric(cleaned.replace("", pd.NA), errors="coerce").astype(
+        "Float64"
+    )
     frame = frame.copy()
     frame["standard_value"] = cleaned
-    frame["standard_units"] = frame["standard_units"].astype("string").fillna("").str.strip()
+    frame["standard_units"] = (
+        frame["standard_units"].astype("string").fillna("").str.strip()
+    )
     frame["standard_value_numeric"] = numeric
     frame["is_valid"] = numeric.notna().astype("boolean")
     return frame[
@@ -263,9 +267,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     config_path.write_text("io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n")
 
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
-    monkeypatch.setattr(
-        get_data, "_warm_parent_catalog", lambda _cfg, _base: None
-    )
+    monkeypatch.setattr(get_data, "_warm_parent_catalog", lambda _cfg, _base: None)
 
     log_streams: deque[io.StringIO] = deque()
     observed_run_ids: list[str] = []
@@ -443,7 +445,9 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert events["activity_missing_value"].get("level") == "ERROR"
     assert not any(record.get("event") == "step_arguments" for record in logs)
 
-    expected_dir = Path(__file__).resolve().parents[1] / "resources" / "expected_get_data"
+    expected_dir = (
+        Path(__file__).resolve().parents[1] / "resources" / "expected_get_data"
+    )
     key_columns = {
         "document": "document_chembl_id",
         "target": "target_chembl_id",
@@ -811,4 +815,3 @@ def _load_assay_dictionary() -> pd.DataFrame:
     lookup["accession"] = lookup["accession"].astype("string")
     lookup["year"] = pd.to_numeric(lookup["year"], errors="coerce").astype("Int64")
     return lookup
-

@@ -94,7 +94,9 @@ def _apply_sampling_and_filters(
             )
             include_warning_logged[0] = True
         include_set = set(include_columns)
-        filtered = filtered.loc[:, [col for col in filtered.columns if col in include_set]]
+        filtered = filtered.loc[
+            :, [col for col in filtered.columns if col in include_set]
+        ]
 
     if exclude_columns:
         missing = sorted(set(exclude_columns) - set(frame.columns))
@@ -373,7 +375,9 @@ class _ColumnAccumulator:
                 message="Parsed string.*included an un-recognized timezone",
                 category=FutureWarning,
             )
-            dates = pd.to_datetime(normalised, errors="coerce", utc=True, format="mixed")
+            dates = pd.to_datetime(
+                normalised, errors="coerce", utc=True, format="mixed"
+            )
 
         valid_dates = dates.dropna()
         if not valid_dates.empty:
@@ -602,13 +606,17 @@ class TableQualityProfiler:
             "top_values",
         ]
         quality_report = pd.DataFrame(rows, columns=column_order)
-        destination = Path(destination_dir) if destination_dir is not None else Path(".")
+        destination = (
+            Path(destination_dir) if destination_dir is not None else Path(".")
+        )
         if destination_dir is not None:
             destination.mkdir(parents=True, exist_ok=True)
 
         table_label = Path(str(table_name)).name
         if not table_label:
-            raise ValueError("table_name must contain at least one non-separator character")
+            raise ValueError(
+                "table_name must contain at least one non-separator character"
+            )
 
         quality_path = destination / f"{table_label}_quality_report_table.csv"
         quality_report.to_csv(quality_path, index=False, encoding="utf-8-sig")
@@ -656,14 +664,10 @@ def analyze_table_quality(
     import pandas as pd
 
     include_tuple: tuple[str, ...] | None = (
-        tuple(include_columns)
-        if include_columns is not None
-        else None
+        tuple(include_columns) if include_columns is not None else None
     )
     exclude_tuple: tuple[str, ...] | None = (
-        tuple(exclude_columns)
-        if exclude_columns is not None
-        else None
+        tuple(exclude_columns) if exclude_columns is not None else None
     )
 
     include_warning_logged = [False]
@@ -687,7 +691,7 @@ def analyze_table_quality(
                 no_columns_logged=no_columns_logged,
             )
             profiler.consume(filtered)
-        elif isinstance(table, (str, Path)):
+        elif isinstance(table, str | Path):
             df = _load_table(table)
             filtered, _ = _apply_sampling_and_filters(
                 df,

@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pandas as pd
 import pandas.testing as pdt
-
 import pytest
 
 from library.postprocessing.target.main import postprocess_target_table
+
 
 @pytest.mark.unit  # type: ignore[misc]
 def test_postprocess_target_table__produces_power_query_equivalent_csv(
@@ -24,7 +24,9 @@ def test_postprocess_target_table__produces_power_query_equivalent_csv(
 
     assert output_path == tmp_path / f"organism.{input_path.name}"
     # Normalise EOL for cross-platform determinism
-    assert output_path.read_bytes().replace(b"\r\n", b"\n") == expected_path.read_bytes().replace(b"\r\n", b"\n")
+    assert output_path.read_bytes().replace(
+        b"\r\n", b"\n"
+    ) == expected_path.read_bytes().replace(b"\r\n", b"\n")
 
     result_frame = pd.read_csv(output_path, dtype=str, keep_default_na=False)
     expected_frame = pd.read_csv(expected_path, dtype=str, keep_default_na=False)
@@ -93,6 +95,7 @@ def test_postprocess_target_table__fills_missing_columns(tmp_path: Path) -> None
     assert output_path.name == "organism.output.target_20250101.csv"
     assert output_path.exists()
 
+
 @pytest.mark.unit  # type: ignore[misc]
 def test_postprocess_target_table__handles_missing_identifier_column(
     tmp_path: Path,
@@ -120,4 +123,3 @@ def test_postprocess_target_table__handles_missing_identifier_column(
     assert result_frame.at[0, "target_chembl_id"] == ""
     assert result_frame.at[0, "multifunctional_enzyme"] == "True"
     assert fetch_calls == [("9606", None)]
-

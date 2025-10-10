@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 from types import ModuleType
-from typing import Iterable
 
 _DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -60,7 +60,9 @@ def _should_purge_existing(module: ModuleType | None, project_root: Path) -> boo
 
     if module is None:
         return False
-    return not any(_is_within_project(path, project_root) for path in _iter_module_paths(module))
+    return not any(
+        _is_within_project(path, project_root) for path in _iter_module_paths(module)
+    )
 
 
 def _purge_conflicting_modules(project_root: Path) -> None:

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
+from datetime import UTC, datetime
 
 import pandas as pd
 
 from library.postprocess.targets.schema import TARGET_SCHEMA
-
 from scripts import make_target_postprocessing as cli
 
 
@@ -32,7 +31,9 @@ def test_make_target_postprocessing__end_to_end(tmp_path, monkeypatch):
     assert exit_code == 0
 
     result = pd.read_csv(output_path)
-    expected_columns = [col for col in TARGET_SCHEMA.column_order if col in result.columns]
+    expected_columns = [
+        col for col in TARGET_SCHEMA.column_order if col in result.columns
+    ]
     assert list(result.columns)[: len(expected_columns)] == expected_columns
     assert {"chembl_synonyms", "gtopdb_synonyms"}.issubset(result.columns)
     assert result["target_chembl_id"].tolist() == ["T1", "T2"]
@@ -54,7 +55,7 @@ def test_make_target_postprocessing__end_to_end(tmp_path, monkeypatch):
     assert payload["table"] == "targets"
     assert payload["metrics"]["output"]["rows"] == len(result)
 
-    date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    date_str = datetime.now(UTC).strftime("%Y%m%d")
     log_path = log_dir / f"make_target_postprocessing_{date_str}.log"
     assert log_path.exists()
 
@@ -62,4 +63,3 @@ def test_make_target_postprocessing__end_to_end(tmp_path, monkeypatch):
     second_exit = cli.main(["--input", str(input_path), "--output", str(output_path)])
     assert second_exit == 0
     assert output_path.read_bytes() == snapshot
-
