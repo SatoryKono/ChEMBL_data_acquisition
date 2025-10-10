@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -18,6 +19,18 @@ from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS
 from library.pipelines.common import PipelineRunResult
 from library.postprocessing import activity_extended
 from scripts import get_activity_data
+
+
+def test_wrapper_module__reflects_command_updates(monkeypatch):
+    command_module = importlib.import_module("library.cli.commands.get_activity_data")
+    wrapper_module = importlib.import_module("scripts.get_activity_data")
+
+    assert wrapper_module is command_module
+
+    sentinel = object()
+    monkeypatch.setattr(command_module, "_sentinel_for_test", sentinel, raising=False)
+
+    assert getattr(wrapper_module, "_sentinel_for_test") is sentinel
 
 
 def _make_pref_name_frame() -> pd.DataFrame:
