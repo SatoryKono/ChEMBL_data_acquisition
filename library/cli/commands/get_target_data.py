@@ -20,7 +20,7 @@ import shutil
 import stat
 import sys
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from itertools import islice
@@ -492,16 +492,17 @@ def run_target_postprocess_if_requested(
 def _resolve_parameter(
     namespace: argparse.Namespace,
     cfg_section: Any,
-    *,
-    dest: str,
     attr: str,
+    *,
+    dest: str | None = None,
     default_value: object,
-    cli_overrides: set[str],
+    cli_overrides: Collection[str] | None = None,
     scope: str,
     fallback: tuple[object, str] | None = None,
 ) -> ParameterLogEntry:
-    if dest in cli_overrides:
-        value = getattr(namespace, dest)
+    dest_name = dest or attr
+    if cli_overrides is not None and dest_name in cli_overrides:
+        value = getattr(namespace, dest_name)
         source = "cli"
     else:
         current = getattr(cfg_section, attr, default_value)
@@ -513,7 +514,7 @@ def _resolve_parameter(
         else:
             value = default_value
             source = "default"
-    setattr(namespace, dest, value)
+    setattr(namespace, dest_name, value)
     if hasattr(cfg_section, attr):
         setattr(cfg_section, attr, value)
     return ParameterLogEntry(scope=scope, name=attr, value=value, source=source)
@@ -522,7 +523,7 @@ def _resolve_parameter(
 def _resolve_target_parameters(
     command: str, cfg: Config, args: argparse.Namespace
 ) -> list[ParameterLogEntry]:
-    cli_overrides: set[str] = getattr(args, "_cli_overrides", set())
+    cli_overrides: Collection[str] = getattr(args, "_cli_overrides", set())
     entries: list[ParameterLogEntry] = []
 
     def _apply_mode(
@@ -545,8 +546,8 @@ def _resolve_target_parameters(
             entry = _resolve_parameter(
                 args,
                 section,
+                name,
                 dest=dest,
-                attr=name,
                 default_value=getattr(defaults, name),
                 cli_overrides=cli_overrides,
                 scope=f"{scope}.{name}" if scope_prefix else scope,
