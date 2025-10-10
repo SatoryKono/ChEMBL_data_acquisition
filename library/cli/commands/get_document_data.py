@@ -80,9 +80,9 @@ from library.pipelines.document.service import (
     FallbackDoiMetrics,
     FallbackDoiState,
 )
-from library.postprocessing import document as document_export_postprocessing
 from library.postprocessing.common import collect_postprocess_metrics
 from library.postprocessing.common.logging import PipelineRunMetrics
+from library.postprocessing.common.types import SchemaValidationError, StepError
 from library.postprocessing.document import preprocess_documents_csv
 from library.postprocessing.documents import (
     run_document_pipeline as run_document_postprocess,
@@ -482,6 +482,67 @@ def _maybe_run_document_postprocessing(
         )
 
 
+def _run_document_postprocess_pipeline(
+    csv_path: Path,
+    *,
+    logger: Logger,
+    extras: Mapping[str, object] | None = None,
+    config_path: Path | None = None,
+) -> tuple[Path, PipelineRunMetrics | None]:
+    """Execute the document postprocessing pipeline mirroring the CLI script."""
+
+    from scripts import make_document_postprocessing as document_postprocess_cli
+
+    pipeline_config = document_postprocess_cli.get_pipeline_config(
+        document_postprocess_cli.TABLE_NAME,
+        config_path,
+    )
+    csv_cfg = document_postprocess_cli.get_csv_runtime_config(pipeline_config)
+
+    document_steps.PIPELINE_CONFIG = pipeline_config
+    document_steps.PIPELINE_STEPS = pipeline_config.step_definitions()
+    resolved_pipeline_version = document_postprocess_cli.resolve_pipeline_version(
+        pipeline_config
+    )
+
+    csv_path = Path(csv_path)
+    destination = document_postprocess_cli._resolve_output_path(  # type: ignore[attr-defined]
+        csv_path,
+        csv_path.parent,
+    )
+
+    frame = document_postprocess_cli.load_output_data(csv_path, csv_cfg)
+    processed, metrics = document_postprocess_cli.apply_postprocessing_steps(
+        frame,
+        pipeline_version=resolved_pipeline_version,
+    )
+    effective_version = metrics.pipeline_version if metrics else None
+    validated = document_postprocess_cli.validate_output_schema(
+        processed,
+        pipeline_version=effective_version,
+    )
+    document_postprocess_cli.save_output_data(validated, destination, csv_cfg)
+
+    extras_payload: dict[str, object] = {
+        "input": str(csv_path),
+        "output": str(destination),
+    }
+    if extras:
+        extras_payload.update(extras)
+
+    final_metrics, _ = document_postprocess_cli.generate_metrics_report(
+        document_postprocess_cli.TABLE_NAME,
+        destination,
+        csv_cfg,
+        run_document_postprocess,
+        pipeline_version=resolved_pipeline_version,
+        extras=extras_payload,
+        logger=logger,
+        pipeline_metrics=metrics,
+    )
+    return destination, final_metrics
+
+
 def _finalise_export(
     df: pd.DataFrame | Iterable[pd.DataFrame],
     output: Path,
@@ -620,12 +681,23 @@ def _finalise_export(
         logger.error("csv_write_failed", error=str(exc), exc_info=exc, path=str(output))
         return 1
 
+    postprocess_extras: Mapping[str, object] | None = None
+    if partial_run:
+        postprocess_extras = {"partial_run": True}
+
     try:
-        postprocessed_path = document_export_postprocessing.postprocess_export_file(
+        postprocessed_path, _ = _run_document_postprocess_pipeline(
             csv_path,
-            cfg=cfg.io,
+            logger=logger,
+            extras=postprocess_extras,
         )
-    except (OSError, ValueError, pd.errors.ParserError) as exc:
+    except (
+        SchemaValidationError,
+        StepError,
+        OSError,
+        ValueError,
+        pd.errors.ParserError,
+    ) as exc:
         logger.error(
             "document_export_postprocess_failed",
             error=str(exc),
