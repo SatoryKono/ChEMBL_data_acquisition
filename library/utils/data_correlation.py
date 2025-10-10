@@ -11,6 +11,7 @@ from .qc_report import (
     TableQualityProfilerLike,
     _TABLE_PROFILER_TYPES,
     _build_reports_from_profiler,
+    _is_table_profiler_instance,
     _prepare_filtered_frame,
     _validate_table_name,
 )
@@ -44,7 +45,7 @@ def build_correlation_matrix(
 
     _validate_table_name(table_name)
     if profiler is not None:
-        if not isinstance(profiler, _TABLE_PROFILER_TYPES):
+        if not _is_table_profiler_instance(profiler):
             raise TypeError("profiler must be a TableQualityProfiler instance")
         _, numeric_candidates = _build_reports_from_profiler(profiler)
     else:
