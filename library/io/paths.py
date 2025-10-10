@@ -50,6 +50,7 @@ def default_output_path(
 
     inp = Path(input_path)
 
+    # Determine the stamp mode
     mode = stamp_mode or getattr(cfg, "output_stamp_mode", None) or "date"
     if isinstance(mode, str):
         normalized_mode = mode.strip().lower()
@@ -61,26 +62,34 @@ def default_output_path(
             "stamp_mode must be 'omit', 'date' or 'require'",
         )
 
-    candidate_date: str | None = None
+    # Try provided date string first
+    date_str: str | None = None
     if isinstance(date, str):
-        candidate_date = date.strip() or None
+        candidate = date.strip()
+        if candidate:
+            date_str = candidate
 
-    if candidate_date is not None:
-        date_str = candidate_date
-        return Path(cfg.output_dir) / f"output.{inp.stem}_{date_str}.csv"
-
+    # Short-circuit for "omit" mode (no date in filename)
     if normalized_mode == "omit":
         return Path(cfg.output_dir) / f"output.{inp.stem}.csv"
 
-    if normalized_mode == "require":
+    # For "require" mode, a date must be present, from caller
+    if normalized_mode == "require" and date_str is None:
         raise ValueError("date must be provided when stamp_mode is 'require'")
 
-    cfg_prefix = getattr(cfg, "default_date_prefix", None)
-    if isinstance(cfg_prefix, str):
-        cfg_prefix = cfg_prefix.strip() or None
-    if cfg_prefix is not None:
-        date_str = cfg_prefix
-    else:
+    # Try to use default_date_prefix from cfg if available and not already found
+    if date_str is None:
+        cfg_prefix = getattr(cfg, "default_date_prefix", None)
+        if isinstance(cfg_prefix, str):
+            candidate = cfg_prefix.strip()
+            if candidate:
+                date_str = candidate
+
+    # Fallback to current utc date string if nothing else
+    if date_str is None:
+        date_str = datetime.now(UTC).strftime("%Y%m%d")
+
+    return Path(cfg.output_dir) / f"output.{inp.stem}_{date_str}.csv"
         date_str = datetime.now(UTC).strftime("%Y%m%d")
 
     return Path(cfg.output_dir) / f"output.{inp.stem}_{date_str}.csv"

@@ -197,6 +197,22 @@ def test_default_output_path__uses_config_prefix(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_default_output_path__prefers_cli_date_over_config_prefix(tmp_path: Path) -> None:
+    cfg = SimpleNamespace(
+        output_dir=tmp_path,
+        default_date_prefix="19991231",
+    )
+
+    output_path = default_output_path(
+        tmp_path / "input.csv",
+        cfg,
+        date="20240615",
+    )
+
+    assert output_path == tmp_path / "output.input_20240615.csv"
+
+
+@pytest.mark.unit
 def test_default_output_path__falls_back_to_explicit_date(tmp_path: Path) -> None:
     cfg = SimpleNamespace(output_dir=tmp_path, default_date_prefix=None)
 
