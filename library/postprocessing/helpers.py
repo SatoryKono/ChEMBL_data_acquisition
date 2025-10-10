@@ -13,11 +13,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-<<<<<<< HEAD
-from collections.abc import Mapping
-from typing import Iterable, Sequence, TypeGuard
-=======
->>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
+from typing import TypeGuard
 from xml.etree import ElementTree
 
 import numpy as np
