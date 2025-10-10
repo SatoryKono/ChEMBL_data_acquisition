@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from library.postprocess.common import DataFrameSchema, validate_schema
+from library.postprocessing.common import DataFrameSchema, validate_schema
 
 DOCUMENT_SCHEMA = DataFrameSchema(
     required_columns=(

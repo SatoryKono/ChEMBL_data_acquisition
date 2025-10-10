@@ -144,11 +144,11 @@ order follows `TARGETS_COLUMN_ORDER`.
 ### Optional classification summary
 
 The modular post-processing pipeline for targets
-(`library.postprocess.targets.run_target_pipeline`) validates an aggregated view
+(`library.postprocessing.targets.run_target_pipeline`) validates an aggregated view
 that powers QA metrics and downstream consumers needing concise taxonomy
 labels. The helper is invoked automatically after the canonical CSV is written
 and enforces the schema defined in
-`library/postprocess/targets/schema.py`.
+`library/postprocessing/targets/schema.py`.
 
 | Column | Description |
 |--------|-------------|

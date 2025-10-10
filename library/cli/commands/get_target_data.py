@@ -62,9 +62,9 @@ from library.pipelines.target import postprocessing as tp
 from library.pipelines.target import protein_classification as pc
 from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
 from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS, ModeDefaults
-from library.postprocess.common import collect_postprocess_metrics
-from library.postprocess.target.export import prepare_targets_for_schema
-from library.postprocess.targets import run_target_pipeline as run_target_postprocess
+from library.postprocessing.common import collect_postprocess_metrics
+from library.postprocessing.target.export import prepare_targets_for_schema
+from library.postprocessing.targets import run_target_pipeline as run_target_postprocess
 from library.postprocessing import names as names_pp
 from library.postprocessing import target as target_pp
 from library.qa.reporting import build_table_quality_hook, is_quality_enabled

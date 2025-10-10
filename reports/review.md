@@ -8,7 +8,7 @@ Executive summary
 - [Structure] Скрипт `scripts/get_activity_data.py` и модуль `library/cli/commands/get_activity_data.py` содержат дублирующийся код подготовки `Namespace`, клампов и финализации. → Любое изменение нужно вносить дважды, легко рассинхронизировать поведение CLI и библиотечного API. → Свести реализацию к одному источнику (скрипт вызывает модуль или наоборот) и удалить дубли.【F:scripts/get_activity_data.py†L1560-L1660】【F:library/cli/commands/get_activity_data.py†L90-L194】
 - [Errors] `ChunkFailureTracker.stats` сериализует полный список проваленных ID, что при крупных батчах приводит к огромным sidecar-ам и OOM при переработке. → Контроль качества становится неработоспособным на больших данных. → Хранить только первые N идентификаторов и счётчики, полный список писать в sidecar-файл на диск.【F:library/common/fetch_retry.py†L43-L58】
 - [Docs/Observability] Metadata sidecar записывает `generated_at` текущим временем, но нигде не фиксируется старт пайплайна и версия конфига, выводится исходный словарь без маскировки вложенных секретов. → Трудно сопоставлять артефакты и есть риск утечки токенов из вложенных структур. → Добавить поля `run_id`/`started_at`, прогонять `_mask_secrets` по всему дереву и документировать формат `.meta.yaml`.【F:library/common/metadata.py†L137-L200】
-- [Testing] Покрытие критичных сценариев ограничено: e2e падает, а property-based проверки schema/pandera отсутствуют. → Легко пропустить регрессии в трансформациях и нарушить схемы. → Добавить pandera-валидаторы для основных DataFrame и property-based тесты для мапперов (activities/assays/documents/targets/testitems).【F:tests/e2e/test_get_cli_pipelines.py†L1212-L1234】【F:library/postprocess/activities/schema.py†L1-L120】
+- [Testing] Покрытие критичных сценариев ограничено: e2e падает, а property-based проверки schema/pandera отсутствуют. → Легко пропустить регрессии в трансформациях и нарушить схемы. → Добавить pandera-валидаторы для основных DataFrame и property-based тесты для мапперов (activities/assays/documents/targets/testitems).【F:tests/e2e/test_get_cli_pipelines.py†L1212-L1234】【F:library/postprocessing/activities/schema.py†L1-L120】
 
 Scores (0–5)
 Structure: 2/5 — Дублируется бизнес-логика между `scripts/*` и `library/cli/commands/*`, что усложняет сопровождение и вносит рассинхрон (см. раздел Structure).【F:scripts/get_activity_data.py†L1560-L1660】
@@ -77,7 +77,7 @@ Testing
   - Почему важно: критический сценарий не покрыт и не проходит.
   - Исправление: после фикса логгера обновить тесты и добавить проверки structured логов.
 - Проблема: Нет property-based тестов для схем pandera и валидации DataFrame.
-  - Пример: схемы в `library/postprocess/activities/schema.py` не тестируются на граничных значениях.【F:library/postprocess/activities/schema.py†L1-L120】
+  - Пример: схемы в `library/postprocessing/activities/schema.py` не тестируются на граничных значениях.【F:library/postprocessing/activities/schema.py†L1-L120】
   - Почему важно: данные из внешних API часто содержат крайние случаи; без property-based тестов легко пропустить ошибки.
   - Исправление: добавить Hypothesis-тесты для парсеров/мапперов и валидаторов pandera.
 
