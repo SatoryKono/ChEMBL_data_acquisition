@@ -1,42 +1,9 @@
-"""Command line interface for retrieving document metadata from external sources.
-
-The tool integrates :mod:`library.integration.pubmed_library` and
-:mod:`library.integration.chembl_library` to collect information about publications from
-several public APIs.  The interface mirrors :mod:`scripts.get_target_data` and exposes a
-single entry point configured via ``--mode``:
-
-``--mode pubmed``
-    Query PubMed, Semantic Scholar, OpenAlex and CrossRef for a list of PMIDs.
-``--mode chembl``
-    Retrieve document information from the ChEMBL API.
-``--mode all``
-    Run the ChEMBL and PubMed pipelines and merge the results.
-
-Example
--------
-Fetch PubMed metadata for identifiers listed in ``pmids.csv``::
-
-    python scripts/get_document_data.py --mode pubmed --config config/config.yaml --input pmids.csv --final-out output.csv
-
-The input file must contain a ``PMID`` column.
-
-"""
+"""Compatibility wrapper exposing :mod:`library.cli.commands.get_document_data`."""
 
 from __future__ import annotations
 
-# ruff: noqa: E402  # bootstrap alters import order for script compatibility
-if __package__ in {None, ""}:
-    from _bootstrap import bootstrap_cli
-else:  # pragma: no cover - executed when imported as a package module
-    from ._bootstrap import bootstrap_cli
-
-bootstrap_cli(__package__, __file__)
-del bootstrap_cli
-
-import argparse
-import inspect
-import os
 import sys
+from importlib import import_module
 import tempfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from itertools import chain, islice
@@ -89,9 +56,9 @@ from library.pipelines.document.service import (
     FallbackDoiMetrics,
     FallbackDoiState,
 )
-from library.postprocess.common import collect_postprocess_metrics
-from library.postprocess.common.logging import PipelineRunMetrics
-from library.postprocess.documents import (
+from library.postprocessing.common import collect_postprocess_metrics
+from library.postprocessing.common.logging import PipelineRunMetrics
+from library.postprocessing.documents import (
     run_document_pipeline as run_document_postprocess,
 )
 from library.postprocessing import document as document_export_postprocessing
@@ -2033,6 +2000,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_logger(log_cfg)
     return exit_code
 
+_module = import_module("library.cli.commands.get_document_data")
+sys.modules[__name__] = _module
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
-    raise SystemExit(main())
+    raise SystemExit(_module.main())

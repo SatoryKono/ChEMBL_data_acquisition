@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from library.pipelines.registry import PipelineStep
 
 if TYPE_CHECKING:  # pragma: no cover - imports used only for typing
-    from scripts.get_data import PipelineRunConfig
+    from library.cli.commands.get_data import PipelineRunConfig
 
 
 @dataclass(frozen=True)
