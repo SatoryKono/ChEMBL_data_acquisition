@@ -331,7 +331,7 @@ class PipelineTargetsRawWriter:
                 encoding=self.encoding,
                 mode=mode,
                 header=header,
-                line_terminator="\n",
+                lineterminator="\n",
             )
             self._destination_opened = True
 
@@ -361,7 +361,7 @@ class PipelineTargetsRawWriter:
                     index=False,
                     sep=self.sep,
                     encoding=self.encoding,
-                    line_terminator="\n",
+                    lineterminator="\n",
                 )
             columns = list(self._columns or [])
             dtypes = self._dtypes or {}
