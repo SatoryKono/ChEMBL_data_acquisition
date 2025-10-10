@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 import pandas as pd
 
-from library.postprocess.common import DataFrameSchema, validate_schema
+from library.postprocessing.common import DataFrameSchema, validate_schema
 
 BOOLEAN_COLUMNS: Sequence[str] = (
     "natural_product",

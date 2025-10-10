@@ -2,13 +2,13 @@
 pipeline_version: "${CHEMBL_ASSAY_PIPELINE_VERSION:-auto}"
 enabled_steps:
   - name: normalize_assay_metadata
-    callable: "library.postprocess.assays.steps:normalize_assay_metadata"
+    callable: "library.postprocessing.assays.steps:normalize_assay_metadata"
     description: "Standardise assay descriptors and harmonise categorical values."
     params:
       uppercase_categories: true
       strip_whitespace: true
   - name: enrich_assay_flags
-    callable: "library.postprocess.assays.steps:enrich_assay_flags"
+    callable: "library.postprocessing.assays.steps:enrich_assay_flags"
     description: "Derive confirmatory flags using configured assay type heuristics."
     params:
       confirmatory_terms:
@@ -16,7 +16,7 @@ enabled_steps:
         - primary
       default_flag: false
   - name: finalize_assay_records
-    callable: "library.postprocess.assays.steps:finalize_assay_records"
+    callable: "library.postprocessing.assays.steps:finalize_assay_records"
     description: "Apply schema validation and deterministic column ordering."
     params:
       enforce_schema: true

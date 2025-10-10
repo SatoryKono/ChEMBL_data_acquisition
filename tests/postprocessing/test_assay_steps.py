@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from library.postprocess.assays.steps import (
+from library.postprocessing.assays.steps import (
     enrich_assay_flags,
     finalize_assay_records,
     normalize_assay_metadata,
