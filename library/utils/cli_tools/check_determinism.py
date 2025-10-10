@@ -11,7 +11,7 @@ from __future__ import annotations
 # ruff: noqa: E402
 import argparse
 import os
-import sys
+from collections.abc import Sequence
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter
@@ -24,8 +24,7 @@ except ImportError as exc:  # pragma: no cover - import-time check
         " Install it with 'pip install pandas'."
     ) from exc
 
-from library.cli import configure_logger, create_logger_config
-from library.cli.base import compute_generated_at
+from library.cli import LoggerConfig, create_logger_config, path_argument
 from library.common.csv_utils import (
     sha256_file,
     write_csv_chunks_deterministic,
@@ -33,6 +32,8 @@ from library.common.csv_utils import (
 )
 from library.common.log import logger
 from library.common.timing import log_duration
+from library.config import Config, DEFAULT_CONFIG_PATH
+from library.utils.cli_tools import run_cli_tool
 
 
 def run_check(tmp_dir: Path) -> bool:
@@ -118,53 +119,75 @@ def run_check(tmp_dir: Path) -> bool:
     return hash1 == hash2 == hash3
 
 
-def main() -> int:
-    """CLI entry point.
+def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
+    """Return the argument parser and default logging configuration."""
 
-    Returns
-    -------
-    int
-        ``0`` on success, ``1`` when hashes differ.
-    """
+    parser = argparse.ArgumentParser(
+        description="Check deterministic CSV writing",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        help="Logging level (default: INFO).",
+    )
+    parser.add_argument(
+        "--run-id",
+        default=os.environ.get("CHEMBL_DA_RUN_ID"),
+        help="Override the run identifier used for logging",
+    )
+    parser.add_argument(
+        "--config",
+        dest="config",
+        type=path_argument,
+        default=DEFAULT_CONFIG_PATH,
+        help=f"YAML configuration file (default: {DEFAULT_CONFIG_PATH})",
+    )
+    parser.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print effective configuration and exit",
+    )
+    run_id_default = parser.get_default("run_id")
+    if run_id_default in (None, argparse.SUPPRESS):
+        run_id_value: str | None = None
+    else:
+        run_id_value = str(run_id_default)
+    log_cfg = create_logger_config(
+        parser.get_default("log_level"),
+        run_id=run_id_value,
+    )
+    return parser, log_cfg
 
+
+def run(cfg: Config, args: argparse.Namespace) -> int:
+    """Execute the deterministic CSV check."""
+
+    del cfg, args
     start = perf_counter()
     try:
-        parser = argparse.ArgumentParser(
-            description="Check deterministic CSV writing",
-        )
-        parser.add_argument(
-            "--log-level",
-            default="INFO",
-            help="Logging level (default: INFO).",
-        )
-        parser.add_argument(
-            "--run-id",
-            default=os.environ.get("CHEMBL_DA_RUN_ID"),
-            help="Override the run identifier used for logging",
-        )
-        args = parser.parse_args()
-
-        log_cfg = create_logger_config(args.log_level)
-        seed_parts = [parser.prog]
-        seed_parts.extend(sys.argv[1:])
-        log_cfg.generated_at = compute_generated_at(
-            date_token=None,
-            run_id=log_cfg.run_id,
-            seed_parts=seed_parts,
-        )
-        configure_logger(log_cfg)
-
         with TemporaryDirectory() as tmp:
             ok = run_check(Path(tmp))
-
-        if ok:
-            logger.info("hashes_match")
-            return 0
-
-        logger.error("hashes_differ")
-        return 1
     finally:
         log_duration(start)
+
+    if ok:
+        logger.info("hashes_match")
+        return 0
+
+    logger.error("hashes_differ")
+    return 1
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """CLI entry point."""
+
+    return run_cli_tool(
+        build_parser=build_parser,
+        run=run,
+        argv=argv,
+        mapping={},
+        logger=logger,
+    )
 
 
 if __name__ == "__main__":

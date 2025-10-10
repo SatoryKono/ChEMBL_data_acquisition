@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import library.cli_utils as cli_utils
 from library.utils.cli_tools import chunk_io_main
 
 
@@ -130,6 +131,7 @@ def test_chunk_io_main__copies_csv(
         return cfg_stub
 
     monkeypatch.setattr(chunk_io_main.cli, "apply_config_overrides", _fake_apply_config)
+    monkeypatch.setattr(cli_utils, "apply_config_overrides", _fake_apply_config)
 
     exit_code = chunk_io_main.main(
         [
