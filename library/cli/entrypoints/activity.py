@@ -30,6 +30,9 @@ import pandas as pd
 import requests
 
 from library import cli, io
+from library.cli import logging as cli_logging
+
+_DEFAULT_LOGGING_DATE_FUNC = cli_logging._current_date_str
 from library.clients.chembl import ChemblClient
 from library.integration import chembl_library as cl
 
@@ -104,7 +107,6 @@ DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
 
-<<<<<<< HEAD
 # ---------------------------------------------------------------------------
 # Compatibility hooks
 # ---------------------------------------------------------------------------
@@ -130,9 +132,28 @@ def _current_utc_datetime() -> _datetime:
 def _current_date_token() -> str:
     """Return the YYYYMMDD date string derived from :data:`datetime`."""
 
-    return _current_utc_datetime().strftime("%Y%m%d")
-=======
->>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
+    date_func = getattr(cli_logging, "_current_date_str", None)
+    if callable(date_func):
+        try:
+            candidate = date_func()
+        except Exception:
+            candidate = None
+        if isinstance(candidate, str):
+            stripped = candidate.strip()
+            if stripped:
+                if date_func is not _DEFAULT_LOGGING_DATE_FUNC:
+                    return stripped
+                candidate = None
+            else:
+                candidate = None
+        else:
+            candidate = None
+    else:
+        candidate = None
+
+    token = _current_utc_datetime().strftime("%Y%m%d")
+    return candidate if candidate is not None else token
+ 
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
     invocation = getattr(args, "invocation", None)
@@ -164,11 +185,7 @@ __all__ = (
     "configure_logger",
     "run_cli_command",
     "datetime",
-<<<<<<< HEAD
     "clock",
-=======
-    "UTC",
->>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
 )
 
 
@@ -599,14 +616,8 @@ def _emit_completion_message(
         logger.info("pipeline_skip_existing", output=str(output_path))
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
-<<<<<<< HEAD
             events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
         return
-=======
-            events_attr.append(
-                ("info", "pipeline_skip_existing", {"output": str(output_path)})
-            )
->>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
 
     payload: dict[str, object] = {
         "output": str(output_path) if output_path is not None else None,
