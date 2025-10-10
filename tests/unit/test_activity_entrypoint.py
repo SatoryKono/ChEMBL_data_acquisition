@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import csv
 import importlib
+import argparse
+import importlib
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +13,7 @@ import pandas as pd
 import pytest
 
 from library.cli.entrypoints import activity
+from library.config import Config
 
 
 @pytest.mark.unit
@@ -104,6 +107,7 @@ class _StubLogger:
 
     def info(self, event: str, **payload: Any) -> None:
         self.calls.append((event, payload))
+        self.events.append(("info", event, dict(payload)))
 
 
 @pytest.mark.unit
@@ -146,17 +150,58 @@ def test_emit_completion_message__skip_existing(
         mode="skip_existing",
     )
 
-    assert len(logger.calls) == 1
-    event, payload = logger.calls[0]
-    assert event == "pipeline_skip_existing"
-    assert payload == {"output_postprocessed": "existing.csv"}
-    assert logger.events == [
+    assert logger.calls == [
+        ("pipeline_skip_existing", {"output_postprocessed": "existing.csv"}),
         (
-            "info",
-            "pipeline_skip_existing",
-            {"output_postprocessed": "existing.csv"},
-        )
+            "activity_pipeline_completion",
+            {
+                "output": "existing.csv",
+                "rows": 0,
+                "duration_s": 0.5,
+                "mode": "skip_existing",
+            },
+        ),
     ]
+    assert (
+        "info",
+        "pipeline_skip_existing",
+        {"output_postprocessed": "existing.csv"},
+    ) in logger.events
+    assert any(
+        event == "activity_pipeline_completion" and payload.get("mode") == "skip_existing"
+        for _, event, payload in logger.events
+    )
+
+
+def test_run_activity_pipeline__propagates_emit_legacy(
+    cfg: Config, tmp_path: Path
+) -> None:
+    input_csv = tmp_path / "activity.csv"
+    input_csv.write_text("activity_id\nACT1\n", encoding="utf-8")
+    output_csv = tmp_path / "output.csv"
+
+    options = activity.ActivityCommandOptions(
+        input_csv=input_csv,
+        output_csv=output_csv,
+        final_output=output_csv,
+        emit_legacy_artifacts=True,
+    )
+
+    recorded: dict[str, Any] = {}
+
+    def fake_runner(_cfg: Config, args: argparse.Namespace) -> int:
+        recorded["emit"] = getattr(args, "emit_legacy_artifacts", False)
+        return 0
+
+    exit_code = activity.run_activity_pipeline(
+        cfg,
+        options,
+        runner=fake_runner,
+        emit_completion_message=lambda **_: None,
+    )
+
+    assert exit_code == 0
+    assert recorded["emit"] is True
 
 
 @pytest.mark.unit

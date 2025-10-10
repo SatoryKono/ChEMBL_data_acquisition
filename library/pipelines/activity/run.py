@@ -10,7 +10,7 @@ import pandas as pd
 
 from ...cli import Logger
 from ...cli.pipeline_definition import PipelineDefinition
-from ...cli_utils import run_pipeline
+from ...cli_utils import PipelineExecutionResult, run_pipeline
 from ...common.fetch_retry import ChunkFailureTracker
 from ...config import Config
 from ..common import (
@@ -36,6 +36,7 @@ def run_activity_pipeline(
     failure_path: Path,
     fetch_failure_path: Path,
     chunk_failures: ChunkFailureTracker,
+    emit_legacy_artifacts: bool = True,
 ) -> PipelineRunResult:
     """Execute the activity pipeline using shared chunked execution helpers."""
 
@@ -50,29 +51,41 @@ def run_activity_pipeline(
     definition_params["writer"] = writer
     definition = PipelineDefinition(**definition_params)
 
+    execution: PipelineExecutionResult
     try:
-        exit_code = run_pipeline(
+        execution = run_pipeline(
             definition=definition,
             fetcher=fetcher,
             output_path=output_path,
             failure_path=failure_path,
             cfg=cfg,
             logger=logger,
+            emit_legacy_artifacts=emit_legacy_artifacts,
         )
     except Exception:
         logger.exception(
             "Activity pipeline execution failed during chunked processing."
         )
-        chunk_failures.save(fetch_failure_path, cfg=cfg)
+        if emit_legacy_artifacts:
+            chunk_failures.save(fetch_failure_path, cfg=cfg)
+        else:
+            fetch_failure_path.unlink(missing_ok=True)
+            Path(f"{fetch_failure_path}.meta.yaml").unlink(missing_ok=True)
         raise
     else:
-        chunk_failures.save(fetch_failure_path, cfg=cfg)
+        if emit_legacy_artifacts:
+            chunk_failures.save(fetch_failure_path, cfg=cfg)
+        else:
+            fetch_failure_path.unlink(missing_ok=True)
+            Path(f"{fetch_failure_path}.meta.yaml").unlink(missing_ok=True)
 
+    exit_code = int(execution.exit_code)
+    dataset_path = execution.dataset_path or output_path
     reason = None if exit_code == 0 else "pipeline_failed"
     written = True if exit_code == 0 else None
     return PipelineRunResult(
         exit_code=exit_code,
-        output_path=Path(output_path),
+        output_path=Path(dataset_path),
         executed=True,
         reason=reason,
         written=written,

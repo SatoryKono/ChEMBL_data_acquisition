@@ -13,6 +13,7 @@ import math
 import numbers
 import os
 import sys
+import tempfile
 from collections.abc import (
     Callable,
     Iterable,
@@ -713,8 +714,32 @@ def _normalise_lookup_series(series: pd.Series[Any]) -> pd.Series[str]:
 
         if isinstance(value, str):
             result = value.strip()
+            if result and any(char in result for char in ".eE"):
+                try:
+                    float_value = float(result)
+                except (TypeError, ValueError):
+                    pass
+                else:
+                    if math.isnan(float_value):
+                        return pd.NA
+                    if float_value.is_integer():
+                        result = str(int(float_value))
+                    else:
+                        result = format(float_value, "g")
         elif isinstance(value, bytes):
             result = value.decode("utf-8", errors="ignore").strip()
+            if result and any(char in result for char in ".eE"):
+                try:
+                    float_value = float(result)
+                except (TypeError, ValueError):
+                    pass
+                else:
+                    if math.isnan(float_value):
+                        return pd.NA
+                    if float_value.is_integer():
+                        result = str(int(float_value))
+                    else:
+                        result = format(float_value, "g")
         elif isinstance(value, numbers.Integral) and not isinstance(value, bool):
             result = str(int(value))
         elif isinstance(value, numbers.Real):
@@ -1249,6 +1274,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             args.final_out = output_path
         args.output_csv = output_path
 
+    emit_legacy = bool(getattr(args, "emit_legacy_artifacts", False))
+
     start_time = clock()
 
     pre_context = prepare_activity_context(cfg, args, skip_read=True)
@@ -1299,6 +1326,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     postprocess_metrics = None
     postprocess_report_path: Path | None = None
     postprocess_output_path: Path | None = None
+    dataset_path: Path | None = None
+    exit_code = 1
 
     enrichment_cfg = cfg.activity_enrichment
     extra_columns: list[str] = []
@@ -1461,11 +1490,68 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return path_obj
 
     doc_quality_cfg = cfg.system.doc_quality
-    table_quality = build_table_quality_hook(
-        doc_quality_cfg,
-        table_name=Path(output_path).with_suffix(""),
-        destination=Path(output_path).parent,
-    )
+    if emit_legacy:
+        table_quality = build_table_quality_hook(
+            doc_quality_cfg,
+            table_name=Path(output_path).with_suffix(""),
+            destination=Path(output_path).parent,
+        )
+    else:
+        table_quality = lambda _: None  # type: ignore[assignment]
+
+    def _persist_standard_outputs(dataset_csv: Path) -> io.StandardOutputArtifacts:
+        dataset_frame = pd.read_csv(
+            dataset_csv,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+        )
+        quality_report = pd.DataFrame()
+        correlation_report = pd.DataFrame()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            quality_hook = build_table_quality_hook(
+                doc_quality_cfg,
+                table_name=dataset_csv.with_suffix(""),
+                destination=tmpdir,
+            )
+            try:
+                quality_result = quality_hook(dataset_frame)
+            except Exception as exc:  # pragma: no cover - defensive guard
+                logger.warning(
+                    "activity_quality_generation_failed",
+                    error=str(exc),
+                    path=str(dataset_csv),
+                )
+            else:
+                if (
+                    isinstance(quality_result, tuple)
+                    and len(quality_result) == 2
+                    and all(isinstance(frame, pd.DataFrame) for frame in quality_result)
+                ):
+                    quality_report, correlation_report = quality_result
+        base = dataset_csv.stem
+        if base.startswith("output."):
+            base = base[len("output.") :]
+        if "_" in base:
+            table_name_candidate, date_tag = base.rsplit("_", 1)
+        else:
+            table_name_candidate = base
+            date_tag = _current_date_token()
+        table_name_value = table_name_candidate or DEFAULT_OUTPUT_STEM
+        artifacts = io.save_standard_outputs(
+            dataset_frame,
+            quality_report,
+            correlation_report,
+            table_name=table_name_value,
+            date_tag=date_tag,
+            cfg=cfg.io,
+        )
+        logger.info(
+            "activity_standard_outputs",
+            dataset=str(artifacts.dataset),
+            quality_report=str(artifacts.quality_report),
+            correlation_report=str(artifacts.correlation_report),
+        )
+        return artifacts
 
     last_error_extra: dict[str, object] | None = None
     last_error_context: dict[str, object] = {}
@@ -1675,10 +1761,29 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             failure_path=failure_path,
             fetch_failure_path=fetch_failure_path,
             chunk_failures=chunk_failures,
+            emit_legacy_artifacts=emit_legacy,
         )
-        exit_code = result.exit_code
+        exit_code = int(result.exit_code)
+        dataset_path = result.output_path
+        if dataset_path is not None:
+            output_path = Path(dataset_path)
+            args.final_out = output_path
+            args.output_csv = output_path
+
+    if not emit_legacy:
+        Path(fetch_failure_path).unlink(missing_ok=True)
+        Path(f"{fetch_failure_path}.meta.yaml").unlink(missing_ok=True)
 
     if exit_code == 0:
+        if dataset_path is not None:
+            standard_artifacts = _persist_standard_outputs(Path(dataset_path))
+            standard_dataset = standard_artifacts.dataset
+            if not emit_legacy and standard_dataset != Path(dataset_path):
+                Path(dataset_path).unlink(missing_ok=True)
+            dataset_path = standard_dataset
+            output_path = dataset_path
+            args.final_out = output_path
+            args.output_csv = output_path
         logger.info(
             f"Merged data checkpoint: wrote merged activity records to '{output_path}'."
         )
@@ -2047,6 +2152,16 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Enable activity postprocessing after the main pipeline",
+    )
+    parser.add_argument(
+        "--emit-legacy-artifacts",
+        dest="emit_legacy_artifacts",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Persist the historical CSV, metadata and diagnostics files in addition "
+            "to the standard activity output bundle (default: disabled)."
+        ),
     )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg

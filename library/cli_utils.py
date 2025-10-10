@@ -58,6 +58,7 @@ __all__ = [
     "resolve_invocation",
     "run_cli_command",
     "run_pipeline",
+    "PipelineExecutionResult",
     "build_parser",
     "Fetcher",
     "MetadataHook",
@@ -115,6 +116,26 @@ class SchemaSnapshot:
             optional_columns=frozenset(optional_cols),
             column_dtypes=column_dtypes,
         )
+
+
+@dataclass(slots=True)
+class PipelineExecutionResult:
+    """Outcome of :func:`run_pipeline` including output artefact paths."""
+
+    exit_code: int
+    dataset_path: Path | None
+    failure_path: Path | None = None
+    metadata_path: Path | None = None
+
+    def __int__(self) -> int:  # pragma: no cover - convenience for legacy callers
+        return int(self.exit_code)
+
+    def __eq__(self, other: object) -> bool:  # pragma: no cover - legacy helpers
+        if isinstance(other, PipelineExecutionResult):
+            return self.exit_code == other.exit_code
+        if isinstance(other, int):
+            return self.exit_code == other
+        return NotImplemented
 
 
 @dataclass(slots=True)
@@ -395,8 +416,9 @@ def run_pipeline(
     failure_path: Path,
     cfg: Config | None = None,
     logger: Logger | None = None,
+    emit_legacy_artifacts: bool = True,
     **legacy_kwargs: object,
-) -> int:
+) -> PipelineExecutionResult:
     """Execute a data pipeline and write deterministic CSV output.
 
     Parameters
@@ -424,10 +446,10 @@ def run_pipeline(
 
     Returns
     -------
-    int
-        Zero on success, one when validation fails or ``writer`` raises an
-        exception.  ``PipelineError`` exceptions raised by ``fetcher`` are
-        converted into a non-zero return code.
+    PipelineExecutionResult
+        Object containing the exit code together with the resolved dataset
+        path. ``PipelineError`` exceptions raised by ``fetcher`` are converted
+        into a non-zero exit code.
     """
 
     use_logger = logger or default_logger
@@ -477,6 +499,7 @@ def run_pipeline(
     schema_column_dtypes = dict(schema_snapshot.column_dtypes)
 
     errors = SidecarErrors()
+    meta_path: Path | None = None
     metrics = PipelineMetrics()
     total_failures = 0
     exit_code = 0
@@ -486,13 +509,32 @@ def run_pipeline(
     validation_enabled = True
     failed_metadata_hooks: set[str] = set()
 
+    def _cleanup_failures(has_failures: bool) -> None:
+        if emit_legacy_artifacts and has_failures:
+            errors.save(failure_path, cfg=cfg)
+        else:
+            failure_path.unlink(missing_ok=True)
+            Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
+
+    def _build_result(code: int, *, dataset: Path | None = None) -> PipelineExecutionResult:
+        failure_artifact = failure_path if emit_legacy_artifacts else None
+        metadata_artifact = meta_path if emit_legacy_artifacts else None
+        return PipelineExecutionResult(
+            exit_code=code,
+            dataset_path=dataset,
+            failure_path=failure_artifact,
+            metadata_path=metadata_artifact,
+        )
+
     try:
         iterable = _as_iterable(fetcher())
     except PipelineError:
-        return 1
+        _cleanup_failures(False)
+        return _build_result(1)
     except Exception as exc:  # pragma: no cover - exercised in integration tests
         use_logger.error("fetch_failed", error=str(exc), exc_info=exc)
-        return 1
+        _cleanup_failures(False)
+        return _build_result(1)
 
     class _AbortPipeline(RuntimeError):
         """Internal exception raised to abort processing early."""
@@ -746,19 +788,11 @@ def run_pipeline(
                 "validation_skipped",
                 missing_columns=sorted(missing_required_columns),
             )
-        if total_failures:
-            errors.save(failure_path, cfg=cfg)
-        else:
-            failure_path.unlink(missing_ok=True)
-            Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
-        return abort_exc.code
+        _cleanup_failures(total_failures > 0)
+        return _build_result(abort_exc.code)
     except PipelineError:
-        if total_failures:
-            errors.save(failure_path, cfg=cfg)
-        else:
-            failure_path.unlink(missing_ok=True)
-            Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
-        return 1
+        _cleanup_failures(total_failures > 0)
+        return _build_result(1)
 
     if first_chunk is not None:
         first_chunk = _prepare_chunk(first_chunk)
@@ -778,20 +812,11 @@ def run_pipeline(
             resolved_keys,
         )
     except _AbortPipeline as abort_exc:
-        if total_failures:
-            errors.save(failure_path, cfg=cfg)
-        else:
-            failure_path.unlink(missing_ok=True)
-            Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
         output_path.unlink(missing_ok=True)
         Path(str(output_path) + ".meta.yaml").unlink(missing_ok=True)
-        return abort_exc.code
+        _cleanup_failures(total_failures > 0)
+        return _build_result(abort_exc.code)
     except Exception as exc:
-        if total_failures:
-            errors.save(failure_path, cfg=cfg)
-        else:
-            failure_path.unlink(missing_ok=True)
-            Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
         output_path.unlink(missing_ok=True)
         Path(str(output_path) + ".meta.yaml").unlink(missing_ok=True)
         use_logger.error(
@@ -800,16 +825,13 @@ def run_pipeline(
             path=str(output_path),
             exc_info=exc,
         )
-        return 1
+        _cleanup_failures(total_failures > 0)
+        return _build_result(1)
 
     if optional_column_order:
         present_columns.update(optional_cols_added)
 
-    if total_failures:
-        errors.save(failure_path, cfg=cfg)
-    else:
-        failure_path.unlink(missing_ok=True)
-        Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
+    _cleanup_failures(total_failures > 0)
 
     if optional_cols and (missing_optional := optional_cols - present_columns):
         use_logger.warning(
@@ -817,11 +839,14 @@ def run_pipeline(
             columns=sorted(missing_optional),
         )
 
+    if not emit_legacy_artifacts:
+        Path(str(output_path) + ".meta.yaml").unlink(missing_ok=True)
+
     if csv_path is None:
         use_logger.error(
             "write_fail", error="writer returned None", path=str(output_path)
         )
-        return 1
+        return _build_result(1)
 
     if stats_extra_config is None:
         extra_stats: StatsExtraMapping | None = None
@@ -850,46 +875,48 @@ def run_pipeline(
     if failed_metadata_hooks:
         extra_metadata["metadata_hook_failures"] = sorted(failed_metadata_hooks)
 
-    meta_path = write_meta_yaml(
-        csv_path=csv_path,
-        command=command_str,
-        config_subset=config_snapshot,
-        inputs=inputs,
-        stats=stats,
-        schema=schema_name,
-        invocation=resolved_invocation or None,
-        extra_metadata=extra_metadata or None,
-        dictionary_resources=dictionary_resources,
-    )
-
-    doc_quality_cfg = getattr(getattr(cfg, "system", None), "doc_quality", None)
-    fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
-
-    try:
-        table_quality(csv_path)
-    except Exception as exc:
-        tb = traceback.format_exc()
-        record_quality_failure(
-            meta_path,
-            error=str(exc),
-            error_type=exc.__class__.__name__,
-            traceback=tb,
-            fatal=fatal_quality_error,
+    if emit_legacy_artifacts:
+        meta_path = write_meta_yaml(
+            csv_path=csv_path,
+            command=command_str,
+            config_subset=config_snapshot,
+            inputs=inputs,
+            stats=stats,
+            schema=schema_name,
+            invocation=resolved_invocation or None,
+            extra_metadata=extra_metadata or None,
+            dictionary_resources=dictionary_resources,
         )
-        log_kwargs = {
-            "error": str(exc),
-            "error_type": exc.__class__.__name__,
-            "path": str(csv_path),
-            "traceback": tb,
-        }
-        if fatal_quality_error:
-            log_kwargs["fatal"] = True
-            exit_code = 1
-        use_logger.warning("quality_report_failed", **log_kwargs)
+
+        doc_quality_cfg = getattr(getattr(cfg, "system", None), "doc_quality", None)
+        fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
+
+        try:
+            table_quality(csv_path)
+        except Exception as exc:
+            tb = traceback.format_exc()
+            record_quality_failure(
+                meta_path,
+                error=str(exc),
+                error_type=exc.__class__.__name__,
+                traceback=tb,
+                fatal=fatal_quality_error,
+            )
+            log_kwargs = {
+                "error": str(exc),
+                "error_type": exc.__class__.__name__,
+                "path": str(csv_path),
+                "traceback": tb,
+            }
+            if fatal_quality_error:
+                log_kwargs["fatal"] = True
+                exit_code = 1
+            use_logger.warning("quality_report_failed", **log_kwargs)
 
     if exit_code == 0:
         use_logger.info("write_done", rows=metrics.rows_kept, path=str(csv_path))
-    return exit_code
+    dataset_result = csv_path if exit_code == 0 else None
+    return _build_result(exit_code, dataset=dataset_result)
 
 
 def build_parser() -> argparse.ArgumentParser:
