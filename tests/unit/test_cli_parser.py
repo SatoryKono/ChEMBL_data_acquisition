@@ -248,3 +248,20 @@ def test_default_output_path__require_mode_needs_date(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="date must be provided"):
         default_output_path(tmp_path / "input.csv", cfg)
+
+
+@pytest.mark.unit
+def test_default_output_path__strips_redundant_output_prefix(tmp_path: Path) -> None:
+    cfg = SimpleNamespace(
+        output_dir=tmp_path,
+        default_date_prefix=None,
+        output_stamp_mode="require",
+    )
+
+    output_path = default_output_path(
+        tmp_path / "output.documents_20240101.csv",
+        cfg,
+        date="20251010",
+    )
+
+    assert output_path == tmp_path / "output.documents_20240101_20251010.csv"
