@@ -58,8 +58,10 @@ from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_dela
 from library.common.log import logger
 from library.config import Config, _serialize_paths
 from library.integration import chembl_library as cl
-from library.io.metadata import write_meta_yaml as _cli_write_meta_yaml
-from library.metadata import file_sha256 as _metadata_file_sha256
+from library.metadata import (
+    file_sha256 as _metadata_file_sha256,
+    write_meta_yaml as _metadata_write_meta_yaml,
+)
 from library.orchestration import ETLContext
 from library.pipelines.activity import run as activity_run
 from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS
@@ -142,7 +144,7 @@ def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
 
 
 file_sha256 = _metadata_file_sha256
-write_meta_yaml = _cli_write_meta_yaml
+write_meta_yaml = _metadata_write_meta_yaml
 try:
     from library.cli import configure_logger
 except ImportError:

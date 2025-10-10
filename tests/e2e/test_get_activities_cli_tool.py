@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from library.pipelines.activity import get_activities
 
@@ -109,3 +110,24 @@ def test_get_activities_cli_wrapper__script_entrypoint(tmp_path: Path) -> None:
 
     meta_path = output_csv.with_suffix(output_csv.suffix + ".meta.yaml")
     assert meta_path.exists()
+    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert isinstance(metadata, dict)
+    base_keys = {
+        "generated_at",
+        "git_sha",
+        "python_version",
+        "platform",
+        "command",
+        "config",
+        "inputs",
+        "stats",
+        "schema",
+        "columns",
+        "dtypes",
+        "pipeline_version",
+    }
+    optional_keys = {"invocation", "dictionaries"}
+    assert base_keys.issubset(metadata)
+    assert set(metadata).issubset(base_keys | optional_keys)
+    assert metadata.get("schema") in {None, "ActivitiesSchema"}
+    assert isinstance(metadata.get("stats"), dict)

@@ -4,16 +4,23 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC as _UTC, datetime as _datetime
 from pathlib import Path
+from typing import Any
 
-import yaml
-
+from ..common.metadata_writer import write_meta_yaml as _write_meta_yaml_impl
 from ..common.run_context import get_current
-from ..config import Config, _mask_secrets, _serialize_paths
-from ..git_utils import _git_sha
-from ..project_version import get_pipeline_version
-from ..utils.atomic import open_atomic
+from ..config import Config, _serialize_paths
+
+# ---------------------------------------------------------------------------
+# Compatibility aliases
+# ---------------------------------------------------------------------------
+
+# Historically callers patched :mod:`library.io.metadata.datetime` for
+# deterministic timestamps.  Expose ``datetime`` and ``UTC`` to preserve that
+# contract for legacy tests and scripts.
+UTC = _UTC
+datetime = _datetime
 
 
 def write_meta_yaml(
@@ -29,27 +36,29 @@ def write_meta_yaml(
     if dtypes is None and columns is not None:
         dtypes = {col: "string" for col in columns}
 
-    context = get_current()
+    config_mapping: Mapping[str, Any] | None = None
+    if cfg is not None:
+        config_mapping = _serialize_paths(cfg.to_dict())
+
     timestamp = generated_at
-    if timestamp is None and context is not None and context.generated_at:
-        timestamp = context.generated_at
+    if timestamp is None:
+        context = get_current()
+        if context is not None and context.generated_at:
+            timestamp = context.generated_at
     if timestamp is None:
         timestamp = datetime.now(UTC).isoformat()
 
-    meta = {
-        "generated_at": timestamp,
-        "git_sha": _git_sha(),
-        "command": " ".join(sys.argv),
-        "columns": list(columns or []),
-        "dtypes": dict(dtypes or {}),
-        "config": (
-            _mask_secrets(_serialize_paths(cfg.to_dict())) if cfg is not None else {}
-        ),
-        "pipeline_version": get_pipeline_version(),
-    }
-    meta_path = Path(f"{path}.meta.yaml")
-    with open_atomic(meta_path, encoding="utf8") as fh:
-        yaml.safe_dump(meta, fh, sort_keys=False)
-    meta_lock_path = meta_path.with_name(meta_path.name + ".lock")
-    meta_lock_path.unlink(missing_ok=True)
-    return meta_path
+    return _write_meta_yaml_impl(
+        path,
+        command=" ".join(sys.argv),
+        config=config_mapping,
+        inputs={},
+        stats={},
+        schema=None,
+        generated_at=timestamp,
+        columns=columns,
+        dtypes=dtypes,
+    )
+
+
+__all__ = ["UTC", "datetime", "write_meta_yaml"]
