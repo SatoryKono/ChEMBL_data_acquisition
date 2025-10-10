@@ -2,21 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from . import _run
+from library.cli.entrypoints import assay as _assay_entrypoint
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run scripts.get_assay_data.
+    """Execute the assay pipeline CLI."""
 
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
+    return _assay_entrypoint.main(argv)
 
-    Returns
-    -------
-    int
-        Exit code returned by the script.
-    """
 
-    return _run("get_assay_data", argv)
+__all__ = ["main"]

@@ -2,21 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from . import _run
+from library.cli.entrypoints import testitem as _testitem_entrypoint
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run scripts.get_testitem_data.
+    """Execute the test item pipeline CLI."""
 
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
+    return _testitem_entrypoint.main(argv)
 
-    Returns
-    -------
-    int
-        Exit code returned by the script.
-    """
 
-    return _run("get_testitem_data", argv)
+__all__ = ["main"]

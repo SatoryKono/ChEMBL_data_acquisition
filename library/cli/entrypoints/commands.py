@@ -22,6 +22,14 @@ from typing import Final
 
 from library.cli import logging as _cli_logging
 from library.cli.commands import _run as _run_command
+from library.cli.commands import get_target_data as _target_command
+from library.cli.entrypoints import (
+    activity as _activity_entrypoint,
+    assay as _assay_entrypoint,
+    document as _document_entrypoint,
+    get_data as _orchestrator_entrypoint,
+    testitem as _testitem_entrypoint,
+)
 
 # ---------------------------------------------------------------------------
 # Generic dispatch helper
@@ -87,25 +95,25 @@ def get_activity_data_main(argv: Sequence[str] | None = None) -> int:
     if not _has_date_override(raw_args):
         raw_args.extend(["--date", _cli_logging._current_date_str()])
 
-    return _dispatch("get_activity_data", raw_args)
+    return _activity_entrypoint.main(raw_args)
 
 
 def get_assay_data_main(argv: Sequence[str] | None = None) -> int:
     """Entry point for the ``get-assay-data`` pipeline CLI."""
 
-    return _dispatch("library.cli.commands.get_assay_data", argv)
+    return _assay_entrypoint.main(argv)
 
 
 def get_data_main(argv: Sequence[str] | None = None) -> int:
     """Entry point for the orchestrating ``get-data`` CLI."""
 
-    return _dispatch("scripts.get_data", argv)
+    return _orchestrator_entrypoint.main(argv)
 
 
 def get_document_data_main(argv: Sequence[str] | None = None) -> int:
     """Entry point for the ``get-document-data`` pipeline CLI."""
 
-    return _dispatch("library.cli.commands.get_document_data", argv)
+    return _document_entrypoint.main(argv)
 
 
 def get_document_type_main(argv: Sequence[str] | None = None) -> int:
@@ -123,13 +131,13 @@ def get_input_initialisation_main(argv: Sequence[str] | None = None) -> int:
 def get_target_data_main(argv: Sequence[str] | None = None) -> int:
     """Entry point for the ``get-target-data`` pipeline CLI."""
 
-    return _dispatch("library.cli.commands.get_target_data", argv)
+    return _target_command.main(argv)
 
 
 def get_testitem_data_main(argv: Sequence[str] | None = None) -> int:
     """Entry point for the ``get-testitem-data`` pipeline CLI."""
 
-    return _dispatch("library.cli.commands.get_testitem_data", argv)
+    return _testitem_entrypoint.main(argv)
 
 
 def make_md_summary_main(argv: Sequence[str] | None = None) -> int:

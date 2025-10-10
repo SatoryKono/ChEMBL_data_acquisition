@@ -2,21 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from . import _run
+from library.cli.entrypoints import document as _document_entrypoint
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run scripts.get_document_data.
+    """Execute the document pipeline CLI."""
 
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
+    return _document_entrypoint.main(argv)
 
-    Returns
-    -------
-    int
-        Exit code returned by the script.
-    """
 
-    return _run("get_document_data", argv)
+__all__ = ["main"]

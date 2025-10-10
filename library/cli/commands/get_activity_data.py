@@ -6,6 +6,7 @@ from collections.abc import Callable, Sequence
 from types import ModuleType
 from typing import cast
 
+from library.cli.entrypoints import activity as _activity_entrypoint
 from library.common.log import logger
 from library.common.logging_setup import Logger
 from library.config import Config
@@ -17,8 +18,6 @@ from library.pipelines.activity.runner import (
 from library.pipelines.activity.runner import (
     run_activity_pipeline as _run_activity_pipeline,
 )
-
-from . import _run
 
 
 def _sync_pipeline_logger(current_logger: Logger) -> None:
@@ -67,20 +66,9 @@ def run_activity_pipeline(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run scripts.get_activity_data.
+    """Execute the activity pipeline CLI."""
 
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code returned by the script.
-    """
-
-    return _run("get_activity_data", argv)
+    return _activity_entrypoint.main(argv)
 
 
 __all__ = [
