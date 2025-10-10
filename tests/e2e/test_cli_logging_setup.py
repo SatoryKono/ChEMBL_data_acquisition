@@ -81,11 +81,15 @@ _SCRIPT_CASES = (
 )
 
 
-@pytest.mark.e2e
-@pytest.mark.parametrize("case", _SCRIPT_CASES, ids=lambda c: _program_name_from_module(c["module"]))
-def test_cli_logging__creates_log_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: dict[str, Any]
-) -> None:
+def _run_logging_case(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case: dict[str, Any],
+    *,
+    expected_date: str,
+    date_override: str | None,
+    datetime_cls: type[datetime] | None = None,
+) -> tuple[Path, list[dict[str, Any]]]:
     base_path = tmp_path
     log_dir = base_path / "logs"
     log_dir.mkdir(parents=True)
@@ -101,15 +105,8 @@ def test_cli_logging__creates_log_file(
 
     monkeypatch.chdir(base_path)
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
-    monkeypatch.setattr("library.cli.logging._current_date_str", lambda: "20240102")
-
-    class _FixedDateTime(datetime):
-        @classmethod
-        def now(cls, tz=None):  # type: ignore[override]
-            tzinfo = tz or timezone.utc
-            return datetime(2024, 1, 2, 0, 0, tzinfo=tzinfo)
-
-    monkeypatch.setattr(get_activity_data, "datetime", _FixedDateTime)
+    if date_override is not None:
+        monkeypatch.setattr("library.cli.logging._current_date_str", lambda: date_override)
 
     module = case["module"]
     prefix = case["prefix"]
@@ -118,6 +115,9 @@ def test_cli_logging__creates_log_file(
     output_flag = case["output_flag"]
     output_attr = case["output_attr"]
     extra_args = list(case["extra_args"])
+
+    if datetime_cls is not None:
+        monkeypatch.setattr(module, "datetime", datetime_cls, raising=False)
 
     def _run_cli_command_stub(
         *,
@@ -149,7 +149,7 @@ def test_cli_logging__creates_log_file(
             logger.info("pipeline_fail", run_id=log_cfg.run_id, exit_code=exit_code)
         return int(exit_code)
 
-    monkeypatch.setattr(module, "run_cli_command", _run_cli_command_stub)
+    monkeypatch.setattr(module, "run_cli_command", _run_cli_command_stub, raising=False)
 
     def _stub_run(_cfg: Any, args: Any) -> int:
         module.logger.info(
@@ -169,7 +169,7 @@ def test_cli_logging__creates_log_file(
         )
         return 0
 
-    monkeypatch.setattr(module, "run", _stub_run)
+    monkeypatch.setattr(module, "run", _stub_run, raising=False)
 
     argv: list[str] = []
     if command:
@@ -197,11 +197,36 @@ def test_cli_logging__creates_log_file(
         )
     assert len(log_files) == 1
     log_path = log_files[0]
-    expected_name = f"{program_name}_20240102.log"
+    expected_name = f"{program_name}_{expected_date}.log"
     assert log_path.name == expected_name
 
     events = parse_log_file(log_path)
+    return log_path, events
 
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("case", _SCRIPT_CASES, ids=lambda c: _program_name_from_module(c["module"]))
+def test_cli_logging__creates_log_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: dict[str, Any]
+) -> None:
+    class _FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            tzinfo = tz or timezone.utc
+            return datetime(2024, 1, 2, 0, 0, tzinfo=tzinfo)
+
+    datetime_cls = _FixedDateTime if case["module"] is get_activity_data else None
+
+    _, events = _run_logging_case(
+        tmp_path,
+        monkeypatch,
+        case,
+        expected_date="20240102",
+        date_override="20240102",
+        datetime_cls=datetime_cls,
+    )
+
+    prefix = case["prefix"]
     event_names = {record.get("event") for record in events}
     expected_events = {
         "pipeline_start",
@@ -221,3 +246,33 @@ def test_cli_logging__creates_log_file(
     data = record_entry.get("data", {})
     assert data.get("processed") == 2
     assert data.get("discarded") == 1
+
+
+@pytest.mark.e2e
+def test_cli_logging__uses_datetime_hook_for_default_date(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case = next(item for item in _SCRIPT_CASES if item["module"] is get_activity_data)
+
+    class _FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            tzinfo = tz or timezone.utc
+            return datetime(2024, 1, 2, 0, 0, tzinfo=tzinfo)
+
+    expected_date = _FixedDateTime.now(timezone.utc).strftime("%Y%m%d")
+
+    log_path, events = _run_logging_case(
+        tmp_path,
+        monkeypatch,
+        case,
+        expected_date=expected_date,
+        date_override=None,
+        datetime_cls=_FixedDateTime,
+    )
+
+    assert log_path.name.endswith(f"_{expected_date}.log")
+
+    event_names = {record.get("event") for record in events}
+    assert "pipeline_start" in event_names
+    assert "pipeline_done" in event_names

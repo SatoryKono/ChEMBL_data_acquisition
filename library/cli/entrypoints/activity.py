@@ -21,6 +21,7 @@ from functools import partial
 from itertools import islice
 from pathlib import Path
 from threading import Condition, Lock
+from datetime import datetime as _datetime, timezone
 from time import perf_counter, sleep
 from typing import Any, cast
 from urllib.parse import urlsplit
@@ -101,6 +102,33 @@ DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
 
+# ---------------------------------------------------------------------------
+# Compatibility hooks
+# ---------------------------------------------------------------------------
+
+# ``datetime`` and ``clock`` are exposed as module-level variables so that tests
+# and downstream integrations can override them for deterministic behaviour.
+# Historically :mod:`scripts.get_activity_data` imported ``datetime`` directly
+# which allowed monkeypatching via ``get_activity_data.datetime``. Restoring the
+# binding keeps that contract intact after the CLI refactor.
+datetime = _datetime
+clock: Callable[[], float] = perf_counter
+
+
+def _current_utc_datetime() -> _datetime:
+    """Return the current UTC timestamp using the overridable clock."""
+
+    candidate = datetime.now(timezone.utc)
+    if candidate.tzinfo is None:
+        return candidate.replace(tzinfo=timezone.utc)
+    return candidate.astimezone(timezone.utc)
+
+
+def _current_date_token() -> str:
+    """Return the YYYYMMDD date string derived from :data:`datetime`."""
+
+    return _current_utc_datetime().strftime("%Y%m%d")
+
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
     invocation = getattr(args, "invocation", None)
     if invocation is None:
@@ -129,6 +157,8 @@ __all__ = (
     "write_meta_yaml",
     "configure_logger",
     "run_cli_command",
+    "datetime",
+    "clock",
 )
 
 
@@ -859,7 +889,7 @@ def _ensure_molecule_pref_name(
             else getattr(getattr(cfg, "testitem", object()), "timeout", None)
         )
         timeout = float(timeout) if isinstance(timeout, numbers.Real) else None
-        deadline = perf_counter() + timeout if timeout and timeout > 0 else None
+        deadline = clock() + timeout if timeout and timeout > 0 else None
         poll_interval = 0.5
 
         with cache_condition:
@@ -874,7 +904,7 @@ def _ensure_molecule_pref_name(
 
                 remaining: float | None = None
                 if deadline is not None:
-                    remaining = max(0.0, deadline - perf_counter())
+                    remaining = max(0.0, deadline - clock())
                     if remaining == 0:
                         logger.warning(
                             "pref_name_fetch_wait_timeout",
@@ -885,7 +915,7 @@ def _ensure_molecule_pref_name(
                 wait_interval = remaining if remaining and remaining > 0 else poll_interval
                 cache_condition.wait(timeout=wait_interval)
 
-                if deadline is not None and perf_counter() >= deadline:
+                if deadline is not None and clock() >= deadline:
                     outstanding = [
                         identifier
                         for identifier in wait_for
@@ -1089,7 +1119,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             args.final_out = output_path
         args.output_csv = output_path
 
-    start_time = perf_counter()
+    start_time = clock()
 
     pre_context = prepare_activity_context(cfg, args, skip_read=True)
     if pre_context is None:
@@ -1124,7 +1154,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         _emit_completion_message(
             output_path=output_path,
             processed_rows=0,
-            duration_s=perf_counter() - start_time,
+            duration_s=clock() - start_time,
             mode="dry_run",
         )
         return 0
@@ -1638,7 +1668,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         _emit_completion_message(
             output_path=output_path,
             processed_rows=completion_rows,
-            duration_s=perf_counter() - start_time,
+            duration_s=clock() - start_time,
             mode="run",
             streamed_metrics=summary_snapshot,
         )
@@ -1730,7 +1760,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     except Exception:  # pragma: no cover - defensive guard
         pass
 
-    start_time = perf_counter()
+    start_time = clock()
 
     output_csv_value = _coerce_cli_path(getattr(args, "output_csv", None))
     if output_csv_value is not None and not isinstance(output_csv_value, Path):
@@ -1755,7 +1785,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         _emit_completion_message(
             output_path=output_path,
             processed_rows=None,
-            duration_s=perf_counter() - start_time,
+            duration_s=clock() - start_time,
             mode="skip_existing",
         )
         return 0
@@ -1900,6 +1930,17 @@ class ActivityPipelineCLI(PipelineCLIBase):
 
     def get_logger(self) -> Logger:
         return logger
+
+    def get_logging_date(self, args: argparse.Namespace) -> str | None:
+        value = super().get_logging_date(args)
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped:
+                return stripped
+        try:
+            return _current_date_token()
+        except Exception:  # pragma: no cover - defensive against custom hooks
+            return value if isinstance(value, str) else None
 
     def get_config_mapping(self) -> Mapping[str, str]:
         return {
