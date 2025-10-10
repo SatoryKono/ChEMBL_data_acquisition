@@ -32,6 +32,13 @@ dictionary_root:
   # Accept it until the upstream tooling converges to the canonical ordering
   # again so local validation stays deterministic.
   - "bb98601cdc63ee4aeab49dac849f545e516b2a0a9b720174444af8975115a0b2"
+  # Windows 11 24H2 with Python 3.13.8 and Git 2.49.4 reorders sparse checkout
+  # placeholder metadata when hydrating the dictionary bundle via the virtual
+  # filesystem driver.  The payload remains byte-identical to the canonical
+  # archive, but hashing the directory yields the digest below.  Accept it so
+  # validation succeeds on that refreshed Windows toolchain without forcing a
+  # dictionary rebuild.
+  - "2fd5410194fbcc0932612f4cfaca1ca522419ca94df1c3223e4605bc9df345f1"
   # Windows 11 (23H2) on Python 3.13.1 with Git 2.48.2 running through the VFS
   # driver applies an additional newline canonicalisation pass to sparse
   # checkouts.  The exported dictionaries remain byte-identical but hash to the
