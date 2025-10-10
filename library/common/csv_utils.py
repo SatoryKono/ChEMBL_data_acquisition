@@ -24,15 +24,8 @@ from pandas.api import types as ptypes
 from ..config import Config
 from ..utils.atomic import open_atomic, robust_replace
 from .log import logger
+from .metadata_writer import write_meta_yaml
 from .run_context import get_current
-
-
-def _write_meta_yaml(*args: Any, **kwargs: Any) -> Path:
-    """Import :func:`write_meta_yaml` lazily to avoid circular imports."""
-
-    from ..io.metadata import write_meta_yaml as _write_meta_yaml_impl
-
-    return _write_meta_yaml_impl(*args, **kwargs)
 
 
 def _metadata_generated_at() -> str | None:
@@ -565,7 +558,7 @@ def write_csv_deterministic(
 
             robust_replace(tmp_path, out_path)
 
-    _write_meta_yaml(
+    write_meta_yaml(
         out_path,
         cfg,
         columns=list(work.columns),
@@ -759,7 +752,7 @@ def write_csv_chunks_deterministic(
         if meta_columns is None:
             meta_columns = list(columns)
 
-    _write_meta_yaml(
+    write_meta_yaml(
         out_path,
         cfg,
         columns=meta_columns or columns,
