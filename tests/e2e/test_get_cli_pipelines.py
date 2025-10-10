@@ -10,7 +10,6 @@ from pathlib import Path
 import pandas as pd
 import pytest
 import requests
-import yaml
 
 from library import cli_utils
 from library.cli.base import PipelineCLIBase
@@ -162,8 +161,8 @@ def _configure_activity_cfg(cfg: Config) -> None:
 
 def _install_activity_writer(
     monkeypatch: pytest.MonkeyPatch,
-) -> list[tuple[Path, pd.DataFrame, str]]:
-    written: list[tuple[Path, pd.DataFrame, str]] = []
+) -> list[dict[str, object]]:
+    written: list[dict[str, object]] = []
 
     def _writer(
         chunks: Iterable[pd.DataFrame],
@@ -189,7 +188,46 @@ def _install_activity_writer(
         destination_path = Path(destination)
         destination_path.parent.mkdir(parents=True, exist_ok=True)
         result.to_csv(destination_path, index=False, sep=sep, encoding=encoding)
-        written.append((destination_path, result, sep))
+
+        quality_df = pd.DataFrame(
+            [
+                {
+                    "metric": "rows_total",
+                    "value": int(result.shape[0]),
+                }
+            ]
+        )
+        correlation_df = pd.DataFrame(
+            [
+                {
+                    "column_a": "activity_id",
+                    "column_b": "standard_value",
+                    "correlation": 0.0,
+                }
+            ]
+        )
+        quality_path = destination_path.with_name(
+            f"{destination_path.stem}_quality_report_table.csv"
+        )
+        correlation_path = destination_path.with_name(
+            f"{destination_path.stem}_data_correlation_report_table.csv"
+        )
+        quality_df.to_csv(quality_path, index=False, sep=sep, encoding=encoding)
+        correlation_df.to_csv(
+            correlation_path, index=False, sep=sep, encoding=encoding
+        )
+
+        written.append(
+            {
+                "dataset_path": destination_path,
+                "dataset": result,
+                "quality_path": quality_path,
+                "quality": quality_df,
+                "correlation_path": correlation_path,
+                "correlation": correlation_df,
+                "sep": sep,
+            }
+        )
         return destination_path
 
     monkeypatch.setattr(get_activity_data, "write_csv_chunks_deterministic", _writer)
@@ -334,20 +372,66 @@ def test_get_document_type_main__writes_meta(
         encoding: str | None = None,
         **_: object,
     ) -> Path:
+        dataset = frame.copy()
+        dataset_path = Path(path)
+        dataset_path.parent.mkdir(parents=True, exist_ok=True)
+        dataset.to_csv(
+            dataset_path,
+            index=False,
+            sep=sep or ",",
+            encoding=encoding or "utf-8",
+        )
+
+        quality_df = pd.DataFrame(
+            [
+                {
+                    "metric": "rows_total",
+                    "value": int(dataset.shape[0]),
+                }
+            ]
+        )
+        correlation_df = pd.DataFrame(
+            [
+                {
+                    "column_a": "chembl_id",
+                    "column_b": "class_label",
+                    "correlation": 1.0,
+                }
+            ]
+        )
+        quality_path = dataset_path.with_name(
+            f"{dataset_path.stem}_quality_report_table.csv"
+        )
+        correlation_path = dataset_path.with_name(
+            f"{dataset_path.stem}_data_correlation_report_table.csv"
+        )
+        quality_df.to_csv(
+            quality_path,
+            index=False,
+            sep=sep or ",",
+            encoding=encoding or "utf-8",
+        )
+        correlation_df.to_csv(
+            correlation_path,
+            index=False,
+            sep=sep or ",",
+            encoding=encoding or "utf-8",
+        )
+
         captured["cfg"] = cfg
         captured["key_cols"] = list(key_cols or [])
-        captured["frame"] = frame.copy()
-        destination = Path(path)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        frame.to_csv(destination, index=False, sep=sep or ",", encoding=encoding or "utf-8")
-        meta_path = Path(f"{destination}.meta.yaml")
-        meta_path.write_text(
-            yaml.safe_dump({"columns": list(frame.columns)}), encoding="utf-8"
-        )
-        captured["meta_path"] = meta_path
-        return destination
+        captured["dataset"] = dataset
+        captured["quality_df"] = quality_df
+        captured["correlation_df"] = correlation_df
+        captured["paths"] = {
+            "dataset": dataset_path,
+            "quality": quality_path,
+            "correlation": correlation_path,
+        }
+        return dataset_path
 
     monkeypatch.setattr(get_document_type.io, "write_csv", _stub_write_csv)
+    monkeypatch.setattr(get_document_type, "write_meta_yaml", lambda *_, **__: None)
 
     invocation = ["--input", str(input_csv), "--final-out", str(output_csv)]
     exit_code = get_document_type.main(invocation)
@@ -359,15 +443,21 @@ def test_get_document_type_main__writes_meta(
     assert output_csv.exists()
     result = pd.read_csv(output_csv)
     assert "class_label" in result.columns
+    assert captured["paths"]["dataset"] == output_csv
+    quality_path = captured["paths"]["quality"]
+    correlation_path = captured["paths"]["correlation"]
+    assert quality_path.exists()
+    assert correlation_path.exists()
 
-    meta_path = Path(f"{output_csv}.meta.yaml")
-    assert meta_path.exists()
-    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
-    assert metadata["schema"] == "document_type"
-    assert metadata["stats"]["rows_total"] == len(frame)
-    assert metadata["stats"]["rows_kept"] == len(frame)
-    assert metadata["stats"]["rows_dropped"] == 0
-    assert metadata.get("invocation") == invocation
+    produced_csvs = {
+        path.name for path in output_csv.parent.glob("*.csv")
+    }
+    assert produced_csvs == {
+        output_csv.name,
+        quality_path.name,
+        correlation_path.name,
+    }
+    assert not list(output_csv.parent.glob("*.meta.yaml"))
 
 @pytest.mark.e2e
 def test_get_testitem_run_success(
@@ -550,7 +640,7 @@ def test_get_activity_cli__retry_and_idempotent(
     assert not any(event == "activity_pipeline_failed" for event in events)
     assert attempts["count"] >= 2
     assert len(written) == 1
-    assert list(written[0][1]["activity_id"]) == ["ACT1", "ACT2", "ACT3"]
+    assert list(written[0]["dataset"]["activity_id"]) == ["ACT1", "ACT2", "ACT3"]
 
     logger_stub.events.clear()
     written.clear()
@@ -727,7 +817,7 @@ def test_get_activity_cli__workers_and_offset(
     assert captured["workers"] == 2
     assert output_csv.exists()
     assert len(written) == 1
-    written_df = written[0][1]
+    written_df = written[0]["dataset"]
     assert written_df["activity_id"].tolist() == ["ACT2", "ACT3"]
     events = [event for _, event, _ in logger_stub.events]
     assert "process_offset" in events
@@ -792,7 +882,7 @@ def test_get_activity_cli__chembl_identifier_backfill_ratio(
     assert output_csv.exists()
     assert written, "expected pipeline to emit output"
 
-    written_df = written[0][1]
+    written_df = written[0]["dataset"]
     assert "activity_id" in written_df.columns
     assert "activity_chembl_id" in written_df.columns
 
@@ -857,7 +947,7 @@ def test_get_activity_cli__non_csv_output_path(
     content = output_csv.read_text(encoding="utf-8")
     assert "\t" in content.splitlines()[1]
     assert len(written) == 1
-    assert written[0][2] == "\t"
+    assert written[0]["sep"] == "\t"
     events = [event for _, event, _ in logger_stub.events]
     assert "activity_pipeline_done" in events
 
