@@ -427,7 +427,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         write_meta_yaml(
             csv_path=output_path,
             command=command,
-            config_subset=config_snapshot,
+            config=config_snapshot,
             inputs=inputs,
             stats=stats,
             schema="PubMedDocumentsSchema",

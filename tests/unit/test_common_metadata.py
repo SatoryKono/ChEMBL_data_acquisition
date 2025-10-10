@@ -25,7 +25,7 @@ def test_write_meta_yaml__records_dictionary_metadata(tmp_path: Path) -> None:
     meta_path = write_meta_yaml(
         csv_path=csv_path,
         command="pytest",
-        config_subset={},
+        config={},
         inputs={},
         stats=stats,
         schema="TestSchema",

@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 from pandas.api import types as ptypes
 
-from ..config import Config
+from ..config import Config, _serialize_paths
 from ..utils.atomic import open_atomic, robust_replace
 from .log import logger
 from .metadata_writer import write_meta_yaml
@@ -558,9 +558,10 @@ def write_csv_deterministic(
 
             robust_replace(tmp_path, out_path)
 
+    config_mapping = _serialize_paths(cfg.to_dict()) if cfg is not None else None
     write_meta_yaml(
         out_path,
-        cfg,
+        config=config_mapping,
         columns=list(work.columns),
         dtypes={col: work.dtypes[col].name for col in work.columns},
         generated_at=_metadata_generated_at(),
@@ -752,9 +753,10 @@ def write_csv_chunks_deterministic(
         if meta_columns is None:
             meta_columns = list(columns)
 
+    config_mapping = _serialize_paths(cfg.to_dict()) if cfg is not None else None
     write_meta_yaml(
         out_path,
-        cfg,
+        config=config_mapping,
         columns=meta_columns or columns,
         dtypes=dtype_names,
         generated_at=_metadata_generated_at(),

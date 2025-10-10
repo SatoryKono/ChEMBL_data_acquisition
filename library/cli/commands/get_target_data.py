@@ -1274,7 +1274,7 @@ def _save_snapshot(df: pd.DataFrame, base: Path, step: str, cfg: Config) -> Path
             write_meta_yaml(
                 csv_path=csv_path,
                 command=" ".join(sys.argv),
-                config_subset=_serialize_paths(cfg.to_dict()),
+                config=_serialize_paths(cfg.to_dict()),
                 inputs={"base": str(base), "step": step},
                 stats=stats,
                 schema="TargetSnapshot",
@@ -1952,7 +1952,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             write_meta_yaml(
                 csv_path=csv_path,
                 command=" ".join(sys.argv),
-                config_subset=_serialize_paths(cfg.to_dict()),
+                config=_serialize_paths(cfg.to_dict()),
                 inputs=inputs,
                 stats=stats,
                 schema="UniProtExport",

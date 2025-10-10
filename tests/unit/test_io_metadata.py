@@ -48,7 +48,7 @@ def test_write_meta_yaml__aligns_with_common_writer(tmp_path: Path) -> None:
     detailed_meta_path = write_common_meta(
         csv_path=csv_detailed,
         command="pytest",
-        config_subset={},
+        config={},
         inputs={"source": "unit"},
         stats=_make_stats(csv_detailed),
         schema="TestSchema",
