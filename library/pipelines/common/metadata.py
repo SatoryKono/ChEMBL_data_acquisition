@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from functools import lru_cache
 
+from ...common.run_context import get_current
+
 import pandas as pd
 
 from ...project_version import get_pipeline_version as _get_pipeline_version
@@ -17,6 +19,9 @@ get_pipeline_version = _get_pipeline_version
 def get_timestamp_utc() -> str:
     """Return an ISO 8601 timestamp representing the pipeline execution time."""
 
+    context = get_current()
+    if context is not None:
+        return context.generated_at
     return datetime.now(UTC).isoformat()
 
 

@@ -251,6 +251,19 @@ def configure_logger(cfg: LoggerConfig, replace_root: bool = True) -> Logger:
     base_logger.propagate = True
 
     set_current(RunContext(run_id=cfg.run_id, generated_at=cfg.generated_at))
+
+    try:
+        from library.pipelines.common import metadata as _metadata_module
+    except Exception:  # pragma: no cover - defensive fallback
+        _metadata_module = None
+    else:
+        get_timestamp = getattr(_metadata_module, "get_timestamp_utc", None)
+        if hasattr(get_timestamp, "cache_clear"):
+            get_timestamp.cache_clear()
+        pipeline_meta = getattr(_metadata_module, "pipeline_metadata", None)
+        if hasattr(pipeline_meta, "cache_clear"):
+            pipeline_meta.cache_clear()
+
     return Logger(cfg, base_logger=base_logger)
 
 

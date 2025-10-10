@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
@@ -22,6 +23,7 @@ from library.pipelines.tissue.pipeline import (
 )
 
 RUN_GENERATED_AT = "2020-01-01T00:00:00+00:00"
+SECOND_RUN_GENERATED_AT = "2021-01-01T12:34:56+00:00"
 
 
 class _DummyClient:
@@ -83,11 +85,18 @@ def test_run_tissue_pipeline__writes_normalised_output(
         timeout=None,
     )
 
-    monkeypatch.setattr(
-        run_context_module,
-        "_CURRENT",
-        RunContext(run_id="tissue-test", generated_at=RUN_GENERATED_AT),
+    pipeline_metadata_module.get_timestamp_utc.cache_clear()
+    pipeline_metadata_module.pipeline_metadata.cache_clear()
+    run_context_module.set_current(
+        RunContext(run_id="tissue-test", generated_at=RUN_GENERATED_AT)
     )
+
+    def _reset_context() -> None:
+        run_context_module.set_current(None)
+        pipeline_metadata_module.get_timestamp_utc.cache_clear()
+        pipeline_metadata_module.pipeline_metadata.cache_clear()
+
+    monkeypatch.addfinalizer(_reset_context)
 
     result = run_tissue_pipeline(cfg, options, client=_DummyClient())
 
@@ -111,6 +120,8 @@ def test_run_tissue_pipeline__writes_normalised_output(
         "CHEMBLT2",
         "CHEMBLT3",
     ]
+    assert output_df["timestamp_utc"].nunique() == 1
+    assert output_df["timestamp_utc"].iloc[0] == RUN_GENERATED_AT
     assert pd.isna(output_df.loc[2, "pref_name"])
     assert (tmp_path / "output_validation_failures.csv").exists() is False
     meta_path = Path(f"{output_csv}.meta.yaml")
@@ -190,12 +201,16 @@ def test_run_tissue_pipeline__deterministic_output_from_fixtures(
     )
     pipeline_metadata_module.get_timestamp_utc.cache_clear()
     pipeline_metadata_module.pipeline_metadata.cache_clear()
-
-    monkeypatch.setattr(
-        run_context_module,
-        "_CURRENT",
-        RunContext(run_id="tissue-test", generated_at=RUN_GENERATED_AT),
+    run_context_module.set_current(
+        RunContext(run_id="tissue-test", generated_at=RUN_GENERATED_AT)
     )
+
+    def _reset_context() -> None:
+        run_context_module.set_current(None)
+        pipeline_metadata_module.get_timestamp_utc.cache_clear()
+        pipeline_metadata_module.pipeline_metadata.cache_clear()
+
+    monkeypatch.addfinalizer(_reset_context)
 
     result = run_tissue_pipeline(cfg, options, client=_DummyClient())
 
@@ -224,4 +239,26 @@ def test_run_tissue_pipeline__deterministic_output_from_fixtures(
     metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
     assert metadata["columns"] == TISSUE_COLUMN_ORDER
     assert metadata["generated_at"] == RUN_GENERATED_AT
+    assert set(output_df["timestamp_utc"].unique()) == {RUN_GENERATED_AT}
+    assert output_df["timestamp_utc"].tolist() == [RUN_GENERATED_AT] * len(output_df)
+    # Second run with a new context should refresh cached metadata values.
+    pipeline_metadata_module.get_timestamp_utc.cache_clear()
+    pipeline_metadata_module.pipeline_metadata.cache_clear()
+    run_context_module.set_current(
+        RunContext(run_id="tissue-test-2", generated_at=SECOND_RUN_GENERATED_AT)
+    )
+    rerun_output = output_path.with_name(output_path.stem + "_rerun.csv")
+    rerun_options = replace(options, output_csv=rerun_output)
+
+    rerun_result = run_tissue_pipeline(cfg, rerun_options, client=_DummyClient())
+
+    assert rerun_result.exit_code == 0
+    rerun_df = pd.read_csv(rerun_output, sep=cfg.io.csv_sep, dtype="string")
+    pd.testing.assert_frame_equal(
+        rerun_df.drop(columns=["timestamp_utc"]),
+        expected_df.drop(columns=["timestamp_utc"]),
+    )
+    assert set(rerun_df["timestamp_utc"].unique()) == {SECOND_RUN_GENERATED_AT}
+    rerun_meta = yaml.safe_load(Path(f"{rerun_output}.meta.yaml").read_text(encoding="utf-8"))
+    assert rerun_meta["generated_at"] == SECOND_RUN_GENERATED_AT
     assert metadata["command"]
