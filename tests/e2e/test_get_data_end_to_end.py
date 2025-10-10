@@ -199,6 +199,7 @@ def _failing_target_transform(
 
 
 @pytest.mark.e2e
+@pytest.mark.smoke
 def test_get_data_end_to_end__miniature_pipeline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

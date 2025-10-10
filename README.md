@@ -384,5 +384,22 @@ The resulting `/tmp/activities.csv` and `/tmp/activities.csv.meta.yaml` files
 should be byte-identical across repeated runs when using the same input and
 configuration.
 
+#### Pytest smoke marker
+
+The pytest marker `smoke` groups the high-value regression scenarios that gate
+the CI pipeline. Run them locally via `make smoke` or `pytest -m "smoke"` to
+verify the core data acquisition flow before a full test run. The suite
+currently includes:
+
+- `tests/integration/test_dictionary_manifest.py::test_dictionary_manifest__bundled_resources_validate`
+  – verifies that the bundled dictionary resources match the tracked manifest
+  checksums and ensures the inputs required for enrichment are available.
+- `tests/e2e/test_get_data_end_to_end.py::test_get_data_end_to_end__miniature_pipeline`
+  – drives the orchestrator against the miniature fixtures, covering the full
+  happy path, degraded inputs, partial failures and idempotent reruns.
+- `tests/e2e/test_get_data_scheduler.py::test_scheduler__selective_run_respects_dependencies`
+  – confirms that the scheduler honours dependency graphs, writes manifests and
+  exits successfully when downstream steps need rebuilding.
+
 See [`docs/en/development/TESTING.md`](./docs/en/development/TESTING.md) for
 fixtures, determinism requirements and coverage targets.

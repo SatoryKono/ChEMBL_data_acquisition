@@ -33,7 +33,9 @@ test: $(PYTHON_BIN)
 	$(PYTHON_BIN) scripts/run_tests.py
 
 smoke: $(PYTHON_BIN)
-	CHEMBL_DA_BASE_PATH=$(PWD)/tests/resources/pipeline_inputs $(VENV)/bin/pytest tests/smoke -k "not testitem"
+        PYTHONHASHSEED=$${PYTHONHASHSEED:-0} \
+        CHEMBL_DA_BASE_PATH=$(PWD)/tests/resources/pipeline_inputs \
+        $(VENV)/bin/pytest -m "smoke"
 
 test-report: $(PYTHON_BIN)
 	PYTHONHASHSEED=$${PYTHONHASHSEED:-0} \

@@ -67,6 +67,7 @@ def _make_pipeline_api(name: str, executed: list[str]) -> get_data.PipelineApi:
 
 
 @pytest.mark.e2e
+@pytest.mark.smoke
 def test_scheduler__selective_run_respects_dependencies(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
