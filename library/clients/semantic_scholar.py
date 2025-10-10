@@ -22,6 +22,15 @@ _SEMANTIC_SCHOLAR_FIELDS = "publicationTypes,externalIds,paperId,venue"
 _SEMANTIC_SCHOLAR_HEADERS = {"Accept": "application/json"}
 
 
+def _build_headers(cfg: SemanticScholarCfg) -> dict[str, str]:
+    """Return request headers for Semantic Scholar calls."""
+
+    headers = dict(_SEMANTIC_SCHOLAR_HEADERS)
+    if cfg.api_key:
+        headers["x-api-key"] = cfg.api_key
+    return headers
+
+
 def fetch_semantic_scholar(
     session: requests.Session,
     pmid: str,
@@ -40,7 +49,7 @@ def fetch_semantic_scholar(
         session,
         url,
         sleep * 5,
-        headers=_SEMANTIC_SCHOLAR_HEADERS,
+        headers=_build_headers(cfg),
         params={"fields": _SEMANTIC_SCHOLAR_FIELDS},
         retries=cfg.retries,
         timeout=timeout,
@@ -92,7 +101,7 @@ def fetch_semantic_scholar_batch(
         session,
         url,
         sleep,
-        headers=_SEMANTIC_SCHOLAR_HEADERS,
+        headers=_build_headers(cfg),
         json={"ids": [f"PMID:{pmid}" for pmid in pmids]},
         method="POST",
         params={"fields": _SEMANTIC_SCHOLAR_FIELDS},

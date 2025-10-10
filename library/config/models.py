@@ -624,6 +624,7 @@ class SemanticScholarCfg(_BaseModel):
     retries: int = Field(2, ge=0)
     rps: int | None = Field(default=None, ge=1)
     burst: int | None = Field(default=None, ge=1)
+    api_key: str | None = Field(default=None)
 
     @field_validator("base")
     @classmethod
@@ -631,6 +632,16 @@ class SemanticScholarCfg(_BaseModel):
         if not _valid_url(v):
             raise ValueError("invalid URL")
         return v
+
+    @field_validator("api_key")
+    @classmethod
+    def _api_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        candidate = value.strip()
+        if not candidate:
+            raise ValueError("api_key must not be empty")
+        return candidate
 
 
 class DocTypeCfg(_BaseModel):
