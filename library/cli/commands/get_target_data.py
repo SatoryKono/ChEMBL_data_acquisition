@@ -2115,7 +2115,13 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
 
         final_out_attr = getattr(args, "final_out", None)
         if final_out_attr in (None, argparse.SUPPRESS):
-            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            output_path = Path(
+                io.default_output_path(
+                    args.input_csv,
+                    cfg.io,
+                    date=getattr(args, "date", None),
+                )
+            )
             args.final_out = output_path
         else:
             output_path = Path(final_out_attr)
@@ -2289,7 +2295,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     final_out_attr = getattr(args, "final_out", None)
     if final_out_attr in (None, argparse.SUPPRESS):
-        base_output = Path(io.default_output_path(args.input_csv, cfg.io))
+        base_output = Path(
+            io.default_output_path(
+                args.input_csv,
+                cfg.io,
+                date=getattr(args, "date", None),
+            )
+        )
         args.final_out = base_output
     else:
         base_output = Path(final_out_attr)
@@ -2427,7 +2439,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     final_candidate = getattr(args, "final_out", None)
     if final_candidate in (None, argparse.SUPPRESS):
-        final_output = Path(io.default_output_path(args.input_csv, cfg.io))
+        final_output = Path(
+            io.default_output_path(
+                args.input_csv,
+                cfg.io,
+                date=getattr(args, "date", None),
+            )
+        )
         args.final_out = final_output
     else:
         final_output = Path(final_candidate)
@@ -2754,7 +2772,13 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     else:
         final_out_attr = getattr(args, "final_out", None)
         if final_out_attr in (None, argparse.SUPPRESS):
-            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            output_path = Path(
+                io.default_output_path(
+                    args.input_csv,
+                    cfg.io,
+                    date=getattr(args, "date", None),
+                )
+            )
             args.final_out = output_path
         else:
             output_path = Path(final_out_attr)
@@ -4022,7 +4046,13 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     try:
         final_candidate = getattr(args, "final_out", None)
         if final_candidate in (None, argparse.SUPPRESS):
-            final_output = Path(io.default_output_path(args.input_csv, cfg.io))
+            final_output = Path(
+                io.default_output_path(
+                    args.input_csv,
+                    cfg.io,
+                    date=getattr(args, "date", None),
+                )
+            )
         else:
             final_output = Path(final_candidate)
 
@@ -4195,7 +4225,13 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
     final_candidate = getattr(args, "final_out", None)
     if final_candidate in (None, argparse.SUPPRESS):
-        final_output = Path(io.default_output_path(args.input_csv, cfg.io))
+        final_output = Path(
+            io.default_output_path(
+                args.input_csv,
+                cfg.io,
+                date=getattr(args, "date", None),
+            )
+        )
         args.final_out = final_output
     else:
         final_output = Path(final_candidate)

@@ -826,7 +826,11 @@ def run_testitem_pipeline(
         output_path = (
             output_csv
             if output_csv is not None
-            else io.default_output_path(input_csv, cfg.io)
+            else io.default_output_path(
+                input_csv,
+                cfg.io,
+                date=getattr(options, "date", None),
+            )
         )
 
         try:

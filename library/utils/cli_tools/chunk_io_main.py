@@ -73,7 +73,14 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the chunked copy operation."""
     try:
-        output = Path(args.output_csv or default_output_path(args.input_csv, cfg.io))
+        output = Path(
+            args.output_csv
+            or default_output_path(
+                args.input_csv,
+                cfg.io,
+                date=getattr(args, "date", None),
+            )
+        )
         parent = output.parent
         if not parent.exists():
             if cfg.io.exist_ok:

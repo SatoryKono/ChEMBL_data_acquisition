@@ -223,7 +223,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         weights=cfg.doc_type.weights,
         thresholds=cfg.doc_type.thresholds,
     )
-    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    output = args.output_csv or io.default_output_path(
+        args.input_csv,
+        cfg.io,
+        date=getattr(args, "date", None),
+    )
     df_out.to_csv(output, index=False, sep=args.sep, encoding=args.encoding)
     logger_inst.info("pipeline_done", run_id=log_cfg.run_id)
     return 0

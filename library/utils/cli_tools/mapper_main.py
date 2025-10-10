@@ -150,7 +150,11 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         if missing_sample:
             summary_payload["sample_missing"] = missing_sample
         logger.info("mapper_summary", **summary_payload)
-        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+        output = args.output_csv or io.default_output_path(
+            args.input_csv,
+            cfg.io,
+            date=getattr(args, "date", None),
+        )
         try:
             io.write_csv(
                 df,

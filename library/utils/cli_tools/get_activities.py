@@ -167,7 +167,11 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     input_candidate = getattr(args, "input_csv", None)
     if output_candidate in (None, argparse.SUPPRESS):
         fallback_input = input_candidate or Path("activities.csv")
-        output_path = io.default_output_path(fallback_input, cfg.io)
+        output_path = io.default_output_path(
+            fallback_input,
+            cfg.io,
+            date=getattr(args, "date", None),
+        )
         args.output_csv = output_path
         args.final_out = output_path
     else:

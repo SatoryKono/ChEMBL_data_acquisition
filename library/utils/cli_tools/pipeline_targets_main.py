@@ -524,7 +524,11 @@ def run(cfg: Config, options: PipelineConfig) -> int:
 
     final_path = options.final_out or options.output_csv
     if final_path is None:
-        final_path = default_output_path(options.input_csv, cfg.io)
+        final_path = default_output_path(
+            options.input_csv,
+            cfg.io,
+            date=getattr(options, "date", None),
+        )
 
     frame_iter = _frame_iterator(result.chembl)
     raw_writer: _RawStreamWriter | None = None

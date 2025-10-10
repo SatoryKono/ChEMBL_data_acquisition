@@ -986,7 +986,13 @@ def run_pubmed(
                 args.final_out = output_path
             args.output_csv = output_path
         else:
-            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            output_path = Path(
+                io.default_output_path(
+                    args.input_csv,
+                    cfg.io,
+                    date=getattr(args, "date", None),
+                )
+            )
             args.final_out = output_path
             args.output_csv = output_path
     else:
@@ -1229,7 +1235,13 @@ def run_chembl(
                 args.final_out = output_path
             args.output_csv = output_path
         else:
-            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            output_path = Path(
+                io.default_output_path(
+                    args.input_csv,
+                    cfg.io,
+                    date=getattr(args, "date", None),
+                )
+            )
             args.final_out = output_path
             args.output_csv = output_path
     else:
@@ -1447,7 +1459,13 @@ def run_all(
                 args.final_out = output_path
             args.output_csv = output_path
         else:
-            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            output_path = Path(
+                io.default_output_path(
+                    args.input_csv,
+                    cfg.io,
+                    date=getattr(args, "date", None),
+                )
+            )
             args.final_out = output_path
             args.output_csv = output_path
     else:
@@ -1762,7 +1780,13 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             if not isinstance(legacy_output, Path):
                 args.final_out = output_path
         else:
-            output_path = Path(io.default_output_path(args.input_csv, cfg.io))
+            output_path = Path(
+                io.default_output_path(
+                    args.input_csv,
+                    cfg.io,
+                    date=getattr(args, "date", None),
+                )
+            )
             args.final_out = output_path
     else:
         output_path = Path(final_out_attr)
