@@ -18,6 +18,7 @@ from library.common.csv_utils import sha256_file
 from scripts import get_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_file, parse_log_lines
+from tests.helpers.manifests import load_latest_manifest
 
 
 PipelineFunc = Callable[[list[str]], int]
@@ -272,7 +273,7 @@ def test_get_data_end_to_end__miniature_pipeline(
         return original_configure(
             get_data.LoggerConfig(
                 level=cfg.level,
-                run_id="e2e-run",
+                run_id=cfg.run_id,
                 redact_secrets=cfg.redact_secrets,
                 stream=stream,
                 handlers=list(cfg.handlers) if cfg.handlers else [],
@@ -366,14 +367,22 @@ def test_get_data_end_to_end__miniature_pipeline(
 
     date_prefix = "20240102"
 
-    def _invoke(argv: list[str]) -> tuple[int, list[dict[str, object]]]:
+    def _invoke(argv: list[str]) -> tuple[int, list[dict[str, object]], str]:
         exit_code = get_data.main(argv)
         assert log_streams, "expected logger stream to be captured"
         records: list[dict[str, object]] = []
         while log_streams:
             stream = log_streams.popleft()
             records.extend(parse_log_lines(stream.getvalue()))
-        return exit_code, records
+        run_ids = {
+            record.get("data", {}).get("run_id")
+            for record in records
+            if isinstance(record.get("data"), dict) and record.get("data", {}).get("run_id")
+        }
+        assert run_ids, "expected run_id to be present in logs"
+        assert len(run_ids) == 1, f"multiple run identifiers observed: {run_ids}"
+        run_id = next(iter(run_ids))
+        return exit_code, records, str(run_id)
 
     argv = [
         "--base-path",
@@ -391,7 +400,7 @@ def test_get_data_end_to_end__miniature_pipeline(
         "--force",
     ]
 
-    exit_code, logs = _invoke(argv)
+    exit_code, logs, first_run_id = _invoke(argv)
     assert exit_code == 0
 
     log_dir = base_path / "logs"
@@ -408,6 +417,9 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert "activity_missing_value" in events
     assert events["activity_missing_value"].get("level") == "ERROR"
     assert not any(record.get("event") == "step_arguments" for record in logs)
+
+    first_manifest_path, first_manifest = load_latest_manifest(base_path)
+    assert first_manifest["run"]["run_id"] == first_run_id
 
     expected_dir = Path(__file__).resolve().parents[1] / "resources" / "expected_get_data"
     key_columns = {
@@ -433,8 +445,9 @@ def test_get_data_end_to_end__miniature_pipeline(
 
     hashes_before = {name: sha256_file(path) for name, path in output_paths.items()}
 
-    repeat_exit_code, repeat_logs = _invoke(argv)
+    repeat_exit_code, repeat_logs, repeat_run_id = _invoke(argv)
     assert repeat_exit_code == 0
+    assert repeat_run_id == first_run_id
     for step_name in key_columns:
         assert any(
             record["event"] == "step_done"
@@ -446,8 +459,12 @@ def test_get_data_end_to_end__miniature_pipeline(
     hashes_after = {name: sha256_file(path) for name, path in output_paths.items()}
     assert hashes_before == hashes_after
 
+    second_manifest_path, second_manifest = load_latest_manifest(base_path)
+    assert second_manifest["run"]["run_id"] == repeat_run_id
+    assert second_manifest_path != first_manifest_path
+
     verbose_argv = [*argv, "--verbose"]
-    verbose_exit_code, verbose_logs = _invoke(verbose_argv)
+    verbose_exit_code, verbose_logs, verbose_run_id = _invoke(verbose_argv)
     assert verbose_exit_code == 0
     assert any(record.get("event") == "step_arguments" for record in verbose_logs)
     assert any(record.get("level") == "DEBUG" for record in verbose_logs)
@@ -463,7 +480,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert summary_md_path.exists()
     report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
     assert report_payload["meta"]["repo"] == "SatoryKono/ChEMBL_data_acquisition"
-    assert report_payload["meta"]["run_id"] == "e2e-run"
+    assert report_payload["meta"]["run_id"] == verbose_run_id
     assert report_payload["meta"]["ts_utc"] == "2020-01-01T00:00:00+00:00"
     assert report_payload["summary"]["total"] == 5
     assert report_payload["summary"]["passed"] == 5
@@ -488,8 +505,9 @@ def test_get_data_end_to_end__miniature_pipeline(
         "--force",
     ]
 
-    new_exit_code, _ = _invoke(new_run_argv)
+    new_exit_code, _, new_run_id = _invoke(new_run_argv)
     assert new_exit_code == 0
+    assert new_run_id != first_run_id
     new_log_path = log_dir / f"get_data_{new_date_prefix}.log"
     assert new_log_path.exists()
     for _step_name, stem in get_data.DEFAULT_OUTPUT_STEMS.items():
@@ -521,7 +539,7 @@ def test_get_data_end_to_end__miniature_pipeline(
         "--force",
     ]
 
-    degraded_exit_code, degraded_logs = _invoke(degraded_argv)
+    degraded_exit_code, degraded_logs, _ = _invoke(degraded_argv)
     assert degraded_exit_code == 1
     degraded_events = {record.get("event"): record for record in degraded_logs if "event" in record}
     assert "document_schema_invalid" in degraded_events
@@ -556,7 +574,7 @@ def test_get_data_end_to_end__miniature_pipeline(
         "INFO",
         "--force",
     ]
-    partial_exit_code, partial_logs = _invoke(partial_argv)
+    partial_exit_code, partial_logs, _ = _invoke(partial_argv)
     assert partial_exit_code == 1
     partial_events = {record.get("event"): record for record in partial_logs if "event" in record}
     assert "step_exception" in partial_events
@@ -587,7 +605,7 @@ def test_get_data_end_to_end__miniature_pipeline(
         "--log-level",
         "INFO",
     ]
-    missing_exit_code, missing_logs = _invoke(missing_argv)
+    missing_exit_code, missing_logs, _ = _invoke(missing_argv)
     assert missing_exit_code == 1
     missing_events = {record.get("event"): record for record in missing_logs if "event" in record}
     assert missing_events.get("step_input_missing") is not None
