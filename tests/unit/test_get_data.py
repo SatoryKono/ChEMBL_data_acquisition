@@ -980,3 +980,33 @@ def test_run_pipeline__dry_run_manifest(
     for entry in step_entries:
         assert entry["reason"] == "dry_run"
         assert entry["output"]["exists"] is False
+
+
+@pytest.mark.unit
+def test_run_postprocess_hook__missing_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    step = next(step for step in get_data.DEFAULT_PIPELINE_STEPS if step.name == "document")
+    final_output = tmp_path / "output.documents_20240101.csv"
+    assert not final_output.exists()
+
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def _record(event: str, **kwargs: object) -> None:
+        calls.append((event, kwargs))
+
+    monkeypatch.setattr(get_data._LOGGER, "warning", _record)
+
+    result = get_data._run_postprocess_hook(step, final_output, table="documents")
+
+    assert result is None
+    assert calls == [
+        (
+            "postprocess_input_missing",
+            {
+                "step": step.name,
+                "table": "documents",
+                "input": str(final_output),
+            },
+        )
+    ]

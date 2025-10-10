@@ -1256,6 +1256,15 @@ def _run_postprocess_hook(
         table = _resolve_postprocess_table(step, final_output)
     if table is None:
         return None
+    if not final_output.exists():
+        _LOGGER.warning(
+            "postprocess_input_missing",
+            step=step.name,
+            table=table,
+            input=str(final_output),
+        )
+        return None
+
     handlers = _POSTPROCESS_HANDLERS.get(table)
     if handlers is None:
         _LOGGER.warning(
