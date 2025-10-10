@@ -49,6 +49,10 @@ from library.cli import (
     build_parser as base_parser,
 )
 from library.cli.base import PipelineCLIBase
+
+import library.cli.logging as cli_logging
+from library.cli.logging import CLILoggingContext
+
 from library.cli.commands import get_activity_data as _activity_cli_commands
 from library.cli.commands.get_activity_data import (
     MIN_ACTIVITY_TIMEOUT,
@@ -132,28 +136,7 @@ def _current_utc_datetime() -> _datetime:
 def _current_date_token() -> str:
     """Return the YYYYMMDD date string derived from :data:`datetime`."""
 
-    date_func = getattr(cli_logging, "_current_date_str", None)
-    if callable(date_func):
-        try:
-            candidate = date_func()
-        except Exception:
-            candidate = None
-        if isinstance(candidate, str):
-            stripped = candidate.strip()
-            if stripped:
-                if date_func is not _DEFAULT_LOGGING_DATE_FUNC:
-                    return stripped
-                candidate = None
-            else:
-                candidate = None
-        else:
-            candidate = None
-    else:
-        candidate = None
-
-    token = _current_utc_datetime().strftime("%Y%m%d")
-    return candidate if candidate is not None else token
- 
+    return _current_utc_datetime().strftime("%Y%m%d")
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
     invocation = getattr(args, "invocation", None)
@@ -2026,6 +2009,13 @@ class ActivityPipelineCLI(PipelineCLIBase):
             stripped = value.strip()
             if stripped:
                 return stripped
+        try:
+            original = getattr(cli_logging, "_ORIGINAL_CURRENT_DATE_STR", None)
+            current = cli_logging._current_date_str
+            if original is not None and current is not original:
+                return current()
+        except Exception:
+            pass
         try:
             return _current_date_token()
         except Exception:  # pragma: no cover - defensive against custom hooks

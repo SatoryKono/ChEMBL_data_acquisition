@@ -47,6 +47,9 @@ def _current_date_str() -> str:
     return datetime.now(UTC).strftime("%Y%m%d")
 
 
+_ORIGINAL_CURRENT_DATE_STR = _current_date_str
+
+
 @dataclass(slots=True)
 class CLILoggingContext:
     """Container returned by :func:`setup_cli_logging`."""
