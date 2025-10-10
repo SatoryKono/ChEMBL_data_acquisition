@@ -720,6 +720,7 @@ def _finalise_export(
         except (ImportError, AttributeError):
             pass
         except (
+            AttributeError,
             SchemaValidationError,
             StepError,
             OSError,
@@ -732,6 +733,27 @@ def _finalise_export(
                 exc_info=exc,
                 path=str(csv_path),
             )
+            postprocessed_path = None
+        else:
+            logger.info(
+                "document_export_postprocess_written",
+                path=str(postprocessed_path),
+            )
+
+    if postprocessed_path is None:
+        try:
+            postprocessed_path = document_export_postprocessing.postprocess_export_file(
+                csv_path,
+                cfg=cfg.io,
+            )
+        except (OSError, ValueError, pd.errors.ParserError) as exc:
+            logger.error(
+                "document_export_postprocess_failed",
+                error=str(exc),
+                exc_info=exc,
+                path=str(csv_path),
+            )
+            postprocessed_path = None
             exit_code = 1
         else:
             logger.info(
