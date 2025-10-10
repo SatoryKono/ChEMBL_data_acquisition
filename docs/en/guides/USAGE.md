@@ -17,6 +17,9 @@ three tiers:
    - `--log-level` – logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
    - `--verbose` – shortcut enabling `DEBUG` logging without overriding
      configuration files.
+   - `--run-id` – explicit identifier stamped into logs and metadata sidecars;
+     defaults to a deterministic value or the `CHEMBL_DA_RUN_ID` environment
+     variable when set.
    - `--sep`, `--encoding` – CSV delimiter and encoding (`utf-8-sig` by default).
    - `--base-path`, `--input-dir`, `--output-dir`, `--date` – shortcuts used by
      the orchestrator to build consistent folder layouts and default filenames.
