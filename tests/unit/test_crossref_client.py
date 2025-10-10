@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 
 import pytest
 import requests
-from urllib.parse import quote
 
 from library.clients import crossref
 from library.config.models import CrossRefCfg, RetryCfg

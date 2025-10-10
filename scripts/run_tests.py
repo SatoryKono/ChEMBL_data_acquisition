@@ -24,6 +24,8 @@ from library.cli_utils import resolve_invocation
 from library.reporting.test_summary import (
     DEFAULT_REPO_SLUG,
     build_summary_markdown,
+)
+from library.reporting.test_summary import (
     normalise_message as _normalise_message,
 )
 

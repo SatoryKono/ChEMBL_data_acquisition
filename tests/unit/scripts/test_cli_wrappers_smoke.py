@@ -30,7 +30,7 @@ _BUILD_PARSER_MODULES = (
 @pytest.mark.parametrize("module_name", _MAIN_MODULES)
 def test_cli_wrapper_main__signature(module_name: str) -> None:
     module = import_module(module_name)
-    main = getattr(module, "main")
+    main = module.main
     signature = inspect.signature(main)
 
     argv_parameter = signature.parameters.get("argv")
@@ -45,7 +45,7 @@ def test_cli_wrapper_main__signature(module_name: str) -> None:
 @pytest.mark.parametrize("module_name", _BUILD_PARSER_MODULES)
 def test_cli_wrapper_build_parser__returns_parser(module_name: str) -> None:
     module = import_module(module_name)
-    build_parser = getattr(module, "build_parser")
+    build_parser = module.build_parser
 
     parser, *_ = build_parser()
 

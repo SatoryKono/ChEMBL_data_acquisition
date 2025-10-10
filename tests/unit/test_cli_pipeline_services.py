@@ -5,14 +5,18 @@ from pathlib import Path
 import pytest
 
 from library.config import Config
-from library.pipelines.assay import AssayPipelineOptions, run_pipeline as run_assay_pipeline
+from library.pipelines.assay import AssayPipelineOptions
+from library.pipelines.assay import run_pipeline as run_assay_pipeline
 from library.pipelines.common import PipelineRunResult
 from library.pipelines.document import (
     DocumentPipelineOptions,
+)
+from library.pipelines.document import (
     run_pipeline as run_document_pipeline,
 )
 from library.pipelines.document.service import DocumentPipeline
-from library.pipelines.target import TargetPipelineOptions, run_pipeline as run_target_pipeline
+from library.pipelines.target import TargetPipelineOptions
+from library.pipelines.target import run_pipeline as run_target_pipeline
 from scripts import get_assay_data, get_document_data, get_target_data
 
 

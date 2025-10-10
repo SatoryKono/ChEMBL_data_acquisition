@@ -34,7 +34,6 @@ from library.postprocessing.documents import (
 from library.postprocessing.documents import steps as document_steps
 from library.postprocessing.documents.schema import DOCUMENT_SCHEMA, validate_documents
 
-
 try:
     from library.postprocess.common import (
         DEFAULT_LOG_DIR,

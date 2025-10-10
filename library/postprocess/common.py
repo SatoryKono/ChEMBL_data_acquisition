@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Callable, Iterable, Mapping, Any
+from typing import Any
 
 import pandas as pd
 
@@ -209,11 +210,11 @@ def _write_output_frame(
 class PostprocessingPipelineConfig:
     """Configuration bundle required to execute a postprocessing pipeline."""
 
-    pipeline_config: "PipelineConfig"
-    csv_runtime_config: "CsvRuntimeConfig"
-    runner: Callable[..., tuple["pd.DataFrame", "PipelineRunMetrics"]]
-    validator: Callable[..., "pd.DataFrame"]
-    schema: "DataFrameSchema"
+    pipeline_config: PipelineConfig
+    csv_runtime_config: CsvRuntimeConfig
+    runner: Callable[..., tuple[pd.DataFrame, PipelineRunMetrics]]
+    validator: Callable[..., pd.DataFrame]
+    schema: DataFrameSchema
     logger: Any
     pipeline_version: str | None = None
 
@@ -221,14 +222,14 @@ class PostprocessingPipelineConfig:
 class PostprocessingPipelineResult:
     """Result payload returned by :func:`run_postprocessing_pipeline`."""
 
-    dataframe: "pd.DataFrame"
-    metrics: "PipelineRunMetrics | None"
+    dataframe: pd.DataFrame
+    metrics: PipelineRunMetrics | None
     output_path: Path
     report_path: Path | None
 
 def _write_metrics_report(
     table: str,
-    metrics: "PipelineRunMetrics",
+    metrics: PipelineRunMetrics,
     output_path: Path,
     logger: logging.Logger,
 ) -> Path:
@@ -310,14 +311,14 @@ def run_postprocessing_pipeline(
 def generate_metrics_report(
     table: str,
     output_path: Path,
-    csv_cfg: "CsvRuntimeConfig",
-    runner: Callable[..., tuple["pd.DataFrame", "PipelineRunMetrics"]],
+    csv_cfg: CsvRuntimeConfig,
+    runner: Callable[..., tuple[pd.DataFrame, PipelineRunMetrics]],
     *,
     pipeline_version: str | None,
     extras: Mapping[str, Any] | None,
     logger,
-    pipeline_metrics: "PipelineRunMetrics | None" = None,
-) -> tuple["PipelineRunMetrics | None", Path | None]:
+    pipeline_metrics: PipelineRunMetrics | None = None,
+) -> tuple[PipelineRunMetrics | None, Path | None]:
     """Create a structured metrics report for ``table``."""
 
     prefix = event_prefix(table)
