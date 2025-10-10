@@ -129,12 +129,14 @@ class PipelineApi:
 def _build_document_options(
     cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> DocumentPipelineOptions:
+    mode = cfg.subcommand_for("document") or "all"
     return DocumentPipelineOptions(
         input_csv=input_path,
         output_csv=output_path,
-        mode="all",
+        mode=mode,
         limit=cfg.limit,
         force=cfg.force,
+        skip_existing=cfg.skip_existing,
     )
 
 
@@ -148,6 +150,7 @@ def _build_target_options(
         command=command,
         limit=cfg.limit,
         force=cfg.force,
+        skip_existing=cfg.skip_existing,
     )
 
 
@@ -159,6 +162,7 @@ def _build_assay_options(
         output_csv=output_path,
         limit=cfg.limit,
         force=cfg.force,
+        skip_existing=cfg.skip_existing,
     )
 
 
@@ -181,6 +185,8 @@ def _build_activity_options(
         output_csv=output_path,
         limit=cfg.limit,
         force=cfg.force,
+        skip_existing=cfg.skip_existing,
+        dry_run=cfg.dry_run,
     )
 
 

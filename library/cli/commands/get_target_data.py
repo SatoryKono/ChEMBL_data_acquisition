@@ -13,11 +13,13 @@ Fetch ChEMBL target information for identifiers in ``targets.csv``::
 from __future__ import annotations
 
 import argparse
+import errno
 import math
 import os
 import shutil
 import stat
 import sys
+import time
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -56,9 +58,9 @@ from library.integration import iuphar_library as ii
 from library.integration import uniprot_library as uu
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.orchestration import ETLContext
-from library.pipelines.common import add_pipeline_metadata
+from library.pipelines.common import PipelineRunResult, add_pipeline_metadata
 from library.pipelines.common.metadata import get_pipeline_version
-from library.pipelines.target import postprocessing as tp
+from library.pipelines.target import TargetPipelineOptions, postprocessing as tp
 from library.pipelines.target import protein_classification as pc
 from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
 from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS, ModeDefaults
@@ -1158,6 +1160,9 @@ def _prepare_raw_destination(destination: Path) -> None:
 class _RawDumpStreamWriter:
     """Stream ChEMBL raw payloads to disk without accumulating chunks."""
 
+    _CSV_WRITE_MAX_ATTEMPTS = 5
+    _CSV_WRITE_RETRY_BASE_SLEEP_S = 0.1
+
     def __init__(
         self,
         destination: Path,
@@ -1223,18 +1228,79 @@ class _RawDumpStreamWriter:
         else:
             mode = "w" if self._rows_written == 0 else "a"
             header = self._rows_written == 0
-            working.to_csv(
-                str(self.destination),
-                mode=mode,
-                header=header,
-                index=False,
-                sep=self.cfg.io.csv_sep,
-                encoding=self.cfg.io.csv_encoding,
-            )
+            self._write_csv_with_retry(working, mode=mode, header=header)
         self._rows_written += len(working)
         logger.info(
             "raw_dump_written", rows=self._rows_written, path=str(self.destination)
         )
+        return self.destination
+
+    def _write_csv_with_retry(
+        self, frame: pd.DataFrame, *, mode: str, header: bool
+    ) -> None:
+        """Persist ``frame`` to ``destination`` handling transient file locks."""
+
+        last_error: OSError | None = None
+        for attempt in range(1, self._CSV_WRITE_MAX_ATTEMPTS + 1):
+            try:
+                frame.to_csv(
+                    str(self.destination),
+                    mode=mode,
+                    header=header,
+                    index=False,
+                    sep=self.cfg.io.csv_sep,
+                    encoding=self.cfg.io.csv_encoding,
+                )
+                return
+            except OSError as exc:
+                should_retry = self._should_retry_on_oserror(exc)
+                if not should_retry or attempt == self._CSV_WRITE_MAX_ATTEMPTS:
+                    raise
+                last_error = exc
+                sleep_seconds = self._CSV_WRITE_RETRY_BASE_SLEEP_S * attempt
+                logger.warning(
+                    "raw_dump_write_retry",
+                    attempt=attempt,
+                    wait_seconds=sleep_seconds,
+                    path=str(self.destination),
+                    error=str(exc),
+                )
+                time.sleep(sleep_seconds)
+        if last_error is not None:  # pragma: no cover - defensive
+            raise last_error
+
+    @staticmethod
+    def _should_retry_on_oserror(exc: OSError) -> bool:
+        if isinstance(exc, PermissionError):
+            return True
+        errno_value = getattr(exc, "errno", None)
+        return errno_value in {errno.EACCES, errno.EPERM}
+
+    def finalize(self) -> Path:
+        """Flush buffered payloads to ``destination`` and return the path."""
+
+        if self._is_parquet:
+            frames = self._frames or []
+            if frames:
+                combined = pd.concat(frames, ignore_index=True)
+            else:
+                combined = pd.DataFrame(columns=self._columns or [])
+            try:
+                combined.to_parquet(self.destination, index=False)
+            except ImportError as exc:  # pragma: no cover - optional dependency
+                raise ValueError(
+                    "Parquet export requires optional pyarrow or fastparquet"
+                ) from exc
+        else:
+            if not self.destination.exists():
+                empty = pd.DataFrame(columns=self._columns or [])
+                empty.to_csv(
+                    str(self.destination),
+                    index=False,
+                    sep=self.cfg.io.csv_sep,
+                    encoding=self.cfg.io.csv_encoding,
+                )
+
         return self.destination
 
 
@@ -1283,33 +1349,6 @@ def _finalize_raw_dump_writer(
         return False
 
     return True
-
-    def finalize(self) -> Path:
-        """Flush buffered payloads to ``destination`` and return the path."""
-
-        if self._is_parquet:
-            frames = self._frames or []
-            if frames:
-                combined = pd.concat(frames, ignore_index=True)
-            else:
-                combined = pd.DataFrame(columns=self._columns or [])
-            try:
-                combined.to_parquet(self.destination, index=False)
-            except ImportError as exc:  # pragma: no cover - optional dependency
-                raise ValueError(
-                    "Parquet export requires optional pyarrow or fastparquet"
-                ) from exc
-        else:
-            if not self.destination.exists():
-                empty = pd.DataFrame(columns=self._columns or [])
-                empty.to_csv(
-                    str(self.destination),
-                    index=False,
-                    sep=self.cfg.io.csv_sep,
-                    encoding=self.cfg.io.csv_encoding,
-                )
-
-        return self.destination
 
 
 def _write_raw_dump(
@@ -4025,6 +4064,89 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         return 1
     finally:
         cfg.target.uniprot.enable_gtop = original_enable_gtop
+
+
+def _update_target_config_from_options(
+    cfg: Config, options: TargetPipelineOptions
+) -> None:
+    """Apply limit/offset overrides from ``options`` to ``cfg``."""
+
+    target_cfg = cfg.sources.chembl.pipelines.target
+
+    def _apply(section_name: str) -> None:
+        section = getattr(target_cfg, section_name)
+        updates: dict[str, object] = {"offset": options.offset}
+        if options.limit is not None:
+            updates["limit"] = options.limit
+        setattr(target_cfg, section_name, section.model_copy(update=updates))
+
+    command = options.command
+    if command == "all":
+        for section_name in ("all", "chembl", "uniprot", "iuphar"):
+            _apply(section_name)
+    elif command in {"chembl", "uniprot", "iuphar"}:
+        _apply(command)
+    else:  # pragma: no cover - defensive guard
+        msg = f"unsupported target pipeline command: {command}"
+        raise ValueError(msg)
+
+
+def run_target_service(
+    config: Config, options: TargetPipelineOptions
+) -> PipelineRunResult:
+    """Execute the target pipeline using typed ``options``."""
+
+    output_path = Path(options.output_csv)
+    if options.skip_existing and output_path.exists() and not options.force:
+        return PipelineRunResult(
+            exit_code=0,
+            output_path=output_path,
+            executed=False,
+            reason="skip_existing",
+            written=False,
+        )
+
+    cfg = config.model_copy(deep=True)
+    _update_target_config_from_options(cfg, options)
+
+    args = argparse.Namespace(
+        input_csv=Path(options.input_csv),
+        final_out=output_path,
+        output_csv=output_path,
+        raw_out=options.raw_output,
+        raw_format=options.raw_format,
+        no_reindex_raw=options.no_reindex_raw,
+        id_cols=options.id_columns,
+        limit=options.limit,
+        offset=options.offset,
+        command=options.command,
+        skip_existing=False,
+        force=options.force,
+    )
+
+    command = options.command
+    if command == "chembl":
+        runner = run_chembl
+    elif command == "uniprot":
+        runner = run_uniprot
+    elif command == "iuphar":
+        runner = run_iuphar
+    elif command == "all":
+        runner = run_all
+    else:  # pragma: no cover - defensive guard
+        msg = f"unsupported target pipeline command: {command}"
+        raise ValueError(msg)
+
+    exit_code = int(runner(cfg, args))
+    reason = None if exit_code == 0 else "pipeline_failed"
+    written = None if exit_code != 0 else True
+    return PipelineRunResult(
+        exit_code=exit_code,
+        output_path=output_path,
+        executed=True,
+        reason=reason,
+        written=written,
+    )
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:

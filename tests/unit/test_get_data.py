@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import io
 from collections.abc import Sequence
 from dataclasses import replace
@@ -9,11 +10,13 @@ from types import SimpleNamespace
 
 import pytest
 
+from library.cli.commands import get_data
 from library.pipelines.common import PipelineRunResult
-from scripts import get_data
 from tests.helpers.logs import iter_events, parse_log_lines
 from tests.helpers.manifests import load_latest_manifest
 
+
+get_data = importlib.import_module("library.cli.commands.get_data")
 
 def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
     base_path = tmp_path
@@ -51,6 +54,55 @@ def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
 def _load_manifest(cfg: get_data.PipelineRunConfig) -> dict[str, object]:
     _, manifest = load_latest_manifest(cfg.base_path)
     return manifest
+
+
+@pytest.mark.unit
+def test_build_document_options__forwards_skip_existing(tmp_path: Path) -> None:
+    cfg = replace(_make_config(tmp_path), skip_existing=True)
+    options = get_data._build_document_options(
+        cfg,
+        cfg.input_path("document"),
+        cfg.output_path("document"),
+    )
+    assert options.skip_existing is True
+    assert options.force is cfg.force
+
+
+@pytest.mark.unit
+def test_build_target_options__forwards_skip_existing(tmp_path: Path) -> None:
+    cfg = replace(_make_config(tmp_path), skip_existing=True)
+    options = get_data._build_target_options(
+        cfg,
+        cfg.input_path("target"),
+        cfg.output_path("target"),
+    )
+    assert options.skip_existing is True
+    assert options.force is cfg.force
+
+
+@pytest.mark.unit
+def test_build_assay_options__forwards_skip_existing(tmp_path: Path) -> None:
+    cfg = replace(_make_config(tmp_path), skip_existing=True)
+    options = get_data._build_assay_options(
+        cfg,
+        cfg.input_path("assay"),
+        cfg.output_path("assay"),
+    )
+    assert options.skip_existing is True
+    assert options.force is cfg.force
+
+
+@pytest.mark.unit
+def test_build_activity_options__forwards_skip_and_dry_run(tmp_path: Path) -> None:
+    cfg = replace(_make_config(tmp_path), skip_existing=True, dry_run=True)
+    options = get_data._build_activity_options(
+        cfg,
+        cfg.input_path("activity"),
+        cfg.output_path("activity"),
+    )
+    assert options.skip_existing is True
+    assert options.dry_run is True
+    assert options.force is cfg.force
 
 
 @pytest.mark.unit
@@ -470,6 +522,88 @@ def test_override_subcommand__target_pipeline_uses_selected_command(
     )
 
     status = get_data.run_pipeline(cfg, steps=target_only)
+    assert status == 0
+    assert captured == ["chembl"]
+
+
+@pytest.mark.unit
+def test_override_subcommand__document_pipeline_uses_selected_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cli_get_data = importlib.import_module("library.cli.commands.get_data")
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("{}", encoding="utf-8")
+    args = argparse.Namespace(
+        base_path=base_path,
+        input_dir=Path("input"),
+        output_dir=Path("output"),
+        config=config_path,
+        date_prefix="20240214",
+        log_level="INFO",
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        verbose=False,
+        pipeline_registry=None,
+        override_input=[],
+        override_output_stem=[],
+        override_subcommand=["document=chembl"],
+    )
+
+    resolved_steps = cli_get_data._resolve_pipeline_steps(args)
+    document_only = tuple(step for step in resolved_steps if step.name == "document")
+    cfg = cli_get_data._prepare_config(args, document_only)
+    document_input = cfg.input_path("document")
+    document_input.write_text(
+        "document_chembl_id\nCHEMBLDOC1\n", encoding="utf-8"
+    )
+    assert cfg.subcommand_for("document") == "chembl"
+
+    captured: list[str] = []
+
+    def _runner(_: get_data.Config, options: object) -> PipelineRunResult:
+        mode = getattr(options, "mode")
+        captured.append(mode)
+        destination = Path(options.output_csv)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text("document_chembl_id\nCHEMBLDOC1\n", encoding="utf-8")
+        return PipelineRunResult(
+            exit_code=0,
+            output_path=destination,
+            executed=True,
+            reason=None,
+            written=True,
+        )
+
+    stream = io.StringIO()
+    logger = cli_get_data.configure_logger(
+        cli_get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="unit_document")
+    )
+    monkeypatch.setattr(cli_get_data, "_LOGGER", logger, raising=False)
+    monkeypatch.setattr(
+        cli_get_data,
+        "_PIPELINE_APIS",
+        {
+            "document": cli_get_data.PipelineApi(
+                cli_get_data._build_document_options, _runner
+            )
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(
+        cli_get_data,
+        "load_config",
+        lambda *args, **kwargs: SimpleNamespace(),
+        raising=False,
+    )
+
+    status = cli_get_data.run_pipeline(cfg, steps=document_only)
     assert status == 0
     assert captured == ["chembl"]
 

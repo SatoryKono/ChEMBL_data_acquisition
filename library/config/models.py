@@ -373,7 +373,7 @@ class OpenAlexCfg(_BaseModel):
     timeout_read: float = Field(30.0, ge=1)
     retries: int = Field(3, ge=0)
     rps: int = Field(4, ge=1)
-    burst: int = Field(5, ge=1)
+    burst: int = Field(1, ge=1)
     mailto: str = "chembl-data@ebi.ac.uk"
 
     @field_validator("base")

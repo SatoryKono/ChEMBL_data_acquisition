@@ -899,3 +899,70 @@ def test_finalize_raw_dump_writer__success(
     assert result is True
     assert calls == ["finalize"]
     assert not _events_of_level(logger_stub, "error")
+
+
+def test_raw_dump_stream_writer_finalize__creates_empty_csv(
+    tmp_path: Path, cfg: Config
+) -> None:
+    destination = tmp_path / "raw.csv"
+    writer = get_target_data._RawDumpStreamWriter(
+        destination, cfg=cfg, reindex_columns=False
+    )
+
+    result = writer.finalize()
+
+    assert result == destination
+    assert destination.exists()
+    content = destination.read_text(encoding="utf-8")
+    assert content.lstrip("\ufeff").replace("\r", "") == "\n"
+
+
+def test_raw_dump_stream_writer_write__permission_error_retries(
+    tmp_path: Path,
+    cfg: Config,
+    monkeypatch: pytest.MonkeyPatch,
+    logger_stub: _MemoryLogger,
+) -> None:
+    destination = tmp_path / "raw.csv"
+    writer = get_target_data._RawDumpStreamWriter(
+        destination, cfg=cfg, reindex_columns=False
+    )
+
+    frame = pd.DataFrame({"col": [1]})
+    calls: list[str] = []
+    original_to_csv = pd.DataFrame.to_csv
+
+    def _flaky_to_csv(self, *args, **kwargs):  # type: ignore[override]
+        calls.append("call")
+        if len(calls) == 1:
+            raise PermissionError("file is locked")
+        return original_to_csv(self, *args, **kwargs)
+
+    sleeps: list[float] = []
+
+    monkeypatch.setattr(pd.DataFrame, "to_csv", _flaky_to_csv)
+    monkeypatch.setattr(get_target_data.time, "sleep", sleeps.append)
+
+    writer.write(frame)
+
+    assert calls == ["call", "call"]
+    assert sleeps == [
+        get_target_data._RawDumpStreamWriter._CSV_WRITE_RETRY_BASE_SLEEP_S
+    ]
+    assert (
+        destination.read_text(encoding="utf-8")
+        .lstrip("\ufeff")
+        .replace("\r", "")
+        == "col\n1\n"
+    )
+    warning_events = _events_of_level(logger_stub, "warning")
+    assert (
+        "warning",
+        "raw_dump_write_retry",
+        {
+            "attempt": 1,
+            "wait_seconds": get_target_data._RawDumpStreamWriter._CSV_WRITE_RETRY_BASE_SLEEP_S,
+            "path": str(destination),
+            "error": "file is locked",
+        },
+    ) in warning_events
