@@ -15,8 +15,8 @@ bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
 _module = import_module("library.cli.commands.get_data")
-sys.modules.setdefault(__name__, _module)
-sys.modules.setdefault("scripts.get_data", _module)
+sys.modules[__name__] = _module
+sys.modules["scripts.get_data"] = _module
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
     raise SystemExit(_module.main())
