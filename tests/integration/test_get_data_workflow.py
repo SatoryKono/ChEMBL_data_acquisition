@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import io
 from collections.abc import Callable
 from dataclasses import replace
@@ -13,10 +14,13 @@ from pydantic import BaseModel, ValidationError
 
 from library.config import Config, ConfigLoaderError
 from library.pipelines.common import PipelineRunResult
-from scripts import get_data, get_target_data
+from scripts import get_target_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_lines
 from tests.helpers.manifests import list_manifest_files, load_latest_manifest
+
+
+get_data = importlib.import_module("library.cli.commands.get_data")
 
 
 def _build_stub_api(
@@ -422,6 +426,106 @@ def test_run_pipeline__target_override_invokes_target_branch(
     assert status == 0
     assert commands == ["uniprot"]
     final_output = cfg.output_path("target")
+    assert final_output.exists()
+
+
+@pytest.mark.integration
+def test_run_pipeline__document_override_invokes_selected_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
+
+    args = SimpleNamespace(
+        base_path=base_path,
+        input_dir=Path("input"),
+        output_dir=Path("output"),
+        config=config_path,
+        date_prefix="20200101",
+        log_level="INFO",
+        verbose=False,
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        pipeline_registry=None,
+        override_input=[],
+        override_output_stem=[],
+        override_subcommand=["document=chembl"],
+    )
+
+    steps = get_data._resolve_pipeline_steps(args)
+    document_step = next(step for step in steps if step.name == "document")
+    cfg = get_data._prepare_config(args, (document_step,))
+    assert cfg.subcommand_for("document") == "chembl"
+
+    document_input = cfg.input_path("document")
+    pd.DataFrame(
+        [
+            {
+                "document_chembl_id": "CHEMBLDOC1",
+                "title": "Document",
+            }
+        ]
+    ).to_csv(document_input, index=False)
+
+    stream = io.StringIO()
+    logger = get_data.configure_logger(
+        get_data.LoggerConfig(level="DEBUG", stream=stream, run_id="integration_doc")
+    )
+    monkeypatch.setattr(get_data, "_LOGGER", logger, raising=False)
+    monkeypatch.setattr(
+        get_data,
+        "load_config",
+        lambda *args, **kwargs: Config(),
+        raising=False,
+    )
+
+    modes: list[str] = []
+
+    def _fake_run_document_pipeline(config: Config, options: object) -> PipelineRunResult:
+        mode = getattr(options, "mode")
+        modes.append(mode)
+        assert mode == "chembl"
+        destination = Path(options.output_csv)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(
+            [
+                {
+                    "document_chembl_id": "CHEMBLDOC1",
+                    "title": "Document",
+                }
+            ]
+        ).to_csv(destination, index=False)
+        return PipelineRunResult(
+            exit_code=0,
+            output_path=destination,
+            executed=True,
+            reason=None,
+            written=True,
+        )
+
+    monkeypatch.setattr(
+        get_data,
+        "_PIPELINE_APIS",
+        {
+            "document": get_data.PipelineApi(
+                get_data._build_document_options, _fake_run_document_pipeline
+            )
+        },
+        raising=False,
+    )
+
+    status = get_data.run_pipeline(cfg, steps=(document_step,))
+
+    assert status == 0
+    assert modes == ["chembl"]
+    final_output = cfg.output_path("document")
     assert final_output.exists()
 
 
