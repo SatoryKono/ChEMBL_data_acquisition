@@ -90,7 +90,10 @@ def test_add_pubchem_data__normal_flow_populates_cache(
 
 @pytest.mark.integration
 def test_add_pubchem_data__skips_polymers_when_disallowed(
-    tmp_path: Path, cfg, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    tmp_path: Path,
+    cfg,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     pubchem_cfg = cfg.pubchem
     pubchem_cfg.enable = True
@@ -116,7 +119,9 @@ def test_add_pubchem_data__skips_polymers_when_disallowed(
     ) -> tuple[pd.Series, set[str], bool]:
         assert skip_mask.tolist() == [True, True, False]
         assert prefer_local_mask.tolist() == [False, False, False]
-        cid_series = pd.Series([pd.NA, pd.NA, "CID3"], index=frame.index, dtype="string")
+        cid_series = pd.Series(
+            [pd.NA, pd.NA, "CID3"], index=frame.index, dtype="string"
+        )
         cid_cache.update({})
         return cid_series, {"CID3"}, False
 
@@ -188,9 +193,7 @@ def test_augment_pubchem__initialises_session_and_reuses_cache(
     monkeypatch.setattr(pubchem.pl, "init_session", record_init)
     monkeypatch.setattr(pubchem, "_PUBCHEM_SESSION_SIGNATURE", None)
 
-    frame = pd.DataFrame(
-        {"molecule_chembl_id": ["CHEMBL1", "CHEMBL2"]}, index=[0, 1]
-    )
+    frame = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1", "CHEMBL2"]}, index=[0, 1])
 
     call_count = 0
 

@@ -13,19 +13,19 @@ import pytest
 from library.postprocessing import ActivityExtendedError, process_activity_extended
 from library.postprocessing.activity_extended import (
     _FINAL_COLUMN_ORDER,
+    _TARGET_COLUMNS,
     _apply_multimol_logic,
+    _augment_activity_frame,
     _derive_output_path,
     _latest_activity_export,
-    _load_document_lookup,
     _load_citation_fraction,
+    _load_document_lookup,
     _load_target_metadata,
     _prepare_unknown_chirality,
     _rename_columns,
     _resolve_targets_path,
     _select_and_cast,
     _transform_activity_frame,
-    _augment_activity_frame,
-    _TARGET_COLUMNS,
 )
 
 pytestmark = pytest.mark.postprocessing
@@ -85,7 +85,9 @@ def _copytree(src: Path, dst: Path) -> Path:
     return dst
 
 
-def test_load_document_lookup__renames_legacy_identifier(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_load_document_lookup__renames_legacy_identifier(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     dictionary_root = tmp_path
     document_dir = dictionary_root / "_document"
     document_dir.mkdir(parents=True)
@@ -96,7 +98,9 @@ def test_load_document_lookup__renames_legacy_identifier(tmp_path: Path, caplog:
             "completed": pd.Series(["yes", "no"], dtype="string"),
         }
     )
-    frame.to_csv(document_dir / "document.csv", index=False, sep="\t", encoding="cp1252")
+    frame.to_csv(
+        document_dir / "document.csv", index=False, sep="\t", encoding="cp1252"
+    )
 
     with caplog.at_level("WARNING"):
         lookup = _load_document_lookup(dictionary_root)
@@ -118,7 +122,9 @@ def test_load_document_lookup__latin1_encoding_fallback(tmp_path: Path) -> None:
             "completed": pd.Series(["value\x81with_control"], dtype="string"),
         }
     )
-    frame.to_csv(document_dir / "document.csv", index=False, sep="\t", encoding="latin-1")
+    frame.to_csv(
+        document_dir / "document.csv", index=False, sep="\t", encoding="latin-1"
+    )
 
     lookup = _load_document_lookup(dictionary_root)
 
@@ -126,7 +132,9 @@ def test_load_document_lookup__latin1_encoding_fallback(tmp_path: Path) -> None:
     assert lookup.loc[0, "completed"] == "value\x81with_control"
 
 
-def test_load_document_lookup__missing_identifier_reports_available_columns(tmp_path: Path) -> None:
+def test_load_document_lookup__missing_identifier_reports_available_columns(
+    tmp_path: Path,
+) -> None:
     dictionary_root = tmp_path
     document_dir = dictionary_root / "_document"
     document_dir.mkdir(parents=True)
@@ -149,7 +157,9 @@ def test_augment_activity_frame__fills_existing_blanks() -> None:
             "activity_chembl_id": pd.Series(["", pd.NA], dtype="string"),
             "activity_id": pd.Series(["ACT-1", "ACT-2"], dtype="string"),
             "compound_name": pd.Series([pd.NA, ""], dtype="string"),
-            "molecule_pref_name": pd.Series(["Preferred-1", "Preferred-2"], dtype="string"),
+            "molecule_pref_name": pd.Series(
+                ["Preferred-1", "Preferred-2"], dtype="string"
+            ),
             "compound_key": pd.Series(["   ", pd.NA], dtype="string"),
             "molecule_chembl_id": pd.Series(["CHEMBL1", "CHEMBL2"], dtype="string"),
             "pchembl_value": pd.Series([5.0, 6.0], dtype="Float64"),
@@ -167,7 +177,12 @@ def test_augment_activity_frame__fills_existing_blanks() -> None:
         pd.Series([5.0, 6.0], index=frame.index, dtype="Float64"),
         check_names=False,
     )
-    assert {"activity_chembl_id", "compound_name", "compound_key", "log_value"} <= filled
+    assert {
+        "activity_chembl_id",
+        "compound_name",
+        "compound_key",
+        "log_value",
+    } <= filled
 
 
 def test_augment_activity_frame__fills_blank_salt_and_log_value() -> None:
@@ -226,6 +241,7 @@ def test_augment_activity_frame__fills_missing_boolean_defaults() -> None:
         assert str(augmented[column].dtype) == "boolean"
         assert augmented[column].tolist() == values
         assert column in filled
+
 
 def test_rename_columns__propagates_backfilled_pA_value() -> None:
     frame = pd.DataFrame(
@@ -352,7 +368,9 @@ def test_resolve_targets_path__uses_override(tmp_path: Path) -> None:
     dictionary_root = tmp_path / "dictionary"
     dictionary_root.mkdir()
     override = tmp_path / "custom_targets.csv"
-    override.write_text("target_chembl_id,target_sort_order\nTAR-X,1\n", encoding="utf-8")
+    override.write_text(
+        "target_chembl_id,target_sort_order\nTAR-X,1\n", encoding="utf-8"
+    )
 
     resolved = _resolve_targets_path(dictionary_root, override)
 
@@ -364,7 +382,9 @@ def test_resolve_targets_path__prefers_known_subdir(tmp_path: Path) -> None:
     targets_dir = dictionary_root / "_target"
     targets_dir.mkdir(parents=True)
     expected = targets_dir / "targets_type.csv"
-    expected.write_text("target_chembl_id,target_sort_order\nTAR-X,1\n", encoding="utf-8")
+    expected.write_text(
+        "target_chembl_id,target_sort_order\nTAR-X,1\n", encoding="utf-8"
+    )
 
     resolved = _resolve_targets_path(dictionary_root, None)
 
@@ -479,7 +499,12 @@ def test_transform_activity_frame__parses_activity_properties_flags(
         pd.NA,
     ]
     assert transformed["assay_with_same_target"].tolist() == [3, 3, 2, pd.NA]
-    assert transformed["molecule_chembl_id.1"].tolist() == ["MOL-1", "MOL-1", "MOL-2", "MOL-3"]
+    assert transformed["molecule_chembl_id.1"].tolist() == [
+        "MOL-1",
+        "MOL-1",
+        "MOL-2",
+        "MOL-3",
+    ]
     assert transformed["standard_inchi_skeleton"].tolist() == [
         "InChI=1",
         "InChI=1",
@@ -487,7 +512,9 @@ def test_transform_activity_frame__parses_activity_properties_flags(
         pd.NA,
     ]
 
-    dtype_map = {column: str(transformed[column].dtype) for column in transformed.columns}
+    dtype_map = {
+        column: str(transformed[column].dtype) for column in transformed.columns
+    }
     assert dtype_map == EXPECTED_DTYPE_MAP
 
     assert transformed["allosteric"].dtype == pd.BooleanDtype()
@@ -498,7 +525,9 @@ def test_transform_activity_frame__parses_activity_properties_flags(
     assert transformed["pam"].eq(False).all()
 
 
-def test_transform_activity_frame__fills_missing_columns(activity_resources: Path) -> None:
+def test_transform_activity_frame__fills_missing_columns(
+    activity_resources: Path,
+) -> None:
     dictionary_root = activity_resources / "dictionary"
     frame = pd.DataFrame(
         {
@@ -597,7 +626,9 @@ def test_process_activity_extended__writes_expected_payload(
     tmp_path: Path,
 ) -> None:
     tmp_exports = _copytree(activity_resources / "exports", tmp_path / "exports")
-    tmp_dictionary = _copytree(activity_resources / "dictionary", tmp_path / "dictionary")
+    tmp_dictionary = _copytree(
+        activity_resources / "dictionary", tmp_path / "dictionary"
+    )
 
     output_path = process_activity_extended(
         search_dir=tmp_exports,
@@ -613,7 +644,9 @@ def test_process_activity_extended__writes_expected_payload(
         targets_override=None,
     )
     assert list(transformed.columns) == list(_FINAL_COLUMN_ORDER)
-    dtype_map = {column: str(transformed[column].dtype) for column in transformed.columns}
+    dtype_map = {
+        column: str(transformed[column].dtype) for column in transformed.columns
+    }
     assert dtype_map == EXPECTED_DTYPE_MAP
 
     result = pd.read_csv(output_path)
@@ -629,7 +662,9 @@ def test_process_activity_extended__supports_base_dir_alias(
     tmp_path: Path,
 ) -> None:
     tmp_exports = _copytree(activity_resources / "exports", tmp_path / "exports")
-    tmp_dictionary = _copytree(activity_resources / "dictionary", tmp_path / "dictionary")
+    tmp_dictionary = _copytree(
+        activity_resources / "dictionary", tmp_path / "dictionary"
+    )
 
     with pytest.warns(DeprecationWarning, match="base_dir"):
         output_path = process_activity_extended(
@@ -645,7 +680,9 @@ def test_process_activity_extended__raises_when_search_and_base_dir_provided(
     tmp_path: Path,
 ) -> None:
     tmp_exports = _copytree(activity_resources / "exports", tmp_path / "exports")
-    tmp_dictionary = _copytree(activity_resources / "dictionary", tmp_path / "dictionary")
+    tmp_dictionary = _copytree(
+        activity_resources / "dictionary", tmp_path / "dictionary"
+    )
 
     with pytest.raises(TypeError, match="both 'search_dir' and 'base_dir'"):
         process_activity_extended(
@@ -675,7 +712,9 @@ def test_process_activity_extended__uses_explicit_input_path(
     tmp_path: Path,
 ) -> None:
     tmp_exports = _copytree(activity_resources / "exports", tmp_path / "exports")
-    tmp_dictionary = _copytree(activity_resources / "dictionary", tmp_path / "dictionary")
+    tmp_dictionary = _copytree(
+        activity_resources / "dictionary", tmp_path / "dictionary"
+    )
 
     original = tmp_exports / "output.activity_20240101.csv"
     explicit = tmp_exports / "chembl_activities_snapshot.csv"

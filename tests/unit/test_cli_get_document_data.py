@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Callable
 
 import pytest
 import yaml
@@ -82,7 +82,9 @@ def test_build_parser__pubmed_defaults() -> None:
 
 
 @pytest.mark.unit
-def test_main__cli_overrides_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main__cli_overrides_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     def _mutator(cfg: Config) -> None:
         cfg.document.pubmed.batch_size = 33
 

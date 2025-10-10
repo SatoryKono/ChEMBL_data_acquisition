@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
-
-from pathlib import Path
 
 from library.postprocessing.target import isoform
 from scripts import get_target_data
@@ -79,7 +79,13 @@ def test_transform__missing_identifier_columns_warns_and_returns_empty_result():
     assert "uniprot_id_primary" in message
     assert "target_chembl_id" in message
 
-    for attribute in ("result", "combined", "dedup_stage1", "sorted_stage", "dedup_stage2"):
+    for attribute in (
+        "result",
+        "combined",
+        "dedup_stage1",
+        "sorted_stage",
+        "dedup_stage2",
+    ):
         frame_result = getattr(result, attribute)
         assert isinstance(frame_result, pd.DataFrame)
         assert frame_result.empty
@@ -142,7 +148,9 @@ def test_postprocess_target_exports__runs_helpers_for_cli_default(
         calls.append("names")
         return None
 
-    def _iuphar_stub(source: Path, *, verbose: bool = True) -> None:  # pragma: no cover - stub
+    def _iuphar_stub(
+        source: Path, *, verbose: bool = True
+    ) -> None:  # pragma: no cover - stub
         calls.append("iuphar")
         return None
 

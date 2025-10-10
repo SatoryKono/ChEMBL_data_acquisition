@@ -1,4 +1,5 @@
 """Schema definitions for activity postprocessing outputs."""
+
 from __future__ import annotations
 
 from library.postprocess.common import DataFrameSchema, validate_schema

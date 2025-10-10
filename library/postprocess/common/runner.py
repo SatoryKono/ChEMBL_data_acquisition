@@ -1,10 +1,11 @@
 """Orchestration helpers for executing post-processing pipelines."""
+
 from __future__ import annotations
 
 import inspect
 import re
 from collections.abc import Iterable, Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any
 
@@ -23,7 +24,7 @@ def _describe_dtypes(frame: pd.DataFrame) -> dict[str, str]:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _coerce_step(entry: StepDefinition | StepTuple, index: int) -> StepDefinition:
@@ -46,14 +47,18 @@ def _coerce_step(entry: StepDefinition | StepTuple, index: int) -> StepDefinitio
         if params is None:
             params = {}
         if not isinstance(params, Mapping):
-            raise TypeError(f"Step #{index} parameters must be a mapping, got {type(params)!r}")
+            raise TypeError(
+                f"Step #{index} parameters must be a mapping, got {type(params)!r}"
+            )
 
         return StepDefinition(name=name, func=func, params=params)
 
     raise TypeError(f"Unsupported step entry at position {index}: {entry!r}")
 
 
-def _normalise_steps(steps: Iterable[StepDefinition | StepTuple]) -> tuple[StepDefinition, ...]:
+def _normalise_steps(
+    steps: Iterable[StepDefinition | StepTuple],
+) -> tuple[StepDefinition, ...]:
     return tuple(_coerce_step(entry, index) for index, entry in enumerate(steps))
 
 
@@ -144,7 +149,9 @@ def _prepare_step_arguments(
     return accepted
 
 
-def _identify_unsupported_kwargs(func: Any, params: Mapping[str, Any]) -> tuple[str, ...]:
+def _identify_unsupported_kwargs(
+    func: Any, params: Mapping[str, Any]
+) -> tuple[str, ...]:
     """Return a tuple of keyword names not accepted by ``func``."""
 
     if not params:
@@ -202,7 +209,7 @@ def run_steps(
         if pipeline_version is not None:
             current.attrs["pipeline_version"] = pipeline_version
 
-    for index, step in enumerate(normalised_steps):
+    for _index, step in enumerate(normalised_steps):
         params = dict(step.params)
         call_params = _prepare_step_arguments(
             step.func,
@@ -227,7 +234,10 @@ def run_steps(
                     break
                 except TypeError as exc:
                     unexpected_keyword = _extract_unexpected_keyword(exc)
-                    if unexpected_keyword is None or unexpected_keyword not in call_params:
+                    if (
+                        unexpected_keyword is None
+                        or unexpected_keyword not in call_params
+                    ):
                         fallback = _identify_unsupported_kwargs(step.func, call_params)
                         if not fallback:
                             raise
@@ -388,4 +398,3 @@ def run_steps(
 
 
 __all__ = ["run_steps"]
-

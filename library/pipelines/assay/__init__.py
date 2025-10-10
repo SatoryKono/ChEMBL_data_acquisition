@@ -7,16 +7,16 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from library.config import Config
-
 from library.pipelines.common import PipelineRunResult
+
 from .chembl_assay import (
-  ACTIVITY_COLUMNS,
-  ASSAY_COLUMNS,
-  ASSAY_VARIANT_COLUMN_ALIASES,
-  get_activities,
-  get_assay,
-  get_assays,
-  get_testitem,
+    ACTIVITY_COLUMNS,
+    ASSAY_COLUMNS,
+    ASSAY_VARIANT_COLUMN_ALIASES,
+    get_activities,
+    get_assay,
+    get_assays,
+    get_testitem,
 )
 from .postprocessing import postprocess_assays, postprocess_file
 
@@ -104,16 +104,16 @@ def run_pipeline(config: Config, options: AssayPipelineOptions) -> PipelineRunRe
 
 
 __all__ = [
-  "ACTIVITY_COLUMNS",
-  "ASSAY_COLUMNS",
-  "ASSAY_VARIANT_COLUMN_ALIASES",
-  "AssayPipelineOptions",
-  "PipelineRunResult",
-  "get_activities",
-  "get_assay",
-  "get_assays",
-  "get_testitem",
-  "postprocess_assays",
-  "postprocess_file",
-  "run_pipeline",
+    "ACTIVITY_COLUMNS",
+    "ASSAY_COLUMNS",
+    "ASSAY_VARIANT_COLUMN_ALIASES",
+    "AssayPipelineOptions",
+    "PipelineRunResult",
+    "get_activities",
+    "get_assay",
+    "get_assays",
+    "get_testitem",
+    "postprocess_assays",
+    "postprocess_file",
+    "run_pipeline",
 ]

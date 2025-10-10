@@ -1,4 +1,5 @@
 """Assay postprocessing pipeline."""
+
 from .schema import ASSAY_SCHEMA, validate_assays
 from .steps import (
     PIPELINE_STEPS,

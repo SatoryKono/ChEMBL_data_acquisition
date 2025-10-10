@@ -188,7 +188,9 @@ def test_pipeline_configs__resolve_steps_and_defaults(
     cfg = load_pipeline_config(config_name)
 
     assert [step.name for step in cfg.steps] == [name for name, _ in expected_steps]
-    for step, (expected_name, expected_params) in zip(cfg.steps, expected_steps):
+    for step, (expected_name, expected_params) in zip(
+        cfg.steps, expected_steps, strict=False
+    ):
         assert step.name == expected_name
         assert step.definition.func is getattr(module, expected_name)
         assert step.params == expected_params
@@ -233,7 +235,9 @@ def test_load_pipeline_config__errors_on_unsupported_step_parameters(tmp_path):
         ("  2024.1  ", "2024.1"),
     ],
 )
-def test_normalize_pipeline_version__cases(raw: str | None, expected: str | None) -> None:
+def test_normalize_pipeline_version__cases(
+    raw: str | None, expected: str | None
+) -> None:
     """``normalize_pipeline_version`` trims sentinels and whitespace."""
 
     assert normalize_pipeline_version(raw) == expected

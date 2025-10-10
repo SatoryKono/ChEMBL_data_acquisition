@@ -25,7 +25,9 @@ def test_ensure_no_parant_column__raises() -> None:
         (" chembl2 ", "CHEMBL1", "CHEMBL2"),
     ],
 )
-def test_normalise_parent_identifier__cases(value: object, child_id: str, expected: str | None) -> None:
+def test_normalise_parent_identifier__cases(
+    value: object, child_id: str, expected: str | None
+) -> None:
     assert catalog._normalise_parent_identifier(value, child_id=child_id) == expected
 
 

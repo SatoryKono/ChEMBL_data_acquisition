@@ -49,6 +49,8 @@ def test_etl_context_global_limiter(cfg):
 
     with ETLContext(cfg) as reopened:
         assert reopened.global_limiter is limiter
+
+
 def test_etl_context_custom_cleanup(stub_etl_context):
     context, clients = stub_etl_context
 

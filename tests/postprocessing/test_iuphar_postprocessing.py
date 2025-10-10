@@ -76,7 +76,7 @@ def test_parse_component_descriptions__supports_json_payloads() -> None:
 
 
 def test_parse_component_descriptions__handles_fallback_delimiters() -> None:
-    payload = 'Alpha| Beta;Gamma ;; '
+    payload = "Alpha| Beta;Gamma ;; "
 
     result = iuphar._parse_component_descriptions(payload)
 
@@ -134,7 +134,9 @@ def test_latest_target_file__returns_newest_export(tmp_path: Path) -> None:
     assert result == newest
 
 
-def test_process_iuphar_targets__produces_expected_csv(tmp_path: Path, snapshot_resource: Path) -> None:
+def test_process_iuphar_targets__produces_expected_csv(
+    tmp_path: Path, snapshot_resource: Path
+) -> None:
     input_path = tmp_path / "output.target_20240101.csv"
     frame = pd.DataFrame(
         [
@@ -181,7 +183,9 @@ def test_process_iuphar_targets__produces_expected_csv(tmp_path: Path, snapshot_
     output_path = iuphar.process_iuphar_targets(input_path)
 
     assert output_path.name == "IUPHAR.output.target_20240101.csv"
-    expected_bytes = (snapshot_resource / "iuphar_postprocessing_expected.csv").read_bytes()
+    expected_bytes = (
+        snapshot_resource / "iuphar_postprocessing_expected.csv"
+    ).read_bytes()
     actual_bytes = output_path.read_bytes()
     # Normalise line endings for cross-platform determinism
     expected_norm = expected_bytes.replace(b"\r\n", b"\n")
@@ -218,7 +222,9 @@ def test_process_iuphar_targets__normalises_tmp_suffix(tmp_path: Path) -> None:
     assert output_path.exists()
 
 
-def test_process_iuphar_targets__fills_missing_component_description(tmp_path: Path) -> None:
+def test_process_iuphar_targets__fills_missing_component_description(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "output.target_20240606.csv"
     frame = pd.DataFrame(
         [

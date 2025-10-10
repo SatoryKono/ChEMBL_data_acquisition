@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
 import pandas as pd
 
@@ -20,7 +21,6 @@ from library.postprocess.common.logging import (
 from library.postprocess.common.schema import DataFrameSchema
 from library.postprocess.common.types import SchemaValidationError
 from library.postprocess.common.utils import collect_postprocess_metrics
-
 
 LOG_DIR_ENV = "CHEMBL_POSTPROCESS_LOG_DIR"
 DEFAULT_LOG_DIR = Path("logs")
@@ -295,4 +295,3 @@ __all__ = [
     "run_postprocess_steps",
     "validate_postprocess_frame",
 ]
-

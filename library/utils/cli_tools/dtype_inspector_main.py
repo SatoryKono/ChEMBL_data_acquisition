@@ -14,9 +14,8 @@ Run with default settings::
 from __future__ import annotations
 
 import argparse
-from collections.abc import Sequence
-
 import os
+from collections.abc import Sequence
 
 from library.cli import configure_logger, create_logger_config
 from library.common.dtype_inspector import inspect_dtypes

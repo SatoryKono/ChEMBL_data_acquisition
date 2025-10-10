@@ -2,21 +2,21 @@ from __future__ import annotations
 
 import argparse
 import io
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Callable
 
 import pandas as pd
 import pytest
+from pydantic import BaseModel, ValidationError
 
 from library.config import Config, ConfigLoaderError
 from library.pipelines.common import PipelineRunResult
 from scripts import get_data, get_target_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_lines
-from tests.helpers.manifests import load_latest_manifest, list_manifest_files
-from pydantic import BaseModel, ValidationError
+from tests.helpers.manifests import list_manifest_files, load_latest_manifest
 
 
 def _build_stub_api(
@@ -75,7 +75,9 @@ def _prepare_environment(tmp_path: Path) -> get_data.PipelineRunConfig:
     config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
     input_files = dict(get_data.DEFAULT_INPUT_FILES)
     output_stems = dict(get_data.DEFAULT_OUTPUT_STEMS)
-    subcommands = {step.name: step.subcommand for step in get_data.DEFAULT_PIPELINE_STEPS}
+    subcommands = {
+        step.name: step.subcommand for step in get_data.DEFAULT_PIPELINE_STEPS
+    }
     return get_data.PipelineRunConfig(
         base_path=base_path,
         input_dir=input_dir,
@@ -93,7 +95,9 @@ def _prepare_environment(tmp_path: Path) -> get_data.PipelineRunConfig:
     )
 
 
-def _write_input(cfg: get_data.PipelineRunConfig, name: str, frame: pd.DataFrame) -> Path:
+def _write_input(
+    cfg: get_data.PipelineRunConfig, name: str, frame: pd.DataFrame
+) -> Path:
     path = cfg.input_path(name)
     frame.to_csv(path, index=False)
     return path
@@ -116,7 +120,9 @@ def _make_validation_error() -> ValidationError:
 
 
 @pytest.mark.integration
-def test_pipeline_subset__schema_and_duplicates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pipeline_subset__schema_and_duplicates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     cfg = _prepare_environment(tmp_path)
     frame = pd.DataFrame(
         [
@@ -249,7 +255,9 @@ def test_run_pipeline__validation_error_handled(
 
 
 @pytest.mark.integration
-def test_pipeline_subset__skip_existing_and_force(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pipeline_subset__skip_existing_and_force(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     cfg = _prepare_environment(tmp_path)
     _write_input(
         cfg,
@@ -375,13 +383,11 @@ def test_run_pipeline__target_override_invokes_target_branch(
 
     commands: list[str] = []
 
-    def _fake_run_target_pipeline(
-        config: Config, options: object
-    ) -> PipelineRunResult:
-        command = getattr(options, "command")
+    def _fake_run_target_pipeline(config: Config, options: object) -> PipelineRunResult:
+        command = options.command
         commands.append(command)
         assert command == "uniprot"
-        destination = Path(getattr(options, "output_csv"))
+        destination = Path(options.output_csv)
         destination.parent.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(
             [
@@ -403,7 +409,11 @@ def test_run_pipeline__target_override_invokes_target_branch(
     monkeypatch.setattr(
         get_data,
         "_PIPELINE_APIS",
-        {"target": get_data.PipelineApi(get_data._build_target_options, _fake_run_target_pipeline)},
+        {
+            "target": get_data.PipelineApi(
+                get_data._build_target_options, _fake_run_target_pipeline
+            )
+        },
         raising=False,
     )
 
@@ -498,7 +508,9 @@ def test_pipeline_subset__testitem_skip_existing_avoids_parent_warm(
 
 
 @pytest.mark.integration
-def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pipeline_subset__retry_after_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     cfg = _prepare_environment(tmp_path)
     _write_input(
         cfg,
@@ -516,7 +528,9 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
     )
 
     attempts = {"count": 0}
-    dictionary_path = Path(__file__).resolve().parents[1] / "data" / "assay_dictionary.csv"
+    dictionary_path = (
+        Path(__file__).resolve().parents[1] / "data" / "assay_dictionary.csv"
+    )
 
     def _on_execute(rows: pd.DataFrame, destination: Path) -> int:
         attempts["count"] += 1
@@ -529,11 +543,17 @@ def test_pipeline_subset__retry_after_failure(tmp_path: Path, monkeypatch: pytes
         dictionary["assay_chembl_id"] = dictionary["assay_chembl_id"].astype("string")
         enriched = rows.merge(dictionary, on="assay_chembl_id", how="left")
         enriched["description"] = enriched["description"].astype("string").str.strip()
-        enriched["description_length"] = enriched["description"].str.len().astype("Int64")
-        enriched["year"] = pd.to_numeric(enriched["year"], errors="coerce").astype("Int64")
+        enriched["description_length"] = (
+            enriched["description"].str.len().astype("Int64")
+        )
+        enriched["year"] = pd.to_numeric(enriched["year"], errors="coerce").astype(
+            "Int64"
+        )
         quality_columns = ["assay_strain", "assay_group", "year", "accession"]
         completeness = 1.0 - enriched[quality_columns].isna().mean()
-        assert (completeness >= ASSAY_ENRICHMENT_MIN_RATIO).all(), completeness.to_dict()
+        assert (
+            completeness >= ASSAY_ENRICHMENT_MIN_RATIO
+        ).all(), completeness.to_dict()
         columns = [
             "assay_chembl_id",
             "target_chembl_id",
@@ -719,4 +739,3 @@ def test_pipeline_subset__target_postprocess_sidecars(
         meta = recorded_sidecars[str(path)]
         assert meta["exists"] is True
         assert meta["checksum_sha256"]
-

@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 import pandas as pd
 
 from ...common.log import logger
 from ..helpers import normalise_export_basename
-from .cellularity import add_cellularity_smart, FetchLineageCallable
+from .cellularity import FetchLineageCallable, add_cellularity_smart
 from .multifunctional import compute_multifunctional
-
 
 _CANONICAL_EXPORT_PREFIX = "output.target_"
 # ``20250101`` mirrors the frozen snapshot bundled with the test fixtures and

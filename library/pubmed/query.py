@@ -7,7 +7,6 @@ issuing robust HTTP requests.
 
 from __future__ import annotations
 
-
 from pathlib import Path
 from typing import TYPE_CHECKING
 from xml.etree import ElementTree as ET
@@ -15,11 +14,16 @@ from xml.etree import ElementTree as ET
 import pandas as pd
 import requests
 
-
 from ..clients import (
     crossref as crossref_client,
+)
+from ..clients import (
     openalex as openalex_client,
+)
+from ..clients import (
     pubmed as pubmed_client,
+)
+from ..clients import (
     semantic_scholar as semantic_client,
 )
 from ..config import (
@@ -29,7 +33,6 @@ from ..config import (
     RetryCfg,
     SemanticScholarCfg,
 )
-
 from .parsing import EMPTY_PUBMED, combine, parse_pubmed_article
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only

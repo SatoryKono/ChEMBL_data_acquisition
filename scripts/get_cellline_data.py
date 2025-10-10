@@ -11,8 +11,8 @@ else:  # pragma: no cover - executed when imported as a package module
 bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from library import cli, io
 from library.cli import LoggerConfig, configure_logger

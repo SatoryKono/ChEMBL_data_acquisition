@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -75,12 +76,18 @@ def test_coerce_chunk_size_value__cases(
         (-5, None),
     ],
 )
-def test_resolve_chunk_size__cases(value: int | None, expected: int | None, logger_stub: _MemoryLogger) -> None:
+def test_resolve_chunk_size__cases(
+    value: int | None, expected: int | None, logger_stub: _MemoryLogger
+) -> None:
     result = get_document_data._resolve_chunk_size(value)
 
     assert result == expected
     if value is not None and value <= 0:
-        assert ("warning", "invalid_csv_chunksize", {"value": value}) in logger_stub.events
+        assert (
+            "warning",
+            "invalid_csv_chunksize",
+            {"value": value},
+        ) in logger_stub.events
 
 
 def test_coalesce_columns__prefers_first_non_empty() -> None:
@@ -149,7 +156,12 @@ def test_prepare_export_frame__renames_and_coalesces() -> None:
     assert export.loc[0, "ChEMBL.title"] == " Example "
 
 
-def test_run__skip_existing(cfg: Config, tmp_path: Path, logger_stub: _MemoryLogger, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run__skip_existing(
+    cfg: Config,
+    tmp_path: Path,
+    logger_stub: _MemoryLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("id\n1\n", encoding="utf-8")
     output_csv = tmp_path / "output.csv"
@@ -178,10 +190,16 @@ def test_run__skip_existing(cfg: Config, tmp_path: Path, logger_stub: _MemoryLog
 
     assert exit_code == 0
     assert not called
-    assert ("info", "pipeline_skip_existing", {"output": str(output_csv)}) in logger_stub.events
+    assert (
+        "info",
+        "pipeline_skip_existing",
+        {"output": str(output_csv)},
+    ) in logger_stub.events
 
 
-def test_run__missing_handler_logs_error(cfg: Config, tmp_path: Path, logger_stub: _MemoryLogger) -> None:
+def test_run__missing_handler_logs_error(
+    cfg: Config, tmp_path: Path, logger_stub: _MemoryLogger
+) -> None:
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("id\n1\n", encoding="utf-8")
     output_csv = tmp_path / "output.csv"
@@ -206,7 +224,9 @@ def test_run__missing_handler_logs_error(cfg: Config, tmp_path: Path, logger_stu
     ) in logger_stub.events
 
 
-def test_run__propagates_timeout(cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run__propagates_timeout(
+    cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("id\n1\n", encoding="utf-8")
     output_csv = tmp_path / "output.csv"
@@ -246,7 +266,9 @@ def test_run__pubmed_timeout_override_updates_config(
 
     recorded: dict[str, float] = {}
 
-    def fake_pubmed(cfg_obj: Config, args: argparse.Namespace, *, pipeline=None) -> int:  # noqa: ARG001
+    def fake_pubmed(
+        cfg_obj: Config, args: argparse.Namespace, *, pipeline=None
+    ) -> int:  # noqa: ARG001
         recorded["pubmed"] = cfg_obj.pubmed.timeout_read
         recorded["api"] = cfg_obj.api.timeout_read
         return 0
@@ -287,7 +309,9 @@ def test_run__all_mode_pubmed_timeout_option_updates_config(
 
     recorded: dict[str, float] = {}
 
-    def fake_all(cfg_obj: Config, args: argparse.Namespace, *, pipeline=None) -> int:  # noqa: ARG001
+    def fake_all(
+        cfg_obj: Config, args: argparse.Namespace, *, pipeline=None
+    ) -> int:  # noqa: ARG001
         recorded["pubmed"] = cfg_obj.pubmed.timeout_read
         recorded["api"] = cfg_obj.api.timeout_read
         recorded["pubmed_arg"] = args.pubmed_timeout
@@ -331,7 +355,9 @@ def test_run__all_mode_timeout_fallback_updates_pubmed(
 
     recorded: dict[str, float] = {}
 
-    def fake_all(cfg_obj: Config, args: argparse.Namespace, *, pipeline=None) -> int:  # noqa: ARG001
+    def fake_all(
+        cfg_obj: Config, args: argparse.Namespace, *, pipeline=None
+    ) -> int:  # noqa: ARG001
         recorded["pubmed"] = cfg_obj.pubmed.timeout_read
         recorded["pubmed_arg"] = args.pubmed_timeout
         return 0
@@ -421,7 +447,9 @@ def test_finalise_export__qa_mismatch_sets_exit_code(
         fake_finalise_csv_output,
     )
 
-    def fail_postprocessing(path: Path, *, skip_qa: bool = False) -> None:  # noqa: ARG001
+    def fail_postprocessing(
+        path: Path, *, skip_qa: bool = False
+    ) -> None:  # noqa: ARG001
         assert skip_qa is False
         raise RuntimeError("QA mismatches")
 

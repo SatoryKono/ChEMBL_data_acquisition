@@ -15,9 +15,11 @@ from __future__ import annotations
 # ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli
+
     bootstrap_cli(__package__, __file__)
 else:  # pragma: no cover - executed when imported as a package module
     from ._bootstrap import bootstrap_cli
+
     bootstrap_cli(__package__, __file__)
     del bootstrap_cli
 
@@ -135,7 +137,9 @@ def _run_pipeline_with_meta(**kwargs: object) -> int:
             failure_path = params.pop("failure_path")
         except KeyError as exc:  # pragma: no cover - defensive validation
             missing = exc.args[0]
-            raise TypeError(f"run_pipeline missing required argument: {missing}") from exc
+            raise TypeError(
+                f"run_pipeline missing required argument: {missing}"
+            ) from exc
 
         cfg = params.pop("cfg", None)
         logger = params.pop("logger", None)
@@ -151,6 +155,7 @@ def _run_pipeline_with_meta(**kwargs: object) -> int:
             cfg=cfg,
             logger=logger,
         )
+
 
 UNIPROT_MISSING_VALUE = ""
 
@@ -530,7 +535,9 @@ def _csv_read_kwargs(cfg: Config) -> dict[str, Any]:
 
     io_cfg = getattr(cfg, "io", None)
     sep = getattr(io_cfg, "csv_sep", ",") if io_cfg is not None else ","
-    encoding = getattr(io_cfg, "csv_encoding", "utf-8") if io_cfg is not None else "utf-8"
+    encoding = (
+        getattr(io_cfg, "csv_encoding", "utf-8") if io_cfg is not None else "utf-8"
+    )
     return {"sep": sep, "encoding": encoding, "dtype": str}
 
 
@@ -562,16 +569,16 @@ def _summarise_contrion_series(series: pd.Series | None) -> dict[str, Any] | Non
     }
 
 
-def _summarise_active_component_types(series: pd.Series | None) -> dict[str, int] | None:
+def _summarise_active_component_types(
+    series: pd.Series | None,
+) -> dict[str, int] | None:
     """Return counts per ``active_component_type`` value."""
 
     if series is None:
         return None
 
     normalised = (
-        series.fillna("<NA>")
-        .astype(str)
-        .map(lambda value: value.strip() or "<EMPTY>")
+        series.fillna("<NA>").astype(str).map(lambda value: value.strip() or "<EMPTY>")
     )
     counts = normalised.value_counts(dropna=False)
     return {str(key): int(value) for key, value in counts.items()}
@@ -935,7 +942,6 @@ COMMAND_ALIAS_TO_CANONICAL: dict[str, str] = {
 }
 
 
-
 @dataclass(frozen=True)
 class _UniprotCandidate:
     """Container describing a UniProt identifier candidate for a target row."""
@@ -1070,7 +1076,9 @@ def _build_uniprot_query_plan(df: pd.DataFrame, cfg: Config) -> _UniprotQueryPla
                     )
         row_candidates.append(candidates)
 
-    return _UniprotQueryPlan(unique_records, row_candidates, row_index, candidate_columns)
+    return _UniprotQueryPlan(
+        unique_records, row_candidates, row_index, candidate_columns
+    )
 
 
 def _resolve_uniprot_matches(
@@ -1149,16 +1157,12 @@ def _prepare_raw_destination(destination: Path) -> None:
         try:
             os.chmod(destination, writable_mode)
         except OSError as exc:  # pragma: no cover - defensive guard
-            raise OSError(
-                f"failed to prepare raw dump destination: {exc}"
-            ) from exc
+            raise OSError(f"failed to prepare raw dump destination: {exc}") from exc
 
         try:
             destination.unlink()
         except OSError as exc:
-            raise OSError(
-                f"failed to prepare raw dump destination: {exc}"
-            ) from exc
+            raise OSError(f"failed to prepare raw dump destination: {exc}") from exc
     except OSError as exc:  # pragma: no cover - defensive guard
         raise OSError(f"failed to prepare raw dump destination: {exc}") from exc
 
@@ -1195,7 +1199,9 @@ class _RawDumpStreamWriter:
             self._columns = columns
             return
 
-        new_columns = [column for column in frame.columns if column not in self._columns]
+        new_columns = [
+            column for column in frame.columns if column not in self._columns
+        ]
         if not new_columns:
             return
 
@@ -1207,9 +1213,7 @@ class _RawDumpStreamWriter:
             self._columns = merged
             return
 
-        raise OSError(
-            "raw_dump_inconsistent_columns"
-        )
+        raise OSError("raw_dump_inconsistent_columns")
 
     def write(self, frame: pd.DataFrame) -> None:
         if frame.empty and self._rows_written == 0 and self._columns is None:
@@ -1384,7 +1388,11 @@ def _prefer_primary(
         return pd.Series(dtype=object)
 
     if primary is None:
-        return secondary.astype(object) if secondary is not None else pd.Series(dtype=object)
+        return (
+            secondary.astype(object)
+            if secondary is not None
+            else pd.Series(dtype=object)
+        )
 
     if secondary is None:
         return primary.astype(object)
@@ -1437,9 +1445,7 @@ def _save_snapshot(df: pd.DataFrame, base: Path, step: str, cfg: Config) -> Path
                 key_cols: list[str] = []
             else:
                 key_cols = [
-                    column
-                    for column in TARGETS_COLUMN_ORDER
-                    if column in work.columns
+                    column for column in TARGETS_COLUMN_ORDER if column in work.columns
                 ]
                 if not key_cols:
                     key_cols = list(work.columns)
@@ -1497,7 +1503,9 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         no_reindex_default: object = False if defaults else argparse.SUPPRESS
         normalize_default: object = False if defaults else argparse.SUPPRESS
         option_actions = parser_obj._option_string_actions
-        if not any(alias in option_actions for alias in ("--final-out", "--out", "--output")):
+        if not any(
+            alias in option_actions for alias in ("--final-out", "--out", "--output")
+        ):
             parser_obj.add_argument(
                 "--final-out",
                 "--out",
@@ -1516,8 +1524,7 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             type=path_argument,
             default=raw_default,
             help=(
-                "Location for the raw combined dataset prior to final "
-                "normalisation"
+                "Location for the raw combined dataset prior to final " "normalisation"
             ),
         )
         parser_obj.add_argument(
@@ -2125,7 +2132,8 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error(
             "uniprot_processing_failed",
-            error=str(exc), exc_info=exc,
+            error=str(exc),
+            exc_info=exc,
             input=str(args.input_csv),
             output=str(output_path) if output_path is not None else None,
         )
@@ -2206,7 +2214,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
             "read_fail",
-            error=str(exc), exc_info=exc,
+            error=str(exc),
+            exc_info=exc,
             path=str(args.input_csv),
         )
         return 1
@@ -2244,13 +2253,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if legacy_raw_candidate not in (None, argparse.SUPPRESS):
             raw_candidate = legacy_raw_candidate
     raw_path_override = (
-        Path(raw_candidate)
-        if raw_candidate not in (None, argparse.SUPPRESS)
-        else None
+        Path(raw_candidate) if raw_candidate not in (None, argparse.SUPPRESS) else None
     )
     raw_destination = raw_path_override or _raw_output_path(base_output)
     normalized_output = _normalized_output_path(base_output)
-
 
     normalize_flag = getattr(args, "normalize_at_export", None)
     if normalize_flag in (None, argparse.SUPPRESS):
@@ -2258,7 +2264,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     else:
         normalize_at_export = bool(normalize_flag)
     reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
-
 
     fetched_rows_total = 0
     raw_dump_rows_total = 0
@@ -2271,6 +2276,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             try:
                 with ETLContext(cfg) as context:
                     client = context.chembl_client
+
                     def _count_attempt() -> None:
                         nonlocal chembl_http_requests
                         chembl_http_requests += 1
@@ -2295,7 +2301,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             except (requests.RequestException, ValueError) as exc:
                 logger.error(
                     "chembl_fetch_failed",
-                    error=str(exc), exc_info=exc,
+                    error=str(exc),
+                    exc_info=exc,
                     chunk_size=cfg.target.chembl.chunk_size,
                     timeout=cfg.target.chembl.timeout,
                 )
@@ -2345,7 +2352,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             except OSError as exc:
                 logger.error(
                     "raw_to_final_copy_failed",
-                    error=str(exc), exc_info=exc,
+                    error=str(exc),
+                    exc_info=exc,
                     source=str(raw_destination),
                     destination=str(destination),
                 )
@@ -2368,7 +2376,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 0
 
-
     final_candidate = getattr(args, "final_out", None)
     if final_candidate in (None, argparse.SUPPRESS):
         final_output = Path(io.default_output_path(args.input_csv, cfg.io))
@@ -2385,9 +2392,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     raw_format = str(getattr(args, "raw_format", "csv") or "csv").lower()
     if raw_format not in {"csv", "parquet"}:
-        logger.warning(
-            "unsupported_raw_format", format=raw_format, fallback="csv"
-        )
+        logger.warning("unsupported_raw_format", format=raw_format, fallback="csv")
         raw_format = "csv"
 
     reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
@@ -2401,7 +2406,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     else:
         key_columns = list(id_cols_value) or ["target_chembl_id"]
     failure_path = final_output.with_name(f"{final_output.stem}_failure_cases.csv")
-
 
     missing_optional_columns: set[str] = set()
     placeholder_replacements = 0
@@ -2445,6 +2449,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         try:
             with ETLContext(cfg) as context:
                 client = context.chembl_client
+
                 def _count_attempt() -> None:
                     nonlocal chembl_http_requests
                     chembl_http_requests += 1
@@ -2467,7 +2472,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     except OSError as exc:
                         logger.error(
                             "raw_dump_failed",
-                            error=str(exc), exc_info=exc,
+                            error=str(exc),
+                            exc_info=exc,
                             path=str(raw_destination),
                         )
                         raise PipelineError(str(exc)) from exc
@@ -2478,12 +2484,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         except (requests.RequestException, ValueError) as exc:
             logger.error(
                 "chembl_fetch_failed",
-                error=str(exc), exc_info=exc,
+                error=str(exc),
+                exc_info=exc,
                 chunk_size=cfg.target.chembl.chunk_size,
                 timeout=cfg.target.chembl.timeout,
             )
             raise PipelineError(str(exc)) from exc
-
 
     def writer(
         chunks: Iterator[pd.DataFrame],
@@ -2535,7 +2541,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if resolved_keys:
             missing_keys = [col for col in resolved_keys if col not in combined.columns]
             if not missing_keys and resolved_keys:
-                combined = combined.sort_values(by=list(resolved_keys)).reset_index(drop=True)
+                combined = combined.sort_values(by=list(resolved_keys)).reset_index(
+                    drop=True
+                )
 
         if raw_format == "parquet":
             try:
@@ -2564,7 +2572,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 missing_optional_columns.update(missing_optional)
                 missing_optional_columns.update(missing_optional)
 
-        if final_output == raw_output and not normalize_at_export and raw_format == "parquet":
+        if (
+            final_output == raw_output
+            and not normalize_at_export
+            and raw_format == "parquet"
+        ):
             final_path = raw_path
         else:
             final_path = io.write_csv(
@@ -2599,7 +2611,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     metadata_hooks = [add_pipeline_metadata, _prepare_chunk]
     if not normalize_at_export:
         metadata_hooks.insert(0, normalize_targets)
-
 
     exit_code = _run_pipeline_with_meta(
         fetcher=fetcher,
@@ -2705,9 +2716,7 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
         df_to_process: pd.DataFrame | None = None
         offset = cfg.target.iuphar.offset
         needs_mutation = (
-            limit is not None
-            or offset
-            or cfg.target.iuphar.column != "uniprot_id"
+            limit is not None or offset or cfg.target.iuphar.column != "uniprot_id"
         )
         if needs_mutation:
             df_full = pd.read_csv(
@@ -2758,7 +2767,8 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error(
             "iuphar_processing_failed",
-            error=str(exc), exc_info=exc,
+            error=str(exc),
+            exc_info=exc,
             input=str(source_csv),
             target_csv=str(cfg.target.iuphar.target_csv),
             family_csv=str(cfg.target.iuphar.family_csv),
@@ -2858,9 +2868,7 @@ def fetch_chembl(
             cfg.target.chembl.chunk_size = original_chunk_size
     _normalized_output_path(final_out)
     df = pd.read_csv(
-
         final_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
-
     )
     logger.info("fetch_chembl_done", rows=len(df))
     return df
@@ -3031,7 +3039,9 @@ def fetch_uniprot(
         df = id_df.copy()
 
     if "__query_order" in df.columns:
-        df = df.sort_values("__query_order").drop(columns=["__query_order"], errors="ignore")
+        df = df.sort_values("__query_order").drop(
+            columns=["__query_order"], errors="ignore"
+        )
         df = df.reset_index(drop=True)
 
     left_original = df.pop("original_id_x") if "original_id_x" in df.columns else None
@@ -3044,16 +3054,24 @@ def fetch_uniprot(
 
     source_column = pd.Series(dtype=object)
     if "source_column_x" in df.columns or "source_column_y" in df.columns:
-        left_source = df.pop("source_column_x") if "source_column_x" in df.columns else None
-        right_source = df.pop("source_column_y") if "source_column_y" in df.columns else None
+        left_source = (
+            df.pop("source_column_x") if "source_column_x" in df.columns else None
+        )
+        right_source = (
+            df.pop("source_column_y") if "source_column_y" in df.columns else None
+        )
         source_column = _prefer_primary(left_source, right_source)
     elif "source_column" in df.columns:
         source_column = df["source_column"].astype(object)
     else:
-        source_column = pd.Series([UNIPROT_MISSING_VALUE] * len(df), index=df.index, dtype=object)
+        source_column = pd.Series(
+            [UNIPROT_MISSING_VALUE] * len(df), index=df.index, dtype=object
+        )
 
     if "source_column" not in df.columns:
-        df["source_column"] = source_column.reindex(df.index, fill_value=UNIPROT_MISSING_VALUE)
+        df["source_column"] = source_column.reindex(
+            df.index, fill_value=UNIPROT_MISSING_VALUE
+        )
 
     if "mapping_uniprot_id" not in df.columns:
         df["mapping_uniprot_id"] = pd.Series(
@@ -3063,7 +3081,9 @@ def fetch_uniprot(
     mapping_mask = df["source_column"].astype(str).eq("mapping_uniprot_id")
     if mapping_mask.any():
         df.loc[mapping_mask, "mapping_uniprot_id"] = (
-            df.loc[mapping_mask, "original_id"].fillna(UNIPROT_MISSING_VALUE).astype(str)
+            df.loc[mapping_mask, "original_id"]
+            .fillna(UNIPROT_MISSING_VALUE)
+            .astype(str)
         )
     df["mapping_uniprot_id"] = df["mapping_uniprot_id"].fillna("").astype(str)
     logger.info("fetch_uniprot_done", rows=len(df))
@@ -3235,11 +3255,11 @@ def fetch_iuphar(
     )
 
     suffixed_columns = [
-        column
-        for column in combined_df.columns
-        if _base_name(column) is not None
+        column for column in combined_df.columns if _base_name(column) is not None
     ]
-    base_columns = {_base_name(column) for column in suffixed_columns if _base_name(column)}
+    base_columns = {
+        _base_name(column) for column in suffixed_columns if _base_name(column)
+    }
 
     for column in sorted(base_columns & critical_columns):
         _coalesce_column(combined_df, column)
@@ -3252,9 +3272,7 @@ def fetch_iuphar(
         coalesced_updates.clear()
 
     remaining_suffixes = [
-        column
-        for column in combined_df.columns
-        if _base_name(column) is not None
+        column for column in combined_df.columns if _base_name(column) is not None
     ]
     if remaining_suffixes:
         rename_map = {
@@ -3265,15 +3283,19 @@ def fetch_iuphar(
         combined_df = combined_df.rename(columns=rename_map)
 
     combined_df = combined_df.drop(
-        columns=[col for col in [lookup_column, mapping_join_column] if col is not None],
-        errors="ignore"
+        columns=[
+            col for col in [lookup_column, mapping_join_column] if col is not None
+        ],
+        errors="ignore",
     )
     if "original_id" in combined_df.columns:
         combined_df = combined_df.drop(columns=["original_id"])
 
     overlap_columns = sorted(
         col
-        for col in (set(chembl_for_merge.columns) & (set(uniprot_df.columns) - {"original_id"}))
+        for col in (
+            set(chembl_for_merge.columns) & (set(uniprot_df.columns) - {"original_id"})
+        )
         if col is not None
     )
     overlap_updates: dict[str, pd.Series] = {}
@@ -3282,14 +3304,10 @@ def fetch_iuphar(
         chembl_col = f"{column}_chembl"
         uniprot_col = f"{column}_uniprot"
         chembl_series = (
-            combined_df.pop(chembl_col)
-            if chembl_col in combined_df.columns
-            else None
+            combined_df.pop(chembl_col) if chembl_col in combined_df.columns else None
         )
         uniprot_series = (
-            combined_df.pop(uniprot_col)
-            if uniprot_col in combined_df.columns
-            else None
+            combined_df.pop(uniprot_col) if uniprot_col in combined_df.columns else None
         )
         if chembl_series is None and uniprot_series is None:
             continue
@@ -3313,9 +3331,9 @@ def fetch_iuphar(
                 dtype=object,
             )
         else:
-            overlap_updates[column] = _prefer_primary(uniprot_series, chembl_series).reindex(
-                combined_df.index
-            )
+            overlap_updates[column] = _prefer_primary(
+                uniprot_series, chembl_series
+            ).reindex(combined_df.index)
 
     if overlap_updates:
         combined_df = combined_df.assign(**overlap_updates)
@@ -3409,7 +3427,9 @@ def fetch_iuphar(
     column_updates["ec_number"] = pd.Series(
         (
             _pipe_merge([ec_val, reaction_val])
-            for ec_val, reaction_val in zip(ec_numbers_values, reaction_values, strict=False)
+            for ec_val, reaction_val in zip(
+                ec_numbers_values, reaction_values, strict=False
+            )
         ),
         index=index,
         dtype=object,
@@ -3646,9 +3666,7 @@ def validate_and_write(
     if raw_out is not None:
         raw_format_value = (raw_format or "csv").lower()
         raw_frame = df.copy()
-        raw_order: Sequence[str] | None = (
-            TARGETS_COLUMN_ORDER if reindex_raw else None
-        )
+        raw_order: Sequence[str] | None = TARGETS_COLUMN_ORDER if reindex_raw else None
         if raw_order is not None:
             raw_frame = raw_frame.reindex(columns=raw_order)
         if raw_format_value == "parquet":
@@ -3668,7 +3686,6 @@ def validate_and_write(
                 key_cols=key_columns or None,
                 col_order=raw_order,
             )
-
 
     normalized = normalize_targets(df)
     normalized_rows = len(normalized)
@@ -3751,9 +3768,7 @@ def validate_and_write(
             final_df = validation.data
             failure_cases = validation.failure_cases.copy()
             if not failure_cases.empty:
-                failure_path = output.with_name(
-                    f"{output.stem}_failure_cases.csv"
-                )
+                failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
                 errors = SidecarErrors()
                 for row in failure_cases.to_dict("records"):
                     errors.add_error(row)
@@ -3793,7 +3808,6 @@ def validate_and_write(
             missing_columns=sorted(missing_required),
         )
 
-
     total_dropped = sum(len(ids) for ids in drop_reasons.values())
     logger.info(
         "validation_drop_stats",
@@ -3822,12 +3836,19 @@ def validate_and_write(
     ambiguous_count = 0
     if "protein_class_pred_rule_id" in final_df.columns:
         ambiguous_count = int(
-            final_df["protein_class_pred_rule_id"].fillna("").astype(str).str.lower().eq("ambiguous").sum()
+            final_df["protein_class_pred_rule_id"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .eq("ambiguous")
+            .sum()
         )
     http_requests = postprocess_context.http_requests if postprocess_context else None
     if http_requests is None:
         chembl_cfg = getattr(getattr(cfg, "target", None), "chembl", None)
-        chunk_value = getattr(chembl_cfg, "chunk_size", 0) if chembl_cfg is not None else 0
+        chunk_value = (
+            getattr(chembl_cfg, "chunk_size", 0) if chembl_cfg is not None else 0
+        )
         if chunk_value:
             http_requests = int(math.ceil(max(input_rows, 0) / chunk_value))
     isoform_context = IsoformPostprocessContext(
@@ -4007,7 +4028,8 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         logger.error(
             "pipeline_step_failed",
-            error=str(exc), exc_info=exc,
+            error=str(exc),
+            exc_info=exc,
             step="all",
             input=str(args.input_csv),
             output=str(final_output),
@@ -4054,9 +4076,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         return 0
     func = getattr(args, "func", None)
     if func is None:
-        logger.error(
-            "missing_subcommand_handler", command=getattr(args, "command", "")
-        )
+        logger.error("missing_subcommand_handler", command=getattr(args, "command", ""))
         return 1
     result = func(cfg, args)
     return int(result)
@@ -4214,8 +4234,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Delegate to :class:`TargetPipelineCLI` for backwards compatibility."""
 
     return _CLI.main(argv)
-
-
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

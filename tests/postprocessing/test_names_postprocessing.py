@@ -40,7 +40,7 @@ def _load_names_module() -> types.ModuleType:
     source = path.read_text(encoding="utf-8")
     fixed = source.replace(
         '"""Helpers for generating target name exports.',
-        'Helpers for generating target name exports.',
+        "Helpers for generating target name exports.",
         1,
     )
     exec(compile(fixed, str(path), "exec"), module.__dict__)
@@ -91,7 +91,9 @@ def test_reference_smiles__override_priority_over_table(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_reference_smiles__missing_table_raises_error(tmp_path: Path) -> None:
     missing = tmp_path / "Table6.csv"
-    with pytest.raises(names.TargetNamesError, match="Reference SMILES table not found"):
+    with pytest.raises(
+        names.TargetNamesError, match="Reference SMILES table not found"
+    ):
         names.reference_SMILES("CHEMBL1", reference_path=missing)
 
 
@@ -105,7 +107,9 @@ def test_reference_smiles__missing_required_columns_raises(tmp_path: Path) -> No
 
 
 @pytest.mark.unit
-def test_component_rows__hydrates_salts_and_structures(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_component_rows__hydrates_salts_and_structures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     reference_path = tmp_path / "Table6.csv"
     reference_path.write_text(
         "molecule_chembl_id,canonical_smiles\nCHEMBL100,C1CCO1\n",
@@ -123,7 +127,10 @@ def test_component_rows__hydrates_salts_and_structures(tmp_path: Path, monkeypat
         {
             "molecule_chembl_id": "CHEMBL100",
             "component_name": "Alpha hemihydrate",
-            "component_synonyms": [{"synonym": "Alpha hemihydrate"}, {"synonym": "Alpha"}],
+            "component_synonyms": [
+                {"synonym": "Alpha hemihydrate"},
+                {"synonym": "Alpha"},
+            ],
             "molecule_structures": {
                 "standard_inchi": "InChI=1",
                 "standard_inchi_stereo": "InChI=1S",
@@ -207,7 +214,9 @@ def test_component_rows__missing_identifier_raises_error() -> None:
 
 
 @pytest.mark.unit
-def test_process_target_names_helper__writes_byte_identical_output(tmp_path: Path) -> None:
+def test_process_target_names_helper__writes_byte_identical_output(
+    tmp_path: Path,
+) -> None:
     input_path = tmp_path / "output.target_20250101.csv"
     data = pd.DataFrame(
         [
@@ -256,9 +265,21 @@ def test_process_target_names_helper__writes_byte_identical_output(tmp_path: Pat
 
     expected_records = [
         ("CHEMBL100", "P11111", "Alpha", "chembl_preferred", "pref_name"),
-        ("CHEMBL100", "P11111", "Alpha canonical", "uniprot_canonical", "protein_name_canonical"),
+        (
+            "CHEMBL100",
+            "P11111",
+            "Alpha canonical",
+            "uniprot_canonical",
+            "protein_name_canonical",
+        ),
         ("CHEMBL100", "P11111", "Alpha GPCR", "gtop_synonym", "gtop_synonyms"),
-        ("CHEMBL100", "P11111", "Alpha recommended", "uniprot_recommended", "recommendedName"),
+        (
+            "CHEMBL100",
+            "P11111",
+            "Alpha recommended",
+            "uniprot_recommended",
+            "recommendedName",
+        ),
         ("CHEMBL100", "P11111", "Alpha", "chembl_synonym", "synonyms"),
         ("CHEMBL100", "P11111", "Beta", "chembl_synonym", "synonyms"),
         ("CHEMBL100", "P11111", "alpha", "chembl_synonym", "synonyms"),
@@ -363,7 +384,9 @@ def test_process_target_names_helper__verbose_logs_summary(
 
 
 @pytest.mark.unit
-def test_process_target_names_helper__stable_sorting_of_duplicates(tmp_path: Path) -> None:
+def test_process_target_names_helper__stable_sorting_of_duplicates(
+    tmp_path: Path,
+) -> None:
     input_path = tmp_path / "output.target_20250101.csv"
     pd.DataFrame(
         [

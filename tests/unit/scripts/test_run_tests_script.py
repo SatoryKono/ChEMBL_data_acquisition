@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 import json
 import logging
 import sys
+from collections.abc import Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Sequence
+from typing import Any
 
 import pytest
 
@@ -17,7 +18,9 @@ from scripts import run_tests
 
 
 @pytest.mark.unit
-def test_run_tests__verbose_creates_debug_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_tests__verbose_creates_debug_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     reports_dir = tmp_path / "reports"
     coverage_dir = reports_dir / "coverage"
     raw_report_file = reports_dir / "pytest_raw_report.json"
@@ -30,8 +33,12 @@ def test_run_tests__verbose_creates_debug_log(tmp_path: Path, monkeypatch: pytes
     monkeypatch.setattr(run_tests, "REPORT_FILE", report_file, raising=False)
     monkeypatch.setattr(run_tests, "SUMMARY_FILE", summary_file, raising=False)
     monkeypatch.setattr(run_tests, "COVERAGE_DIR", coverage_dir, raising=False)
-    monkeypatch.setattr(run_tests, "COVERAGE_XML", coverage_dir / "coverage.xml", raising=False)
-    monkeypatch.setattr(run_tests, "COVERAGE_HTML", coverage_dir / "html", raising=False)
+    monkeypatch.setattr(
+        run_tests, "COVERAGE_XML", coverage_dir / "coverage.xml", raising=False
+    )
+    monkeypatch.setattr(
+        run_tests, "COVERAGE_HTML", coverage_dir / "html", raising=False
+    )
 
     base_command: list[str] = [
         sys.executable,
@@ -49,7 +56,9 @@ def test_run_tests__verbose_creates_debug_log(tmp_path: Path, monkeypatch: pytes
         "-vv",
     ]
     monkeypatch.setattr(run_tests, "_BASE_PYTEST_COMMAND", base_command, raising=False)
-    monkeypatch.setattr(run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False)
+    monkeypatch.setattr(
+        run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False
+    )
     monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
 
     captured_log_path: Path | None = None
@@ -95,14 +104,16 @@ def test_run_tests__verbose_creates_debug_log(tmp_path: Path, monkeypatch: pytes
         lambda: {"tests": [], "duration": 0.0},
     )
 
-    exit_code = run_tests.main([
-        "--verbose",
-        "--date",
-        "20240131",
-        "--",
-        "-k",
-        "unit",
-    ])
+    exit_code = run_tests.main(
+        [
+            "--verbose",
+            "--date",
+            "20240131",
+            "--",
+            "-k",
+            "unit",
+        ]
+    )
 
     assert exit_code == 0
     assert captured_commands, "run_pytest should be invoked"
@@ -170,9 +181,7 @@ def test_build_structured_report__captures_failure_messages() -> None:
     }
 
     failure_entry = next(
-        item
-        for item in structured["tests"]
-        if item["nodeid"].endswith("test_failure")
+        item for item in structured["tests"] if item["nodeid"].endswith("test_failure")
     )
     assert failure_entry["status"] == "failed"
     assert failure_entry["error"] == "AssertionError: boom\nline 1\nline 2"
@@ -270,7 +279,6 @@ def test_calculate_success_rate__all_skipped_return_unity() -> None:
     assert success_rate == pytest.approx(1.0)
 
 
-
 @pytest.mark.unit
 def test_main__returns_exit_code_one_when_quality_gate_fails(
     tmp_path: Path,
@@ -289,8 +297,12 @@ def test_main__returns_exit_code_one_when_quality_gate_fails(
     monkeypatch.setattr(run_tests, "REPORT_FILE", report_file, raising=False)
     monkeypatch.setattr(run_tests, "SUMMARY_FILE", summary_file, raising=False)
     monkeypatch.setattr(run_tests, "COVERAGE_DIR", coverage_dir, raising=False)
-    monkeypatch.setattr(run_tests, "COVERAGE_XML", coverage_dir / "coverage.xml", raising=False)
-    monkeypatch.setattr(run_tests, "COVERAGE_HTML", coverage_dir / "html", raising=False)
+    monkeypatch.setattr(
+        run_tests, "COVERAGE_XML", coverage_dir / "coverage.xml", raising=False
+    )
+    monkeypatch.setattr(
+        run_tests, "COVERAGE_HTML", coverage_dir / "html", raising=False
+    )
 
     base_command = [
         sys.executable,
@@ -302,7 +314,9 @@ def test_main__returns_exit_code_one_when_quality_gate_fails(
         "--durations=0",
     ]
     monkeypatch.setattr(run_tests, "_BASE_PYTEST_COMMAND", base_command, raising=False)
-    monkeypatch.setattr(run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False)
+    monkeypatch.setattr(
+        run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False
+    )
 
     captured_commands: list[list[str]] = []
 
@@ -336,11 +350,15 @@ def test_main__returns_exit_code_one_when_quality_gate_fails(
         "tests": [],
     }
 
-    def _fake_build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, Any]:
+    def _fake_build_structured_report(
+        raw: dict[str, Any], exit_code: int
+    ) -> dict[str, Any]:
         assert exit_code == 0
         return json.loads(json.dumps(structured_template))
 
-    monkeypatch.setattr(run_tests, "build_structured_report", _fake_build_structured_report)
+    monkeypatch.setattr(
+        run_tests, "build_structured_report", _fake_build_structured_report
+    )
     monkeypatch.setattr(run_tests, "_load_raw_report", lambda: {"tests": []})
 
     captured_configs: list[LoggerConfig] = []
@@ -362,7 +380,9 @@ def test_main__returns_exit_code_one_when_quality_gate_fails(
             handlers=list(log_cfg.handlers),
             logger_name=log_cfg.logger_name,
         )
-        yield SimpleNamespace(log_path=log_path, log_cfg=cloned_cfg, console_stream=None)
+        yield SimpleNamespace(
+            log_path=log_path, log_cfg=cloned_cfg, console_stream=None
+        )
 
     monkeypatch.setattr(run_tests, "configure_logger", _fake_configure_logger)
     monkeypatch.setattr(run_tests, "setup_cli_logging", _fake_setup)
@@ -381,7 +401,9 @@ def test_main__returns_exit_code_one_when_quality_gate_fails(
 
 
 @pytest.mark.unit
-def test_main__writes_reports_when_pytest_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main__writes_reports_when_pytest_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     reports_dir = tmp_path / "reports"
     coverage_dir = reports_dir / "coverage"
     raw_report_file = reports_dir / "pytest_raw_report.json"
@@ -394,8 +416,12 @@ def test_main__writes_reports_when_pytest_fails(tmp_path: Path, monkeypatch: pyt
     monkeypatch.setattr(run_tests, "REPORT_FILE", report_file, raising=False)
     monkeypatch.setattr(run_tests, "SUMMARY_FILE", summary_file, raising=False)
     monkeypatch.setattr(run_tests, "COVERAGE_DIR", coverage_dir, raising=False)
-    monkeypatch.setattr(run_tests, "COVERAGE_XML", coverage_dir / "coverage.xml", raising=False)
-    monkeypatch.setattr(run_tests, "COVERAGE_HTML", coverage_dir / "html", raising=False)
+    monkeypatch.setattr(
+        run_tests, "COVERAGE_XML", coverage_dir / "coverage.xml", raising=False
+    )
+    monkeypatch.setattr(
+        run_tests, "COVERAGE_HTML", coverage_dir / "html", raising=False
+    )
 
     base_command = [
         sys.executable,
@@ -406,7 +432,9 @@ def test_main__writes_reports_when_pytest_fails(tmp_path: Path, monkeypatch: pyt
         str(raw_report_file),
     ]
     monkeypatch.setattr(run_tests, "_BASE_PYTEST_COMMAND", base_command, raising=False)
-    monkeypatch.setattr(run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False)
+    monkeypatch.setattr(
+        run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False
+    )
     monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
 
     captured_commands: list[list[str]] = []
@@ -425,7 +453,11 @@ def test_main__writes_reports_when_pytest_fails(tmp_path: Path, monkeypatch: pyt
 
     @contextmanager
     def _fake_setup(script_name: str, log_cfg: LoggerConfig, date: str | None = None):
-        yield SimpleNamespace(log_path=tmp_path / "logs" / "run_tests.log", log_cfg=log_cfg, console_stream=None)
+        yield SimpleNamespace(
+            log_path=tmp_path / "logs" / "run_tests.log",
+            log_cfg=log_cfg,
+            console_stream=None,
+        )
 
     monkeypatch.setattr(run_tests, "setup_cli_logging", _fake_setup)
 
@@ -464,8 +496,12 @@ def test_main__fails_fast_on_summary_filesystem_error(
     monkeypatch.setattr(run_tests, "REPORT_FILE", report_file, raising=False)
     monkeypatch.setattr(run_tests, "SUMMARY_FILE", summary_file, raising=False)
     monkeypatch.setattr(run_tests, "COVERAGE_DIR", coverage_dir, raising=False)
-    monkeypatch.setattr(run_tests, "COVERAGE_XML", coverage_dir / "coverage.xml", raising=False)
-    monkeypatch.setattr(run_tests, "COVERAGE_HTML", coverage_dir / "html", raising=False)
+    monkeypatch.setattr(
+        run_tests, "COVERAGE_XML", coverage_dir / "coverage.xml", raising=False
+    )
+    monkeypatch.setattr(
+        run_tests, "COVERAGE_HTML", coverage_dir / "html", raising=False
+    )
 
     base_command = [
         sys.executable,
@@ -476,11 +512,15 @@ def test_main__fails_fast_on_summary_filesystem_error(
         str(raw_report_file),
     ]
     monkeypatch.setattr(run_tests, "_BASE_PYTEST_COMMAND", base_command, raising=False)
-    monkeypatch.setattr(run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False)
+    monkeypatch.setattr(
+        run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False
+    )
     monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
 
     monkeypatch.setattr(run_tests, "run_pytest", lambda command: 0)
-    monkeypatch.setattr(run_tests, "_load_raw_report", lambda: {"tests": [], "duration": 0.0})
+    monkeypatch.setattr(
+        run_tests, "_load_raw_report", lambda: {"tests": [], "duration": 0.0}
+    )
 
     def _fake_configure_logger(cfg: LoggerConfig) -> object:
         return object()

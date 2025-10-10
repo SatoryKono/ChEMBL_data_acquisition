@@ -1,7 +1,8 @@
 """I/O helpers for converting objects into :class:`pandas.DataFrame` instances."""
+
 from __future__ import annotations
 
-from typing import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
 import pandas as pd
 
@@ -23,7 +24,7 @@ def ensure_dataframe(data: object, *, copy: bool = False) -> pd.DataFrame:
     if isinstance(data, Mapping):
         return pd.DataFrame(data)
 
-    if isinstance(data, (Sequence, Iterable)):
+    if isinstance(data, Sequence | Iterable):
         return pd.DataFrame(list(data))
 
     raise TypeError(f"Unsupported input for ensure_dataframe: {type(data)!r}")

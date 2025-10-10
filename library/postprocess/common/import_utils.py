@@ -1,4 +1,5 @@
 """Helpers for resolving import paths for pipeline configuration."""
+
 from __future__ import annotations
 
 import importlib
@@ -79,8 +80,6 @@ def _format_expected_type(expected: type | tuple[type, ...]) -> str:
     if isinstance(expected, type):
         return expected.__name__
     return repr(expected)
-
-
 
 
 def resolve_dotted_path(

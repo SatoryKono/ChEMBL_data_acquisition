@@ -8,15 +8,16 @@ source implementation (``NullOrEmpty``, ``NormalizeJournal`` and friends).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable, cast
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
 
-from ...config import IoCfg
 from ...common.csv_utils import write_csv_deterministic
 from ...common.text_utils import to_text
+from ...config import IoCfg
 
 # ===== Parameters ===========================================================
 
@@ -294,13 +295,17 @@ def _normalise_reference_frame(frame: pd.DataFrame) -> pd.DataFrame:
     if "document_chembl_id" not in reference.columns:
         reference["document_chembl_id"] = pd.Series(dtype="string")
 
-    missing = [col for col in REFERENCE_REQUIRED_COLUMNS if col not in reference.columns]
+    missing = [
+        col for col in REFERENCE_REQUIRED_COLUMNS if col not in reference.columns
+    ]
     if missing:
         for column in missing:
             if column == "document_chembl_id":
                 reference[column] = pd.Series(dtype="string")
             else:
-                reference[column] = pd.Series(False, index=reference.index, dtype="boolean")
+                reference[column] = pd.Series(
+                    False, index=reference.index, dtype="boolean"
+                )
 
     return reference.loc[:, REFERENCE_REQUIRED_COLUMNS]
 
@@ -347,8 +352,13 @@ def _resolve_reference(
 def _prepare_input_frame(df: pd.DataFrame) -> pd.DataFrame:
     frame = df.copy()
 
-    if "ChEMBL.document_chembl_id" not in frame.columns and "document_chembl_id" in frame.columns:
-        frame = frame.rename(columns={"document_chembl_id": "ChEMBL.document_chembl_id"})
+    if (
+        "ChEMBL.document_chembl_id" not in frame.columns
+        and "document_chembl_id" in frame.columns
+    ):
+        frame = frame.rename(
+            columns={"document_chembl_id": "ChEMBL.document_chembl_id"}
+        )
 
     if "ChEMBL.document_chembl_id" not in frame.columns:
         raise ValueError("Missing required column 'ChEMBL.document_chembl_id'")
@@ -481,8 +491,11 @@ def postprocess_documents(
         pmid_agree.append(match)
 
         non_empty = external_text != ""
-        mismatch = non_empty & ref_valid & external_valid & (
-            external_numbers != ref_pmid_numbers
+        mismatch = (
+            non_empty
+            & ref_valid
+            & external_valid
+            & (external_numbers != ref_pmid_numbers)
         )
         pmid_conflict.append(mismatch)
     frame["invalid.PMID"] = (~_series_any(pmid_agree)) & _series_any(pmid_conflict)
@@ -547,7 +560,9 @@ def postprocess_documents(
         ~year_completed.map(null_or_empty),
         year_completed.map(pad4),
         np.where(
-            ~year_revised.map(null_or_empty), year_revised.map(pad4), chembl_year.map(pad4)
+            ~year_revised.map(null_or_empty),
+            year_revised.map(pad4),
+            chembl_year.map(pad4),
         ),
     )
 
@@ -592,7 +607,9 @@ def postprocess_documents(
         frame["invalid.doi"] | frame["invalid.PMID"] | frame["invalid.reference"]
     )
 
-    drop_candidates = [column for column in STAGE_REMOVED_COLUMNS if column in frame.columns]
+    drop_candidates = [
+        column for column in STAGE_REMOVED_COLUMNS if column in frame.columns
+    ]
     frame = frame.drop(columns=drop_candidates)
 
     rename_map = {
@@ -622,7 +639,7 @@ def postprocess_documents(
     frame = frame.merge(reference, on="document_chembl_id", how="left")
 
     review_values: list[Any] = []
-    for current, doctype in zip(frame["review"], frame["doctype_review"]):
+    for current, doctype in zip(frame["review"], frame["doctype_review"], strict=False):
         current_value = None if pd.isna(current) else bool(current)
         doctype_value = None if pd.isna(doctype) else bool(doctype)
         if current_value is True or doctype_value is True:
@@ -719,4 +736,3 @@ __all__ = [
     "eq_text",
     "ne_text",
 ]
-

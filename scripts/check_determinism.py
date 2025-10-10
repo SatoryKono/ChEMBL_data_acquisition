@@ -78,7 +78,9 @@ def _default_input_csv(tmp_dir: Path) -> Path:
     return fallback
 
 
-def _report_process_failure(label: str, result: subprocess.CompletedProcess[str]) -> None:
+def _report_process_failure(
+    label: str, result: subprocess.CompletedProcess[str]
+) -> None:
     sys.stderr.write(f"{label} failed with exit code {result.returncode}\n")
     if result.stdout:
         sys.stderr.write("stdout:\n")

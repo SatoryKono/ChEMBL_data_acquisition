@@ -11,7 +11,9 @@ import pytest
 from library.postprocessing import document as document_module
 
 
-def _install_stub_qa(monkeypatch: pytest.MonkeyPatch, metrics: dict[str, object]) -> None:
+def _install_stub_qa(
+    monkeypatch: pytest.MonkeyPatch, metrics: dict[str, object]
+) -> None:
     """Patch :mod:`importlib` to return a stub QA module with *metrics*."""
 
     class _StubCrosswalk:
@@ -73,7 +75,9 @@ def test_preprocess_documents_csv__qa_subset_missing_rows(
     data_dir = tmp_path / "data"
     (data_dir / "input" / "full").mkdir(parents=True)
     (data_dir / "output" / "document").mkdir(parents=True)
-    (data_dir / "input" / "full" / "document.csv").write_text("reference", encoding="utf-8")
+    (data_dir / "input" / "full" / "document.csv").write_text(
+        "reference", encoding="utf-8"
+    )
     (data_dir / "output" / "document" / "output.document_20250101.csv").write_text(
         "output",
         encoding="utf-8",
@@ -81,7 +85,9 @@ def test_preprocess_documents_csv__qa_subset_missing_rows(
 
     reference, output, harmonised = _setup_frames()
 
-    monkeypatch.setattr(document_module, "_load_reference_document", lambda path: reference)
+    monkeypatch.setattr(
+        document_module, "_load_reference_document", lambda path: reference
+    )
     monkeypatch.setattr(document_module, "_load_output_document", lambda path: output)
     monkeypatch.setattr(document_module, "_harmonise_documents", lambda *_: harmonised)
 
@@ -103,12 +109,15 @@ def test_preprocess_documents_csv__qa_subset_missing_rows(
         out_document_rel="output\\document\\output.document_20250101.csv",
     )
 
-    expected_path = data_dir / "output" / "document" / "preprocessed_output.document_20250101.csv"
+    expected_path = (
+        data_dir / "output" / "document" / "preprocessed_output.document_20250101.csv"
+    )
     assert Path(result) == expected_path
     assert expected_path.exists()
 
     assert any(
-        "document_postprocess_qa_skipped_subset" in record.message for record in caplog.records
+        "document_postprocess_qa_skipped_subset" in record.message
+        for record in caplog.records
     )
 
 
@@ -119,7 +128,9 @@ def test_preprocess_documents_csv__qa_failure_propagates(
     data_dir = tmp_path / "data"
     (data_dir / "input" / "full").mkdir(parents=True)
     (data_dir / "output" / "document").mkdir(parents=True)
-    (data_dir / "input" / "full" / "document.csv").write_text("reference", encoding="utf-8")
+    (data_dir / "input" / "full" / "document.csv").write_text(
+        "reference", encoding="utf-8"
+    )
     (data_dir / "output" / "document" / "output.document_20250101.csv").write_text(
         "output",
         encoding="utf-8",
@@ -127,7 +138,9 @@ def test_preprocess_documents_csv__qa_failure_propagates(
 
     reference, output, harmonised = _setup_frames()
 
-    monkeypatch.setattr(document_module, "_load_reference_document", lambda path: reference)
+    monkeypatch.setattr(
+        document_module, "_load_reference_document", lambda path: reference
+    )
     monkeypatch.setattr(document_module, "_load_output_document", lambda path: output)
     monkeypatch.setattr(document_module, "_harmonise_documents", lambda *_: harmonised)
 

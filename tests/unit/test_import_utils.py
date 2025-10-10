@@ -1,9 +1,10 @@
 """Tests for :mod:`library.postprocess.common.import_utils`."""
+
 from __future__ import annotations
 
-import pytest
-
 from pathlib import Path
+
+import pytest
 
 from library.postprocess.common.import_utils import (
     ImportResolutionError,

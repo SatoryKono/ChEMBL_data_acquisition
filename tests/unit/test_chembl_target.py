@@ -21,7 +21,9 @@ class _StubChemblClient:
         self._responses = responses
         self.calls: list[tuple[str, float | None]] = []
 
-    def request_json(self, url: str, *, cfg: ApiCfg, timeout: float | None = None) -> dict:
+    def request_json(
+        self, url: str, *, cfg: ApiCfg, timeout: float | None = None
+    ) -> dict:
         del cfg  # Unused in the stub.
         self.calls.append((url, timeout))
         response = self._responses[url]
@@ -59,7 +61,9 @@ def _chunk_url(cfg: ApiCfg, ids: Sequence[str]) -> str:
 
 
 @pytest.mark.unit
-def test_iter_target_batches__splits_chunk_on_timeout(caplog: pytest.LogCaptureFixture) -> None:
+def test_iter_target_batches__splits_chunk_on_timeout(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """The iterator should split large chunks when a read timeout occurs."""
 
     cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=12.0)
@@ -97,7 +101,10 @@ def test_iter_target_batches__splits_chunk_on_timeout(caplog: pytest.LogCaptureF
     parsed_ids = [parsed[2]["target_chembl_id"].iat[0] for parsed in batches]
     assert parsed_ids == ["CHEMBL1", "CHEMBL2"]
 
-    assert any(record.getMessage().startswith("chembl_timeout_split") for record in caplog.records)
+    assert any(
+        record.getMessage().startswith("chembl_timeout_split")
+        for record in caplog.records
+    )
 
 
 @pytest.mark.unit
@@ -169,4 +176,7 @@ def test_iter_target_batches__splits_chunk_on_connection_error(
     parsed_ids = [parsed[2]["target_chembl_id"].iat[0] for parsed in batches]
     assert parsed_ids == ["CHEMBL1", "CHEMBL2"]
 
-    assert any(record.getMessage().startswith("chembl_request_split") for record in caplog.records)
+    assert any(
+        record.getMessage().startswith("chembl_request_split")
+        for record in caplog.records
+    )

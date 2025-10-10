@@ -21,7 +21,9 @@ from library.cli.entrypoints import activity
         ("string", "string", ["foo", None, "bar"]),
     ],
 )
-def test_coerce_series_dtype__extension_roundtrip(dtype: str, expected_dtype: str, values: list[object]) -> None:
+def test_coerce_series_dtype__extension_roundtrip(
+    dtype: str, expected_dtype: str, values: list[object]
+) -> None:
     series = pd.Series(values)
 
     result = activity._coerce_series_dtype(series, dtype)
@@ -70,7 +72,9 @@ class _StubLogger:
 
 
 @pytest.mark.unit
-def test_emit_completion_message__basic_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_emit_completion_message__basic_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     logger = _StubLogger()
     monkeypatch.setattr(activity, "logger", logger)
 
@@ -94,7 +98,9 @@ def test_emit_completion_message__basic_payload(monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.mark.unit
-def test_emit_completion_message__skip_existing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_emit_completion_message__skip_existing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     logger = _StubLogger()
     monkeypatch.setattr(activity, "logger", logger)
 
@@ -115,7 +121,9 @@ def test_emit_completion_message__skip_existing(monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.mark.unit
-def test_emit_completion_message__streamed_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_emit_completion_message__streamed_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     logger = _StubLogger()
     monkeypatch.setattr(activity, "logger", logger)
 
@@ -156,6 +164,3 @@ def test_emit_completion_message__streamed_metrics(monkeypatch: pytest.MonkeyPat
     assert metrics["text"] == "value"
     assert metrics["flag"] == 1
     assert metrics["other"] == "repr-object"
-
-
-

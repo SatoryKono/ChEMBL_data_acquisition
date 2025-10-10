@@ -2,7 +2,22 @@
 
 from __future__ import annotations
 
+from .loader import (
+    CONFIG_DIR,
+    DEFAULT_CONFIG_PATH,
+    DEFAULT_CONFIG_RELATIVE,
+    ConfigLoaderError,
+    _absolutise_path_value,
+    _mask_secrets,
+    _serialize_paths,
+    ensure_dirs,
+    load_config,
+    load_yaml_config,
+    print_config,
+    resolve_config_path,
+)
 from .models import (
+    TESTITEM_FIELD_DEFAULTS,
     ActivityActionTypeCfg,
     ActivityBoundsCfg,
     ActivityCfg,
@@ -23,9 +38,9 @@ from .models import (
     DocumentCfg,
     DocumentChemblCfg,
     DocumentPubmedCfg,
-    IupharCfg,
     InitCfg,
     IoCfg,
+    IupharCfg,
     LocalCfg,
     LogCfg,
     MoleculeCatalogCfg,
@@ -40,8 +55,8 @@ from .models import (
     SystemCfg,
     TargetAllCfg,
     TargetCfg,
-    TargetChemblCfg,
     TargetChemblBatchRetryCfg,
+    TargetChemblCfg,
     TargetIupharCfg,
     TargetUniprotCfg,
     TestitemBatchRetryCfg,
@@ -51,24 +66,9 @@ from .models import (
     TestitemMoleculeEnrichmentLoggingCfg,
     TestitemMoleculeEnrichmentOutputCfg,
     TestitemMoleculeEnrichmentSourcesCfg,
-    TESTITEM_FIELD_DEFAULTS,
     UniprotCfg,
     UniprotMappingCfg,
     build_alias_map,
-)
-from .loader import (
-    CONFIG_DIR,
-    DEFAULT_CONFIG_PATH,
-    DEFAULT_CONFIG_RELATIVE,
-    ConfigLoaderError,
-    ensure_dirs,
-    load_config,
-    load_yaml_config,
-    print_config,
-    resolve_config_path,
-    _absolutise_path_value,
-    _mask_secrets,
-    _serialize_paths,
 )
 from .runtime import (
     configure_rate_limiters,

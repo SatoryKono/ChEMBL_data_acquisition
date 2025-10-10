@@ -18,7 +18,7 @@ class _DummyResponse:
     def json(self) -> dict[str, str]:  # pragma: no cover - JSON not expected here
         raise AssertionError("JSON payloads are not used in PubMed XML fetches")
 
-    def __enter__(self) -> "_DummyResponse":
+    def __enter__(self) -> _DummyResponse:
         return self
 
     def __exit__(
@@ -32,9 +32,13 @@ class _DummyResponse:
 
 class _DummySession:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, float | tuple[float, float], dict[str, object]]] = []
+        self.calls: list[tuple[str, float | tuple[float, float], dict[str, object]]] = (
+            []
+        )
 
-    def get(self, url: str, *, timeout: float | tuple[float, float], **kwargs: object) -> _DummyResponse:
+    def get(
+        self, url: str, *, timeout: float | tuple[float, float], **kwargs: object
+    ) -> _DummyResponse:
         self.calls.append((url, timeout, kwargs))
         return _DummyResponse()
 
@@ -50,7 +54,7 @@ class _SequencedResponse:
         self.text = text
         self.headers = headers or {}
 
-    def __enter__(self) -> "_SequencedResponse":
+    def __enter__(self) -> _SequencedResponse:
         return self
 
     def __exit__(
@@ -65,7 +69,9 @@ class _SequencedResponse:
 class _SequencedSession:
     def __init__(self, responses: list[_SequencedResponse]) -> None:
         self._responses = responses
-        self.calls: list[tuple[str, float | tuple[float, float], dict[str, object]]] = []
+        self.calls: list[tuple[str, float | tuple[float, float], dict[str, object]]] = (
+            []
+        )
 
     def get(
         self,
@@ -97,20 +103,28 @@ def test_retry_delay__respects_backoff_cap() -> None:
 
 @pytest.mark.unit
 def test_retry_delay__deterministic_jitter() -> None:
-    retry_cfg = RetryCfg(max_attempts=4, backoff_factor=1.0, backoff_cap=None, jitter_seed=7)
+    retry_cfg = RetryCfg(
+        max_attempts=4, backoff_factor=1.0, backoff_cap=None, jitter_seed=7
+    )
     jitter_one = retry_cfg.build_jitter()
-    jitter_two = RetryCfg(max_attempts=4, backoff_factor=1.0, backoff_cap=None, jitter_seed=7).build_jitter()
+    jitter_two = RetryCfg(
+        max_attempts=4, backoff_factor=1.0, backoff_cap=None, jitter_seed=7
+    ).build_jitter()
 
     assert jitter_one is not None
     assert jitter_two is not None
 
     base_delay = 0.25
     delays_one = [
-        pubmed._retry_delay(attempt, base_delay, retry_cfg, timeout=None, jitter=jitter_one)
+        pubmed._retry_delay(
+            attempt, base_delay, retry_cfg, timeout=None, jitter=jitter_one
+        )
         for attempt in range(1, 4)
     ]
     delays_two = [
-        pubmed._retry_delay(attempt, base_delay, retry_cfg, timeout=None, jitter=jitter_two)
+        pubmed._retry_delay(
+            attempt, base_delay, retry_cfg, timeout=None, jitter=jitter_two
+        )
         for attempt in range(1, 4)
     ]
 
@@ -163,7 +177,9 @@ def test_pubmed_cfg__requires_non_empty_tool() -> None:
 
 
 @pytest.mark.unit
-def test_do_request__connect_timeout_logs_without_traceback(caplog: pytest.LogCaptureFixture) -> None:
+def test_do_request__connect_timeout_logs_without_traceback(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     class _TimeoutSession:
         def get(
             self,
@@ -195,7 +211,9 @@ def test_do_request__connect_timeout_logs_without_traceback(caplog: pytest.LogCa
 
 
 @pytest.mark.unit
-def test_do_request__deterministic_retry_delays(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_do_request__deterministic_retry_delays(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     responses = [
         _SequencedResponse(503, text="Service unavailable"),
         _SequencedResponse(503, text="Try again"),
@@ -234,6 +252,8 @@ def test_do_request__deterministic_retry_delays(monkeypatch: pytest.MonkeyPatch)
     ]
 
     assert recorded_delays == pytest.approx(expected_delays)
+
+
 def test_session_with_retry__disables_urllib3_retries() -> None:
     api_cfg = ApiCfg()
     retry_cfg = RetryCfg(max_attempts=4, backoff_factor=1.0, backoff_cap=None)

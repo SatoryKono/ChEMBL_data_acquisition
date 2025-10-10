@@ -1,4 +1,5 @@
 """Configuration package exposing shared file-system paths."""
+
 from __future__ import annotations
 
 from .paths import (

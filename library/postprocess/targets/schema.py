@@ -1,4 +1,5 @@
 """Schema specification for target postprocessing."""
+
 from __future__ import annotations
 
 from library.postprocess.common import DataFrameSchema, validate_schema

@@ -128,7 +128,9 @@ def main(argv: list[str] | None = None) -> int:
         if not isinstance(actual_total, int) or actual_total < required_total:
             print(
                 "Report total tests ({actual}) is below the required minimum ({required})".format(
-                    actual=actual_total if isinstance(actual_total, int) else "<unknown>",
+                    actual=(
+                        actual_total if isinstance(actual_total, int) else "<unknown>"
+                    ),
                     required=required_total,
                 ),
                 file=sys.stderr,
@@ -148,23 +150,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if success_rate + 1e-9 < threshold_rate:
         print(
-            "Test success rate {success:.2f}% is below the required threshold {threshold:.2f}% (passed {passed} / total {total})".format(
-                success=success_pct,
-                threshold=threshold_pct,
-                passed=passed,
-                total=total,
-            ),
+            f"Test success rate {success_pct:.2f}% is below the required threshold {threshold_pct:.2f}% (passed {passed} / total {total})",
             file=sys.stderr,
         )
         return 1
 
     print(
-        "Test success rate {success:.2f}% meets the required threshold {threshold:.2f}% (passed {passed} / total {total})".format(
-            success=success_pct,
-            threshold=threshold_pct,
-            passed=passed,
-            total=total,
-        )
+        f"Test success rate {success_pct:.2f}% meets the required threshold {threshold_pct:.2f}% (passed {passed} / total {total})"
     )
     return 0
 

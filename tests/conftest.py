@@ -4,13 +4,11 @@ import csv
 import datetime as dt
 import os
 import random
-import time
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Callable, Iterable, Sequence
-
 import sys
-
+import time
+from collections.abc import Callable, Iterable, Sequence
+from datetime import datetime
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -27,8 +25,7 @@ from library.config import Config
 from library.orchestration import ETLContext
 from library.resources import dictionaries as dictionary_resources
 
-
-FROZEN_UTC = datetime(2020, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+FROZEN_UTC = datetime(2020, 1, 1, 0, 0, 0, tzinfo=dt.UTC)
 FROZEN_TIMESTAMP = FROZEN_UTC.timestamp()
 FROZEN_NAIVE = FROZEN_UTC.replace(tzinfo=None)
 
