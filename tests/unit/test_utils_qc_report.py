@@ -122,3 +122,12 @@ def test_build_qc_summary__accepts_profiler_when_optional_imports_missing(monkey
     reuse = qc_report.build_qc_summary(None, table_name="demo", profiler=profiler)
 
     pd.testing.assert_frame_equal(direct, reuse)
+
+
+def test_build_qc_summary__reprofiles_when_profiler_invalid():
+    frame = pd.DataFrame({"value": [1, 2, 3]})
+
+    expected = build_qc_summary(frame, table_name="invalid")
+    fallback = build_qc_summary(frame, table_name="invalid", profiler=object())
+
+    pd.testing.assert_frame_equal(expected, fallback)
