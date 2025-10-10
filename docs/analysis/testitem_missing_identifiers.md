@@ -2,45 +2,51 @@
 
 ## Summary
 
-An investigation of the `get_testitem_data` pipeline shows that the ChEMBL API
-response contains the requested structural identifiers, but they are dropped
-during normalisation of the `/molecule` payload. The pipeline asks ChEMBL for
-`molecule_structures.canonical_smiles`, `molecule_structures.standard_inchi`,
-and `molecule_structures.standard_inchi_key`, yet the renaming step only maps
-`pubchem.*` fields. When the frame is reindexed to the canonical output schema,
-the untouched `molecule_structures.*` columns are discarded and replaced with
-empty columns, which explains the missing data in `output.testitem.csv`.
+The ChEMBL extraction step **does** download the structural identifiers (SMILES
+and InChI) for every requested molecule, but these attributes never make it past
+the initial normalisation step in `get_testitem`. The DataFrame returned by the
+ChEMBL API contains nested column names such as
+`molecule_structures.canonical_smiles`, yet the pipeline only renames the
+`pubchem.*` subset before reindexing to the canonical schema. As a result the
+`molecule_structures.*` columns are silently dropped during `reindex`, leaving
+empty `canonical_smiles`, `standard_inchi`, and `standard_inchi_key` fields in
+`raw.testitem.csv` and, consequently, in `output.testitem.csv`.
 
 ## Detailed findings
 
 1. **Fields requested from ChEMBL**  \
    Both the configuration (`Config.testitem.fields`) and the default fallback
-   (`TESTITEM_FIELD_DEFAULTS`) explicitly request the structural attributes from
-   the ChEMBL API alongside PubChem enrichment fields.  
-   Relevant references: `library/config/models.py` (`TESTITEM_FIELD_DEFAULTS`).
+   (`TESTITEM_FIELD_DEFAULTS`, see
+   `library/config/models.py`) explicitly request
+   `molecule_structures.canonical_smiles`,
+   `molecule_structures.standard_inchi`, and
+   `molecule_structures.standard_inchi_key` alongside the `pubchem.*`
+   enrichment attributes, so the API response does contain these values.
 
-2. **Data loss during normalisation**  \
-   `get_testitem` normalises each JSON chunk and renames a handful of columns
-   via `TESTITEM_STRUCTURE_COLUMNS` before reindexing to `TESTITEM_COLUMNS`.  
-   The rename mapping only covers `pubchem.*` keys, so the columns named
-   `molecule_structures.canonical_smiles`, `molecule_structures.standard_inchi`,
-   and `molecule_structures.standard_inchi_key` are not converted to their
-   flattened counterparts. When the DataFrame is reindexed, pandas creates empty
-   `canonical_smiles`, `standard_inchi`, and `standard_inchi_key` columns while
-   dropping the original names.  
-   Relevant references: `library/pipelines/assay/chembl_assay.py` (definitions
-   of `TESTITEM_STRUCTURE_COLUMNS`, `TESTITEM_COLUMNS`, and the `get_testitem`
-   implementation).
+2. **Data loss during `get_testitem` normalisation**  \
+   The helper (`library/pipelines/assay/chembl_assay.py`) renames raw columns
+   using `TESTITEM_STRUCTURE_COLUMNS` and then calls
+   `df.reindex(columns=TESTITEM_COLUMNS)`. `TESTITEM_STRUCTURE_COLUMNS` only
+   defines mappings for `pubchem.*`, so the `molecule_structures.*` columns keep
+   their fully qualified names. The final `reindex` discards those unmatched
+   columns and creates new, all-null `canonical_smiles`, `standard_inchi`, and
+   `standard_inchi_key` columns to fit the schema.
 
-3. **Downstream processing preserves column structure**  \
-   Later pipeline stages (`finalize_output`, schema normalisation, post-
-   processing) operate on the already-flattened column list and do not reintroduce
-   or remove these identifiers, so the loss occurs before aggregation/output.
+3. **Downstream stages keep the empty identifiers**  \
+   Subsequent pipeline stages (parent enrichment, schema validation, CSV
+   writers, and post-processing) operate exclusively on the `TESTITEM_COLUMNS`
+   layout. Because the identifiers were lost earlier, these steps simply pass
+   through the empty columns into `raw.testitem.csv` and `output.testitem.csv`.
+
+4. **Raw vs. final output**  \
+   Comparing `raw.testitem.csv` and `output.testitem.csv` shows that both files
+   already contain empty structural identifier columns, confirming that the loss
+   happened before the export logic.
 
 ## Suggested fix
 
-Extend `TESTITEM_STRUCTURE_COLUMNS` (or add a dedicated rename step) so that
-`molecule_structures.canonical_smiles`, `molecule_structures.standard_inchi`,
-and `molecule_structures.standard_inchi_key` are mapped to the canonical output
-column names before the frame is reindexed. This ensures the structural data
-survives the transformation into `raw.testitem.csv` and `output.testitem.csv`.
+Extend `TESTITEM_STRUCTURE_COLUMNS` (or add an explicit rename/flattening step)
+to include the three `molecule_structures.*` attributes **before** reindexing.
+Once those columns are renamed to `canonical_smiles`, `standard_inchi`, and
+`standard_inchi_key`, they will persist through aggregation, schema validation,
+and export without further changes.
