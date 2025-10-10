@@ -180,3 +180,64 @@ def test_run_pipeline__legacy_mode_streams_and_writes_sidecars(
     pd.testing.assert_frame_equal(dataset, expected)
 
     assert not failure_path.exists(), "failure artefacts should be cleaned on success"
+
+
+@pytest.mark.unit
+def test_run_pipeline__passes_config_snapshot_to_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    frame = pd.DataFrame({"identifier": ["row-1"], "value": [7]})
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [frame]
+
+    def writer(
+        chunks: object,
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        pd.concat(list(chunks), ignore_index=True).to_csv(destination, index=False)
+        return destination
+
+    captured_kwargs: list[dict[str, object]] = []
+
+    def fake_write_meta_yaml(csv_path: Path, **kwargs: object) -> Path:
+        captured_kwargs.append(dict(kwargs))
+        meta_path = Path(csv_path).with_name(Path(csv_path).name + ".meta.yaml")
+        meta_path.write_text("{}", encoding="utf-8")
+        return meta_path
+
+    monkeypatch.setattr("library.cli_utils.write_meta_yaml", fake_write_meta_yaml)
+
+    config_snapshot = {"io": {"mode": "test"}}
+
+    definition = PipelineDefinition(
+        schema=None,
+        schema_name="TestSchema",
+        writer=writer,
+        validators=(),
+        metadata_hooks=(),
+        command="test",
+        config_snapshot=config_snapshot,
+        inputs={},
+        key_columns=("identifier",),
+    )
+
+    output_path = tmp_path / "output.documents_20240101.csv"
+    failure_path = tmp_path / "failures.csv"
+    cfg = _make_cfg(tmp_path)
+
+    result = run_pipeline(
+        definition=definition,
+        fetcher=fetcher,
+        output_path=output_path,
+        failure_path=failure_path,
+        cfg=cfg,
+        emit_standard_outputs=False,
+        emit_legacy_artifacts=True,
+    )
+
+    assert int(result) == 0
+    assert captured_kwargs, "metadata writer must capture invocation"
+    assert captured_kwargs[-1]["config"] == config_snapshot

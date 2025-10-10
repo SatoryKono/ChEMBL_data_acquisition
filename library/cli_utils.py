@@ -1044,7 +1044,7 @@ def run_pipeline(
         meta_path = write_meta_yaml(
             csv_path=csv_path,
             command=command_str,
-            config_subset=config_snapshot,
+            config=config_snapshot,
             inputs=inputs,
             stats=stats,
             schema=schema_name,
