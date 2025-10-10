@@ -64,6 +64,7 @@ def unicellular_flag(series: pd.Series) -> pd.Series:
     """Return the boolean unicellular flag derived from ``series`` labels."""
 
     lowered = series.astype("string").str.strip().str.lower()
-    mask = lowered.isin({TYPE_UNICELLULAR.lower(), TYPE_VIRAL.lower(), _VIRAL_LEGACY_LABEL.lower()})
+    mask = lowered.isin(
+        {TYPE_UNICELLULAR.lower(), TYPE_VIRAL.lower(), _VIRAL_LEGACY_LABEL.lower()}
+    )
     return mask.astype("boolean")
-

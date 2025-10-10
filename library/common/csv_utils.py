@@ -273,7 +273,9 @@ def _merge_sorted_csv_group(
                 key = (
                     tuple(
                         converter(row[col])
-                        for converter, col in zip(key_converters, resolved_sort_cols, strict=False)
+                        for converter, col in zip(
+                            key_converters, resolved_sort_cols, strict=False
+                        )
                     )
                     if resolved_sort_cols
                     else tuple()

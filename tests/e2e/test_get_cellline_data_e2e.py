@@ -32,7 +32,9 @@ class _StubChemblClient:
     def __init__(self, payloads: dict[str, dict[str, object]]) -> None:
         self.payloads = payloads
 
-    def request_json(self, url: str, *, cfg, timeout: float | None = None) -> dict[str, object]:
+    def request_json(
+        self, url: str, *, cfg, timeout: float | None = None
+    ) -> dict[str, object]:
         records: list[dict[str, object]] = []
         for key, payload in self.payloads.items():
             if key in url:
@@ -108,7 +110,9 @@ def test_get_cellline_data_main_success(
 
     monkeypatch.setattr(get_cellline_data, "run_cellline_pipeline", fake_run_pipeline)
 
-    def fake_run_cli_command(*, args, parser, log_cfg, mapping, run, logger, base_parser=None):
+    def fake_run_cli_command(
+        *, args, parser, log_cfg, mapping, run, logger, base_parser=None
+    ):
         args._config_metadata = None
         if isinstance(args.input_csv, (str, Path)):
             args.input_csv = Path(args.input_csv)
@@ -185,6 +189,8 @@ def test_get_cellline_data_main_success(
     expected = expected.astype("string")
     pd.testing.assert_frame_equal(df.astype("string"), expected)
 
-    summary_events = [event for event in logger_stub.events if event[1] == "cellline_pipeline_summary"]
+    summary_events = [
+        event for event in logger_stub.events if event[1] == "cellline_pipeline_summary"
+    ]
     assert summary_events
     assert summary_events[0][2]["status"] == "OK"

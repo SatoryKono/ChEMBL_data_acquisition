@@ -11,7 +11,9 @@ from library.postprocess.targets.steps import (
 
 
 @pytest.mark.unit
-def test_normalize_target_fields__applies_taxonomy_and_identifier_normalization() -> None:
+def test_normalize_target_fields__applies_taxonomy_and_identifier_normalization() -> (
+    None
+):
     frame = pd.DataFrame(
         {
             "target_chembl_id": ["  chembl123  ", None],
@@ -46,7 +48,9 @@ def test_normalize_target_fields__applies_taxonomy_and_identifier_normalization(
 
 
 @pytest.mark.unit
-def test_normalize_target_fields__without_optional_flags_preserves_extra_columns() -> None:
+def test_normalize_target_fields__without_optional_flags_preserves_extra_columns() -> (
+    None
+):
     frame = pd.DataFrame(
         {
             "target_chembl_id": ["chembl1"],
@@ -73,7 +77,13 @@ def test_finalize_target_records__fills_missing_required_columns() -> None:
         "pref_name",
         "target_type",
     ]
-    for column in ["organism", "target_class", "protein_family", "synonyms", "pipeline_version"]:
+    for column in [
+        "organism",
+        "target_class",
+        "protein_family",
+        "synonyms",
+        "pipeline_version",
+    ]:
         assert column in result.columns
     assert pd.isna(result.loc[0, "target_type"])
     assert str(result["target_type"].dtype) == "string"
@@ -92,7 +102,13 @@ def test_finalize_target_records__handles_empty_input_frame() -> None:
         "pref_name",
         "target_type",
     ]
-    for column in ["organism", "target_class", "protein_family", "synonyms", "pipeline_version"]:
+    for column in [
+        "organism",
+        "target_class",
+        "protein_family",
+        "synonyms",
+        "pipeline_version",
+    ]:
         assert column in result.columns
     assert str(result["target_chembl_id"].dtype) == "string"
     assert str(result["pref_name"].dtype) == "string"
@@ -177,7 +193,9 @@ def test_finalize_target_records__populates_target_type_from_relationship() -> N
 
 
 @pytest.mark.unit
-def test_finalize_target_records__fills_target_type_from_dictionary(monkeypatch) -> None:
+def test_finalize_target_records__fills_target_type_from_dictionary(
+    monkeypatch,
+) -> None:
     frame = pd.DataFrame(
         {
             "target_chembl_id": ["chembl1", "CHEMBL2"],
@@ -202,11 +220,14 @@ def test_finalize_target_records__fills_target_type_from_dictionary(monkeypatch)
     result = finalize_target_records(frame)
 
     mapping = {
-        key.upper(): value for key, value in result.set_index("target_chembl_id")["target_type"].items()
+        key.upper(): value
+        for key, value in result.set_index("target_chembl_id")["target_type"].items()
     }
 
     assert mapping["CHEMBL1"] == "Multicellular organism"
     assert mapping["CHEMBL2"] == "Unicellular organism"
+
+
 def test_finalize_target_records__populates_target_type_from_description() -> None:
     frame = pd.DataFrame(
         {

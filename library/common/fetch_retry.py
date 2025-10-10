@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from ..config import Config, RetryCfg
 from ..sidecar import SidecarErrors
-
 
 _CHUNK_FAILURE_IDS_LIMIT = 100
 

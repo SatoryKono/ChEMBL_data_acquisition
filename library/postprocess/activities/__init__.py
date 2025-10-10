@@ -1,4 +1,5 @@
 """Activities postprocessing pipeline."""
+
 from .schema import ACTIVITY_SCHEMA, validate_activities
 from .steps import (
     PIPELINE_STEPS,

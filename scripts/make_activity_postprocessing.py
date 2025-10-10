@@ -21,8 +21,8 @@ del bootstrap_cli
 
 import argparse
 import os
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 from uuid import NAMESPACE_URL, uuid5
 
 import pandas as pd
@@ -40,9 +40,9 @@ from library.postprocess.common.types import SchemaValidationError, StepError
 
 try:
     from ._postprocess_common import (
-        CsvRuntimeConfig,
         DEFAULT_LOG_DIR,
         LOG_DIR_ENV,
+        CsvRuntimeConfig,
         export_postprocess_frame,
         generate_metrics_report,
         get_csv_runtime_config,
@@ -273,11 +273,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         log_dir = DEFAULT_LOG_DIR
 
-    with setup_cli_logging(PROGRAM_NAME, log_cfg, date_str=None, log_dir=log_dir) as logging_ctx:
+    with setup_cli_logging(
+        PROGRAM_NAME, log_cfg, date_str=None, log_dir=log_dir
+    ) as logging_ctx:
         configure_logger(logging_ctx.log_cfg)
-        setattr(args, "_pipeline_config", pipeline_config)
-        setattr(args, "_csv_runtime_config", csv_cfg)
-        setattr(args, "_log_level", log_level)
+        args._pipeline_config = pipeline_config
+        args._csv_runtime_config = csv_cfg
+        args._log_level = log_level
         exit_code = run(args)
 
     return exit_code
@@ -285,4 +287,3 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
     raise SystemExit(main())
-

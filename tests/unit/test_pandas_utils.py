@@ -9,7 +9,8 @@ import pytest
 
 pytest.importorskip("hypothesis")
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from library.common.pandas_utils import merge_series_prefer_left
 
@@ -49,12 +50,12 @@ def _manual_merge_series(left: pd.Series, right: pd.Series) -> pd.Series:
         return left.copy()
 
     right_map: dict[object, list[object]] = defaultdict(list)
-    for label, value in zip(right.index, right.tolist()):
+    for label, value in zip(right.index, right.tolist(), strict=False):
         right_map[label].append(value)
 
     counters: defaultdict[object, int] = defaultdict(int)
     result_values: list[object] = []
-    for label, value in zip(left.index, left.tolist()):
+    for label, value in zip(left.index, left.tolist(), strict=False):
         position = counters[label]
         counters[label] += 1
         if pd.isna(value):

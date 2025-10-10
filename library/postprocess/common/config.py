@@ -1,12 +1,14 @@
 """Helpers for loading declarative post-processing pipeline configuration."""
+
 from __future__ import annotations
 
 import inspect
 import os
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import yaml
 
@@ -92,7 +94,9 @@ def load_pipeline_config(
         ) from exc
 
     if not isinstance(raw_data, dict):
-        raise PipelineConfigError("pipeline configuration must be a mapping at the top level")
+        raise PipelineConfigError(
+            "pipeline configuration must be a mapping at the top level"
+        )
 
     expanded = _expand_environment(raw_data, env_mapping)
 
@@ -105,7 +109,9 @@ def load_pipeline_config(
         raise PipelineConfigError("'params' must be a mapping when provided")
 
     enabled_steps = expanded.get("enabled_steps")
-    if not isinstance(enabled_steps, Sequence) or isinstance(enabled_steps, (str, bytes)):
+    if not isinstance(enabled_steps, Sequence) or isinstance(
+        enabled_steps, (str, bytes)
+    ):
         raise PipelineConfigError("'enabled_steps' must be a sequence of mappings")
 
     steps = tuple(_load_step(entry, index) for index, entry in enumerate(enabled_steps))
@@ -157,9 +163,13 @@ def _load_step(entry: Any, index: int) -> ConfiguredStep:
     if not isinstance(callable_path, str) or not callable_path:
         raise PipelineConfigError(f"step '{name}' missing a 'callable' reference")
     if description is not None and not isinstance(description, str):
-        raise PipelineConfigError(f"step '{name}' description must be a string when provided")
+        raise PipelineConfigError(
+            f"step '{name}' description must be a string when provided"
+        )
     if not isinstance(params, dict):
-        raise PipelineConfigError(f"step '{name}' parameters must be expressed as a mapping")
+        raise PipelineConfigError(
+            f"step '{name}' parameters must be expressed as a mapping"
+        )
 
     func = import_by_path(callable_path)
     if not callable(func):  # pragma: no cover - defensive guard
@@ -184,7 +194,9 @@ def _load_step(entry: Any, index: int) -> ConfiguredStep:
     )
 
 
-def _validate_step_parameters(func: Any, params: Mapping[str, Any], *, step_name: str) -> None:
+def _validate_step_parameters(
+    func: Any, params: Mapping[str, Any], *, step_name: str
+) -> None:
     """Ensure that every configured parameter is supported by ``func``."""
 
     if not params:

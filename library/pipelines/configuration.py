@@ -1,10 +1,12 @@
 """Loader for declarative pipeline metadata stored under :mod:`config.pipeline`."""
+
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import yaml
 
@@ -52,7 +54,9 @@ class PipelineParameters:
     modes: Mapping[str, Mapping[str, str]]
     commands: Mapping[str, Mapping[str, str]]
 
-    def mapping_for(self, *, mode: str | None = None, command: str | None = None) -> dict[str, str]:
+    def mapping_for(
+        self, *, mode: str | None = None, command: str | None = None
+    ) -> dict[str, str]:
         """Return a merged mapping using ``mode``/``command`` specific overrides."""
 
         mapping: dict[str, str] = dict(self.default)
@@ -110,7 +114,9 @@ def _coerce_str_sequence(value: Any, *, field: str) -> tuple[str, ...]:
         for idx, item in enumerate(value):
             items.append(_coerce_str(item, field=f"{field}[{idx}]"))
         return tuple(items)
-    raise TypeError(f"pipeline config field '{field}' must be a string or sequence of strings")
+    raise TypeError(
+        f"pipeline config field '{field}' must be a string or sequence of strings"
+    )
 
 
 def _coerce_mapping_str_str(value: Any, *, field: str) -> dict[str, str]:
@@ -120,11 +126,15 @@ def _coerce_mapping_str_str(value: Any, *, field: str) -> dict[str, str]:
         raise TypeError(f"pipeline config field '{field}' must be a mapping")
     result: dict[str, str] = {}
     for key, val in value.items():
-        result[_coerce_str(key, field=f"{field} key")] = _coerce_str(val, field=f"{field}[{key}]")
+        result[_coerce_str(key, field=f"{field} key")] = _coerce_str(
+            val, field=f"{field}[{key}]"
+        )
     return result
 
 
-def _parse_pipeline_version(data: Mapping[str, Any], *, name: str) -> PipelineVersionInfo:
+def _parse_pipeline_version(
+    data: Mapping[str, Any], *, name: str
+) -> PipelineVersionInfo:
     raw = data.get("pipeline_version")
     if raw is None:
         raise KeyError(f"pipeline '{name}' is missing 'pipeline_version'")
@@ -135,7 +145,9 @@ def _parse_pipeline_version(data: Mapping[str, Any], *, name: str) -> PipelineVe
         column = _coerce_str(raw, field="pipeline_version")
     elif isinstance(raw, Mapping):
         column = _coerce_str(raw.get("column"), field="pipeline_version.column")
-        description = _coerce_optional_str(raw.get("description"), field="pipeline_version.description")
+        description = _coerce_optional_str(
+            raw.get("description"), field="pipeline_version.description"
+        )
         raw_value = raw.get("value")
         if raw_value is not None:
             value = _coerce_str(raw_value, field="pipeline_version.value")
@@ -150,14 +162,18 @@ def _parse_steps(data: Mapping[str, Any]) -> tuple[PipelineStepConfig, ...]:
     raw_steps = data.get("steps")
     if raw_steps is None:
         return ()
-    if not isinstance(raw_steps, Sequence) or isinstance(raw_steps, (str, bytes, bytearray)):
+    if not isinstance(raw_steps, Sequence) or isinstance(
+        raw_steps, (str, bytes, bytearray)
+    ):
         raise TypeError("pipeline 'steps' must be a sequence of mappings")
     steps: list[PipelineStepConfig] = []
     for index, entry in enumerate(raw_steps):
         if not isinstance(entry, Mapping):
             raise TypeError(f"pipeline step at index {index} must be a mapping")
         name = _coerce_str(entry.get("name"), field=f"steps[{index}].name")
-        description = _coerce_optional_str(entry.get("description"), field=f"steps[{index}].description")
+        description = _coerce_optional_str(
+            entry.get("description"), field=f"steps[{index}].description"
+        )
         enabled_raw = entry.get("enabled", True)
         if enabled_raw in (None, "", "auto"):
             enabled = True
@@ -165,9 +181,15 @@ def _parse_steps(data: Mapping[str, Any]) -> tuple[PipelineStepConfig, ...]:
             enabled = enabled_raw
         else:
             enabled = str(enabled_raw).lower() not in {"false", "0", "no", "off"}
-        depends_on = _coerce_str_sequence(entry.get("depends_on"), field=f"steps[{index}].depends_on")
-        produces = _coerce_str_sequence(entry.get("produces"), field=f"steps[{index}].produces")
-        applies_to = _coerce_str_sequence(entry.get("applies_to"), field=f"steps[{index}].applies_to")
+        depends_on = _coerce_str_sequence(
+            entry.get("depends_on"), field=f"steps[{index}].depends_on"
+        )
+        produces = _coerce_str_sequence(
+            entry.get("produces"), field=f"steps[{index}].produces"
+        )
+        applies_to = _coerce_str_sequence(
+            entry.get("applies_to"), field=f"steps[{index}].applies_to"
+        )
         steps.append(
             PipelineStepConfig(
                 name=name,
@@ -192,7 +214,9 @@ def _parse_parameters(data: Mapping[str, Any]) -> PipelineParameters:
     modes: dict[str, dict[str, str]] = {}
     commands: dict[str, dict[str, str]] = {}
 
-    def _consume_plain_entries(entries: Mapping[str, Any], *, dest: dict[str, str], prefix: str) -> None:
+    def _consume_plain_entries(
+        entries: Mapping[str, Any], *, dest: dict[str, str], prefix: str
+    ) -> None:
         for key, value in entries.items():
             if key in {"shared", "modes", "commands", "default"}:
                 continue
@@ -206,17 +230,23 @@ def _parse_parameters(data: Mapping[str, Any]) -> PipelineParameters:
             )
 
     if "default" in raw_params:
-        default.update(_coerce_mapping_str_str(raw_params.get("default"), field="parameters.default"))
+        default.update(
+            _coerce_mapping_str_str(
+                raw_params.get("default"), field="parameters.default"
+            )
+        )
     _consume_plain_entries(raw_params, dest=default, prefix="")
-    shared.update(_coerce_mapping_str_str(raw_params.get("shared"), field="parameters.shared"))
+    shared.update(
+        _coerce_mapping_str_str(raw_params.get("shared"), field="parameters.shared")
+    )
 
     raw_modes = raw_params.get("modes")
     if raw_modes is not None:
         if not isinstance(raw_modes, Mapping):
             raise TypeError("parameters.modes must be a mapping")
         for mode, mapping in raw_modes.items():
-            modes[_coerce_str(mode, field="parameters.modes key")] = _coerce_mapping_str_str(
-                mapping, field=f"parameters.modes.{mode}"
+            modes[_coerce_str(mode, field="parameters.modes key")] = (
+                _coerce_mapping_str_str(mapping, field=f"parameters.modes.{mode}")
             )
 
     raw_commands = raw_params.get("commands")
@@ -224,11 +254,13 @@ def _parse_parameters(data: Mapping[str, Any]) -> PipelineParameters:
         if not isinstance(raw_commands, Mapping):
             raise TypeError("parameters.commands must be a mapping")
         for command, mapping in raw_commands.items():
-            commands[_coerce_str(command, field="parameters.commands key")] = _coerce_mapping_str_str(
-                mapping, field=f"parameters.commands.{command}"
+            commands[_coerce_str(command, field="parameters.commands key")] = (
+                _coerce_mapping_str_str(mapping, field=f"parameters.commands.{command}")
             )
 
-    return PipelineParameters(default=default, shared=shared, modes=modes, commands=commands)
+    return PipelineParameters(
+        default=default, shared=shared, modes=modes, commands=commands
+    )
 
 
 def _parse_io_section(data: Mapping[str, Any], *, field: str) -> PipelineIO:
@@ -255,11 +287,13 @@ def _parse_schemas(data: Mapping[str, Any], *, name: str) -> dict[str, str]:
 def _ensure_directory(path: Path) -> Path:
     resolved = path.resolve()
     if not resolved.is_dir():
-        raise FileNotFoundError(f"pipeline configuration directory not found: {resolved}")
+        raise FileNotFoundError(
+            f"pipeline configuration directory not found: {resolved}"
+        )
     return resolved
 
 
-@lru_cache(maxsize=None)
+@cache
 def list_pipeline_configs(directory: Path | None = None) -> tuple[str, ...]:
     """Return the available pipeline configuration names."""
 
@@ -268,7 +302,7 @@ def list_pipeline_configs(directory: Path | None = None) -> tuple[str, ...]:
     return tuple(names)
 
 
-@lru_cache(maxsize=None)
+@cache
 def load_pipeline_config(name: str, *, directory: Path | None = None) -> PipelineConfig:
     """Return the parsed declarative configuration for ``name``."""
 
@@ -278,7 +312,9 @@ def load_pipeline_config(name: str, *, directory: Path | None = None) -> Pipelin
     path = base / f"{name}.yaml"
     if not path.exists():
         available = ", ".join(list_pipeline_configs(directory=base))
-        raise FileNotFoundError(f"pipeline configuration not found: {path} (available: {available})")
+        raise FileNotFoundError(
+            f"pipeline configuration not found: {path} (available: {available})"
+        )
     with path.open("r", encoding="utf-8") as handle:
         raw_data = yaml.safe_load(handle) or {}
     if not isinstance(raw_data, Mapping):

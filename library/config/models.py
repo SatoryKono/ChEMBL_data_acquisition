@@ -18,13 +18,12 @@ import logging
 import random
 import re
 import threading
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import ExitStack
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import UnionType
-from typing import Any, Callable, Union, get_args, get_origin
-
-from dataclasses import dataclass, field
+from typing import Any, Union, get_args, get_origin
 from urllib.parse import urlparse
 
 from pydantic import (
@@ -104,6 +103,7 @@ def _default_cache_home() -> Path:
     from . import env
 
     return env._default_cache_home()
+
 
 _UNSET = object()
 
@@ -695,12 +695,8 @@ class ResourcesCfg(_BaseModel):
 
 
 class IoCfg(_BoolModel):
-    output_dir: Path = Field(
-        default_factory=lambda: _default_base_path() / "output"
-    )
-    cache_dir: Path = Field(
-        default_factory=lambda: _default_cache_home()
-    )
+    output_dir: Path = Field(default_factory=lambda: _default_base_path() / "output")
+    cache_dir: Path = Field(default_factory=lambda: _default_cache_home())
     csv_sep: str = ","
     csv_encoding: str = "utf-8-sig"
     csv_fallback_encodings: Sequence[str] | None = Field(
@@ -746,9 +742,7 @@ class IoCfg(_BoolModel):
                     "default_date_prefix must match YYYYMMDD (eight digits)"
                 )
             return stripped
-        raise TypeError(
-            "default_date_prefix must be provided as a string or null"
-        )
+        raise TypeError("default_date_prefix must be provided as a string or null")
 
 
 class LogCfg(_BaseModel):
@@ -782,10 +776,7 @@ class InitCfg(_BaseModel):
         / "ChEMBL_all_10_05_step5.xlsx"
     )
     output_dir: Path = Field(
-        default_factory=lambda: _default_base_path()
-        / "output"
-        / "ChEMBL"
-        / "processed"
+        default_factory=lambda: _default_base_path() / "output" / "ChEMBL" / "processed"
     )
 
 
@@ -1242,7 +1233,6 @@ class TargetChemblCfg(_BaseModel):
     batch_retry: TargetChemblBatchRetryCfg = Field(
         default_factory=lambda: TargetChemblBatchRetryCfg()
     )
-
 
 
 class TargetIupharCfg(_BaseModel):

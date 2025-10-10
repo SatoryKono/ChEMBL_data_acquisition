@@ -42,7 +42,9 @@ def test_fetch_uniprot__respects_final_out_path(
 
     calls: dict[str, Path] = {}
 
-    def fake_run_uniprot(local_cfg: get_target_data.Config, args: argparse.Namespace) -> int:
+    def fake_run_uniprot(
+        local_cfg: get_target_data.Config, args: argparse.Namespace
+    ) -> int:
         final_out = Path(args.final_out)
         calls["final_out"] = final_out
         calls["input_csv"] = Path(args.input_csv)

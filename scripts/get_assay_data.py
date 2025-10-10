@@ -16,58 +16,53 @@ else:  # pragma: no cover - executed when imported as a package module
 bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 
-from pathlib import Path
-from time import sleep
-
 import argparse
 import sys
 from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from typing import Any
 from functools import partial
 from itertools import islice
+from pathlib import Path
+from time import sleep
+from typing import Any
 
 import pandas as pd
 import requests
 
-from library.integration import chembl_library as cl
-from library.pipelines.assay import postprocessing as ap
-from library.postprocessing import enrich_assay_metadata
-from library.postprocess.assays import run_assay_pipeline as run_assay_postprocess
-from library.postprocess.common import collect_postprocess_metrics
-from library.postprocess.common.logging import PipelineRunMetrics
-from library import cli
-from library import io
-from library.common.csv_utils import write_csv_chunks_deterministic
-from library.pipelines.assay.chembl_assay import ASSAY_COLUMNS, MAX_ASSAY_CHUNK_SIZE
-from library.orchestration import ETLContext
+from library import cli, io
 from library.cli import (
+    ConfigMetadata,
     Logger,
     LoggerConfig,
-    ConfigMetadata,
     configure_logger,
 )
 from library.cli import build_parser as base_parser
-
-from library.cli.pipeline_definition import PipelineDefinition
-
 from library.cli.base import PipelineCLIBase
-
-from library.cli_utils import run_pipeline
 from library.cli.metadata import prepare_option
-from library.config import Config, _serialize_paths
+from library.cli.pipeline_definition import PipelineDefinition
+from library.cli_utils import run_pipeline
+from library.common.csv_utils import write_csv_chunks_deterministic
+from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 from library.common.log import logger
-from library.pipelines.common import add_pipeline_metadata
-from library.qa.reporting import build_table_quality_hook
-from library.validation import validate_assays
-from library.schemas import AssaysSchema, normalize_assays
+from library.config import Config, _serialize_paths
+from library.integration import chembl_library as cl
+from library.orchestration import ETLContext
+from library.pipelines.assay import postprocessing as ap
+from library.pipelines.assay.chembl_assay import ASSAY_COLUMNS, MAX_ASSAY_CHUNK_SIZE
 from library.pipelines.common import (
     ChunkedFetchConfig,
     CsvWriterConfig,
+    add_pipeline_metadata,
     prepare_chunked_pipeline,
 )
 from library.pipelines.common.metadata import get_pipeline_version
-from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
+from library.postprocess.assays import run_assay_pipeline as run_assay_postprocess
+from library.postprocess.common import collect_postprocess_metrics
+from library.postprocess.common.logging import PipelineRunMetrics
+from library.postprocessing import enrich_assay_metadata
+from library.qa.reporting import build_table_quality_hook
+from library.schemas import AssaysSchema, normalize_assays
+from library.validation import validate_assays
 
 __all__ = ["ap", "configure_logger", "main", "run", "run_chembl"]
 
@@ -147,13 +142,13 @@ ASSAY_OUTPUT_DROP_COLUMNS: list[str] = [
 def remove_assay_output_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Return ``df`` without columns disallowed in ``output.assay_*`` exports."""
 
-    allowed_cols = [column for column in df.columns if column not in ASSAY_OUTPUT_DROP_COLUMNS]
+    allowed_cols = [
+        column for column in df.columns if column not in ASSAY_OUTPUT_DROP_COLUMNS
+    ]
     cleaned = df.drop(columns=ASSAY_OUTPUT_DROP_COLUMNS, errors="ignore")
     if allowed_cols:
         cleaned = cleaned.loc[:, allowed_cols]
     return cleaned
-
-
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -188,7 +183,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
             "read_fail",
-            error=str(exc), exc_info=exc,
+            error=str(exc),
+            exc_info=exc,
             path=str(args.input_csv),
         )
         return 1
@@ -201,23 +197,25 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             output_path = Path(legacy_output)
             if not isinstance(legacy_output, Path):
                 args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
         else:
             output_path = Path(io.default_output_path(args.input_csv, cfg.io))
             args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
     else:
         output_path = Path(final_out_attr)
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
-        setattr(args, "output_csv", output_path)
+        args.output_csv = output_path
     metadata_obj = getattr(args, "_config_metadata", None)
     if not isinstance(metadata_obj, ConfigMetadata):
         metadata_obj = None
     output_source = "cli" if getattr(args, "final_out", None) else "derived"
     logger.info(
         "assay_pipeline_start",
-        input=prepare_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
+        input=prepare_option(
+            metadata_obj, value=str(args.input_csv), default_source="cli"
+        ),
         output=prepare_option(
             metadata_obj,
             value=str(output_path),
@@ -266,9 +264,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         ids_source = _iter_ids()
 
     failure_path = output_path.with_name(f"{output_path.stem}_failure_cases.csv")
-    fetch_failure_path = output_path.with_name(
-        f"{output_path.stem}_fetch_failures.csv"
-    )
+    fetch_failure_path = output_path.with_name(f"{output_path.stem}_fetch_failures.csv")
 
     def _enrich_with_dictionaries(frame: pd.DataFrame) -> pd.DataFrame:
         return enrich_assay_metadata(frame, dictionary_dir=cfg.resources.dictionary_dir)
@@ -276,7 +272,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     dropped_columns_seen: set[str] = set()
 
     def _drop_output_columns(frame: pd.DataFrame) -> pd.DataFrame:
-        removed = [column for column in ASSAY_OUTPUT_DROP_COLUMNS if column in frame.columns]
+        removed = [
+            column for column in ASSAY_OUTPUT_DROP_COLUMNS if column in frame.columns
+        ]
         if removed:
             dropped_columns_seen.update(removed)
         return remove_assay_output_columns(frame)
@@ -335,7 +333,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                             "batch_size": cfg.assay.batch_size,
                             "timeout": cfg.assay.timeout,
                         }
-                        log_context = {k: v for k, v in context.items() if k != "chunk_ids"}
+                        log_context = {
+                            k: v for k, v in context.items() if k != "chunk_ids"
+                        }
 
                         if attempt >= attempts:
                             if len(current) > 1:
@@ -344,7 +344,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                                 right = current[split_index:]
                                 logger.warning(
                                     "assay_fetch_split",
-                                    extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
+                                    extra={
+                                        "msg": error_message,
+                                        "chunk_ids": context["chunk_ids"],
+                                    },
                                     **log_context,
                                 )
                                 if right:
@@ -355,7 +358,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
                             logger.error(
                                 "assay_fetch_failed",
-                                extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
+                                extra={
+                                    "msg": error_message,
+                                    "chunk_ids": context["chunk_ids"],
+                                },
                                 error=error_message,
                                 **log_context,
                             )
@@ -365,7 +371,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         delay = compute_backoff_delay(attempt, retry_cfg, jitter=jitter)
                         logger.warning(
                             "assay_fetch_retry",
-                            extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
+                            extra={
+                                "msg": error_message,
+                                "chunk_ids": context["chunk_ids"],
+                            },
                             delay=delay,
                             **log_context,
                         )
@@ -474,7 +483,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             "processed": processed_ids,
             "pipeline_version": (
                 postprocess_metrics.pipeline_version
-                if postprocess_metrics and postprocess_metrics.pipeline_version is not None
+                if postprocess_metrics
+                and postprocess_metrics.pipeline_version is not None
                 else get_pipeline_version()
             ),
         }
@@ -540,16 +550,16 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             output_path = Path(legacy_output)
             if not isinstance(legacy_output, Path):
                 args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
         else:
             output_path = Path(io.default_output_path(args.input_csv, cfg.io))
             args.final_out = output_path
-            setattr(args, "output_csv", output_path)
+            args.output_csv = output_path
     else:
         output_path = Path(final_out_attr)
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
-        setattr(args, "output_csv", output_path)
+        args.output_csv = output_path
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0
@@ -584,9 +594,7 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--limit",
         type=int,
         default=None,
-        help=(
-            "Maximum number of identifiers to process; use 0 to skip processing"
-        ),
+        help=("Maximum number of identifiers to process; use 0 to skip processing"),
     )
     parser.add_argument(
         "--offset",

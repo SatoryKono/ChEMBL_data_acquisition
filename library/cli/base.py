@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Mapping, Sequence, Callable
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from ..common.log import logger as default_logger
 from .logging import CLILoggingContext, setup_cli_logging
 from .parser import Logger, LoggerConfig, configure_logger
 from .run_context import compute_generated_at
-from ..common.log import logger as default_logger
 
 
 class PipelineCLIBase:
@@ -155,7 +155,7 @@ class PipelineCLIBase:
             explicit_run_id = explicit_run_id.strip() or None
         if explicit_run_id in (argparse.SUPPRESS,):
             explicit_run_id = None
-        setattr(args, "run_id", explicit_run_id)
+        args.run_id = explicit_run_id
         if explicit_run_id is not None:
             log_cfg.run_id = explicit_run_id
 
@@ -163,7 +163,7 @@ class PipelineCLIBase:
             from ..cli_utils import resolve_invocation as _resolve_invocation
 
             invocation = _resolve_invocation(parser.prog, argv)
-            setattr(args, "invocation", invocation)
+            args.invocation = invocation
 
         exit_code = self.handle_pre_run(parser, args)
         if exit_code is not None:

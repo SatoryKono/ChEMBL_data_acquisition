@@ -8,7 +8,9 @@ from library.config.models import SemanticScholarCfg
 
 
 @pytest.mark.unit
-def test_fetch_semantic_scholar__includes_api_key_header(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_semantic_scholar__includes_api_key_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: dict[str, object] = {}
 
     def _fake_do_request(session, url, delay, *, headers, **kwargs):  # type: ignore[override]

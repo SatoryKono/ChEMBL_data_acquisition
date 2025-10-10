@@ -121,7 +121,9 @@ def test_execute_workflow__stops_after_failure(tmp_path: Path) -> None:
     invoked_second = False
 
     def fail_runner(*args):
-        return StepExecutionResult(exit_code=1, executed=True, status="failed", reason="boom")
+        return StepExecutionResult(
+            exit_code=1, executed=True, status="failed", reason="boom"
+        )
 
     def success_runner(*args):
         nonlocal invoked_second

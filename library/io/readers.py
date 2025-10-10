@@ -11,17 +11,17 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pandas as pd
 
-from ..config import IoCfg
 from ..common.log import logger
+from ..config import IoCfg
 
 if TYPE_CHECKING:  # pragma: no cover - import only for typing
     from .. import validation as _validation_module
 
 
-_validation_mod: "_validation_module" | None = None
+_validation_mod: _validation_module | None = None
 
 
-def _get_validation_module() -> "_validation_module":
+def _get_validation_module() -> _validation_module:
     """Return the lazily imported :mod:`library.validation` module."""
 
     global _validation_mod
@@ -44,8 +44,12 @@ class _EncodingDecodeError(Exception):
 class _MissingColumnError(ValueError):
     """Raised when the expected identifier column is absent."""
 
-    def __init__(self, column: str, path: Path, fieldnames: Sequence[str] | None) -> None:
-        message = f"column '{column}' not found in {path}; available columns: {fieldnames}"
+    def __init__(
+        self, column: str, path: Path, fieldnames: Sequence[str] | None
+    ) -> None:
+        message = (
+            f"column '{column}' not found in {path}; available columns: {fieldnames}"
+        )
         super().__init__(message)
         self.column = column
         self.path = path
@@ -151,7 +155,9 @@ def read_ids(
     sep_candidates: list[str] = []
     seen_seps: set[str] = set()
     _append_candidate(sep, seen_seps, sep_candidates)
-    _append_candidate(getattr(cfg, "csv_fallback_separators", None), seen_seps, sep_candidates)
+    _append_candidate(
+        getattr(cfg, "csv_fallback_separators", None), seen_seps, sep_candidates
+    )
     if not sep_candidates:
         sep_candidates.append(cfg.csv_sep)
 
@@ -267,7 +273,7 @@ def read_csv(
     dtype: Mapping[Hashable, Any] | type | None = None,
     na_values: Sequence[str] | str | None = None,
     parse_dates: Sequence[str] | None = None,
-    schema: "pa.DataFrameSchema" | type["pa.DataFrameModel"] | None = None,
+    schema: pa.DataFrameSchema | type[pa.DataFrameModel] | None = None,
 ) -> pd.DataFrame:
     """Load a CSV file into a :class:`pandas.DataFrame` with optional schema validation."""
 

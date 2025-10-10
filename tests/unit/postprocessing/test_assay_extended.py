@@ -11,7 +11,9 @@ from library.postprocessing import assay_extended
 
 
 @pytest.mark.unit
-def test_resolve_dictionary_root__defaults_to_config_directory(monkeypatch, tmp_path: Path) -> None:
+def test_resolve_dictionary_root__defaults_to_config_directory(
+    monkeypatch, tmp_path: Path
+) -> None:
     """Default dictionary path should always be anchored to the config package."""
 
     # Changing the working directory mimics invocation from an arbitrary location.
@@ -51,7 +53,9 @@ def test_latest_target_export__accepts_legacy_filename(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_latest_target_export__supports_plural_timestamped_exports(tmp_path: Path) -> None:
+def test_latest_target_export__supports_plural_timestamped_exports(
+    tmp_path: Path,
+) -> None:
     """Timestamped pluralised target exports should be discoverable."""
 
     target_dir = tmp_path / "_target"

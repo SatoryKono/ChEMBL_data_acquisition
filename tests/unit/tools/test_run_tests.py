@@ -10,10 +10,9 @@ from collections.abc import Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import Any, Protocol, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol
 
 import pytest
-
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _RUN_TESTS_PATH = _PROJECT_ROOT / "tests" / "run_tests.py"
@@ -40,14 +39,11 @@ class RunTestsModule(Protocol):
 
     def _build_json(
         self, collector: _ReportCollector, *, report_path: Path
-    ) -> dict[str, Any]:
-        ...
+    ) -> dict[str, Any]: ...
 
-    def _write_markdown(self, path: Path, payload: dict[str, Any]) -> None:
-        ...
+    def _write_markdown(self, path: Path, payload: dict[str, Any]) -> None: ...
 
-    def main(self, argv: Sequence[str]) -> int:
-        ...
+    def main(self, argv: Sequence[str]) -> int: ...
 
 
 LoggerConfig = _LoggerConfig
@@ -112,12 +108,10 @@ def test_build_json__stores_fractional_success_rate(
     collector.end_time = 100.5
     collector.tests = {
         "tests/test_demo.py::test_pass": _make_record(
-            run_tests_module,
-            "tests/test_demo.py::test_pass", "passed"
+            run_tests_module, "tests/test_demo.py::test_pass", "passed"
         ),
         "tests/test_demo.py::test_fail": _make_record(
-            run_tests_module,
-            "tests/test_demo.py::test_fail", "failed"
+            run_tests_module, "tests/test_demo.py::test_fail", "failed"
         ),
     }
 
@@ -238,12 +232,10 @@ def test_main__downgrades_exit_code_when_threshold_not_met(
         collector.end_time = 0.5
         collector.tests = {
             "tests/test_demo.py::test_pass": _make_record(
-                run_tests_module,
-                "tests/test_demo.py::test_pass", "passed"
+                run_tests_module, "tests/test_demo.py::test_pass", "passed"
             ),
             "tests/test_demo.py::test_fail": _make_record(
-                run_tests_module,
-                "tests/test_demo.py::test_fail", "failed"
+                run_tests_module, "tests/test_demo.py::test_fail", "failed"
             ),
         }
         collector.tests["tests/test_demo.py::test_fail"].error = "boom"
@@ -254,12 +246,14 @@ def test_main__downgrades_exit_code_when_threshold_not_met(
     json_path = tmp_path / "report.json"
     markdown_path = tmp_path / "summary.md"
 
-    exit_code = run_tests_module.main([
-        "--json",
-        str(json_path),
-        "--markdown",
-        str(markdown_path),
-    ])
+    exit_code = run_tests_module.main(
+        [
+            "--json",
+            str(json_path),
+            "--markdown",
+            str(markdown_path),
+        ]
+    )
 
     assert exit_code == 1
 
@@ -289,13 +283,15 @@ def test_main__verbose_propagates_debug_logging(
 
     monkeypatch.setattr(run_tests_module.pytest, "main", _fake_pytest_main)
 
-    exit_code = run_tests_module.main([
-        "--json",
-        str(tmp_path / "report.json"),
-        "--markdown",
-        str(tmp_path / "summary.md"),
-        "--verbose",
-    ])
+    exit_code = run_tests_module.main(
+        [
+            "--json",
+            str(tmp_path / "report.json"),
+            "--markdown",
+            str(tmp_path / "summary.md"),
+            "--verbose",
+        ]
+    )
 
     assert exit_code == 0
     assert captured_cfgs and captured_cfgs[-1].level == "DEBUG"
@@ -353,7 +349,9 @@ def _install_fake_cli_logging(
             handlers=list(log_cfg.handlers),
             logger_name=log_cfg.logger_name,
         )
-        yield SimpleNamespace(log_path=log_path, log_cfg=cloned_cfg, console_stream=stream)
+        yield SimpleNamespace(
+            log_path=log_path, log_cfg=cloned_cfg, console_stream=stream
+        )
 
     monkeypatch.setattr(run_tests, "configure_logger", _fake_configure)
     monkeypatch.setattr(run_tests, "setup_cli_logging", _fake_setup)

@@ -13,7 +13,9 @@ from library.cli import LoggerConfig
 
 
 @pytest.mark.unit
-def test_run_cli_command__logs_exc_info_on_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_cli_command__logs_exc_info_on_value_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Ensure ``exc_info`` is attached when configuration resolution fails."""
 
     parser = argparse.ArgumentParser()
@@ -79,7 +81,9 @@ def test_run_cli_command__run_id_determinism(tmp_path, monkeypatch):
     def fake_run(cfg, args):
         return 0
 
-    def make_namespace(*, input_name: str, output_name: str, limit: int) -> argparse.Namespace:
+    def make_namespace(
+        *, input_name: str, output_name: str, limit: int
+    ) -> argparse.Namespace:
         input_path = tmp_path / input_name
         input_path.write_text("activity_id\nACT1\n", encoding="utf-8")
         output_path = tmp_path / output_name

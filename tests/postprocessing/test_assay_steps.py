@@ -64,7 +64,9 @@ def test_normalize_assay_metadata__ignores_unknown_parameters() -> None:
         }
     )
 
-    result = normalize_assay_metadata(frame, uppercase_categories=False, unsupported_flag=True)
+    result = normalize_assay_metadata(
+        frame, uppercase_categories=False, unsupported_flag=True
+    )
 
     expected = frame.copy()
     for column in expected.columns:

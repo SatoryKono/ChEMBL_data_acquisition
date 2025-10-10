@@ -125,7 +125,9 @@ def test_drop_assay_output_columns__matches_schema_columns() -> None:
     # Safety net: if a dropped column sneaks into the schema we want the test to fail
     # with a clear message rather than producing duplicate columns.
     overlap = set(schema_columns) & set(ASSAY_OUTPUT_DROP_COLUMNS)
-    assert not overlap, f"Schema unexpectedly includes dropped columns: {sorted(overlap)}"
+    assert (
+        not overlap
+    ), f"Schema unexpectedly includes dropped columns: {sorted(overlap)}"
 
     input_columns = schema_columns + ASSAY_OUTPUT_DROP_COLUMNS
     sample_row = {column: f"value-{idx}" for idx, column in enumerate(input_columns)}

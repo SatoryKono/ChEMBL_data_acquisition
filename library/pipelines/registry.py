@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Sequence, TypedDict, cast
+from typing import Any, TypedDict, cast
 
 import yaml
 
@@ -50,7 +51,9 @@ class PipelineStep:
         """Return CLI arguments forwarded to the wrapped ``main`` function."""
 
         input_csv = cfg.input_path(self.name)
-        output_csv = output_path if output_path is not None else cfg.output_path(self.name)
+        output_csv = (
+            output_path if output_path is not None else cfg.output_path(self.name)
+        )
         args = ["--config", str(cfg.config_path), "--input", str(input_csv)]
         args.extend([self.output_flag, str(output_csv)])
         args.extend(["--log-level", cfg.log_level])
@@ -80,6 +83,7 @@ class PipelineStep:
 
         input_path = cfg.input_path(self.name)
         return input_path if isinstance(input_path, Path) else Path(input_path)
+
 
 _DEFAULT_DEFINITIONS: tuple[PipelineStepDefinition, ...] = (
     {
@@ -126,7 +130,9 @@ _DEFAULT_DEFINITIONS: tuple[PipelineStepDefinition, ...] = (
 
 
 def load_pipeline_registry(
-    source: Path | str | Iterable[PipelineStepDefinition] | Mapping[str, object] | None = None,
+    source: (
+        Path | str | Iterable[PipelineStepDefinition] | Mapping[str, object] | None
+    ) = None,
 ) -> tuple[PipelineStep, ...]:
     """Return pipeline steps loaded from ``source`` or the default registry."""
 

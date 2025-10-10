@@ -33,12 +33,15 @@ def test_compute_backoff_delay__jitter_sequence_restarts_with_same_seed() -> Non
 
     attempts = range(1, 5)
     first_run = [
-        compute_backoff_delay(attempt, retry_cfg, jitter=jitter)
-        for attempt in attempts
+        compute_backoff_delay(attempt, retry_cfg, jitter=jitter) for attempt in attempts
     ]
 
-    base_delays = [retry_cfg.backoff_factor * (2 ** (attempt - 1)) for attempt in attempts]
-    jitter_offsets = [value - base for value, base in zip(first_run, base_delays, strict=True)]
+    base_delays = [
+        retry_cfg.backoff_factor * (2 ** (attempt - 1)) for attempt in attempts
+    ]
+    jitter_offsets = [
+        value - base for value, base in zip(first_run, base_delays, strict=True)
+    ]
 
     assert jitter_offsets[0] != pytest.approx(jitter_offsets[1])
 
@@ -66,7 +69,9 @@ def test_compute_backoff_delay__adds_jitter_before_cap() -> None:
         retry_cfg.backoff_cap,
     )
 
-    assert compute_backoff_delay(attempt, retry_cfg, jitter=jitter) == pytest.approx(expected)
+    assert compute_backoff_delay(attempt, retry_cfg, jitter=jitter) == pytest.approx(
+        expected
+    )
 
 
 def test_chunk_failure_tracker_stats__returns_fresh_mapping_when_empty() -> None:
@@ -105,4 +110,6 @@ def test_chunk_failure_tracker_stats__limits_reported_ids() -> None:
 
     assert stats["chunk_fetch_failure_ids_total"] == 150
     assert stats["chunk_fetch_failure_ids_truncated"] is True
-    assert len(stats["chunk_fetch_failure_ids"]) < stats["chunk_fetch_failure_ids_total"]
+    assert (
+        len(stats["chunk_fetch_failure_ids"]) < stats["chunk_fetch_failure_ids_total"]
+    )

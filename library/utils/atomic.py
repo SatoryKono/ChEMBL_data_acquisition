@@ -6,10 +6,11 @@ import errno
 import os
 import tempfile
 import time
+from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 from types import ModuleType, TracebackType
-from typing import IO, TYPE_CHECKING, Any, Iterator, Protocol, TextIO, cast
+from typing import IO, TYPE_CHECKING, Any, Protocol, TextIO, cast
 
 __all__ = ["open_atomic", "robust_replace"]
 
@@ -17,6 +18,7 @@ _REPLACE_RETRYABLE_ERRNOS = {errno.EACCES, errno.EPERM}
 _REPLACE_RETRYABLE_WINERRORS = {5, 32, 33}
 
 if TYPE_CHECKING:  # pragma: no cover - typing helpers only
+
     class _PortalockerModule(Protocol):
         def Lock(
             self,
@@ -25,6 +27,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing helpers only
             mode: str = ...,
             timeout: float = ...,
         ) -> AbstractContextManager[Any]: ...
+
 else:  # pragma: no cover - runtime branch
     _PortalockerModule = ModuleType
 
@@ -36,6 +39,7 @@ else:
     portalocker = cast("_PortalockerModule", _portalocker)
 
 if TYPE_CHECKING:  # pragma: no cover - typing helpers only
+
     class _MSVCRTModule(Protocol):
         LK_NBLCK: int
         LK_UNLCK: int
@@ -48,6 +52,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing helpers only
         LOCK_UN: int
 
         def flock(self, fd: int, op: int) -> None: ...
+
 else:  # pragma: no cover - runtime branch
     _MSVCRTModule = ModuleType
     _FcntlModule = ModuleType
@@ -76,7 +81,7 @@ class FileLock:
         self._poll_interval = poll_interval
         self._handle: TextIO | None = None
 
-    def __enter__(self) -> "FileLock":
+    def __enter__(self) -> FileLock:
         start_time = time.monotonic()
         self._path.parent.mkdir(parents=True, exist_ok=True)
         handle = self._path.open("w+")
@@ -238,7 +243,9 @@ def _should_retry_replace(exc: OSError) -> bool:
 
     err_no = exc.errno
     win_err = getattr(exc, "winerror", None)
-    return (err_no in _REPLACE_RETRYABLE_ERRNOS) or (win_err in _REPLACE_RETRYABLE_WINERRORS)
+    return (err_no in _REPLACE_RETRYABLE_ERRNOS) or (
+        win_err in _REPLACE_RETRYABLE_WINERRORS
+    )
 
 
 @contextmanager

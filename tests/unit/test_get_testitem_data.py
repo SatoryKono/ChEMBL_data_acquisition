@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable, MutableMapping
 from pathlib import Path
-from typing import Iterable, MutableMapping
 
 import pandas as pd
 import pytest
@@ -47,7 +47,9 @@ def logger_stub(monkeypatch: pytest.MonkeyPatch) -> _MemoryLogger:
         (["  "], [""]),
     ],
 )
-def test_normalise_chembl_ids__cases(values: Iterable[str | None], expected: list[str]) -> None:
+def test_normalise_chembl_ids__cases(
+    values: Iterable[str | None], expected: list[str]
+) -> None:
     series = pd.Series(values, dtype="object")
 
     result = get_testitem_data._normalise_chembl_ids(series)
@@ -90,7 +92,11 @@ def test_load_molecule_hierarchy_lookup__delegates_and_logs(
         ("chembl1", "chembl_parent"),
         ("chembl2", None),
     ]
-    assert ("info", "molecule_hierarchy_lookup_loaded", {"path": "hierarchy.csv", "rows": 1}) in logger_stub.events
+    assert (
+        "info",
+        "molecule_hierarchy_lookup_loaded",
+        {"path": "hierarchy.csv", "rows": 1},
+    ) in logger_stub.events
 
 
 def test_load_molecule_hierarchy_lookup__missing_file_returns_empty(
@@ -110,7 +116,11 @@ def test_load_molecule_hierarchy_lookup__missing_file_returns_empty(
     )
 
     assert lookup == {}
-    assert ("info", "molecule_hierarchy_lookup_missing", {"path": "missing.csv"}) in logger_stub.events
+    assert (
+        "info",
+        "molecule_hierarchy_lookup_missing",
+        {"path": "missing.csv"},
+    ) in logger_stub.events
 
 
 def test_load_molecule_hierarchy_lookup__invalid_data_raises(
@@ -128,14 +138,18 @@ def test_load_molecule_hierarchy_lookup__invalid_data_raises(
         get_testitem_data.load_molecule_hierarchy_lookup(Path("bad.csv"), io_cfg=cfg.io)
 
 
-def test_run_chembl__passes_options(cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_chembl__passes_options(
+    cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("molecule_chembl_id\nCHEMBL1\n", encoding="utf-8")
     output_csv = tmp_path / "output.csv"
 
     captured: dict[str, object] = {}
 
-    def fake_run_pipeline(config: Config, options: get_testitem_data.TestitemPipelineOptions) -> int:
+    def fake_run_pipeline(
+        config: Config, options: get_testitem_data.TestitemPipelineOptions
+    ) -> int:
         captured["config"] = config
         captured["options"] = options
         return 0
@@ -162,7 +176,9 @@ def test_run_chembl__passes_limit_and_offset(
 
     captured: dict[str, object] = {}
 
-    def fake_run_pipeline(config: Config, options: get_testitem_data.TestitemPipelineOptions) -> int:
+    def fake_run_pipeline(
+        config: Config, options: get_testitem_data.TestitemPipelineOptions
+    ) -> int:
         captured["options"] = options
         return 0
 
@@ -215,7 +231,11 @@ def test_run__skip_existing_without_force(
 
     assert exit_code == 0
     assert not called
-    assert ("info", "pipeline_skip_existing", {"output": str(output_csv)}) in logger_stub.events
+    assert (
+        "info",
+        "pipeline_skip_existing",
+        {"output": str(output_csv)},
+    ) in logger_stub.events
 
 
 def test_run__force_overrides_skip(
@@ -300,7 +320,11 @@ def test_run__success_logs_completion(
     exit_code = get_testitem_data.run(cfg, args)
 
     assert exit_code == 0
-    assert ("info", "testitem_pipeline_done", {"output": str(output_csv)}) in logger_stub.events
+    assert (
+        "info",
+        "testitem_pipeline_done",
+        {"output": str(output_csv)},
+    ) in logger_stub.events
 
 
 def test_add_pubchem_data__delegates_to_pipeline(
@@ -335,7 +359,9 @@ def test_add_pubchem_data__delegates_to_pipeline(
         )
         return df.assign(attached=True)
 
-    monkeypatch.setattr(get_testitem_data.pipeline, "add_pubchem_data", fake_add_pubchem)
+    monkeypatch.setattr(
+        get_testitem_data.pipeline, "add_pubchem_data", fake_add_pubchem
+    )
 
     frame = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
     cfg = get_testitem_data.PubChemCfg()

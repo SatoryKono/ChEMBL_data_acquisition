@@ -29,7 +29,7 @@ from .helpers import (
 )
 
 # ruff: noqa: E501
-SSOT_CONTEXT = '''
+SSOT_CONTEXT = """
 The implementation follows the Single Source of Truth (SSoT) captured in the
 Power Query (M) script that shipped with the historical Excel workbook. The
 script is reproduced below so future refactors can be validated against the
@@ -64,7 +64,7 @@ Query workbook that produced auxiliary name tables for reporting. It extracts
 textual identifiers from the merged targets export, normalises them and emits a
 long-form table where each row represents a distinct name attributed to a
 target.
-'''
+"""
 
 __all__ = [
     "SSOT_CONTEXT",
@@ -103,7 +103,7 @@ class TargetNamesError(RuntimeError):
 def _current_default_search_dir() -> Path:
     package = sys.modules.get(__name__)
     if package is not None and hasattr(package, "_DEFAULT_SEARCH_DIR"):
-        override = getattr(package, "_DEFAULT_SEARCH_DIR")
+        override = package._DEFAULT_SEARCH_DIR
         if override is not None:
             return Path(override)
     return _DEFAULT_SEARCH_DIR
@@ -115,7 +115,11 @@ def _matches_target_filename(name: str) -> bool:
 
 def _latest_target_file(search_dir: Path) -> Path:
     candidates = sorted(
-        (path for path in search_dir.iterdir() if path.is_file() and _matches_target_filename(path.name)),
+        (
+            path
+            for path in search_dir.iterdir()
+            if path.is_file() and _matches_target_filename(path.name)
+        ),
         key=lambda item: item.name,
     )
     if not candidates:
@@ -132,7 +136,16 @@ def is_hidrate(value: object | None) -> bool:
     if not text:
         return False
     lowered = text.lower()
-    return any(token in lowered for token in ("hydrate", "hemihydrate", "sesquihydrate", "trihydrate", "dihydrate"))
+    return any(
+        token in lowered
+        for token in (
+            "hydrate",
+            "hemihydrate",
+            "sesquihydrate",
+            "trihydrate",
+            "dihydrate",
+        )
+    )
 
 
 def remove_hidrate(value: object | None) -> str:
@@ -200,7 +213,9 @@ def _parse_components(value: Any) -> list[dict[str, Any]]:
         try:
             data = json.loads(f"[{text}]")
         except json.JSONDecodeError as exc:
-            raise TargetNamesError(f"Unable to parse target_components payload: {text!r}") from exc
+            raise TargetNamesError(
+                f"Unable to parse target_components payload: {text!r}"
+            ) from exc
     if isinstance(data, dict):
         return [data]
     if isinstance(data, list):
@@ -218,7 +233,9 @@ def _extract_synonyms(component: Mapping[str, Any]) -> list[str]:
                 if text:
                     names.append(text)
             elif isinstance(entry, Mapping):
-                text = normalise_text(entry.get("synonym") or entry.get("name") or entry.get("synonyms"))
+                text = normalise_text(
+                    entry.get("synonym") or entry.get("name") or entry.get("synonyms")
+                )
                 if text:
                     names.append(text)
     return names
@@ -228,7 +245,9 @@ def _extract_contrion(component: Mapping[str, Any]) -> list[str]:
     contrion_value = component.get("contrion")
     if isinstance(contrion_value, str):
         return [contrion_value]
-    if isinstance(contrion_value, Iterable) and not isinstance(contrion_value, (str, bytes)):
+    if isinstance(contrion_value, Iterable) and not isinstance(
+        contrion_value, (str, bytes)
+    ):
         result: list[str] = []
         for item in contrion_value:
             text = normalise_text(item)
@@ -239,7 +258,9 @@ def _extract_contrion(component: Mapping[str, Any]) -> list[str]:
 
 
 def _extract_structures(component: Mapping[str, Any]) -> MoleculeStructures:
-    structures = _coerce_dict(component.get("molecule_structures") or component.get("structures"))
+    structures = _coerce_dict(
+        component.get("molecule_structures") or component.get("structures")
+    )
     return MoleculeStructures(
         canonical_smiles=normalise_text(structures.get("canonical_smiles")),
         standard_inchi_key=normalise_text(structures.get("standard_inchi_key")),
@@ -249,7 +270,9 @@ def _extract_structures(component: Mapping[str, Any]) -> MoleculeStructures:
 
 
 def _extract_properties(component: Mapping[str, Any]) -> MoleculeProperties:
-    properties = _coerce_dict(component.get("molecule_properties") or component.get("properties"))
+    properties = _coerce_dict(
+        component.get("molecule_properties") or component.get("properties")
+    )
     value = properties.get("mw_freebase")
     if value is None:
         return MoleculeProperties()
@@ -287,7 +310,9 @@ def _component_identifier(component: Mapping[str, Any]) -> str:
         if text:
             return text
     molecule = _coerce_dict(component.get("molecule"))
-    text = normalise_text(molecule.get("molecule_chembl_id") or molecule.get("chembl_id"))
+    text = normalise_text(
+        molecule.get("molecule_chembl_id") or molecule.get("chembl_id")
+    )
     if text:
         return text
     raise TargetNamesError("Component record is missing molecule_chembl_id")
@@ -312,7 +337,9 @@ def _active_component(component: Mapping[str, Any]) -> str:
 
 
 def _active_component_type(component: Mapping[str, Any]) -> str:
-    text = normalise_text(component.get("active_component_type") or component.get("component_type"))
+    text = normalise_text(
+        component.get("active_component_type") or component.get("component_type")
+    )
     return text
 
 
@@ -342,7 +369,9 @@ def reference_SMILES(
                 f"Reference table {path!s} is missing required columns: {', '.join(sorted(missing))}"
             )
         series = (
-            frame.set_index("molecule_chembl_id")["canonical_smiles"].astype("string").map(normalise_text)
+            frame.set_index("molecule_chembl_id")["canonical_smiles"]
+            .astype("string")
+            .map(normalise_text)
         )
         _REFERENCE_CACHE[path] = series
     series = _REFERENCE_CACHE[path]
@@ -549,7 +578,9 @@ def _summarise_active_component_type(series: pd.Series | None) -> dict[str, int]
     return {str(key): int(value) for key, value in counts.items()}
 
 
-def process_target_names(input_path: str | Path, *, verbose: bool = False) -> dict[str, Any]:
+def process_target_names(
+    input_path: str | Path, *, verbose: bool = False
+) -> dict[str, Any]:
     """Process ``input_path`` and emit the target names table."""
 
     source_path = Path(input_path)
@@ -567,7 +598,9 @@ def process_target_names(input_path: str | Path, *, verbose: bool = False) -> di
     }
     contrion_summary = _summarise_contrion(frame.get("contrion"))
     summary.update(contrion_summary)
-    active_summary = _summarise_active_component_type(frame.get("active_component_type"))
+    active_summary = _summarise_active_component_type(
+        frame.get("active_component_type")
+    )
     if active_summary:
         summary["active_component_type"] = active_summary
     if verbose:

@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Mapping, Sequence
 
 import yaml
 
 from ..common.run_context import get_current
 from ..config import Config, _mask_secrets, _serialize_paths
 from ..git_utils import _git_sha
-from ..utils.atomic import open_atomic
 from ..project_version import get_pipeline_version
+from ..utils.atomic import open_atomic
 
 
 def write_meta_yaml(
@@ -34,7 +34,7 @@ def write_meta_yaml(
     if timestamp is None and context is not None and context.generated_at:
         timestamp = context.generated_at
     if timestamp is None:
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
 
     meta = {
         "generated_at": timestamp,

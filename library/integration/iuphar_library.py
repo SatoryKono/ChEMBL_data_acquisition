@@ -27,8 +27,8 @@ from ..clients.iuphar import (
     load_targets,
     query_gene_symbol,
 )
-from ..config import IupharCfg, RetryCfg
 from ..common.log import logger
+from ..config import IupharCfg, RetryCfg
 
 
 @dataclass
@@ -139,7 +139,9 @@ class IUPHARData:
             text = uniprot_id.decode("utf-8", errors="ignore").strip()
             if not text:
                 return []
-            return [value.strip() for value in text.split("|") if value and value.strip()]
+            return [
+                value.strip() for value in text.split("|") if value and value.strip()
+            ]
         if pd.isna(uniprot_id):
             return []
         text = str(uniprot_id).strip()
@@ -240,9 +242,7 @@ class IUPHARData:
         implementation.
         """
         uniprot = self.target_id_by_uniprot(row.get("uniprot_id", ""))
-        mapped_uniprot = self.target_id_by_uniprot(
-            row.get("mapping_uniprot_id", "")
-        )
+        mapped_uniprot = self.target_id_by_uniprot(row.get("mapping_uniprot_id", ""))
         hgnc_name = self.target_id_by_hgnc_name(row.get("hgnc_name", ""))
         hgnc_id = self.target_id_by_hgnc_id(row.get("hgnc_id", ""))
         gene_value = row.get("gene_name", "")

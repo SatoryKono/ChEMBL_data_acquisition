@@ -6,7 +6,6 @@ import sys
 from importlib import import_module
 from types import ModuleType
 
-
 # ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if __package__ in {None, ""}:
     from _bootstrap import bootstrap_cli

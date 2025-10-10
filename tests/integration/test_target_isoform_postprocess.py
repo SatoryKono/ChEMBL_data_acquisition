@@ -17,13 +17,15 @@ def _write_isoform_input(path: Path) -> None:
     with path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow(columns)
-        writer.writerow([
-            "synonym-a|synonym-b",
-            "Isoform Alpha",
-            "ID-001",
-            "P12345",
-            "CHEMBL123",
-        ])
+        writer.writerow(
+            [
+                "synonym-a|synonym-b",
+                "Isoform Alpha",
+                "ID-001",
+                "P12345",
+                "CHEMBL123",
+            ]
+        )
 
 
 def test_process_targets__normalises_temp_export_basename(tmp_path: Path) -> None:

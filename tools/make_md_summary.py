@@ -1,8 +1,8 @@
 """Render a Markdown summary from a structured pytest JSON report."""
+
 from __future__ import annotations
 
 # ruff: noqa: E402  # requires sys.path mutation before local imports
-
 import argparse
 import json
 import sys
@@ -33,9 +33,7 @@ REQUIRED_SUMMARY_KEYS = {
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Render a Markdown summary from a structured pytest JSON report."
-        )
+        description=("Render a Markdown summary from a structured pytest JSON report.")
     )
     parser.add_argument(
         "--input",

@@ -11,13 +11,12 @@ metadata files.
 from __future__ import annotations
 
 import argparse
+import shlex
 import sys
 import traceback
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-
-import shlex
 
 import numpy as np
 import pandas as pd
@@ -32,12 +31,6 @@ from .cli import (
     path_argument,
     positive_int,
 )
-from .cli.run_context import compute_generated_at
-from .config import Config, ConfigError, ensure_dirs, print_config
-from .common.log import logger as default_logger
-from .metadata import Stats, file_sha256, write_meta_yaml, record_quality_failure
-from .sidecar import SidecarErrors
-from .config.loader import DEFAULT_CONFIG_PATH
 from .cli.pipeline_definition import (
     Fetcher,
     MetadataHook,
@@ -47,6 +40,12 @@ from .cli.pipeline_definition import (
     Writer,
     normalise_definition,
 )
+from .cli.run_context import compute_generated_at
+from .common.log import logger as default_logger
+from .config import Config, ConfigError, ensure_dirs, print_config
+from .config.loader import DEFAULT_CONFIG_PATH
+from .metadata import Stats, file_sha256, record_quality_failure, write_meta_yaml
+from .sidecar import SidecarErrors
 
 __all__ = [
     "PipelineError",
@@ -76,7 +75,6 @@ def _callable_name(func: Callable[..., object]) -> str:
 
 class PipelineError(RuntimeError):
     """Raised when a pipeline step encounters a fatal error."""
-
 
 
 def resolve_invocation(
@@ -232,7 +230,7 @@ def run_cli_command(
             run_id_value = log_cfg.run_id
     if run_id_value is not None:
         log_cfg.run_id = run_id_value
-        setattr(args, "run_id", run_id_value)
+        args.run_id = run_id_value
     if logger is None:
         use_logger = cli.configure_logger(log_cfg)
     else:
@@ -397,9 +395,7 @@ def run_pipeline(
     if schema is not None:
         schema_columns_dict = getattr(schema, "columns", {})
         required_cols = {
-            name
-            for name, column in schema_columns_dict.items()
-            if column.required
+            name for name, column in schema_columns_dict.items() if column.required
         }
         optional_cols = set(schema_columns_dict) - required_cols
         schema_column_dtypes: dict[str, object | None] = {
@@ -635,9 +631,7 @@ def run_pipeline(
         original_set = set(original_columns)
         if optional_column_order:
             missing = [
-                column
-                for column in optional_column_order
-                if column not in original_set
+                column for column in optional_column_order if column not in original_set
             ]
             if missing:
                 optional_cols_added.update(missing)
@@ -759,7 +753,9 @@ def run_pipeline(
         )
 
     if csv_path is None:
-        use_logger.error("write_fail", error="writer returned None", path=str(output_path))
+        use_logger.error(
+            "write_fail", error="writer returned None", path=str(output_path)
+        )
         return 1
 
     stats: Stats = {

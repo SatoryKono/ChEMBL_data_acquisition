@@ -9,6 +9,7 @@ from typing import Literal
 
 from library.config import Config
 from library.pipelines.common import PipelineRunResult
+
 from . import (
     cellularity,
     helpers,
@@ -126,15 +127,15 @@ def run_pipeline(config: Config, options: TargetPipelineOptions) -> PipelineRunR
 
 
 __all__ = [
-  "TargetPipelineOptions",
-  "PipelineRunResult",
-  "normalize_reaction_ec_numbers",
-  "cellularity",
-  "helpers",
-  "multifunctional",
-  "organism_classification",
-  "pipeline",
-  "postprocessing",
-  "protein_classification",
-  "run_pipeline",
+    "TargetPipelineOptions",
+    "PipelineRunResult",
+    "normalize_reaction_ec_numbers",
+    "cellularity",
+    "helpers",
+    "multifunctional",
+    "organism_classification",
+    "pipeline",
+    "postprocessing",
+    "protein_classification",
+    "run_pipeline",
 ]

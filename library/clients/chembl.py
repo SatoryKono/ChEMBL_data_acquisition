@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import random
-import threading
 import socket
-from collections.abc import Iterable, Iterator
-from datetime import datetime, timezone
+import threading
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from itertools import islice
-from dataclasses import dataclass, field
 from time import monotonic
 from types import TracebackType
-from typing import Any, Callable, TypeVar, cast
+from typing import Any, TypeVar, cast
 from urllib.parse import urlsplit, urlunsplit
 
 import requests
@@ -29,10 +29,10 @@ try:  # pragma: no cover - urllib3 is always available with requests
 except Exception:  # pragma: no cover - defensive fallback
     _Urllib3NameResolutionError = None  # type: ignore[assignment]
 
-from ..config.models import ApiCfg, ChemblCacheCfg, RetryCfg
-from ..config.runtime import session_with_retry
 from ..common.log import logger
 from ..common.rate_limiter import RateLimiter, get_limiter, sleep
+from ..config.models import ApiCfg, ChemblCacheCfg, RetryCfg
+from ..config.runtime import session_with_retry
 
 
 @dataclass
@@ -81,6 +81,7 @@ class ChemblClient:
         retry = retry or RetryCfg()
         self._jitter = jitter if jitter is not None else retry.build_jitter()
         if session is not None:
+
             def _session_from_argument(provided: Session = session) -> Session:
                 return provided
 
@@ -162,7 +163,7 @@ class ChemblClient:
         if session is None:
             session = self._session_factory()
             self._register_session(session)
-            setattr(self._session_local, "session", session)
+            self._session_local.session = session
         return cast(Session, session)
 
     @property
@@ -275,9 +276,8 @@ class ChemblClient:
                             ) from exc
                         response_elapsed = getattr(response, "elapsed", None)
                         response_elapsed_seconds: float | None
-                        if (
-                            response_elapsed is not None
-                            and hasattr(response_elapsed, "total_seconds")
+                        if response_elapsed is not None and hasattr(
+                            response_elapsed, "total_seconds"
                         ):
                             response_elapsed_seconds = float(
                                 response_elapsed.total_seconds()
@@ -337,7 +337,9 @@ class ChemblClient:
                             },
                         )
                         break
-                    delay = _backoff_delay(attempt, cfg, header_delay=None, jitter=self._jitter)
+                    delay = _backoff_delay(
+                        attempt, cfg, header_delay=None, jitter=self._jitter
+                    )
                     _log_retry_warning(
                         "request_retry_json_error",
                         url=request_url,
@@ -547,7 +549,7 @@ def _strip_json_suffix(url: str) -> str | None:
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _retry_after_delay(response: requests.Response | None) -> float | None:
@@ -556,7 +558,9 @@ def _retry_after_delay(response: requests.Response | None) -> float | None:
     status = getattr(response, "status_code", None)
     if status is None or not _is_retry_after_applicable(status):
         return None
-    header = response.headers.get("Retry-After") if hasattr(response, "headers") else None
+    header = (
+        response.headers.get("Retry-After") if hasattr(response, "headers") else None
+    )
     if header is None:
         return None
     value = header.strip()
@@ -574,7 +578,7 @@ def _retry_after_delay(response: requests.Response | None) -> float | None:
             return None
         dt = parsed_dt
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         delta = float((dt - _utcnow()).total_seconds())
         return max(0.0, delta)
 
@@ -752,7 +756,9 @@ def _iter_exception_chain(exc: BaseException) -> Iterator[BaseException]:
         reason = getattr(candidate, "reason", None)
         if isinstance(reason, BaseException):
             stack.append(reason)
-        for argument in getattr(candidate, "args", ()):  # pragma: no branch - tuple walk
+        for argument in getattr(
+            candidate, "args", ()
+        ):  # pragma: no branch - tuple walk
             if isinstance(argument, BaseException):
                 stack.append(argument)
 
@@ -762,9 +768,8 @@ def _is_name_resolution_error(exc: BaseException) -> bool:
 
     indicators = ("name resolution", "nameresolutionerror", "getaddrinfo failed")
     for candidate in _iter_exception_chain(exc):
-        if (
-            _Urllib3NameResolutionError is not None
-            and isinstance(candidate, _Urllib3NameResolutionError)
+        if _Urllib3NameResolutionError is not None and isinstance(
+            candidate, _Urllib3NameResolutionError
         ):
             return True
         if isinstance(candidate, socket.gaierror):

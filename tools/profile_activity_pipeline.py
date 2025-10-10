@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 # ruff: noqa: E402  # requires sys.path mutation before local imports
-
 import argparse
 import math
 import sys
@@ -20,7 +19,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from library.config import Config
-
 
 RESOURCE_DIR = ROOT / "tests" / "resources" / "activity_pipeline"
 
@@ -41,7 +39,9 @@ class StageTimer:
             try:
                 return func(*args, **kwargs)
             finally:
-                self.durations[stage] = self.durations.get(stage, 0.0) + perf_counter() - start
+                self.durations[stage] = (
+                    self.durations.get(stage, 0.0) + perf_counter() - start
+                )
 
         return wrapper
 
@@ -61,7 +61,9 @@ def profile(limit: int | None = None, *, rows: int = 300) -> dict[str, float]:
     stack = ExitStack()
 
     mock = __import__("unittest.mock", fromlist=["patch"])
-    stack.enter_context(mock.patch("library.resources.dictionaries._parse_manifest", return_value={}))
+    stack.enter_context(
+        mock.patch("library.resources.dictionaries._parse_manifest", return_value={})
+    )
     stack.enter_context(
         mock.patch(
             "library.resources.dictionaries.get_resource",
@@ -148,13 +150,20 @@ def profile(limit: int | None = None, *, rows: int = 300) -> dict[str, float]:
         mock.patch("scripts.get_activity_data.io.read_ids", side_effect=fake_read_ids)
     )
     stack.enter_context(
-        mock.patch("scripts.get_activity_data.cl.get_activities", side_effect=fake_get_activities)
+        mock.patch(
+            "scripts.get_activity_data.cl.get_activities",
+            side_effect=fake_get_activities,
+        )
     )
     stack.enter_context(
-        mock.patch("scripts.get_activity_data.cl.get_testitem", side_effect=fake_get_testitem)
+        mock.patch(
+            "scripts.get_activity_data.cl.get_testitem", side_effect=fake_get_testitem
+        )
     )
     try:
-        stack.enter_context(mock.patch("library.orchestration.context.ChemblClient", DummyClient))
+        stack.enter_context(
+            mock.patch("library.orchestration.context.ChemblClient", DummyClient)
+        )
     except AttributeError:
         stack.enter_context(mock.patch("library.clients.ChemblClient", DummyClient))
     assay_lookup = {f"ASSAY{i+1}": f"SRC-ASSAY{i+1}" for i in range(len(chunk_df))}

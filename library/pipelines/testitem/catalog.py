@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 from collections import ChainMap
+from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
-from typing import Mapping, MutableMapping, NamedTuple, Sequence
+from typing import NamedTuple
 
 import pandas as pd
 import requests
 
+from library.common.log import logger
+from library.config import ApiCfg, IoCfg, MoleculeCatalogCfg
 from library.integration import molecule_catalog
 from library.integration.chembl_client import ChemblClient
-from library.config import ApiCfg, IoCfg, MoleculeCatalogCfg
-from library.common.log import logger
 from library.integration.molecule_catalog import (
     load_parent_catalog,
     query_parent_catalog,
@@ -63,10 +64,10 @@ class ParentEnrichmentPreparation:
     """Intermediate data required to attach parent identifiers."""
 
     df: pd.DataFrame
-    lookup_data: "ParentLookupPreparedData"
+    lookup_data: ParentLookupPreparedData
     parent_catalog: dict[str, str] | None
     parent_catalog_source: str
-    parent_stats: "ParentLookupStats"
+    parent_stats: ParentLookupStats
 
 
 @dataclass
@@ -74,7 +75,7 @@ class ParentEnrichmentResult:
     """Result returned after running the parent enrichment stage."""
 
     df: pd.DataFrame
-    parent_stats: "ParentLookupStats"
+    parent_stats: ParentLookupStats
 
 
 @dataclass(frozen=True)
@@ -100,7 +101,9 @@ class ParentLookupPreparedData(NamedTuple):
     need_lookup: set[str]
 
 
-def _merge_parent_stats(base: ParentLookupStats, update: ParentLookupStats) -> ParentLookupStats:
+def _merge_parent_stats(
+    base: ParentLookupStats, update: ParentLookupStats
+) -> ParentLookupStats:
     """Combine two :class:`ParentLookupStats` instances."""
 
     if base.source not in _PARENT_SOURCE_PRIORITY:
@@ -112,9 +115,7 @@ def _merge_parent_stats(base: ParentLookupStats, update: ParentLookupStats) -> P
         resolved_source = update.source
     else:
         resolved_source = base.source
-    combined_failed = tuple(
-        dict.fromkeys((*base.failed_ids, *update.failed_ids))
-    )
+    combined_failed = tuple(dict.fromkeys((*base.failed_ids, *update.failed_ids)))
     return ParentLookupStats(
         source=resolved_source,
         missing=base.missing + update.missing,
@@ -153,7 +154,7 @@ def _normalise_parent_identifier(value: object, *, child_id: str) -> str | None:
     return normalised_parent
 
 
-@lru_cache(maxsize=None)
+@cache
 def _load_molecule_hierarchy_mapping(
     path: str,
     encoding: str,
@@ -183,8 +184,7 @@ def _load_molecule_hierarchy_mapping(
 
     if child_missing:
         raise ValueError(
-            "Molecule hierarchy dictionary missing required columns: "
-            + child_column
+            "Molecule hierarchy dictionary missing required columns: " + child_column
         )
 
     if parent_missing:
@@ -298,7 +298,9 @@ def load_molecule_hierarchy_lookup(
     if not lookup:
         return {}
 
-    attached_rows = sum(1 for value in lookup.values() if value is not None and value != "")
+    attached_rows = sum(
+        1 for value in lookup.values() if value is not None and value != ""
+    )
 
     logger.info(
         "molecule_hierarchy_lookup_loaded",
@@ -430,8 +432,12 @@ def attach_parent_molecule_ids(
 
     from library.pipelines import testitem as pipeline_module
 
-    load_catalog_fn = getattr(pipeline_module, "load_parent_catalog", load_parent_catalog)
-    query_catalog_fn = getattr(pipeline_module, "query_parent_catalog", query_parent_catalog)
+    load_catalog_fn = getattr(
+        pipeline_module, "load_parent_catalog", load_parent_catalog
+    )
+    query_catalog_fn = getattr(
+        pipeline_module, "query_parent_catalog", query_parent_catalog
+    )
     update_cache_fn = getattr(
         pipeline_module, "update_parent_catalog_cache", update_parent_catalog_cache
     )
@@ -681,9 +687,11 @@ def prepare_parent_enrichment(
     if hierarchy_lookup:
         missing_sentinel = object()
         hierarchy_series = normalised_ids.map(
-            lambda value: hierarchy_lookup.get(value, missing_sentinel)
-            if value
-            else missing_sentinel
+            lambda value: (
+                hierarchy_lookup.get(value, missing_sentinel)
+                if value
+                else missing_sentinel
+            )
         )
         hierarchy_series = pd.Series(hierarchy_series, index=df.index, dtype="object")
         hierarchy_mask = hierarchy_series.ne(missing_sentinel)
@@ -715,7 +723,9 @@ def prepare_parent_enrichment(
     if getattr(catalog_cfg, "force_refresh_existing", False):
         need_lookup_mask = normalised_ids != ""
     else:
-        need_lookup_mask = ((normalised_ids != "") & (existing_parent == "")).fillna(False)
+        need_lookup_mask = ((normalised_ids != "") & (existing_parent == "")).fillna(
+            False
+        )
     initial_need_lookup = set(normalised_ids[need_lookup_mask])
     if dictionary_resolved_children:
         need_lookup = initial_need_lookup - dictionary_resolved_children

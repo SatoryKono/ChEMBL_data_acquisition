@@ -25,6 +25,7 @@ from library.cli import configure_logger, create_logger_config
 from library.cli.logging import setup_cli_logging
 from library.cli.parser import path_argument
 from library.common.log import logger
+from library.pipelines.common.metadata import get_pipeline_version
 from library.postprocess.common.config import PipelineConfig, normalize_pipeline_version
 from library.postprocess.common.logging import PipelineRunMetrics
 from library.postprocess.common.types import SchemaValidationError, StepError
@@ -34,7 +35,6 @@ from library.postprocess.documents import (
 from library.postprocess.documents import steps as document_steps
 from library.postprocess.documents.schema import DOCUMENT_SCHEMA, validate_documents
 from library.postprocessing import document as document_postprocessing
-from library.pipelines.common.metadata import get_pipeline_version
 
 
 def _load_postprocess_common_module() -> ModuleType:
@@ -77,31 +77,9 @@ load_input_frame = _postprocess_common.load_input_frame
 run_postprocess_steps = _postprocess_common.run_postprocess_steps
 validate_postprocess_frame = _postprocess_common.validate_postprocess_frame
 
-import argparse
-import os
-from pathlib import Path
-from typing import Sequence
 from uuid import NAMESPACE_URL, uuid5
 
-import pandas as pd
-
-from library import io  # noqa: F401 - imported for CLI parity with existing scripts
-from library.cli import configure_logger, create_logger_config
-from library.cli.logging import setup_cli_logging
-from library.cli.parser import path_argument
 from library.cli_utils import resolve_invocation
-from library.common.log import logger
-from library.postprocess.common.config import PipelineConfig, normalize_pipeline_version
-from library.postprocess.common.logging import PipelineRunMetrics
-from library.postprocess.common.types import SchemaValidationError, StepError
-from library.postprocess.documents import (
-    run_document_pipeline as run_document_postprocess,
-)
-from library.postprocess.documents import steps as document_steps
-from library.postprocess.documents.schema import DOCUMENT_SCHEMA, validate_documents
-from library.postprocessing import document as document_postprocessing
-from library.pipelines.common.metadata import get_pipeline_version
-
 
 TABLE_NAME = "documents"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
@@ -377,11 +355,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         log_dir = DEFAULT_LOG_DIR
 
-    with setup_cli_logging(PROGRAM_NAME, log_cfg, date_str=None, log_dir=log_dir) as logging_ctx:
+    with setup_cli_logging(
+        PROGRAM_NAME, log_cfg, date_str=None, log_dir=log_dir
+    ) as logging_ctx:
         configure_logger(logging_ctx.log_cfg)
-        setattr(args, "_pipeline_config", pipeline_config)
-        setattr(args, "_csv_runtime_config", csv_cfg)
-        setattr(args, "_log_level", log_level)
+        args._pipeline_config = pipeline_config
+        args._csv_runtime_config = csv_cfg
+        args._log_level = log_level
         exit_code = run(args)
 
     return exit_code
@@ -389,4 +369,3 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
     raise SystemExit(main())
-

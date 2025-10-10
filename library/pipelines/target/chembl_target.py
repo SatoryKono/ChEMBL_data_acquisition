@@ -5,18 +5,19 @@ from __future__ import annotations
 import json
 import math
 import re
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from time import monotonic
-from typing import Any, Callable
+from typing import Any
 
 import pandas as pd
 import requests
 from requests.exceptions import ReadTimeout
 
 from library.clients import ChemblClient, _chunked
-from ...config import ApiCfg, TargetChemblBatchRetryCfg, UniprotMappingCfg
+
 from ...common.log import logger
 from ...common.rate_limiter import sleep
+from ...config import ApiCfg, TargetChemblBatchRetryCfg, UniprotMappingCfg
 
 TARGET_FIELDS = [
     "pref_name",
@@ -468,13 +469,13 @@ def iter_target_batches_with_retry(
 
     buffer: list[str] = []
 
-    def _drain_buffer(batch: list[str]) -> Iterator[tuple[list[dict[str, Any]], pd.DataFrame, pd.DataFrame]]:
+    def _drain_buffer(
+        batch: list[str],
+    ) -> Iterator[tuple[list[dict[str, Any]], pd.DataFrame, pd.DataFrame]]:
         queue = list(batch)
         current_size = min(len(queue), base_chunk_size)
 
-        def _should_retry_single(
-            key: tuple[str, ...], exc: Exception
-        ) -> bool:
+        def _should_retry_single(key: tuple[str, ...], exc: Exception) -> bool:
             if single_retry_limit <= 0:
                 return False
             if not isinstance(exc, ReadTimeout):
@@ -548,6 +549,7 @@ def iter_target_batches_with_retry(
             yield from _drain_buffer(buffer)
     if buffer:
         yield from _drain_buffer(buffer)
+
 
 def get_target(
     chembl_target_id: str,
@@ -754,8 +756,9 @@ __all__ = [
     "extend_target",
     "TARGET_FIELDS",
 ]
+
+
 def _map_to_uniprot(chembl_id: str, mapping_cfg: UniprotMappingCfg) -> str | None:
     from ...integration.mapper_library import map_chembl_to_uniprot
 
     return map_chembl_to_uniprot(chembl_id, mapping_cfg)
-

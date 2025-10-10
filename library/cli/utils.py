@@ -11,13 +11,12 @@ metadata files.
 from __future__ import annotations
 
 import argparse
+import shlex
 import sys
 import traceback
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-
-import shlex
 
 import pandas as pd
 from pandera.errors import SchemaErrors
@@ -35,7 +34,7 @@ from ..cli import (
 from ..common.log import logger as default_logger
 from ..common.metadata import record_quality_failure
 from ..common.sidecar import SidecarErrors
-from ..config import Config, ConfigError, DEFAULT_CONFIG_PATH, ensure_dirs, print_config
+from ..config import DEFAULT_CONFIG_PATH, Config, ConfigError, ensure_dirs, print_config
 from ..reporting.run_manifest import finalise_csv_output
 from .pipeline_definition import (
     Fetcher,
@@ -190,7 +189,7 @@ def run_cli_command(
             run_id_value = log_cfg.run_id
     if run_id_value is not None:
         log_cfg.run_id = run_id_value
-        setattr(args, "run_id", run_id_value)
+        args.run_id = run_id_value
     if logger is None:
         use_logger = configure_logger(log_cfg)
     else:
@@ -618,7 +617,9 @@ def run_pipeline(
         )
 
     if csv_path is None:
-        use_logger.error("write_fail", error="writer returned None", path=str(output_path))
+        use_logger.error(
+            "write_fail", error="writer returned None", path=str(output_path)
+        )
         return 1
 
     extra_stats = stats_extra() if callable(stats_extra) else stats_extra
