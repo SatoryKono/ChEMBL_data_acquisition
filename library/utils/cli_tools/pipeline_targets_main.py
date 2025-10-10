@@ -38,6 +38,7 @@ from library.cli.run_context import compute_generated_at
 from library.clients import _chunked
 from library.common.log import logger
 from library.config import Config, ConfigError, ensure_dirs, print_config
+from library.io import write_meta_yaml
 from library.io.paths import default_output_path
 from library.io.readers import read_ids
 from library.io.writers import write_csv
@@ -240,7 +241,7 @@ def _raw_dump(
 ) -> Path:
     """Persist ``frames`` to ``path`` preserving columns and row order."""
 
-    writer = _RawStreamWriter(
+    writer = PipelineTargetsRawWriter(
         path,
         cfg=cfg,
         sep=sep,
@@ -256,7 +257,7 @@ def _raw_dump(
     return writer.close()
 
 
-class _RawStreamWriter:
+class PipelineTargetsRawWriter:
     """Incrementally persist raw output chunks to disk."""
 
     def __init__(
@@ -270,6 +271,7 @@ class _RawStreamWriter:
         reindex_columns: bool = True,
     ) -> None:
         self.path = path
+        self._cfg = cfg
         self.sep = sep or cfg.io.csv_sep
         self.encoding = encoding or cfg.io.csv_encoding
         normalized_format = (raw_format or "csv").lower()
@@ -283,6 +285,7 @@ class _RawStreamWriter:
         self.raw_format = normalized_format
         self._reindex = reindex_columns
         self._columns: list[str] | None = None
+        self._dtypes: dict[str, str] | None = None
         self._rows_written = 0
         self._frames: list[pd.DataFrame] | None = (
             [] if self.raw_format == "parquet" else None
@@ -311,7 +314,7 @@ class _RawStreamWriter:
                     raise OSError("raw_dump_inconsistent_columns")
 
         working = chunk
-        if self._columns is not None and not working.empty:
+        if self._columns is not None:
             working = working.reindex(columns=self._columns)
 
         if self.raw_format == "parquet":
@@ -328,8 +331,14 @@ class _RawStreamWriter:
                 encoding=self.encoding,
                 mode=mode,
                 header=header,
+                line_terminator="\n",
             )
             self._destination_opened = True
+
+        if self._columns is not None:
+            self._dtypes = {col: str(working[col].dtype) for col in self._columns}
+        else:
+            self._dtypes = {col: str(dtype) for col, dtype in working.dtypes.items()}
 
         self._rows_written += len(working)
 
@@ -352,7 +361,16 @@ class _RawStreamWriter:
                     index=False,
                     sep=self.sep,
                     encoding=self.encoding,
+                    line_terminator="\n",
                 )
+            columns = list(self._columns or [])
+            dtypes = self._dtypes or {}
+            write_meta_yaml(
+                self.path,
+                self._cfg,
+                columns=columns,
+                dtypes=dtypes or None,
+            )
         return self.path
 
 
@@ -531,9 +549,9 @@ def run(cfg: Config, options: PipelineConfig) -> int:
         )
 
     frame_iter = _frame_iterator(result.chembl)
-    raw_writer: _RawStreamWriter | None = None
+    raw_writer: PipelineTargetsRawWriter | None = None
     if options.raw_out is not None:
-        raw_writer = _RawStreamWriter(
+        raw_writer = PipelineTargetsRawWriter(
             options.raw_out,
             cfg=cfg,
             sep=options.sep,

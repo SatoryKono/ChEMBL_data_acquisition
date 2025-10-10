@@ -23,9 +23,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from ..common.csv_utils import write_csv_deterministic
+from .. import io
 from ..common.log import logger
-from ..config import IoCfg
+from ..config import Config, IoCfg
 from ..pipelines.document import postprocessing as stage_document_postprocessing
 
 # ===== Parameters ===========================================================
@@ -558,14 +558,15 @@ def postprocess_export_file(
         for column in stage_document_postprocessing.FINAL_COLUMN_ORDER
         if column in processed.columns
     ]
-    write_csv_deterministic(
+    resolved_cfg = _wrap_io_cfg(cfg)
+    io.write_csv(
         processed,
         destination,
-        col_order=col_order,
-        key_cols=list(DEFAULT_KEY_COLUMNS),
+        cfg=resolved_cfg,
         sep=sep,
         encoding=encoding,
-        cfg=None,
+        col_order=col_order,
+        key_cols=list(DEFAULT_KEY_COLUMNS),
     )
     return destination
 
@@ -581,6 +582,21 @@ DEFAULT_BASE_PATH = "e:\\github\\ChEMBL_data_acquisition\\data\\"
 DEFAULT_REF_RELATIVE = "input\\full\\document.csv"
 DEFAULT_OUTPUT_RELATIVE = "output\\document\\output.document_YYYYMMDD.csv"
 DEFAULT_QA_REFERENCE_RELATIVE = "input\\full\\document.csv"
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _wrap_io_cfg(io_cfg: IoCfg | None) -> Config:
+    """Return a :class:`Config` instance carrying ``io_cfg``."""
+
+    base = Config()
+    if io_cfg is None:
+        return base
+    local = base.local.model_copy(update={"io": io_cfg})
+    return base.model_copy(update={"local": local})
 
 
 # ---------------------------------------------------------------------------
