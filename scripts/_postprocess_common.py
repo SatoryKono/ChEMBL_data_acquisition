@@ -107,7 +107,17 @@ def load_input_frame(
         separator=csv_cfg.sep,
     )
     namespace = SimpleNamespace(csv_sep=csv_cfg.sep, csv_encoding=csv_cfg.encoding)
-    frame = io.read_csv(path, cfg=namespace)
+    try:
+        frame = io.read_csv(path, cfg=namespace)
+    except io.CsvReadError as exc:
+        logger.error(
+            f"{prefix}_load_failed",
+            input=str(path),
+            encoding=csv_cfg.encoding,
+            separator=csv_cfg.sep,
+            error=str(exc.original_error),
+        )
+        raise
     rows, cols = frame.shape
     logger.info(
         f"{prefix}_load_done",

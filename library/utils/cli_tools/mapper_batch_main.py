@@ -34,6 +34,15 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 dtype=str,
                 na_values=na_values,
             )
+        except io.CsvReadError as exc:
+            logger.error(
+                "read_fail",
+                error=str(exc.original_error),
+                path=str(args.input_csv),
+                encoding=args.encoding,
+                sep=args.sep,
+            )
+            return 1
         except (FileNotFoundError, OSError) as exc:
             logger.error(
                 "read_fail",
