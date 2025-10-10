@@ -3,24 +3,24 @@
 from __future__ import annotations
 
 import json
-
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from numbers import Real
 from threading import Lock
 from time import monotonic
-from typing import Any, Mapping, cast
+from typing import Any, cast
 from urllib.parse import quote
 
 import requests
 from cachetools import TTLCache
 from requests import Session
 
-from ..config.models import ApiCfg, PubChemCfg, RetryCfg
-from ..config.runtime import session_with_retry
 from ..common.log import logger
 from ..common.rate_limiter import get_limiter, sleep
+from ..config.models import ApiCfg, PubChemCfg, RetryCfg
+from ..config.runtime import session_with_retry
 
 __all__ = [
     "Properties",
@@ -60,7 +60,9 @@ class _CacheEntry:
         return self.payload is not None
 
 
-def _retry_after_seconds(value: str | None, *, now: datetime | None = None) -> float | None:
+def _retry_after_seconds(
+    value: str | None, *, now: datetime | None = None
+) -> float | None:
     """Return the delay in seconds represented by ``Retry-After`` header ``value``."""
 
     if value is None:
@@ -76,8 +78,8 @@ def _retry_after_seconds(value: str | None, *, now: datetime | None = None) -> f
         except (TypeError, ValueError):
             return None
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        reference = now or datetime.now(timezone.utc)
+            parsed = parsed.replace(tzinfo=UTC)
+        reference = now or datetime.now(UTC)
         seconds = (parsed - reference).total_seconds()
     if seconds < 0:
         return 0.0
@@ -228,14 +230,18 @@ def get_cid_from_inchikey(inchikey: str, cfg: PubChemCfg) -> str | None:
     return "|".join(unique_cids) if unique_cids else None
 
 
-def _build_cache_key(method: str, url: str, data: Mapping[str, Any] | None = None) -> str:
+def _build_cache_key(
+    method: str, url: str, data: Mapping[str, Any] | None = None
+) -> str:
     """Return a stable cache key for ``method``/``url``/``data`` combinations."""
 
     method_upper = method.upper()
     if not data:
         return f"{method_upper} {url}"
     try:
-        serialised = json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        serialised = json.dumps(
+            data, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        )
     except TypeError:
         serialised = repr(sorted(data.items()))
     return f"{method_upper} {url}?{serialised}"
@@ -274,7 +280,9 @@ def make_request(
                     cached = None
     if cached is not None:
         if cached.is_hit:
-            logger.debug("cache_hit", url=url, rps=cfg.rps, status="hit", method=method_upper)
+            logger.debug(
+                "cache_hit", url=url, rps=cfg.rps, status="hit", method=method_upper
+            )
             return cast(dict[str, Any], cached.payload)
         miss_details: dict[str, Any] = {}
         for key, value in (cached.details or {}).items():
@@ -313,9 +321,7 @@ def make_request(
         if not last_failure_details:
             return {}
         return {
-            key: value
-            for key, value in last_failure_details.items()
-            if key not in keys
+            key: value for key, value in last_failure_details.items() if key not in keys
         }
 
     for attempt in range(1, total_attempts + 1):
@@ -623,7 +629,11 @@ def _store_cache_miss(
     with _CACHE_LOCK:
         cache = _ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
         if outcome == "timeout":
-            base_backoff = cfg.backoff_initial_seconds if cfg.backoff_initial_seconds > 0 else cfg.delay
+            base_backoff = (
+                cfg.backoff_initial_seconds
+                if cfg.backoff_initial_seconds > 0
+                else cfg.delay
+            )
             retry_after_hint = details_data.get("retry_after")
             if isinstance(retry_after_hint, Real) and float(retry_after_hint) > 0:
                 hint_value = float(retry_after_hint)
@@ -645,8 +655,14 @@ def _store_cache_miss(
                         base_backoff = max(base_backoff, doubled)
                     else:
                         base_backoff = doubled
-            max_backoff = cfg.timeout_seconds if cfg.timeout_seconds and cfg.timeout_seconds > 0 else None
-            effective_backoff = base_backoff if base_backoff and base_backoff > 0 else None
+            max_backoff = (
+                cfg.timeout_seconds
+                if cfg.timeout_seconds and cfg.timeout_seconds > 0
+                else None
+            )
+            effective_backoff = (
+                base_backoff if base_backoff and base_backoff > 0 else None
+            )
             if effective_backoff is not None:
                 if max_backoff is not None:
                     effective_backoff = min(effective_backoff, max_backoff)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Iterator, Tuple, cast
+from collections.abc import Iterator
+from typing import cast
 
 import pandas as pd
 import pytest
@@ -14,7 +15,7 @@ from library.pipelines.target import chembl_target as ct
 def test_iter_target_batches_with_retry__shrinks_on_timeout(
     monkeypatch: pytest.MonkeyPatch, cfg, caplog: pytest.LogCaptureFixture
 ) -> None:
-    calls: list[Tuple[Tuple[str, ...], int]] = []
+    calls: list[tuple[tuple[str, ...], int]] = []
 
     def fake_iter_target_batches(
         ids: Iterator[str],

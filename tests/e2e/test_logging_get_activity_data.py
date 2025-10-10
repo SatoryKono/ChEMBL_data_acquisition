@@ -28,9 +28,7 @@ def test_logging_get_activity_data__writes_expected_messages(
     )
 
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_dir))
-    monkeypatch.setattr(
-        "library.cli.logging._current_date_str", lambda: "20240102"
-    )
+    monkeypatch.setattr("library.cli.logging._current_date_str", lambda: "20240102")
 
     def _stub_run_cli_command(
         *,

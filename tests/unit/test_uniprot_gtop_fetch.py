@@ -44,13 +44,11 @@ class _DummyResponse:
 
     def raise_for_status(self) -> None:  # pragma: no cover - always OK in tests
         if self.status_code >= 400:
-            raise requests.HTTPError(
-                f"{self.status_code} error", response=self
-            )
+            raise requests.HTTPError(f"{self.status_code} error", response=self)
 
     @property
     def content(self) -> bytes:
-        if isinstance(self._payload, (bytes, bytearray)):
+        if isinstance(self._payload, bytes | bytearray):
             return bytes(self._payload)
         if self._text_override is not None:
             return self._text_override.encode("utf-8")
@@ -69,10 +67,14 @@ class _DummyResponse:
             raise self._json_exc
         return self._payload
 
-    def __enter__(self) -> "_DummyResponse":  # pragma: no cover - context manager boilerplate
+    def __enter__(
+        self,
+    ) -> _DummyResponse:  # pragma: no cover - context manager boilerplate
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - context manager boilerplate
+    def __exit__(
+        self, exc_type, exc, tb
+    ) -> bool:  # pragma: no cover - context manager boilerplate
         return False
 
 
@@ -104,7 +106,9 @@ class _FailingSession:
         raise self._exc
 
 
-def _patch_dependencies(monkeypatch: pytest.MonkeyPatch, session: _DummySession) -> None:
+def _patch_dependencies(
+    monkeypatch: pytest.MonkeyPatch, session: _DummySession
+) -> None:
     monkeypatch.setattr(uniprot, "get_uniprot_session", lambda: session)
     monkeypatch.setattr(
         uniprot,
@@ -225,7 +229,10 @@ def test_fetch_gtop_endpoint__skips_when_disabled(
 
     assert result == []
     assert session.calls == 0
-    assert ("gtop_fetch_disabled", {"gtop_id": "GTP9", "endpoint": "function"}) in debug_events
+    assert (
+        "gtop_fetch_disabled",
+        {"gtop_id": "GTP9", "endpoint": "function"},
+    ) in debug_events
 
 
 @pytest.mark.unit
@@ -300,7 +307,9 @@ def test_fetch_gtop_endpoint__records_decode_failure(
 ) -> None:
     json_error = json.JSONDecodeError("invalid", "{", 0)
     session = _DummySession(
-        lambda: _DummyResponse({"invalid": True}, "application/json", json_exc=json_error)
+        lambda: _DummyResponse(
+            {"invalid": True}, "application/json", json_exc=json_error
+        )
     )
     _patch_dependencies(monkeypatch, session)
 
@@ -368,6 +377,8 @@ def test_update_gtop_metadata__disabled_skips_fetch(
     assert result["gtop_natural_ligands_n"] == ""
     assert result["gtop_interactions_n"] == ""
     assert result["gtop_function_text_short"] == ""
+
+
 def test_fetch_gtop_endpoint__handles_404_missing_target(
     monkeypatch: pytest.MonkeyPatch,
     reset_gtop_caches: None,
@@ -380,9 +391,13 @@ def test_fetch_gtop_endpoint__handles_404_missing_target(
     info_events: list[tuple[str, dict[str, object]]] = []
     warning_events: list[tuple[str, dict[str, object]]] = []
 
-    monkeypatch.setattr(uniprot.logger, "info", lambda event, **kw: info_events.append((event, kw)))
     monkeypatch.setattr(
-        uniprot.logger, "warning", lambda event, **kw: warning_events.append((event, kw))
+        uniprot.logger, "info", lambda event, **kw: info_events.append((event, kw))
+    )
+    monkeypatch.setattr(
+        uniprot.logger,
+        "warning",
+        lambda event, **kw: warning_events.append((event, kw)),
     )
 
     cfg = IupharCfg()

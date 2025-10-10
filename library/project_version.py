@@ -26,7 +26,10 @@ def _read_version_from_pyproject() -> str:
     try:
         with _PYPROJECT_PATH.open("rb") as handle:
             data = tomllib.load(handle)
-    except (OSError, tomllib.TOMLDecodeError):  # pragma: no cover - unlikely during tests
+    except (
+        OSError,
+        tomllib.TOMLDecodeError,
+    ):  # pragma: no cover - unlikely during tests
         return _DEFAULT_VERSION
     project = data.get("project")
     if isinstance(project, dict):

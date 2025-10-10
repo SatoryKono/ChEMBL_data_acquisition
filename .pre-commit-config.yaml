@@ -2,21 +2,20 @@
 # Install the hooks with `pre-commit install` and run them with `pre-commit run --all-files`.
 
 default_language_version:
-  python: python3.11
+  python: python
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.13.0
+    rev: v0.7.1
     hooks:
       - id: ruff
         args: ["--fix"]
-      - id: ruff-format
   - repo: https://github.com/psf/black
-    rev: 25.1.0
+    rev: 24.10.0
     hooks:
       - id: black
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.17.1
+    rev: v1.11.2
     hooks:
       - id: mypy
         args: []

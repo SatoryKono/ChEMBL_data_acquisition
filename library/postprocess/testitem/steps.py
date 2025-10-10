@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import pandas as pd
 
+from library.pipelines.common.metadata import get_pipeline_version
 from library.postprocess.common import run_steps
-from library.postprocess.common.logging import PipelineRunMetrics
 from library.postprocess.common.config import (
     load_pipeline_config,
     normalize_pipeline_version,
 )
-from library.pipelines.common.metadata import get_pipeline_version
+from library.postprocess.common.logging import PipelineRunMetrics
 
 from .schema import BOOLEAN_COLUMNS, TESTITEM_SCHEMA, validate_testitems
-
 
 TRUE_MARKERS = {"true", "1", "yes", "y", "t"}
 FALSE_MARKERS = {"false", "0", "no", "n", "f"}
@@ -129,10 +128,14 @@ def enrich_testitem_annotations(
                 pd.array([pd.NA] * row_count, dtype=dtype), index=enriched.index
             )
         elif dtype is object:
-            enriched[column] = pd.Series([pd.NA] * row_count, index=enriched.index, dtype="object")
+            enriched[column] = pd.Series(
+                [pd.NA] * row_count, index=enriched.index, dtype="object"
+            )
         else:
             target_dtype = "string" if dtype is None else dtype
-            enriched[column] = pd.Series(pd.array([pd.NA] * row_count, dtype=target_dtype), index=enriched.index)
+            enriched[column] = pd.Series(
+                pd.array([pd.NA] * row_count, dtype=target_dtype), index=enriched.index
+            )
     return enriched
 
 
@@ -165,9 +168,14 @@ def finalize_testitem_records(
     if pipeline_version:
         prepared["pipeline_version"] = prepared.get(
             "pipeline_version",
-            pd.Series(pd.array([pipeline_version] * len(prepared.index), dtype="string"), index=prepared.index),
+            pd.Series(
+                pd.array([pipeline_version] * len(prepared.index), dtype="string"),
+                index=prepared.index,
+            ),
         )
-        prepared["pipeline_version"] = prepared["pipeline_version"].astype("string").fillna(str(pipeline_version))
+        prepared["pipeline_version"] = (
+            prepared["pipeline_version"].astype("string").fillna(str(pipeline_version))
+        )
 
     prepared = _ensure_column_types(prepared)
 
@@ -180,7 +188,9 @@ def finalize_testitem_records(
     if ordering:
         sort_columns = [column for column in ordering if column in validated.columns]
         if sort_columns:
-            validated = validated.sort_values(sort_columns, kind="mergesort").reset_index(drop=True)
+            validated = validated.sort_values(
+                sort_columns, kind="mergesort"
+            ).reset_index(drop=True)
 
     return validated
 
@@ -227,4 +237,3 @@ __all__ = [
     "normalize_testitem_records",
     "run_testitem_pipeline",
 ]
-

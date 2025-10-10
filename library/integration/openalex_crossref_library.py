@@ -6,15 +6,16 @@ are exposed in a separate module to provide a clear separation of concerns.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, cast
+from collections.abc import Callable, Iterable
+from typing import Any, cast
 
 import requests
 
 from ..clients import crossref as crossref_client
 from ..clients import openalex as openalex_client
+from ..common.rate_limiter import RateLimiter
 from ..config import CrossRefCfg, OpenAlexCfg, RetryCfg
 from ..pubmed import query as pubmed_query
-from ..common.rate_limiter import RateLimiter
 
 
 def fetch_openalex(
@@ -161,7 +162,7 @@ def fetch_crossref(
 
 
 _COMBINE: Callable[[Iterable[str]], str] = cast(
-    Callable[[Iterable[str]], str], getattr(pubmed_query, "combine")
+    Callable[[Iterable[str]], str], pubmed_query.combine
 )
 
 

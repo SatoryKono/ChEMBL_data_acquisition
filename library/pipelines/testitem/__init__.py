@@ -39,24 +39,26 @@ del _name
 
 _shared_exports = list(dict.fromkeys(_core.__all__))
 
-__all__ = list(dict.fromkeys(
-    [
-        *_shared_exports,
-        "ChemblClient",
-        "TESTITEM_PUBCHEM_COLUMNS",
-        "analyze_table_quality",
-        "enrich",
-        "file_sha256",
-        "logger",
-        "molecule_catalog",
-        "pc",
-        "pl",
-        "run_pipeline",
-        "validate_testitems",
-        "write_csv_deterministic",
-        "write_meta_yaml",
-    ]
-))
+__all__ = list(
+    dict.fromkeys(
+        [
+            *_shared_exports,
+            "ChemblClient",
+            "TESTITEM_PUBCHEM_COLUMNS",
+            "analyze_table_quality",
+            "enrich",
+            "file_sha256",
+            "logger",
+            "molecule_catalog",
+            "pc",
+            "pl",
+            "run_pipeline",
+            "validate_testitems",
+            "write_csv_deterministic",
+            "write_meta_yaml",
+        ]
+    )
+)
 
 if "testitem_enrichment" not in __all__:
     __all__.append("testitem_enrichment")

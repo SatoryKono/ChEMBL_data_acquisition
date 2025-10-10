@@ -1,27 +1,24 @@
 """Transformation steps for target postprocessing."""
+
 from __future__ import annotations
 
-from collections.abc import Sequence
-from functools import lru_cache
 import logging
 import re
+from collections.abc import Sequence
+from functools import lru_cache
 
 import pandas as pd
 
-from library.postprocess.common import run_steps
-from library.postprocess.common.logging import PipelineRunMetrics
-
-
 from library.pipelines.common.metadata import get_pipeline_version
-
+from library.postprocess.common import run_steps
 from library.postprocess.common.config import (
     load_pipeline_config,
     normalize_pipeline_version,
 )
+from library.postprocess.common.logging import PipelineRunMetrics
 from library.resources.dictionaries import DictionaryManifestError, get_resource
 
 from .schema import TARGET_SCHEMA, validate_targets
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -54,19 +51,25 @@ def normalize_target_fields(
                     .str.strip()
                     .replace({"": pd.NA})
                 )
-                normalized.loc[missing_mask, "target_chembl_id"] = (
-                    fallback.str.upper().fillna(normalized.loc[missing_mask, "target_chembl_id"])
+                normalized.loc[
+                    missing_mask, "target_chembl_id"
+                ] = fallback.str.upper().fillna(
+                    normalized.loc[missing_mask, "target_chembl_id"]
                 )
                 chembl_ids = normalized["target_chembl_id"].astype("string")
                 missing_mask = chembl_ids.replace({"": pd.NA}).isna()
 
-    for column in ["pref_name", "organism", "target_type", "target_class", "protein_family", "synonyms"]:
+    for column in [
+        "pref_name",
+        "organism",
+        "target_type",
+        "target_class",
+        "protein_family",
+        "synonyms",
+    ]:
         if column in normalized.columns:
             normalized[column] = (
-                normalized[column]
-                    .astype("string")
-                    .str.strip()
-                    .replace({"": pd.NA})
+                normalized[column].astype("string").str.strip().replace({"": pd.NA})
             )
 
     if normalize_taxonomy:
@@ -152,9 +155,7 @@ def enrich_target_synonyms(
         return preferred_separator.join(ordered_tokens)
 
     enriched["synonyms"] = (
-        enriched.apply(_merge_row, axis=1)
-        .astype("string")
-        .replace({"": pd.NA})
+        enriched.apply(_merge_row, axis=1).astype("string").replace({"": pd.NA})
     )
 
     return enriched
@@ -198,11 +199,7 @@ def finalize_target_records(
 
     for column in expected_string_columns:
         if column in prepared.columns:
-            prepared[column] = (
-                prepared[column]
-                .astype("string")
-                .replace({"": pd.NA})
-            )
+            prepared[column] = prepared[column].astype("string").replace({"": pd.NA})
 
     prepared = _populate_target_type(prepared)
 
@@ -212,17 +209,25 @@ def finalize_target_records(
         ordered_columns: list[str] = []
         if TARGET_SCHEMA.column_order:
             ordered_columns.extend(
-                column for column in TARGET_SCHEMA.column_order if column in prepared.columns
+                column
+                for column in TARGET_SCHEMA.column_order
+                if column in prepared.columns
             )
         remaining = [
             column for column in prepared.columns if column not in ordered_columns
         ]
-        validated = prepared.loc[:, ordered_columns + remaining] if ordered_columns else prepared
+        validated = (
+            prepared.loc[:, ordered_columns + remaining]
+            if ordered_columns
+            else prepared
+        )
 
     if sort_by:
         sort_columns = [column for column in sort_by if column in validated.columns]
         if sort_columns:
-            validated = validated.sort_values(sort_columns, kind="mergesort").reset_index(drop=True)
+            validated = validated.sort_values(
+                sort_columns, kind="mergesort"
+            ).reset_index(drop=True)
 
     return validated
 
@@ -266,10 +271,7 @@ def _load_target_type_lookup() -> pd.Series:
         .replace({"": pd.NA})
     )
     normalised["type"] = (
-        normalised["type"]
-        .astype("string")
-        .str.strip()
-        .replace({"": pd.NA})
+        normalised["type"].astype("string").str.strip().replace({"": pd.NA})
     )
 
     normalised = normalised.dropna(subset=["target_chembl_id"])
@@ -317,9 +319,7 @@ def _populate_target_type(df: pd.DataFrame) -> pd.DataFrame:
     if mapped.isna().all():
         return df
 
-    df.loc[missing_mask, "target_type"] = (
-        mapped.astype("string").replace({"": pd.NA})
-    )
+    df.loc[missing_mask, "target_type"] = mapped.astype("string").replace({"": pd.NA})
     return df
 
 

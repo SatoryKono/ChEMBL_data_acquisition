@@ -1,4 +1,5 @@
 """Document postprocessing pipeline."""
+
 from .schema import DOCUMENT_SCHEMA, validate_documents
 from .steps import (
     PIPELINE_STEPS,

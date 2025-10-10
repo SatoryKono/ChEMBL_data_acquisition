@@ -60,7 +60,9 @@ def get_tissues(
 
     for chunk in _chunked(valid, max(1, chunk_size)):
         chunk_key = ",".join(chunk)
-        logger.info("chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key})
+        logger.info(
+            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+        )
         url = f"{base}&tissue_chembl_id__in={chunk_key}&limit={len(chunk)}"
         chunk_frames: list[pd.DataFrame] = []
         next_url: str | None = url
@@ -68,7 +70,9 @@ def get_tissues(
             data = client.request_json(next_url, cfg=cfg, timeout=effective_timeout)
             items = data.get("tissues") or data.get("tissue") or []
             if items:
-                df_chunk = json_normalize_pyarrow(items).dropna(axis="columns", how="all")
+                df_chunk = json_normalize_pyarrow(items).dropna(
+                    axis="columns", how="all"
+                )
                 if not df_chunk.empty:
                     chunk_frames.append(_normalise_records(df_chunk))
             page_meta = data.get("page_meta") or {}
@@ -76,9 +80,13 @@ def get_tissues(
             next_url = urljoin(cfg.chembl_base, next_token) if next_token else None
         if chunk_frames:
             records.append(pd.concat(chunk_frames, ignore_index=True, sort=False))
-            logger.info("chunk_done", extra={"stage": "chunk_done", "chunk_key": chunk_key})
+            logger.info(
+                "chunk_done", extra={"stage": "chunk_done", "chunk_key": chunk_key}
+            )
         else:
-            logger.info("chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key})
+            logger.info(
+                "chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key}
+            )
 
     if not records:
         return pd.DataFrame(columns=TISSUE_BASE_COLUMNS)

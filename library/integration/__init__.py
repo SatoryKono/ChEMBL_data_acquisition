@@ -16,54 +16,54 @@ from .chembl_client import ChemblClient
 
 # ===== Helpers =====
 _LAZY_SUBMODULES = {
-  "chembl_library",
-  "input_initialisation_library",
-  "iuphar_library",
-  "mapper_batch_library",
-  "mapper_library",
-  "molecule_catalog",
-  "openalex_crossref_library",
-  "pubchem_library",
-  "pubmed_library",
-  "semantic_scholar_library",
-  "uniprot_library",
+    "chembl_library",
+    "input_initialisation_library",
+    "iuphar_library",
+    "mapper_batch_library",
+    "mapper_library",
+    "molecule_catalog",
+    "openalex_crossref_library",
+    "pubchem_library",
+    "pubmed_library",
+    "semantic_scholar_library",
+    "uniprot_library",
 }
 
 
 def _load_submodule(name: str) -> Any:
-  """Import ``library.integration.<name>`` and memoise the module object."""
+    """Import ``library.integration.<name>`` and memoise the module object."""
 
-  module = import_module(f"{__name__}.{name}")
-  globals()[name] = module
-  return module
+    module = import_module(f"{__name__}.{name}")
+    globals()[name] = module
+    return module
 
 
 # ===== Exports =====
 __all__ = [
-  "ChemblClient",
-  "chembl_library",
-  "input_initialisation_library",
-  "iuphar_library",
-  "mapper_batch_library",
-  "mapper_library",
-  "molecule_catalog",
-  "openalex_crossref_library",
-  "pubchem_library",
-  "pubmed_library",
-  "semantic_scholar_library",
-  "uniprot_library",
+    "ChemblClient",
+    "chembl_library",
+    "input_initialisation_library",
+    "iuphar_library",
+    "mapper_batch_library",
+    "mapper_library",
+    "molecule_catalog",
+    "openalex_crossref_library",
+    "pubchem_library",
+    "pubmed_library",
+    "semantic_scholar_library",
+    "uniprot_library",
 ]
 
 
 def __getattr__(name: str) -> Any:
-  """Resolve lazy integration submodules on first attribute access."""
+    """Resolve lazy integration submodules on first attribute access."""
 
-  if name in _LAZY_SUBMODULES:
-    return _load_submodule(name)
-  raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+    if name in _LAZY_SUBMODULES:
+        return _load_submodule(name)
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
 def __dir__() -> list[str]:
-  """Expose eager and lazy exports for introspection tools."""
+    """Expose eager and lazy exports for introspection tools."""
 
-  return sorted({*globals(), *__all__, *_LAZY_SUBMODULES})
+    return sorted({*globals(), *__all__, *_LAZY_SUBMODULES})

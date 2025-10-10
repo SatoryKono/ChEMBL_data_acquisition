@@ -11,22 +11,22 @@ sub-commands.
 from __future__ import annotations
 
 import json
-
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-from .type_classifier import compute_scores, decide_label
-from .type_terms import parse_terms
 from ...common.pandas_utils import merge_series_prefer_left
 from ...schemas.document_spec import (
     DOCUMENT_COLUMN_GROUPS,
+)
+from ...schemas.document_spec import (
     DOCUMENT_SCHEMA_COLUMNS as _DECLARED_SCHEMA_COLUMNS,
 )
+from .type_classifier import compute_scores, decide_label
+from .type_terms import parse_terms
 
 # ---------------------------------------------------------------------------
 CH_EMBL_COLUMNS: list[str] = list(DOCUMENT_COLUMN_GROUPS["chembl"])
@@ -180,7 +180,9 @@ def merge_with_chembl(
 ) -> pd.DataFrame:
     """Merge PubMed style metadata into ``chembl_df`` chunk by chunk."""
 
-    def _iter_frames(frame_or_iterable: Iterable[pd.DataFrame]) -> Iterator[pd.DataFrame]:
+    def _iter_frames(
+        frame_or_iterable: Iterable[pd.DataFrame],
+    ) -> Iterator[pd.DataFrame]:
         return iter(frame_or_iterable)
 
     if isinstance(chembl_df, pd.DataFrame):
@@ -223,7 +225,9 @@ def merge_with_chembl(
     for chunk in metadata_iter:
         if chunk.empty or "PubMed.PMID" not in chunk.columns:
             continue
-        right = chunk.drop(columns=[col for col in CH_EMBL_COLUMNS if col in chunk.columns])
+        right = chunk.drop(
+            columns=[col for col in CH_EMBL_COLUMNS if col in chunk.columns]
+        )
         right["PubMed.PMID"] = (
             pd.to_numeric(right["PubMed.PMID"], errors="coerce")
             .astype("Int64")
@@ -327,11 +331,7 @@ class DocumentQualityAccumulator:
             series = frame.get(column)
             if series is None:
                 continue
-            truthy = (
-                series.astype(str)
-                .str.strip()
-                .astype(bool)
-            )
+            truthy = series.astype(str).str.strip().astype(bool)
             self._error_counts[key] += int(truthy.sum())
 
         status = frame.get("fetch_status")
@@ -369,9 +369,7 @@ class DocumentQualityAccumulator:
             "publication_class_counts": dict(self._class_counts),
             "error_counts": {
                 "pubmed": int(self._error_counts.get("pubmed", 0)),
-                "semantic_scholar": int(
-                    self._error_counts.get("semantic_scholar", 0)
-                ),
+                "semantic_scholar": int(self._error_counts.get("semantic_scholar", 0)),
                 "openalex": int(self._error_counts.get("openalex", 0)),
                 "crossref": int(self._error_counts.get("crossref", 0)),
             },

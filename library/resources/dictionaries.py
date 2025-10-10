@@ -5,10 +5,10 @@ from __future__ import annotations
 import hashlib
 import os
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache, lru_cache
 from pathlib import Path
-from typing import Mapping
 
 import yaml
 
@@ -283,9 +283,9 @@ def _env_checksum_allowlist() -> Mapping[str, tuple[str, ...]]:
             continue
         if "=" not in spec:
             warnings.warn(
-                "Ignoring malformed entry in"
-                f" {_ENV_CHECKSUM_ALLOWLIST!r}: {spec!r}",
+                "Ignoring malformed entry in" f" {_ENV_CHECKSUM_ALLOWLIST!r}: {spec!r}",
                 RuntimeWarning,
+                stacklevel=2,
             )
             continue
         name, checksum_blob = spec.split("=", 1)
@@ -299,6 +299,7 @@ def _env_checksum_allowlist() -> Mapping[str, tuple[str, ...]]:
                 "Ignoring empty checksum list for"
                 f" resource {name!r} declared in {_ENV_CHECKSUM_ALLOWLIST!r}",
                 RuntimeWarning,
+                stacklevel=2,
             )
             continue
         key = name.strip()
@@ -313,7 +314,7 @@ def _load_allowlist(base_dir: Path) -> Mapping[str, tuple[str, ...]]:
     return _load_allowlist_cached(str(base_dir.resolve()))
 
 
-@lru_cache(maxsize=None)
+@cache
 def _load_allowlist_cached(root: str) -> Mapping[str, tuple[str, ...]]:
     base_dir = Path(root)
     path = (base_dir / _MANIFEST_ALLOWLIST_FILENAME).resolve()
@@ -333,7 +334,7 @@ def _load_allowlist_cached(root: str) -> Mapping[str, tuple[str, ...]]:
         entries: list[str] = []
         if isinstance(checksums, str):
             candidate_values = [checksums]
-        elif isinstance(checksums, (list, tuple)):
+        elif isinstance(checksums, list | tuple):
             candidate_values = list(checksums)
         else:
             raise DictionaryManifestError(
@@ -520,14 +521,18 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
         generator = meta.get("generator")
 
         if not isinstance(path_value, str):
-            raise DictionaryManifestError(f"Resource {name!r} is missing a string 'path'")
+            raise DictionaryManifestError(
+                f"Resource {name!r} is missing a string 'path'"
+            )
         if Path(path_value).is_absolute():
             raise DictionaryManifestError(f"Resource {name!r} must use a relative path")
         if not isinstance(version, str):
-            raise DictionaryManifestError(f"Resource {name!r} is missing a string 'version'")
+            raise DictionaryManifestError(
+                f"Resource {name!r} is missing a string 'version'"
+            )
         if isinstance(sha256_value, str):
             sha256_expected_list = [sha256_value]
-        elif isinstance(sha256_value, (list, tuple)):
+        elif isinstance(sha256_value, list | tuple):
             sha256_expected_list = []
             for idx, candidate in enumerate(sha256_value):
                 if not isinstance(candidate, str):
@@ -543,7 +548,9 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
             raise DictionaryManifestError(
                 f"Resource {name!r} is missing a string or list 'sha256'"
             )
-        for candidate in _iter_additional_checksums(name, base_dir=manifest_root):  # pragma: no branch
+        for candidate in _iter_additional_checksums(
+            name, base_dir=manifest_root
+        ):  # pragma: no branch
             if candidate not in sha256_expected_list:
                 sha256_expected_list.append(candidate)
 
@@ -556,7 +563,9 @@ def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryReso
 
         sha256_expected = tuple(sha256_expected_list)
         if not isinstance(generator, str):
-            raise DictionaryManifestError(f"Resource {name!r} is missing a string 'generator'")
+            raise DictionaryManifestError(
+                f"Resource {name!r} is missing a string 'generator'"
+            )
 
         relative_path = Path(path_value)
         absolute_path = (manifest_root / relative_path).resolve()

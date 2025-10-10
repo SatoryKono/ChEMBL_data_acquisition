@@ -28,10 +28,19 @@ class MemoryLogger:
     def __init__(self) -> None:
         self.events: list[tuple[str, str, dict[str, Any]]] = []
 
-    def bind(self, **_: Any) -> MemoryLogger:  # pragma: no cover - interface compatibility
+    def bind(
+        self, **_: Any
+    ) -> MemoryLogger:  # pragma: no cover - interface compatibility
         return self
 
-    def _store(self, level: str, event: str, *, extra: dict[str, Any] | None = None, **data: Any) -> None:
+    def _store(
+        self,
+        level: str,
+        event: str,
+        *,
+        extra: dict[str, Any] | None = None,
+        **data: Any,
+    ) -> None:
         payload = dict(extra or {})
         payload.update(data)
         self.events.append((level, event, payload))
@@ -40,7 +49,9 @@ class MemoryLogger:
         extra = data.pop("extra", None)
         self._store(str(level).lower(), event, extra=extra, **data)
 
-    def debug(self, event: str, **data: Any) -> None:  # pragma: no cover - unused in assertions
+    def debug(
+        self, event: str, **data: Any
+    ) -> None:  # pragma: no cover - unused in assertions
         self._store("debug", event, extra=data.pop("extra", None), **data)
 
     def info(self, event: str, **data: Any) -> None:
@@ -54,21 +65,27 @@ class MemoryLogger:
     def error(self, event: str, **data: Any) -> None:
         self._store("error", event, extra=data.pop("extra", None), **data)
 
-    def exception(self, event: str, **data: Any) -> None:  # pragma: no cover - defensive fallback
+    def exception(
+        self, event: str, **data: Any
+    ) -> None:  # pragma: no cover - defensive fallback
         self._store("error", event, extra=data.pop("extra", None), **data)
 
 
 class StubChemblClient:
     """Deterministic replacement for :class:`ChemblClient` used in tests."""
 
-    def __init__(self, pages: Iterable[dict[str, Any]], calls: list[dict[str, Any]]) -> None:
+    def __init__(
+        self, pages: Iterable[dict[str, Any]], calls: list[dict[str, Any]]
+    ) -> None:
         self._pages = deque(copy.deepcopy(list(pages)))
         self._calls = calls
 
     def __enter__(self) -> StubChemblClient:  # pragma: no cover - interface parity
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - interface parity
+    def __exit__(
+        self, exc_type, exc, tb
+    ) -> bool:  # pragma: no cover - interface parity
         return False
 
     def close(self) -> None:  # pragma: no cover - interface parity
@@ -78,7 +95,9 @@ class StubChemblClient:
     def pages_remaining(self) -> int:
         return len(self._pages)
 
-    def request_json(self, url: str, *, cfg: Any, timeout: float | None = None) -> dict[str, Any]:
+    def request_json(
+        self, url: str, *, cfg: Any, timeout: float | None = None
+    ) -> dict[str, Any]:
         del cfg  # the configuration is unused in the stub
         self._calls.append({"url": str(url), "timeout": timeout})
         if not self._pages:
@@ -100,9 +119,7 @@ def test_get_tissue_data_cli__end_to_end(
         resource_dir / "chunk1_page2.json",
         resource_dir / "chunk2_page1.json",
     ]
-    base_pages = [
-        json.loads(path.read_text(encoding="utf-8")) for path in page_files
-    ]
+    base_pages = [json.loads(path.read_text(encoding="utf-8")) for path in page_files]
 
     recorded_calls: list[dict[str, Any]] = []
     created_clients: list[StubChemblClient] = []
@@ -155,11 +172,15 @@ def test_get_tissue_data_cli__end_to_end(
             cfg.tissue.timeout = timeout
         return cfg
 
-    monkeypatch.setattr("library.cli_utils.apply_config_overrides", fake_apply_config_overrides)
+    monkeypatch.setattr(
+        "library.cli_utils.apply_config_overrides", fake_apply_config_overrides
+    )
     monkeypatch.setattr("library.cli_utils.ensure_dirs", lambda _cfg: None)
 
     def fake_configure_logger(log_cfg: Any) -> MemoryLogger:
-        logger.log("debug", "configure_logger_called", log_level=getattr(log_cfg, "level", ""))
+        logger.log(
+            "debug", "configure_logger_called", log_level=getattr(log_cfg, "level", "")
+        )
         set_current(
             RunContext(
                 run_id=str(getattr(log_cfg, "run_id", "")),
@@ -173,7 +194,9 @@ def test_get_tissue_data_cli__end_to_end(
     monkeypatch.setattr(get_tissue_data, "configure_logger", fake_configure_logger)
 
     @contextmanager
-    def fake_setup_cli_logging(script_name: str, log_cfg: Any, date_str: str | None = None):
+    def fake_setup_cli_logging(
+        script_name: str, log_cfg: Any, date_str: str | None = None
+    ):
         del script_name, date_str
         yield SimpleNamespace(log_cfg=log_cfg, console_stream=None)
 
@@ -202,8 +225,8 @@ def test_get_tissue_data_cli__end_to_end(
         str(config_path),
         "--input",
         str(input_csv),
-            "--final-out",
-            str(output_csv),
+        "--final-out",
+        str(output_csv),
         "--batch-size",
         "2",
     ]
@@ -218,18 +241,27 @@ def test_get_tissue_data_cli__end_to_end(
     assert "CHEMBLT3" in first_run_calls[-1]["url"]
 
     fetch_event = next(
-        (payload for level, event, payload in logger.events if event == "tissue_fetch_start"),
+        (
+            payload
+            for level, event, payload in logger.events
+            if event == "tissue_fetch_start"
+        ),
         None,
     )
     assert fetch_event is not None
     assert fetch_event["requested"] == 3
 
-    start_event = next((event for event in logger.events if event[1] == "tissue_pipeline_start"), None)
+    start_event = next(
+        (event for event in logger.events if event[1] == "tissue_pipeline_start"), None
+    )
     assert start_event is not None
     assert start_event[2]["input"] == str(input_csv)
     assert start_event[2]["output"] == str(output_csv)
 
-    summary_event = next((event for event in logger.events if event[1] == "tissue_pipeline_summary"), None)
+    summary_event = next(
+        (event for event in logger.events if event[1] == "tissue_pipeline_summary"),
+        None,
+    )
     assert summary_event is not None
     assert summary_event[2]["records"] == 3
     assert summary_event[2]["duration"] > 0
@@ -240,8 +272,16 @@ def test_get_tissue_data_cli__end_to_end(
 
     output_df = pd.read_csv(output_csv, sep=cfg.io.csv_sep, dtype="string")
     assert list(output_df.columns) == TISSUE_COLUMN_ORDER
-    assert output_df["tissue_chembl_id"].tolist() == ["CHEMBLT1", "CHEMBLT2", "CHEMBLT3"]
-    assert output_df.loc[output_df["tissue_chembl_id"] == "CHEMBLT3", "pref_name"].isna().all()
+    assert output_df["tissue_chembl_id"].tolist() == [
+        "CHEMBLT1",
+        "CHEMBLT2",
+        "CHEMBLT3",
+    ]
+    assert (
+        output_df.loc[output_df["tissue_chembl_id"] == "CHEMBLT3", "pref_name"]
+        .isna()
+        .all()
+    )
 
     failure_path = output_csv.with_name(f"{output_csv.stem}_validation_failures.csv")
     assert not failure_path.exists()
@@ -286,6 +326,8 @@ def test_get_tissue_data_cli__end_to_end(
     new_events = logger.events[first_event_count:]
     assert any(event == "tissue_pipeline_start" for _, event, _ in new_events)
     assert any(
-        event == "tissue_pipeline_summary" and data.get("records") == 3 and data.get("duration", 0) >= 0
+        event == "tissue_pipeline_summary"
+        and data.get("records") == 3
+        and data.get("duration", 0) >= 0
         for _, event, data in new_events
     )

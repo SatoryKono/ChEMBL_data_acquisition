@@ -6,11 +6,12 @@ import logging
 import os
 import re
 import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import IO, Iterator
+from typing import IO
 
 from ..common.logging_setup import LoggerConfig
 
@@ -43,7 +44,7 @@ def _default_log_dir() -> Path:
 def _current_date_str() -> str:
     """Return the current UTC date formatted as ``YYYYMMDD``."""
 
-    return datetime.now(timezone.utc).strftime("%Y%m%d")
+    return datetime.now(UTC).strftime("%Y%m%d")
 
 
 _ORIGINAL_CURRENT_DATE_STR = _current_date_str

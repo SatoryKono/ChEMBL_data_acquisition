@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import argparse
 import io
+from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Sequence
 
 import pytest
 
+from library.pipelines.common import PipelineRunResult
 from scripts import get_data
 from tests.helpers.logs import iter_events, parse_log_lines
 from tests.helpers.manifests import load_latest_manifest
-from library.pipelines.common import PipelineRunResult
 
 
 def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
@@ -23,8 +23,10 @@ def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
     output_dir.mkdir()
     input_files = dict(get_data.DEFAULT_INPUT_FILES)
     output_stems = dict(get_data.DEFAULT_OUTPUT_STEMS)
-    subcommands = {step.name: step.subcommand for step in get_data.DEFAULT_PIPELINE_STEPS}
-    for name, filename in input_files.items():
+    subcommands = {
+        step.name: step.subcommand for step in get_data.DEFAULT_PIPELINE_STEPS
+    }
+    for _name, filename in input_files.items():
         target = input_dir / filename
         target.write_text("id\nplaceholder\n", encoding="utf-8")
     config_path = base_path / "config.yaml"
@@ -73,6 +75,7 @@ def test_parse_args__defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert args.override_input == []
     assert args.override_output_stem == []
     assert args.override_subcommand == []
+    assert args.run_id is None
 
 
 @pytest.mark.unit
@@ -107,6 +110,8 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
             "target=custom_targets",
             "--override-subcommand",
             "target=sync",
+            "--run-id",
+            "explicit",
         ]
     )
     assert args.base_path == base
@@ -125,6 +130,7 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
     assert args.override_input == ["document=document_custom.csv"]
     assert args.override_output_stem == ["target=custom_targets"]
     assert args.override_subcommand == ["target=sync"]
+    assert args.run_id == "explicit"
 
 
 @pytest.mark.unit
@@ -239,7 +245,9 @@ def test_main__print_config__exits_early(
     run_invoked = False
 
     def _fake_run_pipeline(
-        cfg: get_data.PipelineRunConfig, *, steps: Sequence[get_data.PipelineStep] | None = None
+        cfg: get_data.PipelineRunConfig,
+        *,
+        steps: Sequence[get_data.PipelineStep] | None = None,
     ) -> int:
         nonlocal run_invoked
         run_invoked = True
@@ -338,7 +346,9 @@ def test_pipeline_step_registration__expected_shape() -> None:
 
 
 @pytest.mark.unit
-def test_configure_logging__delegates_to_configure_logger(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_configure_logging__delegates_to_configure_logger(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: list[get_data.LoggerConfig] = []
     original_configure = get_data.configure_logger
 
@@ -446,7 +456,12 @@ def test_override_subcommand__target_pipeline_uses_selected_command(
         {"target": get_data.PipelineApi(_build_options, _runner)},
         raising=False,
     )
-    monkeypatch.setattr(get_data, "load_config", lambda *args, **kwargs: SimpleNamespace(), raising=False)
+    monkeypatch.setattr(
+        get_data,
+        "load_config",
+        lambda *args, **kwargs: SimpleNamespace(),
+        raising=False,
+    )
 
     status = get_data.run_pipeline(cfg, steps=target_only)
     assert status == 0
@@ -454,19 +469,29 @@ def test_override_subcommand__target_pipeline_uses_selected_command(
 
 
 @pytest.mark.unit
-def test_run_pipeline__propagates_step_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_pipeline__propagates_step_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     cfg = _make_config(tmp_path)
     failure_calls: list[Sequence[str]] = []
 
-    def _success_runner(_: get_data.Config, options: SimpleNamespace) -> PipelineRunResult:
+    def _success_runner(
+        _: get_data.Config, options: SimpleNamespace
+    ) -> PipelineRunResult:
         path = Path(options.output_csv)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("id\n1\n", encoding="utf-8")
-        return PipelineRunResult(exit_code=0, output_path=path, executed=True, written=True)
+        return PipelineRunResult(
+            exit_code=0, output_path=path, executed=True, written=True
+        )
 
-    def _failure_runner(_: get_data.Config, options: SimpleNamespace) -> PipelineRunResult:
+    def _failure_runner(
+        _: get_data.Config, options: SimpleNamespace
+    ) -> PipelineRunResult:
         failure_calls.append((str(options.input_csv), str(options.output_csv)))
-        return PipelineRunResult(exit_code=2, output_path=Path(options.output_csv), executed=True)
+        return PipelineRunResult(
+            exit_code=2, output_path=Path(options.output_csv), executed=True
+        )
 
     def _build_options(
         cfg: get_data.PipelineRunConfig, input_path: Path, output_path: Path
@@ -524,7 +549,9 @@ def test_run_pipeline__propagates_step_failure(tmp_path: Path, monkeypatch: pyte
     assert second["exit_code"] == 2
     assert second["reason"] == "non_zero_exit"
     assert second["output"]["exists"] is False
-    assert third["status"] == "pending"
+    assert third["status"] == "blocked"
+    assert third["executed"] is False
+    assert third["reason"] == "dependency_failed"
 
     records = parse_log_lines(stream.getvalue())
     events = list(iter_events(records))
@@ -533,10 +560,14 @@ def test_run_pipeline__propagates_step_failure(tmp_path: Path, monkeypatch: pyte
 
 
 @pytest.mark.unit
-def test_run_pipeline__handles_step_exception(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_pipeline__handles_step_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     cfg = _make_config(tmp_path)
 
-    def _raising_runner(_: get_data.Config, options: SimpleNamespace) -> PipelineRunResult:
+    def _raising_runner(
+        _: get_data.Config, options: SimpleNamespace
+    ) -> PipelineRunResult:
         raise RuntimeError("malformed output")
 
     def _build_options(
@@ -575,7 +606,9 @@ def test_run_pipeline__handles_step_exception(tmp_path: Path, monkeypatch: pytes
 
 
 @pytest.mark.unit
-def test_run_pipeline__dry_run_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_pipeline__dry_run_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     cfg = _make_config(tmp_path)
     cfg = replace(cfg, dry_run=True)
 

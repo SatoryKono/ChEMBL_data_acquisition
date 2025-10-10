@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone, timedelta
-from typing import Sequence
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 
-UTC = timezone.utc
+UTC = UTC
 _SEED_EPOCH = datetime(2000, 1, 1, tzinfo=UTC)
 _MAX_SPAN_SECONDS = 50 * 365 * 24 * 60 * 60
 

@@ -25,9 +25,7 @@ def test_transform__falls_back_to_uniprot_columns():
 
 @pytest.mark.unit
 def test_transform__empty_input_returns_empty_frame():
-    frame = pd.DataFrame(
-        columns=["isoform_synonyms", "isoform_names", "isoform_ids"]
-    )
+    frame = pd.DataFrame(columns=["isoform_synonyms", "isoform_names", "isoform_ids"])
 
     transform = isoform._transform(frame)
 

@@ -70,14 +70,17 @@ def test_prepare_cellline_dataframe__coerces_nullable_types() -> None:
 
     assert prepared["cell_id"].dtype == "Int64"
     assert prepared["cell_source_tax_id"].dtype == "Int64"
-    assert all(prepared[col].dtype == "string" for col in [
-        "cell_chembl_id",
-        "cell_name",
-        "cell_description",
-        "cell_source_organism",
-        "cell_source_tissue",
-        "cellosaurus_id",
-        "cl_lincs_id",
-        "clo_id",
-        "efo_id",
-    ])
+    assert all(
+        prepared[col].dtype == "string"
+        for col in [
+            "cell_chembl_id",
+            "cell_name",
+            "cell_description",
+            "cell_source_organism",
+            "cell_source_tissue",
+            "cellosaurus_id",
+            "cl_lincs_id",
+            "clo_id",
+            "efo_id",
+        ]
+    )

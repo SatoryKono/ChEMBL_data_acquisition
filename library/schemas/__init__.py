@@ -11,13 +11,13 @@ from .normalize import (
     normalize_assays,
     normalize_cell_lines,
     normalize_documents,
-    normalize_tissues,
     normalize_targets,
     normalize_testitems,
+    normalize_tissues,
 )
-from .tissues import TissuesSchema
 from .targets import TargetsSchema
 from .testitems import TestitemsSchema
+from .tissues import TissuesSchema
 
 __all__ = [
     "ActivitiesSchema",

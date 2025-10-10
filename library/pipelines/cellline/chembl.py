@@ -111,7 +111,9 @@ def get_cell_lines(
             data = client.request_json(next_url, cfg=cfg, timeout=effective_timeout)
             items = data.get("cell_lines") or data.get("cell_line") or []
             if items:
-                df_chunk = json_normalize_pyarrow(items).dropna(axis="columns", how="all")
+                df_chunk = json_normalize_pyarrow(items).dropna(
+                    axis="columns", how="all"
+                )
                 if not df_chunk.empty:
                     chunk_frames.append(_normalise_records(df_chunk))
             page_meta = data.get("page_meta") or {}

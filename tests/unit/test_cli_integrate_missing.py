@@ -99,8 +99,8 @@ def test_finalize_output__optional_column_present_in_later_chunk(
     monkeypatch.setattr(cli.logger, "warning", capture_warning)
 
     from library.config import Config
-    from library.resources import dictionaries as dictionary_resources
     from library.pipelines.testitem.catalog import ParentLookupStats
+    from library.resources import dictionaries as dictionary_resources
 
     def _fake_resource_path(name: str, base_dir: Path | None = None) -> Path:
         root = tmp_path / "resources"
@@ -151,7 +151,9 @@ def test_finalize_output__optional_column_present_in_later_chunk(
 
     assert exit_code == 0
 
-    optional_warnings = [fields for event, fields in warnings if event == "optional_columns_missing"]
+    optional_warnings = [
+        fields for event, fields in warnings if event == "optional_columns_missing"
+    ]
     for payload in optional_warnings:
         columns = payload.get("columns", [])
         assert "pref_name" not in columns

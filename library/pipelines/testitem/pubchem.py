@@ -4,19 +4,31 @@ from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Collection, Hashable
+from collections.abc import (
+    Callable,
+    Collection,
+    Hashable,
+    Mapping,
+    MutableMapping,
+    Sequence,
+)
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Mapping, MutableMapping, Sequence, TypeAlias, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    TypeAlias,
+    cast,
+)
 
 import pandas as pd
 import requests
 
-from library.integration.chembl_client import ChemblClient
-from library.config import ApiCfg, PubChemCfg, RetryCfg
 from library.common.log import logger
+from library.config import ApiCfg, PubChemCfg, RetryCfg
+from library.integration.chembl_client import ChemblClient
 from library.utils.atomic import open_atomic
 
 if TYPE_CHECKING:
@@ -120,7 +132,9 @@ def _load_pubchem_cid_cache(
     except FileNotFoundError:
         return {}
     except (OSError, json.JSONDecodeError) as exc:  # pragma: no cover - I/O errors
-        logger.warning("pubchem_cache_load_failed", path=str(cache_path), error=str(exc))
+        logger.warning(
+            "pubchem_cache_load_failed", path=str(cache_path), error=str(exc)
+        )
         return {}
     metadata: Mapping[str, Any] | None = None
     values_source: Mapping[str, Any] | None = None
@@ -201,7 +215,9 @@ def _write_pubchem_cid_cache(
             }
             json.dump(payload, handle, indent=2, sort_keys=True)
     except OSError as exc:  # pragma: no cover - I/O errors
-        logger.warning("pubchem_cache_write_failed", path=str(cache_path), error=str(exc))
+        logger.warning(
+            "pubchem_cache_write_failed", path=str(cache_path), error=str(exc)
+        )
 
 
 def _select_primary_cid(
@@ -638,7 +654,9 @@ def _merge_pubchem_properties(
                         logger.warning(
                             "pubchem_properties_failed", cid=cid, error=str(exc)
                         )
-                        props = pubchem_lib.Properties(None, None, None, None, None, None)
+                        props = pubchem_lib.Properties(
+                            None, None, None, None, None, None
+                        )
                     properties_records[cid] = {
                         "pubchem_iupac_name": _value_or_na(props.IUPACName),
                         "pubchem_molecular_formula": _value_or_na(
@@ -823,7 +841,9 @@ def add_pubchem_data(
         prefer_local_mask=prefer_local_mask,
     )
 
-    result = result.drop(columns=[col for col in PUBCHEM_COLUMNS if col in result.columns])
+    result = result.drop(
+        columns=[col for col in PUBCHEM_COLUMNS if col in result.columns]
+    )
     result = result.join(pubchem_df)
 
     if cache_dirty:

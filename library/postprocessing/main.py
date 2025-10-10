@@ -36,14 +36,27 @@ def _build_organism_lookup(frame: pd.DataFrame) -> pd.DataFrame:
     lookup["unicellular_organism"] = cellularity.unicellular_flag(lookup["target_type"])
 
     if "multifunctional_enzyme" in frame.columns:
-        mf_series = multifunctional.normalise_multifunctional(frame["multifunctional_enzyme"])
+        mf_series = multifunctional.normalise_multifunctional(
+            frame["multifunctional_enzyme"]
+        )
     else:
         mf_series = pd.Series(pd.NA, index=frame.index, dtype="boolean")
     lookup["multifunctional_enzyme"] = mf_series.fillna(False).astype("boolean")
 
-    for column in ("IUPHAR_class", "IUPHAR_subclass", "sortorder.target", "gene_index", "taxon_index"):
+    for column in (
+        "IUPHAR_class",
+        "IUPHAR_subclass",
+        "sortorder.target",
+        "gene_index",
+        "taxon_index",
+    ):
         if column in frame.columns:
-            lookup[column] = frame[column].map(helpers.normalise_text).replace("", "-").astype("string")
+            lookup[column] = (
+                frame[column]
+                .map(helpers.normalise_text)
+                .replace("", "-")
+                .astype("string")
+            )
         else:
             lookup[column] = "-"
 
@@ -60,7 +73,9 @@ def _build_organism_lookup(frame: pd.DataFrame) -> pd.DataFrame:
             "taxon_index",
         ],
     )
-    lookup = lookup.sort_values(by="target_chembl_id", kind="mergesort").reset_index(drop=True)
+    lookup = lookup.sort_values(by="target_chembl_id", kind="mergesort").reset_index(
+        drop=True
+    )
     return lookup
 
 
@@ -95,4 +110,3 @@ def postprocess_target_table(input_path: str) -> str:
     processed = helpers.fill_missing(processed, TARGETS_COLUMN_ORDER)
 
     return _write_outputs(processed, source_path)
-

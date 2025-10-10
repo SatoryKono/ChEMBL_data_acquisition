@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
-import pytest
-
-from library.resources import dictionaries
 from config.paths import DICTIONARY_DIR
+from library.resources import dictionaries
 
 
 @pytest.mark.unit
@@ -84,9 +83,13 @@ def test_parse_manifest__accepts_known_checksum_variants(
             }
         },
     }
-    manifest_path.write_text(yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8")
+    manifest_path.write_text(
+        yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8"
+    )
 
-    monkeypatch.setattr(dictionaries, "_compute_sha256", lambda path, value=checksum: value)
+    monkeypatch.setattr(
+        dictionaries, "_compute_sha256", lambda path, value=checksum: value
+    )
 
     resources = dictionaries._parse_manifest(base_dir=manifest_dir)
 
@@ -113,7 +116,9 @@ def test_parse_manifest__accepts_target_cache_checksum_variants(
             }
         },
     }
-    manifest_path.write_text(yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8")
+    manifest_path.write_text(
+        yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8"
+    )
 
     monkeypatch.setattr(
         dictionaries,
@@ -144,12 +149,16 @@ def test_parse_manifest__accepts_taxonomy_lookup_checksum_variant(
             "taxonomy_assay_lookup": {
                 "path": "_taxonomy/taxonomy.csv",
                 "version": "test",
-                "sha256": ["dc81f4becc78bce0d3d8561a3c6ae20cac9cfa46762bed4d9af43a8cb8c6b8ab"],
+                "sha256": [
+                    "dc81f4becc78bce0d3d8561a3c6ae20cac9cfa46762bed4d9af43a8cb8c6b8ab"
+                ],
                 "generator": "tests/generator.py",
             }
         },
     }
-    manifest_path.write_text(yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8")
+    manifest_path.write_text(
+        yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8"
+    )
 
     monkeypatch.setattr(
         dictionaries,
@@ -207,10 +216,7 @@ def test_parse_manifest__deduplicates_expected_checksums(
     message = str(excinfo.value)
 
     assert message.count("duplicate") == 1
-    assert (
-        dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM
-        in message
-    )
+    assert dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM in message
 
 
 @pytest.mark.unit
@@ -233,10 +239,16 @@ def test_parse_manifest__allowlist_file_extends_checksums(
             }
         },
     }
-    manifest_path.write_text(yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8")
+    manifest_path.write_text(
+        yaml.safe_dump(manifest_payload, sort_keys=False), encoding="utf-8"
+    )
 
     allowlist_path = manifest_dir / "manifest.allowlist.yaml"
-    allowlist_payload = {"dictionary_root": ["efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"]}
+    allowlist_payload = {
+        "dictionary_root": [
+            "efc69f6bb252d68bc7fde11ba98b09b24b0b8fd868fcd6d945eaca76b636f43a"
+        ]
+    }
     allowlist_path.write_text(
         yaml.safe_dump(allowlist_payload, sort_keys=False), encoding="utf-8"
     )
@@ -253,6 +265,8 @@ def test_parse_manifest__allowlist_file_extends_checksums(
         resources["dictionary_root"].sha256
         == "ac67acf2dcd801ffbe9d6e3aa95189af7c3e991fb3ddaaf8aab0be988d7d3224"
     )
+
+
 def test_manifest_allows_latest_windows_sha256() -> None:
     """The dictionary manifest accepts hashes produced by new Git versions."""
 
@@ -282,7 +296,9 @@ def test_manifest_allows_latest_windows_sha256() -> None:
 
 
 @pytest.mark.unit
-def test_repository_allowlist_includes_sparse_index_checksum(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_repository_allowlist_includes_sparse_index_checksum(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The repo-level allow-list must include the sparse index checksum variant."""
 
     dictionaries._load_allowlist_cached.cache_clear()
@@ -298,7 +314,9 @@ def test_repository_allowlist_includes_sparse_index_checksum(monkeypatch: pytest
     assert dictionaries.WINDOWS_VFS_PLACEHOLDER_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_DEDUP_PLACEHOLDER_CHECKSUM in variants
     assert dictionaries.WINDOWS_VFS_NTFS_CHECKSUM in variants
-    assert "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a" in variants
+    assert (
+        "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a" in variants
+    )
 
 
 @pytest.mark.unit

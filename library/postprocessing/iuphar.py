@@ -56,9 +56,7 @@ _REQUIRED_COLUMNS: tuple[str, ...] = (
     "gtop_synonyms",
 )
 
-_OPTIONAL_COLUMNS: tuple[str, ...] = (
-    "component_description",
-)
+_OPTIONAL_COLUMNS: tuple[str, ...] = ("component_description",)
 
 _OUTPUT_COLUMNS: tuple[str, ...] = (
     "target_chembl_id",
@@ -89,7 +87,11 @@ def _matches_target_filename(name: str) -> bool:
 
 def _latest_target_file(search_dir: Path) -> Path:
     candidates = sorted(
-        (path for path in search_dir.iterdir() if path.is_file() and _matches_target_filename(path.name)),
+        (
+            path
+            for path in search_dir.iterdir()
+            if path.is_file() and _matches_target_filename(path.name)
+        ),
         key=lambda item: item.name,
     )
     if not candidates:
@@ -124,7 +126,9 @@ def _ensure_required_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, tuple[str,
         return df, ()
 
     logger.warning(
-        "iuphar_postprocess_missing_columns", missing=list(missing), available=list(df.columns)
+        "iuphar_postprocess_missing_columns",
+        missing=list(missing),
+        available=list(df.columns),
     )
 
     formatted = ", ".join(missing)
@@ -180,13 +184,22 @@ def _parse_component_descriptions(value: str) -> list[str]:
             result.append(record.strip())
     return result
 
+
 def _collect_synonym_tokens(row: pd.Series[Any]) -> tuple[list[str], list[str]]:
     raw_tokens: list[str] = []
     sources: tuple[str | None, ...] = (
-        normalise_text(row.get("gtop_synonyms")) if "gtop_synonyms" in row and pd.notnull(row["gtop_synonyms"]) else None,
-        normalise_text(row.get("synonyms")) if "synonyms" in row and pd.notnull(row["synonyms"]) else None,
+        (
+            normalise_text(row.get("gtop_synonyms"))
+            if "gtop_synonyms" in row and pd.notnull(row["gtop_synonyms"])
+            else None
+        ),
+        (
+            normalise_text(row.get("synonyms"))
+            if "synonyms" in row and pd.notnull(row["synonyms"])
+            else None
+        ),
     )
-    
+
     for source in sources:
         if source:
             raw_tokens.extend(_split_pipe(source))
@@ -214,7 +227,9 @@ def _collect_synonym_tokens(row: pd.Series[Any]) -> tuple[list[str], list[str]]:
     return cleaned_tokens, deduped
 
 
-def _apply_synonym_processing(df: pd.DataFrame) -> tuple[pd.DataFrame, SynonymStatistics]:
+def _apply_synonym_processing(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, SynonymStatistics]:
     before = 0
     after = 0
     deduped_rows: list[list[str]] = []
@@ -308,5 +323,5 @@ def process_iuphar_targets(
             stats.before,
             stats.after,
         )
-    
+
     return output_path

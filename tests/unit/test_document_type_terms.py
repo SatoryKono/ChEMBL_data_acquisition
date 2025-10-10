@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("hypothesis")
-
-from hypothesis import given, settings, strategies as st
-from hypothesis.strategies import SearchStrategy
-
 from library.pipelines.document import type_terms
 
+hypothesis = pytest.importorskip("hypothesis")
+st = hypothesis.strategies
+SearchStrategy = st.SearchStrategy
+given = hypothesis.given
+settings = hypothesis.settings
 
-_TOKEN_ALPHABET = list("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ -_" )
+_TOKEN_ALPHABET = list("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ -_")
 
 
 def _token_strategy() -> SearchStrategy[str]:
@@ -26,7 +26,9 @@ def _token_strategy() -> SearchStrategy[str]:
     tokens=st.lists(_token_strategy(), min_size=0, max_size=6),
     separator=st.sampled_from(["|", ";", ",", "/"]),
 )
-def test_parse_terms__normalises_and_deduplicates(tokens: list[str], separator: str) -> None:
+def test_parse_terms__normalises_and_deduplicates(
+    tokens: list[str], separator: str
+) -> None:
     """Parsed tokens are normalised, unique and sorted."""
 
     value = separator.join(tokens)
@@ -57,4 +59,3 @@ def test_parse_terms__non_string_inputs_return_empty(value: object) -> None:
     """Non-string values yield an empty token list."""
 
     assert type_terms.parse_terms(value) == []
-

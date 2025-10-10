@@ -19,7 +19,6 @@ from scripts import get_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_file, parse_log_lines
 
-
 PipelineFunc = Callable[[list[str]], int]
 
 
@@ -64,9 +63,7 @@ def _build_stub_pipeline(
             )
         frame = frame[selected_columns].copy()
         if key_column not in frame.columns:
-            get_data._LOGGER.error(
-                f"{name}_missing_key_column", column=key_column
-            )
+            get_data._LOGGER.error(f"{name}_missing_key_column", column=key_column)
             return 1
 
         frame[key_column] = frame[key_column].astype("string").str.strip()
@@ -82,7 +79,8 @@ def _build_stub_pipeline(
 
         if transformed[key_column].duplicated().any():
             get_data._LOGGER.error(
-                f"{name}_output_duplicates", count=int(transformed[key_column].duplicated().sum())
+                f"{name}_output_duplicates",
+                count=int(transformed[key_column].duplicated().sum()),
             )
             return 1
 
@@ -159,7 +157,9 @@ def _testitems_transform(frame: pd.DataFrame, logger: get_data.Logger) -> pd.Dat
     frame["preferred_name"] = names.where(~missing, "")
     frame["normalized_name"] = normalized
     frame["is_named"] = (~missing).astype("boolean")
-    return frame[["molecule_chembl_id", "preferred_name", "normalized_name", "is_named"]]
+    return frame[
+        ["molecule_chembl_id", "preferred_name", "normalized_name", "is_named"]
+    ]
 
 
 def _activities_transform(frame: pd.DataFrame, logger: get_data.Logger) -> pd.DataFrame:
@@ -170,10 +170,14 @@ def _activities_transform(frame: pd.DataFrame, logger: get_data.Logger) -> pd.Da
     if "force_failure" in frame.columns and frame["force_failure"].any():
         raise RuntimeError("activity_forced_failure")
     cleaned = values.fillna("")
-    numeric = pd.to_numeric(cleaned.replace("", pd.NA), errors="coerce").astype("Float64")
+    numeric = pd.to_numeric(cleaned.replace("", pd.NA), errors="coerce").astype(
+        "Float64"
+    )
     frame = frame.copy()
     frame["standard_value"] = cleaned
-    frame["standard_units"] = frame["standard_units"].astype("string").fillna("").str.strip()
+    frame["standard_units"] = (
+        frame["standard_units"].astype("string").fillna("").str.strip()
+    )
     frame["standard_value_numeric"] = numeric
     frame["is_valid"] = numeric.notna().astype("boolean")
     return frame[
@@ -263,21 +267,21 @@ def test_get_data_end_to_end__miniature_pipeline(
     config_path.write_text("io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n")
 
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
-    monkeypatch.setattr(
-        get_data, "_warm_parent_catalog", lambda _cfg, _base: None
-    )
+    monkeypatch.setattr(get_data, "_warm_parent_catalog", lambda _cfg, _base: None)
 
     log_streams: deque[io.StringIO] = deque()
+    observed_run_ids: list[str] = []
 
     original_configure = get_data.configure_logger
 
     def _configure_logger_stub(cfg: get_data.LoggerConfig) -> get_data.Logger:
         stream = io.StringIO()
         log_streams.append(stream)
+        observed_run_ids.append(str(cfg.run_id))
         return original_configure(
             get_data.LoggerConfig(
                 level=cfg.level,
-                run_id="e2e-run",
+                run_id=cfg.run_id,
                 redact_secrets=cfg.redact_secrets,
                 stream=stream,
                 handlers=list(cfg.handlers) if cfg.handlers else [],
@@ -371,14 +375,37 @@ def test_get_data_end_to_end__miniature_pipeline(
 
     date_prefix = "20240102"
 
-    def _invoke(argv: list[str]) -> tuple[int, list[dict[str, object]]]:
+    def _invoke(argv: list[str]) -> tuple[int, list[dict[str, object]], str]:
+        before = len(observed_run_ids)
         exit_code = get_data.main(argv)
         assert log_streams, "expected logger stream to be captured"
         records: list[dict[str, object]] = []
         while log_streams:
             stream = log_streams.popleft()
             records.extend(parse_log_lines(stream.getvalue()))
-        return exit_code, records
+        assert len(observed_run_ids) > before, "run identifier was not captured"
+        run_id = observed_run_ids[-1]
+        return exit_code, records, run_id
+
+    def _collect_log_run_ids(entries: list[dict[str, object]]) -> set[str]:
+        collected: set[str] = set()
+        for entry in entries:
+            data = entry.get("data", {})
+            if not isinstance(data, dict):
+                continue
+            value = data.get("run_id")
+            if value is None:
+                continue
+            collected.add(str(value))
+        return collected
+
+    def _read_manifest_run_id() -> str:
+        manifest_alias = base_path / "reports" / "run_manifest.json"
+        assert manifest_alias.exists(), "expected manifest alias to exist"
+        payload = json.loads(manifest_alias.read_text(encoding="utf-8"))
+        value = payload["run"].get("run_id")
+        assert value, "manifest must include run_id"
+        return str(value)
 
     argv = [
         "--base-path",
@@ -396,8 +423,12 @@ def test_get_data_end_to_end__miniature_pipeline(
         "--force",
     ]
 
-    exit_code, logs = _invoke(argv)
+    exit_code, logs, first_run_id = _invoke(argv)
     assert exit_code == 0
+    assert _collect_log_run_ids(logs) == {first_run_id}
+
+    manifest_run_id = _read_manifest_run_id()
+    assert manifest_run_id == first_run_id
 
     log_dir = base_path / "logs"
     orchestrator_log = log_dir / f"get_data_{date_prefix}.log"
@@ -414,7 +445,9 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert events["activity_missing_value"].get("level") == "ERROR"
     assert not any(record.get("event") == "step_arguments" for record in logs)
 
-    expected_dir = Path(__file__).resolve().parents[1] / "resources" / "expected_get_data"
+    expected_dir = (
+        Path(__file__).resolve().parents[1] / "resources" / "expected_get_data"
+    )
     key_columns = {
         "document": "document_chembl_id",
         "target": "target_chembl_id",
@@ -438,8 +471,11 @@ def test_get_data_end_to_end__miniature_pipeline(
 
     hashes_before = {name: sha256_file(path) for name, path in output_paths.items()}
 
-    repeat_exit_code, repeat_logs = _invoke(argv)
+    repeat_exit_code, repeat_logs, repeat_run_id = _invoke(argv)
     assert repeat_exit_code == 0
+    assert repeat_run_id == first_run_id
+    assert _collect_log_run_ids(repeat_logs) == {repeat_run_id}
+    assert _read_manifest_run_id() == repeat_run_id
     for step_name in key_columns:
         assert any(
             record["event"] == "step_done"
@@ -452,14 +488,17 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert hashes_before == hashes_after
 
     verbose_argv = [*argv, "--verbose"]
-    verbose_exit_code, verbose_logs = _invoke(verbose_argv)
+    verbose_exit_code, verbose_logs, verbose_run_id = _invoke(verbose_argv)
     assert verbose_exit_code == 0
     assert any(record.get("event") == "step_arguments" for record in verbose_logs)
     assert any(record.get("level") == "DEBUG" for record in verbose_logs)
+    assert _collect_log_run_ids(verbose_logs) == {verbose_run_id}
     verbose_hashes = {name: sha256_file(path) for name, path in output_paths.items()}
     assert hashes_before == verbose_hashes
     verbose_file_records = parse_log_file(orchestrator_log)
     assert any(entry.get("event") == "step_arguments" for entry in verbose_file_records)
+    assert _collect_log_run_ids(verbose_file_records) == {first_run_id, verbose_run_id}
+    assert _read_manifest_run_id() == verbose_run_id
 
     reports_dir = base_path / "reports"
     report_json_path = reports_dir / "test_report.json"
@@ -468,7 +507,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert summary_md_path.exists()
     report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
     assert report_payload["meta"]["repo"] == "SatoryKono/ChEMBL_data_acquisition"
-    assert report_payload["meta"]["run_id"] == "e2e-run"
+    assert report_payload["meta"]["run_id"] == verbose_run_id
     assert report_payload["meta"]["ts_utc"] == "2020-01-01T00:00:00+00:00"
     assert report_payload["summary"]["total"] == 5
     assert report_payload["summary"]["passed"] == 5
@@ -493,8 +532,9 @@ def test_get_data_end_to_end__miniature_pipeline(
         "--force",
     ]
 
-    new_exit_code, _ = _invoke(new_run_argv)
+    new_exit_code, _, new_run_id = _invoke(new_run_argv)
     assert new_exit_code == 0
+    assert new_run_id != verbose_run_id
     new_log_path = log_dir / f"get_data_{new_date_prefix}.log"
     assert new_log_path.exists()
     for _step_name, stem in get_data.DEFAULT_OUTPUT_STEMS.items():
@@ -526,8 +566,9 @@ def test_get_data_end_to_end__miniature_pipeline(
         "--force",
     ]
 
-    degraded_exit_code, degraded_logs = _invoke(degraded_argv)
+    degraded_exit_code, degraded_logs, degraded_run_id = _invoke(degraded_argv)
     assert degraded_exit_code == 1
+    assert degraded_run_id not in {first_run_id, verbose_run_id, new_run_id}
     degraded_events = {record.get("event"): record for record in degraded_logs if "event" in record}
     assert "document_schema_invalid" in degraded_events
     assert degraded_events["document_schema_invalid"].get("level") == "ERROR"
@@ -561,8 +602,15 @@ def test_get_data_end_to_end__miniature_pipeline(
         "INFO",
         "--force",
     ]
-    partial_exit_code, partial_logs = _invoke(partial_argv)
+    partial_exit_code, partial_logs, partial_run_id = _invoke(partial_argv)
     assert partial_exit_code == 1
+    assert partial_run_id not in {
+        first_run_id,
+        repeat_run_id,
+        verbose_run_id,
+        new_run_id,
+        degraded_run_id,
+    }
     partial_events = {record.get("event"): record for record in partial_logs if "event" in record}
     assert "step_exception" in partial_events
     assert (partial_output / f"output.documents_{date_prefix}.csv").exists()
@@ -592,8 +640,16 @@ def test_get_data_end_to_end__miniature_pipeline(
         "--log-level",
         "INFO",
     ]
-    missing_exit_code, missing_logs = _invoke(missing_argv)
+    missing_exit_code, missing_logs, missing_run_id = _invoke(missing_argv)
     assert missing_exit_code == 1
+    assert missing_run_id not in {
+        first_run_id,
+        repeat_run_id,
+        verbose_run_id,
+        new_run_id,
+        degraded_run_id,
+        partial_run_id,
+    }
     missing_events = {record.get("event"): record for record in missing_logs if "event" in record}
     assert missing_events.get("step_input_missing") is not None
     missing_target = missing_output / f"output.targets_{date_prefix}.csv"
@@ -759,4 +815,3 @@ def _load_assay_dictionary() -> pd.DataFrame:
     lookup["accession"] = lookup["accession"].astype("string")
     lookup["year"] = pd.to_numeric(lookup["year"], errors="coerce").astype("Int64")
     return lookup
-

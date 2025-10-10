@@ -10,6 +10,7 @@ import pandas as pd
 import requests
 
 from library.clients import ChemblClient, _chunked
+
 from ...common.log import logger
 from ...config import ApiCfg
 
@@ -171,9 +172,7 @@ def _fetch_documents_chunk(
 
     items = data.get("documents") or data.get("document") or []
     records = [
-        _normalise_document_record(item)
-        for item in items
-        if isinstance(item, Mapping)
+        _normalise_document_record(item) for item in items if isinstance(item, Mapping)
     ]
     return [record for record in records if record]
 
