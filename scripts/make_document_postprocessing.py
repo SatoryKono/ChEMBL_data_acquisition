@@ -8,6 +8,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pandas as pd
+
 # ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if TYPE_CHECKING:
     from . import _bootstrap as _bootstrap_module
@@ -33,6 +35,7 @@ from library.postprocessing.common.config import (
     PipelineConfig,
     normalize_pipeline_version,
 )
+from library.postprocessing.common.logging import PipelineRunMetrics
 from library.postprocessing.common.types import SchemaValidationError, StepError
 from library.postprocessing.documents import (
     run_document_pipeline as run_document_postprocess,
@@ -44,35 +47,50 @@ try:
     from library.postprocess.common import (
         DEFAULT_LOG_DIR,
         LOG_DIR_ENV,
+        CsvRuntimeConfig,
         PostprocessingPipelineConfig,
+        export_postprocess_frame,
         generate_metrics_report,
         get_csv_runtime_config,
         get_default_log_level,
         get_pipeline_config,
+        load_input_frame,
+        run_postprocess_steps,
         run_postprocessing_pipeline,
+        validate_postprocess_frame,
     )
 except ImportError:  # pragma: no cover - fallback for direct execution
     if __package__:
         from ._postprocess_common import (  # type: ignore
             DEFAULT_LOG_DIR,
             LOG_DIR_ENV,
+            CsvRuntimeConfig,
             PostprocessingPipelineConfig,
+            export_postprocess_frame,
             generate_metrics_report,
             get_csv_runtime_config,
             get_default_log_level,
             get_pipeline_config,
+            load_input_frame,
+            run_postprocess_steps,
             run_postprocessing_pipeline,
+            validate_postprocess_frame,
         )
     else:
         from _postprocess_common import (  # type: ignore
             DEFAULT_LOG_DIR,
             LOG_DIR_ENV,
+            CsvRuntimeConfig,
             PostprocessingPipelineConfig,
+            export_postprocess_frame,
             generate_metrics_report,
             get_csv_runtime_config,
             get_default_log_level,
             get_pipeline_config,
+            load_input_frame,
+            run_postprocess_steps,
             run_postprocessing_pipeline,
+            validate_postprocess_frame,
         )
 
 from uuid import NAMESPACE_URL, uuid5
@@ -185,6 +203,64 @@ def _resolve_output_path(input_path: Path, requested: Path) -> Path:
         base_name = _normalise_default_name(input_path)
         return requested / f"{document_postprocessing.DEFAULT_OUTPUT_PREFIX}{base_name}"
     return requested
+
+
+def load_output_data(path: Path | str, csv_cfg: CsvRuntimeConfig) -> pd.DataFrame:
+    """Load the raw post-processing input frame from ``path``."""
+
+    csv_path = Path(path)
+    return load_input_frame(TABLE_NAME, csv_path, csv_cfg, logger=logger)
+
+
+def apply_postprocessing_steps(
+    df: pd.DataFrame,
+    *,
+    pipeline_version: str | None = None,
+) -> tuple[pd.DataFrame, PipelineRunMetrics]:
+    """Run the document post-processing pipeline on ``df``."""
+
+    return run_postprocess_steps(
+        TABLE_NAME,
+        df,
+        run_document_postprocess,
+        pipeline_version,
+        logger=logger,
+    )
+
+
+def validate_output_schema(
+    df: pd.DataFrame,
+    *,
+    pipeline_version: str | None = None,
+) -> pd.DataFrame:
+    """Validate the processed DataFrame against the document schema."""
+
+    return validate_postprocess_frame(
+        TABLE_NAME,
+        df,
+        validate_documents,
+        DOCUMENT_SCHEMA,
+        pipeline_version,
+        logger=logger,
+    )
+
+
+def save_output_data(
+    df: pd.DataFrame,
+    destination: Path | str,
+    csv_cfg: CsvRuntimeConfig,
+) -> Path:
+    """Persist the validated DataFrame to ``destination`` deterministically."""
+
+    output_path = Path(destination)
+    return export_postprocess_frame(
+        TABLE_NAME,
+        df,
+        output_path,
+        csv_cfg,
+        DOCUMENT_SCHEMA,
+        logger=logger,
+    )
 
 
 def run(args: argparse.Namespace) -> int:
