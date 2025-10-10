@@ -29,7 +29,7 @@ from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 def sample_csv(tmp_path: Path) -> Callable[[str], Path]:
     """Return a helper copying CSV fixtures into ``tmp_path``."""
 
-    data_dir = Path(__file__).resolve().parents[1] / "data"
+    data_dir = Path(__file__).resolve().parents[1] / "resources" / "pipeline_inputs"
 
     def _copy(name: str) -> Path:
         source = data_dir / f"{name}.csv"
@@ -1023,7 +1023,7 @@ def test_get_assay_run_success(
     input_csv = sample_csv("assay")
     output_csv = tmp_path / "out" / "assays.csv"
     logger_stub = _patch_logger(monkeypatch, get_assay_data)
-    data_dir = Path(__file__).resolve().parents[1] / "data"
+    data_dir = Path(__file__).resolve().parents[1] / "resources" / "pipeline_inputs"
     dictionary_path = data_dir / "assay_dictionary.csv"
 
     def _stub_run_chembl(config: Config, args: argparse.Namespace) -> int:

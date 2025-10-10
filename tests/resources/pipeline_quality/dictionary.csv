@@ -1,0 +1,4 @@
+molecule_chembl_id,preferred_name,category_override
+CHEMBL1,Acetylsalicylic acid,
+CHEMBL3,Benzene,Stimulant
+CHEMBL4,Undefined,Modulator

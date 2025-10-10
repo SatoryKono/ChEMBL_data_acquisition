@@ -3,8 +3,9 @@
 The test suite is organised around the key scenarios of the ChEMBL data acquisition pipeline:
 
 - `unit/` – fast checks for isolated helpers (loading, normalisation, validation logic).
-- `integration/` – composed workflows that verify enrichment rules, schema validation and failure handling.
-- `postprocessing/` – regression tests for the standalone transformation helpers backed by snapshot fixtures.
+- `integration/` – composed workflows that verify enrichment rules, schema validation and failure handling. Snapshot-backed
+  regression suites that previously lived in `tests/postprocessing/` now reside under
+  `tests/integration/postprocessing/` to keep all multi-module scenarios together.
 - `e2e/` – deterministic end-to-end runs of the test-item pipeline on synthetic fixtures, including export idempotence.
 - `resources/` – small CSV snapshots used by the integration and e2e scenarios.
 
@@ -30,9 +31,10 @@ Shared fixtures live in `tests/conftest.py`. They configure a deterministic envi
 
 ## Post-processing helper coverage
 
-`tests/postprocessing/test_target_postprocessing.py` exercises the new helper modules (`helpers.py`, `cellularity.py`, `multifunctional.py`) that reproduce the Power Query logic for the target lookup. The tests assert deterministic CSV loading, taxonomy normalisation, cellularity labels, multifunctional flag derivation and byte-identical exports using the snapshots under `tests/resources/target_postprocess_power_query_*.csv`.
+`tests/integration/postprocessing/test_target_postprocessing.py` exercises the helper modules (`helpers.py`, `cellularity.py`, `multifunctional.py`) that reproduce the Power Query logic for the target lookup. The tests assert deterministic CSV loading, taxonomy normalisation, cellularity labels, multifunctional flag derivation and byte-identical exports using the snapshots under `tests/resources/target_postprocess_power_query_*.csv`.
 
 `tests/integration/test_target_postprocess_table.py` feeds the same fixtures through `helpers.postprocess_target_table_file` to validate file I/O, export naming and idempotency.
+`tests/integration/test_pipeline_quality_matrix.py` exercises a miniature CSV pipeline backed by golden fixtures in `tests/resources/pipeline_quality/`. The scenario validates schema enforcement, preprocessing, enrichment fallbacks, warning emission, export invariants and idempotence in line with the QA checklist below.
 
 ## Integration enrichment checklist
 
@@ -74,7 +76,7 @@ When developing additional scenarios, keep the guardrails documented in `tests/c
 
 ## End-to-end scenario checklist
 
-`tests/e2e/test_get_data_end_to_end.py` drives the `scripts.get_data` orchestrator against the miniature fixtures in `tests/data`. The stubbed pipelines validate inputs, perform deterministic normalisation/post-processing and emit the canonical filenames in a temporary directory. The scenario also re-runs the workflow after intentionally corrupting `document.csv` (column removed) to verify schema validation, error logging and cleanup behaviour. The assertions cover the full QA checklist:
+`tests/e2e/test_get_data_end_to_end.py` drives the `scripts.get_data` orchestrator against the miniature fixtures in `tests/resources/pipeline_inputs`. The stubbed pipelines validate inputs, perform deterministic normalisation/post-processing and emit the canonical filenames in a temporary directory. The scenario also re-runs the workflow after intentionally corrupting `document.csv` (column removed) to verify schema validation, error logging and cleanup behaviour. The assertions cover the full QA checklist:
 
 - [x] Загрузка входных CSV и валидация схемы/типов/обязательных колонок
 - [x] Нормализация и предобработка (включая кодировки, разделители)

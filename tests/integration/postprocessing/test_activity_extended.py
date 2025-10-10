@@ -28,7 +28,7 @@ from library.postprocessing.activity_extended import (
     _transform_activity_frame,
 )
 
-pytestmark = pytest.mark.postprocessing
+pytestmark = pytest.mark.integration
 
 
 EXPECTED_DTYPE_MAP: dict[str, str] = {

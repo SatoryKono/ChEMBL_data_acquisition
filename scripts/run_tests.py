@@ -49,7 +49,6 @@ VALIDATION_FAILURE_EXIT_CODE = 11
 TEST_DIRECTORIES = (
     ROOT_DIR / "tests" / "unit",
     ROOT_DIR / "tests" / "integration",
-    ROOT_DIR / "tests" / "postprocessing",
     ROOT_DIR / "tests" / "e2e",
 )
 _BASE_PYTEST_COMMAND: list[str] = [

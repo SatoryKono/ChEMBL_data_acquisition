@@ -30,7 +30,6 @@ TEST_ROOT = Path(__file__).resolve().parent
 TEST_DIRECTORIES = (
     TEST_ROOT / "unit",
     TEST_ROOT / "integration",
-    TEST_ROOT / "postprocessing",
     TEST_ROOT / "e2e",
 )
 

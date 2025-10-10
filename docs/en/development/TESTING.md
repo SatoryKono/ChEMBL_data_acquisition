@@ -48,7 +48,7 @@ Target post-processing coverage extends this checklist with explicit checks for
 CSV loading/encoding fallbacks, normalisation of taxonomy columns, dictionary
 enrichment (cellularity), flag derivation (multifunctional enzymes), missing
 data defaults, export naming conventions and idempotent writes. The dedicated
-unit and integration tests under ``tests/postprocessing`` and
+unit and integration tests under ``tests/integration/postprocessing`` and
 ``tests/integration/test_target_postprocess_table.py`` mirror the Power Query
 examples to guarantee byte-for-byte parity.
 
