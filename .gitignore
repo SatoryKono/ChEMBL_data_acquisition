@@ -62,3 +62,6 @@ data/logs/get_target_data_20251003.log
 build/
 *.egg-info/
 *.rar
+# Prevent committing Word documents in scripts/
+scripts/*.docx
+scripts/~$*.docx
