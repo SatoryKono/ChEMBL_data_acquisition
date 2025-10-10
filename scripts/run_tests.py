@@ -97,6 +97,14 @@ def ensure_output_directories(report_file: Path, summary_file: Path) -> None:
 
     for path in (report_file, summary_file, RAW_REPORT_FILE):
         path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            try:
+                path.unlink()
+            except IsADirectoryError:  # pragma: no cover - defensive fallback
+                # A defensive guard in case an unexpected directory is present
+                # at the target path. Removing directories is out of scope for
+                # this helper, but we still make sure the call does not crash.
+                pass
 
 
 def run_pytest(command: Sequence[str]) -> int:
