@@ -16,6 +16,7 @@ import sys
 import traceback
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
@@ -36,11 +37,151 @@ from ..common.metadata import record_quality_failure
 from ..common.sidecar import SidecarErrors
 from ..config import DEFAULT_CONFIG_PATH, Config, ConfigError, ensure_dirs, print_config
 from ..reporting.run_manifest import finalise_csv_output
+from ..postprocess.common import (
+    PostprocessingPipelineConfig,
+    get_csv_runtime_config as get_postprocess_csv_config,
+    get_pipeline_config as load_postprocess_pipeline_config,
+    run_postprocessing_pipeline,
+)
+from ..postprocessing.activities import (
+    ACTIVITY_SCHEMA,
+    run_activity_pipeline as run_activity_postprocess,
+    validate_activities,
+)
+from ..postprocessing.assays import (
+    ASSAY_SCHEMA,
+    run_assay_pipeline as run_assay_postprocess,
+    validate_assays,
+)
+from ..postprocessing.documents import (
+    DOCUMENT_SCHEMA,
+    run_document_pipeline as run_document_postprocess,
+    validate_documents,
+)
+from ..postprocessing.targets import (
+    TARGET_SCHEMA,
+    run_target_pipeline as run_target_postprocess,
+    validate_targets,
+)
+from ..postprocessing.testitem import (
+    TESTITEM_SCHEMA,
+    run_testitem_pipeline as run_testitem_postprocess,
+    validate_testitems,
+)
 from .pipeline_definition import (
     Fetcher,
     PipelineDefinition,
     normalise_definition,
 )
+
+
+@dataclass(frozen=True)
+class _PostprocessHandlers:
+    runner: Callable[..., tuple[pd.DataFrame, object]]
+    validator: Callable[..., pd.DataFrame]
+    schema: object
+
+
+_POSTPROCESS_HANDLERS: dict[str, _PostprocessHandlers] = {
+    "activities": _PostprocessHandlers(
+        runner=run_activity_postprocess,
+        validator=validate_activities,
+        schema=ACTIVITY_SCHEMA,
+    ),
+    "assays": _PostprocessHandlers(
+        runner=run_assay_postprocess,
+        validator=validate_assays,
+        schema=ASSAY_SCHEMA,
+    ),
+    "documents": _PostprocessHandlers(
+        runner=run_document_postprocess,
+        validator=validate_documents,
+        schema=DOCUMENT_SCHEMA,
+    ),
+    "targets": _PostprocessHandlers(
+        runner=run_target_postprocess,
+        validator=validate_targets,
+        schema=TARGET_SCHEMA,
+    ),
+    "testitems": _PostprocessHandlers(
+        runner=run_testitem_postprocess,
+        validator=validate_testitems,
+        schema=TESTITEM_SCHEMA,
+    ),
+}
+
+
+_POSTPROCESS_TABLE_ALIASES = {
+    "activity": "activities",
+    "activities": "activities",
+    "assay": "assays",
+    "assays": "assays",
+    "document": "documents",
+    "documents": "documents",
+    "target": "targets",
+    "targets": "targets",
+    "testitem": "testitems",
+    "testitems": "testitems",
+}
+
+
+def _extract_output_token(path: Path) -> str | None:
+    name = path.name
+    if name.startswith("output.") and name.endswith(".csv"):
+        return name[len("output.") : -len(".csv")]
+    return None
+
+
+def _resolve_postprocess_table(token: str) -> str | None:
+    base = token.split("_", 1)[0].lower().strip()
+    return _POSTPROCESS_TABLE_ALIASES.get(base)
+
+
+def _maybe_run_postprocessing(csv_path: Path, logger: Logger) -> None:
+    token = _extract_output_token(csv_path)
+    if not token:
+        return
+
+    table = _resolve_postprocess_table(token)
+    if table is None:
+        return
+
+    handlers = _POSTPROCESS_HANDLERS.get(table)
+    if handlers is None:
+        return
+
+    try:
+        pipeline_cfg = load_postprocess_pipeline_config(table, None)
+        csv_cfg = get_postprocess_csv_config(pipeline_cfg)
+        runtime = PostprocessingPipelineConfig(
+            pipeline_config=pipeline_cfg,
+            csv_runtime_config=csv_cfg,
+            runner=handlers.runner,
+            validator=handlers.validator,
+            schema=handlers.schema,
+            logger=logger,
+        )
+        destination = csv_path.with_name(f"output_postprocessed.{token}.csv")
+        result = run_postprocessing_pipeline(
+            table,
+            csv_path,
+            destination,
+            runtime,
+        )
+    except Exception:
+        logger.exception(
+            "postprocess_failed",
+            table=table,
+            input=str(csv_path),
+        )
+        raise
+    else:
+        logger.info(
+            "postprocess_done",
+            table=table,
+            input=str(csv_path),
+            output=str(result.output_path),
+        )
 
 
 def _callable_name(func: Callable[..., object]) -> str:
@@ -675,6 +816,12 @@ def run_pipeline(
             log_kwargs["fatal"] = True
             exit_code = 1
         use_logger.warning("quality_report_failed", **log_kwargs)
+
+    if exit_code == 0:
+        try:
+            _maybe_run_postprocessing(csv_path, use_logger)
+        except Exception:
+            exit_code = 1
 
     if exit_code == 0:
         use_logger.info("write_done", rows=rows_kept, path=str(csv_path))
