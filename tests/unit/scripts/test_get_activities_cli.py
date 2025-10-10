@@ -16,7 +16,7 @@ class _LoggerStub:
     def __init__(self) -> None:
         self.events: list[tuple[str, str, dict[str, object]]] = []
 
-    def bind(self, **_: object) -> "_LoggerStub":  # pragma: no cover - interface parity
+    def bind(self, **_: object) -> _LoggerStub:  # pragma: no cover - interface parity
         return self
 
     def info(self, event: str, **data: object) -> None:
@@ -87,7 +87,7 @@ def test_main__limit_forwarded_to_pipeline(
 
     def _prepare_io_paths(args: object, *, output_stem: str | None = None) -> None:
         original_prepare(args, output_stem=output_stem)
-        setattr(args, "writer", lambda *a, **kw: writer_calls.append((a, kw)))
+        args.writer = lambda *a, **kw: writer_calls.append((a, kw))
 
     monkeypatch.setattr(get_activities.cli, "prepare_io_paths", _prepare_io_paths)
     monkeypatch.setattr(get_activities.cli, "configure_logger", lambda *_a, **_k: None)
@@ -151,7 +151,7 @@ def test_main__dry_run_skips_fetch(
 
     def _prepare_io_paths(args: object, *, output_stem: str | None = None) -> None:
         original_prepare(args, output_stem=output_stem)
-        setattr(args, "writer", lambda *a, **kw: writer_calls.append((a, kw)))
+        args.writer = lambda *a, **kw: writer_calls.append((a, kw))
 
     monkeypatch.setattr(get_activities.cli, "prepare_io_paths", _prepare_io_paths)
     monkeypatch.setattr(get_activities.cli, "configure_logger", lambda *_a, **_k: None)

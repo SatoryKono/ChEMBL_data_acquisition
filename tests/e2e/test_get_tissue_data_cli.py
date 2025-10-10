@@ -7,19 +7,19 @@ import hashlib
 import json
 import sys
 from collections import deque
+from collections.abc import Iterable
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Iterable
+from typing import Any
 
 import pandas as pd
 import pytest
 import yaml
 
+from library.common.run_context import RunContext, get_current, set_current
 from library.pipelines.tissue import TISSUE_COLUMN_ORDER
 from scripts import get_tissue_data
-from tests.conftest import FROZEN_UTC
-from library.common.run_context import RunContext, get_current, set_current
 
 
 class MemoryLogger:
@@ -28,7 +28,7 @@ class MemoryLogger:
     def __init__(self) -> None:
         self.events: list[tuple[str, str, dict[str, Any]]] = []
 
-    def bind(self, **_: Any) -> "MemoryLogger":  # pragma: no cover - interface compatibility
+    def bind(self, **_: Any) -> MemoryLogger:  # pragma: no cover - interface compatibility
         return self
 
     def _store(self, level: str, event: str, *, extra: dict[str, Any] | None = None, **data: Any) -> None:
@@ -65,7 +65,7 @@ class StubChemblClient:
         self._pages = deque(copy.deepcopy(list(pages)))
         self._calls = calls
 
-    def __enter__(self) -> "StubChemblClient":  # pragma: no cover - interface parity
+    def __enter__(self) -> StubChemblClient:  # pragma: no cover - interface parity
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - interface parity
@@ -136,7 +136,7 @@ def test_get_tissue_data_cli__end_to_end(
             if final_out is not None:
                 final_path = Path(final_out)
                 args.final_out = final_path
-                setattr(args, "output_csv", final_path)
+                args.output_csv = final_path
             else:
                 legacy_out = getattr(args, "output_csv", None)
                 if legacy_out is not None:
@@ -256,7 +256,7 @@ def test_get_tissue_data_cli__end_to_end(
     assert "--input" in metadata["command"]
     assert metadata.get("dtypes")
     assert metadata.get("config")
-    first_pipeline_start = next(
+    _ = next(
         payload for level, event, payload in logger.events if event == "pipeline_start"
     )
     context = get_current()

@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, Iterable
 
 import pandas as pd
 import pytest
 import requests
 
+from library import cli_utils
 from library.cli.base import PipelineCLIBase
 from library.config import Config
-from library import cli_utils
 from library.pipelines.common import PipelineRunResult
 from scripts import (
     get_activity_data,
@@ -22,7 +22,6 @@ from scripts import (
     get_target_data,
     get_testitem_data,
 )
-
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 
 
@@ -107,7 +106,7 @@ class _DummyChemblClient:
     def __init__(self, *args, **kwargs) -> None:  # pragma: no cover - interface compatibility
         pass
 
-    def __enter__(self) -> "_DummyChemblClient":  # pragma: no cover - trivial helper
+    def __enter__(self) -> _DummyChemblClient:  # pragma: no cover - trivial helper
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - trivial helper
@@ -226,7 +225,7 @@ def _patch_activity_cli(monkeypatch: pytest.MonkeyPatch, cfg: Config) -> None:
         if final_out is not None:
             final_path = Path(final_out)
             args.final_out = final_path
-            setattr(args, "output_csv", final_path)
+            args.output_csv = final_path
         elif hasattr(args, "output_csv") and args.output_csv is not None:
             output_path = Path(args.output_csv)
             args.final_out = output_path
