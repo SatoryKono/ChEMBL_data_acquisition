@@ -763,3 +763,31 @@ def test_ensure_src_assay_id__adds_column_when_missing() -> None:
     assert "src_assay_id" in enriched.columns
     assert enriched["src_assay_id"].isna().all()
     assert pd.api.types.is_string_dtype(enriched["src_assay_id"])  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_run_chembl__delegates_to_run_activity_pipeline(monkeypatch):
+    module = importlib.import_module("library.cli.commands.get_activity_data")
+
+    called = {}
+
+    def fake_pipeline(*args, **kwargs):
+        called["args"] = args
+        called["kwargs"] = kwargs
+        return "sentinel"
+
+    monkeypatch.setattr(module, "run_activity_pipeline", fake_pipeline)
+
+    result = module.run_chembl("cfg", option=True)
+
+    assert result == "sentinel"
+    assert called["args"] == ("cfg",)
+    assert called["kwargs"] == {"option": True}
+
+
+@pytest.mark.unit
+def test_run_chembl__exposed_via_all():
+    module = importlib.import_module("library.cli.commands.get_activity_data")
+
+    assert "run_chembl" in module.__all__
+    assert module.run_chembl is not None
