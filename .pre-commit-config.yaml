@@ -2,7 +2,7 @@
 # Install the hooks with `pre-commit install` and run them with `pre-commit run --all-files`.
 
 default_language_version:
-  python: python3.11
+  python: python
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
