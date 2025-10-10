@@ -86,6 +86,7 @@ from library.postprocessing.common.types import SchemaValidationError, StepError
 from library.postprocessing.document import preprocess_documents_csv
 from library.postprocessing.documents import (
     run_document_pipeline as run_document_postprocess,
+    steps as document_steps,
 )
 from library.qa.reporting import build_table_quality_hook
 from library.qa.table_quality import TableQualityProfiler
