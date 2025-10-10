@@ -90,6 +90,3 @@ def default_output_path(
         date_str = datetime.now(UTC).strftime("%Y%m%d")
 
     return Path(cfg.output_dir) / f"output.{inp.stem}_{date_str}.csv"
-        date_str = datetime.now(UTC).strftime("%Y%m%d")
-
-    return Path(cfg.output_dir) / f"output.{inp.stem}_{date_str}.csv"
