@@ -17,47 +17,50 @@ from collections.abc import Sequence
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
-import pandas as pd
-
 from library import io  # noqa: F401 - imported for CLI parity with existing scripts
 from library.cli import configure_logger, create_logger_config
 from library.cli.logging import setup_cli_logging
 from library.cli.parser import path_argument
 from library.cli_utils import resolve_invocation
 from library.common.log import logger
-from library.postprocessing.common.logging import PipelineRunMetrics
 from library.postprocessing.common.types import SchemaValidationError, StepError
 from library.postprocessing.testitem.schema import TESTITEM_SCHEMA, validate_testitems
 from library.postprocessing.testitem.steps import run_testitem_pipeline
 
 try:
-    from ._postprocess_common import (
+    from library.postprocess.common import (
         DEFAULT_LOG_DIR,
         LOG_DIR_ENV,
-        CsvRuntimeConfig,
-        export_postprocess_frame,
+        PostprocessingPipelineConfig,
         generate_metrics_report,
         get_csv_runtime_config,
         get_default_log_level,
         get_pipeline_config,
-        load_input_frame,
-        run_postprocess_steps,
-        validate_postprocess_frame,
+        run_postprocessing_pipeline,
     )
 except ImportError:  # pragma: no cover - fallback for direct execution
-    from _postprocess_common import (
-        DEFAULT_LOG_DIR,
-        LOG_DIR_ENV,
-        CsvRuntimeConfig,
-        export_postprocess_frame,
-        generate_metrics_report,
-        get_csv_runtime_config,
-        get_default_log_level,
-        get_pipeline_config,
-        load_input_frame,
-        run_postprocess_steps,
-        validate_postprocess_frame,
-    )
+    if __package__:
+        from ._postprocess_common import (  # type: ignore
+            DEFAULT_LOG_DIR,
+            LOG_DIR_ENV,
+            PostprocessingPipelineConfig,
+            generate_metrics_report,
+            get_csv_runtime_config,
+            get_default_log_level,
+            get_pipeline_config,
+            run_postprocessing_pipeline,
+        )
+    else:
+        from _postprocess_common import (  # type: ignore
+            DEFAULT_LOG_DIR,
+            LOG_DIR_ENV,
+            PostprocessingPipelineConfig,
+            generate_metrics_report,
+            get_csv_runtime_config,
+            get_default_log_level,
+            get_pipeline_config,
+            run_postprocessing_pipeline,
+        )
 
 
 TABLE_NAME = "testitems"
@@ -106,62 +109,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def load_output_data(path: Path, csv_cfg: CsvRuntimeConfig) -> pd.DataFrame:
-    """Load the raw test item output frame."""
-
-    return load_input_frame(TABLE_NAME, path, csv_cfg, logger=logger)
-
-
-def apply_postprocessing_steps(
-    df: pd.DataFrame,
-    *,
-    pipeline_version: str | None,
-) -> tuple[pd.DataFrame, PipelineRunMetrics]:
-    """Execute the configured test item postprocessing pipeline."""
-
-    return run_postprocess_steps(
-        TABLE_NAME,
-        df,
-        run_testitem_pipeline,
-        pipeline_version,
-        logger=logger,
-    )
-
-
-def validate_output_schema(
-    df: pd.DataFrame,
-    *,
-    pipeline_version: str | None,
-) -> pd.DataFrame:
-    """Validate and reorder the DataFrame according to the test item schema."""
-
-    return validate_postprocess_frame(
-        TABLE_NAME,
-        df,
-        validate_testitems,
-        TESTITEM_SCHEMA,
-        pipeline_version,
-        logger=logger,
-    )
-
-
-def save_output_data(
-    df: pd.DataFrame,
-    output_path: Path,
-    csv_cfg: CsvRuntimeConfig,
-) -> Path:
-    """Persist ``df`` deterministically to ``output_path``."""
-
-    return export_postprocess_frame(
-        TABLE_NAME,
-        df,
-        output_path,
-        csv_cfg,
-        TESTITEM_SCHEMA,
-        logger=logger,
-    )
-
-
 def run(args: argparse.Namespace) -> int:
     """Execute the test item postprocessing pipeline using ``args``."""
 
@@ -176,25 +123,29 @@ def run(args: argparse.Namespace) -> int:
     output_path = Path(args.output)
     event_prefix = f"{TABLE_NAME}_postprocess"
 
-    if not input_path.exists():
-        logger.error(f"{event_prefix}_input_missing", input=str(input_path))
-        return 1
-
-    metrics: PipelineRunMetrics | None = None
+    pipeline_runtime = PostprocessingPipelineConfig(
+        pipeline_config=pipeline_config,
+        csv_runtime_config=csv_cfg,
+        runner=run_testitem_pipeline,
+        validator=validate_testitems,
+        schema=TESTITEM_SCHEMA,
+        logger=logger,
+    )
 
     try:
-        frame = load_output_data(input_path, csv_cfg)
-        processed, metrics = apply_postprocessing_steps(
-            frame,
-            pipeline_version=pipeline_config.pipeline_version,
+        result = run_postprocessing_pipeline(
+            TABLE_NAME,
+            input_path,
+            output_path,
+            pipeline_runtime,
         )
-        validated = validate_output_schema(
-            processed,
-            pipeline_version=metrics.pipeline_version,
-        )
-        save_output_data(validated, output_path, csv_cfg)
+        validated = result.dataframe
+        metrics = result.metrics
     except (SchemaValidationError, StepError) as exc:
         logger.exception(f"{event_prefix}_failed", exc=exc)
+        return 1
+    except FileNotFoundError:
+        logger.error(f"{event_prefix}_input_missing", input=str(input_path))
         return 1
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception(f"{event_prefix}_unexpected_error", exc=exc)
@@ -202,23 +153,27 @@ def run(args: argparse.Namespace) -> int:
 
     if metrics is not None:
         summary = metrics.summary()
-        summary["output"] = str(output_path)
+        summary["output"] = str(result.output_path)
         logger.info(f"{event_prefix}_summary", **summary)
 
     extras = {"input": str(input_path), "output": str(output_path)}
+    pipeline_version = (
+        metrics.pipeline_version if metrics else pipeline_config.pipeline_version
+    )
     generate_metrics_report(
         TABLE_NAME,
-        output_path,
+        result.output_path,
         csv_cfg,
         run_testitem_pipeline,
-        pipeline_version=metrics.pipeline_version if metrics else None,
+        pipeline_version=pipeline_version,
         extras=extras,
         logger=logger,
+        pipeline_metrics=metrics,
     )
 
     logger.info(
         f"{event_prefix}_done",
-        output=str(output_path),
+        output=str(result.output_path),
         rows=int(validated.shape[0]),
         columns=int(validated.shape[1]),
     )

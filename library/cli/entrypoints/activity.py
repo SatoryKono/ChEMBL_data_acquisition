@@ -1933,6 +1933,13 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=1,
         help="Number of worker threads fetching activities in parallel",
     )
+    parser.add_argument(
+        "--postprocess",
+        dest="postprocess",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable activity postprocessing after the main pipeline",
+    )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg
 

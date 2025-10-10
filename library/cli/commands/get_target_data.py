@@ -1670,6 +1670,13 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             type=_positive_float,
             help=f"Timeout in seconds for API calls (default: {defaults.timeout})",
         )
+        execution.add_argument(
+            "--postprocess",
+            dest="postprocess",
+            action=argparse.BooleanOptionalAction,
+            default=False,
+            help="Enable target postprocessing after the main pipeline",
+        )
 
     # ----------------------------
     # UniProt sub-command
