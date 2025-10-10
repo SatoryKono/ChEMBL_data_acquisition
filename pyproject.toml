@@ -33,6 +33,7 @@ dependencies = [
 dev = [
   "black>=25.1.0,<26.0",
   "build>=1.2.2.post1,<2.0",
+  "freezegun>=1.5.1,<2.0",
   "hypothesis>=6.138.15,<7.0",
   "mypy>=1.17.1,<2.0",
   "pandas-stubs>=2.2.3.241126,<3.0",
