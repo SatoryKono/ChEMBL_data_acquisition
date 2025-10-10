@@ -8,6 +8,8 @@ import pytest
 
 from library.postprocessing import iuphar
 
+from . import assert_meta_and_header
+
 
 def test_ensure_required_columns__raises_for_missing_columns() -> None:
     frame = pd.DataFrame(
@@ -194,6 +196,7 @@ def test_process_iuphar_targets__produces_expected_csv(
     assert not actual_bytes.startswith(BOM_UTF8)
     expected_header = ",".join(iuphar._OUTPUT_COLUMNS) + "\n"
     assert actual_norm.startswith(expected_header.encode("utf-8"))
+    assert_meta_and_header(output_path, iuphar._OUTPUT_COLUMNS)
 
 
 def test_process_iuphar_targets__normalises_tmp_suffix(tmp_path: Path) -> None:
@@ -220,6 +223,7 @@ def test_process_iuphar_targets__normalises_tmp_suffix(tmp_path: Path) -> None:
 
     assert output_path.name == "IUPHAR.output.target_20250101.csv"
     assert output_path.exists()
+    assert_meta_and_header(output_path, iuphar._OUTPUT_COLUMNS)
 
 
 def test_process_iuphar_targets__fills_missing_component_description(
@@ -249,6 +253,7 @@ def test_process_iuphar_targets__fills_missing_component_description(
     output_path = iuphar.process_iuphar_targets(path)
 
     assert output_path.exists()
+    assert_meta_and_header(output_path, iuphar._OUTPUT_COLUMNS)
     result = pd.read_csv(output_path)
     assert result.loc[0, "iuphar_synonyms"] == "alpha|beta|gamma|name"
 
@@ -278,6 +283,7 @@ def test_process_iuphar_targets__handles_header_whitespace(tmp_path: Path) -> No
     output_path = iuphar.process_iuphar_targets(path)
 
     assert output_path.exists()
+    assert_meta_and_header(output_path, iuphar._OUTPUT_COLUMNS)
     result = pd.read_csv(output_path)
     assert result.loc[0, "iuphar_synonyms"] == "omega|omega component"
 
@@ -306,5 +312,6 @@ def test_process_iuphar_targets__handles_bom_prefixed_header(tmp_path: Path) -> 
     output_path = iuphar.process_iuphar_targets(path)
 
     assert output_path.exists()
+    assert_meta_and_header(output_path, iuphar._OUTPUT_COLUMNS)
     result = pd.read_csv(output_path)
     assert result.loc[0, "guidetopharmacology_id"] == "GTOP7"

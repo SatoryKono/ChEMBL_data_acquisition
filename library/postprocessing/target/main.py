@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from functools import lru_cache
 
 import pandas as pd
 
+from ... import io
 from ...common.log import logger
+from ...config import Config
 from ..helpers import normalise_export_basename
 from .cellularity import FetchLineageCallable, add_cellularity_smart
 from .multifunctional import compute_multifunctional
@@ -18,6 +21,17 @@ _CANONICAL_EXPORT_PREFIX = "output.target_"
 # (e.g. ``targets_minimal.csv``). The value is aligned with
 # ``tests/unit/test_target_postprocess_main.py`` expectations.
 _DEFAULT_EXPORT_STAMP = "20250101"
+_OUTPUT_COLUMN_ORDER: tuple[str, ...] = (
+    "target_chembl_id",
+    "uniprot_id_primary",
+    "organism",
+    "taxon_id",
+    "lineage_superkingdom",
+    "lineage_phylum",
+    "lineage_class",
+    "cellularity",
+    "multifunctional_enzyme",
+)
 _STAMP_SOURCE_COLUMNS: tuple[str, ...] = (
     "timestamp_utc",
     "timestamp",
@@ -89,11 +103,19 @@ def _lowercase_column(series: pd.Series) -> pd.Series:
     return series.astype("string").str.lower()
 
 
+@lru_cache(maxsize=1)
+def _default_config() -> Config:
+    """Return a lazily instantiated default configuration."""
+
+    return Config()
+
+
 def postprocess_target_table(
     input_path: str | Path,
     *,
     email: str | None = None,
     fetcher: FetchLineageCallable | None = None,
+    cfg: Config | None = None,
 ) -> str:
     """Replicate the Power Query post-processing for organism helpers."""
 
@@ -145,7 +167,16 @@ def postprocess_target_table(
     if not missing_columns:
         base = _normalise_helper_basename(source, base)
     output_path = path.with_name(f"organism.{base}").with_suffix(".csv")
-    joined.to_csv(output_path, index=False, encoding="utf-8", lineterminator="\n")
+    resolved_cfg = cfg if cfg is not None else _default_config()
+    io.write_csv(
+        joined,
+        output_path,
+        cfg=resolved_cfg,
+        encoding="utf-8",
+        sep=",",
+        key_cols=["target_chembl_id"],
+        col_order=_OUTPUT_COLUMN_ORDER,
+    )
     print(f"Postprocessed target table saved to: {output_path.name}")
     return str(output_path)
 
