@@ -23,19 +23,12 @@ _BASE_EXPORTS = (
     "MAX_ACTIVITY_CHUNK_SIZE",
     "MIN_ACTIVITY_TIMEOUT",
     "register_activity_pipeline_hooks",
-    "run_chembl",
     "run_activity_pipeline",
     "main",
     "run_chembl",
     "_emit_completion_message",
 )
 __all__ = _BASE_EXPORTS
-
-
-def run_chembl(*args, **kwargs):
-    """Backward compatible alias delegating to :func:`run_activity_pipeline`."""
-
-    return run_activity_pipeline(*args, **kwargs)
 
 
 def _bootstrap_entrypoint_exports() -> None:
@@ -77,11 +70,24 @@ if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
     from library.config import Config
 
 
-def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
-    """Execute the legacy :mod:`scripts.get_activity_data` runner."""
+def run_chembl(*args: Any, **kwargs: Any) -> int:
+    """Execute the activity pipeline using the entrypoint when available.
 
-    entrypoint = _load_activity_entrypoint()
-    return entrypoint.run_chembl(cfg, args)
+    Falls back to :func:`run_activity_pipeline` when the entrypoint cannot be
+    imported, preserving backwards compatibility with older deployments that
+    relied on the direct pipeline invocation helper.
+    """
+
+    try:
+        entrypoint = _load_activity_entrypoint()
+    except Exception:  # pragma: no cover - defensive fallback
+        return run_activity_pipeline(*args, **kwargs)
+
+    entrypoint_run = getattr(entrypoint, "run_chembl", None)
+    if callable(entrypoint_run):
+        return entrypoint_run(*args, **kwargs)
+
+    return run_activity_pipeline(*args, **kwargs)
 
 
 def _emit_completion_message(*args: Any, **kwargs: Any) -> None:

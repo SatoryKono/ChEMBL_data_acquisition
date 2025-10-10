@@ -807,18 +807,46 @@ def test_run_chembl__delegates_to_run_activity_pipeline(monkeypatch):
 
     called = {}
 
+    class _StubEntrypoint:
+        pass
+
     def fake_pipeline(*args, **kwargs):
         called["args"] = args
         called["kwargs"] = kwargs
         return "sentinel"
 
     monkeypatch.setattr(module, "run_activity_pipeline", fake_pipeline)
+    monkeypatch.setattr(module, "_load_activity_entrypoint", lambda: _StubEntrypoint())
 
     result = module.run_chembl("cfg", option=True)
 
     assert result == "sentinel"
     assert called["args"] == ("cfg",)
     assert called["kwargs"] == {"option": True}
+
+
+@pytest.mark.unit
+def test_run_chembl__import_failure_falls_back_to_pipeline(monkeypatch):
+    module = importlib.import_module("library.cli.commands.get_activity_data")
+
+    calls: dict[str, object] = {}
+
+    def fake_pipeline(*args, **kwargs):
+        calls["args"] = args
+        calls["kwargs"] = kwargs
+        return "fallback"
+
+    def _raise_import_error():
+        raise ModuleNotFoundError("No module named 'library.cli.entrypoints.activity'")
+
+    monkeypatch.setattr(module, "run_activity_pipeline", fake_pipeline)
+    monkeypatch.setattr(module, "_load_activity_entrypoint", _raise_import_error)
+
+    result = module.run_chembl("cfg", option=True)
+
+    assert result == "fallback"
+    assert calls["args"] == ("cfg",)
+    assert calls["kwargs"] == {"option": True}
 
 
 @pytest.mark.unit
