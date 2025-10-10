@@ -18,6 +18,7 @@ from library.pipelines.common import PipelineRunResult
 from scripts import (
     get_activity_data,
     get_assay_data,
+    get_data,
     get_document_data,
     get_target_data,
     get_testitem_data,
@@ -79,6 +80,28 @@ def _patch_logger(monkeypatch: pytest.MonkeyPatch, module: object) -> _MemoryLog
     logger = _MemoryLogger()
     monkeypatch.setattr(module, "logger", logger)
     return logger
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize(
+    "module",
+    [
+        get_data,
+        get_activity_data,
+        get_assay_data,
+        get_document_data,
+        get_target_data,
+        get_testitem_data,
+    ],
+)
+def test_cli_wrappers__monkeypatch_parent_catalog(monkeypatch: pytest.MonkeyPatch, module: object) -> None:
+    """Ensure monkeypatching private helpers affects both wrapper and underlying module."""
+
+    sentinel = object()
+    monkeypatch.setattr(module, "_warm_parent_catalog", sentinel, raising=False)
+
+    assert getattr(module, "_warm_parent_catalog") is sentinel
+    assert getattr(module._MODULE, "_warm_parent_catalog") is sentinel
 
 
 @pytest.mark.parametrize(
