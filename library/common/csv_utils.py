@@ -754,7 +754,7 @@ def write_csv_chunks_deterministic(
 
     write_meta_yaml(
         out_path,
-        cfg,
+        config=cfg,
         columns=meta_columns or columns,
         dtypes=dtype_names,
         generated_at=_metadata_generated_at(),
