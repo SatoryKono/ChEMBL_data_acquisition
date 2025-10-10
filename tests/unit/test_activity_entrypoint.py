@@ -123,7 +123,7 @@ def test_emit_completion_message__basic_payload(
     event, payload = logger.calls[0]
     assert event == "activity_pipeline_completion"
     assert payload == {
-        "output": "output.csv",
+        "output_postprocessed": "output.csv",
         "rows": 15,
         "duration_s": 1.25,
         "mode": "fetch",
@@ -148,9 +148,13 @@ def test_emit_completion_message__skip_existing(
     assert len(logger.calls) == 1
     event, payload = logger.calls[0]
     assert event == "pipeline_skip_existing"
-    assert payload == {"output": "existing.csv"}
+    assert payload == {"output_postprocessed": "existing.csv"}
     assert logger.events == [
-        ("info", "pipeline_skip_existing", {"output": "existing.csv"})
+        (
+            "info",
+            "pipeline_skip_existing",
+            {"output_postprocessed": "existing.csv"},
+        )
     ]
 
 
@@ -184,7 +188,7 @@ def test_emit_completion_message__streamed_metrics(
     assert len(logger.calls) == 1
     event, payload = logger.calls[0]
     assert event == "activity_pipeline_completion"
-    assert payload["output"] is None
+    assert payload["output_postprocessed"] is None
     assert payload["rows"] == 9
     assert payload["duration_s"] == 2.0
     assert payload["mode"] == "stream"

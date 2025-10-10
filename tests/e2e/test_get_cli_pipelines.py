@@ -1085,7 +1085,9 @@ def test_get_assay_run_success(
         ]
         enriched.to_csv(output_path, index=False, columns=columns)
         get_assay_data.logger.info(
-            "assay_pipeline_done", output=str(args.final_out), processed=len(enriched)
+            "assay_pipeline_done",
+            output_postprocessed=str(args.final_out),
+            processed=len(enriched),
         )
         return 0
 

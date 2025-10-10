@@ -537,7 +537,7 @@ def test_activity_pipeline__happy_path(
         else 0.0
     )
     assert summary_payload["null_fraction"] == pytest.approx(expected_null_fraction)
-    assert summary_payload["output"] == str(output_csv)
+    assert summary_payload["output_postprocessed"] == str(output_csv)
     report_path = cfg.io.output_dir / "activity.postprocess.report.json"
     assert report_path.exists()
     report_payload = json.loads(report_path.read_text(encoding="utf-8"))

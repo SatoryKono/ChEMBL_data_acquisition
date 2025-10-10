@@ -3965,7 +3965,7 @@ def validate_and_write(
     )
     payload: dict[str, object] = {
         "rows": len(final_df),
-        "output": str(output),
+        "output_postprocessed": str(output),
         "pipeline_version": pipeline_version_value,
     }
     if metrics is not None:

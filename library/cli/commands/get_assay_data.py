@@ -479,7 +479,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             processed_rows=processed_ids,
         )
         payload: dict[str, Any] = {
-            "output": str(output_path),
+            "output_postprocessed": str(output_path),
             "processed": processed_ids,
             "pipeline_version": (
                 postprocess_metrics.pipeline_version
@@ -506,7 +506,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     else:
         logger.error(
             "assay_pipeline_failed",
-            output=str(output_path),
+            output_postprocessed=str(output_path),
             processed=processed_ids,
             exit_code=exit_status,
         )

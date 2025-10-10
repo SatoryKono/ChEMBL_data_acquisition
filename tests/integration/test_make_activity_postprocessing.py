@@ -55,10 +55,12 @@ def test_make_activity_postprocessing__end_to_end(tmp_path, monkeypatch):
     assert payload["table"] == "activities"
     assert payload["output_path"] == str(output_path)
     assert payload["metrics"]["output"]["rows"] == len(result)
+    extras = payload.get("extras")
+    assert extras and extras["output_postprocessed"] == str(output_path)
 
     # Log file is created with the expected naming convention
     date_str = datetime.now(UTC).strftime("%Y%m%d")
-    log_path = log_dir / f"make_activity_postprocessing_{date_str}.log"
+    log_path = log_dir / f"make_activities_postprocessing_{date_str}.log"
     assert log_path.exists()
 
     # Idempotent reruns keep the output stable

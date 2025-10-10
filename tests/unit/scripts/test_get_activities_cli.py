@@ -120,7 +120,7 @@ def test_main__limit_forwarded_to_pipeline(
     assert (
         "info",
         "generated",
-        {"count": 7, "output": str(output_csv)},
+        {"count": 7, "output_postprocessed": str(output_csv)},
     ) in logger_stub.events
 
 
@@ -251,7 +251,7 @@ def test_main__skip_existing_short_circuit(
     assert (
         "info",
         "pipeline_skip_existing",
-        {"output": str(output_csv)},
+        {"output_postprocessed": str(output_csv)},
     ) in logger_stub.events
 
 

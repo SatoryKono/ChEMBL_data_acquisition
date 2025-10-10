@@ -76,6 +76,7 @@ from library.cli_utils import resolve_invocation
 
 TABLE_NAME = "documents"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
+LOG_FILE_STEM = f"make_{TABLE_NAME}_postprocessing"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -207,7 +208,7 @@ def run(args: argparse.Namespace) -> int:
     logger.info(
         f"{event_prefix}_start",
         input=str(input_path),
-        output=str(output_path),
+        output_postprocessed=str(output_path),
         separator=csv_cfg.sep,
         encoding=csv_cfg.encoding,
     )
@@ -240,7 +241,10 @@ def run(args: argparse.Namespace) -> int:
         logger.exception(f"{event_prefix}_unexpected_error", exc=exc)
         return 1
 
-    extras = {"input": str(input_path), "output": str(output_path)}
+    extras = {
+        "input": str(input_path),
+        "output_postprocessed": str(output_path),
+    }
     metrics, _ = generate_metrics_report(
         TABLE_NAME,
         output_path,
@@ -255,14 +259,14 @@ def run(args: argparse.Namespace) -> int:
     rows = columns = None
     if metrics is not None:
         summary = metrics.summary()
-        summary["output"] = str(output_path)
+        summary["output_postprocessed"] = str(output_path)
         logger.info(f"{event_prefix}_summary", **summary)
         rows = summary.get("rows")
         columns = summary.get("columns")
 
     logger.info(
         f"{event_prefix}_done",
-        output=str(output_path),
+        output_postprocessed=str(output_path),
         rows=int(rows) if rows is not None else None,
         columns=int(columns) if columns is not None else None,
     )
@@ -287,7 +291,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             [
                 *invocation,
                 f"input={Path(args.input).resolve()}",
-                f"output={Path(args.output).resolve()}",
+                f"output_postprocessed={Path(args.output).resolve()}",
             ]
         )
         run_id_value = uuid5(NAMESPACE_URL, descriptor).hex
@@ -300,7 +304,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         log_dir = DEFAULT_LOG_DIR
 
     with setup_cli_logging(
-        PROGRAM_NAME, log_cfg, date_str=None, log_dir=log_dir
+        LOG_FILE_STEM, log_cfg, date_str=None, log_dir=log_dir
     ) as logging_ctx:
         configure_logger(logging_ctx.log_cfg)
         args._pipeline_config = pipeline_config
