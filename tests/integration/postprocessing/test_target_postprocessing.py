@@ -542,7 +542,7 @@ def test_isoform_process_targets__strips_csv_normalized_suffix(
     with pytest.warns(UserWarning, match=match):
         output_path = isoform.process_targets(str(input_path), verbose=False)
 
-    assert output_path.name == "isoform.output.targets_20250101.csv"
+    assert output_path.name == "isoform.output.target_20250101.csv"
     assert output_path.parent == input_path.parent
 
 
