@@ -844,14 +844,14 @@ def run_pipeline(
         else:
             failure_path.unlink(missing_ok=True)
             Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
-        return abort_exc.code
+        return RunPipelineResult(abort_exc.code, None)
     except PipelineError:
         if total_failures:
             errors.save(failure_path, cfg=cfg)
         else:
             failure_path.unlink(missing_ok=True)
             Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
-        return 1
+        return RunPipelineResult(1, None)
 
     prepared_first: pd.DataFrame | None = None
     if first_chunk is not None:
