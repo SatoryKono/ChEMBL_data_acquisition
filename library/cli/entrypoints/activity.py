@@ -69,12 +69,12 @@ from library.pipelines.common import (
     add_pipeline_metadata,
 )
 from library.pipelines.common.metadata import get_pipeline_version
-from library.postprocessing import helpers as postprocessing_helpers
-from library.postprocessing.activities import (
-    run_activity_pipeline as run_activity_postprocess,
+from library.postprocess import (
+    PostprocessingPipelineConfig,
+    get_csv_runtime_config as get_postprocess_csv_config,
+    get_pipeline_config as get_postprocess_pipeline_config,
+    run_postprocessing_pipeline,
 )
-from library.postprocessing.activity_extended import process_activity_extended
-from library.postprocessing.common import collect_postprocess_metrics
 from library.processing.activity import (
     apply_activity_annotations,
     compute_activity_bounds,
@@ -710,7 +710,19 @@ def _load_assay_src_lookup(dictionary_dir: Path | str | None) -> dict[str, str]:
 
     candidate = Path(dictionary_dir) / "_assay" / "assay.csv"
     try:
-        frame = postprocessing_helpers.read_csv_with_fallbacks(candidate)
+        frame = pd.read_csv(candidate, encoding="utf-8")
+    except UnicodeDecodeError:
+        for encoding in ("utf-8-sig", "cp1252", "latin-1"):
+            try:
+                frame = pd.read_csv(candidate, encoding=encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+        else:
+            logger.warning(
+                f"Assay lookup file '{candidate}' could not be decoded using supported encodings; src_assay_id enrichment will be skipped."
+            )
+            return {}
     except FileNotFoundError:
         logger.warning(
             f"Assay lookup file '{candidate}' was not found; src_assay_id enrichment will be skipped."
@@ -1110,6 +1122,37 @@ def _filter_activity_output_columns(
     return filtered, dropped_columns
 
 
+@dataclass(frozen=True)
+class _ActivityPostprocessDeps:
+    process_activity_extended: Callable[..., Path]
+    run_activity_postprocess: Callable[..., tuple[pd.DataFrame, object]]
+    validate_postprocess: Callable[..., pd.DataFrame]
+    activity_schema: "DataFrameSchema"
+
+
+def _load_activity_postprocess_deps() -> _ActivityPostprocessDeps:
+    from library.postprocessing.activities import (
+        ACTIVITY_SCHEMA as _ACTIVITY_SCHEMA,
+        run_activity_pipeline as _run_activity_postprocess,
+        validate_activities as _validate_postprocess,
+    )
+    from library.postprocessing.activity_extended import process_activity_extended
+
+    return _ActivityPostprocessDeps(
+        process_activity_extended=process_activity_extended,
+        run_activity_postprocess=_run_activity_postprocess,
+        validate_postprocess=_validate_postprocess,
+        activity_schema=_ACTIVITY_SCHEMA,
+    )
+
+
+def _derive_postprocess_output_path(output_path: Path) -> Path:
+    name = output_path.name
+    if name.startswith("output."):
+        return output_path.with_name(f"output_postprocessed.{name[len('output.'):]}")
+    return output_path.with_name(f"{output_path.stem}.postprocessed{output_path.suffix}")
+
+
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute activity retrieval from the ChEMBL API.
 
@@ -1219,6 +1262,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     limit = prepared_context.limit
     limited_ids = prepared_context.limited_ids
     extended_output_path: Path | None = None
+    postprocess_metrics = None
+    postprocess_report_path: Path | None = None
+    postprocess_output_path: Path | None = None
 
     enrichment_cfg = cfg.activity_enrichment
     extra_columns: list[str] = []
@@ -1602,18 +1648,68 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info(
             f"Merged data checkpoint: wrote merged activity records to '{output_path}'."
         )
-        try:
-            extended_output_path = process_activity_extended(
-                input_path=output_path,
-                search_dir=output_path.parent,
-                dictionary_dir=cfg.resources.dictionary_dir,
-                targets_csv=cfg.resources.targets_type_csv,
+        postprocess_enabled = bool(getattr(args, "postprocess", False))
+        if not postprocess_enabled:
+            logger.info("[INFO] Postprocessing skipped (flag --postprocess not set)")
+        else:
+            deps = _load_activity_postprocess_deps()
+            try:
+                extended_output_path = deps.process_activity_extended(
+                    input_path=output_path,
+                    search_dir=output_path.parent,
+                    dictionary_dir=cfg.resources.dictionary_dir,
+                    targets_csv=cfg.resources.targets_type_csv,
+                )
+            except Exception:
+                logger.exception(
+                    "Activity extended post-processing failed while enriching merged activity data."
+                )
+                raise
+
+            try:
+                pipeline_config = get_postprocess_pipeline_config(
+                    "activities", getattr(args, "config", None)
+                )
+                csv_cfg = get_postprocess_csv_config(pipeline_config)
+                runtime_cfg = PostprocessingPipelineConfig(
+                    pipeline_config=pipeline_config,
+                    csv_runtime_config=csv_cfg,
+                    runner=deps.run_activity_postprocess,
+                    validator=deps.validate_postprocess,
+                    schema=deps.activity_schema,
+                    logger=logger,
+                )
+                postprocess_output_path = _derive_postprocess_output_path(output_path)
+                logger.info(
+                    "activity_postprocess_start",
+                    input=str(output_path),
+                    output=str(postprocess_output_path),
+                )
+                pipeline_result = run_postprocessing_pipeline(
+                    "activities",
+                    output_path,
+                    postprocess_output_path,
+                    runtime_cfg,
+                )
+            except Exception:
+                logger.exception(
+                    "Activity postprocessing pipeline failed while processing merged activity data."
+                )
+                raise
+
+            postprocess_metrics = pipeline_result.metrics
+            postprocess_report_path = pipeline_result.report_path
+            if postprocess_metrics is None:
+                raise RuntimeError("activity postprocess metrics missing")
+            if postprocess_report_path is None:
+                raise RuntimeError("activity postprocess report missing")
+            logger.info(
+                "activity_postprocess_done",
+                output=str(pipeline_result.output_path),
+                report=str(postprocess_report_path),
+                rows=_safe_int(postprocess_metrics.output_rows, 0),
+                columns=_safe_int(postprocess_metrics.output_columns, 0),
             )
-        except Exception:
-            logger.exception(
-                "Activity extended post-processing failed while enriching merged activity data."
-            )
-            raise
 
     summary_snapshot: Mapping[str, object] | None = None
     processed_ids = prepared_context.processed_ids
@@ -1670,24 +1766,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         else:
             completion_rows = processed_ids
 
-        report_extras: dict[str, object] = {
-            "rows": completion_rows,
-            "processed": processed_ids,
-        }
-        if pipeline_stats is not None:
-            report_extras.update(pipeline_stats)
-        if summary_snapshot:
-            report_extras["summary_snapshot"] = summary_snapshot
-        if extended_output_path is not None:
-            report_extras["extended_output"] = str(extended_output_path)
-
-        postprocess_metrics, report_path = _generate_activity_postprocess_metrics(
-            cfg,
-            output_path,
-            logger=logger,
-            extras=report_extras,
-        )
-
         pipeline_version_value = (
             getattr(postprocess_metrics, "pipeline_version", None)
             if postprocess_metrics and postprocess_metrics.pipeline_version is not None
@@ -1706,6 +1784,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if extended_output_path is not None:
             pipeline_done_payload["extended_output"] = str(extended_output_path)
         if postprocess_metrics is not None:
+            if postprocess_output_path is not None:
+                pipeline_done_payload["postprocess_output"] = str(
+                    postprocess_output_path
+                )
             summary = postprocess_metrics.summary()
             if summary.get("rows") is not None:
                 pipeline_done_payload["postprocess_rows"] = summary["rows"]
@@ -1720,8 +1802,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 pipeline_done_payload["postprocess_schema"] = getattr(
                     validation, "schema", None
                 )
-            if report_path is not None:
-                pipeline_done_payload["postprocess_report"] = str(report_path)
+            if postprocess_report_path is not None:
+                pipeline_done_payload["postprocess_report"] = str(
+                    postprocess_report_path
+                )
 
         logger.info("activity_pipeline_done", extra=pipeline_done_payload)
         if extended_output_path is not None:
@@ -1770,44 +1854,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
 
     return exit_code
-
-
-def _generate_activity_postprocess_metrics(
-    cfg: Config,
-    output_path: Path,
-    *,
-    logger: Logger,
-    extras: Mapping[str, object] | None = None,
-) -> tuple[object, Path]:
-    """Run the activity postprocess pipeline and persist the metrics report."""
-
-    metrics, report_path = collect_postprocess_metrics(
-        table="activity",
-        output_path=output_path,
-        csv_sep=cfg.io.csv_sep,
-        csv_encoding=cfg.io.csv_encoding,
-        output_dir=cfg.io.output_dir,
-        runner=run_activity_postprocess,
-        logger=logger,
-        pipeline_version=get_pipeline_version(),
-        report_extras=extras,
-    )
-    if report_path is None:
-        fallback = Path(cfg.io.output_dir) / "activity.postprocess.report.json"
-        fallback.parent.mkdir(parents=True, exist_ok=True)
-        fallback_payload: dict[str, object] = {
-            "table": "activity",
-            "metrics": None,
-            "output_path": str(output_path),
-        }
-        if extras:
-            fallback_payload["extras"] = dict(extras)
-        fallback.write_text(
-            json.dumps(fallback_payload, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
-        report_path = fallback
-    return metrics, report_path
 
 
 def _coerce_cli_path(value: object) -> Path | str | None:
