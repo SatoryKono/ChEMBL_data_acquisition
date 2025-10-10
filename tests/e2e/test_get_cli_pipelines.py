@@ -10,6 +10,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 import requests
+import yaml
 
 from library import cli_utils
 from library.cli.base import PipelineCLIBase
@@ -23,6 +24,7 @@ from scripts import (
     get_target_data,
     get_testitem_data,
 )
+from library.utils.cli_tools import get_document_type
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 
 
@@ -274,6 +276,98 @@ def _patch_activity_cli(monkeypatch: pytest.MonkeyPatch, cfg: Config) -> None:
     )
     monkeypatch.setattr(cli_utils, "ensure_dirs", lambda _cfg: None)
 
+
+@pytest.mark.e2e
+def test_get_document_type_main__writes_meta(
+    tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_csv = tmp_path / "docs.csv"
+    frame = pd.DataFrame(
+        [
+            {
+                "chembl_id": "CHEMBL1",
+                "PubMed.PublicationType": "Review Article",
+                "scholar.PublicationTypes": "",
+                "OpenAlex.PublicationTypes": "",
+            },
+            {
+                "chembl_id": "CHEMBL2",
+                "PubMed.PublicationType": "Journal Article",
+                "scholar.PublicationTypes": "Conference Paper",
+                "OpenAlex.PublicationTypes": "",
+            },
+        ]
+    )
+    frame.to_csv(input_csv, index=False)
+    output_csv = tmp_path / "output" / "document_types.csv"
+
+    def fake_apply_config_overrides(
+        args,
+        parser,
+        config_path,
+        mapping=None,
+        *,
+        base_parser=None,
+    ) -> Config:
+        args._config_metadata = None
+        if getattr(args, "output_csv", None) is not None:
+            output_path = Path(args.output_csv)
+            args.output_csv = output_path
+            args.final_out = output_path
+        cfg.io.output_dir = tmp_path / "io"
+        cfg.io.cache_dir = tmp_path / "cache"
+        return cfg
+
+    monkeypatch.setattr(
+        get_document_type.cli, "apply_config_overrides", fake_apply_config_overrides
+    )
+
+    captured: dict[str, object] = {}
+
+    def _stub_write_csv(
+        frame: pd.DataFrame,
+        path: Path,
+        *,
+        cfg: Config,
+        key_cols: Iterable[str] | None = None,
+        sep: str | None = None,
+        encoding: str | None = None,
+        **_: object,
+    ) -> Path:
+        captured["cfg"] = cfg
+        captured["key_cols"] = list(key_cols or [])
+        captured["frame"] = frame.copy()
+        destination = Path(path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        frame.to_csv(destination, index=False, sep=sep or ",", encoding=encoding or "utf-8")
+        meta_path = Path(f"{destination}.meta.yaml")
+        meta_path.write_text(
+            yaml.safe_dump({"columns": list(frame.columns)}), encoding="utf-8"
+        )
+        captured["meta_path"] = meta_path
+        return destination
+
+    monkeypatch.setattr(get_document_type.io, "write_csv", _stub_write_csv)
+
+    invocation = ["--input", str(input_csv), "--final-out", str(output_csv)]
+    exit_code = get_document_type.main(invocation)
+
+    assert exit_code == 0
+    assert captured["cfg"] is cfg
+    assert captured["key_cols"] == ["chembl_id"]
+
+    assert output_csv.exists()
+    result = pd.read_csv(output_csv)
+    assert "class_label" in result.columns
+
+    meta_path = Path(f"{output_csv}.meta.yaml")
+    assert meta_path.exists()
+    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert metadata["schema"] == "document_type"
+    assert metadata["stats"]["rows_total"] == len(frame)
+    assert metadata["stats"]["rows_kept"] == len(frame)
+    assert metadata["stats"]["rows_dropped"] == 0
+    assert metadata.get("invocation") == invocation
 
 @pytest.mark.e2e
 def test_get_testitem_run_success(
