@@ -30,6 +30,9 @@ import pandas as pd
 import requests
 
 from library import cli, io
+from library.cli import logging as cli_logging
+
+_DEFAULT_LOGGING_DATE_FUNC = cli_logging._current_date_str
 from library.clients.chembl import ChemblClient
 from library.integration import chembl_library as cl
 
