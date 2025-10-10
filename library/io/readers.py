@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pandas as pd
+from pandas.io.parsers import TextFileReader
 
 from ..common.log import logger
 from ..config import IoCfg
@@ -280,7 +281,8 @@ def read_csv(
     na_values: Sequence[str] | str | None = None,
     parse_dates: Sequence[str] | None = None,
     schema: pa.DataFrameSchema | type[pa.DataFrameModel] | None = None,
-) -> pd.DataFrame:
+    chunksize: int | None = None,
+) -> pd.DataFrame | TextFileReader[pd.DataFrame]:
     """Load a CSV file into a :class:`pandas.DataFrame` with optional schema validation."""
 
     sep = sep or cfg.csv_sep
@@ -295,6 +297,7 @@ def read_csv(
             dtype=dtype,
             na_values=na_values,
             parse_dates=list(parse_dates) if parse_dates is not None else None,
+            chunksize=chunksize,
         )
     except (FileNotFoundError, pd.errors.ParserError, UnicodeError) as exc:
         logger.error(
@@ -304,6 +307,8 @@ def read_csv(
             error=str(exc),
         )
         raise SystemExit(1) from exc
+    if chunksize is not None:
+        return df
     if schema is not None:
         if pa is None:
             raise RuntimeError(
