@@ -1690,6 +1690,18 @@
           ],
           "default": null,
           "title": "Burst"
+        },
+        "api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Key"
         }
       },
       "title": "SemanticScholarCfg",
