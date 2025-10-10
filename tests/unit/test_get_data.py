@@ -9,8 +9,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from library.cli.commands import get_data
 from library.pipelines.common import PipelineRunResult
-from scripts import get_data
 from tests.helpers.logs import iter_events, parse_log_lines
 from tests.helpers.manifests import load_latest_manifest
 
@@ -51,6 +51,55 @@ def _make_config(tmp_path: Path) -> get_data.PipelineRunConfig:
 def _load_manifest(cfg: get_data.PipelineRunConfig) -> dict[str, object]:
     _, manifest = load_latest_manifest(cfg.base_path)
     return manifest
+
+
+@pytest.mark.unit
+def test_build_document_options__forwards_skip_existing(tmp_path: Path) -> None:
+    cfg = replace(_make_config(tmp_path), skip_existing=True)
+    options = get_data._build_document_options(
+        cfg,
+        cfg.input_path("document"),
+        cfg.output_path("document"),
+    )
+    assert options.skip_existing is True
+    assert options.force is cfg.force
+
+
+@pytest.mark.unit
+def test_build_target_options__forwards_skip_existing(tmp_path: Path) -> None:
+    cfg = replace(_make_config(tmp_path), skip_existing=True)
+    options = get_data._build_target_options(
+        cfg,
+        cfg.input_path("target"),
+        cfg.output_path("target"),
+    )
+    assert options.skip_existing is True
+    assert options.force is cfg.force
+
+
+@pytest.mark.unit
+def test_build_assay_options__forwards_skip_existing(tmp_path: Path) -> None:
+    cfg = replace(_make_config(tmp_path), skip_existing=True)
+    options = get_data._build_assay_options(
+        cfg,
+        cfg.input_path("assay"),
+        cfg.output_path("assay"),
+    )
+    assert options.skip_existing is True
+    assert options.force is cfg.force
+
+
+@pytest.mark.unit
+def test_build_activity_options__forwards_skip_and_dry_run(tmp_path: Path) -> None:
+    cfg = replace(_make_config(tmp_path), skip_existing=True, dry_run=True)
+    options = get_data._build_activity_options(
+        cfg,
+        cfg.input_path("activity"),
+        cfg.output_path("activity"),
+    )
+    assert options.skip_existing is True
+    assert options.dry_run is True
+    assert options.force is cfg.force
 
 
 @pytest.mark.unit

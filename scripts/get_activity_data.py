@@ -64,8 +64,7 @@ def _augment_activity_module(module: ModuleType) -> tuple[str, ...]:
 
 
 def _load_activity_module() -> ModuleType:
-    module = import_module("library.cli.entrypoints.activity")
-    _augment_activity_module(module)
+    module = import_module("library.cli.commands.get_activity_data")
     return module
 
 
@@ -74,7 +73,7 @@ __all__ = _export_module_api(_MODULE)
 
 
 def __getattr__(name: str) -> object:
-    """Proxy attribute access to :mod:`library.cli.entrypoints.activity`."""
+    """Proxy attribute access to :mod:`library.cli.commands.get_activity_data`."""
 
     try:
         return getattr(_MODULE, name)

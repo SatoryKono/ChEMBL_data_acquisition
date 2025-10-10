@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,39 @@ import pandas as pd
 import pytest
 
 from library.cli.entrypoints import activity
+
+
+@pytest.mark.unit
+def test_activity_runner_registration__commands_module(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands_module = importlib.import_module(
+        "library.cli.commands.get_activity_data"
+    )
+    runner_module = importlib.import_module(
+        "library.pipelines.activity.runner"
+    )
+
+    def _stub_runner(cfg, args):  # pragma: no cover - exercised via resolve
+        return 0
+
+    def _stub_emit(**_kwargs):  # pragma: no cover - exercised via resolve
+        return None
+
+    monkeypatch.setattr(commands_module, "run_chembl", _stub_runner)
+    monkeypatch.setattr(
+        commands_module, "_emit_completion_message", _stub_emit
+    )
+
+    reloaded_runner = importlib.reload(runner_module)
+
+    try:
+        runner, emit_completion = reloaded_runner.resolve_activity_pipeline_hooks()
+        assert runner is _stub_runner
+        assert emit_completion is _stub_emit
+    finally:
+        monkeypatch.undo()
+        importlib.reload(reloaded_runner)
 
 
 @pytest.mark.unit

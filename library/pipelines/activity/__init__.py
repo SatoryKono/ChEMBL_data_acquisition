@@ -22,7 +22,12 @@ from .activities import get_activities
 
 @dataclass(slots=True)
 class ActivityPipelineOptions:
-    """Configuration forwarded to the activity CLI runner."""
+    """Configuration forwarded to the activity CLI runner.
+
+    The combined ``get_data`` command maps ``--skip-existing`` and ``--dry-run``
+    to ``skip_existing`` and ``dry_run`` respectively so operators can either
+    reuse existing exports or perform validation passes without writing output.
+    """
 
     input_csv: Path
     output_csv: Path

@@ -76,6 +76,9 @@ def resolve_activity_pipeline_hooks() -> tuple[
     global _ACTIVITY_RUNNER, _ACTIVITY_COMPLETION
 
     if _ACTIVITY_RUNNER is None or _ACTIVITY_COMPLETION is None:
+        _register_default_activity_pipeline_hooks()
+
+    if _ACTIVITY_RUNNER is None or _ACTIVITY_COMPLETION is None:
         try:  # pragma: no cover - defensive fallback for script import side-effects
             from scripts import get_activity_data as activity_cli  # type: ignore
         except Exception:  # pragma: no cover - the runner may be registered elsewhere
@@ -91,6 +94,33 @@ def resolve_activity_pipeline_hooks() -> tuple[
         raise RuntimeError(msg)
 
     return _ACTIVITY_RUNNER, _ACTIVITY_COMPLETION
+
+
+def _register_default_activity_pipeline_hooks() -> None:
+    """Register the default activity pipeline handlers from the CLI command."""
+
+    global _ACTIVITY_RUNNER, _ACTIVITY_COMPLETION
+
+    if _ACTIVITY_RUNNER is not None and _ACTIVITY_COMPLETION is not None:
+        return
+
+    try:
+        from ...cli.commands import get_activity_data as activity_cli
+    except Exception:  # pragma: no cover - defensive fallback to scripts
+        return
+
+    runner = getattr(activity_cli, "run_chembl", None)
+    emit_completion = getattr(activity_cli, "_emit_completion_message", None)
+    if runner is None or emit_completion is None:
+        return
+
+    register_activity_pipeline_hooks(
+        runner=runner,
+        emit_completion_message=emit_completion,
+    )
+
+
+_register_default_activity_pipeline_hooks()
 
 
 def run_activity_pipeline(

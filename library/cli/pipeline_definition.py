@@ -54,6 +54,9 @@ class PipelineDefinition:
     key_columns: Sequence[str] = field(default_factory=tuple)
     table_quality: TableQualityHook | None = None
     stats_extra: Mapping[str, object] | Callable[[], Mapping[str, object]] | None = None
+    #: Additional statistics merged into the metadata output produced by
+    #: :func:`library.cli_utils.run_pipeline`. The mapping must only contain
+    #: JSON-serialisable values and may be provided directly or via a factory.
     stats_callback: Callable[[Stats], None] | None = None
     strict_mode: bool = False
     dictionary_resources: Sequence[str] | None = None
