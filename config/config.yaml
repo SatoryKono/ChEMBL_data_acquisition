@@ -146,8 +146,8 @@ sources:
     timeout_connect: 5  # Connection timeout in seconds (env: CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT)
     timeout_read: 30  # Read timeout in seconds (env: CHEMBL_DA_OPENALEX_TIMEOUT_READ)
     retries: 3  # Retry attempts
-    rps: 5  # Requests per second limit (env: CHEMBL_DA_OPENALEX_RPS)
-    burst: 5  # Burst size for rate limiter (env: CHEMBL_DA_OPENALEX_BURST)
+    rps: 4  # Requests per second limit (env: CHEMBL_DA_OPENALEX_RPS)
+    burst: 1  # Burst size for rate limiter (env: CHEMBL_DA_OPENALEX_BURST)
     mailto: "chembl-data@ebi.ac.uk"  # Required contact email; replace with your team's address before production use (env: CHEMBL_DA_OPENALEX_MAILTO). Placeholder domains such as example.org are rejected.
   crossref:
     base: "https://api.crossref.org"  # CrossRef API root URL (env: CHEMBL_DA_CROSSREF_BASE)
