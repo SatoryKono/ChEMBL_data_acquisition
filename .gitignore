@@ -48,6 +48,9 @@ reports/*
 !reports/archive/**
 !reports/archive/REPORT_activity_log_missing.md
 
+# Static analysis reports
+mypy-report.txt
+
 dictionary/_activity/pairs.csv
 /logs
 data/logs/get_target_data_20251003.log

@@ -152,6 +152,10 @@ push and pull request. Local changes must keep them green and deterministic:
 3. `mypy --strict library` — runs strict type checking across the production
    modules inside `library/`.
 
+The mypy step uploads its textual output to the `test-reports` artifact as
+`reports/mypy-report.txt` instead of committing the file. Download the artifact
+from the CI job summary whenever you need to inspect the type-check log.
+
 ### Logging contract
 
 All CLI entry points initialise structured logging via the shared bootstrap
