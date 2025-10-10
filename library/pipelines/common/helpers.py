@@ -192,6 +192,8 @@ def run_chunked_pipeline(
     cfg = params.pop("cfg", None)
     logger = params.pop("logger", None)
     definition = params.pop("definition", None)
+    emit_standard_outputs = params.pop("emit_standard_outputs", True)
+    emit_legacy_artifacts = params.pop("emit_legacy_artifacts", True)
     params.setdefault("writer", writer)
 
     pipeline_definition = normalise_definition(definition, params)
@@ -203,4 +205,6 @@ def run_chunked_pipeline(
         failure_path=failure_path,
         cfg=cfg,
         logger=logger,
+        emit_standard_outputs=emit_standard_outputs,
+        emit_legacy_artifacts=emit_legacy_artifacts,
     )
