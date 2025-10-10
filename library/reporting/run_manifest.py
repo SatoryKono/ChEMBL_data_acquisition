@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -78,16 +78,15 @@ def _build_stats(
     total = int(rows_total)
     kept = int(rows_kept)
     dropped = max(total - kept, 0)
-    stats: Stats = {
+    stats: dict[str, Any] = {
         "rows_total": total,
         "rows_kept": kept,
         "rows_dropped": dropped,
         "output_sha256": file_sha256(csv_path),
     }
     if extra:
-        for key, value in extra.items():
-            stats[key] = value
-    return stats
+        stats.update(extra)
+    return cast(Stats, stats)
 
 
 def _normalise_quality_summary(

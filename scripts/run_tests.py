@@ -10,10 +10,10 @@ import platform
 import shlex
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, MutableMapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import NAMESPACE_URL, uuid5
 
 import pytest
@@ -219,7 +219,7 @@ def _build_test_entry(test: dict[str, Any]) -> dict[str, Any]:
     return entry
 
 
-def _calculate_success_rate(summary: dict[str, int]) -> float:
+def _calculate_success_rate(summary: Mapping[str, int | float]) -> float:
     total = int(summary.get("total", 0) or 0)
     skipped = int(summary.get("skipped", 0) or 0)
     passed = int(summary.get("passed", 0) or 0)
@@ -237,7 +237,7 @@ def _calculate_success_rate(summary: dict[str, int]) -> float:
 def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, Any]:
     tests_raw = raw.get("tests", [])
     tests: list[dict[str, Any]] = []
-    summary = {
+    summary: dict[str, int | float] = {
         "total": 0,
         "passed": 0,
         "failed": 0,
@@ -245,6 +245,7 @@ def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, An
         "xfailed": 0,
         "xpassed": 0,
         "error": 0,
+        "success_rate": 0.0,
     }
 
     if isinstance(tests_raw, list):
@@ -285,16 +286,14 @@ def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, An
                 "error": message,
             }
         )
-        summary.update(
-            total=1,
-            passed=0,
-            failed=0,
-            skipped=0,
-            xfailed=0,
-            xpassed=0,
-            error=1,
-            success_rate=0.0,
-        )
+        summary["total"] = 1
+        summary["passed"] = 0
+        summary["failed"] = 0
+        summary["skipped"] = 0
+        summary["xfailed"] = 0
+        summary["xpassed"] = 0
+        summary["error"] = 1
+        summary["success_rate"] = 0.0
     else:
         summary["success_rate"] = round(success_rate, 4)
 
@@ -319,17 +318,19 @@ def build_structured_report(raw: dict[str, Any], exit_code: int) -> dict[str, An
 def _ensure_failure_record(
     report: dict[str, Any], exit_code: int, reason: str
 ) -> dict[str, Any]:
-    summary = report.setdefault("summary", {})
-    summary.update(
-        total=max(int(summary.get("total", 0) or 0), 1),
-        passed=0,
-        failed=0,
-        skipped=0,
-        xfailed=0,
-        xpassed=0,
-        error=max(int(summary.get("error", 0) or 0), 1),
-        success_rate=0.0,
-    )
+    summary = cast(MutableMapping[str, object], report.setdefault("summary", {}))
+    raw_total = summary.get("total", 0)
+    total_value = int(raw_total) if isinstance(raw_total, (int, float)) else 0
+    summary["total"] = max(total_value, 1)
+    summary["passed"] = 0
+    summary["failed"] = 0
+    summary["skipped"] = 0
+    summary["xfailed"] = 0
+    summary["xpassed"] = 0
+    raw_error = summary.get("error", 0)
+    error_value = int(raw_error) if isinstance(raw_error, (int, float)) else 0
+    summary["error"] = max(error_value, 1)
+    summary["success_rate"] = 0.0
 
     entry = {
         "nodeid": "<report-generation>",

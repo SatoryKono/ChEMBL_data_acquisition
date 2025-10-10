@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 # ruff: noqa: E402  # bootstrap alters import order for script compatibility
-if __package__ in {None, ""}:
+if TYPE_CHECKING:
+    from . import _bootstrap as _bootstrap_module
+elif __package__ in {None, ""}:
     import sys
     from importlib import import_module
     from pathlib import Path
@@ -12,12 +16,15 @@ if __package__ in {None, ""}:
     if str(_module_path) not in sys.path:
         sys.path.insert(0, str(_module_path))
 
-    bootstrap_cli = import_module("_bootstrap").bootstrap_cli
+    _bootstrap_module = import_module("_bootstrap")
 else:  # pragma: no cover - executed when imported as a package module
-    from ._bootstrap import bootstrap_cli
+    from . import _bootstrap as _bootstrap_module
+
+bootstrap_cli = _bootstrap_module.bootstrap_cli
 
 bootstrap_cli(__package__, __file__)
 del bootstrap_cli
+del _bootstrap_module
 
 import argparse
 import os

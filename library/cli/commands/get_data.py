@@ -35,7 +35,7 @@ from datetime import UTC, datetime
 from fnmatch import fnmatch
 from heapq import heappop, heappush
 from pathlib import Path
-from typing import IO, Any, Generic, Iterator, Optional, TypeVar
+from typing import IO, Any, Optional, TypeVar, Generic, Iterator
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -272,15 +272,15 @@ _DEFAULT_DATE_PREFIX = "19700101"
 _RUN_ID_ENV = "CHEMBL_DA_RUN_ID"
 
 
-PipelineOptionsT = TypeVar("PipelineOptionsT")
+OptionsT = TypeVar("OptionsT")
 
 
 @dataclass(frozen=True)
-class PipelineApi(Generic[PipelineOptionsT]):
+class PipelineApi(Generic[OptionsT]):
     """Describe how to build options and execute a pipeline programmatically."""
 
-    build_options: Callable[["PipelineRunConfig", Path, Path], PipelineOptionsT]
-    runner: Callable[[Config, PipelineOptionsT], PipelineRunResult]
+    build_options: Callable[[PipelineRunConfig, Path, Path], OptionsT]
+    runner: Callable[[Config, OptionsT], PipelineRunResult]
 
 
 def _build_document_options(
@@ -349,11 +349,21 @@ def _build_activity_options(
 
 
 _PIPELINE_APIS: Mapping[str, PipelineApi[Any]] = {
-    "document": PipelineApi(_build_document_options, run_document_pipeline),
-    "target": PipelineApi(_build_target_options, run_target_pipeline),
-    "assay": PipelineApi(_build_assay_options, run_assay_pipeline),
-    "testitem": PipelineApi(_build_testitem_options, run_testitem_pipeline),
-    "activity": PipelineApi(_build_activity_options, run_activity_pipeline),
+    "document": PipelineApi[DocumentPipelineOptions](
+        _build_document_options, run_document_pipeline
+    ),
+    "target": PipelineApi[TargetPipelineOptions](
+        _build_target_options, run_target_pipeline
+    ),
+    "assay": PipelineApi[AssayPipelineOptions](
+        _build_assay_options, run_assay_pipeline
+    ),
+    "testitem": PipelineApi[TestitemPipelineOptions](
+        _build_testitem_options, run_testitem_pipeline
+    ),
+    "activity": PipelineApi[ActivityPipelineOptions](
+        _build_activity_options, run_activity_pipeline
+    ),
 }
 
 
@@ -1435,7 +1445,7 @@ def _warm_parent_catalog(cfg: PipelineRunConfig, base_config: Config) -> None:
     cache_ready = cache_path.is_file()
     sqlite_ready = sqlite_path.is_file()
 
-    log_kwargs = {
+    log_kwargs: dict[str, str] = {
         "cache": str(cache_path),
         "sqlite": str(sqlite_path),
     }
@@ -1478,11 +1488,15 @@ def _warm_parent_catalog(cfg: PipelineRunConfig, base_config: Config) -> None:
         raise
     except Exception as exc:  # pragma: no cover - defensive guard
         elapsed = time.perf_counter() - start_time
+        context: dict[str, object] = {
+            **log_kwargs,
+            "elapsed": elapsed,
+            "error": str(exc),
+        }
         _LOGGER.exception(
             "parent_catalog_warm_failed",
-            elapsed=elapsed,
-            error=str(exc),
-            **log_kwargs,
+            exc=exc,
+            **context,
         )
         raise
     elapsed = time.perf_counter() - start_time
