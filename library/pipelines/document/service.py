@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import difflib
 import heapq
 import weakref
@@ -11,7 +12,7 @@ from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock, local
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import pandas as pd
 import requests
@@ -30,12 +31,19 @@ from library.config import (
 from library.integration import openalex_crossref_library as ocl
 from library.integration import pubmed_library as pl
 from library.integration import semantic_scholar_library as ssl
+from library.pipelines.common import PipelineRunResult
 from library.pipelines.document.pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
     build_dataframe,
     merge_metadata,
     normalise_doi,
 )
+
+if TYPE_CHECKING:
+    from . import DocumentPipelineOptions
+
+DocumentModeHandler = Callable[[Config, argparse.Namespace], int]
+DocumentModeHandlers = Mapping[str, DocumentModeHandler]
 
 T = TypeVar("T")
 
@@ -968,4 +976,105 @@ __all__ = [
     "DocumentPipeline",
     "FallbackDoiMetrics",
     "FallbackDoiState",
+    "run_document_service",
 ]
+
+
+_MODE_HANDLERS_CACHE: DocumentModeHandlers | None = None
+
+
+def _resolve_mode_handlers(
+    handlers: DocumentModeHandlers | None = None,
+) -> DocumentModeHandlers:
+    """Return the mapping of document mode handlers to execute pipelines."""
+
+    if handlers is not None:
+        return handlers
+
+    global _MODE_HANDLERS_CACHE
+    if _MODE_HANDLERS_CACHE is not None:
+        return _MODE_HANDLERS_CACHE
+
+    try:
+        from library.cli.commands import get_document_data as document_cli
+    except ImportError as exc:  # pragma: no cover - configuration issue
+        msg = (
+            "document mode handlers are not registered; "
+            "import 'library.cli.commands.get_document_data' first"
+        )
+        raise RuntimeError(msg) from exc
+
+    _MODE_HANDLERS_CACHE = document_cli.MODE_HANDLERS
+    return _MODE_HANDLERS_CACHE
+
+
+def _update_document_config_from_options(
+    cfg: Config, options: DocumentPipelineOptions
+) -> None:
+    """Apply ``options`` to the document pipeline section of ``cfg``."""
+
+    pipelines = cfg.sources.chembl.pipelines.document
+    section = getattr(pipelines, options.mode)
+    updates: dict[str, object] = {"offset": options.offset}
+    if options.limit is not None:
+        updates["limit"] = options.limit
+    setattr(pipelines, options.mode, section.model_copy(update=updates))
+
+
+def run_document_service(
+    config: Config,
+    options: DocumentPipelineOptions,
+    *,
+    handlers: DocumentModeHandlers | None = None,
+) -> PipelineRunResult:
+    """Execute the document pipeline using typed ``options``."""
+
+    output_path = Path(options.output_csv)
+    if options.skip_existing and output_path.exists() and not options.force:
+        return PipelineRunResult(
+            exit_code=0,
+            output_path=output_path,
+            executed=False,
+            reason="skip_existing",
+            written=False,
+        )
+
+    cfg = config.model_copy(deep=True)
+    _update_document_config_from_options(cfg, options)
+
+    args = argparse.Namespace(
+        input_csv=Path(options.input_csv),
+        final_out=output_path,
+        output_csv=output_path,
+        skip_existing=options.skip_existing,
+        force=options.force,
+        limit=options.limit,
+        offset=options.offset,
+        fallback_doi_enabled=options.fallback_doi_enabled,
+        fallback_doi_path=options.fallback_doi_path,
+        fallback_doi_overwrite=options.fallback_doi_overwrite,
+        fallback_doi_delimiter=options.fallback_doi_delimiter,
+        fallback_doi_encoding=options.fallback_doi_encoding,
+        fallback_doi_col_pmid=options.fallback_doi_col_pmid,
+        fallback_doi_col_doi=options.fallback_doi_col_doi,
+        mode=options.mode,
+        command=options.mode,
+    )
+    args.rerun_postprocess = options.rerun_postprocess
+
+    mode_handlers = _resolve_mode_handlers(handlers)
+    handler = mode_handlers.get(options.mode)
+    if handler is None:  # pragma: no cover - defensive guard
+        msg = f"unsupported document pipeline mode: {options.mode}"
+        raise ValueError(msg)
+
+    pipeline = DocumentPipeline(cfg)
+    exit_code = int(handler(cfg, args, pipeline=pipeline))
+    reason = None if exit_code == 0 else "pipeline_failed"
+    return PipelineRunResult(
+        exit_code=exit_code,
+        output_path=output_path,
+        executed=True,
+        reason=reason,
+        written=exit_code == 0,
+    )
