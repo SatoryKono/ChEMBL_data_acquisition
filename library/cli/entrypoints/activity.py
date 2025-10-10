@@ -104,7 +104,6 @@ DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
 
-<<<<<<< HEAD
 # ---------------------------------------------------------------------------
 # Compatibility hooks
 # ---------------------------------------------------------------------------
@@ -131,8 +130,6 @@ def _current_date_token() -> str:
     """Return the YYYYMMDD date string derived from :data:`datetime`."""
 
     return _current_utc_datetime().strftime("%Y%m%d")
-=======
->>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
     invocation = getattr(args, "invocation", None)
@@ -164,11 +161,8 @@ __all__ = (
     "configure_logger",
     "run_cli_command",
     "datetime",
-<<<<<<< HEAD
     "clock",
-=======
     "UTC",
->>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
 )
 
 
@@ -599,14 +593,10 @@ def _emit_completion_message(
         logger.info("pipeline_skip_existing", output=str(output_path))
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
-<<<<<<< HEAD
-            events_attr.append(("info", "pipeline_skip_existing", {"output": str(output_path)}))
-        return
-=======
             events_attr.append(
                 ("info", "pipeline_skip_existing", {"output": str(output_path)})
             )
->>>>>>> origin/codex/fix-styling-baseline-in-ci-7cexye
+        return
 
     payload: dict[str, object] = {
         "output": str(output_path) if output_path is not None else None,
