@@ -92,7 +92,7 @@ def setup_cli_logging(
         resolved_dir = _default_log_dir()
     resolved_dir.mkdir(parents=True, exist_ok=True)
 
-    normalised_name = _normalise_script_name(script_name)
+    normalised_name = _normalise_script_name(os.fspath(script_name))
 
     if date_str:
         suffix = date_str

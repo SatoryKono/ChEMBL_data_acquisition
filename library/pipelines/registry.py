@@ -72,12 +72,14 @@ class PipelineStep:
     def expected_output(self, cfg: Any) -> Path:
         """Return the path where the pipeline will create its CSV artefact."""
 
-        return cfg.output_path(self.name)
+        output = cfg.output_path(self.name)
+        return output if isinstance(output, Path) else Path(output)
 
     def required_input(self, cfg: Any) -> Path:
         """Return the CSV that the pipeline expects as input."""
 
-        return cfg.input_path(self.name)
+        input_path = cfg.input_path(self.name)
+        return input_path if isinstance(input_path, Path) else Path(input_path)
 
 _DEFAULT_DEFINITIONS: tuple[PipelineStepDefinition, ...] = (
     {

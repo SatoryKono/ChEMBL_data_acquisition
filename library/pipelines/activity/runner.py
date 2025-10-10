@@ -38,9 +38,11 @@ class ActivityCommandOptions:
 def _normalise_optional_path(value: Path | str | None) -> Path | None:
     """Return ``value`` as :class:`Path` when provided and meaningful."""
 
-    if value in (None, argparse.SUPPRESS):
+    if value is None or value is argparse.SUPPRESS:
         return None
-    return value if isinstance(value, Path) else Path(value)
+    if isinstance(value, Path):
+        return value
+    return Path(value)
 
 
 def _normalise_path(value: Path | str) -> Path:
