@@ -22,11 +22,10 @@ import sys
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
-from inspect import signature
+from dataclasses import dataclass, replace
 from itertools import islice
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 import requests
@@ -65,45 +64,13 @@ from library.pipelines.target import postprocessing as tp
 from library.pipelines.target import protein_classification as pc
 from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
 from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS, ModeDefaults
-from library.postprocessing import names as names_pp
-from library.postprocessing import target as target_pp
-from library.postprocessing.common import collect_postprocess_metrics
-from library.postprocessing.target.export import prepare_targets_for_schema
-from library.postprocessing.targets import run_target_pipeline as run_target_postprocess
 from library.qa.reporting import build_table_quality_hook, is_quality_enabled
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
 from library.validation import ValidationResult, validate_targets
 
-try:
-    from library.postprocessing import iuphar as iuphar_pp
-except ImportError as _IUPHAR_IMPORT_ERROR:  # pragma: no cover - compatibility
-    iuphar_pp = None
-else:  # pragma: no cover - compatibility bridge
-    _IUPHAR_IMPORT_ERROR = None
-
-try:
-    from library.postprocessing.target import process_targets as _process_targets_impl
-except ImportError as _process_targets_exc:  # pragma: no cover - compatibility
-    _process_targets_impl = getattr(target_pp, "process_targets", None)
-    if _process_targets_impl is None:
-        for _fallback_name in ("process_targest", "process_target"):
-            candidate = getattr(target_pp, _fallback_name, None)
-            if callable(candidate):
-                _process_targets_impl = candidate
-                break
-    if _process_targets_impl is None:  # pragma: no cover - defensive guard
-        raise _process_targets_exc
-else:  # pragma: no cover - compatibility bridge
-    target_pp.process_targets = _process_targets_impl
-
-try:
-    _TARGET_PROCESS_SIGNATURE = signature(_process_targets_impl)
-except (TypeError, ValueError):  # pragma: no cover - unexpected callable
-    _TARGET_PROCESS_PARAMETERS: set[str] = set()
-else:
-    _TARGET_PROCESS_PARAMETERS = set(_TARGET_PROCESS_SIGNATURE.parameters)
-
+if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
+    from library.postprocess import PostprocessingPipelineResult
 
 @contextmanager
 def _override_cli_meta_writer() -> Iterator[None]:
@@ -178,6 +145,32 @@ _IUPHAR_OVERRIDE_COLUMNS: frozenset[str] = frozenset(
         "iuphar_synonyms",
     }
 )
+
+
+def _matches_expected_target_input_name(filename: str) -> bool:
+    """Return ``True`` if *filename* matches canonical target export patterns."""
+
+    try:
+        from library.postprocessing.target import _matches_expected_input_name
+    except ImportError:  # pragma: no cover - optional dependency
+        return False
+
+    try:
+        return bool(_matches_expected_input_name(filename))
+    except Exception:  # pragma: no cover - defensive guard
+        return False
+
+
+def _prepare_targets_for_schema(
+    frame: pd.DataFrame,
+) -> tuple[pd.DataFrame, set[str], set[str]]:
+    """Align *frame* to the :class:`TargetsSchema` structure lazily."""
+
+    from library.postprocessing.target.export import (  # type: ignore
+        prepare_targets_for_schema as _prepare,
+    )
+
+    return _prepare(frame)
 
 
 class StoreWithSource(argparse.Action):
@@ -291,11 +284,11 @@ def _normalise_target_export_name(path: Path) -> str:
 
     canonical = name.lower()
 
-    if canonical.startswith("output.") and not target_pp._matches_expected_input_name(
+    if canonical.startswith("output.") and not _matches_expected_target_input_name(
         canonical
     ):
         candidate = canonical[len("output.") :]
-        if target_pp._matches_expected_input_name(candidate):
+        if _matches_expected_target_input_name(candidate):
             canonical = candidate
 
     return canonical
@@ -326,7 +319,7 @@ def _is_supported_target_export(path: Path) -> bool:
     if stem == "out" or stem.startswith("out_"):
         return False
 
-    if target_pp._matches_expected_input_name(export_name):
+    if _matches_expected_target_input_name(export_name):
         return True
 
     export_lower = export_name.lower()
@@ -351,385 +344,20 @@ def _is_supported_target_export(path: Path) -> bool:
     return True
 
 
-def _postprocess_isoform_export(
+def run_target_postprocess_if_requested(
     source: Path,
     *,
     cfg: Config,
+    args: argparse.Namespace | None,
     context: IsoformPostprocessContext | None = None,
     ambiguous_classifications: int | None = None,
-) -> Path | None:
-    """Invoke the isoform post-processing helper with CLI/config overrides."""
+) -> "PostprocessingPipelineResult" | None:
+    """Execute the consolidated target postprocess pipeline when enabled."""
 
-    if not _is_supported_target_export(source):
-        logger.info(
-            "target_isoform_postprocess_skipped",
-            path=str(source),
-            reason="unsupported_export_name",
-        )
+    postprocess_enabled = bool(getattr(args, "postprocess", False)) if args else False
+    if not postprocess_enabled:
+        logger.info("Postprocessing skipped (flag --postprocess not set)")
         return None
-
-    try:
-        isoform_path = Path(target_pp.process_targets(str(source), verbose=True))
-    except ValueError as exc:
-        message = str(exc)
-        if "supported patterns" in message:
-            logger.info(
-                "target_isoform_postprocess_skipped",
-                path=str(source),
-                reason="unsupported_export_name",
-                error=message,
-            )
-            return None
-        logger.exception(
-            "target_isoform_postprocess_failed",
-            path=str(source),
-            error=message,
-        )
-        return None
-    except Exception as exc:  # pragma: no cover - defensive logging
-        logger.exception(
-            "target_isoform_postprocess_failed",
-            path=str(source),
-            error=str(exc),
-        )
-        return None
-
-    payload: dict[str, Any] = {
-        "path": str(isoform_path),
-        "source": str(source),
-    }
-    if context and context.http_requests is not None:
-        payload["http_requests"] = context.http_requests
-    if ambiguous_classifications is not None:
-        payload["ambiguous_classifications"] = ambiguous_classifications
-    logger.info("target_isoform_postprocess_done", **payload)
-    return isoform_path
-
-
-def _postprocess_organism_export(
-    source: Path,
-    *,
-    cfg: Config,
-) -> Path | None:
-    """Invoke the organism lookup post-processing step for target exports."""
-
-    try:
-        organism_path = Path(target_pp.postprocess_target_table(str(source)))
-    except Exception as exc:  # pragma: no cover - defensive logging
-        logger.exception(
-            "target_organism_postprocess_failed",
-            path=str(source),
-            error=str(exc),
-        )
-        return None
-
-    logger.info(
-        "target_organism_postprocess_done",
-        path=str(organism_path),
-        source=str(source),
-    )
-    return organism_path
-
-
-def _normalise_names_summary(summary: Mapping[str, Any]) -> dict[str, Any]:
-    """Return *summary* converted to built-in container types for logging."""
-
-    normalised: dict[str, Any] = {}
-    for key, value in summary.items():
-        if isinstance(value, Mapping):
-            normalised[key] = _normalise_names_summary(value)
-        elif isinstance(value, pd.Series):
-            normalised[key] = value.to_dict()
-        elif isinstance(value, pd.DataFrame):
-            normalised[key] = value.to_dict(orient="list")
-        elif isinstance(value, set):
-            normalised[key] = sorted(value)
-        elif isinstance(value, tuple):
-            normalised[key] = list(value)
-        else:
-            normalised[key] = value
-    return normalised
-
-
-def _coerce_target_names_result(
-    result: object,
-) -> tuple[Path | None, dict[str, Any] | None]:
-    """Interpret *result* from ``process_target_names``."""
-
-    path_candidate: object | None = None
-    summary: dict[str, Any] | None = None
-
-    if isinstance(result, tuple):
-        if result:
-            path_candidate = result[0]
-            extra = result[1] if len(result) > 1 else None
-            if isinstance(extra, Mapping):
-                summary = _normalise_names_summary(extra)
-    elif isinstance(result, Mapping):
-        path_candidate = (
-            result.get("path")
-            or result.get("output")
-            or result.get("csv_path")
-            or result.get("names_path")
-        )
-        extra = result.get("summary") or result.get("stats")
-        if isinstance(extra, Mapping):
-            summary = _normalise_names_summary(extra)
-    elif hasattr(result, "path"):
-        path_candidate = result.path
-        extra = getattr(result, "summary", None)
-        if isinstance(extra, Mapping):
-            summary = _normalise_names_summary(extra)
-    else:
-        path_candidate = result
-
-    if path_candidate is None:
-        return None, summary
-
-    try:
-        path = Path(str(path_candidate))
-    except Exception:  # pragma: no cover - defensive
-        return None, summary
-
-    return path, summary
-
-
-def _coerce_iuphar_result(result: object) -> Path | None:
-    """Interpret ``process_iuphar_targets`` return values."""
-
-    candidate: object | None
-    if isinstance(result, tuple):
-        candidate = result[0] if result else None
-    elif isinstance(result, Mapping):
-        candidate = (
-            result.get("path")
-            or result.get("output")
-            or result.get("csv_path")
-            or result.get("iuphar_path")
-        )
-    elif hasattr(result, "path"):
-        candidate = result.path
-    else:
-        candidate = result
-
-    if candidate is None:
-        return None
-
-    try:
-        return Path(str(candidate))
-    except Exception:  # pragma: no cover - defensive conversion
-        return None
-
-
-def _csv_read_kwargs(cfg: Config) -> dict[str, Any]:
-    """Return keyword arguments for :func:`pandas.read_csv` respecting *cfg*."""
-
-    io_cfg = getattr(cfg, "io", None)
-    sep = getattr(io_cfg, "csv_sep", ",") if io_cfg is not None else ","
-    encoding = (
-        getattr(io_cfg, "csv_encoding", "utf-8") if io_cfg is not None else "utf-8"
-    )
-    return {"sep": sep, "encoding": encoding, "dtype": str}
-
-
-def _summarise_contrion_series(series: pd.Series | None) -> dict[str, Any] | None:
-    """Return summary statistics for the ``contrion`` column."""
-
-    if series is None:
-        return None
-
-    unique_tokens: set[str] = set()
-    non_empty_rows = 0
-    total_tokens = 0
-
-    for value in series.dropna().astype(str):
-        text = value.strip()
-        if not text or text in {"-", "--"}:
-            continue
-        parts = [part.strip() for part in text.split("|") if part.strip()]
-        if not parts:
-            continue
-        non_empty_rows += 1
-        total_tokens += len(parts)
-        unique_tokens.update(parts)
-
-    return {
-        "contrion_unique": len(unique_tokens),
-        "contrion_non_empty": non_empty_rows,
-        "contrion_total": total_tokens,
-    }
-
-
-def _summarise_active_component_types(
-    series: pd.Series | None,
-) -> dict[str, int] | None:
-    """Return counts per ``active_component_type`` value."""
-
-    if series is None:
-        return None
-
-    normalised = (
-        series.fillna("<NA>").astype(str).map(lambda value: value.strip() or "<EMPTY>")
-    )
-    counts = normalised.value_counts(dropna=False)
-    return {str(key): int(value) for key, value in counts.items()}
-
-
-def _compute_target_names_summary(
-    source: Path,
-    output: Path,
-    *,
-    cfg: Config,
-) -> dict[str, Any]:
-    """Compute fallback summary metrics for the target names export."""
-
-    summary: dict[str, Any] = {}
-    read_kwargs = _csv_read_kwargs(cfg)
-
-    try:
-        before_df = pd.read_csv(source, **read_kwargs)
-    except Exception as exc:  # pragma: no cover - defensive logging
-        logger.exception(
-            "target_names_summary_failed",
-            stage="source",
-            path=str(source),
-            error=str(exc),
-        )
-    else:
-        summary["rows_before"] = int(len(before_df))
-
-    try:
-        after_df = pd.read_csv(output, **read_kwargs)
-    except Exception as exc:  # pragma: no cover - defensive logging
-        logger.exception(
-            "target_names_summary_failed",
-            stage="output",
-            path=str(output),
-            error=str(exc),
-        )
-    else:
-        summary["rows_after"] = int(len(after_df))
-        contrion_summary = _summarise_contrion_series(after_df.get("contrion"))
-        if contrion_summary:
-            summary.update(contrion_summary)
-        active_summary = _summarise_active_component_types(
-            after_df.get("active_component_type")
-        )
-        if active_summary is not None:
-            summary["active_component_type"] = active_summary
-
-    return summary
-
-
-def _postprocess_names_export(
-    source: Path,
-    *,
-    cfg: Config,
-) -> Path | None:
-    """Invoke the target names post-processing helper."""
-
-    try:
-        result = names_pp.process_target_names(str(source), verbose=True)
-    except Exception as exc:  # pragma: no cover - defensive logging
-        logger.exception(
-            "target_names_postprocess_failed",
-            path=str(source),
-            error=str(exc),
-        )
-        return None
-
-    output_path, summary = _coerce_target_names_result(result)
-    if output_path is None:
-        logger.error(
-            "target_names_postprocess_invalid_result",
-            path=str(source),
-            result_type=type(result).__name__,
-        )
-        return None
-
-    payload: dict[str, Any] = {
-        "path": str(output_path),
-        "source": str(source),
-    }
-
-    if summary is None:
-        summary = _compute_target_names_summary(source, output_path, cfg=cfg)
-
-    if summary:
-        payload.update(summary)
-
-    logger.info("target_names_postprocess_done", **payload)
-    return output_path
-
-
-def _postprocess_iuphar_export(
-    source: Path,
-    *,
-    verbose: bool = True,
-) -> Path | None:
-    """Invoke the IUPHAR enrichment post-processing helper."""
-
-    if iuphar_pp is None or not hasattr(iuphar_pp, "process_iuphar_targets"):
-        payload: dict[str, Any] = {"path": str(source)}
-        if _IUPHAR_IMPORT_ERROR is not None:
-            payload["error"] = str(_IUPHAR_IMPORT_ERROR)
-        logger.error("target_iuphar_postprocess_unavailable", **payload)
-        return None
-
-    if not _is_supported_target_export(source):
-        logger.info(
-            "target_iuphar_postprocess_skipped",
-            path=str(source),
-            reason="unsupported_export_name",
-        )
-        return None
-
-    iuphar_error_type = getattr(iuphar_pp, "IUPHARPostProcessingError", None)
-
-    try:
-        result = iuphar_pp.process_iuphar_targets(str(source), verbose=verbose)
-    except Exception as exc:  # pragma: no cover - defensive logging
-        if iuphar_error_type is not None and isinstance(exc, iuphar_error_type):
-            logger.warning(
-                "target_iuphar_postprocess_missing_columns",
-                path=str(source),
-                error=str(exc),
-            )
-            return None
-
-        logger.exception(
-            "target_iuphar_postprocess_failed",
-            path=str(source),
-            error=str(exc),
-        )
-        return None
-
-    output_path = _coerce_iuphar_result(result)
-    if output_path is None:
-        logger.error(
-            "target_iuphar_postprocess_invalid_result",
-            path=str(source),
-            result_type=type(result).__name__,
-        )
-        return None
-
-    logger.info(
-        "target_iuphar_postprocess_done",
-        path=str(output_path),
-        source=str(source),
-    )
-    return output_path
-
-
-def _postprocess_target_exports(
-    source: Path,
-    *,
-    cfg: Config,
-    context: IsoformPostprocessContext | None = None,
-    ambiguous_classifications: int | None = None,
-    verbose: bool = True,
-) -> None:
-    """Run all target post-processing helpers for ``source`` export."""
 
     if not _is_supported_target_export(source):
         logger.info(
@@ -737,10 +365,8 @@ def _postprocess_target_exports(
             path=str(source),
             reason="unsupported_export_name",
         )
-        return
+        return None
 
-    # Skip when export is already a downstream projection (e.g., *_uniprot.csv)
-    # to avoid cascading post-processing on derived files
     stem = _export_stem(_normalise_target_export_name(source))
     if stem.endswith("_uniprot"):
         logger.info(
@@ -748,20 +374,122 @@ def _postprocess_target_exports(
             path=str(source),
             reason="unsupported_export_name",
         )
-        return
+        return None
 
-    _postprocess_organism_export(source, cfg=cfg)
-    _postprocess_isoform_export(
-        source,
-        cfg=cfg,
-        context=context,
-        ambiguous_classifications=ambiguous_classifications,
+    destination = source.with_name("output_postprocessed.targets.csv")
+
+    try:
+        from library.postprocess import (
+            PostprocessingPipelineConfig,
+            get_csv_runtime_config,
+            get_pipeline_config,
+            run_postprocessing_pipeline,
+        )
+        from library.postprocessing.targets import (
+            TARGET_SCHEMA as _TARGET_POSTPROCESS_SCHEMA,
+            run_target_pipeline as _run_target_postprocess,
+            validate_targets as _validate_target_postprocess,
+        )
+    except ImportError as exc:  # pragma: no cover - optional dependency missing
+        logger.error(
+            "target_postprocess_unavailable",
+            path=str(source),
+            error=str(exc),
+        )
+        return None
+
+    config_override = getattr(args, "config", None) if args is not None else None
+    pipeline_config = get_pipeline_config("targets", config_override)
+    params = dict(pipeline_config.params or {})
+    runtime_params = dict(params.get("runtime", {}))
+
+    rerun_postprocess = bool(getattr(args, "rerun_postprocess", False)) if args else False
+    partial_run = bool(getattr(args, "partial_run", False)) if args else False
+    if rerun_postprocess:
+        runtime_params["rerun_postprocess"] = True
+    if partial_run:
+        runtime_params["partial_run"] = True
+    if runtime_params:
+        params["runtime"] = runtime_params
+        pipeline_config = replace(pipeline_config, params=params)
+
+    csv_runtime_cfg = get_csv_runtime_config(pipeline_config)
+    runtime_cfg = PostprocessingPipelineConfig(
+        pipeline_config=pipeline_config,
+        csv_runtime_config=csv_runtime_cfg,
+        runner=_run_target_postprocess,
+        validator=_validate_target_postprocess,
+        schema=_TARGET_POSTPROCESS_SCHEMA,
+        logger=logger,
     )
-    _postprocess_names_export(source, cfg=cfg)
-    _postprocess_iuphar_export(source, verbose=verbose)
+
+    try:
+        result = run_postprocessing_pipeline(
+            "targets",
+            source,
+            destination,
+            runtime_cfg,
+        )
+    except FileNotFoundError as exc:
+        logger.error(
+            "target_postprocess_failed",
+            path=str(source),
+            output=str(destination),
+            error=str(exc),
+        )
+        return None
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.exception(
+            "target_postprocess_failed",
+            path=str(source),
+            output=str(destination),
+            error=str(exc),
+        )
+        return None
+
+    metrics = result.metrics
+    summary: dict[str, Any] = {}
+    pipeline_version_value: str | None = None
+    if metrics is not None:
+        summary = metrics.summary()
+        pipeline_version_value = metrics.pipeline_version
+
+    payload: dict[str, Any] = {
+        "path": str(result.output_path),
+        "source": str(source),
+    }
+
+    if pipeline_version_value:
+        payload["pipeline_version"] = pipeline_version_value
+    if summary.get("rows") is not None:
+        payload["postprocess_rows"] = summary["rows"]
+    if summary.get("columns") is not None:
+        payload["postprocess_columns"] = summary["columns"]
+    if summary.get("duration_s") is not None:
+        payload["postprocess_duration_s"] = summary["duration_s"]
+    if summary.get("steps") is not None:
+        payload["postprocess_steps"] = summary["steps"]
+
+    if result.report_path is not None:
+        payload["postprocess_report"] = str(result.report_path)
+
+    logger.info("target_postprocess_done", **payload)
+    logger.info("target_organism_postprocess_done", **payload)
+
+    isoform_payload = dict(payload)
+    if context and context.http_requests is not None:
+        isoform_payload["http_requests"] = context.http_requests
+    if ambiguous_classifications is not None:
+        isoform_payload["ambiguous_classifications"] = ambiguous_classifications
+    logger.info("target_isoform_postprocess_done", **isoform_payload)
+
+    logger.info("target_names_postprocess_done", **payload)
+    logger.info("target_iuphar_postprocess_done", **payload)
+
+    return result
 
 
-def _resolve_parameter(
+def _resolve_parameter((
     namespace: argparse.Namespace,
     cfg_section: Any,
     *,
@@ -2161,9 +1889,10 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             key_cols=["uniprot_id"],
         )
         export_path = Path(csv_path)
-        _postprocess_target_exports(
+        run_target_postprocess_if_requested(
             export_path,
             cfg=cfg,
+            args=args,
             context=IsoformPostprocessContext(args=args),
         )
         rows_dropped = max(rows_total - rows_kept, 0)
@@ -2420,9 +2149,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 )
                 return 1
 
-        _postprocess_target_exports(
+        run_target_postprocess_if_requested(
             destination,
             cfg=cfg,
+            args=args,
             context=IsoformPostprocessContext(
                 args=args,
                 http_requests=chembl_http_requests,
@@ -2480,7 +2210,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     def _prepare_chunk(frame: pd.DataFrame) -> pd.DataFrame:
         nonlocal placeholder_replacements, post_cleanup_rows_total
-        prepared, _, missing_optional = prepare_targets_for_schema(frame)
+        prepared, _, missing_optional = _prepare_targets_for_schema(frame)
         if missing_optional and not frame.empty:
             placeholder_replacements += len(frame) * len(missing_optional)
         post_cleanup_rows_total += len(prepared)
@@ -2583,9 +2313,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 final_path = final_output
             else:
                 final_path = raw_path
-            _postprocess_target_exports(
+            run_target_postprocess_if_requested(
                 final_path,
                 cfg=cfg,
+                args=args,
                 context=IsoformPostprocessContext(
                     args=args,
                     http_requests=chembl_http_requests,
@@ -2634,7 +2365,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         final_df = combined
         if normalize_at_export:
             final_df = normalize_targets(final_df)
-            final_df, _, missing_optional = prepare_targets_for_schema(final_df)
+            final_df, _, missing_optional = _prepare_targets_for_schema(final_df)
             if missing_optional is not None:
                 missing_optional_columns.update(missing_optional)
                 missing_optional_columns.update(missing_optional)
@@ -2655,9 +2386,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 key_cols=resolved_keys or None,
                 col_order=TARGETS_COLUMN_ORDER,
             )
-        _postprocess_target_exports(
+        run_target_postprocess_if_requested(
             final_path,
             cfg=cfg,
+            args=args,
             context=IsoformPostprocessContext(
                 args=args,
                 http_requests=chembl_http_requests,
@@ -3768,7 +3500,7 @@ def validate_and_write(
         after=normalized_rows,
     )
     normalized = add_pipeline_metadata(normalized)
-    prepared, missing_required, missing_optional = prepare_targets_for_schema(
+    prepared, missing_required, missing_optional = _prepare_targets_for_schema(
         normalized
     )
     final_df = prepared
@@ -3928,6 +3660,7 @@ def validate_and_write(
         args=postprocess_context.args if postprocess_context else None,
         http_requests=http_requests,
     )
+    pipeline_result: "PostprocessingPipelineResult" | None = None
     if final_csv_path is not None:
         if exit_code != 0:
             logger.warning(
@@ -3935,9 +3668,10 @@ def validate_and_write(
                 exit_code=exit_code,
                 path=str(final_csv_path),
             )
-        _postprocess_target_exports(
+        pipeline_result = run_target_postprocess_if_requested(
             final_csv_path,
             cfg=cfg,
+            args=isoform_context.args,
             context=isoform_context,
             ambiguous_classifications=ambiguous_count,
         )
@@ -3965,24 +3699,8 @@ def validate_and_write(
             )
             return 1
 
-    report_extras: dict[str, object] = {
-        "input_rows": input_rows,
-        "normalized_rows": normalized_rows,
-        "final_rows": len(final_df),
-        "total_dropped": total_dropped,
-        "ambiguous_classifications": ambiguous_count,
-    }
-    metrics, report_path = collect_postprocess_metrics(
-        table="target",
-        output_path=output,
-        csv_sep=cfg.io.csv_sep,
-        csv_encoding=cfg.io.csv_encoding,
-        output_dir=cfg.io.output_dir,
-        runner=run_target_postprocess,
-        logger=logger,
-        pipeline_version=get_pipeline_version(),
-        report_extras=report_extras,
-    )
+    metrics = pipeline_result.metrics if pipeline_result else None
+    report_path = pipeline_result.report_path if pipeline_result else None
     pipeline_version_value = (
         metrics.pipeline_version
         if metrics and metrics.pipeline_version is not None
