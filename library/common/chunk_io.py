@@ -132,6 +132,7 @@ def process_csv_chunks(
     sep: str | None = None,
     encoding: str | None = None,
     ensure_directory: bool = False,
+    line_terminator: str = "\n",
 ) -> int:
     """Copy ``input_path`` to ``output_path`` using chunked I/O.
 
@@ -159,6 +160,9 @@ def process_csv_chunks(
         When ``True``, create the parent directory of ``output_path`` if it does
         not exist and :attr:`IoCfg.exist_ok` permits directory creation. When
         ``False``, callers must ensure the directory is available.
+    line_terminator:
+        Line ending to use when serialising CSV data. Defaults to a Unix newline
+        to guarantee consistent output across platforms.
 
     Returns
     -------
@@ -208,6 +212,7 @@ def process_csv_chunks(
             header=not header_written,
             sep=sep,
             encoding=encoding,
+            lineterminator=line_terminator,
         )
         header_written = True
         rows_written += len(chunk)

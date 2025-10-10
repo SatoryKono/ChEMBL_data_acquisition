@@ -110,6 +110,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             sep=args.sep,
             encoding=args.encoding,
             ensure_directory=False,
+            line_terminator="\n",
         )
         logger.info("rows_processed", rows=rows)
         return 0

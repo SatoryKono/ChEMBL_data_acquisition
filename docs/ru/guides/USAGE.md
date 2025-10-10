@@ -275,7 +275,7 @@ get-testitem-data --input data/input/testitem.csv \
 | Модуль | Команда | Назначение |
 |--------|---------|------------|
 | `library.utils.cli_tools.check_determinism` | `check-determinism --log-level INFO` | Проверка детерминированности CSV через сравнение хэшей тестовых файлов. |
-| `library.utils.cli_tools.chunk_io_main` | `chunk-io --input data.csv --final-out copy.csv` | Потоковое чтение/запись CSV с сохранением порядка. |
+| `library.utils.cli_tools.chunk_io_main` | `chunk-io --input data.csv --final-out copy.csv` | Потоковое чтение/запись CSV с сохранением порядка и Unix-разделителями строк. |
 | `library.utils.cli_tools.csv_utils_main` | `csv-utils --input data.csv --final-out clean.csv --sep ,` | Нормализация разделителей, кавычек и порядка колонок. |
 | `library.utils.cli_tools.dtype_inspector_main` | `python -m library.utils.cli_tools.dtype_inspector_main` | Диагностика типов pandas-таблиц. |
 | `library.utils.cli_tools.get_activities` | `python scripts/get_activities.py --limit 10 --dry-run` | Генерация тестовых активностей для проверки логов и CLI; по умолчанию используется колонка `activity_id`. |

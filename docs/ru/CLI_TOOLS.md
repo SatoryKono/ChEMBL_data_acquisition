@@ -8,7 +8,7 @@
 | Модуль | Пример | Назначение |
 |--------|--------|------------|
 | `library.utils.cli_tools.check_determinism` | `python -m library.utils.cli_tools.check_determinism --baseline out1 --candidate out2` | Сравнение хэшей CSV между запусками. |
-| `library.utils.cli_tools.chunk_io_main` | `python -m library.utils.cli_tools.chunk_io_main --input data.csv --final-out copy.csv` | Потоковая обработка CSV с сохранением порядка. |
+| `library.utils.cli_tools.chunk_io_main` | `python -m library.utils.cli_tools.chunk_io_main --input data.csv --final-out copy.csv` | Потоковая обработка CSV с сохранением порядка и Unix-разделителями строк. |
 | `library.utils.cli_tools.csv_utils_main` | `python -m library.utils.cli_tools.csv_utils_main --input data.csv --final-out clean.csv` | Перезапись CSV с детерминированным порядком. |
 | `library.utils.cli_tools.dtype_inspector_main` | `python -m library.utils.cli_tools.dtype_inspector_main --log-level INFO` | Просмотр типов pandas. |
 | `library.utils.cli_tools.get_activities` | `python -m library.utils.cli_tools.get_activities --limit 10 --final-out output/activities_smoke.csv` | Синтетические активности с записью детерминированного CSV и `.meta.yaml` для smoke-запусков. |
