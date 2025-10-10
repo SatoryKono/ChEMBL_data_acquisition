@@ -4,6 +4,7 @@ import csv
 import importlib.util
 import sys
 import types
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -530,6 +531,25 @@ def test_isoform_process_targets__writes_isoform_prefix(
 
     output_path = isoform.process_targets(str(input_path), verbose=False)
 
+    assert output_path.name == "isoform.output.target_20250101.csv"
+    assert output_path.parent == input_path.parent
+
+
+@pytest.mark.unit
+def test_isoform_process_targets__temporary_suffix_no_warning(
+    tmp_path: Path, snapshot_resource: Path
+) -> None:
+    """Temporary exports are processed without canonical extension warnings."""
+
+    source = snapshot_resource / "target_isoform_minimal.csv"
+    input_path = tmp_path / ".output.targets_20250101.csv.tmp"
+    input_path.write_bytes(source.read_bytes())
+
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        output_path = isoform.process_targets(str(input_path), verbose=False)
+
+    assert not captured
     assert output_path.name == "isoform.output.target_20250101.csv"
     assert output_path.parent == input_path.parent
 
