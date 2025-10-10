@@ -1054,7 +1054,8 @@ def run_pipeline(
             extra_metadata=extra_metadata or None,
             dictionary_resources=dictionary_resources,
         )
-        
+
+
 
         doc_quality_cfg = getattr(getattr(cfg, "system", None), "doc_quality", None)
         fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
