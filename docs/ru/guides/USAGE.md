@@ -66,6 +66,39 @@ get-data --base-path /data/chembl \
 выгрузки создаются в целевых каталогах без устаревших алиасов. Значение
 `--limit 0` пропускает выполнение, а `--dry-run` выводит план без записи файлов.
 
+### Примеры частичного запуска документа
+
+Для повторных прогонов часто достаточно перезапустить только документный шаг в
+режиме `chembl` или `pubmed`, не трогая остальные пайплайны. Это делается через
+`--override-subcommand`, которое меняет подкоманду шага и прокидывается дальше по
+всему плану.
+
+```bash
+python scripts/get_data.py \
+  --base-path /data/chembl \
+  --input-dir input --output-dir exports \
+  --config /data/chembl/config.yaml \
+  --date 20250101 \
+  --override-subcommand document=chembl
+```
+
+Команда выше выполнит только ChEMBL-часть конвейера документов и завершит
+оркестрацию, как только документный шаг закончится. Аналогично можно собрать
+данные PubMed, сохранив настройки лимитов и директорий:
+
+```bash
+python scripts/get_data.py \
+  --base-path /data/chembl \
+  --input-dir input --output-dir exports \
+  --config /data/chembl/config.yaml \
+  --date 20250101 \
+  --override-subcommand document=pubmed
+```
+
+Если нужно переименовать результат (например, чтобы отличать `chembl` и
+`pubmed`-варианты), добавьте `--override-output-stem document=document_pubmed` —
+этот флаг воздействует только на выбранный шаг и не требует правок реестра.
+
 ## Пайплайн документов (`python scripts/get_document_data.py`)
 
 Конвейер документов запускается единым скриптом `python scripts/get_document_data.py --mode <chembl|pubmed|all>`. Флаг `--mode`
