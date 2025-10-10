@@ -2082,6 +2082,12 @@ class ActivityPipelineCLI(PipelineCLIBase):
     def get_logger(self) -> Logger:
         return logger
 
+    def get_run_cli_command(self) -> Callable[..., int]:
+        candidate = getattr(_activity_cli_commands, "run_cli_command", None)
+        if callable(candidate):
+            return candidate
+        return super().get_run_cli_command()
+
     def get_logging_date(self, args: argparse.Namespace) -> str | None:
         value = super().get_logging_date(args)
         if isinstance(value, str):
