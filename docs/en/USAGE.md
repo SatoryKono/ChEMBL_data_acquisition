@@ -74,9 +74,12 @@ After every execution the orchestrator writes a dedicated manifest such as
 `reports/run_<timestamp>.json` relative to `--base-path` and updates the
 `reports/run_manifest.json` pointer to reference the most recent run. Each
 manifest records every step with the resolved CSV destination, discovered
-sidecars, status (`success`, `skipped`, `failed`, etc.), timings and SHA256
+sidecars, status (`success`, `skipped`, `failed`, `blocked`, etc.), timings and
+SHA256
 checksums for all artefacts. The file is emitted even when the workflow aborts
-part way through so partial results can be inspected.
+part way through so partial results can be inspected. When a step fails, the
+remaining ones are marked as `blocked` with `reason: dependency_failed` to make
+the dependency chain explicit in the manifest.
 
 ## Document pipeline `get_document_data`
 

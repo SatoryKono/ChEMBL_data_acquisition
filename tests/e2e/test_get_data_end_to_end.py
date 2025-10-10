@@ -189,6 +189,11 @@ def _activities_transform(frame: pd.DataFrame, logger: get_data.Logger) -> pd.Da
     ]
 
 
+def _failing_target_transform(frame: pd.DataFrame, logger: get_data.Logger) -> pd.DataFrame:
+    _ = frame, logger
+    raise RuntimeError("target_forced_failure")
+
+
 def _make_report_writer(step_count: int) -> Callable[[Path], None]:
     def _writer(working_output: Path) -> None:
         base_dir = working_output.parent.parent
@@ -595,6 +600,152 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert not missing_target.exists()
     sentinel_path = missing_output / f"output.targets_{date_prefix}.csv.failed"
     assert sentinel_path.exists()
+
+
+@pytest.mark.e2e
+def test_get_data_end_to_end__blocked_steps_after_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    fixture_dir = Path(__file__).resolve().parents[1] / "data"
+    for stem in ("document", "target", "assay", "testitem", "activity"):
+        shutil.copy(fixture_dir / f"{stem}.csv", input_dir / f"{stem}.csv")
+
+    config_path = base_path / "config.yaml"
+    config_path.write_text("io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n")
+
+    monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
+    monkeypatch.setattr(get_data, "_warm_parent_catalog", lambda _cfg, _base: None)
+
+    stub_steps = (
+        get_data.PipelineStep(
+            name="document",
+            main=_build_stub_pipeline(
+                "document",
+                "document_chembl_id",
+                ["document_chembl_id", "title", "pubmed_id"],
+                _documents_transform,
+                accept_mode=True,
+            ),
+            input_filename="document.csv",
+            output_stem="documents",
+            extra_args=("--mode", "all"),
+        ),
+        get_data.PipelineStep(
+            name="target",
+            main=_build_stub_pipeline(
+                "target",
+                "target_chembl_id",
+                ["target_chembl_id", "target_name", "organism"],
+                _failing_target_transform,
+                accept_subcommand=True,
+            ),
+            input_filename="target.csv",
+            output_stem="targets",
+            subcommand="all",
+        ),
+        get_data.PipelineStep(
+            name="assay",
+            main=_build_stub_pipeline(
+                "assay",
+                "assay_chembl_id",
+                [
+                    "assay_chembl_id",
+                    "target_chembl_id",
+                    "document_chembl_id",
+                    "description",
+                ],
+                _assays_transform,
+            ),
+            input_filename="assay.csv",
+            output_stem="assays",
+        ),
+        get_data.PipelineStep(
+            name="testitem",
+            main=_build_stub_pipeline(
+                "testitem",
+                "molecule_chembl_id",
+                ["molecule_chembl_id", "preferred_name"],
+                _testitems_transform,
+            ),
+            input_filename="testitem.csv",
+            output_stem="testitems",
+        ),
+        get_data.PipelineStep(
+            name="activity",
+            main=_build_stub_pipeline(
+                "activity",
+                "activity_id",
+                [
+                    "activity_id",
+                    "assay_chembl_id",
+                    "molecule_chembl_id",
+                    "standard_value",
+                    "standard_units",
+                ],
+                _activities_transform,
+            ),
+            input_filename="activity.csv",
+            output_stem="activities",
+        ),
+    )
+
+    monkeypatch.setattr(
+        get_data,
+        "_resolve_pipeline_steps",
+        lambda _: stub_steps,
+    )
+    monkeypatch.setattr(get_data, "_PIPELINE_APIS", {}, raising=False)
+
+    date_prefix = "20240105"
+    argv = [
+        "--base-path",
+        str(base_path),
+        "--input-dir",
+        "input",
+        "--output-dir",
+        "output",
+        "--config",
+        str(config_path),
+        "--date",
+        date_prefix,
+        "--log-level",
+        "INFO",
+        "--force",
+    ]
+
+    exit_code = get_data.main(argv)
+    assert exit_code == 1
+
+    manifest_path = base_path / "reports" / "run_manifest.json"
+    assert manifest_path.exists()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    entries_by_name = {entry["name"]: entry for entry in manifest["steps"]}
+
+    assert entries_by_name["document"]["status"] == "success"
+    assert entries_by_name["target"]["status"] == "failed"
+    assert entries_by_name["target"]["reason"] == "exception"
+
+    for blocked_name in ("assay", "testitem", "activity"):
+        blocked_entry = entries_by_name[blocked_name]
+        assert blocked_entry["status"] == "blocked"
+        assert blocked_entry["executed"] is False
+        assert blocked_entry["reason"] == "dependency_failed"
+        assert blocked_entry["exit_code"] is None
+
+        final_output = output_dir / f"output.{get_data.DEFAULT_OUTPUT_STEMS[blocked_name]}_{date_prefix}.csv"
+        assert not final_output.exists()
+
+    target_sentinel = (
+        output_dir
+        / f"output.{get_data.DEFAULT_OUTPUT_STEMS['target']}_{date_prefix}.csv.failed"
+    )
+    assert target_sentinel.exists()
 _ASSAY_DICTIONARY_PATH = Path(__file__).resolve().parents[1] / "data" / "assay_dictionary.csv"
 
 
