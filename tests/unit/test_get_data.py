@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from library.cli.commands import get_data
+from library.config import Config
 from library.pipelines.common import PipelineRunResult
 from tests.helpers.logs import iter_events, parse_log_lines
 from tests.helpers.manifests import load_latest_manifest
@@ -520,6 +521,7 @@ def test_override_subcommand__target_pipeline_uses_selected_command(
         lambda *args, **kwargs: SimpleNamespace(),
         raising=False,
     )
+    monkeypatch.setattr(get_data, "ensure_dirs", lambda _cfg: None, raising=False)
 
     status = get_data.run_pipeline(cfg, steps=target_only)
     assert status == 0
@@ -602,10 +604,46 @@ def test_override_subcommand__document_pipeline_uses_selected_mode(
         lambda *args, **kwargs: SimpleNamespace(),
         raising=False,
     )
+    monkeypatch.setattr(
+        cli_get_data, "ensure_dirs", lambda _cfg: None, raising=False
+    )
 
     status = cli_get_data.run_pipeline(cfg, steps=document_only)
     assert status == 0
     assert captured == ["chembl"]
+
+
+@pytest.mark.unit
+def test_run_pipeline__fails_when_directories_missing_and_exist_ok_false(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("{}", encoding="utf-8")
+    cfg.io.exist_ok = False
+    cfg.io.output_dir = tmp_path / "missing-output"
+    cfg.io.cache_dir = tmp_path / "missing-cache"
+
+    run_cfg = get_data.PipelineRunConfig(
+        base_path=tmp_path,
+        input_dir=tmp_path,
+        output_dir=cfg.io.output_dir,
+        config_path=config_path,
+        date_prefix="20240101",
+        log_level="INFO",
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        input_files={},
+        output_stems={},
+        subcommands={},
+    )
+
+    monkeypatch.setattr(get_data, "load_config", lambda *_, **__: cfg, raising=False)
+
+    status = get_data.run_pipeline(run_cfg, steps=())
+
+    assert status == 1
 
 
 @pytest.mark.unit

@@ -137,18 +137,18 @@ def test_split_uniprot_tokens__cases(value: str, tokens: list[str]) -> None:
     assert list(get_target_data._split_uniprot_tokens(value)) == tokens
 
 
-def test_prepare_raw_destination__removes_existing(tmp_path: Path) -> None:
+def test_prepare_raw_destination__removes_existing(tmp_path: Path, cfg: Config) -> None:
     destination = tmp_path / "raw.csv"
     destination.write_text("old", encoding="utf-8")
 
-    get_target_data._prepare_raw_destination(destination)
+    get_target_data._prepare_raw_destination(destination, cfg=cfg)
 
     assert not destination.exists()
     assert destination.parent.exists()
 
 
 def test_prepare_raw_destination__handles_permission_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
     destination = tmp_path / "raw.csv"
     destination.write_text("old", encoding="utf-8")
@@ -173,7 +173,7 @@ def test_prepare_raw_destination__handles_permission_error(
 
     monkeypatch.setattr(get_target_data.os, "chmod", _fake_chmod)
 
-    get_target_data._prepare_raw_destination(destination)
+    get_target_data._prepare_raw_destination(destination, cfg=cfg)
 
     assert unlink_calls["count"] >= 2
     expected_mode = stat.S_IRUSR | stat.S_IWUSR | getattr(stat, "S_IWRITE", 0)
@@ -182,7 +182,7 @@ def test_prepare_raw_destination__handles_permission_error(
 
 
 def test_prepare_raw_destination__raises_when_unlink_fails(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
     destination = tmp_path / "raw.csv"
     destination.write_text("old", encoding="utf-8")
@@ -194,7 +194,17 @@ def test_prepare_raw_destination__raises_when_unlink_fails(
     monkeypatch.setattr(get_target_data.os, "chmod", lambda *_, **__: None)
 
     with pytest.raises(OSError):
-        get_target_data._prepare_raw_destination(destination)
+        get_target_data._prepare_raw_destination(destination, cfg=cfg)
+
+
+def test_prepare_raw_destination__fails_when_parent_missing_and_exist_ok_false(
+    tmp_path: Path, cfg: Config
+) -> None:
+    cfg.io.exist_ok = False
+    destination = tmp_path / "missing" / "raw.csv"
+
+    with pytest.raises(FileNotFoundError):
+        get_target_data._prepare_raw_destination(destination, cfg=cfg)
 
 
 def test_collect_uniprot_candidate_columns__orders_columns(cfg: Config) -> None:
