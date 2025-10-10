@@ -638,14 +638,110 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         ),
     )
     exit_code = run_chembl(cfg, args)
+    postprocess_error = False
     if exit_code == 0:
-        logger.info("testitem_pipeline_done", output=str(output_path))
-    else:
+        raw_output = Path(getattr(args, "output_csv", output_path))
+        postprocess_enabled = bool(getattr(args, "postprocess", False))
+        payload: dict[str, object] = {"output": str(output_path)}
+
+        if not postprocess_enabled:
+            logger.info("Postprocessing skipped (flag --postprocess not set)")
+        else:
+            try:
+                from library.postprocess import (
+                    PostprocessingPipelineConfig,
+                    get_csv_runtime_config,
+                    get_pipeline_config,
+                    run_postprocessing_pipeline,
+                )
+                from library.postprocessing.testitem import (
+                    TESTITEM_SCHEMA,
+                    run_testitem_pipeline as run_testitem_postprocess,
+                    validate_testitems,
+                )
+            except Exception as exc:  # pragma: no cover - defensive guard
+                logger.exception(
+                    "testitem_postprocess_import_failed",
+                    error=str(exc),
+                )
+                postprocess_error = True
+            else:
+                pipeline_config = get_pipeline_config(
+                    "testitems", getattr(args, "config", None)
+                )
+                csv_cfg = get_csv_runtime_config(pipeline_config)
+                runtime_cfg = PostprocessingPipelineConfig(
+                    pipeline_config=pipeline_config,
+                    csv_runtime_config=csv_cfg,
+                    runner=run_testitem_postprocess,
+                    validator=validate_testitems,
+                    schema=TESTITEM_SCHEMA,
+                    logger=logger,
+                )
+
+                destination = raw_output.with_name("output_postprocessed.testitems.csv")
+
+                try:
+                    postprocess_result = run_postprocessing_pipeline(
+                        "testitems",
+                        raw_output,
+                        destination,
+                        runtime_cfg,
+                    )
+                except FileNotFoundError:
+                    logger.error(
+                        "testitem_postprocess_input_missing",
+                        input=str(raw_output),
+                    )
+                    postprocess_error = True
+                except Exception as exc:  # pragma: no cover - defensive guard
+                    logger.exception(
+                        "testitem_postprocess_failed",
+                        input=str(raw_output),
+                        error=str(exc),
+                    )
+                    postprocess_error = True
+                else:
+                    payload["postprocess_output"] = str(
+                        postprocess_result.output_path
+                    )
+
+                    metrics = postprocess_result.metrics
+                    if metrics is not None:
+                        summary = metrics.summary()
+                        pipeline_version = summary.get("pipeline_version")
+                        if pipeline_version:
+                            payload["postprocess_pipeline_version"] = pipeline_version
+                        rows_value = summary.get("rows")
+                        if rows_value is not None:
+                            payload["postprocess_rows"] = int(rows_value)
+                        columns_value = summary.get("columns")
+                        if columns_value is not None:
+                            payload["postprocess_columns"] = int(columns_value)
+                        duration_value = summary.get("duration_s")
+                        if duration_value is not None:
+                            payload["postprocess_duration_s"] = float(duration_value)
+                        steps_value = summary.get("steps")
+                        if steps_value is not None:
+                            payload["postprocess_steps"] = int(steps_value)
+                        validation = getattr(metrics, "validation", None)
+                        if validation is not None and getattr(validation, "schema", None):
+                            payload["postprocess_schema"] = validation.schema
+
+                    if postprocess_result.report_path is not None:
+                        payload["postprocess_report"] = str(
+                            postprocess_result.report_path
+                        )
+
+        if not postprocess_error:
+            logger.info("testitem_pipeline_done", **payload)
+    if exit_code != 0 or postprocess_error:
         logger.error(
             "testitem_pipeline_failed",
             output=str(output_path),
-            exit_code=exit_code,
+            exit_code=exit_code if not postprocess_error else 1,
         )
+        return 1 if postprocess_error else exit_code
     return exit_code
 
 
