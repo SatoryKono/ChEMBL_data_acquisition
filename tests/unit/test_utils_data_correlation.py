@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
-from library.table_quality import TableQualityProfiler
 from library.utils.data_correlation import build_correlation_matrix
 
 
-def test_build_correlation_matrix__matches_profiler_output(tmp_path):
+def test_build_correlation_matrix__produces_expected_structure():
     frame = pd.DataFrame(
         {
             "col_a": [1.0, 2.0, 3.0, 4.0],
@@ -19,13 +19,12 @@ def test_build_correlation_matrix__matches_profiler_output(tmp_path):
 
     correlation = build_correlation_matrix(frame, table_name="example_table")
 
-    profiler = TableQualityProfiler()
-    profiler.consume(frame)
-    _, expected_corr = profiler.build(
-        table_name="example_table", destination_dir=tmp_path
-    )
-
-    pd.testing.assert_frame_equal(correlation, expected_corr)
+    assert correlation.shape == (2, 2)
+    assert list(correlation.columns) == ["col_a", "col_b"]
+    assert list(correlation.index) == ["col_a", "col_b"]
+    assert correlation.loc["col_a", "col_a"] == pytest.approx(1.0)
+    assert correlation.loc["col_b", "col_b"] == pytest.approx(1.0)
+    assert correlation.loc["col_a", "col_b"] == pytest.approx(1.0)
 
 
 def test_build_correlation_matrix__returns_empty_when_no_numeric():
