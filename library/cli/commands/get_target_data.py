@@ -47,7 +47,12 @@ from library.cli import (
 from library.cli.base import PipelineCLIBase
 from library.cli.logging import CLILoggingContext
 from library.cli.pipeline_definition import normalise_definition
-from library.cli_utils import PipelineError, run_cli_command, run_pipeline
+from library.cli_utils import (
+    PipelineError,
+    PipelineExecutionResult,
+    run_cli_command,
+    run_pipeline,
+)
 from library.common.csv_utils import write_csv_deterministic
 from library.common.log import logger
 from library.config import (
@@ -87,7 +92,7 @@ def _override_cli_meta_writer() -> Iterator[None]:
         cli_utils_module.write_meta_yaml = original_cli_write_meta
 
 
-def _run_pipeline_with_meta(**kwargs: object) -> int:
+def _run_pipeline_with_meta(**kwargs: object) -> PipelineExecutionResult:
     """Invoke :func:`run_pipeline` with project-specific metadata writer."""
 
     with _override_cli_meta_writer():
@@ -1274,7 +1279,7 @@ def _save_snapshot(df: pd.DataFrame, base: Path, step: str, cfg: Config) -> Path
             write_meta_yaml(
                 csv_path=csv_path,
                 command=" ".join(sys.argv),
-                config_subset=_serialize_paths(cfg.to_dict()),
+                config=_serialize_paths(cfg.to_dict()),
                 inputs={"base": str(base), "step": step},
                 stats=stats,
                 schema="TargetSnapshot",
@@ -1952,7 +1957,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             write_meta_yaml(
                 csv_path=csv_path,
                 command=" ".join(sys.argv),
-                config_subset=_serialize_paths(cfg.to_dict()),
+                config=_serialize_paths(cfg.to_dict()),
                 inputs=inputs,
                 stats=stats,
                 schema="UniProtExport",
@@ -2164,7 +2169,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         failure_path = raw_destination.with_name(
             f"{raw_destination.stem}_failure_cases.csv"
         )
-        exit_code = _run_pipeline_with_meta(
+        execution = _run_pipeline_with_meta(
             fetcher=_raw_fetcher,
             schema=None,
             schema_name="raw_target_payload",
@@ -2181,6 +2186,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg,
             logger=logger,
         )
+        exit_code = int(execution.exit_code)
+        dataset_path = execution.dataset_path or raw_destination
+        raw_destination = Path(dataset_path)
         if exit_code != 0:
             return exit_code
 
@@ -2461,7 +2469,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if not normalize_at_export:
         metadata_hooks.insert(0, normalize_targets)
 
-    exit_code = _run_pipeline_with_meta(
+    execution = _run_pipeline_with_meta(
         fetcher=fetcher,
         schema=TargetsSchema,
         schema_name="TargetsSchema",
@@ -2483,6 +2491,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             "target_iuphar_family",
         ),
     )
+    exit_code = int(execution.exit_code)
+    dataset_path = execution.dataset_path or raw_output
+    raw_output = Path(dataset_path)
 
     if not _finalize_raw_dump_writer(
         raw_dump_writer,

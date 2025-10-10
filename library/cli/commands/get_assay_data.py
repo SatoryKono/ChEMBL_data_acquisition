@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+import tempfile
+from datetime import UTC, datetime
 from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from functools import partial
@@ -278,6 +280,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return remove_assay_output_columns(frame)
 
     postprocess_enabled = bool(getattr(args, "postprocess", False))
+    emit_legacy = bool(getattr(args, "emit_legacy_artifacts", False))
     dictionary_resources: tuple[str, ...] | None = None
 
     metadata_hooks = [
@@ -350,11 +353,68 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         StepError = PostprocessStepError
 
     doc_quality_cfg = cfg.system.doc_quality
-    table_quality = build_table_quality_hook(
-        doc_quality_cfg,
-        table_name=output_path.with_suffix(""),
-        destination=output_path.parent,
-    )
+    if emit_legacy:
+        table_quality = build_table_quality_hook(
+            doc_quality_cfg,
+            table_name=output_path.with_suffix(""),
+            destination=output_path.parent,
+        )
+    else:
+        table_quality = lambda _: None  # type: ignore[assignment]
+
+    def _persist_standard_outputs(dataset_csv: Path) -> io.StandardOutputArtifacts:
+        dataset_frame = pd.read_csv(
+            dataset_csv,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+        )
+        quality_report = pd.DataFrame()
+        correlation_report = pd.DataFrame()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            quality_hook = build_table_quality_hook(
+                doc_quality_cfg,
+                table_name=dataset_csv.with_suffix(""),
+                destination=tmpdir,
+            )
+            try:
+                quality_result = quality_hook(dataset_frame)
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning(
+                    "assay_quality_generation_failed",
+                    error=str(exc),
+                    path=str(dataset_csv),
+                )
+            else:
+                if (
+                    isinstance(quality_result, tuple)
+                    and len(quality_result) == 2
+                    and all(isinstance(frame, pd.DataFrame) for frame in quality_result)
+                ):
+                    quality_report, correlation_report = quality_result
+        base = dataset_csv.stem
+        if base.startswith("output."):
+            base = base[len("output.") :]
+        if "_" in base:
+            table_name_candidate, date_tag = base.rsplit("_", 1)
+        else:
+            table_name_candidate = base
+            date_tag = datetime.now(UTC).strftime("%Y%m%d")
+        table_name_value = table_name_candidate or DEFAULT_OUTPUT_STEM
+        artifacts = io.save_standard_outputs(
+            dataset_frame,
+            quality_report,
+            correlation_report,
+            table_name=table_name_value,
+            date_tag=date_tag,
+            cfg=cfg.io,
+        )
+        logger.info(
+            "assay_standard_outputs",
+            dataset=str(artifacts.dataset),
+            quality_report=str(artifacts.quality_report),
+            correlation_report=str(artifacts.correlation_report),
+        )
+        return artifacts
 
     with ETLContext(cfg) as context:
         client = context.chembl_client
@@ -477,6 +537,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             nonlocal pipeline_stats
             pipeline_stats = dict(stats)
 
+        execution = None
         try:
             definition = PipelineDefinition(
                 schema=AssaysSchema,
@@ -493,18 +554,42 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 stats_callback=_capture_stats,
                 dictionary_resources=dictionary_resources,
             )
-            exit_code = run_pipeline(
+            execution = run_pipeline(
                 definition=definition,
                 fetcher=fetcher,
                 output_path=output_path,
                 failure_path=failure_path,
                 cfg=cfg,
                 logger=logger,
+                emit_legacy_artifacts=emit_legacy,
             )
         finally:
-            chunk_failures.save(fetch_failure_path, cfg=cfg)
+            if emit_legacy:
+                chunk_failures.save(fetch_failure_path, cfg=cfg)
+            else:
+                Path(fetch_failure_path).unlink(missing_ok=True)
+                Path(f"{fetch_failure_path}.meta.yaml").unlink(missing_ok=True)
 
-    exit_status = 0 if exit_code is None else int(exit_code)
+    if execution is None:
+        exit_code_int = 1
+        dataset_path: Path | None = None
+    else:
+        exit_code_int = int(execution.exit_code)
+        dataset_path = execution.dataset_path
+
+    if exit_code_int == 0 and dataset_path is not None:
+        standard_artifacts = _persist_standard_outputs(dataset_path)
+        standard_dataset = standard_artifacts.dataset
+        if not emit_legacy and standard_dataset != dataset_path:
+            Path(dataset_path).unlink(missing_ok=True)
+        dataset_path = standard_dataset
+
+    if dataset_path is not None:
+        output_path = Path(dataset_path)
+        args.final_out = output_path
+        args.output_csv = output_path
+
+    exit_status = exit_code_int
 
     dropped_columns_report = [
         column for column in ASSAY_OUTPUT_DROP_COLUMNS if column in dropped_columns_seen
@@ -726,6 +811,8 @@ def run_assay_service(
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the assay pipeline handling ``--skip-existing`` semantics."""
 
+    args.emit_legacy_artifacts = bool(getattr(args, "emit_legacy_artifacts", False))
+
     final_out_attr = getattr(args, "final_out", None)
     if final_out_attr in (None, argparse.SUPPRESS):
         legacy_output = getattr(args, "output_csv", None)
@@ -797,6 +884,16 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Enable assay postprocessing after the main pipeline",
+    )
+    parser.add_argument(
+        "--emit-legacy-artifacts",
+        dest="emit_legacy_artifacts",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Write the legacy CSV, metadata and diagnostics alongside the standard "
+            "output bundle (default: disabled)."
+        ),
     )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg

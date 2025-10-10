@@ -819,7 +819,7 @@ def _finalise_export(
                     rows_total=rows_total,
                     rows_kept=rows_kept,
                     command=" ".join(sys.argv),
-                    config_subset=_serialize_paths(cfg.to_dict()),
+                    config=_serialize_paths(cfg.to_dict()),
                     inputs={"input_csv": str(input_csv)},
                     schema="DocumentsSchema",
                     quality_summary=quality_summary,

@@ -13,8 +13,8 @@ import pytest
 import requests
 import yaml
 
-from library.cli_utils import run_pipeline as cli_run_pipeline
-import library.common.metadata as metadata
+from library.cli_utils import PipelineExecutionResult, run_pipeline as cli_run_pipeline
+from library.io import StandardOutputArtifacts
 from library.config import Config
 from library.pipelines.assay.chembl_assay import MAX_ASSAY_CHUNK_SIZE
 from library.resources.dictionaries import get_resource
@@ -89,6 +89,7 @@ def minimal_args(tmp_path: Path) -> argparse.Namespace:
         skip_existing=False,
         force=False,
         offset=0,
+        emit_legacy_artifacts=False,
     )
 
 
@@ -180,13 +181,35 @@ def test_run_chembl__successful_execution(
         output_path,
         failure_path,
         **kwargs: object,
-    ) -> int:
+    ) -> PipelineExecutionResult:
         del fetcher, output_path, failure_path, kwargs
         if definition.stats_callback is not None:
             definition.stats_callback(
                 {"rows_total": 2, "rows_kept": 2, "rows_dropped": 0}
             )
-        return 0
+        pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]}).to_csv(
+            minimal_args.final_out,
+            index=False,
+        )
+        return PipelineExecutionResult(
+            exit_code=0,
+            dataset_path=minimal_args.final_out,
+        )
+
+    def fake_save_standard_outputs(
+        dataset: pd.DataFrame,
+        quality: pd.DataFrame,
+        correlation: pd.DataFrame,
+        **_: object,
+    ) -> StandardOutputArtifacts:
+        del dataset, quality, correlation
+        return StandardOutputArtifacts(
+            dataset=minimal_args.final_out,
+            quality_report=minimal_args.final_out.with_name("quality.csv"),
+            correlation_report=minimal_args.final_out.with_name(
+                "correlation.csv"
+            ),
+        )
 
     monkeypatch.setattr(get_assay_data.io, "read_ids", fake_read_ids)
     monkeypatch.setattr(
@@ -203,11 +226,19 @@ def test_run_chembl__successful_execution(
         get_assay_data, "prepare_chunked_pipeline", fake_prepare_chunked_pipeline
     )
     monkeypatch.setattr(get_assay_data, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(
+        get_assay_data.io,
+        "save_standard_outputs",
+        fake_save_standard_outputs,
+    )
 
     exit_code = get_assay_data.run_chembl(cfg, minimal_args)
 
     assert exit_code == 0
-    assert any(event == "assay_pipeline_done" for _, event, _ in logger_stub.events)
+    assert any(
+        event == "assay_standard_outputs" for _, event, _ in logger_stub.events
+    )
+    assert any(event == "postprocess_skipped" for _, event, _ in logger_stub.events)
     if offset:
         assert any(event == "process_offset" for _, event, _ in logger_stub.events)
     assert any(event == "process_limit" for _, event, _ in logger_stub.events)
@@ -292,12 +323,33 @@ def test_run_chembl__splits_chunk_on_timeout(
         output_path: Path,
         failure_path: Path,
         **kwargs: object,
-    ) -> int:
+    ) -> PipelineExecutionResult:
         del output_path, failure_path, kwargs
         list(fetcher())
         if definition.stats_callback is not None:
             definition.stats_callback({})
-        return 0
+        pd.DataFrame({"assay_chembl_id": ["CHEMBL100", "CHEMBL200"]}).to_csv(
+            minimal_args.final_out,
+            index=False,
+        )
+        return PipelineExecutionResult(
+            exit_code=0,
+            dataset_path=minimal_args.final_out,
+        )
+
+    def fake_save_standard_outputs(
+        dataset: pd.DataFrame,
+        quality: pd.DataFrame,
+        correlation: pd.DataFrame,
+        **_: object,
+    ) -> StandardOutputArtifacts:
+        return StandardOutputArtifacts(
+            dataset=minimal_args.final_out,
+            quality_report=minimal_args.final_out.with_name("quality.csv"),
+            correlation_report=minimal_args.final_out.with_name(
+                "correlation.csv"
+            ),
+        )
 
     monkeypatch.setattr(get_assay_data.io, "read_ids", fake_read_ids)
     monkeypatch.setattr(
@@ -311,6 +363,11 @@ def test_run_chembl__splits_chunk_on_timeout(
     )
     monkeypatch.setattr(get_assay_data, "run_pipeline", fake_run_pipeline)
     monkeypatch.setattr(get_assay_data, "sleep", lambda *_: None)
+    monkeypatch.setattr(
+        get_assay_data.io,
+        "save_standard_outputs",
+        fake_save_standard_outputs,
+    )
 
     exit_code = get_assay_data.run_chembl(cfg, minimal_args)
 
@@ -321,6 +378,104 @@ def test_run_chembl__splits_chunk_on_timeout(
     assert ["CHEMBL200"] in call_history
     assert tracker._failures == []
     assert any(event == "assay_fetch_split" for _, event, _ in logger_stub.events)
+
+
+def test_run_chembl__standard_outputs_created_without_legacy(
+    cfg: Config,
+    minimal_args: argparse.Namespace,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg.assay.limit = 1
+
+    df = pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]})
+    df.to_csv(minimal_args.final_out, index=False, encoding="utf-8")
+
+    save_calls: list[tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]] = []
+
+    def fake_save_standard_outputs(dataset, quality, correlation, **kwargs: object):
+        save_calls.append((dataset, quality, correlation))
+        return StandardOutputArtifacts(
+            dataset=minimal_args.final_out,
+            quality_report=minimal_args.final_out.with_name("quality.csv"),
+            correlation_report=minimal_args.final_out.with_name("correlation.csv"),
+        )
+
+    class FakeTracker:
+        def __init__(self) -> None:
+            self.saved = False
+
+        def add_failure(self, *_: object, **__: object) -> None:
+            return None
+
+        def save(self, *_: object, **__: object) -> None:
+            self.saved = True
+
+        def stats(self) -> dict[str, object]:
+            return {"failures": 0}
+
+    tracker = FakeTracker()
+
+    def fake_run_pipeline(**kwargs: object) -> PipelineExecutionResult:
+        if (definition := kwargs.get("definition")) and definition.stats_callback:
+            definition.stats_callback({"rows_total": 1, "rows_kept": 1, "rows_dropped": 0})
+        return PipelineExecutionResult(
+            exit_code=0,
+            dataset_path=minimal_args.final_out,
+        )
+
+    monkeypatch.setattr(get_assay_data, "ChunkFailureTracker", lambda: tracker)
+    monkeypatch.setattr(get_assay_data, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(
+        get_assay_data.io,
+        "save_standard_outputs",
+        fake_save_standard_outputs,
+    )
+    monkeypatch.setattr(
+        get_assay_data.io,
+        "read_ids",
+        lambda *_args, **_kwargs: iter(["CHEMBL1"]),
+    )
+    monkeypatch.setattr(get_assay_data.cl, "get_assays", lambda *_, **__: df)
+    class _DummyClient:
+        def __enter__(self) -> "_DummyClient":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "library.orchestration.context.ChemblClient",
+        lambda *_, **__: _DummyClient(),
+    )
+    def fake_prepare_chunked_pipeline(**kwargs: object):
+        del kwargs
+
+        def _fetcher() -> Iterable[pd.DataFrame]:
+            yield df
+
+        def _writer(*_args: object, **_kwargs: object) -> Path:
+            return minimal_args.final_out
+
+        return _fetcher, _writer
+
+    monkeypatch.setattr(
+        get_assay_data,
+        "prepare_chunked_pipeline",
+        fake_prepare_chunked_pipeline,
+    )
+
+    exit_code = get_assay_data.run_chembl(cfg, minimal_args)
+
+    assert exit_code == 0
+    assert save_calls, "expected save_standard_outputs to be invoked"
+    assert not tracker.saved
+    fetch_failure = minimal_args.final_out.with_name(
+        f"{minimal_args.final_out.stem}_fetch_failures.csv"
+    )
+    assert not fetch_failure.exists()
 
 
 def test_run__skip_existing_returns_zero(
@@ -449,6 +604,7 @@ def test_run_pipeline__adds_missing_assay_optional_columns(
         stats_extra=None,
         logger=logger,
         dictionary_resources=("dictionary_root",),
+        emit_legacy_artifacts=False,
     )
 
     assert exit_code == 0
@@ -464,6 +620,9 @@ def test_run_pipeline__adds_missing_assay_optional_columns(
 
     resource = get_resource("dictionary_root")
     assert dictionaries.get("dictionary_root", {}).get("version") == resource.version
+
+    meta_path = output_path.with_name(output_path.name + ".meta.yaml")
+    assert not meta_path.exists()
 
 
 def test_build_parser__defaults() -> None:

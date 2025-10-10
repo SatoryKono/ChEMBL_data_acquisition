@@ -1174,7 +1174,7 @@ def finalize_output(
     meta_path = write_meta_yaml(
         csv_path=artifacts.dataset,
         command=" ".join(sys.argv),
-        config_subset=_serialize_paths(cfg.to_dict()),
+        config=_serialize_paths(cfg.to_dict()),
         inputs={"input_csv": str(input_csv)},
         stats=stats,
         schema="TestitemsSchema",

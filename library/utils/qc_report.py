@@ -2,13 +2,60 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, TYPE_CHECKING
 
 import pandas as pd
 
-from ..table_quality import TableQualityProfiler, _apply_sampling_and_filters
+from ..table_quality import (
+    TableQualityProfiler as _LegacyTableQualityProfiler,
+    _apply_sampling_and_filters,
+)
+
+try:  # pragma: no cover - optional compatibility import
+    from ..qa.table_quality import TableQualityProfiler as _QaTableQualityProfiler
+except ImportError:  # pragma: no cover - qa table quality module absent
+    _QaTableQualityProfiler = None  # type: ignore[assignment]
+
+_TABLE_PROFILER_TYPES: tuple[type, ...]
+
+if _QaTableQualityProfiler is not None and _QaTableQualityProfiler is not _LegacyTableQualityProfiler:
+    _TABLE_PROFILER_TYPES = (_LegacyTableQualityProfiler, _QaTableQualityProfiler)
+else:
+    _TABLE_PROFILER_TYPES = (_LegacyTableQualityProfiler,)
+
+if TYPE_CHECKING:  # pragma: no cover - type checker assistance only
+    from ..qa.table_quality import TableQualityProfiler as _QaTableQualityProfilerType
+else:  # pragma: no cover - runtime fallback for typing alias
+    _QaTableQualityProfilerType = _LegacyTableQualityProfiler  # type: ignore[assignment]
+
+TableQualityProfilerLike = _LegacyTableQualityProfiler | _QaTableQualityProfilerType
+
+# Re-export the legacy profiler for typing/backwards compatibility.
+TableQualityProfiler = _LegacyTableQualityProfiler
+
+
+def _is_table_profiler_instance(candidate: object) -> bool:
+    """Return ``True`` when ``candidate`` behaves like a table profiler."""
+
+    if isinstance(candidate, _TABLE_PROFILER_TYPES):
+        return True
+
+    if candidate is None:
+        return False
+
+    required_attrs = ("_columns", "_accumulators")
+    if not all(hasattr(candidate, attr) for attr in required_attrs):
+        return False
+
+    columns = getattr(candidate, "_columns")
+    accumulators = getattr(candidate, "_accumulators")
+
+    if not isinstance(columns, Sequence) or not isinstance(accumulators, Mapping):
+        return False
+
+    return True
 
 
 def _validate_table_name(table_name: str) -> str:
@@ -48,7 +95,7 @@ def _prepare_filtered_frame(
 
 
 def _build_reports_from_profiler(
-    profiler: TableQualityProfiler,
+    profiler: TableQualityProfilerLike,
 ) -> Tuple[pd.DataFrame, dict[str, pd.Series]]:
     """Generate quality report rows and numeric candidates without file writes."""
 
@@ -97,7 +144,7 @@ def _build_reports_from_profiler(
 
 
 def build_reports_from_profiler(
-    profiler: TableQualityProfiler,
+    profiler: TableQualityProfilerLike,
     *,
     correlation_method: str = "pearson",
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -133,13 +180,13 @@ def build_qc_summary(
     include_columns: Sequence[str] | None = None,
     exclude_columns: Sequence[str] | None = None,
     sample_rows: int | None = None,
-    profiler: TableQualityProfiler | None = None,
+    profiler: TableQualityProfilerLike | None = None,
 ) -> pd.DataFrame:
     """Return the quality-control summary DataFrame for ``frame``."""
 
     _validate_table_name(table_name)
     if profiler is not None:
-        if not isinstance(profiler, TableQualityProfiler):
+        if not _is_table_profiler_instance(profiler):
             raise TypeError("profiler must be a TableQualityProfiler instance")
         quality_report, _ = _build_reports_from_profiler(profiler)
         return quality_report

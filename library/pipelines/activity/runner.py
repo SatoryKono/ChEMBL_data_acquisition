@@ -33,6 +33,7 @@ class ActivityCommandOptions:
     skip_existing: bool = False
     force: bool = False
     invocation: Sequence[str] | None = None
+    emit_legacy_artifacts: bool = False
 
 
 def _normalise_optional_path(value: Path | str | None) -> Path | None:
@@ -185,6 +186,8 @@ def run_activity_pipeline(
         output_path = final_output
         args.final_out = output_path
         args.output_csv = output_path
+
+    args.emit_legacy_artifacts = bool(options.emit_legacy_artifacts)
 
     batch_size = getattr(effective_cfg.activity, "batch_size", None)
     if batch_size is not None and batch_size > MAX_ACTIVITY_CHUNK_SIZE:

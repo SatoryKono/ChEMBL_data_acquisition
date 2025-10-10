@@ -893,7 +893,7 @@ def run_pipeline(
         rows_total=rows_total,
         rows_kept=rows_kept,
         command=command_str,
-        config_subset=config_snapshot,
+        config=config_snapshot,
         inputs=inputs,
         schema=schema_name,
         stats_extra=stats_payload or None,
