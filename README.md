@@ -42,7 +42,7 @@ tables before executing the activity pipeline.
 | `library/` | Reusable packages: API clients, pipelines, validation schemas, post-processing and QA utilities. |
 | `config/` | Default YAML configuration, schemas and dictionary resources used during enrichment. |
 | `data/` | Lightweight fixtures and smoke-test inputs that mirror the expected CSV structure. |
-| `docs/` | Full bilingual documentation set (`en`/`ru`) kept in sync. |
+| `docs/` | Full bilingual documentation set (`en`/`ru`) kept in sync, including [`docs/ГОСТ.md`](./docs/%D0%93%D0%9E%D0%A1%D0%A2.md) with regulatory notes. |
 | `tests/` | Deterministic pytest suite covering unit, integration and end-to-end scenarios. |
 | `reports/` | Location where JSON/Markdown test reports are emitted by CI and local runs. |
 | `Makefile` | Convenience targets for formatting, linting, tests and documentation checks. |
