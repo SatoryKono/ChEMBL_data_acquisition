@@ -427,12 +427,12 @@ def test_finalise_export__qa_mismatch_sets_exit_code(
         fake_write_csv_chunks,
     )
 
-    def fake_postprocess_export(path: Path, *, cfg: Any) -> Path:  # noqa: ARG001
-        return Path(path)
+    def fake_postprocess_export(csv_path: Path, **_: Any) -> tuple[Path, None]:
+        return Path(csv_path), None
 
     monkeypatch.setattr(
-        get_document_data.document_export_postprocessing,
-        "postprocess_export_file",
+        get_document_data,
+        "_run_document_postprocess_pipeline",
         fake_postprocess_export,
     )
 
@@ -519,12 +519,12 @@ def test_finalise_export__partial_run_skips_qa(
         fake_write_csv_chunks,
     )
 
-    def fake_postprocess_export(path: Path, *, cfg: Any) -> Path:  # noqa: ARG001
-        return Path(path)
+    def fake_postprocess_export(csv_path: Path, **_: Any) -> tuple[Path, None]:
+        return Path(csv_path), None
 
     monkeypatch.setattr(
-        get_document_data.document_export_postprocessing,
-        "postprocess_export_file",
+        get_document_data,
+        "_run_document_postprocess_pipeline",
         fake_postprocess_export,
     )
 
