@@ -7,9 +7,11 @@ from collections.abc import Iterable, MutableMapping
 from pathlib import Path
 
 import pandas as pd
+import pandas.testing as pdt
 import pytest
 
 from library.config import Config
+from library.io import StandardOutputArtifacts
 from scripts import get_testitem_data
 
 
@@ -198,6 +200,91 @@ def test_run_chembl__passes_limit_and_offset(
     assert isinstance(options, get_testitem_data.TestitemPipelineOptions)
     assert options.limit == 5
     assert options.offset == 2
+
+
+@pytest.mark.unit
+def test_run_chembl__builds_standard_outputs_when_missing_artifacts(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataset_path = tmp_path / "output.csv"
+    source_frame = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    source_frame.to_csv(dataset_path, index=False)
+
+    class FakeResult:
+        def __init__(self, path: Path) -> None:
+            self.exit_code = 0
+            self.dataset_path = path
+
+    def fake_run_pipeline(config: Config, options: get_testitem_data.TestitemPipelineOptions):
+        assert config is cfg
+        assert options.output_csv == dataset_path
+        return FakeResult(dataset_path)
+
+    captured: dict[str, object] = {}
+
+    def fake_generate_qc_report(df: pd.DataFrame, *, table_name: str, **_: object) -> pd.DataFrame:
+        captured["qc_frame"] = df.copy()
+        captured["qc_table"] = table_name
+        return pd.DataFrame({"metric": [1]})
+
+    def fake_generate_correlation_report(
+        df: pd.DataFrame, *, table_name: str, **_: object
+    ) -> pd.DataFrame:
+        captured["corr_frame"] = df.copy()
+        captured["corr_table"] = table_name
+        return pd.DataFrame({"metric": [0.5]})
+
+    def fake_save_standard_outputs(
+        dataset: pd.DataFrame,
+        correlation: pd.DataFrame,
+        quality: pd.DataFrame,
+        **kwargs: object,
+    ) -> StandardOutputArtifacts:
+        captured["save_dataset"] = dataset.copy()
+        captured["save_corr"] = correlation.copy()
+        captured["save_quality"] = quality.copy()
+        captured["save_kwargs"] = dict(kwargs)
+        return StandardOutputArtifacts(
+            dataset=dataset_path,
+            correlation_report=dataset_path.with_name("correlation.csv"),
+            quality_report=dataset_path.with_name("quality.csv"),
+        )
+
+    monkeypatch.setattr(get_testitem_data, "run_testitem_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(
+        get_testitem_data,
+        "generate_qc_report",
+        fake_generate_qc_report,
+    )
+    monkeypatch.setattr(
+        get_testitem_data,
+        "generate_correlation_report",
+        fake_generate_correlation_report,
+    )
+    monkeypatch.setattr(
+        get_testitem_data.io,
+        "save_standard_outputs",
+        fake_save_standard_outputs,
+    )
+
+    args = argparse.Namespace(
+        input_csv=dataset_path,
+        final_out=dataset_path,
+        emit_legacy_artifacts=False,
+    )
+
+    exit_code = get_testitem_data.run_chembl(cfg, args)
+
+    assert exit_code == 0
+    assert isinstance(getattr(args, "_testitem_artifacts"), StandardOutputArtifacts)
+    pdt.assert_frame_equal(captured["qc_frame"], source_frame)
+    pdt.assert_frame_equal(captured["corr_frame"], source_frame)
+    pdt.assert_frame_equal(captured["save_dataset"], source_frame)
+    pdt.assert_frame_equal(captured["save_corr"], pd.DataFrame({"metric": [0.5]}))
+    pdt.assert_frame_equal(captured["save_quality"], pd.DataFrame({"metric": [1]}))
+    assert captured["save_kwargs"]["output_path"] == dataset_path
 
 
 def test_run__skip_existing_without_force(
