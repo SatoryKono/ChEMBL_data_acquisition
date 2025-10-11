@@ -374,6 +374,24 @@ _OUTPUT_FILENAME_PATTERN = re.compile(r"^output\.(?P<table>.+)_(?P<date>\d{8})$"
 _STEM_DATE_PATTERN = re.compile(r"^(?P<table>.+)_(?P<date>\d{8})$")
 
 
+def _normalize_table_name(value: str, *, default: str = "targets") -> str:
+    """Return a canonical table identifier derived from ``value``."""
+
+    cleaned = str(value).strip()
+    if cleaned:
+        cleaned = cleaned.lstrip(".")
+    prefix = "output."
+    while cleaned.startswith(prefix) and len(cleaned) > len(prefix):
+        cleaned = cleaned[len(prefix) :]
+    cleaned = cleaned.strip()
+    if cleaned.lower().endswith(".csv"):
+        cleaned = cleaned[:-4]
+    date_match = _STEM_DATE_PATTERN.match(cleaned)
+    if date_match:
+        return _normalize_table_name(date_match.group("table"), default=default)
+    return cleaned or default
+
+
 def _resolve_output_metadata(
     output: Path,
     *,
@@ -384,18 +402,23 @@ def _resolve_output_metadata(
 
     candidates = [output.with_suffix("").name, output.stem]
     for candidate in candidates:
-        match = _OUTPUT_FILENAME_PATTERN.match(candidate)
-        if match:
-            return match.group("table"), match.group("date")
-        match = _STEM_DATE_PATTERN.match(candidate)
-        if match:
-            table_value = match.group("table")
-            if table_value.startswith("output."):
-                table_value = table_value[len("output.") :]
-            return table_value, match.group("date")
+        variations = [candidate]
+        if candidate.lower().endswith(".csv"):
+            variations.append(candidate[:-4])
+        for option in variations:
+            match = _OUTPUT_FILENAME_PATTERN.match(option)
+            if match:
+                table_value = _normalize_table_name(match.group("table"))
+                return table_value, match.group("date")
+            match = _STEM_DATE_PATTERN.match(option)
+            if match:
+                table_value = _normalize_table_name(match.group("table"))
+                return table_value, match.group("date")
 
-    sanitized_table = (table_hint or output.stem or "targets").strip() or "targets"
-    normalized_table = sanitized_table.replace(" ", "_")
+    sanitized_table = _normalize_table_name(
+        (table_hint or output.stem or "targets"), default="targets"
+    )
+    normalized_table = sanitized_table.replace(" ", "_") or "targets"
     if date_hint and re.fullmatch(r"\d{8}", date_hint):
         resolved_date = date_hint
     else:
