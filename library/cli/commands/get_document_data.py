@@ -2010,6 +2010,14 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             "them"
         ),
     )
+    parser.add_argument(
+        "--emit-legacy-artifacts",
+        action="store_true",
+        help=(
+            "Write the legacy CSV export and quality artifacts alongside the "
+            "primary dataset"
+        ),
+    )
     pipeline_group = parser.add_argument_group("Pipeline selection")
     pipeline_group.add_argument(
         "--mode",
