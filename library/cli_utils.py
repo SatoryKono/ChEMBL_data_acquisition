@@ -53,24 +53,20 @@ from .io import save_standard_outputs, StandardOutputArtifacts
 from .utils.qc_report import build_reports_from_profiler
 
 __all__ = [
-    "PipelineError",
-    "MetadataHook",
-    "Validator",
-    "Writer",
-    "TableQualityHook",
-    "resolve_invocation",
-    "run_cli_command",
-    "run_pipeline",
-    "PipelineExecutionResult",
-    "build_parser",
     "Fetcher",
     "MetadataHook",
     "PipelineDefinition",
+    "PipelineError",
+    "PipelineExecutionResult",
+    "RunPipelineResult",
     "TableQualityHook",
     "Validator",
     "Writer",
+    "build_parser",
     "normalise_definition",
-    "RunPipelineResult",
+    "resolve_invocation",
+    "run_cli_command",
+    "run_pipeline",
 ]
 
 
@@ -173,7 +169,6 @@ class PipelineMetrics:
 
 @dataclass(slots=True, frozen=True)
 class RunPipelineResult:
-    """Return value exposing the exit code alongside output artefact paths."""
     """Return value exposing the exit code alongside output artefact paths.
 
     Historically this type inherited from :class:`int`.  Python 3.13 tightened
