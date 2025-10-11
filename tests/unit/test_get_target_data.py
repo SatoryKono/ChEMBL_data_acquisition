@@ -123,6 +123,28 @@ def test_normalise_target_export_name__normalised_suffix_cases(
     assert result == expected
 
 
+def test_resolve_output_metadata__strips_working_prefix() -> None:
+    table_name, date_tag = get_target_data._resolve_output_metadata(
+        Path(".output.targets_20240101.csv.tmp")
+    )
+
+    assert table_name == "targets"
+    assert date_tag == "20240101"
+
+
+def test_resolve_output_metadata__normalizes_table_hint(tmp_path: Path) -> None:
+    output_path = tmp_path / "custom.csv"
+
+    table_name, date_tag = get_target_data._resolve_output_metadata(
+        output_path,
+        table_hint=".output.targets",
+        date_hint="20251231",
+    )
+
+    assert table_name == "targets"
+    assert date_tag == "20251231"
+
+
 @pytest.mark.parametrize(
     "value, tokens",
     [
