@@ -110,3 +110,51 @@ def test_save_standard_outputs__creates_output_directory(
     )
 
     assert output_dir.exists() and output_dir.is_dir()
+
+
+@pytest.mark.unit
+def test_save_standard_outputs__respects_explicit_dataset_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _sample_frames
+) -> None:
+    dataset, correlation, quality = _sample_frames
+
+    captured_paths: list[Path] = []
+
+    def _fake_write_csv(
+        frame: pd.DataFrame,
+        destination: Path,
+        *,
+        **_: object,
+    ) -> Path:
+        path = Path(destination)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        frame.to_csv(path, index=False)
+        captured_paths.append(path)
+        return path
+
+    monkeypatch.setattr(output_writer, "write_csv_deterministic", _fake_write_csv)
+
+    target_path = tmp_path / "custom" / "final.csv"
+
+    artefacts = output_writer.save_standard_outputs(
+        dataset,
+        correlation,
+        quality,
+        table_name="documents",
+        date_tag="20240101",
+        dataset_path=target_path,
+    )
+
+    assert artefacts.dataset == target_path
+    assert artefacts.dataset.exists()
+    assert artefacts.correlation_report.parent == target_path.parent
+    assert artefacts.quality_report.parent == target_path.parent
+    assert artefacts.correlation_report.stem.startswith(target_path.stem)
+    assert artefacts.quality_report.stem.startswith(target_path.stem)
+
+    written_files = sorted(p.name for p in captured_paths)
+    assert written_files == [
+        "final.csv",
+        "final_data_correlation_report_table.csv",
+        "final_quality_report_table.csv",
+    ]

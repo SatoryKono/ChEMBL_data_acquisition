@@ -41,6 +41,8 @@ def save_standard_outputs(
     date_tag: str,
     *,
     key_columns: Sequence[str] | None = None,
+    dataset_path: Path | None = None,
+    output_dir: Path | None = None,
 ) -> StandardOutputArtifacts:
     """Persist the canonical dataset together with QC artefacts.
 
@@ -59,6 +61,12 @@ def save_standard_outputs(
     key_columns:
         Optional sequence of columns used to deterministically order
         ``df_main`` before writing.
+    dataset_path:
+        Explicit path for the dataset CSV. When provided the correlation and
+        quality reports are emitted alongside it using the same stem.
+    output_dir:
+        Directory where artefacts should be written. Ignored when
+        ``dataset_path`` is provided. Defaults to ``data/output``.
 
     Returns
     -------
@@ -66,12 +74,27 @@ def save_standard_outputs(
         Paths to the dataset, correlation report and quality report.
     """
 
-    _ensure_output_directory(OUTPUT_DIR)
+    if dataset_path is not None and output_dir is not None:
+        output_dir = Path(output_dir)
+        dataset_path = Path(dataset_path)
+        if dataset_path.parent != output_dir:
+            raise ValueError(
+                "dataset_path parent must match output_dir when both are provided"
+            )
 
-    stem = f"output.{table_name}_{date_tag}"
-    dataset_path = OUTPUT_DIR / f"{stem}.csv"
-    correlation_path = OUTPUT_DIR / f"{stem}_data_correlation_report_table.csv"
-    quality_path = OUTPUT_DIR / f"{stem}_quality_report_table.csv"
+    if dataset_path is not None:
+        dataset_path = Path(dataset_path)
+        base_dir = dataset_path.parent
+        stem = dataset_path.stem
+    else:
+        base_dir = Path(output_dir) if output_dir is not None else OUTPUT_DIR
+        stem = f"output.{table_name}_{date_tag}"
+        dataset_path = base_dir / f"{stem}.csv"
+
+    _ensure_output_directory(base_dir)
+
+    correlation_path = base_dir / f"{stem}_data_correlation_report_table.csv"
+    quality_path = base_dir / f"{stem}_quality_report_table.csv"
 
     key_cols = list(key_columns or [])
     if not key_cols and not df_main.empty:
