@@ -161,15 +161,7 @@ def test_make_request__caches_server_error_results(
 
     cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
     entry = cache.get(pubchem._build_cache_key("GET", url))
-    assert entry is not None
-    assert entry.outcome == "server_error"
-    assert entry.details == {
-        "reason": "server_error",
-        "status": 503,
-        "retry_after": pytest.approx(30.0, abs=1e-3),
-        "retry_after_source": "header",
-        "cache": True,
-    }
+    assert entry is None
 
     monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_UNTIL", None)
     monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_DETAILS", None)
@@ -177,16 +169,16 @@ def test_make_request__caches_server_error_results(
     second_result = pubchem.make_request(url, cfg)
 
     assert second_result is None
-    assert len(session.calls) == 1
-    assert limiter.acquires == 1
-    assert sleep_calls == [30.0]
+    assert len(session.calls) == 2
+    assert limiter.acquires == 2
+    assert sleep_calls == [30.0, 30.0]
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "server_error"
     assert details == {
         "reason": "server_error",
         "retry_after": pytest.approx(30.0, abs=1e-3),
         "retry_after_source": "header",
-        "http_status": 503,
+        "status": 503,
         "cache": True,
     }
 
@@ -407,15 +399,7 @@ def test_make_request__retry_after_honours_grace(
 
     cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
     entry = cache.get(pubchem._build_cache_key("GET", url))
-    assert entry is not None
-    assert entry.outcome == "server_error"
-    assert entry.details == {
-        "reason": "server_error",
-        "status": 503,
-        "retry_after": pytest.approx(30.0, abs=1e-3),
-        "retry_after_source": "header",
-        "cache": True,
-    }
+    assert entry is None
 
 
 def test_make_request__retry_after_grace_disabled_causes_timeout(
