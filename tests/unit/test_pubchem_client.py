@@ -185,12 +185,69 @@ def test_make_request__invalid_identifier_cached(
     }
 
 
-def test_make_request__retry_after_exceeds_deadline(
+def test_make_request__retry_after_honours_grace(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cfg = PubChemCfg()
     cfg.retries = 3
     cfg.timeout_seconds = 10
+
+    url = (
+        f"{cfg.base.rstrip('/')}/compound/cid/64972/property/"
+        "MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
+    )
+
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(pubchem, "sleep", lambda seconds: sleep_calls.append(seconds))
+    limiter = _DummyLimiter()
+    monkeypatch.setattr(pubchem, "get_limiter", lambda *_args, **_kwargs: limiter)
+
+    def _response() -> _DummyResponse:
+        return _DummyResponse(503, {"Retry-After": "30"})
+
+    session = _DummySession(_response)
+    monkeypatch.setattr(pubchem, "get_session", lambda *_args, **_kwargs: session)
+    monkeypatch.setattr(pubchem, "_CACHE", None)
+
+    result = pubchem.make_request(url, cfg)
+
+    assert result is None
+    assert session.calls == [
+        (
+            "GET",
+            url,
+            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
+        )
+        for _ in range(cfg.retries + 1)
+    ]
+    assert sleep_calls == [30.0, 30.0, 30.0]
+    assert limiter.acquires == cfg.retries + 1
+    outcome, details = pubchem.last_request_outcome()
+    assert outcome == "server_error"
+    assert details == {
+        "reason": "server_error",
+        "status": 503,
+        "retry_after": 30.0,
+    }
+
+    cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
+    entry = cache.get(pubchem._build_cache_key("GET", url))
+    assert entry is not None
+    assert entry.outcome == "server_error"
+    assert entry.details == {
+        "reason": "server_error",
+        "status": 503,
+        "retry_after": 30.0,
+    }
+
+
+def test_make_request__retry_after_grace_disabled_causes_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = PubChemCfg()
+    cfg.retries = 3
+    cfg.timeout_seconds = 10
+    cfg.retry_after_grace_seconds = 0
 
     url = (
         f"{cfg.base.rstrip('/')}/compound/cid/64972/property/"
