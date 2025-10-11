@@ -756,6 +756,76 @@ def test_run_chembl__restores_final_output_without_legacy(
     ) in logger_stub.events
 
 
+@pytest.mark.unit
+def test_run_chembl__forces_standard_outputs_when_outputs_disabled(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logger_stub: _MemoryLogger,
+) -> None:
+    input_csv = tmp_path / "identifiers.csv"
+    input_csv.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+    final_out = tmp_path / "output.targets_chembl.csv"
+    dataset_dir = tmp_path / "standard"
+    dataset_dir.mkdir()
+    dataset_path = dataset_dir / "output.targets_chembl.csv"
+    dataset_path.write_text(
+        "target_chembl_id\nCHEMBL1\n", encoding=cfg.io.csv_encoding
+    )
+
+    def _fake_read_ids(path: Path, *, column: str, **_: object) -> Iterable[str]:
+        assert column == cfg.target.chembl.column
+        return iter(["CHEMBL1"])
+
+    monkeypatch.setattr(get_target_data.io, "read_ids", _fake_read_ids)
+
+    monkeypatch.setattr(
+        get_target_data,
+        "build_table_quality_hook",
+        lambda *_, **__: lambda *_: None,
+    )
+
+    captured: dict[str, object] = {}
+
+    def _fake_run_pipeline(**kwargs: object) -> SimpleNamespace:
+        captured["emit_standard_outputs"] = kwargs["emit_standard_outputs"]
+        captured["emit_legacy_artifacts"] = kwargs["emit_legacy_artifacts"]
+        return SimpleNamespace(exit_code=0, dataset_path=str(dataset_path))
+
+    monkeypatch.setattr(
+        get_target_data,
+        "_run_pipeline_with_meta",
+        _fake_run_pipeline,
+    )
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=final_out,
+        output_csv=final_out,
+        raw_out=None,
+        raw_format="csv",
+        id_cols=None,
+        offset=0,
+        normalize_at_export=True,
+        no_reindex_raw=False,
+        emit_standard_outputs=False,
+        emit_legacy_artifacts=False,
+    )
+
+    exit_code = get_target_data.run_chembl(cfg, args)
+
+    assert exit_code == 0
+    assert captured["emit_standard_outputs"] is True
+    assert captured["emit_legacy_artifacts"] is False
+    assert (
+        "info",
+        "chembl_pipeline_outputs_forced",
+        {"reason": "run_pipeline_requires_outputs"},
+    ) in logger_stub.events
+    assert args.emit_standard_outputs is True
+    assert args.emit_legacy_artifacts is False
+
+
 def test_run_uniprot__doc_quality_reports(
     cfg: Config,
     tmp_path: Path,

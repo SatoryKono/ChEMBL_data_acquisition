@@ -2271,11 +2271,18 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     raw_dump_rows_total = 0
     chembl_http_requests = 0
 
-    raw_emit_flag = getattr(args, "emit_standard_outputs", argparse.SUPPRESS)
-    if raw_emit_flag in (argparse.SUPPRESS, None):
+    emit_standard_outputs = bool(getattr(args, "emit_standard_outputs", True))
+    emit_legacy_artifacts = bool(getattr(args, "emit_legacy_artifacts", False))
+
+    if not (emit_standard_outputs or emit_legacy_artifacts):
+        logger.info(
+            "chembl_pipeline_outputs_forced",
+            reason="run_pipeline_requires_outputs",
+        )
         emit_standard_outputs = True
-    else:
-        emit_standard_outputs = bool(raw_emit_flag)
+        setattr(args, "emit_standard_outputs", True)
+
+    setattr(args, "emit_legacy_artifacts", emit_legacy_artifacts)
 
     if not normalize_at_export:
 
@@ -2349,7 +2356,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg,
             logger=logger,
             emit_standard_outputs=emit_standard_outputs,
-            emit_legacy_artifacts=False,
+            emit_legacy_artifacts=emit_legacy_artifacts,
         )
         exit_code_attr = getattr(execution, "exit_code", None)
         exit_code = int(exit_code_attr if exit_code_attr is not None else execution)
@@ -2657,7 +2664,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             "target_iuphar_family",
         ),
         emit_standard_outputs=emit_standard_outputs,
-        emit_legacy_artifacts=False,
+        emit_legacy_artifacts=emit_legacy_artifacts,
     )
     exit_code_attr = getattr(execution, "exit_code", None)
     exit_code = int(exit_code_attr if exit_code_attr is not None else execution)
@@ -2881,7 +2888,7 @@ def fetch_chembl(
     normalize_at_export: bool = True,
     no_reindex_raw: bool = False,
     emit_standard_outputs: bool = True,
-    cleanup_standard_outputs: bool = False,
+    emit_legacy_artifacts: bool = False,
 ) -> pd.DataFrame:
     """Fetch target information from ChEMBL.
 
@@ -2899,9 +2906,12 @@ def fetch_chembl(
         Temporary override for the batch size used when calling the API.
     offset : int, optional
         Number of identifiers to skip before starting the retrieval.
-    emit_standard_outputs : bool, optional
+        emit_standard_outputs : bool, optional
         Forwarded to :func:`run_pipeline` to control whether canonical CSV
         artefacts should be produced alongside ``final_out``.
+    emit_legacy_artifacts : bool, optional
+        Forwarded to :func:`run_pipeline` to request legacy artefacts in
+        addition to ``final_out``.
 
     Returns
     -------
@@ -2928,6 +2938,7 @@ def fetch_chembl(
         normalize_at_export=normalize_at_export,
         no_reindex_raw=no_reindex_raw,
         emit_standard_outputs=emit_standard_outputs,
+        emit_legacy_artifacts=emit_legacy_artifacts,
     )
     original_limit = cfg.target.chembl.limit
     original_chunk_size = cfg.target.chembl.chunk_size
@@ -4238,8 +4249,8 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             chunk_size=cfg.target.all.chunk_size,
             offset=cfg.target.all.offset,
             id_cols=key_columns,
-            emit_standard_outputs=True,
-            cleanup_standard_outputs=True,
+            emit_standard_outputs=False,
+            emit_legacy_artifacts=emit_legacy,
         )
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
