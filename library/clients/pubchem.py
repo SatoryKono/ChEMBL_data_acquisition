@@ -456,6 +456,10 @@ def make_request(
                                 timeout_details.setdefault(
                                     "retry_after", delay
                                 )
+                                timeout_details.setdefault(
+                                    "retry_after_source",
+                                    "header" if retry_after is not None else "backoff",
+                                )
                                 timeout_details["timeout_reason"] = (
                                     "retry_after_exceeds_deadline"
                                 )
@@ -701,11 +705,12 @@ def _store_cache_miss(
                 if cfg.timeout_seconds and cfg.timeout_seconds > 0
                 else None
             )
+            retry_after_source = details_data.get("retry_after_source")
             effective_backoff = (
                 base_backoff if base_backoff and base_backoff > 0 else None
             )
             if effective_backoff is not None:
-                if max_backoff is not None:
+                if max_backoff is not None and retry_after_source != "header":
                     effective_backoff = min(effective_backoff, max_backoff)
                 stored_at = monotonic()
                 details_data.update(

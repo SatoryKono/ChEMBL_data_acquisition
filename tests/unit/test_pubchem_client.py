@@ -208,13 +208,73 @@ def test_make_request__retry_after_exceeds_deadline(
     timeout_stored_at = details.pop("timeout_stored_at", None)
     assert timeout_flag is True
     assert isinstance(timeout_stored_at, float)
-    assert timeout_retry_after == pytest.approx(cfg.timeout_seconds)
+    assert timeout_retry_after == pytest.approx(30.0)
     assert details == {
         "reason": "server_error",
         "status": 503,
         "retry_after": 30.0,
+        "retry_after_source": "header",
         "timeout_reason": "retry_after_exceeds_deadline",
     }
+
+
+def test_make_request__timeout_cache_uses_config_backoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = PubChemCfg()
+    cfg.retries = 3
+    cfg.timeout_seconds = 5
+    cfg.backoff_initial_seconds = 10.0
+
+    url = (
+        f"{cfg.base.rstrip('/')}/compound/cid/64972/property/"
+        "MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
+    )
+
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(
+        pubchem, "sleep", lambda seconds: sleep_calls.append(float(seconds))
+    )
+    limiter = _DummyLimiter()
+    monkeypatch.setattr(pubchem, "get_limiter", lambda *_args, **_kwargs: limiter)
+
+    session = _DummySession(lambda: _DummyResponse(503, {}))
+    monkeypatch.setattr(pubchem, "get_session", lambda *_args, **_kwargs: session)
+    monkeypatch.setattr(pubchem, "_CACHE", None)
+
+    result = pubchem.make_request(url, cfg)
+
+    assert result is None
+    assert session.calls == [
+        (
+            "GET",
+            url,
+            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
+        )
+    ]
+    assert sleep_calls == []
+    assert limiter.acquires == 1
+
+    cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
+    entry = cache.get(pubchem._build_cache_key("GET", url))
+    assert entry is not None
+    assert entry.outcome == "timeout"
+    assert entry.details is not None
+    details = dict(entry.details)
+    timeout_retry_after = details.pop("timeout_retry_after", None)
+    timeout_flag = details.pop("timeout", None)
+    timeout_stored_at = details.pop("timeout_stored_at", None)
+    assert timeout_flag is True
+    assert isinstance(timeout_stored_at, float)
+    assert timeout_retry_after == pytest.approx(cfg.timeout_seconds)
+    assert details == {
+        "reason": "server_error",
+        "status": 503,
+        "retry_after": pytest.approx(cfg.backoff_initial_seconds),
+        "retry_after_source": "backoff",
+        "timeout_reason": "retry_after_exceeds_deadline",
+    }
+
 
 def test_get_cid_from_smiles__uses_post_for_stereochemistry(
     monkeypatch: pytest.MonkeyPatch,
