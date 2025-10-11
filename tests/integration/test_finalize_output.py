@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 import pytest
 from library import io
 from library.common.csv_utils import sha256_file
+from library.integration.chembl_client import ChemblClient
 from library.pipelines.testitem import cli
 from library.pipelines.testitem.catalog import ParentLookupStats
 
@@ -245,6 +247,64 @@ def test_finalize_output__omits_pubchem_columns_when_disabled(
     final = pd.read_csv(dataset_path)
     for column in cli._PUBCHEM_OPTIONAL_COLUMNS:
         assert column not in final.columns
+
+
+@pytest.mark.integration
+def test_finalize_output__fallback_pubchem_augmentation(
+    tmp_path: Path, sample_input_csv: Path, cfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg.system.doc_quality.enable = False
+
+    chunk = pd.DataFrame(
+        {
+            "molecule_chembl_id": pd.Series(["CHEMBL1"], dtype="string"),
+        }
+    )
+    for column in cli._PUBCHEM_OPTIONAL_COLUMNS:
+        chunk[column] = pd.Series([pd.NA], dtype="string")
+
+    output_path = tmp_path / "fallback_pubchem.csv"
+    stats_supplier = _StatsSupplier(_base_stats())
+
+    augmented_values = {
+        "pubchem_cid": "2244",
+        "pubchem_canonical_smiles": "C",
+    }
+
+    def fake_augment(df: pd.DataFrame, **_: object) -> pd.DataFrame:
+        updated = df.copy(deep=True)
+        for key, value in augmented_values.items():
+            updated[key] = value
+        return updated
+
+    monkeypatch.setattr(cli, "_load_pubchem_augmenter", lambda: fake_augment)
+
+    context = cli.PubChemAugmentationContext(
+        pubchem_cfg=cfg.pubchem,
+        api_cfg=cfg.api,
+        retry_cfg=cfg.retry,
+        client=cast(ChemblClient, object()),
+        timeout=cfg.testitem.timeout,
+        fields=cfg.testitem.fields,
+        request_limit=cfg.testitem.request_limit,
+    )
+
+    result = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=stats_supplier,
+        input_csv=sample_input_csv,
+        pubchem_context=context,
+    )
+
+    exit_code, artifacts = _unwrap_finalize_result(result)
+    assert exit_code == 0
+    assert artifacts is not None
+
+    final = pd.read_csv(artifacts.dataset)
+    for key, value in augmented_values.items():
+        assert str(final.loc[0, key]) == value
 
 
 @pytest.mark.integration
