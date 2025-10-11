@@ -62,8 +62,8 @@ _POSTPROCESS_TABLE_ALIASES = {
     "documents": "documents",
     "target": "targets",
     "targets": "targets",
-    "testitem": "testitem",
-    "testitems": "testitem",
+    "testitem": "testitems",
+    "testitems": "testitems",
 }
 
 
