@@ -282,7 +282,7 @@ py -3 scripts\get_target_data.py all ^
 ```bash
 python scripts/get_assay_data.py \
   --input data/input/assay.csv \
-  --final-out output/assays_sample.csv \
+  --final-out output/assay_sample.csv \
   --limit 100
 ```
 

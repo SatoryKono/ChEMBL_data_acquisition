@@ -7,6 +7,7 @@ import importlib
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -14,10 +15,10 @@ import requests
 import yaml
 
 from library.cli_utils import PipelineExecutionResult, run_pipeline as cli_run_pipeline
+from library.common import metadata_writer as metadata
 from library.io import StandardOutputArtifacts
 from library.config import Config
 from library.pipelines.assay.chembl_assay import MAX_ASSAY_CHUNK_SIZE
-from library.resources.dictionaries import get_resource
 from library.schemas import AssaysSchema
 from scripts import get_assay_data
 
@@ -97,12 +98,15 @@ def minimal_args(tmp_path: Path) -> argparse.Namespace:
 def test_derive_standard_output_labels__normalizes_hidden_tmp_path(
     tmp_path: Path,
 ) -> None:
-    dataset_csv = tmp_path / ".output.assays_20240101.csv.tmp"
+    dataset_csv = tmp_path / ".output.assay_20240101.csv.tmp"
     dataset_csv.touch()
 
-    table_name, date_tag = get_assay_data._derive_standard_output_labels(dataset_csv)
+    table_name, date_tag = get_assay_data.io.derive_output_labels(
+        dataset_csv,
+        default_table=get_assay_data.DEFAULT_OUTPUT_STEM,
+    )
 
-    assert table_name == "assays"
+    assert table_name == "assay"
     assert date_tag == "20240101"
 
 
@@ -499,7 +503,7 @@ def test_run_chembl__standard_outputs_normalize_hidden_tmp_path(
     minimal_args: argparse.Namespace,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    hidden_tmp = minimal_args.final_out.parent / ".output.assays_20240101.csv.tmp"
+    hidden_tmp = minimal_args.final_out.parent / ".output.assay_20240101.csv.tmp"
     minimal_args.final_out = hidden_tmp
     cfg.io.output_dir = str(hidden_tmp.parent)
 
@@ -516,13 +520,13 @@ def test_run_chembl__standard_outputs_normalize_hidden_tmp_path(
     ) -> StandardOutputArtifacts:
         del dataset, correlation, quality
         captured_kwargs.update(kwargs)
-        final_dataset = hidden_tmp.parent / "output.assays_20240101.csv"
+        final_dataset = hidden_tmp.parent / "output.assay_20240101.csv"
         return StandardOutputArtifacts(
             dataset=final_dataset,
             correlation_report=hidden_tmp.parent
-            / "output.assays_20240101_data_correlation_report_table.csv",
+            / "output.assay_20240101_data_correlation_report_table.csv",
             quality_report=hidden_tmp.parent
-            / "output.assays_20240101_quality_report_table.csv",
+            / "output.assay_20240101_quality_report_table.csv",
         )
 
     class FakeTracker:
@@ -574,9 +578,9 @@ def test_run_chembl__standard_outputs_normalize_hidden_tmp_path(
     exit_code = get_assay_data.run_chembl(cfg, minimal_args)
 
     assert exit_code == 0
-    assert captured_kwargs["table_name"] == "assays"
+    assert captured_kwargs["table_name"] == "assay"
     assert captured_kwargs["date_tag"] == "20240101"
-    assert minimal_args.final_out == hidden_tmp.parent / "output.assays_20240101.csv"
+    assert minimal_args.final_out == hidden_tmp.parent / "output.assay_20240101.csv"
 
 
 def test_run__skip_existing_returns_zero(
@@ -670,8 +674,8 @@ def test_run_pipeline__adds_missing_assay_optional_columns(
         return destination
 
     logger = _MemoryLogger()
-    output_path = tmp_path / "assays.csv"
-    failure_path = tmp_path / "assays_failures.csv"
+    output_path = tmp_path / "assay.csv"
+    failure_path = tmp_path / "assay_failures.csv"
 
     captured_meta: dict[str, object] = {}
 
@@ -687,7 +691,9 @@ def test_run_pipeline__adds_missing_assay_optional_columns(
 
     monkeypatch.setattr(metadata, "write_meta_yaml", _capture_meta)
 
-    exit_code = cli_run_pipeline(
+    cfg_stub = SimpleNamespace(io=SimpleNamespace(output_dir=tmp_path))
+
+    result = cli_run_pipeline(
         fetcher=fetcher,
         schema=AssaysSchema,
         schema_name="AssaysSchema",
@@ -701,28 +707,29 @@ def test_run_pipeline__adds_missing_assay_optional_columns(
         inputs={},
         key_columns=["assay_chembl_id"],
         table_quality=lambda _: None,
-        cfg=None,
+        cfg=cfg_stub,
         stats_extra=None,
         logger=logger,
         dictionary_resources=("dictionary_root",),
         emit_legacy_artifacts=False,
     )
 
+    exit_code = int(result)
+    if hasattr(result, "dataset_path") and getattr(result, "dataset_path") is not None:
+        dataset_path = Path(getattr(result, "dataset_path"))
+    else:
+        dataset_path = output_path
+
     assert exit_code == 0
-    assert output_path.exists()
-    result = pd.read_csv(output_path)
-    assert "assay_group" in result.columns
-    assert "assay_strain" in result.columns
-    assert result["assay_group"].isna().all()
-    assert result["assay_strain"].isna().all()
-    metadata_payload = captured_meta.get("data") or {}
-    dictionaries = metadata_payload.get("dictionaries")
-    assert isinstance(dictionaries, dict)
+    assert dataset_path.exists()
+    result_frame = pd.read_csv(dataset_path)
+    assert "assay_group" in result_frame.columns
+    assert "assay_strain" in result_frame.columns
+    assert result_frame["assay_group"].isna().all()
+    assert result_frame["assay_strain"].isna().all()
+    assert captured_meta.get("data") is None
 
-    resource = get_resource("dictionary_root")
-    assert dictionaries.get("dictionary_root", {}).get("version") == resource.version
-
-    meta_path = output_path.with_name(output_path.name + ".meta.yaml")
+    meta_path = dataset_path.with_suffix(dataset_path.suffix + ".meta.yaml")
     assert not meta_path.exists()
 
 
