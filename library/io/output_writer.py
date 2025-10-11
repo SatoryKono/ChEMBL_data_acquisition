@@ -11,7 +11,9 @@ import pandas as pd
 from ..common.csv_utils import write_csv_deterministic
 
 
-__all__ = ["StandardOutputArtifacts", "save_standard_outputs"]
+OUTPUT_DIR = Path("data/output")
+
+__all__ = ["StandardOutputArtifacts", "save_standard_outputs", "OUTPUT_DIR"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +44,7 @@ def save_standard_outputs(
     *,
     key_columns: Sequence[str] | None = None,
     output_dir: Path | str | None = None,
-    output_path: Path | None = None,
+    output_path: Path | str | None = None,
     cleanup_source: bool = True,
 ) -> StandardOutputArtifacts:
     """Persist the canonical dataset together with QC artefacts.
@@ -63,10 +65,10 @@ def save_standard_outputs(
         Optional sequence of columns used to deterministically order
         ``df_main`` before writing.
     output_dir:
-        Directory for writing the artefacts. When omitted, ``data/output`` is
-        used.  The parameter is ignored when ``output_path`` is supplied; in
-        that case the parent directory of ``output_path`` becomes the target
-        location.
+        Directory for writing the artefacts. When omitted, :data:`OUTPUT_DIR`
+        (``data/output``) is used. The parameter is ignored when
+        ``output_path`` is supplied; in that case the parent directory of
+        ``output_path`` becomes the target location.
     output_path:
         Optional original dataset path. When provided the canonical artefacts
         are written next to this file using the standard ``output.<table>``
@@ -75,8 +77,8 @@ def save_standard_outputs(
         sidecar) is deleted when ``cleanup_source`` evaluates to ``True``.
     cleanup_source:
         Remove ``output_path`` when it does not match the canonical dataset
-        path.  Defaults to ``True`` so that legacy exports do not leave
-        stray files behind.
+        path. Defaults to ``True`` so that legacy exports do not leave stray
+        files behind.
 
     Returns
     -------
@@ -84,7 +86,7 @@ def save_standard_outputs(
         Paths to the dataset, correlation report and quality report.
     """
 
-    resolved_output_dir = Path(output_dir) if output_dir is not None else Path("data/output")
+    resolved_output_dir = Path(output_dir) if output_dir is not None else OUTPUT_DIR
 
     if output_path is not None:
         candidate_path = Path(output_path)
