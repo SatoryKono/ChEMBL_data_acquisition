@@ -65,7 +65,7 @@ __all__ = [
 
 
 DEFAULT_INPUT_NAME = "assay.csv"
-DEFAULT_OUTPUT_STEM = "assays"
+DEFAULT_OUTPUT_STEM = "assay"
 
 # Backwards compatibility: legacy configs referenced the private
 # ``_ASSAY_MAX_IDS_PER_REQUEST`` constant before it was renamed to
