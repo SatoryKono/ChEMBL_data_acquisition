@@ -56,6 +56,9 @@ Important flags:
   runs). `0` skips all processing.
 - `--force`, `--skip-existing` — pass-through execution controls.
 - `--log-level`, `--verbose` — adjust logging; `--verbose` forces the `DEBUG` level without changing configuration files.
+- `--rerun-postprocess` — rebuild stage-aligned exports even when previous runs already produced them so downstream post-processing is refreshed.
+- `--debug` — enable verbose diagnostics and retain intermediate artefacts for every delegated pipeline.
+- `--keep-intermediate` — preserve intermediate and diagnostic artefacts created by individual pipelines without forcing debug logging.
 - `--dry-run` — validate configuration, log intended actions and exit without
   touching the filesystem.
 - `--print-config` — resolve the effective configuration and exit without
@@ -137,6 +140,16 @@ python scripts/get_document_data.py --mode pubmed \
   --fallback-doi-enabled \
   --fallback-doi-path data/input/document_fallback.csv
 ```
+
+### Post-processing reruns
+
+Use `--rerun-postprocess` when staged inputs already exist but the
+stage-aligned exports must be refreshed. The flag rebuilds post-processed
+artefacts even if earlier runs created them, helping recover from downstream
+schema changes or manual edits. Pair it with `--emit-legacy-artifacts` to update
+both the modern output directory and the optional legacy CSV sidecars, and add
+`--keep-intermediate` if you plan to inspect the retained staging folders while
+debugging.
 
 ## Target pipeline `get_target_data`
 

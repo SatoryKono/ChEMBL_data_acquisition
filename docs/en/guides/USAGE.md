@@ -70,6 +70,16 @@ write to the canonical destination without relying on deprecated aliases.
 `--limit 0` skips execution, `--dry-run` prints scheduled steps without touching
 the filesystem.
 
+Helpful switches while iterating:
+
+- `--rerun-postprocess` — rebuild stage-aligned exports even if they were
+  generated earlier. Use this when you tweak normalisation rules but want to
+  reuse cached staging artefacts.
+- `--debug` — enable verbose diagnostics and retain intermediate artefacts for
+  each child pipeline.
+- `--keep-intermediate` — preserve intermediate and diagnostic folders without
+  forcing debug logging.
+
 ## Document pipeline (`python scripts/get_document_data.py`)
 
 Run the document workflow via the single entry point `python scripts/get_document_data.py --mode <chembl|pubmed|all>`. The `--mode`
@@ -160,6 +170,22 @@ python scripts/get_document_data.py --mode all \
 ```
 
 The pipeline writes a deterministic CSV, `<name>.meta.yaml`, `<name>_quality_report_table.csv`, `<name>_data_correlation_report_table.csv`, and `<name>.quality.json` containing DOI coverage metrics.
+
+### Post-processing reruns
+
+When you only need to rebuild the exports from cached staging results, append
+`--rerun-postprocess`. The command recreates stage-aligned outputs even if a
+previous run already produced them. Combine it with
+`--emit-legacy-artifacts` to refresh both the modern output directory and the
+legacy CSV sidecars in one go. For ad-hoc investigations, add
+`--keep-intermediate` (or run the orchestrator with `--debug`) to retain the
+temporary staging folders:
+
+```bash
+python scripts/get_document_data.py --mode all \
+    --rerun-postprocess --emit-legacy-artifacts \
+    --final-out output/documents_full.csv
+```
 
 ## Target pipeline (`get-target-data`)
 
