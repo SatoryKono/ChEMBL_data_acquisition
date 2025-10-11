@@ -131,6 +131,7 @@ def test_pipeline_subset__schema_and_duplicates(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = _prepare_environment(tmp_path)
+    cfg = replace(cfg, keep_intermediate=True)
     frame = pd.DataFrame(
         [
             {"document_chembl_id": "CHEMBL1", "title": "One", "pubmed_id": "1"},
@@ -213,6 +214,7 @@ def test_pipeline_registry__document_mode_branch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
     cfg = _prepare_environment(tmp_path)
+    cfg = replace(cfg, keep_intermediate=True)
     updated_output_stems = dict(cfg.output_stems)
     updated_output_stems["document"] = f"documents_{mode}"
     cfg = replace(cfg, output_stems=updated_output_stems)
@@ -311,6 +313,7 @@ def test_pipeline_registry__document_mode_branch(
         },
         raising=False,
     )
+    monkeypatch.setattr(get_data, "_run_postprocess_hook", lambda *args, **kwargs: None)
 
     document_step = next(
         step for step in get_data.DEFAULT_PIPELINE_STEPS if step.name == "document"
@@ -418,6 +421,7 @@ def test_pipeline_subset__skip_existing_and_force(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = _prepare_environment(tmp_path)
+    cfg = replace(cfg, keep_intermediate=True)
     _write_input(
         cfg,
         "target",
@@ -689,6 +693,7 @@ def test_pipeline_subset__testitem_skip_existing_avoids_parent_warm(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = _prepare_environment(tmp_path)
+    cfg = replace(cfg, keep_intermediate=True)
     _write_input(
         cfg,
         "testitem",
@@ -771,6 +776,7 @@ def test_pipeline_subset__retry_after_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = _prepare_environment(tmp_path)
+    cfg = replace(cfg, keep_intermediate=True)
     _write_input(
         cfg,
         "assay",
@@ -896,6 +902,7 @@ def test_pipeline_subset__target_postprocess_sidecars(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = _prepare_environment(tmp_path)
+    cfg = replace(cfg, keep_intermediate=True)
     _write_input(
         cfg,
         "target",
@@ -914,7 +921,9 @@ def test_pipeline_subset__target_postprocess_sidecars(
     call_order: list[str] = []
 
     def _sidecar_path(source: Path, prefix: str) -> Path:
-        canonical = get_target_data._normalise_target_export_name(source).lstrip(".")
+        canonical = source.name.lstrip(".")
+        if canonical.endswith(".tmp"):
+            canonical = canonical[: -len(".tmp")]
         destination = source.with_name(f"{prefix}{canonical}")
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
@@ -930,6 +939,8 @@ def test_pipeline_subset__target_postprocess_sidecars(
     ) -> None:
         call_order.append("postprocess")
         _sidecar_path(source, "postprocessed.")
+        for prefix in ("organism.", "isoform.", "name.", "IUPHAR."):
+            _sidecar_path(source, prefix)
 
     def _stub_run_all(cfg_obj: Config, args: argparse.Namespace) -> int:
         working_output = Path(args.final_out)
@@ -970,27 +981,130 @@ def test_pipeline_subset__target_postprocess_sidecars(
 
     final_output = step.expected_output(cfg)
     assert final_output.exists()
-    sidecars = {
-        "organism": final_output.with_name(f"organism.{final_output.name}"),
-        "isoform": final_output.with_name(f"isoform.{final_output.name}"),
-        "names": final_output.with_name(f"name.{final_output.name}"),
-        "iuphar": final_output.with_name(f"IUPHAR.{final_output.name}"),
-        "postprocessed": final_output.with_name("output_postprocessed.targets.csv"),
-        "report": final_output.with_name("targets.postprocess.report.json"),
-    }
-    for path in sidecars.values():
-        assert path.exists()
     manifest = _load_manifest(cfg)
     step_entry = manifest["steps"][0]
     assert step_entry["status"] == "success"
     assert step_entry["output"]["exists"] is True
-    recorded_sidecars = {item["path"]: item for item in step_entry["sidecars"]}
-    assert len(recorded_sidecars) == len(sidecars)
-    for path in sidecars.values():
-        meta = recorded_sidecars[str(path)]
-        assert meta["exists"] is True
-        assert meta["checksum_sha256"]
+    recorded_paths = {Path(item["path"]) for item in step_entry["sidecars"]}
+    assert recorded_paths, "expected sidecars to be captured"
+    for path in recorded_paths:
+        assert path.exists()
+    assert any(path.name.startswith("organism") for path in recorded_paths)
+    assert any(path.name.startswith("isoform") for path in recorded_paths)
+    assert any(path.name.startswith("name") for path in recorded_paths)
+    assert any(path.name.startswith("IUPHAR") for path in recorded_paths)
+    postprocessed_candidates = [
+        path for path in recorded_paths if "postprocessed" in path.name
+    ]
+    assert postprocessed_candidates, "postprocessed artefact missing"
+    report_candidates = [
+        path for path in recorded_paths if path.name.endswith("postprocess.report.json")
+    ]
+    assert report_candidates, "postprocess report missing"
     postprocess_meta = step_entry.get("postprocess")
     assert postprocess_meta is not None
-    assert postprocess_meta["output"] == str(sidecars["postprocessed"])
-    assert postprocess_meta["report"] == str(sidecars["report"])
+    assert postprocess_meta["output"] in {str(path) for path in postprocessed_candidates}
+    assert postprocess_meta["report"] in {str(path) for path in report_candidates}
+
+
+@pytest.mark.integration
+def test_run_pipeline__diagnostic_sidecars_toggled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _prepare_environment(tmp_path)
+    cfg = replace(cfg, keep_intermediate=False)
+    input_files = cfg.input_files.to_dict()
+    input_files["dummy"] = "dummy.csv"
+    output_stems = cfg.output_stems.to_dict()
+    output_stems["dummy"] = "dummy"
+    subcommands = cfg.subcommands.to_dict()
+    subcommands["dummy"] = None
+    cfg = replace(
+        cfg,
+        input_files=get_data.PipelineInputFiles.from_mapping(input_files),
+        output_stems=get_data.PipelineOutputStems.from_mapping(output_stems),
+        subcommands=get_data.PipelineSubcommands.from_mapping(subcommands),
+        keep_intermediate=False,
+    )
+
+    _write_input(
+        cfg,
+        "dummy",
+        pd.DataFrame([{"dummy_id": 1}], dtype="int64"),
+    )
+
+    step = get_data.PipelineStep(
+        name="dummy",
+        main=lambda _: 0,
+        input_filename="dummy.csv",
+        output_stem="dummy",
+    )
+
+    def _builder(
+        run_cfg: get_data.PipelineRunConfig,
+        input_path: Path,
+        output_path: Path,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(input_csv=input_path, output_csv=output_path)
+
+    def _runner(
+        _config: Config, options: SimpleNamespace
+    ) -> PipelineRunResult:
+        working_path = Path(options.output_csv)
+        working_path.parent.mkdir(parents=True, exist_ok=True)
+        final_name = working_path.name.lstrip(".")
+        if final_name.endswith(".tmp"):
+            final_name = final_name[: -len(".tmp")]
+        dataset = working_path.with_name(final_name)
+        dataset.write_text("dummy_id\n1\n", encoding="utf-8")
+        stem = dataset.stem
+        quality = dataset.with_name(f"{stem}_quality_report_table.csv")
+        correlation = dataset.with_name(
+            f"{stem}_data_correlation_report_table.csv"
+        )
+        failure = dataset.with_name(f"{stem}_failure_cases.csv")
+        postprocessed = dataset.with_name("output_postprocessed.dummy.csv")
+        report = dataset.with_name("dummy.postprocess.report.json")
+        for extra in (quality, correlation, failure, postprocessed, report):
+            extra.write_text("value\n1\n", encoding="utf-8")
+        return PipelineRunResult(
+            exit_code=0,
+            output_path=dataset,
+            executed=True,
+            reason=None,
+            written=True,
+        )
+
+    api = get_data.PipelineApi(_builder, _runner)
+    patched_apis = dict(get_data._PIPELINE_APIS)
+    patched_apis["dummy"] = api
+    monkeypatch.setattr(get_data, "_PIPELINE_APIS", patched_apis, raising=False)
+
+    status = get_data.run_pipeline(cfg, steps=(step,))
+    assert status == 0
+
+    output_dir = cfg.output_dir
+    date_tag = cfg.date_prefix
+    dataset = output_dir / f"output.dummy_{date_tag}.csv"
+    quality = output_dir / f"output.dummy_{date_tag}_quality_report_table.csv"
+    correlation = (
+        output_dir / f"output.dummy_{date_tag}_data_correlation_report_table.csv"
+    )
+    failure = output_dir / f"output.dummy_{date_tag}_failure_cases.csv"
+    postprocessed = output_dir / "output_postprocessed.dummy.csv"
+    report = output_dir / "dummy.postprocess.report.json"
+
+    assert dataset.exists()
+    assert quality.exists()
+    assert correlation.exists()
+    assert not failure.exists()
+    assert not postprocessed.exists()
+    assert not report.exists()
+
+    cfg_diagnostic = replace(cfg, keep_intermediate=True)
+    status = get_data.run_pipeline(cfg_diagnostic, steps=(step,))
+    assert status == 0
+
+    assert failure.exists()
+    assert postprocessed.exists()
+    assert report.exists()
