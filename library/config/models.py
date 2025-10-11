@@ -89,6 +89,28 @@ _RESOURCE_STACK = ExitStack()
 atexit.register(_RESOURCE_STACK.close)
 
 
+def _normalize_verify_option(value: Any) -> bool | str:
+    """Coerce verification config values to ``bool`` or path string."""
+
+    if value is None:
+        return True
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return True
+        lowered = stripped.lower()
+        truthy = {"1", "true", "yes", "on"}
+        falsy = {"0", "false", "no", "off"}
+        if lowered in truthy | falsy:
+            return lowered in truthy
+        return stripped
+    return value
+
+
 def _default_base_path() -> Path:
     """Return the default base directory delegated to :mod:`env`."""
 
@@ -378,6 +400,7 @@ class OpenAlexCfg(_BaseModel):
     rps: int = Field(4, ge=1)
     burst: int = Field(1, ge=1)
     mailto: str = "chembl-data@ebi.ac.uk"
+    verify: bool | str = True
 
     @field_validator("base")
     @classmethod
@@ -391,6 +414,14 @@ class OpenAlexCfg(_BaseModel):
     def _email(cls, v: str) -> str:
         return _require_non_placeholder_email("openalex", v)
 
+    @field_validator("verify", mode="before")
+    @classmethod
+    def _verify_option(cls, value: Any) -> bool | str:
+        coerced = _normalize_verify_option(value)
+        if isinstance(coerced, (bool, str)):
+            return coerced
+        raise TypeError("verify must be a boolean or path string")
+
 
 class CrossRefCfg(_BaseModel):
     base: str = "https://api.crossref.org"
@@ -400,6 +431,7 @@ class CrossRefCfg(_BaseModel):
     rps: int = Field(4, ge=1)
     burst: int = Field(5, ge=1)
     mailto: str = "chembl-data@ebi.ac.uk"
+    verify: bool | str = True
 
     @field_validator("base")
     @classmethod
@@ -412,6 +444,14 @@ class CrossRefCfg(_BaseModel):
     @classmethod
     def _email(cls, v: str) -> str:
         return _require_non_placeholder_email("crossref", v)
+
+    @field_validator("verify", mode="before")
+    @classmethod
+    def _verify_option(cls, value: Any) -> bool | str:
+        coerced = _normalize_verify_option(value)
+        if isinstance(coerced, (bool, str)):
+            return coerced
+        raise TypeError("verify must be a boolean or path string")
 
 
 class UniprotCfg(_BaseModel):

@@ -156,8 +156,8 @@ production use.
 
 | Block | Required fields | Notes |
 |-------|-----------------|-------|
-| `sources.openalex` | `mailto` (**Yes**) | Provide a valid contact email; OpenAlex rejects placeholder domains. |
-| `sources.crossref` | `mailto` (**Yes**) | CrossRef requires a contact email. |
+| `sources.openalex` | `mailto` (**Yes**) | Provide a valid contact email; set `verify` to `false` or a CA bundle path when corporate proxies break TLS validation. |
+| `sources.crossref` | `mailto` (**Yes**) | CrossRef requires a contact email; use `verify` to disable certificate checks or point to a bundle if needed. |
 | `sources.uniprot.api` | None | Contains `base`, `timeout_connect`, `timeout_read`, `rps`, `burst`, `delay`. |
 | `sources.uniprot.mapping` | None | Controls polling interval, timeout and cache TTL. |
 | `sources.iuphar` | None | Base URL and rate limits for the Guide to Pharmacology API. |
