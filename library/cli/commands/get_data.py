@@ -296,7 +296,6 @@ def _build_document_options(
         skip_existing=cfg.skip_existing,
         date_prefix=cfg.date_prefix,
         rerun_postprocess=cfg.rerun_postprocess,
-        date_prefix=cfg.date_prefix,
         output_stem=cfg.output_stems.get("document"),
     )
 
