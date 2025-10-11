@@ -129,6 +129,26 @@ def _run_pipeline_with_meta(**kwargs: object) -> PipelineExecutionResult:
         )
 
 
+def _cleanup_intermediate_outputs(outputs: Sequence[tuple[Path, bool]] | None) -> None:
+    """Remove intermediate artefacts that are no longer required."""
+
+    if not outputs:
+        return
+
+    for path, should_keep in outputs:
+        if should_keep:
+            continue
+        try:
+            if path.exists():
+                path.unlink()
+        except OSError as exc:  # pragma: no cover - best-effort cleanup
+            logger.warning(
+                "intermediate_output_cleanup_failed",
+                path=str(path),
+                error=str(exc),
+            )
+
+
 UNIPROT_MISSING_VALUE = ""
 
 
@@ -2195,6 +2215,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     raw_dump_rows_total = 0
     chembl_http_requests = 0
 
+    emit_standard_outputs = bool(getattr(args, "emit_standard_outputs", True))
+
     if not normalize_at_export:
 
         def _raw_fetcher() -> Iterator[pd.DataFrame]:
@@ -2266,7 +2288,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             table_quality=lambda _: None,
             cfg=cfg,
             logger=logger,
-            emit_standard_outputs=True,
+            emit_standard_outputs=emit_standard_outputs,
             emit_legacy_artifacts=False,
         )
         exit_code_attr = getattr(execution, "exit_code", None)
@@ -2574,7 +2596,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             "target_iuphar_target",
             "target_iuphar_family",
         ),
-        emit_standard_outputs=True,
+        emit_standard_outputs=emit_standard_outputs,
         emit_legacy_artifacts=False,
     )
     exit_code_attr = getattr(execution, "exit_code", None)
@@ -2798,6 +2820,7 @@ def fetch_chembl(
     offset: int = 0,
     normalize_at_export: bool = True,
     no_reindex_raw: bool = False,
+    emit_standard_outputs: bool = True,
 ) -> pd.DataFrame:
     """Fetch target information from ChEMBL.
 
@@ -2815,6 +2838,9 @@ def fetch_chembl(
         Temporary override for the batch size used when calling the API.
     offset : int, optional
         Number of identifiers to skip before starting the retrieval.
+    emit_standard_outputs : bool, optional
+        Forwarded to :func:`run_pipeline` to control whether canonical CSV
+        artefacts should be produced alongside ``final_out``.
 
     Returns
     -------
@@ -2840,6 +2866,7 @@ def fetch_chembl(
         offset=offset,
         normalize_at_export=normalize_at_export,
         no_reindex_raw=no_reindex_raw,
+        emit_standard_outputs=emit_standard_outputs,
     )
     original_limit = cfg.target.chembl.limit
     original_chunk_size = cfg.target.chembl.chunk_size
@@ -4088,15 +4115,38 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             raw_output: Path | None = None
         else:
             raw_output = Path(raw_candidate)
-        chembl_out = cfg.target.all.chembl_out or final_output.with_name(
-            final_output.stem + "_chembl.csv"
-        )
-        uniprot_out = cfg.target.all.uniprot_out or final_output.with_name(
-            final_output.stem + "_uniprot.csv"
-        )
-        iuphar_out = cfg.target.all.iuphar_out or final_output.with_name(
-            final_output.stem + "_iuphar.csv"
-        )
+        cli_chembl_out = getattr(args, "chembl_out", None)
+        keep_chembl_output = False
+        if cli_chembl_out not in (None, argparse.SUPPRESS):
+            chembl_out = Path(cli_chembl_out)
+            keep_chembl_output = True
+        else:
+            chembl_out = cfg.target.all.chembl_out or final_output.with_name(
+                final_output.stem + "_chembl.csv"
+            )
+            keep_chembl_output = bool(cfg.target.all.chembl_out)
+
+        cli_uniprot_out = getattr(args, "uniprot_out", None)
+        keep_uniprot_output = False
+        if cli_uniprot_out not in (None, argparse.SUPPRESS):
+            uniprot_out = Path(cli_uniprot_out)
+            keep_uniprot_output = True
+        else:
+            uniprot_out = cfg.target.all.uniprot_out or final_output.with_name(
+                final_output.stem + "_uniprot.csv"
+            )
+            keep_uniprot_output = bool(cfg.target.all.uniprot_out)
+
+        cli_iuphar_out = getattr(args, "iuphar_out", None)
+        keep_iuphar_output = False
+        if cli_iuphar_out not in (None, argparse.SUPPRESS):
+            iuphar_out = Path(cli_iuphar_out)
+            keep_iuphar_output = True
+        else:
+            iuphar_out = cfg.target.all.iuphar_out or final_output.with_name(
+                final_output.stem + "_iuphar.csv"
+            )
+            keep_iuphar_output = bool(cfg.target.all.iuphar_out)
 
         raw_format = str(getattr(args, "raw_format", "csv") or "csv").lower()
         reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
@@ -4125,6 +4175,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             chunk_size=cfg.target.all.chunk_size,
             offset=cfg.target.all.offset,
             id_cols=key_columns,
+            emit_standard_outputs=False,
         )
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
@@ -4142,6 +4193,14 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             date_tag=resolved_date_tag,
             emit_legacy_artifacts=emit_legacy,
         )
+        if exit_code == 0:
+            _cleanup_intermediate_outputs(
+                [
+                    (chembl_out, keep_chembl_output or chembl_out == final_output),
+                    (uniprot_out, keep_uniprot_output or uniprot_out == final_output),
+                    (iuphar_out, keep_iuphar_output or iuphar_out == final_output),
+                ]
+            )
         return exit_code
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         logger.error(
