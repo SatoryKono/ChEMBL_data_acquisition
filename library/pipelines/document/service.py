@@ -1084,6 +1084,15 @@ def _canonical_dataset_path(
     return output_dir / f"output.{table_name}_{date_tag}.csv"
 
 
+def _safe_resolve(path: Path) -> Path:
+    """Best-effort ``Path.resolve`` handling ``OSError`` gracefully."""
+
+    try:
+        return path.resolve()
+    except OSError:  # pragma: no cover - defensive guard
+        return path
+
+
 def run_document_service(
     config: Config,
     options: DocumentPipelineOptions,
@@ -1151,21 +1160,44 @@ def run_document_service(
 
     if exit_code == 0 and not working_output.exists():
         canonical_path = _canonical_dataset_path(cfg, table_name, date_tag, cli_output)
+        candidate_paths: list[Path] = []
         if canonical_path.exists():
+            candidate_paths.append(canonical_path)
+
+        cli_output_resolved = _safe_resolve(cli_output)
+
+        if cli_output.exists() and all(
+            _safe_resolve(path) != cli_output_resolved for path in candidate_paths
+        ):
+            candidate_paths.append(cli_output)
+
+        working_resolved = _safe_resolve(working_output)
+
+        copy_error: OSError | None = None
+        for candidate in candidate_paths:
             working_output.parent.mkdir(parents=True, exist_ok=True)
             try:
-                if canonical_path.resolve() == working_output.resolve():
-                    pass
+                if _safe_resolve(candidate) == working_resolved:
+                    if not working_output.exists():
+                        shutil.copy2(candidate, working_output)
                 else:
-                    shutil.copy2(canonical_path, working_output)
+                    shutil.copy2(candidate, working_output)
             except OSError as exc:  # pragma: no cover - filesystem failure guard
                 logger.error(
                     "document_output_copy_failed",
                     expected=str(working_output),
                     canonical=str(canonical_path),
+                    fallback=str(cli_output),
+                    source=str(candidate),
                     error=str(exc),
                     exc_info=exc,
                 )
+                copy_error = exc
+                continue
+            else:
+                break
+        else:
+            if copy_error is not None:
                 return PipelineRunResult(
                     exit_code=1,
                     output_path=working_output,
@@ -1173,11 +1205,11 @@ def run_document_service(
                     reason="output_copy_failed",
                     written=False,
                 )
-        else:
             logger.error(
                 "document_output_missing",
                 expected=str(working_output),
                 canonical=str(canonical_path),
+                fallback=str(cli_output),
             )
             return PipelineRunResult(
                 exit_code=1,
