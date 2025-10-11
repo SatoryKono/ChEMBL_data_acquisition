@@ -961,7 +961,20 @@ def add_pubchem_data(
         replacement = pubchem_df[column]
         if column in result.columns:
             original = result[column]
-            result[column] = replacement.combine_first(original)
+
+            if replacement.empty:
+                continue
+
+            replacement_non_null = replacement.dropna()
+            if replacement_non_null.empty:
+                continue
+
+            # ``Series.combine_first`` internally concatenates the operands and
+            # currently issues a ``FutureWarning`` when one of them is empty.
+            # Assigning only the non-null values preserves the existing
+            # behaviour without triggering the warning while still favouring the
+            # PubChem values over the ChEMBL fallbacks.
+            result.loc[replacement_non_null.index, column] = replacement_non_null
         else:
             result[column] = replacement
 
