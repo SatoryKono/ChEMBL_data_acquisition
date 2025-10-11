@@ -47,6 +47,7 @@ from .common.log import logger as default_logger
 from .config import Config, ConfigError, ensure_dirs, print_config
 from .config.loader import DEFAULT_CONFIG_PATH
 from .metadata import Stats, file_sha256, record_quality_failure, write_meta_yaml
+from .maintenance import ensure_legacy_cleanup
 from .sidecar import SidecarErrors
 from .table_quality import TableQualityProfiler
 from .io import save_standard_outputs, StandardOutputArtifacts
@@ -418,6 +419,19 @@ def run_cli_command(
             use_logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
+        cleanup_result = ensure_legacy_cleanup(cfg, logger=use_logger)
+        if cleanup_result.performed and not cleanup_result.dry_run:
+            log_method = use_logger.warning if cleanup_result.removed_count else use_logger.info
+            log_method(
+                "legacy_outputs_retention_notice",
+                directory=str(cleanup_result.output_dir),
+                removed=cleanup_result.removed_count,
+                sentinel=str(cleanup_result.sentinel_path),
+                hint=(
+                    "Legacy diagnostics are now opt-in via --emit-legacy-artifacts/"
+                    "--keep-intermediate/--debug"
+                ),
+            )
         if logger is None:
             use_logger = cli.configure_logger(log_cfg)
         else:
