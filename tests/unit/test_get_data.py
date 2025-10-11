@@ -1152,6 +1152,16 @@ def test_run_postprocess_hook__missing_input(
 
 
 @pytest.mark.unit
+def test_resolve_postprocess_table__normalises_activity(tmp_path: Path) -> None:
+    step = next(step for step in get_data.DEFAULT_PIPELINE_STEPS if step.name == "activity")
+    final_output = tmp_path / "output.activity_20240101.csv"
+
+    table = get_data._resolve_postprocess_table(step, final_output)
+
+    assert table == "activities"
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "filename",
     [
