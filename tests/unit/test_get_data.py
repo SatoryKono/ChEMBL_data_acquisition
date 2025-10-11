@@ -484,6 +484,7 @@ def test_prepare_config__csv_override_output_path(tmp_path: Path) -> None:
     [
         (".output.assays", "output.assays_20251011.csv"),
         ("output.assays", "output.assays_20251011.csv"),
+        ("output..output.assays_20240101.csv", "output.assays_20240101.csv"),
     ],
 )
 def test_prepare_config__normalises_override_output_stems(

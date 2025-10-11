@@ -416,6 +416,14 @@ class PipelineRunConfig:
             # concrete targets.
             name_lower = stem_path.name.lower()
             if ".csv" in name_lower:
+                original_name = stem_path.name
+                normalised_name = _normalise_output_stem(original_name)
+                if normalised_name != original_name:
+                    stripped_original = original_name.lstrip(".")
+                    had_output_prefix = stripped_original.startswith("output.")
+                    if had_output_prefix and not normalised_name.startswith("output."):
+                        normalised_name = f"output.{normalised_name}".lstrip(".")
+                    return self.output_dir / stem_path.with_name(normalised_name)
                 return self.output_dir / stem_path
 
         normalised = _normalise_output_stem(str(stem_path))
@@ -458,6 +466,13 @@ def _normalise_output_stem(raw_stem: str) -> str:
         stripped = stem_name
         while stripped.startswith(prefix) and len(stripped) > len(prefix):
             stripped = stripped[len(prefix) :]
+            stripped = stripped.lstrip(".")
+            if not stripped:
+                break
+        stem_name = stripped or stem_name
+
+    if stem_name.startswith("."):
+        stripped = stem_name.lstrip(".")
         stem_name = stripped or stem_name
 
     if stem_path.parent == Path("."):
