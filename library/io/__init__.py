@@ -22,10 +22,12 @@ write_csv = _writers.write_csv
 save_standard_outputs = _output_writer.save_standard_outputs
 StandardOutputArtifacts = _output_writer.StandardOutputArtifacts
 default_output_path = _paths.default_output_path
+derive_output_labels = _paths.derive_output_labels
 write_meta_yaml = _metadata.write_meta_yaml
 
 __all__ = [
     "CsvReadError",
+    "derive_output_labels",
     "default_output_path",
     "pa",
     "locale",

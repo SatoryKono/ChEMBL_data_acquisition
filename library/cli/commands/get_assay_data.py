@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import UTC, datetime
 from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from functools import partial
@@ -147,30 +146,6 @@ def remove_assay_output_columns(df: pd.DataFrame) -> pd.DataFrame:
     if allowed_cols:
         cleaned = cleaned.loc[:, allowed_cols]
     return cleaned
-
-
-def _derive_standard_output_labels(dataset_csv: Path) -> tuple[str, str]:
-    """Return the logical table name and date tag for ``dataset_csv``."""
-
-    base = dataset_csv.stem
-    if base.endswith(".csv"):
-        base = base[: -len(".csv")]
-    base = base.lstrip(".")
-
-    if base.startswith("output."):
-        base = base[len("output.") :]
-
-    table_name_candidate = base or DEFAULT_OUTPUT_STEM
-    date_tag_candidate = datetime.now(UTC).strftime("%Y%m%d")
-
-    if "_" in base:
-        maybe_table, maybe_date = base.rsplit("_", 1)
-        if maybe_table:
-            table_name_candidate = maybe_table
-        if maybe_date:
-            date_tag_candidate = maybe_date
-
-    return table_name_candidate or DEFAULT_OUTPUT_STEM, date_tag_candidate
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -418,7 +393,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 path=str(dataset_csv),
             )
             quality_report = pd.DataFrame()
-        table_name_value, date_tag = _derive_standard_output_labels(dataset_csv)
+        table_name_value, date_tag = io.derive_output_labels(
+            dataset_csv,
+            default_table=DEFAULT_OUTPUT_STEM,
+        )
         artifacts = io.save_standard_outputs(
             dataset_frame,
             correlation_report,

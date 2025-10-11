@@ -1533,15 +1533,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 path=str(dataset_csv),
             )
             quality_report = pd.DataFrame()
-        base = dataset_csv.stem
-        if base.startswith("output."):
-            base = base[len("output.") :]
-        if "_" in base:
-            table_name_candidate, date_tag = base.rsplit("_", 1)
-        else:
-            table_name_candidate = base
-            date_tag = _current_date_token()
-        table_name_value = table_name_candidate or DEFAULT_OUTPUT_STEM
+        table_name_value, date_tag = io.derive_output_labels(
+            dataset_csv,
+            default_table=DEFAULT_OUTPUT_STEM,
+            fallback_date=_current_date_token(),
+        )
         artifacts = io.save_standard_outputs(
             dataset_frame,
             correlation_report,
