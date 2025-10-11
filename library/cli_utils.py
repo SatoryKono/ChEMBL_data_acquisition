@@ -169,15 +169,15 @@ class PipelineMetrics:
 
 @dataclass(slots=True, frozen=True)
 class RunPipelineResult:
-    """Return value exposing the exit code alongside output artefact paths.
+    """Return value exposing the exit code alongside output artefact paths."""
 
-    Historically this type inherited from :class:`int`.  Python 3.13 tightened
-    restrictions around built-in subclasses with ``__slots__`` which caused the
-    previous implementation to fail during import on Windows builds.  The
-    dataclass-based representation keeps attribute access ergonomic while
-    maintaining backwards compatibility by implementing ``__int__`` and
-    ``__bool__``.
-    """
+    # NOTE:
+    # Python 3.13 tightened the validation rules around ``__slots__`` when
+    # inheriting from built-in types which broke the historical ``int``
+    # subclass used by the CLI entry points.  The dataclass-based wrapper keeps
+    # the public API intact (``int(result)`` and truthiness checks) without
+    # triggering the import error that Windows users observed when running the
+    # data acquisition scripts.
 
     exit_code: int
     dataset_path: Path | None
