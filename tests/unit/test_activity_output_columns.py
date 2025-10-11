@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from scripts import get_activity_data
 
 
+@pytest.mark.unit
+@pytest.mark.pipeline_scenario("assembly")
 def test_filter_activity_output_columns__drops_unwanted_columns_preserves_order():
     # Arrange
     source_columns = [
@@ -49,6 +52,7 @@ def test_filter_activity_output_columns__drops_unwanted_columns_preserves_order(
     )
 
 
+@pytest.mark.unit
 def test_filter_activity_output_columns__no_op_when_columns_absent():
     # Arrange
     frame = pd.DataFrame(

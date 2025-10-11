@@ -7,6 +7,7 @@ from library.pipelines.testitem import enrichment
 
 
 @pytest.mark.integration
+@pytest.mark.pipeline_scenario("enrichment")
 def test_enrich__attaches_flags_and_parent(
     tmp_path: Path, cfg, snapshot_resource, monkeypatch
 ) -> None:

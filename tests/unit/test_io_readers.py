@@ -14,6 +14,7 @@ from scripts import make_activity_postprocessing as activity_cli
 
 
 @pytest.mark.unit
+@pytest.mark.pipeline_scenario("csv_loading")
 def test_read_csv__wraps_parser_errors(monkeypatch, tmp_path: Path) -> None:
     sample_path = tmp_path / "input.csv"
     sample_path.write_text("col\nvalue\n", encoding="utf-8")

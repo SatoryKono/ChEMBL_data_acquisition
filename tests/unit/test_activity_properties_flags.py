@@ -5,6 +5,7 @@ from library.postprocessing.activity_extended import _extract_activity_propertie
 
 
 @pytest.mark.unit
+@pytest.mark.pipeline_scenario("transformation_rules")
 def test_extract_activity_properties_flags__parses_standard_payload() -> None:
     frame = pd.DataFrame(
         {
