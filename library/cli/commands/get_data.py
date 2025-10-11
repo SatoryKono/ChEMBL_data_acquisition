@@ -328,6 +328,12 @@ def _build_assay_options(
     )
 
 
+def _diagnostic_outputs_enabled(cfg: PipelineRunConfig) -> bool:
+    """Return ``True`` when diagnostic artefacts should be preserved."""
+
+    return cfg.debug or cfg.keep_intermediate or cfg.rerun_postprocess
+
+
 def _build_testitem_options(
     cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> TestitemPipelineOptions:
@@ -336,7 +342,7 @@ def _build_testitem_options(
         output_csv=output_path,
         limit=cfg.limit,
         offset=0,
-        emit_legacy_artifacts=cfg.debug or cfg.keep_intermediate,
+        emit_legacy_artifacts=_diagnostic_outputs_enabled(cfg),
     )
 
 
@@ -350,7 +356,7 @@ def _build_activity_options(
         force=cfg.force,
         skip_existing=cfg.skip_existing,
         dry_run=cfg.dry_run,
-        emit_legacy_artifacts=cfg.debug or cfg.keep_intermediate,
+        emit_legacy_artifacts=_diagnostic_outputs_enabled(cfg),
     )
 
 
@@ -1110,6 +1116,49 @@ def _discover_sidecars(
     return sidecars
 
 
+def _is_diagnostic_sidecar(path: Path) -> bool:
+    """Return ``True`` when ``path`` points to a diagnostic-only artefact."""
+
+    name = path.name.lower()
+    if name.endswith(".meta.yaml"):
+        return True
+    if name.endswith(".postprocess.report.json"):
+        return True
+    if name.endswith(".quality.json"):
+        return True
+    if name.startswith("output_postprocessed.") and name.endswith(".csv"):
+        return True
+
+    diagnostic_suffixes = (
+        "_failure_cases.csv",
+        "_chembl.csv",
+        "_pubmed.csv",
+        "_uniprot.csv",
+        "_iuphar.csv",
+    )
+    if name.endswith(diagnostic_suffixes):
+        return True
+
+    if name.endswith(".csv") and (
+        "_normalized" in name or "_raw" in name or name.endswith("_raw")
+    ):
+        return True
+
+    raw_suffixes = (
+        ".raw.csv",
+        ".raw.parquet",
+        ".raw.json",
+        ".raw.jsonl",
+        "_raw.parquet",
+        "_raw.json",
+        "_raw.jsonl",
+    )
+    if any(name.endswith(suffix) for suffix in raw_suffixes):
+        return True
+
+    return False
+
+
 def _remove_path(path: Path) -> None:
     """Remove ``path`` handling transient Windows sharing violations."""
 
@@ -1262,11 +1311,19 @@ def _run_step(
 
 
 def _finalize_step_success(
-    final_output: Path, working_output: Path, sentinel_path: Path
+    final_output: Path,
+    working_output: Path,
+    sentinel_path: Path,
+    *,
+    diagnostics_enabled: bool,
 ) -> None:
     """Rename temporary outputs into place and clear failure sentinels."""
 
-    sidecars = _discover_sidecars(final_output, working_output)
+    sidecars = _discover_sidecars(
+        final_output,
+        working_output,
+        include_patterns=_sidecar_include_patterns(final_output, working_output),
+    )
     working_dir = working_output.parent
     final_dir = final_output.parent
 
@@ -1277,9 +1334,26 @@ def _finalize_step_success(
 
     for sidecar in sidecars.values():
         working_path = sidecar.working_path
+        destination = sidecar.destination
+        if not diagnostics_enabled and _is_diagnostic_sidecar(destination):
+            for candidate in (working_path, sidecar.final_path, destination):
+                if candidate is None or not candidate.exists():
+                    continue
+                try:
+                    _remove_path(candidate)
+                except OSError as exc:  # pragma: no cover - defensive guard
+                    _LOGGER.warning(
+                        "diagnostic_sidecar_cleanup_failed",
+                        path=str(candidate),
+                        error=str(exc),
+                    )
+                    continue
+                parent = candidate.parent
+                root = working_dir if parent.is_relative_to(working_dir) else final_dir
+                _cleanup_empty_directories(parent, root=root)
+            continue
         if working_path is None or not working_path.exists():
             continue
-        destination = sidecar.destination
         destination.parent.mkdir(parents=True, exist_ok=True)
         try:
             same_location = working_path.resolve() == destination.resolve()
@@ -1640,10 +1714,8 @@ def _describe_file(path: Path) -> dict[str, Any]:
     return info
 
 
-def _describe_sidecars(
-    final_output: Path, working_output: Path
-) -> list[dict[str, Any]]:
-    """Return manifest metadata for sidecars associated with ``final_output``."""
+def _sidecar_include_patterns(final_output: Path, working_output: Path) -> tuple[str, ...]:
+    """Return glob patterns capturing relevant sidecar artefacts."""
 
     include_patterns = [
         f"*{final_output.name}",
@@ -1666,10 +1738,18 @@ def _describe_sidecars(
                 f"*{table_candidate}.postprocess.report.json",
             ]
         )
+    return tuple(include_patterns)
+
+
+def _describe_sidecars(
+    final_output: Path, working_output: Path
+) -> list[dict[str, Any]]:
+    """Return manifest metadata for sidecars associated with ``final_output``."""
+
     sidecars = _discover_sidecars(
         final_output,
         working_output,
-        include_patterns=tuple(include_patterns),
+        include_patterns=_sidecar_include_patterns(final_output, working_output),
     )
     described: list[dict[str, Any]] = []
     for artefact in sorted(sidecars.values(), key=lambda item: str(item.destination)):
@@ -1958,11 +2038,13 @@ def run_pipeline(
         _LOGGER.error("config_load_failed", error=str(exc), exc_info=exc)
         _LOGGER.info("pipeline_done", stage="pipeline", exit_code=1)
         return 1
-    diagnostics_enabled = cfg.debug or cfg.keep_intermediate
+    diagnostics_enabled = _diagnostic_outputs_enabled(cfg)
     if not diagnostics_enabled:
-        doc_quality_cfg = getattr(base_config.system, "doc_quality", None)
-        if doc_quality_cfg is not None and hasattr(doc_quality_cfg, "enable"):
-            setattr(doc_quality_cfg, "enable", False)
+        system_cfg = getattr(base_config, "system", None)
+        if system_cfg is not None:
+            doc_quality_cfg = getattr(system_cfg, "doc_quality", None)
+            if doc_quality_cfg is not None and hasattr(doc_quality_cfg, "enable"):
+                setattr(doc_quality_cfg, "enable", False)
     try:
         if not cfg.dry_run:
             ensure_dirs(base_config)
@@ -2233,7 +2315,13 @@ def run_pipeline(
 
             entry["status"] = result.status
             output_existed = final_output.exists() or working_output.exists()
-            _finalize_step_success(final_output, working_output, sentinel_path)
+            diagnostics_enabled = _diagnostic_outputs_enabled(cfg)
+            _finalize_step_success(
+                final_output,
+                working_output,
+                sentinel_path,
+                diagnostics_enabled=diagnostics_enabled,
+            )
             if (
                 result.executed
                 and result.exit_code == 0
@@ -2276,9 +2364,7 @@ def run_pipeline(
                 )
             postprocess_result: PostprocessResult | None = None
             postprocess_table = _resolve_postprocess_table(step, final_output)
-            allow_postprocess = (
-                cfg.rerun_postprocess or cfg.debug or cfg.keep_intermediate
-            )
+            allow_postprocess = _diagnostic_outputs_enabled(cfg)
             if (
                 result.executed
                 and postprocess_table is not None
@@ -2371,16 +2457,15 @@ def run_pipeline(
     duration_seconds = time.perf_counter() - run_started_clock
     logger_cfg = getattr(_LOGGER, "_cfg", None)
     manifest_run_id = getattr(logger_cfg, "run_id", None)
-    if cfg.debug or cfg.keep_intermediate:
-        _write_run_manifest(
-            cfg,
-            run_started_at=run_started_at,
-            run_completed_at=run_completed_at,
-            duration_seconds=duration_seconds,
-            exit_code=overall_status,
-            steps=manifest_entries,
-            run_id=manifest_run_id,
-        )
+    _write_run_manifest(
+        cfg,
+        run_started_at=run_started_at,
+        run_completed_at=run_completed_at,
+        duration_seconds=duration_seconds,
+        exit_code=overall_status,
+        steps=manifest_entries,
+        run_id=manifest_run_id,
+    )
 
     _LOGGER.info("pipeline_done", stage="pipeline", exit_code=overall_status)
     return overall_status
