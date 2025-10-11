@@ -50,6 +50,25 @@ def default_output_path(
 
     inp = Path(input_path)
     stem = inp.stem
+    suffixes = inp.suffixes
+
+    # When the source file carries multiple extensions (for example
+    # ``.csv.tmp``), :attr:`Path.stem` only removes the last suffix.  This
+    # leaves artefacts such as ``<stem>.csv`` in the name, which would then
+    # result in outputs like ``output.<stem>.csv.csv``.  Trim the additional
+    # ``.csv`` segment proactively to keep the generated filenames stable.
+    if (
+        len(suffixes) >= 2
+        and suffixes[-2].lower() == ".csv"
+        and stem.lower().endswith(".csv")
+    ):
+        stem = stem[: -len(".csv")]
+
+    # Normalise hidden temporary files that start with ``.output.`` to avoid
+    # producing names with double dots such as ``output..output.<name>``.
+    if stem.startswith("."):
+        stripped = stem.lstrip(".")
+        stem = stripped or stem
     prefix = "output."
     if stem.startswith(prefix):
         stripped = stem
