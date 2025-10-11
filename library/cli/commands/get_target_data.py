@@ -958,6 +958,41 @@ def _ensure_parent_directory(path: Path, *, cfg: Config) -> None:
         raise FileNotFoundError(f"{parent} does not exist")
 
 
+def _restore_legacy_output(
+    final_output: Path, dataset_path: Path | None, *, cfg: Config
+) -> None:
+    """Ensure ``final_output`` exists by copying the canonical dataset when needed."""
+
+    if dataset_path is None:
+        return
+
+    destination = Path(final_output)
+    if destination.exists():
+        return
+
+    source = Path(dataset_path)
+    if not source.exists() or source == destination:
+        return
+
+    _ensure_parent_directory(destination, cfg=cfg)
+    try:
+        shutil.copy2(source, destination)
+    except OSError as exc:  # pragma: no cover - defensive against filesystem errors
+        logger.warning(
+            "legacy_output_restore_failed",
+            error=str(exc),
+            source=str(source),
+            destination=str(destination),
+        )
+        return
+
+    logger.warning(
+        "legacy_output_restored",
+        source=str(source),
+        destination=str(destination),
+    )
+
+
 def _prepare_raw_destination(destination: Path, *, cfg: Config) -> None:
     """Ensure the raw dump destination can be written to safely."""
 
@@ -2535,8 +2570,16 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     )
     exit_code_attr = getattr(execution, "exit_code", None)
     exit_code = int(exit_code_attr if exit_code_attr is not None else execution)
-    dataset_path = getattr(execution, "dataset_path", None) or raw_output
+    dataset_path_value = getattr(execution, "dataset_path", None)
+    dataset_path = (
+        Path(dataset_path_value)
+        if dataset_path_value is not None
+        else Path(raw_output)
+    )
     raw_output = Path(dataset_path)
+
+    if exit_code == 0:
+        _restore_legacy_output(final_output, dataset_path, cfg=cfg)
 
     if not _finalize_raw_dump_writer(
         raw_dump_writer,
