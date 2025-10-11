@@ -99,6 +99,11 @@ def _normalise_output_labels(
         table_name = default_table
     return table_name, date_tag
 
+# Canonical dataset stem used for standard outputs.
+_DEFAULT_OUTPUT_TABLE = "testitem"
+
+_TABLE_NAME_ALIASES: dict[str, str] = {"testitems": _DEFAULT_OUTPUT_TABLE}
+
 _PUBCHEM_OPTIONAL_COLUMNS = frozenset(
     {
         "pubchem_canonical_smiles",
@@ -1125,10 +1130,10 @@ def finalize_output(
     if exit_code != 0:
         return exit_code, None
 
-    def _resolve_table_name_and_tag(path: Path) -> tuple[str, str]:
-        return _normalise_output_labels(path)
-
-    table_name, date_tag = _resolve_table_name_and_tag(output)
+    raw_table, date_tag = io.derive_output_labels(
+        output, default_table=_DEFAULT_OUTPUT_TABLE
+    )
+    table_name = _TABLE_NAME_ALIASES.get(raw_table, raw_table)
 
     dataset_frame: pd.DataFrame
     if validated_chunks_list:
