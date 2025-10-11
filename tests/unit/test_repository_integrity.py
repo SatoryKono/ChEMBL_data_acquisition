@@ -1,30 +1,30 @@
 from __future__ import annotations
 
 import py_compile
-import re
 import tempfile
 from pathlib import Path
 
 import pytest
 
-_MERGE_CONFLICT_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"^[ \t]*<<<<<<< ", re.MULTILINE),
-    re.compile(r"^[ \t]*=======", re.MULTILINE),
-    re.compile(r"^[ \t]*>>>>>>> ", re.MULTILINE),
+from re import Pattern
+
+from tools.merge_conflict import (
+    MERGE_CONFLICT_PATTERNS,
+    has_merge_conflict_markers,
 )
 
 
 @pytest.mark.parametrize(
     ("pattern", "snippet"),
     (
-        (_MERGE_CONFLICT_PATTERNS[0], "    <<<<<<< HEAD"),
-        (_MERGE_CONFLICT_PATTERNS[1], "  ======="),
-        (_MERGE_CONFLICT_PATTERNS[2], "    >>>>>>> feature"),
+        (MERGE_CONFLICT_PATTERNS[0], "    <<<<<<< HEAD"),
+        (MERGE_CONFLICT_PATTERNS[1], "  ======="),
+        (MERGE_CONFLICT_PATTERNS[2], "    >>>>>>> feature"),
     ),
 )
 @pytest.mark.unit
 def test_merge_conflict_patterns__match_indented_markers(
-    pattern: re.Pattern[str], snippet: str
+    pattern: Pattern[str], snippet: str
 ) -> None:
     """Ensure guard patterns catch conflict markers even when indented."""
 
@@ -53,7 +53,7 @@ def test_python_sources__have_no_merge_conflict_markers() -> None:
 
     for source in _iter_python_sources(root):
         text = source.read_text(encoding="utf-8")
-        if any(pattern.search(text) for pattern in _MERGE_CONFLICT_PATTERNS):
+        if has_merge_conflict_markers(text):
             offenders.append(source.relative_to(root).as_posix())
 
     assert not offenders, (

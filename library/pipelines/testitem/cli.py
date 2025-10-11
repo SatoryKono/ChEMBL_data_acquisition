@@ -9,7 +9,6 @@ import traceback
 from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from functools import lru_cache
 from itertools import chain, islice
 from pathlib import Path
@@ -42,6 +41,7 @@ from library.orchestration import ETLContext
 from library.qa.reporting import build_table_quality_hook
 from library.qa.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
+from library.pipelines.assay.chembl_assay import TESTITEM_STRUCTURE_COLUMNS
 from library.utils import data_correlation, qc_report
 
 from .catalog import (
@@ -70,6 +70,64 @@ def _chembl_library() -> Any:
 _FETCH_ERROR_SAMPLE_SIZE = 10
 _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
 _PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
+_DEFAULT_TABLE_NAME = "testitem"
+
+
+@dataclass(frozen=True)
+class PubChemAugmentationContext:
+    """Capture the parameters required for a fallback PubChem enrichment run."""
+
+    pubchem_cfg: PubChemCfg
+    api_cfg: ApiCfg
+    retry_cfg: RetryCfg
+    client: ChemblClient
+    timeout: float
+    fields: Sequence[str] | None
+    request_limit: int
+
+
+def _normalise_output_labels(
+    output: Path | str,
+    *,
+    default_table: str = _DEFAULT_TABLE_NAME,
+    fallback_date: str | None = None,
+) -> tuple[str, str]:
+    """Return canonical table name and date tag derived from ``output``.
+
+    Intermediate filenames produced by the pipeline (for example
+    ``.output.testitem_20240101.csv.tmp``) are normalised so that downstream
+    artefacts re-use the canonical ``testitem`` label. When ``fallback_date`` is
+    omitted the helper mirrors the previous behaviour by falling back to the
+    current UTC date.
+    """
+
+    table_name, date_tag = io.derive_output_labels(
+        output,
+        default_table=default_table,
+        fallback_date=fallback_date,
+    )
+    if table_name.lower() == "testitems":
+        table_name = default_table
+    return table_name, date_tag
+
+# Canonical dataset stem used for standard outputs.
+_DEFAULT_OUTPUT_TABLE = "testitem"
+
+_TABLE_NAME_ALIASES: dict[str, str] = {"testitems": _DEFAULT_OUTPUT_TABLE}
+
+_PUBCHEM_OPTIONAL_COLUMNS = frozenset(
+    {
+        "pubchem_canonical_smiles",
+        "pubchem_cid",
+        "pubchem_inchi",
+        "pubchem_inchikey",
+        "pubchem_isomeric_smiles",
+        "pubchem_iupac_name",
+        "pubchem_molecular_formula",
+    }
+)
+_SALT_OPTIONAL_COLUMN = "salt_chembl_id"
+_DEFAULT_TABLE_NAME = "testitem"
 
 
 @dataclass
@@ -439,6 +497,26 @@ def _batched(iterable: Iterable[str], size: int) -> Iterator[list[str]]:
         yield chunk
 
 
+def _disabled_optional_columns(cfg: Config) -> frozenset[str]:
+    """Return optional schema columns disabled by configuration."""
+
+    disabled: set[str] = set()
+
+    pubchem_cfg = getattr(cfg, "pubchem", None)
+    pubchem_enabled = True if pubchem_cfg is None else getattr(pubchem_cfg, "enable", True)
+    if not pubchem_enabled:
+        disabled.update(_PUBCHEM_OPTIONAL_COLUMNS)
+
+    enrichment_cfg = getattr(cfg, "testitem_molecule_enrichment", None)
+    enrichment_enabled = (
+        True if enrichment_cfg is None else getattr(enrichment_cfg, "enable", False)
+    )
+    if not enrichment_enabled:
+        disabled.add(_SALT_OPTIONAL_COLUMN)
+
+    return frozenset(disabled)
+
+
 def fetch_testitems(
     ids_iter: Iterable[str],
     *,
@@ -525,15 +603,23 @@ def fetch_testitems(
             return _load_chunk(batch, next_chunk_size)
 
         if fields:
-            missing_fields = [
-                column
-                for column in fields
-                if isinstance(column, str) and column not in frame.columns
+            resolved_targets: dict[str, str] = {}
+            for column in fields:
+                if not isinstance(column, str):
+                    continue
+                target = TESTITEM_STRUCTURE_COLUMNS.get(column, column)
+                resolved_targets[column] = target
+
+            if resolved_targets:
+                frame = frame.rename(columns=resolved_targets)
+
+            missing_targets = [
+                target for target in resolved_targets.values() if target not in frame.columns
             ]
-            if missing_fields:
+            if missing_targets:
                 na_series = pd.Series(pd.NA, index=frame.index, dtype="object")
-                for column in missing_fields:
-                    frame[column] = na_series.copy()
+                for target in missing_targets:
+                    frame[target] = na_series.copy()
 
         if "molecule_chembl_id" not in frame.columns:
             frame["molecule_chembl_id"] = pd.Series(dtype="string")
@@ -666,6 +752,12 @@ def run_testitem_pipeline(
     api_cfg = cfg.api.model_copy(update=api_overrides) if api_overrides else cfg.api
 
     pubchem_enabled = getattr(cfg.pubchem, "enable", True)
+    if not pubchem_enabled:
+        logger.warning(
+            "pubchem_augmentation_disabled",
+            reason="config_disabled",
+            detail="PubChem augmentation is disabled; pubchem_* columns will remain empty.",
+        )
     pubchem_api_cfg = api_cfg
     if pubchem_enabled:
         pubchem_api_cfg = _prepare_pubchem_api_cfg(cfg, api_cfg)
@@ -740,6 +832,19 @@ def run_testitem_pipeline(
             else None
         )
         parent_timeout = cfg.testitem.timeout
+        pubchem_fallback_context = (
+            PubChemAugmentationContext(
+                pubchem_cfg=cfg.pubchem,
+                api_cfg=pubchem_api_cfg,
+                retry_cfg=cfg.retry,
+                client=client,
+                timeout=parent_timeout,
+                fields=cfg.testitem.fields,
+                request_limit=cfg.testitem.request_limit,
+            )
+            if pubchem_enabled
+            else None
+        )
 
         def _parent_stats_supplier() -> ParentLookupStats:
             return parent_stats_holder["value"]
@@ -845,6 +950,7 @@ def run_testitem_pipeline(
                 input_csv=input_csv,
                 missing_ids=missing_ids,
                 emit_legacy_artifacts=options.emit_legacy_artifacts,
+                pubchem_context=pubchem_fallback_context,
             )
         except TestitemPipelineStageError as exc:
             return exc.code, None
@@ -864,13 +970,19 @@ def finalize_output(
     input_csv: Path,
     missing_ids: Sequence[str] | None = None,
     emit_legacy_artifacts: bool = False,
+    pubchem_context: PubChemAugmentationContext | None = None,
 ) -> tuple[int, io.StandardOutputArtifacts | None]:
     """Normalise, validate, and persist the final dataset from ``chunks``."""
 
     schema_model, normalizer = _load_testitem_schema()
     schema_cols = list(schema_model.columns)
-    required_cols = {name for name, col in schema_model.columns.items() if col.required}
-    optional_cols = set(schema_model.columns) - required_cols
+    disabled_optional = _disabled_optional_columns(cfg)
+    required_cols = {
+        name
+        for name, col in schema_model.columns.items()
+        if col.required and name not in disabled_optional
+    }
+    optional_cols = (set(schema_model.columns) - required_cols) - disabled_optional
     col_order = schema_cols
     key_cols = ["molecule_chembl_id"]
 
@@ -1054,29 +1166,37 @@ def finalize_output(
     if exit_code != 0:
         return exit_code, None
 
-    def _resolve_table_name_and_tag(path: Path) -> tuple[str, str]:
-        stem = path.stem
-        remainder = stem.split("output.", 1)[-1] if stem.startswith("output.") else stem
-        candidate_table, sep, candidate_tag = remainder.rpartition("_")
-        if sep and len(candidate_tag) == 8 and candidate_tag.isdigit():
-            table_name_candidate = candidate_table or remainder
-            return table_name_candidate or "testitems", candidate_tag
-        return (remainder or "testitems", datetime.now(UTC).strftime("%Y%m%d"))
-
-    table_name, date_tag = _resolve_table_name_and_tag(output)
-
-    def _build_output_cfg(target: Path) -> IoCfg:
-        target_dir = target.parent
-        io_cfg = cfg.io
-        if Path(io_cfg.output_dir) != target_dir:
-            return io_cfg.model_copy(update={"output_dir": target_dir})
-        return io_cfg
+    table_name, date_tag = io.derive_output_labels(
+        output,
+        default_table=_DEFAULT_TABLE_NAME,
+        fallback_date=getattr(getattr(cfg, "io", None), "default_date_prefix", None),
+    )
 
     dataset_frame: pd.DataFrame
     if validated_chunks_list:
         dataset_frame = pd.concat(validated_chunks_list, ignore_index=True)
     else:
         dataset_frame = pd.DataFrame(columns=list(expected_columns) or col_order)
+
+    if pubchem_context is not None and not dataset_frame.empty:
+        available_columns = [
+            column
+            for column in _PUBCHEM_OPTIONAL_COLUMNS
+            if column in dataset_frame.columns
+        ]
+        if not available_columns or dataset_frame[available_columns].isna().all().all():
+            logger.info("pubchem_fallback_augment_start")
+            dataset_frame = _load_pubchem_augmenter()(
+                dataset_frame,
+                pubchem_cfg=pubchem_context.pubchem_cfg,
+                api_cfg=pubchem_context.api_cfg,
+                retry_cfg=pubchem_context.retry_cfg,
+                timeout=pubchem_context.timeout,
+                client=pubchem_context.client,
+                fields=pubchem_context.fields,
+                request_limit=pubchem_context.request_limit,
+            )
+            logger.info("pubchem_fallback_augment_done")
 
     ordered_columns = [column for column in col_order if column in dataset_frame.columns]
     extra_columns = [
@@ -1086,6 +1206,7 @@ def finalize_output(
         columns=ordered_columns + extra_columns,
         copy=False,
     )
+    export_column_order = list(dataset_frame.columns)
 
     doc_quality_cfg = cfg.system.doc_quality
     include_columns = getattr(doc_quality_cfg, "include_columns", None)
@@ -1107,8 +1228,6 @@ def finalize_output(
         sample_rows=sample_rows,
     )
 
-    output_cfg = _build_output_cfg(output)
-
     try:
         artifacts = io.save_standard_outputs(
             dataset_frame,
@@ -1116,8 +1235,9 @@ def finalize_output(
             quality_report,
             table_name=table_name,
             date_tag=date_tag,
-            cfg=output_cfg,
             key_columns=key_cols,
+            output_path=output,
+            column_order=export_column_order,
         )
     except (OSError, ValueError) as exc:
         logger.error("write_fail", error=str(exc), path=str(output))

@@ -12,7 +12,7 @@ flowchart TD
     S06 --> S07["S07_apply_annotations"]
     S07 --> S08["S08_schema_validation"]
     S08 --> S09["S09_stream_writer"]
-    S09 --> MAINCSV["output.activities_*.csv"]
+    S09 --> MAINCSV["output.activity_*.csv"]
     MAINCSV --> QA["S10–S12 QA postprocess metrics"]
     MAINCSV --> EXTIN["S13_ext_read_input"]
     QA --> REPORT["activity.postprocess.report.json"]
@@ -158,7 +158,7 @@ flowchart TD
 - **Функция/блок:** локальный `writer` + `write_csv_chunks_deterministic`
 - **Назначение:** отфильтровать drop-колонки, зафиксировать порядок столбцов, отсортировать по ключам и сериализовать CSV детерминированно. 【F:scripts/get_activity_data.py†L1092-L1166】【F:scripts/get_activity_data.py†L240-L256】【F:library/common/csv_utils.py†L569-L640】
 - **Вход:** Итератор валидированных chunkов; `col_order` и `key_cols` от `PipelineDefinition` (схема Activities).
-- **Выход:** `output.activities_<stamp>.csv` в `cfg.io.output_dir` (кодировка `cfg.io.csv_encoding`, разделитель `cfg.io.csv_sep`).
+- **Выход:** `output.activity_<stamp>.csv` в `cfg.io.output_dir` (кодировка `cfg.io.csv_encoding`, разделитель `cfg.io.csv_sep`).
 - **Операция:**
   - *type: filter* — `_filter_activity_output_columns` удаляет `_OUTPUT_ACTIVITY_DROP_COLUMNS` (например, `standard_lower_value`).
   - *type: sort* — `write_csv_chunks_deterministic` сортирует chunkи по `key_cols` (fallback mergesort), мержит временные файлы, записывает финальный CSV.
@@ -174,7 +174,7 @@ flowchart TD
 ### S10_postprocess_normalize
 - **Функция/блок:** `run_activity_postprocess` step `normalize_activity_records`
 - **Назначение:** QA-постпроцесс — нормализация метаданных после записи (используется только для отчёта). 【F:scripts/get_activity_data.py†L1446-L1451】【F:library/postprocessing/activities/steps.py†L41-L72】
-- **Вход:** `pd.read_csv(output.activities_*.csv)` (deterministic порядок/тип строк).
+- **Вход:** `pd.read_csv(output.activity_*.csv)` (deterministic порядок/тип строк).
 - **Выход:** Normalized DataFrame с приведёнными регистрами (аналог S04, но в отчёте). Метрики фиксируются в `PipelineRunMetrics`.
 - **Операция:**
   - *type: normalize* — strip, collapse whitespace, uppercase `standard_type` и relation, units uppercase (по конфигу). 【F:library/postprocessing/activities/steps.py†L55-L70】

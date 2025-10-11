@@ -114,17 +114,17 @@ _DEFAULT_DEFINITIONS: tuple[PipelineStepDefinition, ...] = (
         "name": "testitem",
         "callable": "library.cli.commands.get_testitem_data:main",
         "input": "testitem.csv",
-        "output": "testitems",
-        "produces": ["testitems"],
+        "output": "testitem",
+        "produces": ["testitem"],
     },
     {
         "name": "activity",
         "callable": "library.cli.entrypoints.activity:main",
         "input": "activity.csv",
-        "output": "activities",
+        "output": "activity",
         "flags": {"dry_run": True},
-        "produces": ["activities"],
-        "consumes": ["documents", "targets", "assays", "testitems"],
+        "produces": ["activity", "activities"],
+        "consumes": ["documents", "targets", "assays", "testitem"],
     },
 )
 

@@ -152,6 +152,7 @@ sources:
     rps: 4  # Requests per second limit (env: CHEMBL_DA_OPENALEX_RPS)
     burst: 1  # Burst size for rate limiter (env: CHEMBL_DA_OPENALEX_BURST)
     mailto: "chembl-data@ebi.ac.uk"  # Required contact email; replace with your team's address before production use (env: CHEMBL_DA_OPENALEX_MAILTO). Placeholder domains such as example.org are rejected.
+    verify: true  # TLS verification; set to false or provide a CA bundle when proxies intercept certificates (env: CHEMBL_DA_OPENALEX_VERIFY)
   crossref:
     base: "https://api.crossref.org"  # CrossRef API root URL (env: CHEMBL_DA_CROSSREF_BASE)
     timeout_connect: 5  # (env: CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT)
@@ -160,6 +161,7 @@ sources:
     rps: 5  # (env: CHEMBL_DA_CROSSREF_RPS)
     burst: 5  # (env: CHEMBL_DA_CROSSREF_BURST)
     mailto: "chembl-data@ebi.ac.uk"  # Required contact email; replace with your team's address before production use (env: CHEMBL_DA_CROSSREF_MAILTO). Placeholder domains such as example.org are rejected.
+    verify: true  # TLS verification toggle or CA bundle path (env: CHEMBL_DA_CROSSREF_VERIFY)
   uniprot:
     api:
       base: "https://rest.uniprot.org"  # UniProt REST API root (env: CHEMBL_DA_UNIPROT_BASE)
@@ -232,7 +234,12 @@ local:
     iuphar_family_csv: "target_iuphar_family"  # IUPHAR family mapping file
     uniprot_data_dir: "target_uniprot_cache"  # Directory containing cached UniProt JSON files
     targets_type_csv: "target_types"  # Target type mapping table
+    reference_smiles_csv: null  # Optional fallback table with canonical SMILES
   io:
+    # Final CSVs land here. Each export writes `<name>.meta.yaml` with
+    # deterministic stats (rows_total/rows_kept/rows_dropped, output SHA256) and
+    # the pipeline version; QA hooks may add `<name>.quality.json` alongside the
+    # CSV.
     output_dir: "$CHEMBL_DA_BASE_PATH/output"  # Directory for generated datasets
     cache_dir: "~/.cache/chembl-da"  # Directory for cached HTTP responses (env: CHEMBL_DA_CACHE_DIR)
     csv_sep: ","  # CSV field separator
@@ -247,6 +254,10 @@ local:
     exist_ok: true  # Create directories with ensure_dirs if missing
     output_stamp_mode: "omit"  # Append --date token to defaults ('require') or keep deterministic names ('omit')
     default_date_prefix: "20240101"  # Default for --date when omitted (env: CHEMBL_DA_DEFAULT_DATE_PREFIX)
+    # Run manifests (`reports/run_<timestamp>.json`) and the rolling
+    # `reports/run_manifest.json` alias are written under `$CHEMBL_DA_BASE_PATH`.
+    # They aggregate the per-step statistics and checksum metadata collected from
+    # the `<name>.meta.yaml`/`<name>.quality.json` sidecars.
   init:
     same_doc: "$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"  # Source workbook
     all_doc: "$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"

@@ -73,6 +73,7 @@ __all__ = [
     "remove_hidrate",
     "sort_my_list",
     "reference_SMILES",
+    "set_reference_smiles_table",
     "write_csv_deterministic",
 ]
 
@@ -344,6 +345,36 @@ def _active_component_type(component: Mapping[str, Any]) -> str:
 
 
 _REFERENCE_CACHE: MutableMapping[Path, pd.Series] = {}
+_REFERENCE_TABLE_PATH: Path | None = None
+
+
+def set_reference_smiles_table(path: str | Path | None) -> None:
+    """Configure the default reference table consulted by :func:`reference_SMILES`."""
+
+    global _REFERENCE_TABLE_PATH
+
+    if _REFERENCE_TABLE_PATH is not None:
+        _REFERENCE_CACHE.pop(_REFERENCE_TABLE_PATH, None)
+
+    if path is None:
+        _REFERENCE_TABLE_PATH = None
+        return
+
+    candidate = Path(path).expanduser()
+    resolved = candidate.resolve(strict=False)
+    _REFERENCE_TABLE_PATH = resolved
+    _REFERENCE_CACHE.pop(resolved, None)
+
+
+def _resolve_reference_table_path(reference_path: str | Path | None) -> Path:
+    if reference_path is not None:
+        return Path(reference_path).expanduser().resolve(strict=False)
+    if _REFERENCE_TABLE_PATH is None:
+        raise TargetNamesError(
+            "Reference SMILES table path not configured; "
+            "provide reference_path or call set_reference_smiles_table()."
+        )
+    return _REFERENCE_TABLE_PATH
 
 
 def reference_SMILES(
@@ -357,9 +388,10 @@ def reference_SMILES(
         return None
     if overrides and text in overrides:
         return normalise_text(overrides[text]) or None
-    path = Path(reference_path or Path("data/reference/Table6.csv"))
+    path = _resolve_reference_table_path(reference_path)
     if not path.exists():
         raise TargetNamesError(f"Reference SMILES table not found at {path!s}")
+    path = path.resolve()
     if path not in _REFERENCE_CACHE:
         frame = read_csv_with_fallbacks(path, encodings=ENCODING_FALLBACKS)
         required = {"molecule_chembl_id", "canonical_smiles"}
@@ -627,17 +659,34 @@ def _summarise_active_component_type(series: pd.Series | None) -> dict[str, int]
 
 
 def process_target_names(
-    input_path: str | Path, *, verbose: bool = False
+    input_path: str | Path | None = None,
+    *,
+    output_dir: str | Path | None = None,
+    verbose: bool = False,
 ) -> dict[str, Any]:
-    """Process ``input_path`` and emit the target names table."""
+    """Process a target export and emit the target names table.
 
-    source_path = Path(input_path)
+    When ``input_path`` is omitted the helper scans ``output_dir`` (or the
+    legacy default search directory) for the most recent
+    ``output.target_YYYYMMDD.csv`` export.  The resulting CSV is written to
+    ``output_dir`` when provided; otherwise it is saved alongside
+    ``input_path``.
+    """
+
+    if input_path is None:
+        search_dir = Path(output_dir) if output_dir is not None else _current_default_search_dir()
+        source_path = _latest_target_file(search_dir)
+    else:
+        source_path = Path(input_path)
+
     frame = helpers.read_csv_with_fallbacks(source_path)
     frame = helpers.ensure_string_columns(frame, frame.columns)
 
     names_df = _build_names_table(frame)
     base = normalise_export_basename(source_path)
-    output_path = source_path.with_name(f"names.{base}").with_suffix(".csv")
+    destination_dir = Path(output_dir) if output_dir is not None else source_path.parent
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    output_path = destination_dir / f"names.{base}.csv"
     helpers.write_csv(names_df, output_path, columns=TARGET_NAMES_COLUMNS)
 
     summary: dict[str, Any] = {

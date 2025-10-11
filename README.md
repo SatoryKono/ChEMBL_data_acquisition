@@ -54,11 +54,25 @@ in [`docs/en/SUMMARY.md`](./docs/en/SUMMARY.md) and
 ## Quick start
 
 ```bash
+make init
+source .venv/bin/activate
+pre-commit install --install-hooks
+```
+
+The `init` target enforces the interpreter listed in `.python-version` (when
+available), creates the `.venv`, upgrades `pip`, installs all pinned
+dependencies from `requirements-lock.txt` and finally installs the project in
+editable mode without re-resolving dependency versions.
+
+Prefer running the target, but if you need to bootstrap manually (for example,
+inside a container image) execute the equivalent sequence:
+
+```bash
 python -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
 pip install -r requirements-lock.txt
-pip install .[dev]
-pre-commit install
+pip install --no-deps -e .
 ```
 
 > 📌 Need a specific interpreter? Create a `.python-version` file with the
@@ -83,9 +97,10 @@ pip install pre-commit
 pre-commit install --install-hooks
 ```
 
-If you already executed the quick start commands (`pip install .[dev]`), the
-package is available and only the `pre-commit install --install-hooks` call is
-required. To verify the checks manually without committing, execute:
+If you already executed the quick start commands (`make init` followed by
+`pre-commit install --install-hooks`) the package is available and only the
+`pre-commit install --install-hooks` call is required on subsequent clones. To
+verify the checks manually without committing, execute:
 
 ```bash
 pre-commit run --all-files
@@ -191,7 +206,7 @@ events while investigating discrepancies.
 | Orchestrator | `python scripts/get_data.py --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --dry-run` | Runs the full pipeline chain once, forwarding `--limit`, `--force`, `--skip-existing` and `--dry-run` to individual stages. Advanced flags include `--pipeline-registry` to load alternative step definitions and `--override-{input,output-stem,subcommand}` for ad hoc tweaks. |
 | Document | `python scripts/get_document_data.py --mode all --input data/input/document.csv --final-out output/documents.csv --fallback-doi-enabled --fallback-doi-path data/input/fallback.csv --openalex-rps 2` | Supports `--mode chembl|pubmed|all`, per-source batch sizing and fallback DOI overrides. |
 | Target | `python scripts/get_target_data.py all --input data/input/target.csv --final-out output/targets.csv --chembl-chunk-size 10 --uniprot-data-dir cache/uniprot --raw-out output/targets_raw.parquet --raw-format parquet` | Sub-commands (`uniprot`, `chembl`, `iuphar`, `all`) accept prefixed overrides and optional raw exports. |
-| Assay | `python scripts/get_assay_data.py --input data/input/assay.csv --final-out output/assays.csv --chunk-size 25 --timeout 45` | Requires the assay, taxonomy and target dictionaries under `config/dictionary` to enrich `assay_group`, `assay_strain`, `year` and `accession` before normalisation; shares global options plus per-request chunk size and timeout tuning. |
+| Assay | `python scripts/get_assay_data.py --input data/input/assay.csv --final-out output/assay.csv --chunk-size 25 --timeout 45` | Requires the assay, taxonomy and target dictionaries under `config/dictionary` to enrich `assay_group`, `assay_strain`, `year` and `accession` before normalisation; shares global options plus per-request chunk size and timeout tuning. |
 | Test item | `python scripts/get_testitem_data.py --input data/input/testitem.csv --final-out output/testitems.csv --request-limit 500 --hierarchy-path config/dictionary/_testitem/molecule_hierarchy.csv` | Provides parent-molecule enrichment controls and request throttling (`--request-limit`, `--batch-size`, `--dry-run`). |
 | Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto` | Resolves tissue metadata, merges ontology cross-references and normalises synonyms for downstream joins. Run separately before `get_activity_data` when tissue lookups are required. |
 | Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --final-out output/cellline.csv --batch-size 20 --limit 100` | Retrieves ChEMBL cell line records, normalises nullable identifiers and enforces deterministic ordering. |
@@ -213,6 +228,51 @@ Custom file names such as `targets.csv` still trigger this post-processing
 chain, so downstream helpers are generated even when the export deviates from
 the canonical `output.target_<stamp>.csv` pattern.
 
+### Run manifest and metadata artefacts
+
+Every CLI command writes rich metadata alongside the exported CSV and updates a
+JSON manifest under `<base-path>/reports/`. The orchestrator stores
+time-stamped snapshots named `run_<timestamp>.json` and keeps
+`run_manifest.json` as a lightweight alias to the latest execution. Each
+manifest exposes two top-level sections:
+
+- `run` — wall-clock timings, exit code, resolved configuration (base path,
+  input/output directories, config path, log level, force/limit toggles) and an
+  optional `run_id` propagated from the structured logger.【F:library/cli/commands/get_data.py†L1855-L1914】【F:library/cli/commands/get_data.py†L2497-L2524】
+- `steps` — ordered entries for every pipeline stage. During execution the
+  runner records status transitions, exit codes, sidecar artefacts discovered on
+  disk and the per-table statistics returned by
+  `finalise_csv_output`.【F:library/cli/commands/get_data.py†L1815-L1890】【F:library/reporting/run_manifest.py†L27-L117】
+
+Each successful step produces a trio of artefacts stored alongside the CSV:
+
+1. `<name>.meta.yaml` captures provenance (`command`, masked config fragment,
+   pipeline version), resolved inputs and table statistics such as
+   `rows_total`, `rows_kept`, `rows_dropped` and the SHA256 checksum of the
+   output.【F:library/common/metadata_writer.py†L69-L157】
+2. Optional `<name>.quality.json` contains structured QA findings when table
+   profilers are enabled.【F:library/reporting/run_manifest.py†L75-L117】
+3. The manifest entry merges the metadata by adding `output.meta_path`,
+   `output.meta_sha256`, `output.quality_path`, `output.quality_sha256` and a
+   `stats` block so downstream tooling can diff runs without opening the sidecar
+   files.【F:library/reporting/run_manifest.py†L117-L166】
+
+```mermaid
+flowchart TD
+    A[Pipeline step\nCSV export] -->|finalise_csv_output| B[<name>.meta.yaml]
+    A -->|QA hook| C[<name>.quality.json]
+    A -->|hash + stats| D[run_<timestamp>.json]
+    B -->|merge_run_output| D
+    C -->|checksums| D
+    D -->|alias| E[reports/run_manifest.json]
+```
+
+Reviewing a manifest therefore provides a single, deterministic location to
+inspect run-level context and per-step statistics without opening individual
+CSV/metadata files. The alias pointer allows automation to fetch the latest run
+reliably even on filesystems without symlink support (the code falls back to an
+atomic copy when needed).【F:library/cli/commands/get_data.py†L1916-L1958】
+
 #### Reproducing the archived target bundle
 
 Historical examples of the target export bundle now live under
@@ -231,32 +291,36 @@ recreate the same structure locally:
      --uniprot-data-dir cache/uniprot
    ```
 
-3. Inspect the contents of `output/targets.csv` and its sidecars:
-   `output/targets.csv.meta.yaml`, `output/targets_quality_report_table.csv`,
-   `output/targets_uniprot.csv`, `output/targets_iuphar.csv`, `output/targets_chembl.csv`
-   plus the associated quality reports.
+3. Inspect the contents of `output/targets.csv` together with the
+   `_quality_report_table.csv`/`_data_correlation_report_table.csv` QA reports.
+   Add `--emit-legacy-artifacts` (or `--debug`/`--keep-intermediate`) to also
+   regenerate the historical metadata YAML, failure cases and auxiliary CSVs for
+   troubleshooting.
 
 All artefacts share the deterministic guarantees described above, so repeating
 the command with the same inputs produces byte-identical files.
 
 ### Deterministic exports and metadata policy
 
-All pipelines are required to be deterministic. Running the same CLI twice with
-identical inputs and configuration produces byte-identical CSV files and a
-matching `<output>.meta.yaml` sidecar. The metadata document captures the
-columns, Pandas dtypes, git SHA and effective configuration so analysts can
-audit the provenance of every export. The `generated_at` field is derived
-deterministically — `--date` takes precedence, otherwise the normalised CLI
-invocation (including the resolved run identifier) feeds a stable hash — which
-means repeated runs with the same arguments no longer drift. These `.meta.yaml`
-files are mandatory artefacts and must be stored alongside their CSV
-counterparts when publishing results or exchanging data with downstream
-systems.
+All pipelines remain deterministic: running the same CLI twice with identical
+inputs produces byte-identical datasets, quality reports and correlation
+metrics. To minimise disk usage, the default bundle now only retains the CSV and
+its `_quality_report_table.csv`/`_data_correlation_report_table.csv` companions.
+Metadata YAML files, JSON quality summaries and failure-case CSVs are still
+available on demand via `--emit-legacy-artifacts`, `--debug` or
+`--keep-intermediate`. The metadata captures the column schema, hashes, git SHA
+and effective configuration so analysts can audit provenance when diagnostics
+are enabled.
 
-Temporary files created during atomic writes follow the `.<name>.*.tmp`
-pattern and are always removed after a successful run. If a command fails, the
-cleanup logic also deletes partially written CSVs and orphaned metadata to keep
-output directories tidy.
+Upgrading from earlier releases triggers a one-time sweep that deletes legacy
+sidecars (`*.meta.yaml`, `.quality.json`, `*_failure_cases.csv`) before the first
+pipeline run. Re-run `tools/cleanup_legacy_outputs.py` to repeat the cleanup or
+preview the files slated for removal with `--dry-run`.
+
+Temporary files created during atomic writes follow the `.<name>.*.tmp` pattern
+and are always removed after a successful run. If a command fails, the cleanup
+logic also deletes partially written CSVs and orphaned metadata to keep output
+directories tidy.
 
 ## Documentation
 

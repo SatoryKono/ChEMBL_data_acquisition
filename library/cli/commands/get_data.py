@@ -140,6 +140,7 @@ from library.postprocessing.testitem import (
 from library.postprocessing.testitem import (
     run_testitem_pipeline as run_testitem_postprocess,
 )
+from library.io.paths import derive_output_labels
 from library.reporting.run_manifest import load_output_report, merge_run_output
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
@@ -234,6 +235,11 @@ class _PostprocessHandlers:
 
 
 _POSTPROCESS_HANDLERS: dict[str, _PostprocessHandlers] = {
+    "activity": _PostprocessHandlers(
+        runner=run_activity_postprocess,
+        validator=validate_activities,
+        schema=ACTIVITY_SCHEMA,
+    ),
     "activities": _PostprocessHandlers(
         runner=run_activity_postprocess,
         validator=validate_activities,
@@ -253,6 +259,11 @@ _POSTPROCESS_HANDLERS: dict[str, _PostprocessHandlers] = {
         runner=run_target_postprocess,
         validator=validate_targets,
         schema=TARGET_SCHEMA,
+    ),
+    "testitem": _PostprocessHandlers(
+        runner=run_testitem_postprocess,
+        validator=validate_testitems,
+        schema=TESTITEM_SCHEMA,
     ),
     "testitems": _PostprocessHandlers(
         runner=run_testitem_postprocess,
@@ -294,8 +305,8 @@ def _build_document_options(
         limit=cfg.limit,
         force=cfg.force,
         skip_existing=cfg.skip_existing,
-        rerun_postprocess=cfg.rerun_postprocess,
         date_prefix=cfg.date_prefix,
+        rerun_postprocess=cfg.rerun_postprocess,
         output_stem=cfg.output_stems.get("document"),
     )
 
@@ -311,6 +322,8 @@ def _build_target_options(
         limit=cfg.limit,
         force=cfg.force,
         skip_existing=cfg.skip_existing,
+        date=cfg.date_prefix,
+        output_stem=cfg.output_stems.get("target"),
     )
 
 
@@ -326,6 +339,12 @@ def _build_assay_options(
     )
 
 
+def _diagnostic_outputs_enabled(cfg: PipelineRunConfig) -> bool:
+    """Return ``True`` when diagnostic artefacts should be preserved."""
+
+    return cfg.debug or cfg.keep_intermediate or cfg.rerun_postprocess
+
+
 def _build_testitem_options(
     cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> TestitemPipelineOptions:
@@ -334,6 +353,7 @@ def _build_testitem_options(
         output_csv=output_path,
         limit=cfg.limit,
         offset=0,
+        emit_legacy_artifacts=_diagnostic_outputs_enabled(cfg),
     )
 
 
@@ -347,6 +367,7 @@ def _build_activity_options(
         force=cfg.force,
         skip_existing=cfg.skip_existing,
         dry_run=cfg.dry_run,
+        emit_legacy_artifacts=_diagnostic_outputs_enabled(cfg),
     )
 
 
@@ -387,6 +408,8 @@ class PipelineRunConfig:
     output_stems: PipelineOutputStems
     subcommands: PipelineSubcommands
     rerun_postprocess: bool = False
+    debug: bool = False
+    keep_intermediate: bool = False
 
     def input_path(self, name: str) -> Path:
         """Return the fully resolved path for ``name`` in the input directory."""
@@ -398,7 +421,30 @@ class PipelineRunConfig:
         """Return the fully resolved path for ``name`` in the output directory."""
 
         stem = self.output_stems[name]
-        filename = f"output.{stem}_{self.date_prefix}.csv"
+        stem_path = Path(stem)
+
+        # Allow overrides to provide explicit filenames (e.g. ``output.targets.csv``)
+        # or nested locations. When the stem includes a suffix we treat it as a
+        # concrete path instead of appending the canonical prefix/suffix.
+        if stem_path.suffix:
+            if stem_path.is_absolute():
+                return stem_path
+            # Treat explicit filenames that already include a CSV extension as
+            # concrete targets.
+            name_lower = stem_path.name.lower()
+            if ".csv" in name_lower:
+                original_name = stem_path.name
+                normalised_name = _normalise_output_stem(original_name)
+                if normalised_name != original_name:
+                    stripped_original = original_name.lstrip(".")
+                    had_output_prefix = stripped_original.startswith("output.")
+                    if had_output_prefix and not normalised_name.startswith("output."):
+                        normalised_name = f"output.{normalised_name}".lstrip(".")
+                    return self.output_dir / stem_path.with_name(normalised_name)
+                return self.output_dir / stem_path
+
+        normalised = _normalise_output_stem(str(stem_path))
+        filename = f"output.{normalised}_{self.date_prefix}.csv"
         return self.output_dir / filename
 
     def subcommand_for(self, name: str) -> str | None:
@@ -416,6 +462,40 @@ class PipelineRunConfig:
         object.__setattr__(
             self, "subcommands", PipelineSubcommands.from_mapping(self.subcommands)
         )
+
+
+def _normalise_output_stem(raw_stem: str) -> str:
+    """Return ``raw_stem`` without redundant hidden prefixes."""
+
+    candidate = raw_stem.strip()
+    if not candidate:
+        return raw_stem
+
+    stem_path = Path(candidate)
+    stem_name = stem_path.name
+
+    if stem_name.startswith("."):
+        stripped = stem_name.lstrip(".")
+        stem_name = stripped or stem_name
+
+    prefix = "output."
+    if stem_name.startswith(prefix):
+        stripped = stem_name
+        while stripped.startswith(prefix) and len(stripped) > len(prefix):
+            stripped = stripped[len(prefix) :]
+            stripped = stripped.lstrip(".")
+            if not stripped:
+                break
+        stem_name = stripped or stem_name
+
+    if stem_name.startswith("."):
+        stripped = stem_name.lstrip(".")
+        stem_name = stripped or stem_name
+
+    if stem_path.parent == Path("."):
+        return stem_name
+
+    return str(stem_path.with_name(stem_name))
 
 
 def _resolve_path(base: Path, candidate: Path) -> Path:
@@ -800,6 +880,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable verbose diagnostics and keep intermediate artefacts",
+    )
+    parser.add_argument(
+        "--keep-intermediate",
+        action="store_true",
+        help="Preserve intermediate files produced by individual pipelines",
+    )
+    parser.add_argument(
         "--print-config",
         action="store_true",
         help="Print the resolved configuration and exit without running pipelines",
@@ -886,6 +976,8 @@ def _prepare_config(
         input_files=input_files,
         output_stems=output_stems,
         subcommands=subcommands,
+        debug=bool(getattr(args, "debug", False)),
+        keep_intermediate=bool(getattr(args, "keep_intermediate", False)),
     )
 
 
@@ -1033,6 +1125,51 @@ def _discover_sidecars(
         entry.working_path = path
 
     return sidecars
+
+
+def _is_diagnostic_sidecar(path: Path) -> bool:
+    """Return ``True`` when ``path`` points to a diagnostic-only artefact."""
+
+    name = path.name.lower()
+    if name.startswith("output.") and ".csv_" in name:
+        return True
+    if name.endswith(".meta.yaml"):
+        return True
+    if name.endswith(".postprocess.report.json"):
+        return True
+    if name.endswith(".quality.json"):
+        return True
+    if name.startswith("output_postprocessed.") and name.endswith(".csv"):
+        return True
+
+    diagnostic_suffixes = (
+        "_failure_cases.csv",
+        "_chembl.csv",
+        "_pubmed.csv",
+        "_uniprot.csv",
+        "_iuphar.csv",
+    )
+    if name.endswith(diagnostic_suffixes):
+        return True
+
+    if name.endswith(".csv") and (
+        "_normalized" in name or "_raw" in name or name.endswith("_raw")
+    ):
+        return True
+
+    raw_suffixes = (
+        ".raw.csv",
+        ".raw.parquet",
+        ".raw.json",
+        ".raw.jsonl",
+        "_raw.parquet",
+        "_raw.json",
+        "_raw.jsonl",
+    )
+    if any(name.endswith(suffix) for suffix in raw_suffixes):
+        return True
+
+    return False
 
 
 def _remove_path(path: Path) -> None:
@@ -1187,13 +1324,39 @@ def _run_step(
 
 
 def _finalize_step_success(
-    final_output: Path, working_output: Path, sentinel_path: Path
+    final_output: Path,
+    working_output: Path,
+    sentinel_path: Path,
+    *,
+    diagnostics_enabled: bool,
 ) -> None:
     """Rename temporary outputs into place and clear failure sentinels."""
 
-    sidecars = _discover_sidecars(final_output, working_output)
+    sidecars = _discover_sidecars(
+        final_output,
+        working_output,
+        include_patterns=_sidecar_include_patterns(final_output, working_output),
+    )
     working_dir = working_output.parent
     final_dir = final_output.parent
+
+    try:
+        table_name, date_tag = derive_output_labels(
+            final_output.name,
+            default_table=final_output.stem or "dataset",
+        )
+    except Exception:  # pragma: no cover - defensive guard
+        canonical_prefix: str | None = None
+        canonical_allowed: frozenset[str] = frozenset()
+    else:
+        canonical_prefix = f"output.{table_name}_{date_tag}"
+        canonical_allowed = frozenset(
+            {
+                f"{canonical_prefix}.csv",
+                f"{canonical_prefix}_data_correlation_report_table.csv",
+                f"{canonical_prefix}_quality_report_table.csv",
+            }
+        )
 
     if working_output.exists():
         if final_output.exists():
@@ -1202,9 +1365,36 @@ def _finalize_step_success(
 
     for sidecar in sidecars.values():
         working_path = sidecar.working_path
+        destination = sidecar.destination
+        extra_standard_output = False
+        if canonical_prefix is not None:
+            candidate_name = destination.name
+            if (
+                candidate_name.startswith(canonical_prefix)
+                and candidate_name not in canonical_allowed
+            ):
+                extra_standard_output = True
+        if not diagnostics_enabled and (
+            _is_diagnostic_sidecar(destination) or extra_standard_output
+        ):
+            for candidate in (working_path, sidecar.final_path, destination):
+                if candidate is None or not candidate.exists():
+                    continue
+                try:
+                    _remove_path(candidate)
+                except OSError as exc:  # pragma: no cover - defensive guard
+                    _LOGGER.warning(
+                        "diagnostic_sidecar_cleanup_failed",
+                        path=str(candidate),
+                        error=str(exc),
+                    )
+                    continue
+                parent = candidate.parent
+                root = working_dir if parent.is_relative_to(working_dir) else final_dir
+                _cleanup_empty_directories(parent, root=root)
+            continue
         if working_path is None or not working_path.exists():
             continue
-        destination = sidecar.destination
         destination.parent.mkdir(parents=True, exist_ok=True)
         try:
             same_location = working_path.resolve() == destination.resolve()
@@ -1565,10 +1755,8 @@ def _describe_file(path: Path) -> dict[str, Any]:
     return info
 
 
-def _describe_sidecars(
-    final_output: Path, working_output: Path
-) -> list[dict[str, Any]]:
-    """Return manifest metadata for sidecars associated with ``final_output``."""
+def _sidecar_include_patterns(final_output: Path, working_output: Path) -> tuple[str, ...]:
+    """Return glob patterns capturing relevant sidecar artefacts."""
 
     include_patterns = [
         f"*{final_output.name}",
@@ -1591,10 +1779,18 @@ def _describe_sidecars(
                 f"*{table_candidate}.postprocess.report.json",
             ]
         )
+    return tuple(include_patterns)
+
+
+def _describe_sidecars(
+    final_output: Path, working_output: Path
+) -> list[dict[str, Any]]:
+    """Return manifest metadata for sidecars associated with ``final_output``."""
+
     sidecars = _discover_sidecars(
         final_output,
         working_output,
-        include_patterns=tuple(include_patterns),
+        include_patterns=_sidecar_include_patterns(final_output, working_output),
     )
     described: list[dict[str, Any]] = []
     for artefact in sorted(sidecars.values(), key=lambda item: str(item.destination)):
@@ -1883,6 +2079,13 @@ def run_pipeline(
         _LOGGER.error("config_load_failed", error=str(exc), exc_info=exc)
         _LOGGER.info("pipeline_done", stage="pipeline", exit_code=1)
         return 1
+    diagnostics_enabled = _diagnostic_outputs_enabled(cfg)
+    if not diagnostics_enabled:
+        system_cfg = getattr(base_config, "system", None)
+        if system_cfg is not None:
+            doc_quality_cfg = getattr(system_cfg, "doc_quality", None)
+            if doc_quality_cfg is not None and hasattr(doc_quality_cfg, "enable"):
+                setattr(doc_quality_cfg, "enable", False)
     try:
         if not cfg.dry_run:
             ensure_dirs(base_config)
@@ -2153,7 +2356,13 @@ def run_pipeline(
 
             entry["status"] = result.status
             output_existed = final_output.exists() or working_output.exists()
-            _finalize_step_success(final_output, working_output, sentinel_path)
+            diagnostics_enabled = _diagnostic_outputs_enabled(cfg)
+            _finalize_step_success(
+                final_output,
+                working_output,
+                sentinel_path,
+                diagnostics_enabled=diagnostics_enabled,
+            )
             if (
                 result.executed
                 and result.exit_code == 0
@@ -2196,7 +2405,12 @@ def run_pipeline(
                 )
             postprocess_result: PostprocessResult | None = None
             postprocess_table = _resolve_postprocess_table(step, final_output)
-            if result.executed and postprocess_table is not None:
+            allow_postprocess = _diagnostic_outputs_enabled(cfg)
+            if (
+                result.executed
+                and postprocess_table is not None
+                and allow_postprocess
+            ):
                 try:
                     postprocess_result = _run_postprocess_hook(
                         step,
@@ -2305,6 +2519,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     desired_level = (
         "DEBUG" if getattr(args, "verbose", False) else str(args.log_level).upper()
     )
+    if getattr(args, "debug", False):
+        desired_level = "DEBUG"
     if desired_level not in {"DEBUG", "INFO", "WARN", "WARNING", "ERROR"}:
         raise SystemExit(f"invalid log level: {args.log_level}")
 

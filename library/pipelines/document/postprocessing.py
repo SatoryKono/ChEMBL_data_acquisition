@@ -17,7 +17,7 @@ import pandas as pd
 
 from ...common.csv_utils import write_csv_deterministic
 from ...common.text_utils import to_text
-from ...config import IoCfg
+from ...config import IoCfg, ResourcesCfg
 
 # ===== Parameters ===========================================================
 
@@ -26,6 +26,7 @@ CP1252_ENCODING = "cp1252"
 CSV_DELIMITER = ","
 OUTPUT_PREFIX = "preprocessed_"
 DEFAULT_REF_DOCUMENT_PATH = Path("data/input/full/document.csv")
+REFERENCE_RESOURCE_SUBPATH = Path("_document") / "document.csv"
 
 
 # ===== Column specifications ===============================================
@@ -313,9 +314,9 @@ def _normalise_reference_frame(frame: pd.DataFrame) -> pd.DataFrame:
 def _load_reference_document(path: Path) -> pd.DataFrame:
     if not path.exists():
         msg = (
-            "Reference document CSV not found. "
-            "Set 'ref_document_path' to the location of the ETL export or "
-            "materialise 'data/input/full/document.csv'."
+            f"Reference document CSV not found at '{path}'. "
+            "Provide 'ref_document_path' or configure "
+            "'local.resources.dictionary_dir' with the bundled export."
         )
         raise FileNotFoundError(msg)
 
@@ -335,15 +336,50 @@ def _load_reference_document(path: Path) -> pd.DataFrame:
     return _normalise_reference_frame(frame)
 
 
+def _resolve_dictionary_root(
+    resources: ResourcesCfg | Path | str | None,
+) -> Path | None:
+    if resources is None:
+        return None
+    if isinstance(resources, ResourcesCfg):
+        return Path(resources.dictionary_dir)
+    if hasattr(resources, "dictionary_dir"):
+        return Path(getattr(resources, "dictionary_dir"))
+    return Path(resources)
+
+
 def _resolve_reference(
     ref_document: pd.DataFrame | None,
     ref_document_path: Path | str | None,
+    resources: ResourcesCfg | Path | str | None,
 ) -> pd.DataFrame:
     if ref_document is not None:
         return _normalise_reference_frame(ref_document)
     if ref_document_path is not None:
         return _load_reference_document(Path(ref_document_path))
-    return _load_reference_document(DEFAULT_REF_DOCUMENT_PATH)
+
+    dictionary_root = _resolve_dictionary_root(resources)
+    checked_paths: list[Path] = []
+
+    if dictionary_root is not None:
+        candidate = dictionary_root / REFERENCE_RESOURCE_SUBPATH
+        try:
+            return _load_reference_document(candidate)
+        except FileNotFoundError:
+            checked_paths.append(candidate)
+
+    try:
+        return _load_reference_document(DEFAULT_REF_DOCUMENT_PATH)
+    except FileNotFoundError as exc:
+        checked_paths.append(DEFAULT_REF_DOCUMENT_PATH)
+        hint = (
+            "Reference document CSV not found. Provide 'ref_document_path' or configure "
+            "'local.resources.dictionary_dir' with the bundled document.csv."
+        )
+        if checked_paths:
+            inspected = ", ".join(str(path) for path in checked_paths)
+            hint = f"{hint} Checked locations: {inspected}."
+        raise FileNotFoundError(hint) from exc
 
 
 # ===== Core transformation ==================================================
@@ -439,6 +475,7 @@ def postprocess_documents(
     required_columns: Iterable[str] | None = None,
     ref_document: pd.DataFrame | None = None,
     ref_document_path: Path | str | None = None,
+    resources: ResourcesCfg | Path | str | None = None,
 ) -> pd.DataFrame:
     """Clean and enrich document metadata.
 
@@ -464,7 +501,7 @@ def postprocess_documents(
         return pd.DataFrame(columns=FINAL_COLUMN_ORDER)
 
     frame = _prepare_input_frame(df)
-    reference = _resolve_reference(ref_document, ref_document_path)
+    reference = _resolve_reference(ref_document, ref_document_path, resources)
 
     frame["ChEMBL.journal"] = frame["ChEMBL.journal"].map(normalize_journal)
     frame["PubMed.JournalTitle"] = frame["PubMed.JournalTitle"].map(normalize_journal)
@@ -684,6 +721,7 @@ def postprocess_file(
     *,
     cfg: IoCfg,
     ref_document_path: Path | str | None = None,
+    resources: ResourcesCfg | Path | str | None = None,
 ) -> Path:
     """Read a CSV, apply :func:`postprocess_documents` and write the result."""
 
@@ -710,6 +748,7 @@ def postprocess_file(
     processed = postprocess_documents(
         frame,
         ref_document_path=ref_document_path,
+        resources=resources,
     )
 
     write_csv_deterministic(

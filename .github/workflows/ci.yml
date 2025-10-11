@@ -35,7 +35,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements-lock.txt
-          pip install .[dev]
+          pip install -r requirements-dev.txt -c requirements-lock.txt
       - name: Check installed packages
         run: pip check
       - name: Ruff check

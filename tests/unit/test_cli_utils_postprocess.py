@@ -125,7 +125,7 @@ def test_run_pipeline__triggers_postprocessing_on_known_table(monkeypatch, tmp_p
         table_quality=lambda path: None,
     )
 
-    output_path = tmp_path / "output.activities_sample.csv"
+    output_path = tmp_path / "output.activity_sample.csv"
     failure_path = tmp_path / "failures.csv"
 
     exit_code = run_pipeline(
@@ -141,7 +141,7 @@ def test_run_pipeline__triggers_postprocessing_on_known_table(monkeypatch, tmp_p
     assert exit_code == 0
     assert captured["table"] == "activities"
     assert captured["input"] == output_path
-    assert captured["output"].name == "output_postprocessed.activities_sample.csv"
+    assert captured["output"].name == "output_postprocessed.activity_sample.csv"
     assert captured["output"].exists()
     finalise_kwargs = captured["finalise_kwargs"]
     assert finalise_kwargs is not None
@@ -172,7 +172,7 @@ def test_run_pipeline__skips_postprocessing_when_disabled(monkeypatch, tmp_path)
         table_quality=lambda path: None,
     )
 
-    output_path = tmp_path / "output.activities_sample.csv"
+    output_path = tmp_path / "output.activity_sample.csv"
     failure_path = tmp_path / "failures.csv"
 
     captured: dict[str, object] = {}

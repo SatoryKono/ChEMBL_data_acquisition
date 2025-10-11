@@ -53,10 +53,7 @@ def test_run_document_service__invokes_mode_handler(
         captured["cfg"] = cfg_arg
         captured["args"] = args_arg
         captured["pipeline"] = pipeline
-        date_tag = getattr(args_arg, "_standard_date_tag")
-        table_name = Path(args_arg.final_out).stem
-        canonical = Path(cfg_arg.io.output_dir) / f"output.{table_name}_{date_tag}.csv"
-        canonical.write_text("id\nCHEMBL1\n", encoding="utf-8")
+        Path(args_arg.final_out).write_text("id\nCHEMBL1\n", encoding="utf-8")
         return 0
 
     monkeypatch.setattr(get_document_data, "run_chembl", _fake_run)
@@ -83,7 +80,7 @@ def test_run_document_service__invokes_mode_handler(
 
     args = captured["args"]
     assert Path(args.input_csv) == sample_csv
-    assert Path(args.final_out) == tmp_path / "documents.csv"
+    assert Path(args.final_out) == tmp_path / "output.documents_20240101.csv"
     assert getattr(args, "_standard_date_tag") == "20240101"
     assert args.command == "chembl"
 
@@ -140,10 +137,7 @@ def test_run_document_service__copies_canonical_output(
         *,
         pipeline: DocumentPipeline | None = None,
     ) -> int:
-        date_tag = getattr(args_arg, "_standard_date_tag")
-        table_name = Path(args_arg.final_out).stem
-        canonical = Path(cfg_arg.io.output_dir) / f"output.{table_name}_{date_tag}.csv"
-        canonical.write_text("id\nCHEMBL1\n", encoding="utf-8")
+        Path(args_arg.final_out).write_text("id\nCHEMBL1\n", encoding="utf-8")
         return 0
 
     monkeypatch.setattr(get_document_data, "run_all", _fake_run)
@@ -156,6 +150,76 @@ def test_run_document_service__copies_canonical_output(
     assert result.output_path == working_output
     assert working_output.exists()
     assert working_output.read_text(encoding="utf-8").splitlines()[1] == "CHEMBL1"
+
+
+def test_run_document_service__copies_cli_output_when_canonical_missing(
+    cfg: Config, tmp_path: Path, sample_csv: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    working_output = tmp_path / ".output.documents_20240101.csv.tmp"
+    cfg.io.output_dir = tmp_path
+    options = DocumentPipelineOptions(
+        input_csv=sample_csv,
+        output_csv=working_output,
+        mode="chembl",
+        date_prefix="20240101",
+        output_stem="documents",
+    )
+
+    def _fake_run(
+        cfg_arg: Config,
+        args_arg,
+        *,
+        pipeline: DocumentPipeline | None = None,
+    ) -> int:
+        final_out = Path(args_arg.final_out)
+        final_out.write_text("id\nCHEMBL2\n", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(get_document_data, "run_chembl", _fake_run)
+    monkeypatch.setitem(get_document_data.MODE_HANDLERS, "chembl", _fake_run)
+    monkeypatch.setattr(document_service, "_MODE_HANDLERS_CACHE", None)
+
+    result = get_document_data.run_document_service(cfg, options)
+
+    assert result.exit_code == 0
+    assert result.output_path == working_output
+    assert working_output.exists()
+    assert working_output.read_text(encoding="utf-8").splitlines()[1] == "CHEMBL2"
+
+
+def test_run_document_service__recovers_plain_dataset_name(
+    cfg: Config, tmp_path: Path, sample_csv: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    working_output = tmp_path / ".output.documents_20240101.csv.tmp"
+    cfg.io.output_dir = tmp_path
+    options = DocumentPipelineOptions(
+        input_csv=sample_csv,
+        output_csv=working_output,
+        mode="all",
+        date_prefix="20240101",
+        output_stem="documents",
+    )
+
+    def _fake_run(
+        cfg_arg: Config,
+        args_arg,
+        *,
+        pipeline: DocumentPipeline | None = None,
+    ) -> int:
+        plain_path = Path(args_arg.final_out).with_name("documents.csv")
+        plain_path.write_text("id\nCHEMBL3\n", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(get_document_data, "run_all", _fake_run)
+    monkeypatch.setitem(get_document_data.MODE_HANDLERS, "all", _fake_run)
+    monkeypatch.setattr(document_service, "_MODE_HANDLERS_CACHE", None)
+
+    result = get_document_data.run_document_service(cfg, options)
+
+    assert result.exit_code == 0
+    assert working_output.exists()
+    assert working_output.read_text(encoding="utf-8").splitlines()[1] == "CHEMBL3"
+
 
 def test_document_pipeline_run__delegates_to_service(
     cfg: Config, tmp_path: Path, sample_csv: Path, monkeypatch: pytest.MonkeyPatch
@@ -191,6 +255,8 @@ def test_run_target_service__invokes_command_handler(
         command="chembl",
         limit=10,
         offset=3,
+        date="20250115",
+        output_stem="custom_targets",
     )
 
     captured: dict[str, object] = {}
@@ -225,6 +291,8 @@ def test_run_target_service__invokes_command_handler(
     assert Path(args.input_csv) == sample_csv
     assert Path(args.final_out) == output_csv
     assert args.command == "chembl"
+    assert getattr(args, "_auto_output_stem", None) == options.output_stem
+    assert getattr(args, "date", None) == options.date
 
 
 def test_run_target_service__skip_existing(

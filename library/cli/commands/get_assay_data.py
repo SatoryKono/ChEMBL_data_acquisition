@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import UTC, datetime
 from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from functools import partial
@@ -66,7 +65,7 @@ __all__ = [
 
 
 DEFAULT_INPUT_NAME = "assay.csv"
-DEFAULT_OUTPUT_STEM = "assays"
+DEFAULT_OUTPUT_STEM = "assay"
 
 # Backwards compatibility: legacy configs referenced the private
 # ``_ASSAY_MAX_IDS_PER_REQUEST`` constant before it was renamed to
@@ -394,22 +393,18 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 path=str(dataset_csv),
             )
             quality_report = pd.DataFrame()
-        base = dataset_csv.stem
-        if base.startswith("output."):
-            base = base[len("output.") :]
-        if "_" in base:
-            table_name_candidate, date_tag = base.rsplit("_", 1)
-        else:
-            table_name_candidate = base
-            date_tag = datetime.now(UTC).strftime("%Y%m%d")
-        table_name_value = table_name_candidate or DEFAULT_OUTPUT_STEM
+        table_name_value, date_tag = io.derive_output_labels(
+            dataset_csv,
+            default_table=DEFAULT_OUTPUT_STEM,
+        )
         artifacts = io.save_standard_outputs(
             dataset_frame,
             correlation_report,
             quality_report,
             table_name=table_name_value,
             date_tag=date_tag,
-            cfg=cfg.io,
+            output_path=dataset_csv,
+            cleanup_source=not emit_legacy,
         )
         logger.info(
             "assay_standard_outputs",
@@ -565,6 +560,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 cfg=cfg,
                 logger=logger,
                 emit_legacy_artifacts=emit_legacy,
+                cleanup_standard_source=not emit_legacy,
             )
         finally:
             if emit_legacy:
@@ -862,6 +858,10 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         chunk_size=10,
         size_option="--batch-size",
         size_dest="batch_size",
+        emit_legacy_help=(
+            "Write the legacy CSV, metadata and diagnostics alongside the "
+            "standard output bundle (default: disabled)."
+        ),
     )
     parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
     parser.add_argument(
@@ -889,16 +889,12 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=False,
         help="Enable assay postprocessing after the main pipeline",
     )
-    parser.add_argument(
-        "--emit-legacy-artifacts",
-        dest="emit_legacy_artifacts",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help=(
+    legacy_option = parser._option_string_actions.get("--emit-legacy-artifacts")
+    if legacy_option is not None:
+        legacy_option.help = (
             "Write the legacy CSV, metadata and diagnostics alongside the standard "
             "output bundle (default: disabled)."
-        ),
-    )
+        )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg
 

@@ -12,9 +12,10 @@ from collections.abc import (
     MutableMapping,
     Sequence,
 )
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import CancelledError, ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
+from numbers import Real
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -56,6 +57,48 @@ _PUBCHEM_SESSION_SIGNATURE: str | None = None
 
 ResolutionCache: TypeAlias = MutableMapping[Hashable, "PubChemResolution"]
 _PUBCHEM_SESSION_LOCK = threading.Lock()
+
+
+def _service_unavailable_log_context(details: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Return structured logging context extracted from PubChem failure details."""
+
+    context: dict[str, Any] = {}
+    if not details:
+        return context
+
+    status = details.get("status")
+    if isinstance(status, Real):
+        context["status"] = int(status)
+
+    retry_after = details.get("retry_after")
+    if isinstance(retry_after, Real):
+        context["retry_after"] = float(retry_after)
+
+    timeout_retry_in = details.get("timeout_retry_in")
+    if isinstance(timeout_retry_in, Real):
+        context["timeout_retry_in"] = float(timeout_retry_in)
+
+    cooldown_remaining = details.get("cooldown_remaining")
+    if isinstance(cooldown_remaining, Real):
+        context["cooldown_remaining"] = float(cooldown_remaining)
+
+    cooldown_available_at = details.get("cooldown_available_at")
+    if isinstance(cooldown_available_at, str) and cooldown_available_at:
+        context["cooldown_available_at"] = cooldown_available_at
+
+    retry_after_source = details.get("retry_after_source")
+    if isinstance(retry_after_source, str) and retry_after_source:
+        context["retry_after_source"] = retry_after_source
+
+    timeout_reason = details.get("timeout_reason")
+    if isinstance(timeout_reason, str) and timeout_reason:
+        context["timeout_reason"] = timeout_reason
+
+    reason = details.get("reason")
+    if isinstance(reason, str) and reason:
+        context.setdefault("reason", reason)
+
+    return context
 
 
 @lru_cache(maxsize=1)
@@ -334,8 +377,13 @@ def resolve_pubchem_cid(
     if cid is not None:
         return cid
 
+    temporary_failure = bool(getattr(resolution, "temporary_failure", False))
+
+    if temporary_failure:
+        return None
+
     if not cfg.use_parent_for_salts:
-        if chembl_id and chembl_id not in cache:
+        if chembl_id and chembl_id not in cache and not temporary_failure:
             cache[chembl_id] = None
         return None
 
@@ -344,12 +392,12 @@ def resolve_pubchem_cid(
         parent_raw = row.get("parent_molecule_chembl_id")
     parent_id = _normalise_identifier(parent_raw, uppercase=True)
     if not parent_id:
-        if chembl_id and chembl_id not in cache:
+        if chembl_id and chembl_id not in cache and not temporary_failure:
             cache[chembl_id] = None
         return None
 
     if parent_loader is None:
-        if chembl_id and chembl_id not in cache:
+        if chembl_id and chembl_id not in cache and not temporary_failure:
             cache[chembl_id] = None
         return None
 
@@ -360,9 +408,9 @@ def resolve_pubchem_cid(
             parent=parent_id,
             reason="parent_cycle_detected",
         )
-        if parent_id not in cache:
+        if parent_id not in cache and not temporary_failure:
             cache[parent_id] = None
-        if chembl_id and chembl_id not in cache:
+        if chembl_id and chembl_id not in cache and not temporary_failure:
             cache[chembl_id] = None
         return None
 
@@ -374,7 +422,7 @@ def resolve_pubchem_cid(
             parent=parent_id,
             reason="parent_unavailable",
         )
-        if chembl_id and chembl_id not in cache:
+        if chembl_id and chembl_id not in cache and not temporary_failure:
             cache[chembl_id] = None
         return None
 
@@ -398,8 +446,9 @@ def resolve_pubchem_cid(
         parent=parent_id,
         reason="structure_unresolved",
     )
-    cache.setdefault(parent_id, None)
-    cache.setdefault(chembl_id or parent_id, None)
+    if not temporary_failure:
+        cache.setdefault(parent_id, None)
+        cache.setdefault(chembl_id or parent_id, None)
     return None
 
 
@@ -634,30 +683,67 @@ def _merge_pubchem_properties(
         configured_batch_size = max(int(getattr(cfg, "batch_size", 1)), 1)
         rps_limit = int(getattr(cfg, "rps", configured_batch_size))
         max_workers = max(1, min(configured_batch_size, rps_limit))
-        batch_size = configured_batch_size
+        batch_size = max_workers
 
         pubchem_lib = _load_pubchem_library()
+
+        def _empty_properties() -> Properties:
+            return pubchem_lib.Properties(None, None, None, None, None, None)
 
         def _fetch_properties(cid: str) -> Properties:
             return pubchem_lib.get_properties(cid, cfg)
 
+        service_unavailable = False
+        unavailable_error: str | None = None
+        unavailable_context: dict[str, Any] = {}
+        failed_cids: set[str] = set()
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for start in range(0, len(lookup_order), batch_size):
+                if service_unavailable:
+                    break
                 batch = lookup_order[start : start + batch_size]
                 future_map = {
                     executor.submit(_fetch_properties, cid): cid for cid in batch
                 }
                 for future, cid in future_map.items():
-                    try:
-                        props = future.result()
-                    except Exception as exc:  # pragma: no cover - defensive
-                        logger.warning(
-                            "pubchem_properties_failed", cid=cid, error=str(exc)
-                        )
-                        props = pubchem_lib.Properties(
-                            None, None, None, None, None, None
-                        )
-                    properties_records[cid] = {
+                    if service_unavailable:
+                        cancelled = future.cancel()
+                        if not cancelled:
+                            try:
+                                future.result()
+                            except (  # pragma: no cover - defensive cleanup
+                                CancelledError,
+                                pubchem_lib.PubChemServiceUnavailable,
+                                Exception,
+                            ):
+                                pass
+                        props = _empty_properties()
+                        failed_cids.add(cid)
+                    else:
+                        try:
+                            props = future.result()
+                        except pubchem_lib.PubChemServiceUnavailable as exc:
+                            log_context = _service_unavailable_log_context(exc.details)
+                            if exc.outcome:
+                                log_context.setdefault("outcome", exc.outcome)
+                            logger.warning(
+                                "pubchem_properties_failed",
+                                cid=cid,
+                                error=str(exc),
+                                **log_context,
+                            )
+                            service_unavailable = True
+                            unavailable_error = str(exc)
+                            unavailable_context = log_context
+                            failed_cids.add(cid)
+                            props = _empty_properties()
+                        except Exception as exc:  # pragma: no cover - defensive
+                            logger.warning(
+                                "pubchem_properties_failed", cid=cid, error=str(exc)
+                            )
+                            props = _empty_properties()
+                    values = {
                         "pubchem_iupac_name": _value_or_na(props.IUPACName),
                         "pubchem_molecular_formula": _value_or_na(
                             props.MolecularFormula
@@ -667,6 +753,22 @@ def _merge_pubchem_properties(
                         "pubchem_inchi": _value_or_na(props.InChI),
                         "pubchem_inchikey": _value_or_na(props.InChIKey),
                     }
+                    properties_records[cid] = values
+
+                if service_unavailable:
+                    remaining_cids = lookup_order[start + batch_size :]
+                    if remaining_cids:
+                        failed_cids.update(remaining_cids)
+                    break
+
+        if service_unavailable:
+            pending = max(len(failed_cids), 0)
+            log_payload = {"pending": pending}
+            if unavailable_error:
+                log_payload["error"] = unavailable_error
+            if unavailable_context:
+                log_payload.update(unavailable_context)
+            logger.warning("pubchem_properties_unavailable", **log_payload)
 
     properties_df = pd.DataFrame.from_dict(properties_records, orient="index")
     pubchem_df = cid_series.to_frame("pubchem_cid").join(
@@ -675,22 +777,38 @@ def _merge_pubchem_properties(
     pubchem_df = pubchem_df.reindex(frame.index)
 
     preserve_mask = skip_mask | prefer_local_mask
-    if preserve_mask.any():
-        existing_columns = [
-            column for column in PUBCHEM_COLUMNS if column in frame.columns
-        ]
-        if existing_columns:
-            original_existing = frame[existing_columns].astype("string")
+    existing_columns = [column for column in PUBCHEM_COLUMNS if column in frame.columns]
+    prefer_local_values = bool(getattr(cfg, "prefer_local_values", False))
+
+    if existing_columns:
+        original_existing = frame[existing_columns].astype("string")
+        for column in existing_columns:
+            if column not in pubchem_df.columns:
+                pubchem_df[column] = pd.Series(
+                    pd.NA, index=pubchem_df.index, dtype="string"
+                )
+
+        updated = pubchem_df[existing_columns].astype("string")
+
+        if prefer_local_values:
             for column in existing_columns:
-                if column not in pubchem_df.columns:
-                    pubchem_df[column] = pd.Series(
-                        pd.NA, index=pubchem_df.index, dtype="string"
-                    )
-            pubchem_df[existing_columns] = (
-                pubchem_df[existing_columns]
-                .astype("string")
-                .mask(preserve_mask, original_existing)
-            )
+                new_col = updated[column]
+                original_col = original_existing[column]
+                new_missing = new_col.isna() | (new_col.fillna("").str.len() == 0)
+                original_present = ~original_col.isna() & (
+                    original_col.fillna("").str.len() > 0
+                )
+                replace_mask = new_missing & original_present
+                if replace_mask.any():
+                    updated[column] = new_col.mask(replace_mask, original_col)
+
+        if preserve_mask.any():
+            for column in existing_columns:
+                updated[column] = updated[column].mask(
+                    preserve_mask, original_existing[column]
+                )
+
+        pubchem_df[existing_columns] = updated
 
     return pubchem_df.convert_dtypes()
 
@@ -833,10 +951,40 @@ def add_pubchem_data(
         prefer_local_mask=prefer_local_mask,
     )
 
-    result = result.drop(
-        columns=[col for col in PUBCHEM_COLUMNS if col in result.columns]
-    )
-    result = result.join(pubchem_df)
+    # ``pubchem_df`` already aligns with ``result`` and contains the
+    # best-effort lookups returned by the PubChem integration.  When the
+    # external API cannot provide additional data (for example due to
+    # rate limits or compounds absent from the catalogue) we must retain
+    # the values previously obtained from the ChEMBL API instead of
+    # replacing them with ``<NA>`` placeholders.
+    for column in pubchem_df.columns:
+        replacement = pubchem_df[column]
+        if column in result.columns:
+            original = result[column]
+
+            if replacement.empty:
+                continue
+
+            replacement_non_null = replacement.dropna()
+            if replacement_non_null.empty:
+                continue
+
+            # ``Series.combine_first`` internally concatenates the operands and
+            # currently issues a ``FutureWarning`` when one of them is empty.
+            # Assigning only the non-null values preserves the existing
+            # behaviour without triggering the warning while still favouring the
+            # PubChem values over the ChEMBL fallbacks.
+            result.loc[replacement_non_null.index, column] = replacement_non_null
+        else:
+            result[column] = replacement
+
+    # Ensure downstream schema validation consistently sees every
+    # PubChem column even when no data was available for a particular
+    # attribute.
+    for column in PUBCHEM_COLUMNS:
+        if column not in result.columns:
+            dtype = object if column == "pubchem_cid" else "string"
+            result[column] = pd.Series(pd.NA, index=result.index, dtype=dtype)
 
     if cache_dirty:
         _write_pubchem_cid_cache(cache_path, cid_cache)

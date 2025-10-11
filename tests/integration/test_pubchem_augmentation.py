@@ -201,6 +201,284 @@ def test_merge_pubchem_properties__preserves_existing_values_on_skip(cfg) -> Non
 
 
 @pytest.mark.integration
+def test_add_pubchem_data__keeps_existing_when_lookup_empty(
+    cfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pubchem_cfg = cfg.pubchem
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1"],
+            "pubchem_cid": ["CID1"],
+            "pubchem_canonical_smiles": ["LOCAL_SMILES"],
+        }
+    )
+
+    def fake_prepare_caches(*_args, **_kwargs):
+        return {}, {}, {}, set(), lambda *_a, **_kw: None
+
+    def fake_prefetch(*_args, **_kwargs):
+        return None
+
+    def fake_resolve(*_args, **_kwargs):
+        cid_series = pd.Series(["CID1"], index=frame.index, dtype="string")
+        return cid_series, set(), False
+
+    def fake_merge(
+        frame_arg: pd.DataFrame,
+        cid_series: pd.Series,
+        lookup_cids: set[str],
+        *,
+        cfg,
+        skip_mask: pd.Series,
+        prefer_local_mask: pd.Series,
+    ) -> pd.DataFrame:
+        assert lookup_cids == set()
+        assert skip_mask.tolist() == [False]
+        assert prefer_local_mask.tolist() == [False]
+        return pd.DataFrame(
+            {
+                "pubchem_cid": cid_series,
+                "pubchem_canonical_smiles": pd.Series(
+                    [pd.NA], index=frame_arg.index, dtype="string"
+                ),
+            }
+        )
+
+    monkeypatch.setattr(pubchem, "_prepare_pubchem_caches", fake_prepare_caches)
+    monkeypatch.setattr(pubchem, "_prefetch_parents", fake_prefetch)
+    monkeypatch.setattr(pubchem, "_resolve_pubchem_cids", fake_resolve)
+    monkeypatch.setattr(pubchem, "_merge_pubchem_properties", fake_merge)
+    monkeypatch.setattr(pubchem, "_write_pubchem_cid_cache", lambda *args, **kwargs: None)
+
+    result = pubchem.add_pubchem_data(frame, pubchem_cfg)
+
+    assert result.loc[0, "pubchem_cid"] == "CID1"
+    assert result.loc[0, "pubchem_canonical_smiles"] == "LOCAL_SMILES"
+
+
+def test_merge_pubchem_properties__retains_partial_values_on_failed_lookup(
+    cfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pubchem_cfg = cfg.pubchem
+    pubchem_cfg.prefer_local_values = True
+
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1"],
+            "pubchem_cid": ["CID_OLD"],
+            "pubchem_iupac_name": ["Existing"],
+            "pubchem_canonical_smiles": ["SMILES_EXISTING"],
+            "pubchem_isomeric_smiles": ["ISMILES_EXISTING"],
+        }
+    )
+
+    cid_series = pd.Series(["CID_NEW"], index=frame.index, dtype="string")
+    lookup_cids = {"CID_NEW"}
+
+    from library.integration import pubchem_library
+
+    class _DummyPubChemLib:
+        Properties = pubchem_library.Properties
+
+        def get_properties(self, cid: str, cfg_arg: PubChemCfg) -> pubchem_library.Properties:
+            assert cid == "CID_NEW"
+            return pubchem_library.Properties(None, None, None, None, None, None)
+
+    monkeypatch.setattr(pubchem, "_load_pubchem_library", lambda: _DummyPubChemLib())
+
+    skip_mask = pd.Series([False], index=frame.index, dtype="bool")
+    prefer_local_mask = pd.Series([False], index=frame.index, dtype="bool")
+
+    merged = pubchem._merge_pubchem_properties(
+        frame,
+        cid_series,
+        lookup_cids,
+        cfg=pubchem_cfg,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
+    )
+
+    assert merged.loc[0, "pubchem_cid"] == "CID_NEW"
+    assert merged.loc[0, "pubchem_iupac_name"] == "Existing"
+    assert merged.loc[0, "pubchem_canonical_smiles"] == "SMILES_EXISTING"
+    assert merged.loc[0, "pubchem_isomeric_smiles"] == "ISMILES_EXISTING"
+
+
+def test_merge_pubchem_properties__stops_after_service_unavailable(
+    cfg, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    pubchem_cfg = cfg.pubchem
+    pubchem_cfg.batch_size = 1
+    pubchem_cfg.rps = 1
+
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1", "CHEMBL2", "CHEMBL3"],
+        }
+    )
+
+    cid_series = pd.Series(["CID1", "CID2", "CID3"], index=frame.index, dtype="string")
+    lookup_cids = set(cid_series.tolist())
+
+    skip_mask = pd.Series([False, False, False], index=frame.index, dtype="bool")
+    prefer_local_mask = pd.Series([False, False, False], index=frame.index, dtype="bool")
+
+    from library.integration import pubchem_library
+
+    call_count = 0
+
+    class _DummyPubChemLib:
+        Properties = pubchem_library.Properties
+        PubChemServiceUnavailable = pubchem_library.PubChemServiceUnavailable
+
+        def get_properties(self, cid: str, cfg_arg: PubChemCfg) -> pubchem_library.Properties:
+            nonlocal call_count
+            call_count += 1
+            raise pubchem_library.PubChemServiceUnavailable(
+                "server_error", {"status": 503, "retry_after": 30.0}
+            )
+
+    monkeypatch.setattr(pubchem, "_load_pubchem_library", lambda: _DummyPubChemLib())
+
+    with caplog.at_level(logging.WARNING):
+        merged = pubchem._merge_pubchem_properties(
+            frame,
+            cid_series,
+            lookup_cids,
+            cfg=pubchem_cfg,
+            skip_mask=skip_mask,
+            prefer_local_mask=prefer_local_mask,
+        )
+
+    assert call_count == 1
+    assert merged["pubchem_cid"].tolist() == ["CID1", "CID2", "CID3"]
+    remaining_columns = [col for col in pubchem.PUBCHEM_COLUMNS if col != "pubchem_cid"]
+    assert merged[remaining_columns].isna().all().all()
+
+    warning_messages = [
+        record.message for record in caplog.records if record.levelno >= logging.WARNING
+    ]
+    failed_messages = [
+        msg for msg in warning_messages if msg.startswith("pubchem_properties_failed")
+    ]
+    assert len(failed_messages) == 1
+    assert any("retry_after=30.0" in msg for msg in failed_messages)
+    assert any("status=503" in msg for msg in failed_messages)
+    unavailable_messages = [
+        msg for msg in warning_messages if msg.startswith("pubchem_properties_unavailable")
+    ]
+    assert unavailable_messages
+    assert any("pending=3" in msg for msg in unavailable_messages)
+    assert any("retry_after=30.0" in msg for msg in unavailable_messages)
+    assert any("outcome='server_error'" in msg for msg in unavailable_messages)
+
+
+def test_merge_pubchem_properties__limits_outstanding_requests_on_service_unavailable(
+    cfg, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    pubchem_cfg = cfg.pubchem
+    pubchem_cfg.batch_size = 10
+    pubchem_cfg.rps = 3
+
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": [f"CHEMBL{i}" for i in range(1, 8)],
+        }
+    )
+
+    cid_series = pd.Series(
+        [f"CID{i}" for i in range(1, 8)], index=frame.index, dtype="string"
+    )
+    lookup_cids = set(cid_series.tolist())
+
+    skip_mask = pd.Series([False] * len(frame), index=frame.index, dtype="bool")
+    prefer_local_mask = pd.Series([False] * len(frame), index=frame.index, dtype="bool")
+
+    from library.integration import pubchem_library
+
+    call_count = 0
+
+    class _DummyPubChemLib:
+        Properties = pubchem_library.Properties
+        PubChemServiceUnavailable = pubchem_library.PubChemServiceUnavailable
+
+        def get_properties(self, cid: str, cfg_arg: PubChemCfg) -> pubchem_library.Properties:
+            nonlocal call_count
+            call_count += 1
+            raise pubchem_library.PubChemServiceUnavailable(
+                "server_error", {"status": 503, "retry_after": 30.0}
+            )
+
+    monkeypatch.setattr(pubchem, "_load_pubchem_library", lambda: _DummyPubChemLib())
+
+    with caplog.at_level(logging.WARNING):
+        merged = pubchem._merge_pubchem_properties(
+            frame,
+            cid_series,
+            lookup_cids,
+            cfg=pubchem_cfg,
+            skip_mask=skip_mask,
+            prefer_local_mask=prefer_local_mask,
+        )
+
+    assert call_count == pubchem_cfg.rps
+    assert merged["pubchem_cid"].tolist() == [f"CID{i}" for i in range(1, 8)]
+    remaining_columns = [col for col in pubchem.PUBCHEM_COLUMNS if col != "pubchem_cid"]
+    assert merged[remaining_columns].isna().all().all()
+
+    warning_messages = [
+        record.message for record in caplog.records if record.levelno >= logging.WARNING
+    ]
+    assert sum(msg.startswith("pubchem_properties_failed") for msg in warning_messages) == 1
+    unavailable_messages = [
+        msg for msg in warning_messages if msg.startswith("pubchem_properties_unavailable")
+    ]
+    assert unavailable_messages
+    assert any("pending=7" in msg for msg in unavailable_messages)
+
+
+@pytest.mark.integration
+def test_resolve_pubchem_cid__temporary_failure_does_not_cache(
+    cfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pubchem_cfg = cfg.pubchem
+    from library.integration import pubchem_library
+    row = pd.Series({"molecule_chembl_id": "CHEMBL1"})
+    cid_cache: dict[str, str | None] = {}
+    resolution_cache: dict[str, object] = {}
+
+    class _DummyPubChemLib:
+        def resolve_pubchem_record(self, *args, **kwargs):
+            return pubchem_library.PubChemResolution(
+                cid=None,
+                source=None,
+                status=503,
+                temporary_failure=True,
+            )
+
+    loader_called = False
+
+    def fake_parent_loader(_identifier: str) -> None:
+        nonlocal loader_called
+        loader_called = True
+        return None
+
+    monkeypatch.setattr(pubchem, "_load_pubchem_library", lambda: _DummyPubChemLib())
+
+    result = pubchem.resolve_pubchem_cid(
+        row,
+        cid_cache,
+        pubchem_cfg,
+        parent_loader=fake_parent_loader,
+        resolution_cache=resolution_cache,
+    )
+
+    assert result is None
+    assert cid_cache == {}
+    assert loader_called is False
+
+
+@pytest.mark.integration
 def test_augment_pubchem__initialises_session_and_reuses_cache(
     tmp_path: Path, cfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:

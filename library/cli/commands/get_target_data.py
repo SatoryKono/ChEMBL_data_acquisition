@@ -21,6 +21,7 @@ import shutil
 import stat
 import sys
 import time
+from tempfile import TemporaryDirectory
 from datetime import datetime, timezone
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -111,6 +112,8 @@ def _run_pipeline_with_meta(**kwargs: object) -> PipelineExecutionResult:
         cfg = params.pop("cfg", None)
         logger = params.pop("logger", None)
         definition = params.pop("definition", None)
+        emit_standard_outputs = params.pop("emit_standard_outputs", True)
+        emit_legacy_artifacts = params.pop("emit_legacy_artifacts", True)
 
         pipeline_definition = normalise_definition(definition, params)
 
@@ -121,7 +124,81 @@ def _run_pipeline_with_meta(**kwargs: object) -> PipelineExecutionResult:
             failure_path=failure_path,
             cfg=cfg,
             logger=logger,
+            emit_standard_outputs=emit_standard_outputs,
+            emit_legacy_artifacts=emit_legacy_artifacts,
         )
+
+
+def _resolve_bool_option(value: object, *, default: bool) -> bool:
+    """Coerce optional CLI flags to ``bool`` while preserving ``None`` defaults."""
+
+    if value in (None, argparse.SUPPRESS):
+        return default
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered == "":
+            return default
+        if lowered in {"0", "false", "no", "off"}:
+            return False
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+    return bool(value)
+
+
+def _cleanup_intermediate_outputs(outputs: Sequence[tuple[Path, bool]] | None) -> None:
+    """Remove intermediate artefacts that are no longer required."""
+
+    if not outputs:
+        return
+
+    for path, should_keep in outputs:
+        if should_keep:
+            continue
+        try:
+            if path.exists():
+                path.unlink()
+        except OSError as exc:  # pragma: no cover - best-effort cleanup
+            logger.warning(
+                "intermediate_output_cleanup_failed",
+                path=str(path),
+                error=str(exc),
+            )
+
+
+def _cleanup_standard_output_artifacts(base_output: Path) -> None:
+    """Remove canonical artefacts produced for intermediate pipeline steps."""
+
+    parent = base_output.parent
+    if not parent.exists():
+        return
+
+    stem = base_output.stem
+    dataset_pattern = f"{stem}_*.csv"
+    report_suffixes = (
+        "_quality_report_table.csv",
+        "_data_correlation_report_table.csv",
+    )
+
+    for candidate in parent.glob(dataset_pattern):
+        if candidate == base_output:
+            continue
+        try:
+            candidate.unlink()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:  # pragma: no cover - best-effort cleanup
+            logger.warning(
+                "standard_output_cleanup_failed",
+                path=str(candidate),
+                error=str(exc),
+            )
+            continue
+        Path(f"{candidate}.meta.yaml").unlink(missing_ok=True)
+
+        for suffix in report_suffixes:
+            report_candidate = parent / f"{candidate.stem}{suffix}"
+            report_candidate.unlink(missing_ok=True)
+            Path(f"{report_candidate}.meta.yaml").unlink(missing_ok=True)
 
 
 UNIPROT_MISSING_VALUE = ""
@@ -180,6 +257,23 @@ def _prepare_targets_for_schema(
     )
 
     return _prepare(frame)
+
+
+def _remove_failure_artifacts(path: Path) -> None:
+    """Remove residual validation failure artefacts if present."""
+
+    meta_path = path.with_name(path.name + ".meta.yaml")
+    for candidate in (path, meta_path):
+        try:
+            candidate.unlink()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:  # pragma: no cover - defensive guard
+            logger.warning(
+                "failure_artifact_cleanup_failed",
+                path=str(candidate),
+                error=str(exc),
+            )
 
 
 class StoreWithSource(argparse.Action):
@@ -357,6 +451,24 @@ _OUTPUT_FILENAME_PATTERN = re.compile(r"^output\.(?P<table>.+)_(?P<date>\d{8})$"
 _STEM_DATE_PATTERN = re.compile(r"^(?P<table>.+)_(?P<date>\d{8})$")
 
 
+def _normalize_table_name(value: str, *, default: str = "targets") -> str:
+    """Return a canonical table identifier derived from ``value``."""
+
+    cleaned = str(value).strip()
+    if cleaned:
+        cleaned = cleaned.lstrip(".")
+    prefix = "output."
+    while cleaned.startswith(prefix) and len(cleaned) > len(prefix):
+        cleaned = cleaned[len(prefix) :]
+    cleaned = cleaned.strip()
+    if cleaned.lower().endswith(".csv"):
+        cleaned = cleaned[:-4]
+    date_match = _STEM_DATE_PATTERN.match(cleaned)
+    if date_match:
+        return _normalize_table_name(date_match.group("table"), default=default)
+    return cleaned or default
+
+
 def _resolve_output_metadata(
     output: Path,
     *,
@@ -367,18 +479,23 @@ def _resolve_output_metadata(
 
     candidates = [output.with_suffix("").name, output.stem]
     for candidate in candidates:
-        match = _OUTPUT_FILENAME_PATTERN.match(candidate)
-        if match:
-            return match.group("table"), match.group("date")
-        match = _STEM_DATE_PATTERN.match(candidate)
-        if match:
-            table_value = match.group("table")
-            if table_value.startswith("output."):
-                table_value = table_value[len("output.") :]
-            return table_value, match.group("date")
+        variations = [candidate]
+        if candidate.lower().endswith(".csv"):
+            variations.append(candidate[:-4])
+        for option in variations:
+            match = _OUTPUT_FILENAME_PATTERN.match(option)
+            if match:
+                table_value = _normalize_table_name(match.group("table"))
+                return table_value, match.group("date")
+            match = _STEM_DATE_PATTERN.match(option)
+            if match:
+                table_value = _normalize_table_name(match.group("table"))
+                return table_value, match.group("date")
 
-    sanitized_table = (table_hint or output.stem or "targets").strip() or "targets"
-    normalized_table = sanitized_table.replace(" ", "_")
+    sanitized_table = _normalize_table_name(
+        (table_hint or output.stem or "targets"), default="targets"
+    )
+    normalized_table = sanitized_table.replace(" ", "_") or "targets"
     if date_hint and re.fullmatch(r"\d{8}", date_hint):
         resolved_date = date_hint
     else:
@@ -916,6 +1033,41 @@ def _ensure_parent_directory(path: Path, *, cfg: Config) -> None:
         parent.mkdir(parents=True, exist_ok=True)
     else:
         raise FileNotFoundError(f"{parent} does not exist")
+
+
+def _restore_legacy_output(
+    final_output: Path, dataset_path: Path | None, *, cfg: Config
+) -> None:
+    """Ensure ``final_output`` exists by copying the canonical dataset when needed."""
+
+    if dataset_path is None:
+        return
+
+    destination = Path(final_output)
+    if destination.exists():
+        return
+
+    source = Path(dataset_path)
+    if not source.exists() or source == destination:
+        return
+
+    _ensure_parent_directory(destination, cfg=cfg)
+    try:
+        shutil.copy2(source, destination)
+    except OSError as exc:  # pragma: no cover - defensive against filesystem errors
+        logger.warning(
+            "legacy_output_restore_failed",
+            error=str(exc),
+            source=str(source),
+            destination=str(destination),
+        )
+        return
+
+    logger.warning(
+        "legacy_output_restored",
+        source=str(source),
+        destination=str(destination),
+    )
 
 
 def _prepare_raw_destination(destination: Path, *, cfg: Config) -> None:
@@ -1944,6 +2096,10 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             args=args,
             context=IsoformPostprocessContext(args=args),
         )
+        meta_path = export_path.with_name(export_path.name + ".meta.yaml")
+        meta_path.unlink(missing_ok=True)
+        meta_lock_path = meta_path.with_name(meta_path.name + ".lock")
+        meta_lock_path.unlink(missing_ok=True)
         rows_dropped = max(rows_total - rows_kept, 0)
         stats: Stats = {
             "rows_total": rows_total,
@@ -2115,6 +2271,19 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     raw_dump_rows_total = 0
     chembl_http_requests = 0
 
+    emit_standard_outputs = bool(getattr(args, "emit_standard_outputs", True))
+    emit_legacy_artifacts = bool(getattr(args, "emit_legacy_artifacts", False))
+
+    if not (emit_standard_outputs or emit_legacy_artifacts):
+        logger.info(
+            "chembl_pipeline_outputs_forced",
+            reason="run_pipeline_requires_outputs",
+        )
+        emit_standard_outputs = True
+        setattr(args, "emit_standard_outputs", True)
+
+    setattr(args, "emit_legacy_artifacts", emit_legacy_artifacts)
+
     if not normalize_at_export:
 
         def _raw_fetcher() -> Iterator[pd.DataFrame]:
@@ -2186,6 +2355,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             table_quality=lambda _: None,
             cfg=cfg,
             logger=logger,
+            emit_standard_outputs=emit_standard_outputs,
+            emit_legacy_artifacts=emit_legacy_artifacts,
         )
         exit_code_attr = getattr(execution, "exit_code", None)
         exit_code = int(exit_code_attr if exit_code_attr is not None else execution)
@@ -2492,11 +2663,20 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             "target_iuphar_target",
             "target_iuphar_family",
         ),
+        emit_standard_outputs=emit_standard_outputs,
+        emit_legacy_artifacts=emit_legacy_artifacts,
     )
     exit_code_attr = getattr(execution, "exit_code", None)
     exit_code = int(exit_code_attr if exit_code_attr is not None else execution)
-    dataset_path = getattr(execution, "dataset_path", None) or raw_output
-    raw_output = Path(dataset_path)
+    dataset_path_value = getattr(execution, "dataset_path", None)
+    if dataset_path_value is not None:
+        dataset_path = Path(dataset_path_value)
+    else:
+        dataset_path = Path(raw_output)
+    raw_output = dataset_path
+
+    if exit_code == 0:
+        _restore_legacy_output(final_output, dataset_path, cfg=cfg)
 
     if not _finalize_raw_dump_writer(
         raw_dump_writer,
@@ -2525,6 +2705,35 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         "chembl_placeholder_replacements",
         total=placeholder_replacements,
     )
+
+    if exit_code == 0 and not final_output.exists():
+        if dataset_path.exists():
+            if dataset_path != final_output:
+                try:
+                    _ensure_parent_directory(final_output, cfg=cfg)
+                    shutil.copy2(dataset_path, final_output)
+                except OSError as exc:
+                    logger.error(
+                        "chembl_final_output_restore_failed",
+                        error=str(exc),
+                        exc_info=exc,
+                        source=str(dataset_path),
+                        destination=str(final_output),
+                    )
+                    return 1
+                else:
+                    logger.info(
+                        "chembl_final_output_restored",
+                        source=str(dataset_path),
+                        destination=str(final_output),
+                    )
+        else:
+            logger.error(
+                "chembl_final_output_missing_dataset",
+                expected=str(final_output),
+                dataset=str(dataset_path),
+            )
+            return 1
 
     return exit_code
 
@@ -2678,6 +2887,9 @@ def fetch_chembl(
     offset: int = 0,
     normalize_at_export: bool = True,
     no_reindex_raw: bool = False,
+    emit_standard_outputs: bool = True,
+    emit_legacy_artifacts: bool = False,
+    cleanup_standard_outputs: bool | None = None,
 ) -> pd.DataFrame:
     """Fetch target information from ChEMBL.
 
@@ -2695,6 +2907,17 @@ def fetch_chembl(
         Temporary override for the batch size used when calling the API.
     offset : int, optional
         Number of identifiers to skip before starting the retrieval.
+        emit_standard_outputs : bool, optional
+        Forwarded to :func:`run_pipeline` to control whether canonical CSV
+        artefacts should be produced alongside ``final_out``.
+    emit_legacy_artifacts : bool, optional
+        Forwarded to :func:`run_pipeline` to request legacy artefacts in
+        addition to ``final_out``.
+    cleanup_standard_outputs : bool, optional
+        When ``True`` any canonical artefacts generated next to ``final_out``
+        are removed once the export has been loaded. ``None`` defaults to the
+        inverse of ``emit_standard_outputs`` so that callers requesting the
+        canonical artefacts keep them by default.
 
     Returns
     -------
@@ -2720,6 +2943,8 @@ def fetch_chembl(
         offset=offset,
         normalize_at_export=normalize_at_export,
         no_reindex_raw=no_reindex_raw,
+        emit_standard_outputs=emit_standard_outputs,
+        emit_legacy_artifacts=emit_legacy_artifacts,
     )
     original_limit = cfg.target.chembl.limit
     original_chunk_size = cfg.target.chembl.chunk_size
@@ -2728,18 +2953,41 @@ def fetch_chembl(
     if chunk_size is not None:
         cfg.target.chembl.chunk_size = chunk_size
     try:
-        if run_chembl(cfg, chembl_args) != 0:
+        exit_code = run_chembl(cfg, chembl_args)
+        if exit_code != 0:
             raise RuntimeError("ChEMBL retrieval failed")
     finally:
         if limit is not None:
             cfg.target.chembl.limit = original_limit
         if chunk_size is not None:
             cfg.target.chembl.chunk_size = original_chunk_size
-    _normalized_output_path(final_out)
+    output_path = Path(final_out)
+    if not output_path.exists():
+        normalized_fallback = _normalized_output_path(output_path)
+        if normalized_fallback.exists():
+            logger.warning(
+                "fetch_chembl_missing_expected_output",
+                expected=str(output_path),
+                fallback=str(normalized_fallback),
+            )
+            output_path = normalized_fallback
+        else:
+            raise FileNotFoundError(output_path)
+
     df = pd.read_csv(
-        final_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+        output_path,
+        sep=cfg.io.csv_sep,
+        encoding=cfg.io.csv_encoding,
+        dtype=str,
     )
-    logger.info("fetch_chembl_done", rows=len(df))
+    logger.info("fetch_chembl_done", rows=len(df), path=str(output_path))
+    should_cleanup = (
+        cleanup_standard_outputs
+        if cleanup_standard_outputs is not None
+        else not emit_standard_outputs
+    )
+    if should_cleanup:
+        _cleanup_standard_output_artifacts(final_out)
     return df
 
 
@@ -3558,6 +3806,12 @@ def validate_and_write(
     )
     logger.info("validate_write_start", output=str(expected_dataset_path))
 
+    failure_path = expected_dataset_path.with_name(
+        f"{expected_dataset_path.stem}_failure_cases.csv"
+    )
+    if not emit_legacy_artifacts:
+        _remove_failure_artifacts(failure_path)
+
     key_columns = list(id_cols) if id_cols else ["target_chembl_id"]
     input_rows = len(df)
 
@@ -3640,13 +3894,13 @@ def validate_and_write(
         try:
             validation = validate_targets(final_df, return_result=True)
         except SchemaErrors as exc:
-            failure_path = expected_dataset_path.with_name(
-                f"{expected_dataset_path.stem}_failure_cases.csv"
-            )
-            errors = SidecarErrors()
-            for row in exc.failure_cases.to_dict("records"):
-                errors.add_error(row)
-            errors.save(failure_path, cfg=cfg)
+            if emit_legacy_artifacts:
+                errors = SidecarErrors()
+                for row in exc.failure_cases.to_dict("records"):
+                    errors.add_error(row)
+                errors.save(failure_path, cfg=cfg)
+            else:
+                _remove_failure_artifacts(failure_path)
             logger.error(
                 "validation_failed",
                 failures=len(exc.failure_cases),
@@ -3674,13 +3928,13 @@ def validate_and_write(
             final_df = validation.data
             failure_cases = validation.failure_cases.copy()
             if not failure_cases.empty:
-                failure_path = expected_dataset_path.with_name(
-                    f"{expected_dataset_path.stem}_failure_cases.csv"
-                )
-                errors = SidecarErrors()
-                for row in failure_cases.to_dict("records"):
-                    errors.add_error(row)
-                errors.save(failure_path, cfg=cfg)
+                if emit_legacy_artifacts:
+                    errors = SidecarErrors()
+                    for row in failure_cases.to_dict("records"):
+                        errors.add_error(row)
+                    errors.save(failure_path, cfg=cfg)
+                else:
+                    _remove_failure_artifacts(failure_path)
                 logger.error(
                     "validation_failed",
                     failures=len(failure_cases),
@@ -3741,29 +3995,6 @@ def validate_and_write(
         sortable_keys = [col for col in key_columns if col in final_df.columns]
         if sortable_keys:
             final_df = final_df.sort_values(by=sortable_keys).reset_index(drop=True)
-    quality_summary = generate_qc_report(
-        final_df,
-        table_name=inferred_table_name,
-    )
-    correlation_matrix = generate_correlation_report(
-        final_df,
-        table_name=inferred_table_name,
-    )
-    artifacts = io.save_standard_outputs(
-        final_df,
-        correlation_matrix,
-        quality_summary,
-        table_name=inferred_table_name,
-        date_tag=inferred_date_tag,
-        cfg=output_io_cfg,
-    )
-    logger.info(
-        "standard_outputs_written",
-        dataset=str(artifacts.dataset),
-        quality=str(artifacts.quality_report),
-        correlation=str(artifacts.correlation_report),
-    )
-    final_csv_path = artifacts.dataset
     ambiguous_count = 0
     if "protein_class_pred_rule_id" in final_df.columns:
         ambiguous_count = int(
@@ -3786,21 +4017,82 @@ def validate_and_write(
         args=postprocess_context.args if postprocess_context else None,
         http_requests=http_requests,
     )
+    export_df = final_df
     pipeline_result: "PostprocessingPipelineResult" | None = None
-    if final_csv_path is not None:
-        if exit_code != 0:
-            logger.warning(
-                "postprocess_running_with_errors",
-                exit_code=exit_code,
-                path=str(final_csv_path),
+    postprocess_output_path: Path | None = None
+    postprocess_report_path: Path | None = None
+    final_csv_path: Path | None = None
+    postprocess_args = postprocess_context.args if postprocess_context else None
+    postprocess_requested = bool(getattr(postprocess_args, "postprocess", False))
+    if exit_code != 0:
+        logger.warning(
+            "postprocess_running_with_errors",
+            exit_code=exit_code,
+            path=str(expected_dataset_path),
+        )
+    if postprocess_requested:
+        with TemporaryDirectory(prefix="target_postprocess_") as temp_dir:
+            temp_source = Path(temp_dir) / (
+                f"output.{inferred_table_name}_{inferred_date_tag}.csv"
             )
+            io.write_csv(
+                final_df,
+                temp_source,
+                cfg=cfg,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+                key_cols=key_columns or None,
+                col_order=export_columns,
+            )
+            pipeline_result = run_target_postprocess_if_requested(
+                temp_source,
+                cfg=cfg,
+                args=postprocess_args,
+                context=isoform_context,
+                ambiguous_classifications=ambiguous_count,
+            )
+    else:
         pipeline_result = run_target_postprocess_if_requested(
-            final_csv_path,
+            expected_dataset_path,
             cfg=cfg,
-            args=isoform_context.args,
+            args=postprocess_args,
             context=isoform_context,
             ambiguous_classifications=ambiguous_count,
         )
+    if pipeline_result is not None:
+        export_df = pipeline_result.dataframe
+        postprocess_output_path = Path(pipeline_result.output_path)
+        if pipeline_result.report_path is not None:
+            postprocess_report_path = Path(pipeline_result.report_path)
+    final_df = export_df
+    quality_summary = generate_qc_report(
+        final_df,
+        table_name=inferred_table_name,
+    )
+    correlation_matrix = generate_correlation_report(
+        final_df,
+        table_name=inferred_table_name,
+    )
+    artifacts = io.save_standard_outputs(
+        final_df,
+        correlation_matrix,
+        quality_summary,
+        table_name=inferred_table_name,
+        date_tag=inferred_date_tag,
+        output_path=output_path,
+        key_columns=key_columns,
+    )
+    logger.info(
+        "standard_outputs_written",
+        dataset=str(artifacts.dataset),
+        quality=str(artifacts.quality_report),
+        correlation=str(artifacts.correlation_report),
+    )
+    final_csv_path = artifacts.dataset
+    if postprocess_output_path is not None and postprocess_output_path != final_csv_path:
+        postprocess_output_path.unlink(missing_ok=True)
+    if postprocess_report_path is not None:
+        postprocess_report_path.unlink(missing_ok=True)
     if final_df.empty:
         logger.info(
             "quality_report_skipped",
@@ -3908,15 +4200,38 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             raw_output: Path | None = None
         else:
             raw_output = Path(raw_candidate)
-        chembl_out = cfg.target.all.chembl_out or final_output.with_name(
-            final_output.stem + "_chembl.csv"
-        )
-        uniprot_out = cfg.target.all.uniprot_out or final_output.with_name(
-            final_output.stem + "_uniprot.csv"
-        )
-        iuphar_out = cfg.target.all.iuphar_out or final_output.with_name(
-            final_output.stem + "_iuphar.csv"
-        )
+        cli_chembl_out = getattr(args, "chembl_out", None)
+        keep_chembl_output = False
+        if cli_chembl_out not in (None, argparse.SUPPRESS):
+            chembl_out = Path(cli_chembl_out)
+            keep_chembl_output = True
+        else:
+            chembl_out = cfg.target.all.chembl_out or final_output.with_name(
+                final_output.stem + "_chembl.csv"
+            )
+            keep_chembl_output = bool(cfg.target.all.chembl_out)
+
+        cli_uniprot_out = getattr(args, "uniprot_out", None)
+        keep_uniprot_output = False
+        if cli_uniprot_out not in (None, argparse.SUPPRESS):
+            uniprot_out = Path(cli_uniprot_out)
+            keep_uniprot_output = True
+        else:
+            uniprot_out = cfg.target.all.uniprot_out or final_output.with_name(
+                final_output.stem + "_uniprot.csv"
+            )
+            keep_uniprot_output = bool(cfg.target.all.uniprot_out)
+
+        cli_iuphar_out = getattr(args, "iuphar_out", None)
+        keep_iuphar_output = False
+        if cli_iuphar_out not in (None, argparse.SUPPRESS):
+            iuphar_out = Path(cli_iuphar_out)
+            keep_iuphar_output = True
+        else:
+            iuphar_out = cfg.target.all.iuphar_out or final_output.with_name(
+                final_output.stem + "_iuphar.csv"
+            )
+            keep_iuphar_output = bool(cfg.target.all.iuphar_out)
 
         raw_format = str(getattr(args, "raw_format", "csv") or "csv").lower()
         reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
@@ -3945,6 +4260,9 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             chunk_size=cfg.target.all.chunk_size,
             offset=cfg.target.all.offset,
             id_cols=key_columns,
+            emit_standard_outputs=True,
+            emit_legacy_artifacts=emit_legacy,
+            cleanup_standard_outputs=True,
         )
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
@@ -3962,6 +4280,14 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             date_tag=resolved_date_tag,
             emit_legacy_artifacts=emit_legacy,
         )
+        if exit_code == 0:
+            _cleanup_intermediate_outputs(
+                [
+                    (chembl_out, keep_chembl_output or chembl_out == final_output),
+                    (uniprot_out, keep_uniprot_output or uniprot_out == final_output),
+                    (iuphar_out, keep_iuphar_output or iuphar_out == final_output),
+                ]
+            )
         return exit_code
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         logger.error(
@@ -4034,6 +4360,11 @@ def run_target_service(
         skip_existing=False,
         force=options.force,
     )
+
+    if options.output_stem is not None:
+        setattr(args, "_auto_output_stem", options.output_stem)
+    if options.date is not None:
+        setattr(args, "date", options.date)
 
     command = options.command
     if command == "chembl":

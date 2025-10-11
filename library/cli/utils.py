@@ -62,8 +62,8 @@ _POSTPROCESS_TABLE_ALIASES = {
     "documents": "documents",
     "target": "targets",
     "targets": "targets",
-    "testitem": "testitems",
-    "testitems": "testitems",
+    "testitem": "testitem",
+    "testitems": "testitem",
 }
 
 
@@ -141,6 +141,11 @@ def _load_postprocess_runtime() -> _PostprocessRuntime:
             runner=run_target_postprocess,
             validator=validate_targets,
             schema=TARGET_SCHEMA,
+        ),
+        "testitem": _PostprocessHandlers(
+            runner=run_testitem_postprocess,
+            validator=validate_testitems,
+            schema=TESTITEM_SCHEMA,
         ),
         "testitems": _PostprocessHandlers(
             runner=run_testitem_postprocess,

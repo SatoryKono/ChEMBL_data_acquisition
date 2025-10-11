@@ -34,7 +34,6 @@ def fetch_crossref(
     url = f"{base}/works/{quote(doi, safe='')}?mailto={quote(cfg.mailto)}"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
 
-    logger.info("request_start", extra={"stage": "request_start", "url": url})
     data, error = _do_request(
         session,
         url,
@@ -43,8 +42,4 @@ def fetch_crossref(
         timeout=timeout,
         retry_cfg=retry_cfg,
     )
-    if error:
-        logger.info("request_fail", extra={"stage": "request_fail", "url": url})
-    else:
-        logger.info("request_ok", extra={"stage": "request_ok", "url": url})
     return data, error

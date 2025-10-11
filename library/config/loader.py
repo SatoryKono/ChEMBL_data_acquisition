@@ -350,6 +350,22 @@ def _upgrade_legacy_config(data: dict[str, Any]) -> None:
         _merge_mapping(system_cfg["doc_type"], data.pop("doc_type"))
 
 
+def _configure_postprocessing_runtime(cfg: Config) -> None:
+    """Propagate configuration paths to postprocessing helpers when available."""
+
+    try:
+        from library.postprocessing.common.runtime import (
+            configure_runtime_paths_from_config,
+        )
+    except ImportError:  # pragma: no cover - optional dependency
+        return
+
+    try:
+        configure_runtime_paths_from_config(cfg)
+    except Exception:  # pragma: no cover - defensive log
+        logger.debug("postprocess_runtime_configuration_failed", exc_info=True)
+
+
 def load_config(
     path: str | Path | None = None,
     cli_overrides: dict[str, Any] | None = None,
@@ -441,6 +457,7 @@ def load_config(
                 raise FileNotFoundError(p)
 
     configure_rate_limiters(cfg)
+    _configure_postprocessing_runtime(cfg)
     if not include_metadata:
         return cfg
 

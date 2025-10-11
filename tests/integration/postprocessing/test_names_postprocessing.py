@@ -4,7 +4,6 @@ import importlib.util
 import json
 import sys
 import types
-from functools import partial
 from pathlib import Path
 
 import pandas as pd
@@ -91,6 +90,27 @@ def test_reference_smiles__override_priority_over_table(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_reference_smiles__configured_default_table(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    table_path = tmp_path / "Table6.csv"
+    table_path.write_text(
+        "molecule_chembl_id,canonical_smiles\nCHEMBL1,CCO\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(names, "_REFERENCE_CACHE", {})
+    previous = getattr(names, "_REFERENCE_TABLE_PATH", None)
+    names.set_reference_smiles_table(table_path)
+    try:
+        result = names.reference_SMILES("CHEMBL1")
+    finally:
+        names.set_reference_smiles_table(previous)
+
+    assert result == "CCO"
+
+
+@pytest.mark.unit
 def test_reference_smiles__missing_table_raises_error(tmp_path: Path) -> None:
     missing = tmp_path / "Table6.csv"
     with pytest.raises(
@@ -119,11 +139,8 @@ def test_component_rows__hydrates_salts_and_structures(
     )
 
     monkeypatch.setattr(names, "_REFERENCE_CACHE", {})
-    monkeypatch.setattr(
-        names,
-        "reference_SMILES",
-        partial(names.reference_SMILES, reference_path=reference_path),
-    )
+    previous = getattr(names, "_REFERENCE_TABLE_PATH", None)
+    names.set_reference_smiles_table(reference_path)
 
     components = [
         {
@@ -176,7 +193,10 @@ def test_component_rows__hydrates_salts_and_structures(
         ]
     )
 
-    rows = names._component_rows(frame)
+    try:
+        rows = names._component_rows(frame)
+    finally:
+        names.set_reference_smiles_table(previous)
 
     assert len(rows) == 2
 
@@ -411,6 +431,52 @@ def test_process_target_names_helper__stable_sorting_of_duplicates(
 
     subset = produced[produced["name"] == "BRCA1"]
     assert list(subset["source_column"]) == ["gene_symbol", "gene_symbol_list"]
+
+
+def test_process_target_names__custom_output_dir(tmp_path: Path) -> None:
+    output_dir = tmp_path / "custom-output"
+    output_dir.mkdir()
+
+    older = output_dir / "output.target_20240101.csv"
+    newer = output_dir / "output.target_20250303.csv"
+
+    pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL_OLD",
+                "uniprot_id_primary": "POLD",
+                "pref_name": "Legacy",
+            }
+        ]
+    ).to_csv(older, index=False)
+
+    pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL_NEW",
+                "uniprot_id_primary": "PNEW",
+                "pref_name": "Latest",
+                "contrion": "A|B",
+                "active_component_type": "protein",
+            }
+        ]
+    ).to_csv(newer, index=False)
+
+    result = names.process_target_names(output_dir=output_dir)
+    output_path = Path(result["path"])
+
+    assert output_path.parent == output_dir
+    assert output_path.name == "names.output.target_20250303.csv"
+
+    produced = pd.read_csv(output_path, dtype="string")
+    assert_csv_header(output_path, names.TARGET_NAMES_COLUMNS)
+
+    assert (produced["target_chembl_id"] == "CHEMBL_NEW").all()
+    assert "Latest" in produced["name"].tolist()
+
+    summary = result["summary"]
+    assert summary["rows_before"] == 1
+    assert summary["contrion_total"] == 2
 
 
 @pytest.mark.unit

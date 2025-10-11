@@ -47,6 +47,7 @@ from .common.log import logger as default_logger
 from .config import Config, ConfigError, ensure_dirs, print_config
 from .config.loader import DEFAULT_CONFIG_PATH
 from .metadata import Stats, file_sha256, record_quality_failure, write_meta_yaml
+from .maintenance import ensure_legacy_cleanup
 from .sidecar import SidecarErrors
 from .table_quality import TableQualityProfiler
 from .io import save_standard_outputs, StandardOutputArtifacts
@@ -301,6 +302,13 @@ def run_cli_command(
 ) -> int:
     """Execute CLI boilerplate shared by data acquisition commands."""
 
+    debug_flag = bool(getattr(args, "debug", False))
+    keep_flag = bool(getattr(args, "keep_intermediate", False))
+    legacy_flag = bool(getattr(args, "emit_legacy_artifacts", False))
+    diagnostics_enabled = legacy_flag or debug_flag or keep_flag
+    if diagnostics_enabled != legacy_flag:
+        setattr(args, "emit_legacy_artifacts", diagnostics_enabled)
+
     if not log_cfg.generated_at:
         seed_parts: list[str] = []
         invocation = getattr(args, "invocation", None)
@@ -399,6 +407,11 @@ def run_cli_command(
     if metadata is not None:
         use_logger.info("config_snapshot", config=getattr(metadata, "snapshot", {}))
 
+    if not diagnostics_enabled:
+        doc_quality_cfg = getattr(cfg.system, "doc_quality", None)
+        if doc_quality_cfg is not None and hasattr(doc_quality_cfg, "enable"):
+            setattr(doc_quality_cfg, "enable", False)
+
     try:
         if getattr(args, "print_config", False):
             print_config(cfg)
@@ -406,6 +419,19 @@ def run_cli_command(
             use_logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
+        cleanup_result = ensure_legacy_cleanup(cfg, logger=use_logger)
+        if cleanup_result.performed and not cleanup_result.dry_run:
+            log_method = use_logger.warning if cleanup_result.removed_count else use_logger.info
+            log_method(
+                "legacy_outputs_retention_notice",
+                directory=str(cleanup_result.output_dir),
+                removed=cleanup_result.removed_count,
+                sentinel=str(cleanup_result.sentinel_path),
+                hint=(
+                    "Legacy diagnostics are now opt-in via --emit-legacy-artifacts/"
+                    "--keep-intermediate/--debug"
+                ),
+            )
         if logger is None:
             use_logger = cli.configure_logger(log_cfg)
         else:
@@ -456,10 +482,23 @@ def _resolve_standard_output_naming(
 ) -> tuple[str, str]:
     """Return ``(table_name, date_tag)`` derived from legacy output paths."""
 
-    stem = output_path.stem
+    name = output_path.name
+    if name.startswith(".") and name.endswith(".tmp"):
+        name = name[1:-len(".tmp")]
+    stem = Path(name).stem if name else output_path.stem
     remainder = stem
-    if remainder.startswith("output."):
-        remainder = remainder.split("output.", 1)[1]
+
+    if remainder.startswith("."):
+        stripped = remainder.lstrip(".")
+        remainder = stripped or remainder
+
+    prefix = "output."
+    while remainder.lower().startswith(prefix) and remainder:
+        candidate = remainder[len(prefix) :]
+        candidate = candidate.lstrip(".")
+        if not candidate:
+            break
+        remainder = candidate
 
     table_name = remainder
     date_tag: str | None = None
@@ -502,6 +541,7 @@ def run_pipeline(
     logger: Logger | None = None,
     emit_standard_outputs: bool = True,
     emit_legacy_artifacts: bool = True,
+    cleanup_standard_source: bool | None = None,
     **legacy_kwargs: object,
 ) -> PipelineExecutionResult:
     """Execute a data pipeline and write deterministic CSV output.
@@ -531,6 +571,10 @@ def run_pipeline(
     emit_legacy_artifacts:
         When ``True`` the historical deterministic writer and sidecar artefacts are
         produced.
+    cleanup_standard_source:
+        Optional override controlling whether :func:`library.io.save_standard_outputs`
+        removes the original dataset when the canonical path differs. Defaults to
+        ``True`` when omitted, matching the historical behaviour.
     legacy_kwargs:
         Deprecated keyword arguments matching the historical signature. When
         provided they are converted into a :class:`PipelineDefinition`.
@@ -548,11 +592,6 @@ def run_pipeline(
 
     standard_outputs_enabled = bool(emit_standard_outputs)
     legacy_outputs_enabled = bool(emit_legacy_artifacts)
-    if not standard_outputs_enabled and not legacy_outputs_enabled:
-        raise ValueError(
-            "run_pipeline requires at least one of emit_standard_outputs or "
-            "emit_legacy_artifacts to be enabled"
-        )
 
     definition = normalise_definition(definition, legacy_kwargs)
 
@@ -922,8 +961,10 @@ def run_pipeline(
 
     csv_path: Path | None = None
     chunk_stream = _iter_chunks()
+    should_invoke_writer = legacy_outputs_enabled or not standard_outputs_enabled
+
     try:
-        if legacy_outputs_enabled:
+        if should_invoke_writer:
             csv_path = writer(
                 chunk_stream,
                 output_path,
@@ -983,17 +1024,24 @@ def run_pipeline(
             active_profiler
         )
 
-        io_cfg = getattr(cfg, "io", None) if cfg is not None else None
-        if io_cfg is None:
-            raise ValueError(
-                "emit_standard_outputs requires a configuration with an 'io' section"
-            )
-
         table_name, date_tag = _resolve_standard_output_naming(
             output_path,
             cfg=cfg,
             command=command_str,
             invocation=invocation_tuple,
+        )
+
+        io_cfg = getattr(cfg, "io", None) if cfg is not None else None
+        output_dir_value = (
+            getattr(io_cfg, "output_dir", None) if io_cfg is not None else None
+        )
+        if output_dir_value is None:
+            raise ValueError("cfg.io.output_dir must be configured for standard outputs")
+
+        cleanup_canonical_source = (
+            bool(cleanup_standard_source)
+            if cleanup_standard_source is not None
+            else True
         )
 
         standard_artifacts = save_standard_outputs(
@@ -1002,7 +1050,9 @@ def run_pipeline(
             quality_report,
             table_name=table_name,
             date_tag=date_tag,
-            cfg=io_cfg,
+            output_path=output_path,
+            key_columns=resolved_keys or key_columns,
+            cleanup_source=cleanup_canonical_source,
         )
         use_logger.info(
             "standard_outputs_written",
@@ -1011,9 +1061,18 @@ def run_pipeline(
             correlation_report=str(standard_artifacts.correlation_report),
         )
         dataset_path = standard_artifacts.dataset
+        csv_path = standard_artifacts.dataset
 
     if dataset_path is None and csv_path is not None:
         dataset_path = csv_path
+
+    quality_input_path: Path | None
+    if dataset_path is not None:
+        quality_input_path = Path(dataset_path)
+    elif csv_path is not None:
+        quality_input_path = Path(csv_path)
+    else:
+        quality_input_path = None
 
     if legacy_outputs_enabled and csv_path is None:
         use_logger.error(
@@ -1053,14 +1112,12 @@ def run_pipeline(
 
     meta_path: Path | None = None
     extra_metadata: dict[str, object] | None = None
-    if legacy_outputs_enabled and csv_path is not None:
-        extra_metadata = {}
-        if failed_metadata_hooks:
-            extra_metadata["metadata_hook_failures"] = sorted(failed_metadata_hooks)
+    if legacy_outputs_enabled and failed_metadata_hooks:
+        extra_metadata = {"metadata_hook_failures": sorted(failed_metadata_hooks)}
 
-    if emit_legacy_artifacts:
+    if emit_legacy_artifacts and quality_input_path is not None:
         meta_path = write_meta_yaml(
-            csv_path=csv_path,
+            csv_path=quality_input_path,
             command=command_str,
             config=config_snapshot,
             inputs=inputs,
@@ -1070,14 +1127,13 @@ def run_pipeline(
             extra_metadata=extra_metadata or None,
             dictionary_resources=dictionary_resources,
         )
-
-
-
         doc_quality_cfg = getattr(getattr(cfg, "system", None), "doc_quality", None)
         fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
 
+        quality_source = dataset_path or csv_path
         try:
-            table_quality(csv_path)
+            if quality_source is not None:
+                table_quality(quality_source)
         except Exception as exc:
             tb = traceback.format_exc()
             record_quality_failure(
@@ -1087,10 +1143,13 @@ def run_pipeline(
                 traceback=tb,
                 fatal=fatal_quality_error,
             )
+            fallback_path = quality_source if quality_source is not None else csv_path
+            if fallback_path is None:
+                fallback_path = output_path
             log_kwargs = {
                 "error": str(exc),
                 "error_type": exc.__class__.__name__,
-                "path": str(csv_path),
+                "path": str(fallback_path),
                 "traceback": tb,
             }
             if fatal_quality_error:

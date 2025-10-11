@@ -40,6 +40,8 @@ class TargetPipelineOptions:
     id_columns: tuple[str, ...] | None = None
     skip_existing: bool = False
     force: bool = False
+    date: str | None = None
+    output_stem: str | None = None
 
 def run_pipeline(config: Config, options: TargetPipelineOptions) -> PipelineRunResult:
     """Execute the target pipeline for the selected command."""

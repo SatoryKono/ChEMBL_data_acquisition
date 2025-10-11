@@ -162,26 +162,39 @@ def add_common_arguments(
     force_default: bool | object = False if defaults else argparse.SUPPRESS
     skip_default: bool | object = False if defaults else argparse.SUPPRESS
     emit_legacy_default: bool | object = False if defaults else argparse.SUPPRESS
+    debug_default: bool | object = False if defaults else argparse.SUPPRESS
+    keep_default: bool | object = False if defaults else argparse.SUPPRESS
     if defaults:
         run_id_default: str | object = os.environ.get(_RUN_ID_ENV) or None
     else:
         run_id_default = argparse.SUPPRESS
 
-    parser.add_argument("--log-level", default=log_level, help="Logging level")
-    parser.add_argument(
+    def _add_optional_argument(*option_strings: str, **kwargs: Any) -> None:
+        """Add an optional argument unless it is already registered."""
+
+        optional_strings = [
+            opt for opt in option_strings if isinstance(opt, str) and opt.startswith("-")
+        ]
+        option_actions = getattr(parser, "_option_string_actions", {})
+        if optional_strings and any(opt in option_actions for opt in optional_strings):
+            return
+        parser.add_argument(*option_strings, **kwargs)
+
+    _add_optional_argument("--log-level", default=log_level, help="Logging level")
+    _add_optional_argument(
         "--verbose",
         action="store_true",
         default=False,
         help="Enable debug logging",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--input",
         dest="input_csv",
         type=path_argument,
         default=input_default,
         help="Input CSV file",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--final-out",
         "--out",
         "--output",
@@ -190,58 +203,76 @@ def add_common_arguments(
         default=final_default,
         help="Destination CSV file (default: output.<stem>.csv)",
     )
-    parser.add_argument("--sep", default=sep_default, help="CSV delimiter")
-    parser.add_argument("--encoding", default=enc_default, help="File encoding")
-    parser.add_argument(
+    _add_optional_argument("--sep", default=sep_default, help="CSV delimiter")
+    _add_optional_argument("--encoding", default=enc_default, help="File encoding")
+    _add_optional_argument(
         "--base-path",
         dest="base_path",
         type=path_argument,
         default=base_default,
         help="Base directory for input and output data",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--input-dir",
         dest="input_dir",
         type=path_argument,
         default=input_dir_default,
         help="Directory containing input artefacts",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--output-dir",
         dest="output_dir",
         type=path_argument,
         default=output_dir_default,
         help="Directory receiving generated artefacts",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--date",
         dest="date",
         default=date_default,
         help="Date prefix used when constructing default outputs",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--emit-legacy-artifacts",
         dest="emit_legacy_artifacts",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=emit_legacy_default,
         help=(
-            "Persist legacy artefacts such as raw exports, metadata sidecars and"
-            " manifest snapshots"
+            "Persist metadata sidecars, failure CSVs and other diagnostics. "
+            "Defaults to off so only the dataset and QA CSV reports are kept."
         ),
     )
-    parser.add_argument(
+    _add_optional_argument(
+        "--debug",
+        action="store_true",
+        default=debug_default,
+        help=(
+            "Enable verbose diagnostics, retain intermediate artefacts and"
+            " re-enable the legacy diagnostic bundle"
+        ),
+    )
+    _add_optional_argument(
+        "--keep-intermediate",
+        action="store_true",
+        default=keep_default,
+        help=(
+            "Preserve intermediate artefacts on disk (also enables the legacy"
+            " diagnostic bundle)"
+        ),
+    )
+    _add_optional_argument(
         "--force",
         action="store_true",
         default=force_default,
         help="Overwrite outputs even when they already exist",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--skip-existing",
         action="store_true",
         default=skip_default,
         help="Skip processing if the destination file is present",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--run-id",
         dest="run_id",
         default=run_id_default,
@@ -253,6 +284,29 @@ def add_common_arguments(
     return parser
 
 
+def _set_emit_legacy_help(
+    parser: argparse.ArgumentParser, help_text: str
+) -> None:
+    """Update the help text for ``--emit-legacy-artifacts`` if present."""
+
+    for action in parser._actions:
+        option_strings = getattr(action, "option_strings", ())
+        if "--emit-legacy-artifacts" in option_strings:
+            action.help = help_text
+            return
+    raise ValueError(
+        "parser does not define the --emit-legacy-artifacts option"
+    )
+
+
+def set_emit_legacy_help(
+    parser: argparse.ArgumentParser, help_text: str
+) -> None:
+    """Public helper for tweaking the legacy artefact flag description."""
+
+    _set_emit_legacy_help(parser, help_text)
+
+
 def build_parser(
     description: str,
     *,
@@ -261,6 +315,7 @@ def build_parser(
     size_option: str = "--chunk-size",
     size_dest: str = "chunk_size",
     size_help: str = "Maximum IDs per request",
+    emit_legacy_help: str | None = None,
 ) -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Return a parser with shared options and logging configuration.
 
@@ -287,6 +342,8 @@ def build_parser(
 
     parser = argparse.ArgumentParser(description=description)
     add_common_arguments(parser)
+    if emit_legacy_help is not None:
+        _set_emit_legacy_help(parser, emit_legacy_help)
     parser.add_argument(
         "--column",
         default=column,
@@ -835,13 +892,25 @@ def prepare_io_paths(
             if effective_date is None and stamp_mode == "require":
                 msg = "--date must be provided when io.output_stamp_mode is 'require'"
                 raise ValueError(msg)
-            normalized_stem = output_stem
+            normalized_stem = output_stem.strip()
             prefix = "output."
             if normalized_stem.startswith(prefix):
                 stripped = normalized_stem
                 while stripped.startswith(prefix) and len(stripped) > len(prefix):
                     stripped = stripped[len(prefix) :]
-                normalized_stem = stripped or normalized_stem
+                    stripped = stripped.lstrip(".")
+                    if not stripped:
+                        break
+                normalized_stem = stripped or normalized_stem.lstrip(".") or normalized_stem
+            else:
+                normalized_stem = normalized_stem.lstrip(".") or normalized_stem
+
+            suffix_lower = suffix.lower()
+            if suffix_lower and normalized_stem.lower().endswith(suffix_lower):
+                candidate = normalized_stem[: -len(suffix_lower)].rstrip(".")
+                if candidate:
+                    normalized_stem = candidate
+
             if effective_date is not None:
                 filename = f"output.{normalized_stem}_{effective_date}{suffix}"
             else:

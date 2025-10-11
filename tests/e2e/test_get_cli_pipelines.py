@@ -569,7 +569,7 @@ def test_get_testitem_run_success(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     input_csv = sample_csv("testitem")
-    output_csv = tmp_path / "out" / "testitems.csv"
+    output_csv = tmp_path / "out" / "testitem.csv"
     logger_stub = _patch_logger(monkeypatch, get_testitem_data)
 
     def _stub_pipeline(
@@ -630,7 +630,7 @@ def test_get_testitem_run_failure_logs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     input_csv = sample_csv("testitem")
-    output_csv = tmp_path / "out" / "testitems.csv"
+    output_csv = tmp_path / "out" / "testitem.csv"
     logger_stub = _patch_logger(monkeypatch, get_testitem_data)
 
     def _failing_pipeline(
@@ -665,7 +665,7 @@ def test_get_testitem_run_skip_existing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     input_csv = sample_csv("testitem")
-    output_csv = tmp_path / "out" / "testitems.csv"
+    output_csv = tmp_path / "out" / "testitem.csv"
     _ensure_parent(output_csv)
     output_csv.write_text("placeholder", encoding="utf-8")
 

@@ -720,6 +720,18 @@
           "default": "chembl-data@ebi.ac.uk",
           "title": "Mailto",
           "type": "string"
+        },
+        "verify": {
+          "default": true,
+          "title": "Verify",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ]
         }
       },
       "title": "CrossRefCfg",
@@ -1279,7 +1291,7 @@
           "type": "integer"
         },
         "burst": {
-          "default": 5,
+          "default": 1,
           "minimum": 1,
           "title": "Burst",
           "type": "integer"
@@ -1288,6 +1300,18 @@
           "default": "chembl-data@ebi.ac.uk",
           "title": "Mailto",
           "type": "string"
+        },
+        "verify": {
+          "default": true,
+          "title": "Verify",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ]
         }
       },
       "title": "OpenAlexCfg",
@@ -1362,6 +1386,13 @@
           "description": "Initial delay when backing off after 429/5xx responses",
           "minimum": 0,
           "title": "Backoff Initial Seconds",
+          "type": "number"
+        },
+        "retry_after_grace_seconds": {
+          "default": 120.0,
+          "description": "Additional seconds beyond timeout_seconds allowed to honour Retry-After headers",
+          "minimum": 0,
+          "title": "Retry After Grace Seconds",
           "type": "number"
         },
         "resolve_order": {

@@ -1047,14 +1047,11 @@ def _normalise_working_basename(path: Path) -> Path:
         name = name[1:]
     if name.endswith(".tmp"):
         name = name[:-4]
-    final_path = path.with_name(name)
-    while final_path.suffix:
-        final_path = final_path.with_suffix("")
-    return final_path
+    return path.with_name(name)
 
 
 def _resolve_table_name(
-    options: DocumentPipelineOptions, working_output: Path, date_tag: str
+    options: DocumentPipelineOptions, final_output: Path, date_tag: str
 ) -> str:
     """Derive the logical table name for canonical outputs."""
 
@@ -1064,8 +1061,7 @@ def _resolve_table_name(
         if text:
             return text
 
-    final_path = _normalise_working_basename(working_output)
-    stem = final_path.name
+    stem = final_output.stem
     if date_tag and stem.endswith(f"_{date_tag}"):
         stem = stem[: -len(f"_{date_tag}")]
     if stem.startswith("output."):
@@ -1082,6 +1078,84 @@ def _canonical_dataset_path(
     output_dir_value = getattr(cfg.io, "output_dir", None)
     output_dir = Path(output_dir_value) if output_dir_value else cli_output.parent
     return output_dir / f"output.{table_name}_{date_tag}.csv"
+
+
+def _expand_dataset_path_candidates(
+    table_name: str, date_tag: str, cli_output: Path
+) -> list[Path]:
+    """Return additional filesystem paths that may contain the dataset.
+
+    Historically the document pipeline always produced files using the
+    ``output.<table>_<date>.csv`` naming scheme.  Recent configuration options
+    allow callers to omit date stamps or the ``output.`` prefix altogether when
+    integrating with legacy tooling.  The orchestrator still relies on the
+    working artefact name (``.output.<table>_<date>.csv.tmp``), so we probe a
+    selection of deterministic alternatives when the canonical destination is
+    missing.
+    """
+
+    suffix = cli_output.suffix or ".csv"
+    canonical_stem = cli_output.with_suffix("").name
+    base_names: set[str] = {canonical_stem, table_name}
+    prefix = "output."
+    if not canonical_stem.startswith(prefix):
+        base_names.add(f"{prefix}{table_name}")
+    else:
+        base_names.add(canonical_stem[len(prefix) :] or canonical_stem)
+
+    if date_tag:
+        token = f"_{date_tag}"
+        base_names.update({f"{table_name}{token}", f"{prefix}{table_name}{token}"})
+        if canonical_stem.endswith(token):
+            trimmed = canonical_stem[: -len(token)]
+            if trimmed:
+                base_names.add(trimmed)
+                if trimmed.startswith(prefix):
+                    base_names.add(trimmed[len(prefix) :] or trimmed)
+
+    candidates: list[Path] = []
+    seen: set[Path] = set()
+    for name in base_names:
+        if not name:
+            continue
+        if name.endswith(suffix):
+            candidate = cli_output.with_name(name)
+        else:
+            candidate = cli_output.with_name(f"{name}{suffix}")
+        resolved = _safe_resolve(candidate)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        candidates.append(candidate)
+    return candidates
+
+
+def _candidate_dataset_paths(
+    canonical_path: Path, cli_output: Path, table_name: str, date_tag: str
+) -> list[Path]:
+    """Return ordered dataset paths to probe for the working artefact copy."""
+
+    paths: list[Path] = [canonical_path, cli_output]
+    paths.extend(_expand_dataset_path_candidates(table_name, date_tag, cli_output))
+
+    deduplicated: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        resolved = _safe_resolve(path)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        deduplicated.append(path)
+    return deduplicated
+
+
+def _safe_resolve(path: Path) -> Path:
+    """Best-effort ``Path.resolve`` handling ``OSError`` gracefully."""
+
+    try:
+        return path.resolve()
+    except OSError:  # pragma: no cover - defensive guard
+        return path
 
 
 def run_document_service(
@@ -1105,9 +1179,16 @@ def run_document_service(
     cfg = config.model_copy(deep=True)
     _update_document_config_from_options(cfg, options)
 
+    io_cfg = getattr(cfg.local, "io", None)
+    if options.date_prefix and io_cfg is not None:
+        try:
+            io_cfg.default_date_prefix = options.date_prefix
+        except AttributeError:  # pragma: no cover - defensive guard
+            pass
     date_tag = _resolve_effective_date(options, cfg)
-    table_name = _resolve_table_name(options, working_output, date_tag)
-    cli_output = working_output.parent / f"{table_name}.csv"
+    final_output = _normalise_working_basename(working_output)
+    table_name = _resolve_table_name(options, final_output, date_tag)
+    cli_output = final_output
 
     args = argparse.Namespace(
         input_csv=Path(options.input_csv),
@@ -1126,11 +1207,12 @@ def run_document_service(
         fallback_doi_col_doi=options.fallback_doi_col_doi,
         mode=options.mode,
         command=options.mode,
+        date=options.date_prefix,
     )
     args.rerun_postprocess = options.rerun_postprocess
-    setattr(args, "date", date_tag)
-    setattr(args, "date_prefix", date_tag)
-    setattr(args, "_standard_date_tag", date_tag)
+    args.date = date_tag
+    args.date_prefix = date_tag
+    args._standard_date_tag = date_tag
 
     mode_handlers = _resolve_mode_handlers(handlers)
     handler = mode_handlers.get(options.mode)
@@ -1144,21 +1226,38 @@ def run_document_service(
 
     if exit_code == 0 and not working_output.exists():
         canonical_path = _canonical_dataset_path(cfg, table_name, date_tag, cli_output)
-        if canonical_path.exists():
+        all_candidates = _candidate_dataset_paths(
+            canonical_path, cli_output, table_name, date_tag
+        )
+        candidate_paths = [path for path in all_candidates if path.exists()]
+
+        working_resolved = _safe_resolve(working_output)
+
+        copy_error: OSError | None = None
+        for candidate in candidate_paths:
             working_output.parent.mkdir(parents=True, exist_ok=True)
             try:
-                if canonical_path.resolve() == working_output.resolve():
-                    pass
+                if _safe_resolve(candidate) == working_resolved:
+                    if not working_output.exists():
+                        shutil.copy2(candidate, working_output)
                 else:
-                    shutil.copy2(canonical_path, working_output)
+                    shutil.copy2(candidate, working_output)
             except OSError as exc:  # pragma: no cover - filesystem failure guard
                 logger.error(
                     "document_output_copy_failed",
                     expected=str(working_output),
                     canonical=str(canonical_path),
+                    fallback=str(cli_output),
+                    source=str(candidate),
                     error=str(exc),
                     exc_info=exc,
                 )
+                copy_error = exc
+                continue
+            else:
+                break
+        else:
+            if copy_error is not None:
                 return PipelineRunResult(
                     exit_code=1,
                     output_path=working_output,
@@ -1166,11 +1265,12 @@ def run_document_service(
                     reason="output_copy_failed",
                     written=False,
                 )
-        else:
             logger.error(
                 "document_output_missing",
                 expected=str(working_output),
                 canonical=str(canonical_path),
+                fallback=str(cli_output),
+                candidates=[str(path) for path in all_candidates],
             )
             return PipelineRunResult(
                 exit_code=1,

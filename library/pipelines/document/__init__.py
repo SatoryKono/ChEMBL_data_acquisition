@@ -9,8 +9,7 @@ from typing import Literal
 from library.config import Config
 from library.pipelines.common import PipelineRunResult
 
-from . import pipeline, postprocessing, type_classifier, type_terms
-from .service import run_document_service
+from . import pipeline, postprocessing, service as document_service, type_classifier, type_terms
 from .chembl_document import get_documents
 
 
@@ -30,6 +29,7 @@ class DocumentPipelineOptions:
     offset: int = 0
     force: bool = False
     skip_existing: bool = False
+    date_prefix: str | None = None
     fallback_doi_enabled: bool = False
     fallback_doi_path: Path | None = None
     fallback_doi_overwrite: bool = False
@@ -44,7 +44,7 @@ class DocumentPipelineOptions:
 def run_pipeline(config: Config, options: DocumentPipelineOptions) -> PipelineRunResult:
     """Run the document pipeline using programmatic options."""
 
-    return run_document_service(config, options)
+    return document_service.run_document_service(config, options)
 
 
 __all__ = [

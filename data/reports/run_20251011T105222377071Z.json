@@ -1,0 +1,164 @@
+{
+  "run": {
+    "started_at": "2025-10-11T10:52:22.377071+00:00",
+    "completed_at": "2025-10-11T10:52:33.204096+00:00",
+    "duration_sec": 10.82702,
+    "exit_code": 1,
+    "status": "failed",
+    "date_prefix": "20240101",
+    "base_path": "E:\\github\\ChEMBL_data_acquisition6\\data",
+    "input_dir": "E:\\github\\ChEMBL_data_acquisition6\\data\\input",
+    "output_dir": "E:\\github\\ChEMBL_data_acquisition6\\data\\output",
+    "config_path": "E:\\github\\ChEMBL_data_acquisition6\\config\\config.yaml",
+    "log_level": "INFO",
+    "limit": 1,
+    "force": false,
+    "skip_existing": false,
+    "dry_run": false,
+    "run_id": "b6255217bafcc845d90a3db05b7b6d03"
+  },
+  "steps": [
+    {
+      "name": "document",
+      "status": "success",
+      "exit_code": 0,
+      "executed": true,
+      "reason": null,
+      "started_at": "2025-10-11T10:52:22.384765+00:00",
+      "completed_at": "2025-10-11T10:52:28.186818+00:00",
+      "duration_sec": 5.802055,
+      "output": {
+        "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.documents_20240101.csv",
+        "exists": true,
+        "size_bytes": 4808,
+        "checksum_sha256": "e205944554e30e36767eda3273452d4da36d506e27939129177061f8c3716dc3",
+        "meta_path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.documents_20240101.csv.meta.yaml",
+        "meta_sha256": "3e52b7b845b87282e131cb3e0f18611c8cfb6d09ffb56559f6584d08e7e536fe"
+      },
+      "sidecars": [
+        {
+          "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.documents_20240101.csv.meta.yaml",
+          "exists": true,
+          "size_bytes": 3482,
+          "checksum_sha256": "3e52b7b845b87282e131cb3e0f18611c8cfb6d09ffb56559f6584d08e7e536fe"
+        },
+        {
+          "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.documents_20240101.csv.meta.yaml.lock",
+          "exists": true,
+          "size_bytes": 1,
+          "checksum_sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+        },
+        {
+          "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.documents_20240101_data_correlation_report_table.csv",
+          "exists": true,
+          "size_bytes": 809,
+          "checksum_sha256": "376d2cc31406b754f3bd212b95bed3e5cbdd7fff85b99cd1275a7832ac8eaade"
+        },
+        {
+          "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.documents_20240101_data_correlation_report_table.csv.meta.yaml",
+          "exists": true,
+          "size_bytes": 1357,
+          "checksum_sha256": "4f342abbac64fc292ca4884da8abdc9ae26eb0479236308fa2ec45af2d2d5220"
+        },
+        {
+          "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.documents_20240101_data_correlation_report_table.csv.meta.yaml.lock",
+          "exists": true,
+          "size_bytes": 1,
+          "checksum_sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+        },
+        {
+          "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.documents_20240101_quality_report_table.csv",
+          "exists": true,
+          "size_bytes": 7798,
+          "checksum_sha256": "f0070c5dcf60d82b364659f0b17809fc2f0c555b3fcaa8db489010a7abf2e2e5"
+        },
+        {
+          "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.documents_20240101_quality_report_table.csv.meta.yaml",
+          "exists": true,
+          "size_bytes": 1469,
+          "checksum_sha256": "6eaba0fc85ffa187b8b61b124bb39e4c9b3e5a8eab50ad9f68528e38e441ce58"
+        },
+        {
+          "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.documents_20240101_quality_report_table.csv.meta.yaml.lock",
+          "exists": true,
+          "size_bytes": 1,
+          "checksum_sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+        }
+      ],
+      "stats": {
+        "rows_total": 0,
+        "rows_kept": 0,
+        "rows_dropped": 0,
+        "output_sha256": "e205944554e30e36767eda3273452d4da36d506e27939129177061f8c3716dc3"
+      }
+    },
+    {
+      "name": "target",
+      "status": "failed",
+      "exit_code": 1,
+      "executed": true,
+      "reason": "pipeline_failed",
+      "started_at": "2025-10-11T10:52:28.253798+00:00",
+      "completed_at": "2025-10-11T10:52:33.199970+00:00",
+      "duration_sec": 4.946174,
+      "output": {
+        "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.targets_20240101.csv",
+        "exists": false,
+        "size_bytes": null,
+        "checksum_sha256": null
+      },
+      "sidecars": []
+    },
+    {
+      "name": "assay",
+      "status": "blocked",
+      "exit_code": null,
+      "executed": false,
+      "reason": "dependency_failed",
+      "started_at": null,
+      "completed_at": null,
+      "duration_sec": null,
+      "output": {
+        "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.assays_20240101.csv",
+        "exists": false,
+        "size_bytes": null,
+        "checksum_sha256": null
+      },
+      "sidecars": []
+    },
+    {
+      "name": "testitem",
+      "status": "blocked",
+      "exit_code": null,
+      "executed": false,
+      "reason": "dependency_failed",
+      "started_at": null,
+      "completed_at": null,
+      "duration_sec": null,
+      "output": {
+        "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.testitems_20240101.csv",
+        "exists": false,
+        "size_bytes": null,
+        "checksum_sha256": null
+      },
+      "sidecars": []
+    },
+    {
+      "name": "activity",
+      "status": "blocked",
+      "exit_code": null,
+      "executed": false,
+      "reason": "dependency_failed",
+      "started_at": null,
+      "completed_at": null,
+      "duration_sec": null,
+      "output": {
+        "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.activities_20240101.csv",
+        "exists": false,
+        "size_bytes": null,
+        "checksum_sha256": null
+      },
+      "sidecars": []
+    }
+  ]
+}

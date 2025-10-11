@@ -84,6 +84,8 @@ def test_build_target_options__forwards_skip_existing(tmp_path: Path) -> None:
     )
     assert options.skip_existing is True
     assert options.force is cfg.force
+    assert options.date == cfg.date_prefix
+    assert options.output_stem == cfg.output_stems.get("target")
 
 
 @pytest.mark.unit
@@ -438,6 +440,88 @@ def test_prepare_config__verbose_overrides_level(tmp_path: Path) -> None:
 
     cfg = get_data._prepare_config(args)
     assert cfg.log_level == "DEBUG"
+
+
+@pytest.mark.unit
+def test_prepare_config__csv_override_output_path(tmp_path: Path) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
+
+    args = argparse.Namespace(
+        base_path=base_path,
+        input_dir=Path("input"),
+        output_dir=Path("output"),
+        config=config_path,
+        date_prefix="20251011",
+        log_level="INFO",
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        verbose=False,
+        rerun_postprocess=False,
+        override_input=[],
+        override_output_stem=["target=output.targets_20240101.csv"],
+        override_subcommand=[],
+        pipeline_registry=None,
+    )
+
+    steps = get_data._resolve_pipeline_steps(args)
+    cfg = get_data._prepare_config(args, steps)
+
+    expected = (output_dir / "output.targets_20240101.csv").resolve()
+    assert cfg.output_path("target") == expected
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "override, expected_name",
+    [
+        (".output.assay", "output.assay_20251011.csv"),
+        ("output.assay", "output.assay_20251011.csv"),
+        ("output..output.assay_20240101.csv", "output.assay_20240101.csv"),
+    ],
+)
+def test_prepare_config__normalises_override_output_stems(
+    tmp_path: Path, override: str, expected_name: str
+) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
+
+    args = argparse.Namespace(
+        base_path=base_path,
+        input_dir=Path("input"),
+        output_dir=Path("output"),
+        config=config_path,
+        date_prefix="20251011",
+        log_level="INFO",
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        verbose=False,
+        rerun_postprocess=False,
+        override_input=[],
+        override_output_stem=[f"assay={override}"],
+        override_subcommand=[],
+        pipeline_registry=None,
+    )
+
+    steps = get_data._resolve_pipeline_steps(args)
+    cfg = get_data._prepare_config(args, steps)
+
+    expected = (output_dir / expected_name).resolve()
+    assert cfg.output_path("assay") == expected
 
 
 @pytest.mark.unit
@@ -1065,3 +1149,49 @@ def test_run_postprocess_hook__missing_input(
             },
         )
     ]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "output.targets_20240101_failure_cases.csv",
+        "output.targets_20240101_chembl.csv",
+        "output.targets_20240101_uniprot.csv",
+        "output.documents_20240101_pubmed.csv",
+        "output.targets_20240101_normalized.csv",
+        "output.targets_raw.csv",
+        "output.targets.raw.parquet",
+        "output.targets_20240101.quality.json",
+        "output.targets_20240101.postprocess.report.json",
+        "output_postprocessed.targets.csv",
+    ],
+)
+def test_is_diagnostic_sidecar__legacy_suffixes(filename: str) -> None:
+    assert get_data._is_diagnostic_sidecar(Path(filename)) is True
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "output.targets_20240101.csv_chembl_20240101.csv",
+        "output.targets_20240101.csv_chembl_20240101_data_correlation_report_table.csv",
+        "output.targets_20240101.csv_chembl_20240101_quality_report_table.csv",
+    ],
+)
+def test_is_diagnostic_sidecar__intermediate_standard_outputs(filename: str) -> None:
+    assert get_data._is_diagnostic_sidecar(Path(filename)) is True
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "output.targets_20240101.csv",
+        "output.targets_20240101_quality_report_table.csv",
+        "output.targets_20240101_data_correlation_report_table.csv",
+    ],
+)
+def test_is_diagnostic_sidecar__canonical_outputs(filename: str) -> None:
+    assert get_data._is_diagnostic_sidecar(Path(filename)) is False

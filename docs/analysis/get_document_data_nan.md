@@ -1,0 +1,122 @@
+# Причины пустых колонок внешних источников в `get_document_data`
+
+## Краткое резюме
+
+* HTTP-клиенты OpenAlex и CrossRef действительно выполняют запросы, но в
+  контейнере тестового стенда TLS-проверка завершает каждую попытку ошибкой
+  `SSLCertVerificationError: Missing Authority Key Identifier`. В результате
+  `fetch_openalex`/`fetch_crossref` возвращают `None` и строку ошибки, а
+  конвейер заполняет поля OpenAlex/CrossRef пустыми значениями с текстом
+  ошибки в `*.Error`.【F:library/clients/openalex.py†L18-L38】【F:library/clients/crossref.py†L18-L38】【8665de†L1-L10】【f392a1†L1-L8】
+* Даже при успешном ответе обёртки нормализации выставляют пустые строки для
+  отсутствующих значений, поэтому после записи CSV (`na_rep=""`) и повторного
+  чтения через Pandas без `keep_default_na=False` такие ячейки видны как `NaN`.
+* Post-processing выгрузки удаляет диагностические колонки (`OpenAlex.Error`,
+  `crossref.Error`, `scholar.Error` и т.д.), что затрудняет выявление сетевых
+  проблем в финальной таблице без анализа логов или промежуточных данных.【F:library/pipelines/document/postprocessing.py†L38-L75】
+
+## Почему HTTP-запросы завершаются ошибкой
+
+1. **TLS цепочка недоступна внутри окружения.**
+
+   При создании сессии `session_with_retry` не выполняет никакой специальной
+   настройки верификации сертификатов, полагаясь на системное хранилище
+   `certifi`. В контейнере тестового полигона отсутствует необходимый корневой
+   сертификат, поэтому каждая попытка соединения с `api.openalex.org` и
+   `api.crossref.org` завершается исключением
+   `SSLCertVerificationError: Missing Authority Key Identifier`. `_do_request`
+   перехватывает исключение, исчерпывает все ретраи и возвращает текст ошибки,
+   а обёртки OpenAlex/CrossRef уже перекладывают его в поле `*.Error` и
+   оставляют остальные атрибуты пустыми.【F:library/clients/pubmed.py†L210-L269】【8665de†L1-L10】【f392a1†L1-L8】
+
+2. **Ошибка маскируется пост-обработкой.**
+
+   После слияния данных `DocumentPipeline` включает `OpenAlex.Error` и
+   `crossref.Error` в запись, но стадия `document/postprocessing` удаляет эти
+   колонки (`STAGE_REMOVED_COLUMNS`). В финальном CSV остаются только пустые
+   значения, а текст ошибки можно увидеть лишь в промежуточном фрейме или в
+   логах запуска.【F:library/pipelines/document/service.py†L692-L829】【F:library/pipelines/document/postprocessing.py†L38-L75】
+
+## Где именно «пропадает» информация
+
+1. **Получение и нормализация OpenAlex / CrossRef.**
+
+   Внутри конвейера `DocumentPipeline.fetch_pubmed_records` результаты
+   внешних запросов объединяются с PubMed и Semantic Scholar записями перед
+   возвратом чанка (`merge_metadata(pubmed, semsch, openalex, crossref)`).【F:library/pipelines/document/service.py†L720-L829】
+   
+   Однако сами обёртки нормализации возвращают пустые строки для большинства
+   полей, когда API не прислало значения. Например, `OpenAlex.Genre`,
+   `OpenAlex.MeshQualifiers`, `OpenAlex.Venue` и `OpenAlex.Error` заполняются
+   значением `""`, если ключей нет в ответе или не было ошибок, аналогично для
+   `crossref.Subject/Subtype/Subtitle` и `crossref.Error`. При сетевой ошибке
+   в `*.Error` попадает диагностическое сообщение, а остальные колонки всё
+   равно остаются пустыми.【F:library/integration/openalex_crossref_library.py†L50-L161】
+
+2. **Semantic Scholar.**
+   
+   Клиент Semantic Scholar также проставляет `""` в колонке
+   `scholar.Error`, когда запрос прошёл успешно, и только реальные ошибки
+   приводят к тексту в поле.【F:library/clients/semantic_scholar.py†L60-L80】
+
+3. **Формирование итогового CSV.**
+   
+   Финальная подготовка экспортного кадра вызывает `_prepare_export_frame`,
+   который заново переупорядочивает колонки и заполняет отсутствующие значения
+   пустыми строками (`fill_value=""`).【F:library/cli/commands/get_document_data.py†L320-L352】
+   При записи CSV используется `write_csv_deterministic`, где Pandas получает
+   параметр `na_rep=""` — то есть `NaN` сериализуется как пустая ячейка.【F:library/common/csv_utils.py†L450-L459】
+
+   Если затем читать такой CSV без `na_filter=False`, Pandas обратно
+   интерпретирует пустую ячейку как `NaN`, что и наблюдается в результате.
+
+## Что это означает на практике
+
+* Колонки из OpenAlex/CrossRef/Scholar не «теряются» при объединении — они
+  действительно присутствуют, но содержат пустую строку, когда внешнее API не
+  вернуло полезное значение.
+* `*.Error` остаются пустыми, потому что отсутствие ошибки трактуется как
+  пустое значение, а не как текст «OK».
+* Просмотр результата через `pandas.read_csv` по умолчанию превращает эти пустые
+  строки в `NaN`, создавая впечатление «потерянных данных», хотя в исходном
+  CSV просто нет содержимого.
+
+## Почему это проявляется в `get_data.py`
+
+Комбинированный запуск `get_data.py` использует ровно тот же CSV, который
+формирует документный конвейер: после постобработки к результату снова
+добавляются «внешние» колонки, и кадр передаётся в `_finalise_export` без
+дополнительных преобразований.【F:library/cli/commands/get_document_data.py†L1811-L1855】
+`_prepare_export_frame` принудительно создаёт отсутствующие столбцы как пустые
+строки, а `write_csv_deterministic` сериализует `NaN` как `""`. Поэтому при
+дальнейшем чтении pandas (в том числе в этапах объединения внутри
+`get_data.py`) значения снова становятся `NaN`, если явно не отключить
+распознавание пустых ячеек как пропусков.【F:library/cli/commands/get_document_data.py†L320-L352】【F:library/common/csv_utils.py†L450-L463】
+
+### Минимальный пример с Pandas
+
+```python
+>>> import pandas as pd
+>>> from io import StringIO
+>>> csv = "OpenAlex.Genre,OpenAlex.Error\n,\n"
+>>> pd.read_csv(StringIO(csv))
+   OpenAlex.Genre  OpenAlex.Error
+0            NaN             NaN
+>>> pd.read_csv(StringIO(csv), keep_default_na=False)
+  OpenAlex.Genre OpenAlex.Error
+0
+```
+
+С точки зрения выгрузки `get_document_data` таблица содержит пустые строки.
+`read_csv` без `keep_default_na=False` преобразует их в `NaN`, поэтому при
+первичном анализе кажется, что значения обнулились.
+
+## Рекомендации
+
+1. При анализе выгрузки считывать CSV с `keep_default_na=False` или
+   `na_filter=False`, чтобы отличать истинный `NaN` от «пустая строка».
+2. Если необходимо явно фиксировать отсутствие ошибки, стоит записывать, например,
+   `"OK"` в `OpenAlex.Error`/`scholar.Error` при успешных запросах.
+3. Для полей с часто пустыми значениями (жанр, субтипы) можно добавить
+   дополнительное логирование или отчёт о покрытии, чтобы понимать, какая доля
+   записей действительно обогащена.

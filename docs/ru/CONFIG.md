@@ -150,8 +150,8 @@ system:
 
 | Блок | Обязательные поля | Примечание |
 |------|--------------------|------------|
-| `sources.openalex` | `mailto` (**Да**) | Требуется валидный контакт. |
-| `sources.crossref` | `mailto` (**Да**) | CrossRef требует e-mail. |
+| `sources.openalex` | `mailto` (**Да**) | Требуется валидный контакт; опция `verify` отключает проверку сертификата или указывает путь к CA. |
+| `sources.crossref` | `mailto` (**Да**) | CrossRef требует e-mail; при проблемах TLS используйте `verify=false` либо путь к сертификату. |
 | `sources.uniprot.api` | нет | Параметры REST API UniProt. |
 | `sources.uniprot.mapping` | нет | Настройки ID Mapping (poll interval, timeout). |
 | `sources.iuphar` | нет | Базовый URL и лимиты Guide to Pharmacology. |

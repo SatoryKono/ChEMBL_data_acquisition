@@ -22,7 +22,8 @@ $(PYTHON_BIN): requirements.txt pyproject.toml
 	fi
 	$(PYTHON) -m venv $(VENV)
 	$(PIP) install --upgrade pip
-	$(PIP) install '.[dev]'
+	$(PIP) install -r requirements-lock.txt
+	$(PIP) install --no-deps -e .
 
 lint: $(PYTHON_BIN)
 	$(VENV)/bin/ruff check .
