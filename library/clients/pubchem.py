@@ -1033,15 +1033,8 @@ def _store_cache_miss(
         cache = _ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
 
         if service_unavailable_outcome:
-            cache_details = details_data.copy()
-            cache_details.setdefault("cache", True)
-            cache[cache_key] = _CacheEntry(
-                payload=None,
-                outcome=outcome,
-                details=cache_details,
-            )
-            cached = True
-            log_details = cache_details.copy()
+            cache.pop(cache_key, None)
+            log_details = details_data.copy()
         elif outcome == "timeout":
             base_backoff = (
                 cfg.backoff_initial_seconds
