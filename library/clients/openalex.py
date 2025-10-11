@@ -34,7 +34,6 @@ def fetch_openalex(
     url = f"{base}/works/pmid:{pmid}?mailto={quote(cfg.mailto)}"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
 
-    logger.debug("request_start", extra={"stage": "request_start", "url": url})
     data, error = _do_request(
         session,
         url,
