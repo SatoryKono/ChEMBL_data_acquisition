@@ -939,6 +939,181 @@ def test_run__delegates_to_handler(
     assert exit_code == 4
 
 
+@pytest.mark.unit
+def test_run_all__disables_standard_outputs_for_chembl(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+    final_out = tmp_path / "output.targets.csv"
+
+    captured: dict[str, object] = {}
+
+    def _fake_fetch_chembl(
+        cfg_obj: Config,
+        input_path: Path,
+        final_path: Path,
+        **kwargs: object,
+    ) -> pd.DataFrame:
+        captured["emit_standard_outputs"] = kwargs["emit_standard_outputs"]
+        return pd.DataFrame({"target_chembl_id": ["CHEMBL1"]})
+
+    def _fake_fetch_uniprot(
+        cfg_obj: Config,
+        chembl_df: pd.DataFrame,
+        output_path: Path,
+    ) -> pd.DataFrame:
+        return chembl_df.assign(uniprot_id=["P12345"])
+
+    def _fake_fetch_iuphar(
+        cfg_obj: Config,
+        chembl_df: pd.DataFrame,
+        uniprot_df: pd.DataFrame,
+        output_path: Path,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        return uniprot_df, pd.DataFrame()
+
+    def _fake_validate_and_write(
+        merged: pd.DataFrame,
+        destination: Path,
+        cfg_obj: Config,
+        **_: object,
+    ) -> int:
+        destination.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(get_target_data, "fetch_chembl", _fake_fetch_chembl)
+    monkeypatch.setattr(get_target_data, "fetch_uniprot", _fake_fetch_uniprot)
+    monkeypatch.setattr(get_target_data, "fetch_iuphar", _fake_fetch_iuphar)
+    monkeypatch.setattr(get_target_data, "merge_results", lambda a, *_: a)
+    monkeypatch.setattr(get_target_data, "validate_and_write", _fake_validate_and_write)
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=final_out,
+        raw_out=None,
+        raw_format="csv",
+        no_reindex_raw=False,
+        disable_gtop=False,
+        emit_legacy_artifacts=False,
+        chembl_out=None,
+        uniprot_out=None,
+        iuphar_out=None,
+        id_cols=None,
+        date=None,
+        _auto_output_stem=None,
+    )
+
+    exit_code = get_target_data.run_all(cfg, args)
+
+    assert exit_code == 0
+    assert captured.get("emit_standard_outputs") is False
+    assert final_out.exists()
+
+
+@pytest.mark.unit
+def test_run_all__cleans_up_default_intermediate_outputs(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+    final_out = tmp_path / "output.targets.csv"
+
+    created_paths: dict[str, Path] = {}
+
+    def _fake_fetch_chembl(
+        cfg_obj: Config,
+        input_path: Path,
+        final_path: Path,
+        **kwargs: object,
+    ) -> pd.DataFrame:
+        final_path.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+        created_paths["chembl"] = final_path
+        return pd.DataFrame({"target_chembl_id": ["CHEMBL1"]})
+
+    def _fake_fetch_uniprot(
+        cfg_obj: Config,
+        chembl_df: pd.DataFrame,
+        output_path: Path,
+    ) -> pd.DataFrame:
+        output_path.write_text(
+            "target_chembl_id,uniprot_id\nCHEMBL1,P12345\n",
+            encoding="utf-8",
+        )
+        created_paths["uniprot"] = output_path
+        return chembl_df.assign(uniprot_id=["P12345"])
+
+    def _fake_fetch_iuphar(
+        cfg_obj: Config,
+        chembl_df: pd.DataFrame,
+        uniprot_df: pd.DataFrame,
+        output_path: Path,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        output_path.write_text(
+            "target_chembl_id,iuphar_id\nCHEMBL1,GTOP\n",
+            encoding="utf-8",
+        )
+        created_paths["iuphar"] = output_path
+        return uniprot_df, pd.DataFrame({"target_chembl_id": ["CHEMBL1"]})
+
+    def _fake_merge_results(
+        combined: pd.DataFrame, iuphar_df: pd.DataFrame, cfg_obj: Config
+    ) -> pd.DataFrame:
+        return combined.assign(iuphar_id=["GTOP"])
+
+    def _fake_validate_and_write(
+        merged: pd.DataFrame,
+        destination: Path,
+        cfg_obj: Config,
+        **_: object,
+    ) -> int:
+        destination.write_text(
+            "target_chembl_id,uniprot_id,iuphar_id\nCHEMBL1,P12345,GTOP\n",
+            encoding="utf-8",
+        )
+        return 0
+
+    monkeypatch.setattr(get_target_data, "fetch_chembl", _fake_fetch_chembl)
+    monkeypatch.setattr(get_target_data, "fetch_uniprot", _fake_fetch_uniprot)
+    monkeypatch.setattr(get_target_data, "fetch_iuphar", _fake_fetch_iuphar)
+    monkeypatch.setattr(get_target_data, "merge_results", _fake_merge_results)
+    monkeypatch.setattr(get_target_data, "validate_and_write", _fake_validate_and_write)
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=final_out,
+        raw_out=None,
+        raw_format="csv",
+        no_reindex_raw=False,
+        disable_gtop=False,
+        emit_legacy_artifacts=False,
+        chembl_out=None,
+        uniprot_out=None,
+        iuphar_out=None,
+        id_cols=None,
+        date=None,
+        _auto_output_stem=None,
+    )
+
+    exit_code = get_target_data.run_all(cfg, args)
+
+    chembl_path = final_out.with_name(final_out.stem + "_chembl.csv")
+    uniprot_path = final_out.with_name(final_out.stem + "_uniprot.csv")
+    iuphar_path = final_out.with_name(final_out.stem + "_iuphar.csv")
+
+    assert exit_code == 0
+    assert final_out.exists()
+    assert created_paths["chembl"] == chembl_path
+    assert created_paths["uniprot"] == uniprot_path
+    assert created_paths["iuphar"] == iuphar_path
+    assert not chembl_path.exists()
+    assert not uniprot_path.exists()
+    assert not iuphar_path.exists()
+
 def test_run_target_postprocess_if_requested__disabled_flag_logs_skip(
     cfg: Config,
     tmp_path: Path,
