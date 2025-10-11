@@ -115,7 +115,7 @@ def test_finalize_output__normalises_hidden_output_path(
 
     assert exit_code == 0
     assert artifacts is not None
-    assert artifacts.dataset.name == "output.testitems_20240101.csv"
+    assert artifacts.dataset.name == "output.testitem_20240101.csv"
     assert artifacts.dataset.parent == working_output.parent
     assert artifacts.dataset.exists()
     assert not working_output.exists()

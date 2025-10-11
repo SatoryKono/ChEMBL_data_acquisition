@@ -73,6 +73,11 @@ _FETCH_ERROR_SAMPLE_SIZE = 10
 _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
 _PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
 
+# Canonical dataset stem used for standard outputs.
+_DEFAULT_OUTPUT_TABLE = "testitem"
+
+_TABLE_NAME_ALIASES: dict[str, str] = {"testitems": _DEFAULT_OUTPUT_TABLE}
+
 _PUBCHEM_OPTIONAL_COLUMNS = frozenset(
     {
         "pubchem_canonical_smiles",
@@ -1099,21 +1104,10 @@ def finalize_output(
     if exit_code != 0:
         return exit_code, None
 
-    def _resolve_table_name_and_tag(path: Path) -> tuple[str, str]:
-        stem = path.stem
-        remainder = stem.split("output.", 1)[-1] if stem.startswith("output.") else stem
-        candidate_table, sep, candidate_tag = remainder.rpartition("_")
-
-        def _normalise_table_name(value: str) -> str:
-            return {"testitems": "testitem"}.get(value, value)
-
-        if sep and len(candidate_tag) == 8 and candidate_tag.isdigit():
-            table_name_candidate = candidate_table or remainder
-            return _normalise_table_name(table_name_candidate or "testitem"), candidate_tag
-        table_name = _normalise_table_name(remainder or "testitem")
-        return (table_name, datetime.now(UTC).strftime("%Y%m%d"))
-
-    table_name, date_tag = _resolve_table_name_and_tag(output)
+    raw_table, date_tag = io.derive_output_labels(
+        output, default_table=_DEFAULT_OUTPUT_TABLE
+    )
+    table_name = _TABLE_NAME_ALIASES.get(raw_table, raw_table)
 
     dataset_frame: pd.DataFrame
     if validated_chunks_list:
