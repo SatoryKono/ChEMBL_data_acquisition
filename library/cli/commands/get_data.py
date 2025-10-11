@@ -233,6 +233,11 @@ class _PostprocessHandlers:
     schema: Any
 
 
+_POSTPROCESS_TABLE_ALIASES: dict[str, str] = {
+    "activity": "activities",
+}
+
+
 _POSTPROCESS_HANDLERS: dict[str, _PostprocessHandlers] = {
     "activity": _PostprocessHandlers(
         runner=run_activity_postprocess,
@@ -1393,11 +1398,14 @@ def _resolve_postprocess_table(step: PipelineStep, final_output: Path) -> str | 
     """Return the postprocess table identifier for ``step`` if supported."""
 
     table = getattr(step, "output_stem", "")
-    if not table or table not in POSTPROCESS_SUPPORTED_TABLES:
+    if not table:
+        return None
+    canonical = _POSTPROCESS_TABLE_ALIASES.get(table, table)
+    if canonical not in POSTPROCESS_SUPPORTED_TABLES:
         return None
     if final_output.suffix.lower() != ".csv":
         return None
-    return str(table)
+    return str(canonical)
 
 
 def _run_postprocess_hook(
