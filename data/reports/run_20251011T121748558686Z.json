@@ -1,8 +1,8 @@
 {
   "run": {
-    "started_at": "2025-10-11T12:18:37.677571+00:00",
-    "completed_at": "2025-10-11T12:19:03.626309+00:00",
-    "duration_sec": 25.948733,
+    "started_at": "2025-10-11T12:17:48.558686+00:00",
+    "completed_at": "2025-10-11T12:18:15.004912+00:00",
+    "duration_sec": 26.446221,
     "exit_code": 0,
     "status": "success",
     "date_prefix": "20240101",
@@ -24,9 +24,9 @@
       "exit_code": 0,
       "executed": true,
       "reason": null,
-      "started_at": "2025-10-11T12:18:37.687367+00:00",
-      "completed_at": "2025-10-11T12:18:42.935612+00:00",
-      "duration_sec": 5.248244,
+      "started_at": "2025-10-11T12:17:48.601412+00:00",
+      "completed_at": "2025-10-11T12:17:54.285036+00:00",
+      "duration_sec": 5.683625,
       "output": {
         "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.documents_20240101.csv",
         "exists": true,
@@ -54,9 +54,9 @@
       "exit_code": 0,
       "executed": true,
       "reason": null,
-      "started_at": "2025-10-11T12:18:42.941315+00:00",
-      "completed_at": "2025-10-11T12:18:58.281873+00:00",
-      "duration_sec": 15.340562,
+      "started_at": "2025-10-11T12:17:54.295283+00:00",
+      "completed_at": "2025-10-11T12:18:09.891583+00:00",
+      "duration_sec": 15.596303,
       "output": {
         "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.targets_20240101.csv",
         "exists": true,
@@ -74,7 +74,7 @@
           "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.targets_20240101_chembl.csv.meta.yaml",
           "exists": true,
           "size_bytes": 15097,
-          "checksum_sha256": "f87e93db5e82d7b3ea478c56bfe1296ea308b3a53b5376516b2c3f4568ea139f"
+          "checksum_sha256": "6dd2894d1bc08a311db8762f4139f6d8136c1404cd97d129904ad14f7b07c2bc"
         },
         {
           "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.targets_20240101_chembl.csv.meta.yaml.lock",
@@ -128,7 +128,7 @@
           "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.targets_20240101_uniprot.csv.meta.yaml",
           "exists": true,
           "size_bytes": 14063,
-          "checksum_sha256": "e6e95e89f2b40d86830490283f0f6684269624c7dd5868dad0347d77161942c2"
+          "checksum_sha256": "8ecc07387cdc27d125ccada71d34d438f438ed249b45e585761963a97c43efb4"
         },
         {
           "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.targets_20240101_uniprot.csv.meta.yaml.lock",
@@ -156,9 +156,9 @@
       "exit_code": 0,
       "executed": true,
       "reason": null,
-      "started_at": "2025-10-11T12:18:58.346070+00:00",
-      "completed_at": "2025-10-11T12:18:59.933590+00:00",
-      "duration_sec": 1.58752,
+      "started_at": "2025-10-11T12:18:09.940623+00:00",
+      "completed_at": "2025-10-11T12:18:11.273276+00:00",
+      "duration_sec": 1.332651,
       "output": {
         "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.assays_20240101.csv",
         "exists": true,
@@ -186,9 +186,9 @@
       "exit_code": 0,
       "executed": true,
       "reason": null,
-      "started_at": "2025-10-11T12:18:59.943481+00:00",
-      "completed_at": "2025-10-11T12:19:01.512214+00:00",
-      "duration_sec": 1.568735,
+      "started_at": "2025-10-11T12:18:11.285436+00:00",
+      "completed_at": "2025-10-11T12:18:12.849185+00:00",
+      "duration_sec": 1.56375,
       "output": {
         "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.testitems_20240101.csv",
         "exists": true,
@@ -216,9 +216,9 @@
       "exit_code": 0,
       "executed": true,
       "reason": null,
-      "started_at": "2025-10-11T12:19:01.521205+00:00",
-      "completed_at": "2025-10-11T12:19:03.615966+00:00",
-      "duration_sec": 2.094764,
+      "started_at": "2025-10-11T12:18:12.878254+00:00",
+      "completed_at": "2025-10-11T12:18:14.964041+00:00",
+      "duration_sec": 2.085784,
       "output": {
         "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.activity_20240101.csv",
         "exists": true,
