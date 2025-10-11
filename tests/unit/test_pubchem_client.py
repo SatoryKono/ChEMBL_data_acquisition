@@ -10,6 +10,13 @@ from library.clients import pubchem
 from library.config import PubChemCfg
 
 
+@pytest.fixture(autouse=True)
+def _reset_service_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pubchem, "_SERVICE_OUTAGE_UNTIL", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_OUTAGE_REASON", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_OUTAGE_DETAILS", None)
+
+
 @dataclass
 class _DummyResponse:
     status_code: int
@@ -140,7 +147,6 @@ def test_make_request__caches_server_error_results(
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "server_error"
     assert details == {
-        "cache": True,
         "reason": "server_error",
         "retry_after": pytest.approx(30.0),
         "retry_after_source": "header",
