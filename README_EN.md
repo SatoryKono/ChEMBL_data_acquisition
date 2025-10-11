@@ -170,6 +170,51 @@ Custom file names such as `targets.csv` still trigger this post-processing
 chain, so downstream helpers are generated even when the export deviates from
 the canonical `output.target_<stamp>.csv` pattern.
 
+### Run manifest and metadata artefacts
+
+Every CLI command writes rich metadata alongside the exported CSV and updates a
+JSON manifest under `<base-path>/reports/`. The orchestrator stores
+time-stamped snapshots named `run_<timestamp>.json` and keeps
+`run_manifest.json` as a lightweight alias to the latest execution. Each
+manifest exposes two top-level sections:
+
+- `run` — wall-clock timings, exit code, resolved configuration (base path,
+  input/output directories, config path, log level, force/limit toggles) and an
+  optional `run_id` propagated from the structured logger.【F:library/cli/commands/get_data.py†L1855-L1914】【F:library/cli/commands/get_data.py†L2497-L2524】
+- `steps` — ordered entries for every pipeline stage. During execution the
+  runner records status transitions, exit codes, sidecar artefacts discovered on
+  disk and the per-table statistics returned by
+  `finalise_csv_output`.【F:library/cli/commands/get_data.py†L1815-L1890】【F:library/reporting/run_manifest.py†L27-L117】
+
+Each successful step produces a trio of artefacts stored alongside the CSV:
+
+1. `<name>.meta.yaml` captures provenance (`command`, masked config fragment,
+   pipeline version), resolved inputs and table statistics such as
+   `rows_total`, `rows_kept`, `rows_dropped` and the SHA256 checksum of the
+   output.【F:library/common/metadata_writer.py†L69-L157】
+2. Optional `<name>.quality.json` contains structured QA findings when table
+   profilers are enabled.【F:library/reporting/run_manifest.py†L75-L117】
+3. The manifest entry merges the metadata by adding `output.meta_path`,
+   `output.meta_sha256`, `output.quality_path`, `output.quality_sha256` and a
+   `stats` block so downstream tooling can diff runs without opening the sidecar
+   files.【F:library/reporting/run_manifest.py†L117-L166】
+
+```mermaid
+flowchart TD
+    A[Pipeline step\nCSV export] -->|finalise_csv_output| B[<name>.meta.yaml]
+    A -->|QA hook| C[<name>.quality.json]
+    A -->|hash + stats| D[run_<timestamp>.json]
+    B -->|merge_run_output| D
+    C -->|checksums| D
+    D -->|alias| E[reports/run_manifest.json]
+```
+
+Reviewing a manifest therefore provides a single, deterministic location to
+inspect run-level context and per-step statistics without opening individual
+CSV/metadata files. The alias pointer allows automation to fetch the latest run
+reliably even on filesystems without symlink support (the code falls back to an
+atomic copy when needed).【F:library/cli/commands/get_data.py†L1916-L1958】
+
 #### Reproducing the archived target bundle
 
 Historical examples of the target export bundle now live under
