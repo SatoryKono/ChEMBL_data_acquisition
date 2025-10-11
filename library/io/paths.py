@@ -70,12 +70,24 @@ def default_output_path(
         stripped = stem.lstrip(".")
         stem = stripped or stem
     prefix = "output."
-    if stem.startswith(prefix):
+    if stem.lower().startswith(prefix):
         stripped = stem
         # Avoid generating names like ``output.output.<stem>`` when the
-        # source filename already carries the canonical prefix.
-        while stripped.startswith(prefix) and len(stripped) > len(prefix):
-            stripped = stripped[len(prefix) :]
+        # source filename already carries the canonical prefix. The slicing is
+        # case-preserving to keep any meaningful capitalisation while still
+        # matching against lower-cased prefixes.
+        while stripped.lower().startswith(prefix) and stripped:
+            candidate = stripped[len(prefix) :]
+            # ``output..foo`` style stems introduce a leading ``.`` after the
+            # first iteration. Normalise it here so the next loop iteration can
+            # drop the remaining redundant ``output.`` prefix.
+            candidate = candidate.lstrip(".")
+            if not candidate:
+                # If the filename is literally ``output`` (with or without the
+                # trailing dot), fall back to the previous value to keep the
+                # stem non-empty.
+                break
+            stripped = candidate
         stem = stripped or stem
 
     # Determine the stamp mode
