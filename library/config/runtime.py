@@ -62,19 +62,22 @@ def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
     return session
 
 
-def _session_with_mailto_header(api: ApiCfg, retry: RetryCfg, mailto: str) -> Session:
+def _session_with_mailto_header(
+    api: ApiCfg, retry: RetryCfg, mailto: str, verify: bool | str
+) -> Session:
     session = session_with_retry(api, retry)
     session.headers["mailto"] = mailto
+    session.verify = verify
     return session
 
 
 def openalex_session(api: ApiCfg, retry: RetryCfg, cfg: OpenAlexCfg) -> Session:
     """Return a session configured for OpenAlex requests."""
 
-    return _session_with_mailto_header(api, retry, cfg.mailto)
+    return _session_with_mailto_header(api, retry, cfg.mailto, cfg.verify)
 
 
 def crossref_session(api: ApiCfg, retry: RetryCfg, cfg: CrossRefCfg) -> Session:
     """Return a session configured for CrossRef requests."""
 
-    return _session_with_mailto_header(api, retry, cfg.mailto)
+    return _session_with_mailto_header(api, retry, cfg.mailto, cfg.verify)

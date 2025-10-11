@@ -152,16 +152,19 @@ events while investigating discrepancies.
 | Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --column activity_id --batch-size 10 --workers 4 --dry-run` | Flags: identifier column overrides (`--column activity_id`), per-request limits (`--batch-size`, `--timeout`), range selection (`--limit`, `--offset`) and dry-run validation/workers toggles. |
 | Synthetic activities | `python scripts/get_activities.py --limit 25 --dry-run` | Generates deterministic dummy rows for smoke tests; accepts the same logging flags as other CLI tools. |
 
-Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar
-and table-quality reports under the same directory. The target pipeline also
-emits helper lookups named `organism.output.target_<stamp>.csv`,
-`isoform.output.target_<stamp>.csv`, `names.output.target_<stamp>.csv`, and
-`IUPHAR.output.target_<stamp>.csv` — all detailed in
-[`docs/en/OUTPUT_TARGETS.md`](./docs/en/OUTPUT_TARGETS.md) and
-[`docs/ru/OUTPUT_TARGETS.md`](./docs/ru/OUTPUT_TARGETS.md). The isoform helper
-is produced by `library.postprocessing.target.process_targets`, a direct port of
-the original Power Query workbook that keeps every row byte-identical. Refer to
-the [output reference](./docs/en/OUTPUT.md) for the complete specification.
+Each pipeline now keeps a deterministic CSV together with the
+`<name>_quality_report_table.csv` and
+`<name>_data_correlation_report_table.csv` diagnostics under the same directory.
+Metadata YAML files, JSON quality summaries and failure-case CSVs remain
+available via `--emit-legacy-artifacts`, `--debug` or `--keep-intermediate` when
+investigating issues. The target pipeline also emits helper lookups named
+`organism.output.target_<stamp>.csv`, `isoform.output.target_<stamp>.csv`,
+`names.output.target_<stamp>.csv`, and `IUPHAR.output.target_<stamp>.csv` — all
+detailed in [`docs/en/OUTPUT_TARGETS.md`](./docs/en/OUTPUT_TARGETS.md) and
+[`docs/ru/OUTPUT_TARGETS.md`](./docs/ru/OUTPUT_TARGETS.md). The isoform helper is
+produced by `library.postprocessing.target.process_targets`, a direct port of the
+original Power Query workbook that keeps every row byte-identical. Refer to the
+[output reference](./docs/en/OUTPUT.md) for the complete specification.
 
 Custom file names such as `targets.csv` still trigger this post-processing
 chain, so downstream helpers are generated even when the export deviates from
@@ -185,10 +188,11 @@ recreate the same structure locally:
      --uniprot-data-dir cache/uniprot
    ```
 
-3. Inspect the contents of `output/targets.csv` and its sidecars:
-   `output/targets.csv.meta.yaml`, `output/targets_quality_report_table.csv`,
-   `output/targets_uniprot.csv`, `output/targets_iuphar.csv`, `output/targets_chembl.csv`
-   plus the associated quality reports.
+3. Inspect the contents of `output/targets.csv` together with the
+   `_quality_report_table.csv`/`_data_correlation_report_table.csv` QA reports.
+   Pass `--emit-legacy-artifacts` (or `--debug`/`--keep-intermediate`) to also
+   regenerate the historical metadata YAML, failure cases and auxiliary CSVs for
+   troubleshooting.
 
 All artefacts share the deterministic guarantees described above, so repeating
 the command with the same inputs produces byte-identical files.

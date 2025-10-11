@@ -246,32 +246,36 @@ recreate the same structure locally:
      --uniprot-data-dir cache/uniprot
    ```
 
-3. Inspect the contents of `output/targets.csv` and its sidecars:
-   `output/targets.csv.meta.yaml`, `output/targets_quality_report_table.csv`,
-   `output/targets_uniprot.csv`, `output/targets_iuphar.csv`, `output/targets_chembl.csv`
-   plus the associated quality reports.
+3. Inspect the contents of `output/targets.csv` together with the
+   `_quality_report_table.csv`/`_data_correlation_report_table.csv` QA reports.
+   Add `--emit-legacy-artifacts` (or `--debug`/`--keep-intermediate`) to also
+   regenerate the historical metadata YAML, failure cases and auxiliary CSVs for
+   troubleshooting.
 
 All artefacts share the deterministic guarantees described above, so repeating
 the command with the same inputs produces byte-identical files.
 
 ### Deterministic exports and metadata policy
 
-All pipelines are required to be deterministic. Running the same CLI twice with
-identical inputs and configuration produces byte-identical CSV files and a
-matching `<output>.meta.yaml` sidecar. The metadata document captures the
-columns, Pandas dtypes, git SHA and effective configuration so analysts can
-audit the provenance of every export. The `generated_at` field is derived
-deterministically — `--date` takes precedence, otherwise the normalised CLI
-invocation (including the resolved run identifier) feeds a stable hash — which
-means repeated runs with the same arguments no longer drift. These `.meta.yaml`
-files are mandatory artefacts and must be stored alongside their CSV
-counterparts when publishing results or exchanging data with downstream
-systems.
+All pipelines remain deterministic: running the same CLI twice with identical
+inputs produces byte-identical datasets, quality reports and correlation
+metrics. To minimise disk usage, the default bundle now only retains the CSV and
+its `_quality_report_table.csv`/`_data_correlation_report_table.csv` companions.
+Metadata YAML files, JSON quality summaries and failure-case CSVs are still
+available on demand via `--emit-legacy-artifacts`, `--debug` or
+`--keep-intermediate`. The metadata captures the column schema, hashes, git SHA
+and effective configuration so analysts can audit provenance when diagnostics
+are enabled.
 
-Temporary files created during atomic writes follow the `.<name>.*.tmp`
-pattern and are always removed after a successful run. If a command fails, the
-cleanup logic also deletes partially written CSVs and orphaned metadata to keep
-output directories tidy.
+Upgrading from earlier releases triggers a one-time sweep that deletes legacy
+sidecars (`*.meta.yaml`, `.quality.json`, `*_failure_cases.csv`) before the first
+pipeline run. Re-run `tools/cleanup_legacy_outputs.py` to repeat the cleanup or
+preview the files slated for removal with `--dry-run`.
+
+Temporary files created during atomic writes follow the `.<name>.*.tmp` pattern
+and are always removed after a successful run. If a command fails, the cleanup
+logic also deletes partially written CSVs and orphaned metadata to keep output
+directories tidy.
 
 ## Documentation
 
