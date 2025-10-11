@@ -169,21 +169,32 @@ def add_common_arguments(
     else:
         run_id_default = argparse.SUPPRESS
 
-    parser.add_argument("--log-level", default=log_level, help="Logging level")
-    parser.add_argument(
+    def _add_optional_argument(*option_strings: str, **kwargs: Any) -> None:
+        """Add an optional argument unless it is already registered."""
+
+        optional_strings = [
+            opt for opt in option_strings if isinstance(opt, str) and opt.startswith("-")
+        ]
+        option_actions = getattr(parser, "_option_string_actions", {})
+        if optional_strings and any(opt in option_actions for opt in optional_strings):
+            return
+        parser.add_argument(*option_strings, **kwargs)
+
+    _add_optional_argument("--log-level", default=log_level, help="Logging level")
+    _add_optional_argument(
         "--verbose",
         action="store_true",
         default=False,
         help="Enable debug logging",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--input",
         dest="input_csv",
         type=path_argument,
         default=input_default,
         help="Input CSV file",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--final-out",
         "--out",
         "--output",
@@ -192,36 +203,36 @@ def add_common_arguments(
         default=final_default,
         help="Destination CSV file (default: output.<stem>.csv)",
     )
-    parser.add_argument("--sep", default=sep_default, help="CSV delimiter")
-    parser.add_argument("--encoding", default=enc_default, help="File encoding")
-    parser.add_argument(
+    _add_optional_argument("--sep", default=sep_default, help="CSV delimiter")
+    _add_optional_argument("--encoding", default=enc_default, help="File encoding")
+    _add_optional_argument(
         "--base-path",
         dest="base_path",
         type=path_argument,
         default=base_default,
         help="Base directory for input and output data",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--input-dir",
         dest="input_dir",
         type=path_argument,
         default=input_dir_default,
         help="Directory containing input artefacts",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--output-dir",
         dest="output_dir",
         type=path_argument,
         default=output_dir_default,
         help="Directory receiving generated artefacts",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--date",
         dest="date",
         default=date_default,
         help="Date prefix used when constructing default outputs",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--emit-legacy-artifacts",
         dest="emit_legacy_artifacts",
         action=argparse.BooleanOptionalAction,
@@ -231,31 +242,31 @@ def add_common_arguments(
             " manifest snapshots"
         ),
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--debug",
         action="store_true",
         default=debug_default,
         help="Enable verbose diagnostics and retain intermediate artefacts",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--keep-intermediate",
         action="store_true",
         default=keep_default,
         help="Preserve intermediate and diagnostic artefacts on disk",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--force",
         action="store_true",
         default=force_default,
         help="Overwrite outputs even when they already exist",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--skip-existing",
         action="store_true",
         default=skip_default,
         help="Skip processing if the destination file is present",
     )
-    parser.add_argument(
+    _add_optional_argument(
         "--run-id",
         dest="run_id",
         default=run_id_default,
