@@ -276,11 +276,11 @@ def test_default_output_path__handles_hidden_temp_files(tmp_path: Path) -> None:
     )
 
     output_path = default_output_path(
-        tmp_path / ".output.assays_20240101.csv.tmp",
+        tmp_path / ".output.assay_20240101.csv.tmp",
         cfg,
     )
 
-    assert output_path == tmp_path / "output.assays_20240101.csv"
+    assert output_path == tmp_path / "output.assay_20240101.csv"
 
 
 @pytest.mark.unit
@@ -292,11 +292,11 @@ def test_default_output_path__deduplicates_intermediate_suffix(tmp_path: Path) -
     )
 
     output_path = default_output_path(
-        tmp_path / "output.assays_20240101.csv.tmp",
+        tmp_path / "output.assay_20240101.csv.tmp",
         cfg,
     )
 
-    assert output_path == tmp_path / "output.assays_20240101.csv"
+    assert output_path == tmp_path / "output.assay_20240101.csv"
 
 
 @pytest.mark.unit

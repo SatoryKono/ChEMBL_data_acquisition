@@ -618,7 +618,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     }
     assert "step_exception" in partial_events
     assert (partial_output / f"output.documents_{date_prefix}.csv").exists()
-    activity_sentinel = partial_output / f"output.activities_{date_prefix}.csv.failed"
+    activity_sentinel = partial_output / f"output.activity_{date_prefix}.csv.failed"
     assert activity_sentinel.exists()
 
     missing_base = base_path / "missing"

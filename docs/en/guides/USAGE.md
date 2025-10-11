@@ -238,7 +238,7 @@ Cached replay of the production pipeline is available through
 
 ```
 get-assay-data --input data/input/assay.csv \
-    --final-out output/assays_$(date +%Y%m%d).csv \
+    --final-out output/assay_$(date +%Y%m%d).csv \
     --batch-size 100 --timeout 60 --limit 200
 ```
 

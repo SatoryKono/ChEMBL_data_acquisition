@@ -281,7 +281,7 @@ def test_derive_standard_output_labels__handles_hidden_tmp_suffix() -> None:
         Path(".output.activities_20240101.csv.tmp")
     )
 
-    assert table == "activities"
+    assert table == "activity"
     assert date == "20240101"
 
 
@@ -301,7 +301,7 @@ def test_derive_standard_output_labels__deduplicates_output_prefix_chain() -> No
         Path("output..output.activities_20251011.csv.tmp")
     )
 
-    assert table == "activities"
+    assert table == "activity"
     assert date == "20251011"
 
 

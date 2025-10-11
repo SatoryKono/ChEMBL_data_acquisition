@@ -234,6 +234,11 @@ class _PostprocessHandlers:
 
 
 _POSTPROCESS_HANDLERS: dict[str, _PostprocessHandlers] = {
+    "activity": _PostprocessHandlers(
+        runner=run_activity_postprocess,
+        validator=validate_activities,
+        schema=ACTIVITY_SCHEMA,
+    ),
     "activities": _PostprocessHandlers(
         runner=run_activity_postprocess,
         validator=validate_activities,
