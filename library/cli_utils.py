@@ -1069,6 +1069,14 @@ def run_pipeline(
     if dataset_path is None and csv_path is not None:
         dataset_path = csv_path
 
+    quality_input_path: Path | None
+    if dataset_path is not None:
+        quality_input_path = Path(dataset_path)
+    elif csv_path is not None:
+        quality_input_path = Path(csv_path)
+    else:
+        quality_input_path = None
+
     if legacy_outputs_enabled and csv_path is None:
         use_logger.error(
             "write_fail", error="writer returned None", path=str(output_path)
@@ -1107,14 +1115,12 @@ def run_pipeline(
 
     meta_path: Path | None = None
     extra_metadata: dict[str, object] | None = None
-    if legacy_outputs_enabled and csv_path is not None:
-        extra_metadata = {}
-        if failed_metadata_hooks:
-            extra_metadata["metadata_hook_failures"] = sorted(failed_metadata_hooks)
+    if legacy_outputs_enabled and failed_metadata_hooks:
+        extra_metadata = {"metadata_hook_failures": sorted(failed_metadata_hooks)}
 
-    if emit_legacy_artifacts:
+    if emit_legacy_artifacts and quality_input_path is not None:
         meta_path = write_meta_yaml(
-            csv_path=csv_path,
+            csv_path=quality_input_path,
             command=command_str,
             config=config_snapshot,
             inputs=inputs,
@@ -1124,9 +1130,6 @@ def run_pipeline(
             extra_metadata=extra_metadata or None,
             dictionary_resources=dictionary_resources,
         )
-
-
-
         doc_quality_cfg = getattr(getattr(cfg, "system", None), "doc_quality", None)
         fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
 
