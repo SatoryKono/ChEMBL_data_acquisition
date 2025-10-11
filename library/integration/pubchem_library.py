@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from ..clients.pubchem import (
     Properties,
+    PubChemServiceUnavailable,
     get_all_cid,
     get_cid,
     get_cid_from_inchi,
@@ -61,6 +62,7 @@ class PubChemResolution:
     cid: str | None
     source: str | None
     status: int | None = None
+    temporary_failure: bool = False
 
 
 def resolve_pubchem_record(
@@ -187,7 +189,29 @@ def resolve_pubchem_record(
         handler = handlers.get(stage.lower())
         if handler is None:
             raise ValueError(f"Unknown PubChem resolve order entry: {stage!r}")
-        resolution = handler()
+        try:
+            resolution = handler()
+        except PubChemServiceUnavailable as exc:
+            log_fields: dict[str, object] = {"stage": stage}
+            if exc.outcome:
+                log_fields["outcome"] = exc.outcome
+            if exc.status is not None:
+                log_fields["status"] = exc.status
+            for key, value in exc.details.items():
+                if key == "status":
+                    continue
+                if key not in log_fields:
+                    log_fields[key] = value
+            logger.warning("pubchem_unavailable", **log_fields)
+            resolution = PubChemResolution(
+                cid=None,
+                source=None,
+                status=exc.status,
+                temporary_failure=True,
+            )
+            if resolution_cache is not None and resolution_key is not None:
+                resolution_cache[resolution_key] = resolution
+            return resolution
         if resolution and resolution.cid:
             return _remember(resolution)
 

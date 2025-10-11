@@ -249,6 +249,47 @@ def test_merge_pubchem_properties__retains_partial_values_on_failed_lookup(
 
 
 @pytest.mark.integration
+def test_resolve_pubchem_cid__temporary_failure_does_not_cache(
+    cfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pubchem_cfg = cfg.pubchem
+    from library.integration import pubchem_library
+    row = pd.Series({"molecule_chembl_id": "CHEMBL1"})
+    cid_cache: dict[str, str | None] = {}
+    resolution_cache: dict[str, object] = {}
+
+    class _DummyPubChemLib:
+        def resolve_pubchem_record(self, *args, **kwargs):
+            return pubchem_library.PubChemResolution(
+                cid=None,
+                source=None,
+                status=503,
+                temporary_failure=True,
+            )
+
+    loader_called = False
+
+    def fake_parent_loader(_identifier: str) -> None:
+        nonlocal loader_called
+        loader_called = True
+        return None
+
+    monkeypatch.setattr(pubchem, "_load_pubchem_library", lambda: _DummyPubChemLib())
+
+    result = pubchem.resolve_pubchem_cid(
+        row,
+        cid_cache,
+        pubchem_cfg,
+        parent_loader=fake_parent_loader,
+        resolution_cache=resolution_cache,
+    )
+
+    assert result is None
+    assert cid_cache == {}
+    assert loader_called is False
+
+
+@pytest.mark.integration
 def test_augment_pubchem__initialises_session_and_reuses_cache(
     tmp_path: Path, cfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:
