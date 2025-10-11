@@ -67,6 +67,15 @@ __all__ = [
 DEFAULT_INPUT_NAME = "assay.csv"
 DEFAULT_OUTPUT_STEM = "assays"
 
+# Backwards compatibility shim: older unit tests import the private
+# ``_derive_standard_output_labels`` helper from this module directly.  Preserve
+# that entry point and delegate to the shared implementation while providing the
+# historic default table stem.
+def _derive_standard_output_labels(
+    dataset_csv: Path, *, default_table: str = DEFAULT_OUTPUT_STEM
+) -> tuple[str, str]:
+    return io.derive_output_labels(dataset_csv, default_table=default_table)
+
 # Backwards compatibility: legacy configs referenced the private
 # ``_ASSAY_MAX_IDS_PER_REQUEST`` constant before it was renamed to
 # :data:`MAX_ASSAY_CHUNK_SIZE`.  Re-expose the alias so that pipelines relying on
