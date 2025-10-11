@@ -3755,7 +3755,7 @@ def validate_and_write(
         quality_summary,
         table_name=inferred_table_name,
         date_tag=inferred_date_tag,
-        output_dir=Path(cfg.io.output_dir),
+        output_path=output_path,
     )
     logger.info(
         "standard_outputs_written",

@@ -42,6 +42,7 @@ def save_standard_outputs(
     *,
     key_columns: Sequence[str] | None = None,
     output_dir: Path | str | None = None,
+    output_path: Path | None = None,
 ) -> StandardOutputArtifacts:
     """Persist the canonical dataset together with QC artefacts.
 
@@ -60,9 +61,12 @@ def save_standard_outputs(
     key_columns:
         Optional sequence of columns used to deterministically order
         ``df_main`` before writing.
-    output_dir:
-        Destination directory for generated artefacts. Usually sourced from
-        ``cfg.io.output_dir``.
+    output_path:
+        Destination for the primary dataset. When provided, the artefacts are
+        written next to this path, and the dataset is materialised exactly at
+        ``output_path``. Otherwise, the canonical :data:`OUTPUT_DIR` location is
+        used together with the standard naming convention derived from
+        ``table_name`` and ``date_tag``.
 
     Returns
     -------
@@ -70,18 +74,27 @@ def save_standard_outputs(
         Paths to the dataset, correlation report and quality report.
     """
 
-    if output_dir is None:
-        msg = "output_dir must be provided to save_standard_outputs"
-        raise ValueError(msg)
+    if output_path is not None:
+        dataset_path = Path(output_path)
+        destination_dir = dataset_path.parent
+        if dataset_path.suffix:
+            stem_name = dataset_path.with_suffix("").name
+        else:
+            stem_name = dataset_path.name
+    else:
+        if output_dir is None:
+            msg = "output_dir must be provided to save_standard_outputs"
+            raise ValueError(msg)
+        destination_dir = Path(output_dir)
+        stem_name = f"output.{table_name}_{date_tag}"
+        dataset_path = destination_dir / f"{stem_name}.csv"
 
-    base_dir = Path(output_dir)
+    _ensure_output_directory(destination_dir)
 
-    _ensure_output_directory(base_dir)
-
-    stem = f"output.{table_name}_{date_tag}"
-    dataset_path = base_dir / f"{stem}.csv"
-    correlation_path = base_dir / f"{stem}_data_correlation_report_table.csv"
-    quality_path = base_dir / f"{stem}_quality_report_table.csv"
+    correlation_path = destination_dir / (
+        f"{stem_name}_data_correlation_report_table.csv"
+    )
+    quality_path = destination_dir / f"{stem_name}_quality_report_table.csv"
 
     key_cols = list(key_columns or [])
     if not key_cols and not df_main.empty:
