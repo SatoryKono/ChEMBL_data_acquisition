@@ -283,6 +283,26 @@ def test_make_request__timeout_cache_uses_config_backoff(
     ]
     assert sleep_calls == []
     assert limiter.acquires == 1
+    cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
+    entry = cache.get(pubchem._build_cache_key("GET", url))
+    assert entry is not None
+    assert entry.outcome == "timeout"
+    assert entry.details is not None
+    details = dict(entry.details)
+    timeout_retry_after = details.pop("timeout_retry_after", None)
+    timeout_flag = details.pop("timeout", None)
+    timeout_stored_at = details.pop("timeout_stored_at", None)
+    assert timeout_flag is True
+    assert isinstance(timeout_stored_at, float)
+    assert timeout_retry_after == pytest.approx(cfg.timeout_seconds)
+    assert details == {
+        "reason": "server_error",
+        "status": 503,
+        "retry_after": pytest.approx(cfg.backoff_initial_seconds),
+        "retry_after_source": "backoff",
+        "timeout_reason": "retry_after_exceeds_deadline",
+    }
+
 
     cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
     entry = cache.get(pubchem._build_cache_key("GET", url))
