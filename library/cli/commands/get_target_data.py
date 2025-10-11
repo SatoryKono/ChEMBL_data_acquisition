@@ -2889,6 +2889,7 @@ def fetch_chembl(
     no_reindex_raw: bool = False,
     emit_standard_outputs: bool = True,
     emit_legacy_artifacts: bool = False,
+    cleanup_standard_outputs: bool | None = None,
 ) -> pd.DataFrame:
     """Fetch target information from ChEMBL.
 
@@ -2912,6 +2913,11 @@ def fetch_chembl(
     emit_legacy_artifacts : bool, optional
         Forwarded to :func:`run_pipeline` to request legacy artefacts in
         addition to ``final_out``.
+    cleanup_standard_outputs : bool, optional
+        When ``True`` any canonical artefacts generated next to ``final_out``
+        are removed once the export has been loaded. ``None`` defaults to the
+        inverse of ``emit_standard_outputs`` so that callers requesting the
+        canonical artefacts keep them by default.
 
     Returns
     -------
@@ -2975,7 +2981,12 @@ def fetch_chembl(
         dtype=str,
     )
     logger.info("fetch_chembl_done", rows=len(df), path=str(output_path))
-    if cleanup_standard_outputs:
+    should_cleanup = (
+        cleanup_standard_outputs
+        if cleanup_standard_outputs is not None
+        else not emit_standard_outputs
+    )
+    if should_cleanup:
         _cleanup_standard_output_artifacts(final_out)
     return df
 
@@ -4249,8 +4260,9 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             chunk_size=cfg.target.all.chunk_size,
             offset=cfg.target.all.offset,
             id_cols=key_columns,
-            emit_standard_outputs=False,
+            emit_standard_outputs=True,
             emit_legacy_artifacts=emit_legacy,
+            cleanup_standard_outputs=True,
         )
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
