@@ -7,7 +7,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
@@ -15,6 +15,9 @@ from library.common.csv_utils import write_csv_deterministic
 from library.common.log import logger
 
 from .helpers import normalise_export_basename, normalise_text, read_csv_with_fallbacks
+
+if TYPE_CHECKING:  # pragma: no cover - imported for typing only
+    from library.config import Config
 
 __all__ = ["process_iuphar_targets", "IUPHARPostProcessingError"]
 
@@ -259,17 +262,66 @@ def _prepare_output(df: pd.DataFrame) -> pd.DataFrame:
     return df.loc[:, list(_OUTPUT_COLUMNS)]
 
 
+def _resolve_search_directory(
+    search_dir: Path | str | None,
+    cfg: "Config | None",
+) -> Path:
+    """Return the directory containing target exports for the helper."""
+
+    if search_dir is not None:
+        candidate = Path(search_dir)
+    elif cfg is not None:
+        io_cfg = getattr(cfg, "io", None)
+        output_dir = getattr(io_cfg, "output_dir", None)
+        candidate = Path(output_dir) if output_dir is not None else _current_default_search_dir()
+    else:
+        candidate = _current_default_search_dir()
+
+    candidate = candidate.expanduser()
+    if not candidate.exists():
+        raise IUPHARPostProcessingError(
+            f"Search directory does not exist: {candidate!s}"
+        )
+    if not candidate.is_dir():
+        raise IUPHARPostProcessingError(
+            f"Search directory is not a directory: {candidate!s}"
+        )
+    return candidate
+
+
 def process_iuphar_targets(
     input_csv: str | Path | None = None,
     *,
     output_csv: str | Path | None = None,
+    search_dir: str | Path | None = None,
+    cfg: "Config | None" = None,
     verbose: bool = False,
 ) -> Path:
-    """Process the canonical target export to reproduce the legacy IUPHAR helper."""
+    """Process the canonical target export to reproduce the legacy IUPHAR helper.
+
+    Parameters
+    ----------
+    input_csv:
+        Optional explicit path to the merged target export. When omitted the
+        newest ``output.target_YYYYMMDD.csv`` file under ``search_dir`` is used.
+    output_csv:
+        Optional destination path for the generated helper export. Defaults to
+        ``IUPHAR.<basename>.csv`` adjacent to the input file.
+    search_dir:
+        Directory containing canonical target exports. Takes precedence over
+        ``cfg`` when provided. Defaults to ``cfg.io.output_dir`` or the bundled
+        ``data/output`` directory when neither ``search_dir`` nor ``cfg`` are
+        supplied.
+    cfg:
+        Optional :class:`library.config.Config` instance used to infer the export
+        directory via ``cfg.io.output_dir`` when ``search_dir`` is omitted.
+    verbose:
+        Emit detailed logging when :data:`True`.
+    """
 
     if input_csv is None:
-        search_dir = _current_default_search_dir()
-        input_path = _latest_target_file(Path(search_dir))
+        resolved_dir = _resolve_search_directory(search_dir, cfg)
+        input_path = _latest_target_file(resolved_dir)
     else:
         input_path = Path(input_csv)
     if output_csv is None:
