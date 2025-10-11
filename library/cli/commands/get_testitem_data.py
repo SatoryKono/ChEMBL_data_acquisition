@@ -63,7 +63,7 @@ from library.utils.qc_report import generate_qc_report
 # ===== Parameters =====
 
 DEFAULT_INPUT_NAME = "testitem.csv"
-DEFAULT_OUTPUT_STEM = "testitems"
+DEFAULT_OUTPUT_STEM = "testitem"
 
 configure_logger = cli.configure_logger
 
@@ -805,11 +805,11 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                     logger=logger,
                 )
 
-                destination = raw_output.with_name("output_postprocessed.testitems.csv")
+                destination = raw_output.with_name("output_postprocessed.testitem.csv")
 
                 try:
                     postprocess_result = run_postprocessing_pipeline(
-                        "testitems",
+                        "testitem",
                         raw_output,
                         destination,
                         runtime_cfg,

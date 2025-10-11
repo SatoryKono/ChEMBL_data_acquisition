@@ -1064,10 +1064,15 @@ def finalize_output(
         stem = path.stem
         remainder = stem.split("output.", 1)[-1] if stem.startswith("output.") else stem
         candidate_table, sep, candidate_tag = remainder.rpartition("_")
+
+        def _normalise_table_name(value: str) -> str:
+            return {"testitems": "testitem"}.get(value, value)
+
         if sep and len(candidate_tag) == 8 and candidate_tag.isdigit():
             table_name_candidate = candidate_table or remainder
-            return table_name_candidate or "testitems", candidate_tag
-        return (remainder or "testitems", datetime.now(UTC).strftime("%Y%m%d"))
+            return _normalise_table_name(table_name_candidate or "testitem"), candidate_tag
+        table_name = _normalise_table_name(remainder or "testitem")
+        return (table_name, datetime.now(UTC).strftime("%Y%m%d"))
 
     table_name, date_tag = _resolve_table_name_and_tag(output)
 

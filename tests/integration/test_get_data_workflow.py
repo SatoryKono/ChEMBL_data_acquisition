@@ -724,7 +724,7 @@ def test_pipeline_subset__testitem_skip_existing_avoids_parent_warm(
         name="testitem",
         main=lambda _: 0,
         input_filename="testitem.csv",
-        output_stem="testitems",
+        output_stem="testitem",
     )
 
     stream = io.StringIO()

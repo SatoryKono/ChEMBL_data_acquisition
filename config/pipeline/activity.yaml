@@ -13,7 +13,7 @@ inputs:
     - documents.csv
     - targets.csv
     - assays.csv
-    - testitems.csv
+    - testitem.csv
 outputs:
   primary: activities.csv
   artefacts:

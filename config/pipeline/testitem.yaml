@@ -12,9 +12,9 @@ inputs:
   dependencies:
     - testitem_molecule_catalog.csv
 outputs:
-  primary: testitems.csv
+  primary: testitem.csv
   artefacts:
-    - testitems.csv.meta.yaml
+    - testitem.csv.meta.yaml
 parameters:
   column: testitem.column
   batch_size: testitem.batch_size

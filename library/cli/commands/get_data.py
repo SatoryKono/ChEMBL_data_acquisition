@@ -259,6 +259,11 @@ _POSTPROCESS_HANDLERS: dict[str, _PostprocessHandlers] = {
         validator=validate_targets,
         schema=TARGET_SCHEMA,
     ),
+    "testitem": _PostprocessHandlers(
+        runner=run_testitem_postprocess,
+        validator=validate_testitems,
+        schema=TESTITEM_SCHEMA,
+    ),
     "testitems": _PostprocessHandlers(
         runner=run_testitem_postprocess,
         validator=validate_testitems,
