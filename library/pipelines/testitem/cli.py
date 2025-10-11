@@ -739,6 +739,12 @@ def run_testitem_pipeline(
     api_cfg = cfg.api.model_copy(update=api_overrides) if api_overrides else cfg.api
 
     pubchem_enabled = getattr(cfg.pubchem, "enable", True)
+    if not pubchem_enabled:
+        logger.warning(
+            "pubchem_augmentation_disabled",
+            reason="config_disabled",
+            detail="PubChem augmentation is disabled; pubchem_* columns will remain empty.",
+        )
     pubchem_api_cfg = api_cfg
     if pubchem_enabled:
         pubchem_api_cfg = _prepare_pubchem_api_cfg(cfg, api_cfg)
