@@ -152,6 +152,7 @@ sources:
     rps: 4  # Requests per second limit (env: CHEMBL_DA_OPENALEX_RPS)
     burst: 1  # Burst size for rate limiter (env: CHEMBL_DA_OPENALEX_BURST)
     mailto: "chembl-data@ebi.ac.uk"  # Required contact email; replace with your team's address before production use (env: CHEMBL_DA_OPENALEX_MAILTO). Placeholder domains such as example.org are rejected.
+    verify: true  # TLS verification; set to false or provide a CA bundle when proxies intercept certificates (env: CHEMBL_DA_OPENALEX_VERIFY)
   crossref:
     base: "https://api.crossref.org"  # CrossRef API root URL (env: CHEMBL_DA_CROSSREF_BASE)
     timeout_connect: 5  # (env: CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT)
@@ -160,6 +161,7 @@ sources:
     rps: 5  # (env: CHEMBL_DA_CROSSREF_RPS)
     burst: 5  # (env: CHEMBL_DA_CROSSREF_BURST)
     mailto: "chembl-data@ebi.ac.uk"  # Required contact email; replace with your team's address before production use (env: CHEMBL_DA_CROSSREF_MAILTO). Placeholder domains such as example.org are rejected.
+    verify: true  # TLS verification toggle or CA bundle path (env: CHEMBL_DA_CROSSREF_VERIFY)
   uniprot:
     api:
       base: "https://rest.uniprot.org"  # UniProt REST API root (env: CHEMBL_DA_UNIPROT_BASE)
