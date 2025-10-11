@@ -344,7 +344,7 @@ def test_get_data_end_to_end__miniature_pipeline(
                 _testitems_transform,
             ),
             input_filename="testitem.csv",
-            output_stem="testitems",
+            output_stem="testitem",
         ),
         get_data.PipelineStep(
             name="activity",
@@ -736,7 +736,7 @@ def test_get_data_end_to_end__blocked_steps_after_failure(
                 _testitems_transform,
             ),
             input_filename="testitem.csv",
-            output_stem="testitems",
+            output_stem="testitem",
         ),
         get_data.PipelineStep(
             name="activity",

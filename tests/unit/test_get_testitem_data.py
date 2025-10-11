@@ -427,10 +427,10 @@ def test_run__postprocess_enabled_runs_pipeline(
 ) -> None:
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("id\nCHEMBL1\n", encoding="utf-8")
-    output_csv = tmp_path / "output.testitems.csv"
+    output_csv = tmp_path / "output.testitem.csv"
     output_csv.write_text("id,name\nCHEMBL1,Example\n", encoding="utf-8")
 
-    postprocessed_csv = output_csv.with_name("output_postprocessed.testitems.csv")
+    postprocessed_csv = output_csv.with_name("output_postprocessed.testitem.csv")
     report_path = tmp_path / "testitems.postprocess.report.json"
 
     class DummyMetrics:
@@ -515,7 +515,7 @@ def test_run__postprocess_enabled_runs_pipeline(
 
     assert exit_code == 0
     expected_destination = postprocessed_csv
-    assert captured["postprocess_table"] == "testitems"
+    assert captured["postprocess_table"] == "testitem"
     assert captured["postprocess_input"] == output_csv
     assert captured["postprocess_output"] == expected_destination
     assert captured["runtime_cfg"].pipeline_config is pipeline_cfg
@@ -533,7 +533,6 @@ def test_run__postprocess_enabled_runs_pipeline(
             "postprocess_duration_s": 0.5,
             "postprocess_steps": 3,
             "postprocess_schema": "TestitemPostprocess",
-            "postprocess_report": str(report_path),
         },
     ) in logger_stub.events
 

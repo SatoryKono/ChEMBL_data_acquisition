@@ -42,6 +42,7 @@ _DOMAIN_RESOURCES: dict[str, _DomainResources] = {
     "assays": _DomainResources(run_assay_pipeline, ASSAY_SCHEMA),
     "documents": _DomainResources(run_document_pipeline, DOCUMENT_SCHEMA),
     "targets": _DomainResources(run_target_pipeline, TARGET_SCHEMA),
+    "testitem": _DomainResources(run_testitem_pipeline, TESTITEM_SCHEMA),
     "testitems": _DomainResources(run_testitem_pipeline, TESTITEM_SCHEMA),
 }
 
