@@ -81,6 +81,24 @@
   строки в `NaN`, создавая впечатление «потерянных данных», хотя в исходном
   CSV просто нет содержимого.
 
+### Минимальный пример с Pandas
+
+```python
+>>> import pandas as pd
+>>> from io import StringIO
+>>> csv = "OpenAlex.Genre,OpenAlex.Error\n,\n"
+>>> pd.read_csv(StringIO(csv))
+   OpenAlex.Genre  OpenAlex.Error
+0            NaN             NaN
+>>> pd.read_csv(StringIO(csv), keep_default_na=False)
+  OpenAlex.Genre OpenAlex.Error
+0
+```
+
+С точки зрения выгрузки `get_document_data` таблица содержит пустые строки.
+`read_csv` без `keep_default_na=False` преобразует их в `NaN`, поэтому при
+первичном анализе кажется, что значения обнулились.
+
 ## Рекомендации
 
 1. При анализе выгрузки считывать CSV с `keep_default_na=False` или
