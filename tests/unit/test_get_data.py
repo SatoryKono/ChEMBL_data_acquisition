@@ -441,6 +441,42 @@ def test_prepare_config__verbose_overrides_level(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_prepare_config__csv_override_output_path(tmp_path: Path) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
+
+    args = argparse.Namespace(
+        base_path=base_path,
+        input_dir=Path("input"),
+        output_dir=Path("output"),
+        config=config_path,
+        date_prefix="20251011",
+        log_level="INFO",
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        verbose=False,
+        rerun_postprocess=False,
+        override_input=[],
+        override_output_stem=["target=output.targets_20240101.csv"],
+        override_subcommand=[],
+        pipeline_registry=None,
+    )
+
+    steps = get_data._resolve_pipeline_steps(args)
+    cfg = get_data._prepare_config(args, steps)
+
+    expected = (output_dir / "output.targets_20240101.csv").resolve()
+    assert cfg.output_path("target") == expected
+
+
+@pytest.mark.unit
 def test_pipeline_step_registration__expected_shape() -> None:
     steps = get_data.DEFAULT_PIPELINE_STEPS
     names = [step.name for step in steps]

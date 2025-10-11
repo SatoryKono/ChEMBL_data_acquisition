@@ -398,6 +398,16 @@ class PipelineRunConfig:
         """Return the fully resolved path for ``name`` in the output directory."""
 
         stem = self.output_stems[name]
+        stem_path = Path(stem)
+
+        # Allow overrides to provide explicit filenames (e.g. ``output.targets.csv``)
+        # or nested locations. When the stem includes a suffix we treat it as a
+        # concrete path instead of appending the canonical prefix/suffix.
+        if stem_path.suffix:
+            if stem_path.is_absolute():
+                return stem_path
+            return self.output_dir / stem_path
+
         filename = f"output.{stem}_{self.date_prefix}.csv"
         return self.output_dir / filename
 
