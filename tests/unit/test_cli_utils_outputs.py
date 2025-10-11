@@ -100,13 +100,22 @@ def test_run_pipeline__persists_standard_outputs(tmp_path: Path) -> None:
     assert int(result) == 0
     assert not writer_called, "legacy writer must not be invoked"
     assert not table_quality_called, "quality hook should be skipped without legacy artefacts"
-
     artifacts = result.artifacts
     assert artifacts is not None
     assert artifacts.dataset.exists()
     assert artifacts.quality_report.exists()
     assert artifacts.correlation_report.exists()
     assert artifacts.dataset.parent == cfg.io.output_dir
+
+    for path in (
+        artifacts.dataset,
+        artifacts.quality_report,
+        artifacts.correlation_report,
+    ):
+        meta = Path(f"{path}.meta.yaml")
+        lock = Path(f"{meta}.lock")
+        assert not meta.exists()
+        assert not lock.exists()
 
     dataset = pd.read_csv(artifacts.dataset)
     pd.testing.assert_frame_equal(dataset, frame)
