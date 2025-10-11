@@ -53,7 +53,7 @@ class _DummyLimiter:
         self.acquires += 1
 
 
-def test_make_request__caches_server_error_results(
+def test_make_request__does_not_cache_server_error_results(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cfg = PubChemCfg()
@@ -102,27 +102,20 @@ def test_make_request__caches_server_error_results(
 
     cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
     entry = cache.get(pubchem._build_cache_key("GET", url))
-    assert entry is not None
-    assert entry.outcome == "server_error"
-    assert entry.details == {
-        "reason": "server_error",
-        "status": 503,
-        "retry_after": 30.0,
-    }
+    assert entry is None
 
     second_result = pubchem.make_request(url, cfg)
 
     assert second_result is None
-    assert len(session.calls) == cfg.retries + 1
-    assert limiter.acquires == cfg.retries + 1
-    assert sleep_calls == [30.0]
+    assert len(session.calls) == 2 * (cfg.retries + 1)
+    assert limiter.acquires == 2 * (cfg.retries + 1)
+    assert sleep_calls == [30.0, 30.0]
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "server_error"
     assert details == {
-        "cache": True,
         "reason": "server_error",
         "retry_after": 30.0,
-        "http_status": 503,
+        "status": 503,
     }
 
 
