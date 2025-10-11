@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import inspect
 import os
+import re
 import sys
 import tempfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -182,6 +183,28 @@ _EXPORT_SORT_FALLBACK = [
 
 
 _EXPORT_STREAM_CHUNK_SIZE = 10_000
+
+_TABLE_NAME_PREFIX = "output."
+_DATE_SUFFIX_RE = re.compile(r"_(\d{8})$")
+
+
+def _resolve_table_name_and_date(output: Path) -> tuple[str, str | None]:
+    """Return a normalised table name and optional date inferred from ``output``."""
+
+    stem = output.stem or DEFAULT_OUTPUT_STEM
+    inferred_date: str | None = None
+    match = _DATE_SUFFIX_RE.search(stem)
+    if match is not None:
+        candidate = match.group(1)
+        if candidate.isdigit():
+            inferred_date = candidate
+            stem = stem[: match.start()]
+
+    if stem.startswith(_TABLE_NAME_PREFIX) and len(stem) > len(_TABLE_NAME_PREFIX):
+        stem = stem[len(_TABLE_NAME_PREFIX) :]
+
+    normalised = stem.strip("._") or DEFAULT_OUTPUT_STEM
+    return normalised, inferred_date
 
 
 def _resolve_timeout(value: float | None, default: float) -> float:
@@ -653,8 +676,12 @@ def _finalise_export(
         export_frame = dataframe_to_strings(export_frame, skip=_NUMERIC_EXPORT_COLUMNS)
         export_frame = _prepare_export_frame(export_frame)
 
-    table_name = output.stem or DEFAULT_OUTPUT_STEM
-    resolved_date_tag = date_tag or datetime.now(timezone.utc).strftime("%Y%m%d")
+    table_name, inferred_date = _resolve_table_name_and_date(output)
+    resolved_date_tag = (
+        date_tag
+        or inferred_date
+        or datetime.now(timezone.utc).strftime("%Y%m%d")
+    )
 
     try:
         quality_report = generate_qc_report(
@@ -1876,11 +1903,25 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
     args.output_csv = output_path
-    standard_date_tag = datetime.now(timezone.utc).strftime("%Y%m%d")
+    table_name, inferred_date = _resolve_table_name_and_date(output_path)
+
+    explicit_date = getattr(args, "date", None)
+    if isinstance(explicit_date, str):
+        explicit_date = explicit_date.strip() or None
+
+    fallback_date = getattr(args, "date_prefix", None)
+    if isinstance(fallback_date, str):
+        fallback_date = fallback_date.strip() or None
+
+    standard_date_tag = (
+        explicit_date
+        or fallback_date
+        or inferred_date
+        or datetime.now(timezone.utc).strftime("%Y%m%d")
+    )
     setattr(args, "_standard_date_tag", standard_date_tag)
     emit_legacy = bool(getattr(args, "emit_legacy_artifacts", False))
 
-    table_name = output_path.stem or DEFAULT_OUTPUT_STEM
     output_dir_value = getattr(cfg.io, "output_dir", None)
     output_dir = Path(output_dir_value) if output_dir_value else output_path.parent
     canonical_dataset = output_dir / f"output.{table_name}_{standard_date_tag}.csv"

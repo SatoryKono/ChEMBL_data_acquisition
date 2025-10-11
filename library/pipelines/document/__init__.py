@@ -30,6 +30,7 @@ class DocumentPipelineOptions:
     offset: int = 0
     force: bool = False
     skip_existing: bool = False
+    date_prefix: str | None = None
     fallback_doi_enabled: bool = False
     fallback_doi_path: Path | None = None
     fallback_doi_overwrite: bool = False

@@ -294,6 +294,7 @@ def _build_document_options(
         limit=cfg.limit,
         force=cfg.force,
         skip_existing=cfg.skip_existing,
+        date_prefix=cfg.date_prefix,
         rerun_postprocess=cfg.rerun_postprocess,
     )
 

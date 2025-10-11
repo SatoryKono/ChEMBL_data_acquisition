@@ -1042,6 +1042,13 @@ def run_document_service(
     cfg = config.model_copy(deep=True)
     _update_document_config_from_options(cfg, options)
 
+    io_cfg = getattr(cfg.local, "io", None)
+    if options.date_prefix and io_cfg is not None:
+        try:
+            io_cfg.default_date_prefix = options.date_prefix
+        except AttributeError:  # pragma: no cover - defensive guard
+            pass
+
     args = argparse.Namespace(
         input_csv=Path(options.input_csv),
         final_out=output_path,
@@ -1059,8 +1066,11 @@ def run_document_service(
         fallback_doi_col_doi=options.fallback_doi_col_doi,
         mode=options.mode,
         command=options.mode,
+        date=options.date_prefix,
     )
     args.rerun_postprocess = options.rerun_postprocess
+    if options.date_prefix:
+        args._standard_date_tag = options.date_prefix
 
     mode_handlers = _resolve_mode_handlers(handlers)
     handler = mode_handlers.get(options.mode)
