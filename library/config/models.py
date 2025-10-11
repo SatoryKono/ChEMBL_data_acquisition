@@ -554,6 +554,11 @@ class PubChemCfg(_BaseModel):
         ge=0,
         description="Initial delay when backing off after 429/5xx responses",
     )
+    retry_after_grace_seconds: float = Field(
+        120.0,
+        ge=0,
+        description="Additional seconds beyond timeout_seconds allowed to honour Retry-After headers",
+    )
     resolve_order: tuple[str, ...] = Field(
         (
             "cache",
