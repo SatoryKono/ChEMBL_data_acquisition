@@ -1008,6 +1008,7 @@ def run_pipeline(
             quality_report,
             table_name=table_name,
             date_tag=date_tag,
+            io_cfg=cfg.io,
         )
         use_logger.info(
             "standard_outputs_written",

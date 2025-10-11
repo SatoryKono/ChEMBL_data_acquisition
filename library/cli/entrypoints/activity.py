@@ -1548,6 +1548,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             quality_report,
             table_name=table_name_value,
             date_tag=date_tag,
+            io_cfg=cfg.io,
         )
         logger.info(
             "activity_standard_outputs",

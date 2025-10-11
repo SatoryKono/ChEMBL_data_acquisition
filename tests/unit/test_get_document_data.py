@@ -534,7 +534,7 @@ def test_finalise_export__normalises_table_name_and_date(
         *,
         table_name: str,
         date_tag: str,
-        cfg: any,
+        io_cfg: any,
         key_columns: Sequence[str] | None = None,
     ) -> get_document_data.io.StandardOutputArtifacts:
         captured["table_name"] = table_name
@@ -583,7 +583,7 @@ def test_finalise_export__normalises_table_name_and_date(
         *,
         table_name: str,
         date_tag: str,
-        cfg: any,
+        io_cfg: any,
         key_columns: Sequence[str] | None = None,
     ) -> get_document_data.io.StandardOutputArtifacts:
         captured["table_name"] = table_name

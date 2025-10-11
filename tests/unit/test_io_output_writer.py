@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from library.config import IoCfg
 from library.io import output_writer
 
 
@@ -41,8 +42,6 @@ def test_save_standard_outputs__writes_expected_csvs(
 
     captured: dict[str, pd.DataFrame] = {}
 
-    monkeypatch.setattr(output_writer, "OUTPUT_DIR", tmp_path)
-
     def _fake_write_csv(
         frame: pd.DataFrame,
         destination: Path,
@@ -63,6 +62,7 @@ def test_save_standard_outputs__writes_expected_csvs(
         quality,
         table_name="documents",
         date_tag="20240101",
+        io_cfg=IoCfg(output_dir=tmp_path),
     )
 
     expected_names = {
@@ -98,15 +98,14 @@ def test_save_standard_outputs__creates_output_directory(
     correlation = pd.DataFrame({"id": [1.0]})
     quality = pd.DataFrame({"column": ["id"]})
 
-    output_dir = tmp_path / "missing" / "nested"
-    monkeypatch.setattr(output_writer, "OUTPUT_DIR", output_dir)
-
     output_writer.save_standard_outputs(
         dataset,
         correlation,
         quality,
         table_name="demo",
         date_tag="20240101",
+        io_cfg=IoCfg(output_dir=tmp_path / "missing" / "nested"),
     )
 
+    output_dir = tmp_path / "missing" / "nested"
     assert output_dir.exists() and output_dir.is_dir()
