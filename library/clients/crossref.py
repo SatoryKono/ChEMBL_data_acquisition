@@ -42,8 +42,4 @@ def fetch_crossref(
         timeout=timeout,
         retry_cfg=retry_cfg,
     )
-    if error:
-        logger.info("request_fail", extra={"stage": "request_fail", "url": url})
-    else:
-        logger.info("request_ok", extra={"stage": "request_ok", "url": url})
     return data, error

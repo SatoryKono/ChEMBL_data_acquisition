@@ -12,7 +12,10 @@ sources:
       cache_ttl: 900
       cache_maxsize: 256
   pubchem:
-    enable: false
+    # PubChem enrichment is enabled by default. Keep this flag on unless you
+    # explicitly need to skip augmentation (for example, when running in an
+    # offline sandbox).
+    enable: true
   openalex:
     mailto: "team@example.org"
   crossref:
