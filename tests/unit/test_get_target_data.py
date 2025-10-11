@@ -1009,7 +1009,7 @@ def test_run_all__disables_standard_outputs_for_chembl(
     exit_code = get_target_data.run_all(cfg, args)
 
     assert exit_code == 0
-    assert captured.get("emit_standard_outputs") is False
+    assert captured.get("emit_standard_outputs") is True
     assert final_out.exists()
 
 

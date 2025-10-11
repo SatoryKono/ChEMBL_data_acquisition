@@ -4179,7 +4179,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             chunk_size=cfg.target.all.chunk_size,
             offset=cfg.target.all.offset,
             id_cols=key_columns,
-            emit_standard_outputs=False,
+            emit_standard_outputs=True,
         )
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
