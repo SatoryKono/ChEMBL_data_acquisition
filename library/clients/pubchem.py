@@ -886,9 +886,18 @@ def _store_cache_miss(
     details_data = dict(details) if details else {}
     cached = False
     log_details: dict[str, Any] = {}
+
+    service_unavailable_outcome = (
+        outcome in SERVICE_UNAVAILABLE_OUTCOMES and outcome != "timeout"
+    )
+
     with _CACHE_LOCK:
         cache = _ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
-        if outcome == "timeout":
+
+        if service_unavailable_outcome:
+            cache.pop(cache_key, None)
+            log_details = details_data.copy()
+        elif outcome == "timeout":
             base_backoff = (
                 cfg.backoff_initial_seconds
                 if cfg.backoff_initial_seconds > 0

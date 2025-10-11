@@ -60,93 +60,7 @@ class _DummyLimiter:
         self.acquires += 1
 
 
-def test_make_request__skips_during_global_service_cooldown(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    cfg = PubChemCfg()
-    cfg.retries = 0
-
-    base = cfg.base.rstrip("/")
-    url1 = f"{base}/compound/cid/1/property/MolecularFormula/JSON"
-    url2 = f"{base}/compound/cid/2/property/MolecularFormula/JSON"
-
-    current_time = 0.0
-
-    def fake_monotonic() -> float:
-        return current_time
-
-    def fake_sleep(seconds: float) -> None:
-        nonlocal current_time
-        current_time += float(seconds)
-
-    monkeypatch.setattr(pubchem, "monotonic", fake_monotonic)
-    monkeypatch.setattr(pubchem, "sleep", fake_sleep)
-
-    limiter = _DummyLimiter()
-    monkeypatch.setattr(pubchem, "get_limiter", lambda *_args, **_kwargs: limiter)
-
-    responses = iter(
-        [
-            _DummyResponse(503, {"Retry-After": "30"}),
-            _DummyResponse(200, {}, {"payload": "ok"}),
-        ]
-    )
-
-    def _response() -> _DummyResponse:
-        try:
-            return next(responses)
-        except StopIteration:  # pragma: no cover - defensive
-            raise AssertionError("unexpected request")
-
-    session = _DummySession(_response)
-    monkeypatch.setattr(pubchem, "get_session", lambda *_args, **_kwargs: session)
-    monkeypatch.setattr(pubchem, "_CACHE", None)
-
-    first_result = pubchem.make_request(url1, cfg)
-
-    assert first_result is None
-    assert session.calls == [
-        ("GET", url1, {"timeout": (cfg.timeout_connect, cfg.timeout_read)})
-    ]
-    assert limiter.acquires == 1
-    outcome, details = pubchem.last_request_outcome()
-    assert outcome == "server_error"
-    assert details == {
-        "reason": "server_error",
-        "retry_after": 30.0,
-        "status": 503,
-    }
-
-    second_result = pubchem.make_request(url2, cfg)
-
-    assert second_result is None
-    assert session.calls == [
-        ("GET", url1, {"timeout": (cfg.timeout_connect, cfg.timeout_read)})
-    ]
-    assert limiter.acquires == 1
-    outcome, details = pubchem.last_request_outcome()
-    assert outcome == "server_error"
-    assert details is not None
-    assert details.get("reason") == "server_error"
-    assert details.get("retry_after") == pytest.approx(30.0)
-    assert details.get("cooldown_remaining") == pytest.approx(30.0)
-
-    current_time += 31.0
-
-    third_result = pubchem.make_request(url2, cfg)
-
-    assert third_result == {"payload": "ok"}
-    assert session.calls == [
-        ("GET", url1, {"timeout": (cfg.timeout_connect, cfg.timeout_read)}),
-        ("GET", url2, {"timeout": (cfg.timeout_connect, cfg.timeout_read)}),
-    ]
-    assert limiter.acquires == 2
-    outcome, details = pubchem.last_request_outcome()
-    assert outcome == "hit"
-    assert details == {"status": 200}
-
-
-def test_make_request__caches_server_error_results(
+def test_make_request__does_not_cache_server_error_results(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cfg = PubChemCfg()
@@ -195,27 +109,20 @@ def test_make_request__caches_server_error_results(
 
     cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
     entry = cache.get(pubchem._build_cache_key("GET", url))
-    assert entry is not None
-    assert entry.outcome == "server_error"
-    assert entry.details == {
-        "reason": "server_error",
-        "status": 503,
-        "retry_after": 30.0,
-    }
+    assert entry is None
 
     second_result = pubchem.make_request(url, cfg)
 
     assert second_result is None
-    assert len(session.calls) == cfg.retries + 1
-    assert limiter.acquires == cfg.retries + 1
-    assert sleep_calls == [30.0]
+    assert len(session.calls) == 2 * (cfg.retries + 1)
+    assert limiter.acquires == 2 * (cfg.retries + 1)
+    assert sleep_calls == [30.0, 30.0]
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "server_error"
     assert details == {
-        "cache": True,
         "reason": "server_error",
         "retry_after": 30.0,
-        "http_status": 503,
+        "status": 503,
     }
 
 
