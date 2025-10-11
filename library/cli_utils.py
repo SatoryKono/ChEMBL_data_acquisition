@@ -1034,6 +1034,7 @@ def run_pipeline(
             date_tag=date_tag,
             output_path=output_path,
             key_columns=resolved_keys or key_columns,
+            cleanup_source=not emit_legacy_artifacts,
         )
         use_logger.info(
             "standard_outputs_written",
