@@ -72,6 +72,32 @@ def _chembl_library() -> Any:
 _FETCH_ERROR_SAMPLE_SIZE = 10
 _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
 _PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
+_DEFAULT_TABLE_NAME = "testitem"
+
+
+def _normalise_output_labels(
+    output: Path | str,
+    *,
+    default_table: str = _DEFAULT_TABLE_NAME,
+    fallback_date: str | None = None,
+) -> tuple[str, str]:
+    """Return canonical table name and date tag derived from ``output``.
+
+    Intermediate filenames produced by the pipeline (for example
+    ``.output.testitem_20240101.csv.tmp``) are normalised so that downstream
+    artefacts re-use the canonical ``testitem`` label. When ``fallback_date`` is
+    omitted the helper mirrors the previous behaviour by falling back to the
+    current UTC date.
+    """
+
+    table_name, date_tag = io.derive_output_labels(
+        output,
+        default_table=default_table,
+        fallback_date=fallback_date,
+    )
+    if table_name.lower() == "testitems":
+        table_name = default_table
+    return table_name, date_tag
 
 _PUBCHEM_OPTIONAL_COLUMNS = frozenset(
     {
@@ -1100,18 +1126,7 @@ def finalize_output(
         return exit_code, None
 
     def _resolve_table_name_and_tag(path: Path) -> tuple[str, str]:
-        stem = path.stem
-        remainder = stem.split("output.", 1)[-1] if stem.startswith("output.") else stem
-        candidate_table, sep, candidate_tag = remainder.rpartition("_")
-
-        def _normalise_table_name(value: str) -> str:
-            return {"testitems": "testitem"}.get(value, value)
-
-        if sep and len(candidate_tag) == 8 and candidate_tag.isdigit():
-            table_name_candidate = candidate_table or remainder
-            return _normalise_table_name(table_name_candidate or "testitem"), candidate_tag
-        table_name = _normalise_table_name(remainder or "testitem")
-        return (table_name, datetime.now(UTC).strftime("%Y%m%d"))
+        return _normalise_output_labels(path)
 
     table_name, date_tag = _resolve_table_name_and_tag(output)
 
