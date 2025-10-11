@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import pytest
 
@@ -53,6 +53,20 @@ class _DummyLimiter:
         self.acquires += 1
 
 
+class _TimeController:
+    def __init__(self) -> None:
+        self._now = 0.0
+
+    def monotonic(self) -> float:
+        return self._now
+
+    def sleep(self, seconds: float) -> None:
+        self._now += float(seconds)
+
+    def advance(self, seconds: float) -> None:
+        self._now += float(seconds)
+
+
 def test_make_request__caches_server_error_results(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -79,6 +93,9 @@ def test_make_request__caches_server_error_results(
     monkeypatch.setattr(pubchem, "get_session", lambda *_args, **_kwargs: session)
     monkeypatch.setattr(pubchem, "_CACHE", None)
 
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_UNTIL", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_DETAILS", None)
+
     first_result = pubchem.make_request(url, cfg)
 
     assert first_result is None
@@ -88,17 +105,16 @@ def test_make_request__caches_server_error_results(
             url,
             {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
         )
-        for _ in range(cfg.retries + 1)
     ]
     assert sleep_calls == [30.0]
-    assert limiter.acquires == cfg.retries + 1
+    assert limiter.acquires == 1
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "server_error"
-    assert details == {
-        "reason": "server_error",
-        "retry_after": 30.0,
-        "status": 503,
-    }
+    assert details is not None
+    assert details.get("reason") == "server_error"
+    assert details.get("status") == 503
+    assert details.get("retry_after_source") == "header"
+    assert details.get("retry_after") == pytest.approx(30.0)
 
     cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
     entry = cache.get(pubchem._build_cache_key("GET", url))
@@ -107,24 +123,133 @@ def test_make_request__caches_server_error_results(
     assert entry.details == {
         "reason": "server_error",
         "status": 503,
-        "retry_after": 30.0,
+        "retry_after": pytest.approx(30.0),
+        "retry_after_source": "header",
+        "cache": True,
     }
+
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_UNTIL", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_DETAILS", None)
 
     second_result = pubchem.make_request(url, cfg)
 
     assert second_result is None
-    assert len(session.calls) == cfg.retries + 1
-    assert limiter.acquires == cfg.retries + 1
+    assert len(session.calls) == 1
+    assert limiter.acquires == 1
     assert sleep_calls == [30.0]
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "server_error"
     assert details == {
         "cache": True,
         "reason": "server_error",
-        "retry_after": 30.0,
+        "retry_after": pytest.approx(30.0),
+        "retry_after_source": "header",
         "http_status": 503,
     }
 
+
+def test_make_request__short_circuits_during_retry_after(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = PubChemCfg()
+    cfg.retries = 0
+
+    base = cfg.base.rstrip("/")
+    url_first = (
+        f"{base}/compound/cid/149790/property/"
+        "MolecularFormula,IUPACName,SMILES,ConnectivitySMILES,InChI,InChIKey/JSON"
+    )
+    url_second = (
+        f"{base}/compound/cid/20353/property/"
+        "MolecularFormula,IUPACName,SMILES,ConnectivitySMILES,InChI,InChIKey/JSON"
+    )
+
+    time_ctrl = _TimeController()
+    monkeypatch.setattr(pubchem, "monotonic", time_ctrl.monotonic)
+    monkeypatch.setattr(pubchem, "sleep", time_ctrl.sleep)
+
+    limiter = _DummyLimiter()
+    monkeypatch.setattr(pubchem, "get_limiter", lambda *_args, **_kwargs: limiter)
+
+    success_payload = {
+        "PropertyTable": {
+            "Properties": [
+                {
+                    "MolecularFormula": "C9H8O4",
+                    "IUPACName": "2-acetyloxybenzoic acid",
+                }
+            ]
+        }
+    }
+
+    responses = [
+        _DummyResponse(503, {"Retry-After": "30"}),
+        _DummyResponse(200, {}, success_payload),
+    ]
+    index = {"value": 0}
+
+    def _response() -> _DummyResponse:
+        value = responses[index["value"]]
+        index["value"] += 1
+        return value
+
+    session = _DummySession(_response)
+    monkeypatch.setattr(pubchem, "get_session", lambda *_args, **_kwargs: session)
+    monkeypatch.setattr(pubchem, "_CACHE", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_UNTIL", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_DETAILS", None)
+
+    first = pubchem.make_request(url_first, cfg)
+
+    assert first is None
+    assert session.calls == [
+        (
+            "GET",
+            url_first,
+            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
+        )
+    ]
+    assert limiter.acquires == 1
+    outcome, details = pubchem.last_request_outcome()
+    assert outcome == "server_error"
+    assert details is not None
+    assert details.get("retry_after_source") == "header"
+
+    second = pubchem.make_request(url_second, cfg)
+
+    assert second is None
+    assert session.calls == [
+        (
+            "GET",
+            url_first,
+            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
+        )
+    ]
+    assert limiter.acquires == 1
+    outcome, details = pubchem.last_request_outcome()
+    assert outcome == "server_error"
+    assert details is not None
+    assert details.get("retry_after_source") == "header"
+    assert details.get("retry_after") == pytest.approx(30.0)
+    assert details.get("cache") is True
+
+    time_ctrl.advance(31.0)
+
+    third = pubchem.make_request(url_second, cfg)
+
+    assert third is None
+    assert session.calls == [
+        (
+            "GET",
+            url_first,
+            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
+        )
+    ]
+    assert limiter.acquires == 1
+    outcome, details = pubchem.last_request_outcome()
+    assert outcome == "server_error"
+    assert details is not None
+    assert details.get("cache") is True
 
 def test_make_request__invalid_identifier_cached(
     monkeypatch: pytest.MonkeyPatch,
@@ -201,6 +326,8 @@ def test_make_request__retry_after_honours_grace(
     monkeypatch.setattr(pubchem, "sleep", lambda seconds: sleep_calls.append(seconds))
     limiter = _DummyLimiter()
     monkeypatch.setattr(pubchem, "get_limiter", lambda *_args, **_kwargs: limiter)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_UNTIL", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_DETAILS", None)
 
     def _response() -> _DummyResponse:
         return _DummyResponse(503, {"Retry-After": "30"})
@@ -218,16 +345,17 @@ def test_make_request__retry_after_honours_grace(
             url,
             {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
         )
-        for _ in range(cfg.retries + 1)
     ]
-    assert sleep_calls == [30.0, 30.0, 30.0]
-    assert limiter.acquires == cfg.retries + 1
+    assert sleep_calls == [30.0]
+    assert limiter.acquires == 1
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "server_error"
     assert details == {
         "reason": "server_error",
         "status": 503,
-        "retry_after": 30.0,
+        "retry_after": pytest.approx(30.0),
+        "retry_after_source": "header",
+        "cache": True,
     }
 
     cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
@@ -237,7 +365,9 @@ def test_make_request__retry_after_honours_grace(
     assert entry.details == {
         "reason": "server_error",
         "status": 503,
-        "retry_after": 30.0,
+        "retry_after": pytest.approx(30.0),
+        "retry_after_source": "header",
+        "cache": True,
     }
 
 
@@ -258,6 +388,8 @@ def test_make_request__retry_after_grace_disabled_causes_timeout(
     monkeypatch.setattr(pubchem, "sleep", lambda seconds: sleep_calls.append(seconds))
     limiter = _DummyLimiter()
     monkeypatch.setattr(pubchem, "get_limiter", lambda *_args, **_kwargs: limiter)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_UNTIL", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_DETAILS", None)
 
     def _response() -> _DummyResponse:
         return _DummyResponse(503, {"Retry-After": "30"})
@@ -390,6 +522,8 @@ def test_get_cid_from_smiles__uses_post_for_stereochemistry(
 
     limiter = _DummyLimiter()
     monkeypatch.setattr(pubchem, "get_limiter", lambda *_args, **_kwargs: limiter)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_UNTIL", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_DETAILS", None)
 
     response_payload = {
         "IdentifierList": {
