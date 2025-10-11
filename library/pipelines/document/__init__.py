@@ -38,6 +38,8 @@ class DocumentPipelineOptions:
     fallback_doi_col_pmid: str = "PMID"
     fallback_doi_col_doi: str = "DOI"
     rerun_postprocess: bool = False
+    date_prefix: str | None = None
+    output_stem: str | None = None
 
 def run_pipeline(config: Config, options: DocumentPipelineOptions) -> PipelineRunResult:
     """Run the document pipeline using programmatic options."""
