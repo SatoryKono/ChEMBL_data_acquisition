@@ -2866,7 +2866,6 @@ def fetch_chembl(
         encoding=cfg.io.csv_encoding,
         dtype=str,
     )
-    )
     logger.info("fetch_chembl_done", rows=len(df), path=str(output_path))
     return df
 
