@@ -1011,6 +1011,7 @@ def run_pipeline(
             quality_report,
             table_name=table_name,
             date_tag=date_tag,
+            output_path=output_path,
         )
         use_logger.info(
             "standard_outputs_written",

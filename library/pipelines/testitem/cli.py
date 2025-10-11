@@ -1108,6 +1108,7 @@ def finalize_output(
             table_name=table_name,
             date_tag=date_tag,
             key_columns=key_cols,
+            output_path=output,
         )
     except (OSError, ValueError) as exc:
         logger.error("write_fail", error=str(exc), path=str(output))

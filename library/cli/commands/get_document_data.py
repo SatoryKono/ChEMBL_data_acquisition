@@ -711,6 +711,7 @@ def _finalise_export(
             quality_report,
             table_name=table_name,
             date_tag=resolved_date_tag,
+            output_path=output,
         )
     except (OSError, ValueError) as exc:
         logger.error(

@@ -46,7 +46,6 @@ def test_save_standard_outputs__writes_expected_csvs(
     def _fake_write_csv(
         frame: pd.DataFrame,
         destination: Path,
-        *,
         **_: object,
     ) -> Path:
         path = Path(destination)
@@ -110,3 +109,60 @@ def test_save_standard_outputs__creates_output_directory(
     )
 
     assert output_dir.exists() and output_dir.is_dir()
+
+
+@pytest.mark.unit
+def test_save_standard_outputs__uses_explicit_output_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _sample_frames
+) -> None:
+    dataset, correlation, quality = _sample_frames
+
+    # Ensure the fallback directory would differ from our explicit path.
+    fallback_dir = tmp_path / "fallback"
+    monkeypatch.setattr(output_writer, "OUTPUT_DIR", fallback_dir)
+
+    output_path = tmp_path / "final" / ".output.targets_20240101.csv.tmp"
+
+    captured: dict[Path, pd.DataFrame] = {}
+
+    def _fake_write_csv(
+        frame: pd.DataFrame,
+        destination: Path,
+        **_: object,
+    ) -> Path:
+        path = Path(destination)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        captured[path] = frame.copy()
+        return path
+
+    monkeypatch.setattr(output_writer, "write_csv_deterministic", _fake_write_csv)
+
+    artefacts = output_writer.save_standard_outputs(
+        dataset,
+        correlation,
+        quality,
+        table_name="targets",
+        date_tag="20240101",
+        output_path=output_path,
+    )
+
+    assert artefacts.dataset == output_path
+    expected_stem = output_path.with_suffix("").name
+    expected_correlation = output_path.parent / (
+        f"{expected_stem}_data_correlation_report_table.csv"
+    )
+    expected_quality = output_path.parent / (
+        f"{expected_stem}_quality_report_table.csv"
+    )
+
+    assert artefacts.correlation_report == expected_correlation
+    assert artefacts.quality_report == expected_quality
+
+    assert set(captured) == {
+        artefacts.dataset,
+        artefacts.correlation_report,
+        artefacts.quality_report,
+    }
+
+    # Fallback directory should remain unused.
+    assert not fallback_dir.exists()

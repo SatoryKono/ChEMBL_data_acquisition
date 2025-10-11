@@ -43,6 +43,7 @@ def save_standard_outputs(
     date_tag: str,
     *,
     key_columns: Sequence[str] | None = None,
+    output_path: Path | None = None,
 ) -> StandardOutputArtifacts:
     """Persist the canonical dataset together with QC artefacts.
 
@@ -61,6 +62,12 @@ def save_standard_outputs(
     key_columns:
         Optional sequence of columns used to deterministically order
         ``df_main`` before writing.
+    output_path:
+        Destination for the primary dataset. When provided the artefacts are
+        written next to this path and the dataset is materialised exactly at
+        ``output_path``. Otherwise the canonical :data:`OUTPUT_DIR` location is
+        used together with the standard naming convention derived from
+        ``table_name`` and ``date_tag``.
 
     Returns
     -------
@@ -68,12 +75,24 @@ def save_standard_outputs(
         Paths to the dataset, correlation report and quality report.
     """
 
-    _ensure_output_directory(OUTPUT_DIR)
+    if output_path is not None:
+        dataset_path = Path(output_path)
+        destination_dir = dataset_path.parent
+        if dataset_path.suffix:
+            stem_name = dataset_path.with_suffix("").name
+        else:
+            stem_name = dataset_path.name
+    else:
+        destination_dir = OUTPUT_DIR
+        stem_name = f"output.{table_name}_{date_tag}"
+        dataset_path = destination_dir / f"{stem_name}.csv"
 
-    stem = f"output.{table_name}_{date_tag}"
-    dataset_path = OUTPUT_DIR / f"{stem}.csv"
-    correlation_path = OUTPUT_DIR / f"{stem}_data_correlation_report_table.csv"
-    quality_path = OUTPUT_DIR / f"{stem}_quality_report_table.csv"
+    _ensure_output_directory(destination_dir)
+
+    correlation_path = destination_dir / (
+        f"{stem_name}_data_correlation_report_table.csv"
+    )
+    quality_path = destination_dir / f"{stem_name}_quality_report_table.csv"
 
     key_cols = list(key_columns or [])
     if not key_cols and not df_main.empty:
