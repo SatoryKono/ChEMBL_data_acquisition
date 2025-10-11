@@ -14,9 +14,11 @@
 
 ### 2. Промежуточные выгрузки создают дополнительные CSV
 
-Комбинированная команда (`target all`) всегда вызывает `fetch_chembl`, `fetch_uniprot` и `fetch_iuphar`, каждый из которых пишет свой CSV (`*_chembl.csv`, `*_uniprot.csv`, `*_iuphar.csv`) в директорию вывода перед слиянием. Эти файлы остаются на диске вне зависимости от режима сохранения. 【F:library/cli/commands/get_target_data.py†L2787-L2950】
+Комбинированная команда (`target all`) всегда вызывает `fetch_chembl`, `fetch_uniprot` и `fetch_iuphar`. Имена файлов для этих этапов вычисляются на базе финального пути: `chembl_out = final_output.stem + "_chembl.csv"`, `uniprot_out = ... + "_uniprot.csv"`, `iuphar_out = ... + "_iuphar.csv"`. Таким образом рядом с целевым `output.targets_<date>.csv` появляются промежуточные `output.targets_<date>_chembl.csv`, `output.targets_<date>_uniprot.csv` и `output.targets_<date>_iuphar.csv`. 【F:library/cli/commands/get_target_data.py†L4091-L4130】
 
-**Подзадача:** перенаправить промежуточные выгрузки либо в временные каталоги, либо удалять их после слияния.
+Особенно критично, что `fetch_chembl` запускает `_run_pipeline_with_meta(..., emit_standard_outputs=True)`, а внутри `run_pipeline` это приводит к вызову `save_standard_outputs`. Последняя формирует canonical-пакет `output.<table>_<date>.csv`, где `<table>` наследует `_chembl` из имени промежуточного файла. Поэтому в каталоге вывода остаются три «лишних» артефакта: `output.targets_<date>_chembl_<date>.csv`, отчёт по корреляциям и QC-отчёт с тем же суффиксом `_chembl`. 【F:library/cli/commands/get_target_data.py†L2253-L2275】【F:library/cli_utils.py†L1012-L1067】【F:library/io/output_writer.py†L109-L135】
+
+**Подзадача:** выключить стандартный пакет (`emit_standard_outputs=False`) для промежуточного вызова ChEMBL и удалять/перемещать черновики после слияния, чтобы в каталоге остались только три финальные таблицы.
 
 ### 3. Шаг валидации оставляет «сырые» и failure-артефакты при активном legacy
 
@@ -29,6 +31,10 @@
 Если CLI вызывается с `--postprocess`, функция `run_target_postprocess_if_requested` формирует `output_postprocessed.targets.csv` рядом с основным датасетом. Позже `validate_and_write` удаляет файл только в случае, если canonical CSV оказался в другом месте; иначе артефакт остаётся. 【F:library/cli/commands/get_target_data.py†L433-L518】【F:library/cli/commands/get_target_data.py†L3914-L3922】
 
 **Подзадача:** писать результаты постобработки напрямую через `save_standard_outputs` или очищать временный файл сразу после чтения.
+
+### 5. Sidecar от UniProt создавался даже без legacy-режима
+
+Этап `run_uniprot` экспортирует данные через `io.write_csv`, который внутри вызывает `write_csv_deterministic`. Последний всегда пишет `.meta.yaml` рядом с CSV, поэтому появлялись файлы вроде `output.targets_<date>_uniprot.csv.meta.yaml` даже при обычном запуске без `--emit-legacy-artifacts`. Мы удаляем sidecar сразу после чтения промежуточного CSV, чтобы в каталоге оставались только стандартизованные артефакты. 【F:library/cli/commands/get_target_data.py†L1994-L2018】【F:library/io/writers.py†L13-L44】【F:library/common/csv_utils.py†L562-L569】
 
 ## Рекомендации по исправлению
 

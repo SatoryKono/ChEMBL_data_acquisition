@@ -2024,6 +2024,10 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             args=args,
             context=IsoformPostprocessContext(args=args),
         )
+        meta_path = export_path.with_name(export_path.name + ".meta.yaml")
+        meta_path.unlink(missing_ok=True)
+        meta_lock_path = meta_path.with_name(meta_path.name + ".lock")
+        meta_lock_path.unlink(missing_ok=True)
         rows_dropped = max(rows_total - rows_kept, 0)
         stats: Stats = {
             "rows_total": rows_total,
