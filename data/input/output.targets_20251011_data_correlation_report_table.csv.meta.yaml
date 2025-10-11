@@ -1,0 +1,56 @@
+generated_at: '2029-04-16T11:54:38+00:00'
+git_sha: 1e2ac8c292a63db0c20954e9d9f98d75973aed23
+python_version: 3.13.8
+platform: Windows-10-10.0.19045-SP0
+command: scripts\get_target_data.py --input data\input\target.csv all --limit 1 --log-level
+  INFO
+config:
+  output_dir: C:\Users\HP3168\Documents\GitHub\ChEMBL_data_acquisition\data\input
+  cache_dir: C:\Users\HP3168\.cache\chembl-da
+  csv_sep: ','
+  csv_encoding: utf-8-sig
+  csv_fallback_encodings:
+  - utf-8
+  - cp1252
+  - windows-1251
+  - latin-1
+  csv_fallback_separators:
+  - "\t"
+  - ;
+  na_markers:
+  - '#N/A'
+  csv_chunksize: 10000
+  exist_ok: true
+  keep_na_markers: false
+  output_stamp_mode: omit
+  default_date_prefix: '20240101'
+inputs: {}
+stats: {}
+schema: null
+columns:
+- GuidetoPHARMACOLOGY
+- gtop_interactions_n
+- gtop_target_id
+- hgnc_id
+- iuphar_family_id
+- iuphar_target_id
+- protein_class_pred_evidence
+- sequence_length
+- tax_id
+- taxon_id
+- uniprot_version
+- xref_iuphar
+dtypes:
+  GuidetoPHARMACOLOGY: float64
+  gtop_interactions_n: float64
+  gtop_target_id: float64
+  hgnc_id: float64
+  iuphar_family_id: float64
+  iuphar_target_id: float64
+  protein_class_pred_evidence: float64
+  sequence_length: float64
+  tax_id: float64
+  taxon_id: float64
+  uniprot_version: float64
+  xref_iuphar: float64
+pipeline_version: 0.1.3
