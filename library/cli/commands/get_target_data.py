@@ -2775,11 +2775,23 @@ def fetch_chembl(
             cfg.target.chembl.limit = original_limit
         if chunk_size is not None:
             cfg.target.chembl.chunk_size = original_chunk_size
-    _normalized_output_path(final_out)
+    output_path = Path(final_out)
+    if not output_path.exists():
+        normalized_fallback = _normalized_output_path(output_path)
+        if normalized_fallback.exists():
+            logger.warning(
+                "fetch_chembl_missing_expected_output",
+                expected=str(output_path),
+                fallback=str(normalized_fallback),
+            )
+            output_path = normalized_fallback
+        else:
+            raise FileNotFoundError(output_path)
+
     df = pd.read_csv(
-        final_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+        output_path, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
     )
-    logger.info("fetch_chembl_done", rows=len(df))
+    logger.info("fetch_chembl_done", rows=len(df), path=str(output_path))
     return df
 
 
