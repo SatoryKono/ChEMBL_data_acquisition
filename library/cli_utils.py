@@ -169,9 +169,6 @@ class PipelineMetrics:
 
 @dataclass(slots=True, frozen=True)
 class RunPipelineResult:
-
-
-
     """Return value exposing the exit code alongside output artefact paths.
 
     Historically this type inherited from :class:`int`.  Python 3.13 tightened
@@ -187,45 +184,14 @@ class RunPipelineResult:
     artifacts: StandardOutputArtifacts | None = None
 
     def __int__(self) -> int:
-        return int(self.exit_code)
-
-    def __bool__(self) -> bool:  # pragma: no cover - mirrors ``bool(int)`` semantics
-        return bool(self.exit_code)
-
-    def __eq__(self, other: object) -> bool:  # pragma: no cover - legacy helpers
-
-    """Return value exposing the exit code alongside output artefact paths."""
-
-    """Return value exposing the exit code alongside output artefact paths.
-
-    Historically this type inherited from :class:`int`.  Python 3.13 tightened
-    restrictions around built-in subclasses with ``__slots__`` which caused the
-    previous implementation to fail during import on Windows builds.  The
-    dataclass-based representation keeps attribute access ergonomic while
-    maintaining backwards compatibility by implementing ``__int__`` and
-    ``__bool__``.
-    """
-
-    exit_code: int
-    dataset_path: Path | None
-    artifacts: StandardOutputArtifacts | None = None
-
-    def __int__(self) -> int:
-        """Return the stored exit code.
-
-        ``RunPipelineResult`` used to subclass :class:`int` directly.  Python
-        3.13 on Windows tightened the rules around ``int`` subclasses with
-        custom slots which caused import-time failures.  Storing the exit code
-        explicitly keeps the legacy semantics while avoiding those platform
-        specific crashes.
-        """
+        """Return the stored exit code."""
 
         return int(self.exit_code)
 
     def __index__(self) -> int:  # pragma: no cover - mirrors __int__
         return int(self.exit_code)
 
-    def __bool__(self) -> bool:  # pragma: no cover - mirrors bool(int)
+    def __bool__(self) -> bool:  # pragma: no cover - mirrors ``bool(int)`` semantics
         return bool(self.exit_code)
 
     def __eq__(self, other: object) -> bool:  # pragma: no cover - trivial delegation
