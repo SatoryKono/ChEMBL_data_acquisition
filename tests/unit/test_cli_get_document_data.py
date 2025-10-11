@@ -82,6 +82,15 @@ def test_build_parser__pubmed_defaults() -> None:
 
 
 @pytest.mark.unit
+def test_build_parser__legacy_flag_roundtrip() -> None:
+    parser, _log_cfg = get_document_data.build_parser()
+    args = parser.parse_args(["--emit-legacy-artifacts", "pubmed"])
+
+    assert args.emit_legacy_artifacts is True
+    assert args.command == "pubmed"
+
+
+@pytest.mark.unit
 def test_main__cli_overrides_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
