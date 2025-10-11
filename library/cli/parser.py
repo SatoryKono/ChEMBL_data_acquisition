@@ -162,6 +162,8 @@ def add_common_arguments(
     force_default: bool | object = False if defaults else argparse.SUPPRESS
     skip_default: bool | object = False if defaults else argparse.SUPPRESS
     emit_legacy_default: bool | object = False if defaults else argparse.SUPPRESS
+    debug_default: bool | object = False if defaults else argparse.SUPPRESS
+    keep_default: bool | object = False if defaults else argparse.SUPPRESS
     if defaults:
         run_id_default: str | object = os.environ.get(_RUN_ID_ENV) or None
     else:
@@ -228,6 +230,18 @@ def add_common_arguments(
             "Persist legacy artefacts such as raw exports, metadata sidecars and"
             " manifest snapshots"
         ),
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        default=debug_default,
+        help="Enable verbose diagnostics and retain intermediate artefacts",
+    )
+    parser.add_argument(
+        "--keep-intermediate",
+        action="store_true",
+        default=keep_default,
+        help="Preserve intermediate and diagnostic artefacts on disk",
     )
     parser.add_argument(
         "--force",
