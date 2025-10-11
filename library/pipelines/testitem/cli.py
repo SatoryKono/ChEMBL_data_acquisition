@@ -73,6 +73,19 @@ _PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
 _DEFAULT_TABLE_NAME = "testitem"
 
 
+@dataclass(frozen=True)
+class PubChemAugmentationContext:
+    """Capture the parameters required for a fallback PubChem enrichment run."""
+
+    pubchem_cfg: PubChemCfg
+    api_cfg: ApiCfg
+    retry_cfg: RetryCfg
+    client: ChemblClient
+    timeout: float
+    fields: Sequence[str] | None
+    request_limit: int
+
+
 def _normalise_output_labels(
     output: Path | str,
     *,
@@ -739,6 +752,12 @@ def run_testitem_pipeline(
     api_cfg = cfg.api.model_copy(update=api_overrides) if api_overrides else cfg.api
 
     pubchem_enabled = getattr(cfg.pubchem, "enable", True)
+    if not pubchem_enabled:
+        logger.warning(
+            "pubchem_augmentation_disabled",
+            reason="config_disabled",
+            detail="PubChem augmentation is disabled; pubchem_* columns will remain empty.",
+        )
     pubchem_api_cfg = api_cfg
     if pubchem_enabled:
         pubchem_api_cfg = _prepare_pubchem_api_cfg(cfg, api_cfg)
@@ -813,6 +832,19 @@ def run_testitem_pipeline(
             else None
         )
         parent_timeout = cfg.testitem.timeout
+        pubchem_fallback_context = (
+            PubChemAugmentationContext(
+                pubchem_cfg=cfg.pubchem,
+                api_cfg=pubchem_api_cfg,
+                retry_cfg=cfg.retry,
+                client=client,
+                timeout=parent_timeout,
+                fields=cfg.testitem.fields,
+                request_limit=cfg.testitem.request_limit,
+            )
+            if pubchem_enabled
+            else None
+        )
 
         def _parent_stats_supplier() -> ParentLookupStats:
             return parent_stats_holder["value"]
@@ -918,6 +950,7 @@ def run_testitem_pipeline(
                 input_csv=input_csv,
                 missing_ids=missing_ids,
                 emit_legacy_artifacts=options.emit_legacy_artifacts,
+                pubchem_context=pubchem_fallback_context,
             )
         except TestitemPipelineStageError as exc:
             return exc.code, None
@@ -937,6 +970,7 @@ def finalize_output(
     input_csv: Path,
     missing_ids: Sequence[str] | None = None,
     emit_legacy_artifacts: bool = False,
+    pubchem_context: PubChemAugmentationContext | None = None,
 ) -> tuple[int, io.StandardOutputArtifacts | None]:
     """Normalise, validate, and persist the final dataset from ``chunks``."""
 
@@ -1143,6 +1177,26 @@ def finalize_output(
         dataset_frame = pd.concat(validated_chunks_list, ignore_index=True)
     else:
         dataset_frame = pd.DataFrame(columns=list(expected_columns) or col_order)
+
+    if pubchem_context is not None and not dataset_frame.empty:
+        available_columns = [
+            column
+            for column in _PUBCHEM_OPTIONAL_COLUMNS
+            if column in dataset_frame.columns
+        ]
+        if not available_columns or dataset_frame[available_columns].isna().all().all():
+            logger.info("pubchem_fallback_augment_start")
+            dataset_frame = _load_pubchem_augmenter()(
+                dataset_frame,
+                pubchem_cfg=pubchem_context.pubchem_cfg,
+                api_cfg=pubchem_context.api_cfg,
+                retry_cfg=pubchem_context.retry_cfg,
+                timeout=pubchem_context.timeout,
+                client=pubchem_context.client,
+                fields=pubchem_context.fields,
+                request_limit=pubchem_context.request_limit,
+            )
+            logger.info("pubchem_fallback_augment_done")
 
     ordered_columns = [column for column in col_order if column in dataset_frame.columns]
     extra_columns = [
