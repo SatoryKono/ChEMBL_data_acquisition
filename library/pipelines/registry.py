@@ -107,7 +107,7 @@ _DEFAULT_DEFINITIONS: tuple[PipelineStepDefinition, ...] = (
         "name": "assay",
         "callable": "library.cli.commands.get_assay_data:main",
         "input": "assay.csv",
-        "output": "assays",
+        "output": "assay",
         "produces": ["assays"],
     },
     {

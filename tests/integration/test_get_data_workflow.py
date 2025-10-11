@@ -847,7 +847,7 @@ def test_pipeline_subset__retry_after_failure(
         name="assay",
         main=lambda _: 0,
         input_filename="assay.csv",
-        output_stem="assays",
+        output_stem="assay",
     )
 
     stream = io.StringIO()
