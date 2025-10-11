@@ -200,6 +200,54 @@ def test_merge_pubchem_properties__preserves_existing_values_on_skip(cfg) -> Non
         assert merged.loc[0, column] == frame.loc[0, column]
 
 
+def test_merge_pubchem_properties__retains_partial_values_on_failed_lookup(
+    cfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pubchem_cfg = cfg.pubchem
+    pubchem_cfg.prefer_local_values = True
+
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1"],
+            "pubchem_cid": ["CID_OLD"],
+            "pubchem_iupac_name": ["Existing"],
+            "pubchem_canonical_smiles": ["SMILES_EXISTING"],
+            "pubchem_isomeric_smiles": ["ISMILES_EXISTING"],
+        }
+    )
+
+    cid_series = pd.Series(["CID_NEW"], index=frame.index, dtype="string")
+    lookup_cids = {"CID_NEW"}
+
+    from library.integration import pubchem_library
+
+    class _DummyPubChemLib:
+        Properties = pubchem_library.Properties
+
+        def get_properties(self, cid: str, cfg_arg: PubChemCfg) -> pubchem_library.Properties:
+            assert cid == "CID_NEW"
+            return pubchem_library.Properties(None, None, None, None, None, None)
+
+    monkeypatch.setattr(pubchem, "_load_pubchem_library", lambda: _DummyPubChemLib())
+
+    skip_mask = pd.Series([False], index=frame.index, dtype="bool")
+    prefer_local_mask = pd.Series([False], index=frame.index, dtype="bool")
+
+    merged = pubchem._merge_pubchem_properties(
+        frame,
+        cid_series,
+        lookup_cids,
+        cfg=pubchem_cfg,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
+    )
+
+    assert merged.loc[0, "pubchem_cid"] == "CID_NEW"
+    assert merged.loc[0, "pubchem_iupac_name"] == "Existing"
+    assert merged.loc[0, "pubchem_canonical_smiles"] == "SMILES_EXISTING"
+    assert merged.loc[0, "pubchem_isomeric_smiles"] == "ISMILES_EXISTING"
+
+
 @pytest.mark.integration
 def test_augment_pubchem__initialises_session_and_reuses_cache(
     tmp_path: Path, cfg, monkeypatch: pytest.MonkeyPatch
