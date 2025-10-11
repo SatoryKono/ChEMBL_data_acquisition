@@ -56,6 +56,7 @@ from library.cli import (
     LoggerConfig,
     build_root_parser,
     configure_logger,
+    set_emit_legacy_help,
     path_argument,
     positive_int,
     prepare_io_paths,
@@ -2002,20 +2003,17 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
+    set_emit_legacy_help(
+        parser,
+        "Write legacy CSV sidecars and metadata in addition to the standard "
+        "outputs saved under io.output_dir",
+    )
     parser.add_argument(
         "--rerun-postprocess",
         action="store_true",
         help=(
             "Rebuild stage-aligned exports even if a previous run already produced "
             "them"
-        ),
-    )
-    parser.add_argument(
-        "--emit-legacy-artifacts",
-        action="store_true",
-        help=(
-            "Write legacy CSV sidecars and metadata in addition to the standard "
-            "outputs saved under io.output_dir"
         ),
     )
 

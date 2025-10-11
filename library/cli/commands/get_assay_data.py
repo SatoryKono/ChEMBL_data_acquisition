@@ -861,6 +861,10 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         chunk_size=10,
         size_option="--batch-size",
         size_dest="batch_size",
+        emit_legacy_help=(
+            "Write the legacy CSV, metadata and diagnostics alongside the "
+            "standard output bundle (default: disabled)."
+        ),
     )
     parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
     parser.add_argument(
@@ -887,16 +891,6 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Enable assay postprocessing after the main pipeline",
-    )
-    parser.add_argument(
-        "--emit-legacy-artifacts",
-        dest="emit_legacy_artifacts",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help=(
-            "Write the legacy CSV, metadata and diagnostics alongside the standard "
-            "output bundle (default: disabled)."
-        ),
     )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg

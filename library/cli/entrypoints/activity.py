@@ -2115,6 +2115,11 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         chunk_size=5,
         size_option="--batch-size",
         size_dest="batch_size",
+        emit_legacy_help=(
+            "Persist the historical CSV, metadata and diagnostics files in "
+            "addition to the standard activity output bundle (default: "
+            "disabled)."
+        ),
     )
     parser.prog = PROGRAM_NAME
     parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
@@ -2156,16 +2161,6 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Enable activity postprocessing after the main pipeline",
-    )
-    parser.add_argument(
-        "--emit-legacy-artifacts",
-        dest="emit_legacy_artifacts",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help=(
-            "Persist the historical CSV, metadata and diagnostics files in addition "
-            "to the standard activity output bundle (default: disabled)."
-        ),
     )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg
