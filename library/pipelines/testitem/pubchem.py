@@ -657,7 +657,7 @@ def _merge_pubchem_properties(
                         props = pubchem_lib.Properties(
                             None, None, None, None, None, None
                         )
-                    properties_records[cid] = {
+                    values = {
                         "pubchem_iupac_name": _value_or_na(props.IUPACName),
                         "pubchem_molecular_formula": _value_or_na(
                             props.MolecularFormula
@@ -667,6 +667,7 @@ def _merge_pubchem_properties(
                         "pubchem_inchi": _value_or_na(props.InChI),
                         "pubchem_inchikey": _value_or_na(props.InChIKey),
                     }
+                    properties_records[cid] = values
 
     properties_df = pd.DataFrame.from_dict(properties_records, orient="index")
     pubchem_df = cid_series.to_frame("pubchem_cid").join(
@@ -675,22 +676,38 @@ def _merge_pubchem_properties(
     pubchem_df = pubchem_df.reindex(frame.index)
 
     preserve_mask = skip_mask | prefer_local_mask
-    if preserve_mask.any():
-        existing_columns = [
-            column for column in PUBCHEM_COLUMNS if column in frame.columns
-        ]
-        if existing_columns:
-            original_existing = frame[existing_columns].astype("string")
+    existing_columns = [column for column in PUBCHEM_COLUMNS if column in frame.columns]
+    prefer_local_values = bool(getattr(cfg, "prefer_local_values", False))
+
+    if existing_columns:
+        original_existing = frame[existing_columns].astype("string")
+        for column in existing_columns:
+            if column not in pubchem_df.columns:
+                pubchem_df[column] = pd.Series(
+                    pd.NA, index=pubchem_df.index, dtype="string"
+                )
+
+        updated = pubchem_df[existing_columns].astype("string")
+
+        if prefer_local_values:
             for column in existing_columns:
-                if column not in pubchem_df.columns:
-                    pubchem_df[column] = pd.Series(
-                        pd.NA, index=pubchem_df.index, dtype="string"
-                    )
-            pubchem_df[existing_columns] = (
-                pubchem_df[existing_columns]
-                .astype("string")
-                .mask(preserve_mask, original_existing)
-            )
+                new_col = updated[column]
+                original_col = original_existing[column]
+                new_missing = new_col.isna() | (new_col.fillna("").str.len() == 0)
+                original_present = ~original_col.isna() & (
+                    original_col.fillna("").str.len() > 0
+                )
+                replace_mask = new_missing & original_present
+                if replace_mask.any():
+                    updated[column] = new_col.mask(replace_mask, original_col)
+
+        if preserve_mask.any():
+            for column in existing_columns:
+                updated[column] = updated[column].mask(
+                    preserve_mask, original_existing[column]
+                )
+
+        pubchem_df[existing_columns] = updated
 
     return pubchem_df.convert_dtypes()
 
