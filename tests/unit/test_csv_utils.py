@@ -9,6 +9,7 @@ from library.common import csv_utils
 
 
 @pytest.mark.unit
+@pytest.mark.pipeline_scenario("export")
 def test_write_csv_deterministic__orders_columns_and_rows(tmp_path: Path) -> None:
     frame = pd.DataFrame(
         {
@@ -38,6 +39,7 @@ def test_write_csv_deterministic__orders_columns_and_rows(tmp_path: Path) -> Non
 
 
 @pytest.mark.unit
+@pytest.mark.pipeline_scenario("logging")
 def test_write_csv_deterministic__drops_unexpected_columns(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

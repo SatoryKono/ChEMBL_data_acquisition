@@ -18,6 +18,7 @@ def test_normalize_testitems__relation_mapping(relation: str, expected: str) -> 
 
 
 @pytest.mark.unit
+@pytest.mark.pipeline_scenario("normalization")
 def test_normalize_testitems__identifier_columns_trimmed() -> None:
     frame = pd.DataFrame(
         {
@@ -47,6 +48,7 @@ def test_normalize_testitems__preserves_boolean_dtype() -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.pipeline_scenario("missing_data")
 def test_normalize_testitems__retains_missing_values() -> None:
     frame = pd.DataFrame({"molecule_chembl_id": [pd.NA]})
     normalised = normalize_testitems(frame)
