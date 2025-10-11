@@ -20,7 +20,7 @@ def get_timestamp_utc() -> str:
     """Return an ISO 8601 timestamp representing the pipeline execution time."""
 
     context = get_current()
-    if context is not None:
+    if context is not None and context.generated_at:
         return context.generated_at
     return datetime.now(UTC).isoformat()
 
