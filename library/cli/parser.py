@@ -267,6 +267,29 @@ def add_common_arguments(
     return parser
 
 
+def _set_emit_legacy_help(
+    parser: argparse.ArgumentParser, help_text: str
+) -> None:
+    """Update the help text for ``--emit-legacy-artifacts`` if present."""
+
+    for action in parser._actions:
+        option_strings = getattr(action, "option_strings", ())
+        if "--emit-legacy-artifacts" in option_strings:
+            action.help = help_text
+            return
+    raise ValueError(
+        "parser does not define the --emit-legacy-artifacts option"
+    )
+
+
+def set_emit_legacy_help(
+    parser: argparse.ArgumentParser, help_text: str
+) -> None:
+    """Public helper for tweaking the legacy artefact flag description."""
+
+    _set_emit_legacy_help(parser, help_text)
+
+
 def build_parser(
     description: str,
     *,
@@ -275,6 +298,7 @@ def build_parser(
     size_option: str = "--chunk-size",
     size_dest: str = "chunk_size",
     size_help: str = "Maximum IDs per request",
+    emit_legacy_help: str | None = None,
 ) -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Return a parser with shared options and logging configuration.
 
@@ -301,6 +325,8 @@ def build_parser(
 
     parser = argparse.ArgumentParser(description=description)
     add_common_arguments(parser)
+    if emit_legacy_help is not None:
+        _set_emit_legacy_help(parser, emit_legacy_help)
     parser.add_argument(
         "--column",
         default=column,

@@ -2115,6 +2115,11 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         chunk_size=5,
         size_option="--batch-size",
         size_dest="batch_size",
+        emit_legacy_help=(
+            "Persist the historical CSV, metadata and diagnostics files in "
+            "addition to the standard activity output bundle (default: "
+            "disabled)."
+        ),
     )
     parser.prog = PROGRAM_NAME
     parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))

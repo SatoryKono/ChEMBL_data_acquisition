@@ -861,6 +861,10 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         chunk_size=10,
         size_option="--batch-size",
         size_dest="batch_size",
+        emit_legacy_help=(
+            "Write the legacy CSV, metadata and diagnostics alongside the "
+            "standard output bundle (default: disabled)."
+        ),
     )
     parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
     parser.add_argument(
