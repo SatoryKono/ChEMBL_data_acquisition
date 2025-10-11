@@ -2010,14 +2010,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             "them"
         ),
     )
-    parser.add_argument(
-        "--emit-legacy-artifacts",
-        action="store_true",
-        help=(
+    legacy_option = parser._option_string_actions.get("--emit-legacy-artifacts")
+    if legacy_option is not None:
+        legacy_option.help = (
             "Write legacy CSV sidecars and metadata in addition to the standard "
             "outputs saved under io.output_dir"
-        ),
-    )
+        )
 
     pipeline_group = parser.add_argument_group("Pipeline selection")
     pipeline_group.add_argument(
