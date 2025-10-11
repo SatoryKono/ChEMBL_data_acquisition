@@ -121,9 +121,9 @@ _DEFAULT_DEFINITIONS: tuple[PipelineStepDefinition, ...] = (
         "name": "activity",
         "callable": "library.cli.entrypoints.activity:main",
         "input": "activity.csv",
-        "output": "activities",
+        "output": "activity",
         "flags": {"dry_run": True},
-        "produces": ["activities"],
+        "produces": ["activity", "activities"],
         "consumes": ["documents", "targets", "assays", "testitems"],
     },
 )

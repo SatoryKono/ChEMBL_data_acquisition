@@ -74,7 +74,7 @@ For details on the recent relocation of the test item pipeline into the
 | Assay | `scripts/get_assay_data.py` | ChEMBL `/assay`. | `output.assays_<stamp>.csv` with QA artefacts. |
 | Test item | `scripts/get_testitem_data.py` | ChEMBL `/molecule`, PubChem PUG-REST. | `output.testitems_<stamp>.csv` and metadata. |
 | Tissue | `scripts/get_tissue_data.py` | ChEMBL `/tissue`, ontology caches (UBERON, EFO, BTO, Caloha, LINCS, CCLE). | `output.tissue_<stamp>.csv` plus quality reports and metadata; run manually before the activity pipeline when tissue joins are needed. |
-| Activity | `scripts/get_activity_data.py` | ChEMBL `/activity`. | `output.activities_<stamp>.csv` with enrichment columns. |
+| Activity | `scripts/get_activity_data.py` | ChEMBL `/activity`. | `output.activity_<stamp>.csv` with enrichment columns. |
 
 The orchestrator runs the document → target → assay → test item → activity
 modules sequentially unless specific stages are skipped via CLI flags. Tissue is

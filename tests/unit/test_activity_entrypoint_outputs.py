@@ -13,7 +13,7 @@ def test_derive_standard_output_labels__handles_hidden_temp_file(tmp_path: Path)
 
     table_name, date_tag = activity._derive_standard_output_labels(dataset_path)
 
-    assert table_name == "activities"
+    assert table_name == "activity"
     assert date_tag == "20240101"
 
 

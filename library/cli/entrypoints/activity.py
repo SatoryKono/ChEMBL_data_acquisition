@@ -102,7 +102,7 @@ except Exception:  # pragma: no cover - defensive fallback for alternative stack
     _Urllib3NameResolutionError = None  # type: ignore[assignment]
 
 DEFAULT_INPUT_NAME = "activity.csv"
-DEFAULT_OUTPUT_STEM = "activities"
+DEFAULT_OUTPUT_STEM = "activity"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
 
 # ---------------------------------------------------------------------------
@@ -160,9 +160,14 @@ def _derive_standard_output_labels(dataset_csv: Path) -> tuple[str, str]:
         table = (match.group("table") or "").rstrip("_")
         date_tag = match.group("date")
         table_name = table or DEFAULT_OUTPUT_STEM
+        if table_name.lower() == "activities":
+            table_name = DEFAULT_OUTPUT_STEM
         return table_name, date_tag
 
-    return (base or DEFAULT_OUTPUT_STEM, _current_date_token())
+    table_name = base or DEFAULT_OUTPUT_STEM
+    if table_name.lower() == "activities":
+        table_name = DEFAULT_OUTPUT_STEM
+    return table_name, _current_date_token()
 
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
@@ -1291,11 +1296,18 @@ def _derive_standard_output_labels(dataset_csv: Path) -> tuple[str, str]:
     else:
         table_candidate, date_candidate = base, ""
 
-    table_name = table_candidate.lstrip(".") or DEFAULT_OUTPUT_STEM
-    if _DATE_TOKEN_RE.fullmatch(date_candidate):
-        date_tag = date_candidate
+    clean_table = table_candidate.lstrip(".")
+    if _DATE_TOKEN_RE.fullmatch(clean_table) and not date_candidate:
+        table_name = DEFAULT_OUTPUT_STEM
+        date_tag = clean_table
     else:
-        date_tag = _current_date_token()
+        table_name = clean_table or DEFAULT_OUTPUT_STEM
+        if table_name.lower() == "activities":
+            table_name = DEFAULT_OUTPUT_STEM
+        if _DATE_TOKEN_RE.fullmatch(date_candidate):
+            date_tag = date_candidate
+        else:
+            date_tag = _current_date_token()
 
     return table_name, date_tag
 
@@ -1864,7 +1876,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if dataset_path is not None:
             standard_artifacts = _persist_standard_outputs(Path(dataset_path))
             standard_dataset = standard_artifacts.dataset
-            if not emit_legacy and standard_dataset != Path(dataset_path):
+            auto_generated = bool(getattr(args, "_auto_output_generated", False))
+            if (
+                not emit_legacy
+                and auto_generated
+                and standard_dataset != Path(dataset_path)
+            ):
                 Path(dataset_path).unlink(missing_ok=True)
             dataset_path = standard_dataset
             output_path = dataset_path
