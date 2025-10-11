@@ -468,7 +468,10 @@ def _resolve_standard_output_naming(
 ) -> tuple[str, str]:
     """Return ``(table_name, date_tag)`` derived from legacy output paths."""
 
-    stem = output_path.stem
+    name = output_path.name
+    if name.startswith(".") and name.endswith(".tmp"):
+        name = name[1:-len(".tmp")]
+    stem = Path(name).stem if name else output_path.stem
     remainder = stem
     if remainder.startswith("output."):
         remainder = remainder.split("output.", 1)[1]
