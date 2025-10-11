@@ -682,7 +682,6 @@ def _finalise_export(
         or inferred_date
         or datetime.now(timezone.utc).strftime("%Y%m%d")
     )
-    )
 
     try:
         quality_report = generate_qc_report(
