@@ -78,6 +78,14 @@ def _service_unavailable_log_context(details: Mapping[str, Any] | None) -> dict[
     if isinstance(timeout_retry_in, Real):
         context["timeout_retry_in"] = float(timeout_retry_in)
 
+    cooldown_remaining = details.get("cooldown_remaining")
+    if isinstance(cooldown_remaining, Real):
+        context["cooldown_remaining"] = float(cooldown_remaining)
+
+    cooldown_available_at = details.get("cooldown_available_at")
+    if isinstance(cooldown_available_at, str) and cooldown_available_at:
+        context["cooldown_available_at"] = cooldown_available_at
+
     retry_after_source = details.get("retry_after_source")
     if isinstance(retry_after_source, str) and retry_after_source:
         context["retry_after_source"] = retry_after_source

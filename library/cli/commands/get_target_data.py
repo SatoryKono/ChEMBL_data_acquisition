@@ -21,6 +21,7 @@ import shutil
 import stat
 import sys
 import time
+from tempfile import TemporaryDirectory
 from datetime import datetime, timezone
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -3904,39 +3905,53 @@ def validate_and_write(
         args=postprocess_context.args if postprocess_context else None,
         http_requests=http_requests,
     )
-    io.write_csv(
-        final_df,
-        expected_dataset_path,
-        cfg=cfg,
-        sep=cfg.io.csv_sep,
-        encoding=cfg.io.csv_encoding,
-        key_cols=key_columns or None,
-        col_order=export_columns,
-    )
     export_df = final_df
     pipeline_result: "PostprocessingPipelineResult" | None = None
     postprocess_output_path: Path | None = None
     postprocess_report_path: Path | None = None
-    final_csv_path: Path | None = expected_dataset_path
-    if final_csv_path is not None:
-        if exit_code != 0:
-            logger.warning(
-                "postprocess_running_with_errors",
-                exit_code=exit_code,
-                path=str(final_csv_path),
+    final_csv_path: Path | None = None
+    postprocess_args = postprocess_context.args if postprocess_context else None
+    postprocess_requested = bool(getattr(postprocess_args, "postprocess", False))
+    if exit_code != 0:
+        logger.warning(
+            "postprocess_running_with_errors",
+            exit_code=exit_code,
+            path=str(expected_dataset_path),
+        )
+    if postprocess_requested:
+        with TemporaryDirectory(prefix="target_postprocess_") as temp_dir:
+            temp_source = Path(temp_dir) / (
+                f"output.{inferred_table_name}_{inferred_date_tag}.csv"
             )
+            io.write_csv(
+                final_df,
+                temp_source,
+                cfg=cfg,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+                key_cols=key_columns or None,
+                col_order=export_columns,
+            )
+            pipeline_result = run_target_postprocess_if_requested(
+                temp_source,
+                cfg=cfg,
+                args=postprocess_args,
+                context=isoform_context,
+                ambiguous_classifications=ambiguous_count,
+            )
+    else:
         pipeline_result = run_target_postprocess_if_requested(
-            final_csv_path,
+            expected_dataset_path,
             cfg=cfg,
-            args=isoform_context.args,
+            args=postprocess_args,
             context=isoform_context,
             ambiguous_classifications=ambiguous_count,
         )
-        if pipeline_result is not None:
-            export_df = pipeline_result.dataframe
-            postprocess_output_path = Path(pipeline_result.output_path)
-            if pipeline_result.report_path is not None:
-                postprocess_report_path = Path(pipeline_result.report_path)
+    if pipeline_result is not None:
+        export_df = pipeline_result.dataframe
+        postprocess_output_path = Path(pipeline_result.output_path)
+        if pipeline_result.report_path is not None:
+            postprocess_report_path = Path(pipeline_result.report_path)
     final_df = export_df
     quality_summary = generate_qc_report(
         final_df,
