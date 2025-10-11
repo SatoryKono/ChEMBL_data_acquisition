@@ -928,3 +928,43 @@ def test_raw_dump_stream_writer_write__permission_error_retries(
             "error": "file is locked",
         },
     ) in warning_events
+
+def test_validate_and_write__omits_failure_artifacts_when_legacy_disabled(
+    tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        get_target_data,
+        "generate_qc_report",
+        lambda *_, **__: pd.DataFrame(),
+    )
+    monkeypatch.setattr(
+        get_target_data,
+        "generate_correlation_report",
+        lambda *_, **__: pd.DataFrame(),
+    )
+
+    cfg.io.output_dir = tmp_path
+    output_path = tmp_path / "output.targets_20230101.csv"
+    failure_path = tmp_path / "output.targets_20230101_failure_cases.csv"
+    failure_meta = failure_path.with_name(failure_path.name + ".meta.yaml")
+    failure_path.write_text("stale", encoding="utf-8")
+    failure_meta.write_text("metadata", encoding="utf-8")
+
+    df = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1"],
+            "sequence_length": [123],
+        }
+    )
+
+    exit_code = get_target_data.validate_and_write(
+        df,
+        output_path,
+        cfg,
+        emit_legacy_artifacts=False,
+    )
+
+    assert exit_code == 1
+    assert output_path.exists()
+    assert not failure_path.exists()
+    assert not failure_meta.exists()
