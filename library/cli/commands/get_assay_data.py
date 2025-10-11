@@ -404,6 +404,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             table_name=table_name_value,
             date_tag=date_tag,
             output_path=dataset_csv,
+            cleanup_source=not emit_legacy,
         )
         logger.info(
             "assay_standard_outputs",
@@ -559,6 +560,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 cfg=cfg,
                 logger=logger,
                 emit_legacy_artifacts=emit_legacy,
+                cleanup_standard_source=not emit_legacy,
             )
         finally:
             if emit_legacy:
