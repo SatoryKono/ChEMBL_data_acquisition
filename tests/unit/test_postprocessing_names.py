@@ -61,3 +61,26 @@ def test_process_target_names__normalises_tmp_suffix(tmp_path: Path) -> None:
     output_path = Path(result["path"])
     assert output_path.name == "names.output.target_20250101.csv"
     assert output_path.exists()
+
+
+def test_process_target_names__writes_to_custom_output_dir(tmp_path: Path) -> None:
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    input_path = input_dir / "output.target_20260101.csv"
+    pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL_CUSTOM",
+                "uniprot_id_primary": "PCUSTOM",
+                "pref_name": "Custom",
+            }
+        ]
+    ).to_csv(input_path, index=False)
+
+    output_dir = tmp_path / "names"
+    result = names.process_target_names(input_path, output_dir=output_dir, verbose=False)
+
+    output_path = Path(result["path"])
+    assert output_path.parent == output_dir
+    assert output_path.name == "names.output.target_20260101.csv"
+    assert output_path.exists()

@@ -433,6 +433,52 @@ def test_process_target_names_helper__stable_sorting_of_duplicates(
     assert list(subset["source_column"]) == ["gene_symbol", "gene_symbol_list"]
 
 
+def test_process_target_names__custom_output_dir(tmp_path: Path) -> None:
+    output_dir = tmp_path / "custom-output"
+    output_dir.mkdir()
+
+    older = output_dir / "output.target_20240101.csv"
+    newer = output_dir / "output.target_20250303.csv"
+
+    pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL_OLD",
+                "uniprot_id_primary": "POLD",
+                "pref_name": "Legacy",
+            }
+        ]
+    ).to_csv(older, index=False)
+
+    pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL_NEW",
+                "uniprot_id_primary": "PNEW",
+                "pref_name": "Latest",
+                "contrion": "A|B",
+                "active_component_type": "protein",
+            }
+        ]
+    ).to_csv(newer, index=False)
+
+    result = names.process_target_names(output_dir=output_dir)
+    output_path = Path(result["path"])
+
+    assert output_path.parent == output_dir
+    assert output_path.name == "names.output.target_20250303.csv"
+
+    produced = pd.read_csv(output_path, dtype="string")
+    assert_csv_header(output_path, names.TARGET_NAMES_COLUMNS)
+
+    assert (produced["target_chembl_id"] == "CHEMBL_NEW").all()
+    assert "Latest" in produced["name"].tolist()
+
+    summary = result["summary"]
+    assert summary["rows_before"] == 1
+    assert summary["contrion_total"] == 2
+
+
 @pytest.mark.unit
 def test_ensure_columns__missing_required_columns_raise() -> None:
     frame = pd.DataFrame({"target_components": ["[]"]})
