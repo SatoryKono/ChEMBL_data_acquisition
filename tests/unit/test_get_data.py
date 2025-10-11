@@ -1149,3 +1149,36 @@ def test_run_postprocess_hook__missing_input(
             },
         )
     ]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "output.targets_20240101_failure_cases.csv",
+        "output.targets_20240101_chembl.csv",
+        "output.targets_20240101_uniprot.csv",
+        "output.documents_20240101_pubmed.csv",
+        "output.targets_20240101_normalized.csv",
+        "output.targets_raw.csv",
+        "output.targets.raw.parquet",
+        "output.targets_20240101.quality.json",
+        "output.targets_20240101.postprocess.report.json",
+        "output_postprocessed.targets.csv",
+    ],
+)
+def test_is_diagnostic_sidecar__legacy_suffixes(filename: str) -> None:
+    assert get_data._is_diagnostic_sidecar(Path(filename)) is True
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "output.targets_20240101.csv",
+        "output.targets_20240101_quality_report_table.csv",
+        "output.targets_20240101_data_correlation_report_table.csv",
+    ],
+)
+def test_is_diagnostic_sidecar__canonical_outputs(filename: str) -> None:
+    assert get_data._is_diagnostic_sidecar(Path(filename)) is False
