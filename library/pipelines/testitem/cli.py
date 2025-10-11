@@ -1099,8 +1099,19 @@ def finalize_output(
         return exit_code, None
 
     def _resolve_table_name_and_tag(path: Path) -> tuple[str, str]:
-        stem = path.stem
+        normalised_path = path
+        if normalised_path.suffix == ".tmp":
+            normalised_path = normalised_path.with_suffix("")
+
+        stem = normalised_path.stem
+        if stem.startswith("."):
+            stripped = stem.lstrip(".")
+            if stripped:
+                stem = stripped
+
         remainder = stem.split("output.", 1)[-1] if stem.startswith("output.") else stem
+        if remainder.endswith(".csv"):
+            remainder = remainder[: -len(".csv")]
         candidate_table, sep, candidate_tag = remainder.rpartition("_")
 
         def _normalise_table_name(value: str) -> str:
