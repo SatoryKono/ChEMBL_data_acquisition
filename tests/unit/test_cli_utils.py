@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -146,3 +147,18 @@ def test_run_cli_command__run_id_determinism(tmp_path, monkeypatch):
 
     assert run_id_a == run_id_b
     assert run_id_a != run_id_c
+
+
+@pytest.mark.unit
+def test_resolve_standard_output_naming__temporary_working_path() -> None:
+    output_path = Path(".output.targets_20240101.csv.tmp")
+
+    table_name, date_tag = cli_utils._resolve_standard_output_naming(
+        output_path,
+        cfg=None,
+        command="target",
+        invocation=("target", "--final-out", str(output_path)),
+    )
+
+    assert table_name == "targets"
+    assert date_tag == "20240101"
