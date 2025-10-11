@@ -475,6 +475,53 @@ def test_finalise_export__qa_mismatch_sets_exit_code(
     assert finalise_calls, "finalise_csv_output should still be invoked"
 
 
+def test_resolve_output_table_and_tag__canonical(tmp_path: Path) -> None:
+    output = tmp_path / "output.documents_20240101.csv"
+
+    table, stamp = get_document_data._resolve_output_table_and_tag(output)
+
+    assert table == "documents"
+    assert stamp == "20240101"
+
+
+def test_resolve_output_table_and_tag__noncanonical(tmp_path: Path) -> None:
+    output = tmp_path / "documents.csv"
+
+    table, stamp = get_document_data._resolve_output_table_and_tag(output)
+
+    assert table == "documents"
+    assert stamp is None
+
+
+def test_finalise_export__canonical_output_writes_to_target(
+    cfg: Config, tmp_path: Path
+) -> None:
+    output_csv = tmp_path / "output.documents_20240101.csv"
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("document_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    cfg.io.output_dir = str(output_csv.parent)
+
+    frame = get_document_data.build_dataframe(
+        [{"document_chembl_id": "CHEMBL1"}],
+        columns=get_document_data.DOCUMENT_SCHEMA_COLUMNS,
+        fill_missing=False,
+    )
+
+    result = get_document_data._finalise_export(
+        frame,
+        output_csv,
+        cfg,
+        input_csv=input_csv,
+    )
+
+    assert result.exit_code == 0
+    assert result.artifacts is not None
+    assert result.artifacts.dataset == output_csv
+    assert output_csv.exists()
+
+
 def test_finalise_export__partial_run_skips_qa(
     cfg: Config,
     tmp_path: Path,
