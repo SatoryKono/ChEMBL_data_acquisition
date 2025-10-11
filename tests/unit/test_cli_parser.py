@@ -297,3 +297,19 @@ def test_default_output_path__deduplicates_intermediate_suffix(tmp_path: Path) -
     )
 
     assert output_path == tmp_path / "output.assays_20240101.csv"
+
+
+@pytest.mark.unit
+def test_default_output_path__normalises_chained_hidden_prefix(tmp_path: Path) -> None:
+    cfg = SimpleNamespace(
+        output_dir=tmp_path,
+        default_date_prefix=None,
+        output_stamp_mode="omit",
+    )
+
+    output_path = default_output_path(
+        tmp_path / "output..output.activities_20240101.csv.tmp",
+        cfg,
+    )
+
+    assert output_path == tmp_path / "output.activities_20240101.csv"
