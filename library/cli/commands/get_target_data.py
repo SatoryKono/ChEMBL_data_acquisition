@@ -149,6 +149,42 @@ def _cleanup_intermediate_outputs(outputs: Sequence[tuple[Path, bool]] | None) -
             )
 
 
+def _cleanup_standard_output_artifacts(base_output: Path) -> None:
+    """Remove canonical artefacts produced for intermediate pipeline steps."""
+
+    parent = base_output.parent
+    if not parent.exists():
+        return
+
+    stem = base_output.stem
+    dataset_pattern = f"{stem}_*.csv"
+    report_suffixes = (
+        "_quality_report_table.csv",
+        "_data_correlation_report_table.csv",
+    )
+
+    for candidate in parent.glob(dataset_pattern):
+        if candidate == base_output:
+            continue
+        try:
+            candidate.unlink()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:  # pragma: no cover - best-effort cleanup
+            logger.warning(
+                "standard_output_cleanup_failed",
+                path=str(candidate),
+                error=str(exc),
+            )
+            continue
+        Path(f"{candidate}.meta.yaml").unlink(missing_ok=True)
+
+        for suffix in report_suffixes:
+            report_candidate = parent / f"{candidate.stem}{suffix}"
+            report_candidate.unlink(missing_ok=True)
+            Path(f"{report_candidate}.meta.yaml").unlink(missing_ok=True)
+
+
 UNIPROT_MISSING_VALUE = ""
 
 
@@ -2825,6 +2861,7 @@ def fetch_chembl(
     normalize_at_export: bool = True,
     no_reindex_raw: bool = False,
     emit_standard_outputs: bool = True,
+    cleanup_standard_outputs: bool = False,
 ) -> pd.DataFrame:
     """Fetch target information from ChEMBL.
 
@@ -2907,6 +2944,8 @@ def fetch_chembl(
         dtype=str,
     )
     logger.info("fetch_chembl_done", rows=len(df), path=str(output_path))
+    if cleanup_standard_outputs:
+        _cleanup_standard_output_artifacts(final_out)
     return df
 
 
@@ -4179,7 +4218,8 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             chunk_size=cfg.target.all.chunk_size,
             offset=cfg.target.all.offset,
             id_cols=key_columns,
-            emit_standard_outputs=False,
+            emit_standard_outputs=True,
+            cleanup_standard_outputs=True,
         )
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
