@@ -37,7 +37,10 @@ def _load_bootstrap(script_file: str | None) -> _BootstrapModule:
         if project_root_str not in sys.path:
             sys.path.insert(0, project_root_str)
 
-    imported = import_module(module_name)
+    try:
+        imported = import_module(module_name)
+    except ModuleNotFoundError as exc:  # pragma: no cover - import guard
+        raise SystemExit(str(exc)) from exc
     return cast(_BootstrapModule, imported)
 
 

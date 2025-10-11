@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import inspect
 import os
+import re
 import sys
 import tempfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -182,6 +183,29 @@ _EXPORT_SORT_FALLBACK = [
 
 
 _EXPORT_STREAM_CHUNK_SIZE = 10_000
+
+_CANONICAL_OUTPUT_RE = re.compile(
+    r"^output\.(?P<table>[\w.-]+)_(?P<stamp>\d{8})$"
+)
+
+
+def _resolve_output_table_and_tag(output: Path) -> tuple[str, str | None]:
+    """Return the logical table name and optional date tag for ``output``."""
+
+    stem = output.with_suffix("").name
+    match = _CANONICAL_OUTPUT_RE.fullmatch(stem)
+    if match:
+        table = match.group("table") or DEFAULT_OUTPUT_STEM
+        stamp = match.group("stamp")
+        return table, stamp
+
+    if stem.startswith("output."):
+        table = stem[len("output.") :]
+    else:
+        table = stem
+
+    table = table or DEFAULT_OUTPUT_STEM
+    return table, None
 
 
 def _resolve_timeout(value: float | None, default: float) -> float:
@@ -653,8 +677,10 @@ def _finalise_export(
         export_frame = dataframe_to_strings(export_frame, skip=_NUMERIC_EXPORT_COLUMNS)
         export_frame = _prepare_export_frame(export_frame)
 
-    table_name = output.stem or DEFAULT_OUTPUT_STEM
-    resolved_date_tag = date_tag or datetime.now(timezone.utc).strftime("%Y%m%d")
+    table_name, canonical_tag = _resolve_output_table_and_tag(output)
+    resolved_date_tag = (
+        canonical_tag or date_tag or datetime.now(timezone.utc).strftime("%Y%m%d")
+    )
 
     try:
         quality_report = generate_qc_report(
@@ -1876,11 +1902,11 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         if not isinstance(final_out_attr, Path):
             args.final_out = output_path
     args.output_csv = output_path
-    standard_date_tag = datetime.now(timezone.utc).strftime("%Y%m%d")
+    table_name, canonical_tag = _resolve_output_table_and_tag(output_path)
+    standard_date_tag = canonical_tag or datetime.now(timezone.utc).strftime("%Y%m%d")
     setattr(args, "_standard_date_tag", standard_date_tag)
     emit_legacy = bool(getattr(args, "emit_legacy_artifacts", False))
 
-    table_name = output_path.stem or DEFAULT_OUTPUT_STEM
     output_dir_value = getattr(cfg.io, "output_dir", None)
     output_dir = Path(output_dir_value) if output_dir_value else output_path.parent
     canonical_dataset = output_dir / f"output.{table_name}_{standard_date_tag}.csv"

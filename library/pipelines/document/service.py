@@ -10,9 +10,11 @@ from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, Seq
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock, local
 from typing import TYPE_CHECKING, Any, TypeVar
+import shutil
 
 import pandas as pd
 import requests
@@ -1021,6 +1023,67 @@ def _update_document_config_from_options(
     setattr(pipelines, options.mode, section.model_copy(update=updates))
 
 
+def _resolve_effective_date(options: DocumentPipelineOptions, cfg: Config) -> str:
+    """Return the date stamp used for canonical output artefacts."""
+
+    candidates = (
+        getattr(options, "date_prefix", None),
+        getattr(cfg.io, "default_date_prefix", None),
+    )
+    for candidate in candidates:
+        if not candidate:
+            continue
+        text = str(candidate).strip()
+        if text:
+            return text
+    return datetime.now(timezone.utc).strftime("%Y%m%d")
+
+
+def _normalise_working_basename(path: Path) -> Path:
+    """Return the final output path inferred from a working artefact."""
+
+    name = path.name
+    if name.startswith("."):
+        name = name[1:]
+    if name.endswith(".tmp"):
+        name = name[:-4]
+    final_path = path.with_name(name)
+    while final_path.suffix:
+        final_path = final_path.with_suffix("")
+    return final_path
+
+
+def _resolve_table_name(
+    options: DocumentPipelineOptions, working_output: Path, date_tag: str
+) -> str:
+    """Derive the logical table name for canonical outputs."""
+
+    candidate = getattr(options, "output_stem", None)
+    if candidate:
+        text = str(candidate).strip()
+        if text:
+            return text
+
+    final_path = _normalise_working_basename(working_output)
+    stem = final_path.name
+    if date_tag and stem.endswith(f"_{date_tag}"):
+        stem = stem[: -len(f"_{date_tag}")]
+    if stem.startswith("output."):
+        stripped = stem[len("output.") :]
+        stem = stripped or stem
+    return stem or "documents"
+
+
+def _canonical_dataset_path(
+    cfg: Config, table_name: str, date_tag: str, cli_output: Path
+) -> Path:
+    """Return the canonical dataset path emitted by the CLI."""
+
+    output_dir_value = getattr(cfg.io, "output_dir", None)
+    output_dir = Path(output_dir_value) if output_dir_value else cli_output.parent
+    return output_dir / f"output.{table_name}_{date_tag}.csv"
+
+
 def run_document_service(
     config: Config,
     options: DocumentPipelineOptions,
@@ -1029,11 +1092,11 @@ def run_document_service(
 ) -> PipelineRunResult:
     """Execute the document pipeline using typed ``options``."""
 
-    output_path = Path(options.output_csv)
-    if options.skip_existing and output_path.exists() and not options.force:
+    working_output = Path(options.output_csv)
+    if options.skip_existing and working_output.exists() and not options.force:
         return PipelineRunResult(
             exit_code=0,
-            output_path=output_path,
+            output_path=working_output,
             executed=False,
             reason="skip_existing",
             written=False,
@@ -1042,10 +1105,14 @@ def run_document_service(
     cfg = config.model_copy(deep=True)
     _update_document_config_from_options(cfg, options)
 
+    date_tag = _resolve_effective_date(options, cfg)
+    table_name = _resolve_table_name(options, working_output, date_tag)
+    cli_output = working_output.parent / f"{table_name}.csv"
+
     args = argparse.Namespace(
         input_csv=Path(options.input_csv),
-        final_out=output_path,
-        output_csv=output_path,
+        final_out=cli_output,
+        output_csv=cli_output,
         skip_existing=options.skip_existing,
         force=options.force,
         limit=options.limit,
@@ -1061,6 +1128,9 @@ def run_document_service(
         command=options.mode,
     )
     args.rerun_postprocess = options.rerun_postprocess
+    setattr(args, "date", date_tag)
+    setattr(args, "date_prefix", date_tag)
+    setattr(args, "_standard_date_tag", date_tag)
 
     mode_handlers = _resolve_mode_handlers(handlers)
     handler = mode_handlers.get(options.mode)
@@ -1071,9 +1141,48 @@ def run_document_service(
     pipeline = DocumentPipeline(cfg)
     exit_code = int(handler(cfg, args, pipeline=pipeline))
     reason = None if exit_code == 0 else "pipeline_failed"
+
+    if exit_code == 0 and not working_output.exists():
+        canonical_path = _canonical_dataset_path(cfg, table_name, date_tag, cli_output)
+        if canonical_path.exists():
+            working_output.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                if canonical_path.resolve() == working_output.resolve():
+                    pass
+                else:
+                    shutil.copy2(canonical_path, working_output)
+            except OSError as exc:  # pragma: no cover - filesystem failure guard
+                logger.error(
+                    "document_output_copy_failed",
+                    expected=str(working_output),
+                    canonical=str(canonical_path),
+                    error=str(exc),
+                    exc_info=exc,
+                )
+                return PipelineRunResult(
+                    exit_code=1,
+                    output_path=working_output,
+                    executed=True,
+                    reason="output_copy_failed",
+                    written=False,
+                )
+        else:
+            logger.error(
+                "document_output_missing",
+                expected=str(working_output),
+                canonical=str(canonical_path),
+            )
+            return PipelineRunResult(
+                exit_code=1,
+                output_path=working_output,
+                executed=True,
+                reason="output_missing",
+                written=False,
+            )
+
     return PipelineRunResult(
         exit_code=exit_code,
-        output_path=output_path,
+        output_path=working_output,
         executed=True,
         reason=reason,
         written=exit_code == 0,
