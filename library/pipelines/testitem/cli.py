@@ -1128,10 +1128,12 @@ def finalize_output(
     if exit_code != 0:
         return exit_code, None
 
+    fallback_date = getattr(getattr(cfg, "io", None), "default_date_prefix", None)
     table_name, date_tag = io.derive_output_labels(
         output,
         default_table="testitem",
-        fallback_date=getattr(cfg.io, "default_date_prefix", None),
+        fallback_date=fallback_date,
+    )
     )
 
     dataset_frame: pd.DataFrame

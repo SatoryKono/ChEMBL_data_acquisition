@@ -91,19 +91,9 @@ def test_finalize_output__writes_csv_and_metadata(
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize(
-    ("raw_output_name", "expected_dataset"),
-    [
-        ("output.testitems_20240101.csv", "output.testitems_20240101.csv"),
-        ("output.testitem_20240101.csv", "output.testitem_20240101.csv"),
-    ],
-)
+@pytest.mark.parametrize("stem", ["testitems", "testitem"])
 def test_finalize_output__normalises_hidden_output_path(
-    tmp_path: Path,
-    sample_input_csv: Path,
-    cfg,
-    raw_output_name: str,
-    expected_dataset: str,
+    tmp_path: Path, sample_input_csv: Path, cfg, stem: str
 ) -> None:
     cfg.system.doc_quality.enable = False
 
@@ -113,7 +103,7 @@ def test_finalize_output__normalises_hidden_output_path(
             "natural_product": pd.Series([True], dtype="boolean"),
         }
     )
-    working_output = tmp_path / f".{raw_output_name}.tmp"
+    working_output = tmp_path / f".output.{stem}_20240101.csv.tmp"
     stats_supplier = _StatsSupplier(_base_stats())
 
     exit_code, artifacts = cli.finalize_output(
@@ -126,7 +116,8 @@ def test_finalize_output__normalises_hidden_output_path(
 
     assert exit_code == 0
     assert artifacts is not None
-    assert artifacts.dataset.name == expected_dataset
+    expected_name = f"output.{stem}_20240101.csv"
+    assert artifacts.dataset.name == expected_name
     assert artifacts.dataset.parent == working_output.parent
     assert artifacts.dataset.exists()
     assert not working_output.exists()
