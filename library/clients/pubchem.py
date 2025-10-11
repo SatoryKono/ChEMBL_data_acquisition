@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from numbers import Real
 from threading import Lock, local
@@ -94,6 +94,11 @@ def _retry_after_seconds(
 _CACHE: TTLCache[str, _CacheEntry] | None = None
 _CACHE_LOCK = Lock()
 
+_SERVICE_OUTAGE_LOCK = Lock()
+_SERVICE_OUTAGE_UNTIL: float | None = None
+_SERVICE_OUTAGE_REASON: str | None = None
+_SERVICE_OUTAGE_DETAILS: dict[str, Any] | None = None
+
 _SESSION_LOCK = Lock()
 _DEFAULT_API_CFG = ApiCfg(user_agent="chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)")
 _DEFAULT_RETRY_CFG = RetryCfg()
@@ -115,6 +120,95 @@ def _set_last_outcome(outcome: str | None, details: Mapping[str, Any] | None) ->
     if details is not None:
         details = dict(details)
     _THREAD_STATE.last_outcome = (outcome, details)
+
+
+def _service_outage_remaining(
+    *, now: float | None = None,
+) -> tuple[float | None, str | None, dict[str, Any] | None]:
+    """Return remaining global cooldown seconds, outcome and details if active."""
+
+    current = monotonic() if now is None else now
+    with _SERVICE_OUTAGE_LOCK:
+        global _SERVICE_OUTAGE_UNTIL, _SERVICE_OUTAGE_REASON, _SERVICE_OUTAGE_DETAILS
+        if _SERVICE_OUTAGE_UNTIL is None:
+            return None, None, None
+        remaining = _SERVICE_OUTAGE_UNTIL - current
+        if remaining <= 0:
+            _SERVICE_OUTAGE_UNTIL = None
+            _SERVICE_OUTAGE_REASON = None
+            _SERVICE_OUTAGE_DETAILS = None
+            return None, None, None
+        details = (
+            dict(_SERVICE_OUTAGE_DETAILS)
+            if _SERVICE_OUTAGE_DETAILS is not None
+            else None
+        )
+        return remaining, _SERVICE_OUTAGE_REASON, details
+
+
+def _start_service_outage(
+    outcome: str | None,
+    details: Mapping[str, Any] | None,
+    cfg: PubChemCfg,
+) -> None:
+    """Begin a global service cooldown when *outcome* denotes unavailability."""
+
+    if outcome not in SERVICE_UNAVAILABLE_OUTCOMES:
+        return
+
+    retry_after: float | None = None
+    source: str | None = None
+    if details:
+        retry_after_value = details.get("retry_after")
+        if isinstance(retry_after_value, Real) and float(retry_after_value) > 0:
+            retry_after = float(retry_after_value)
+            retry_after_source = details.get("retry_after_source")
+            if isinstance(retry_after_source, str) and retry_after_source:
+                source = retry_after_source
+        if retry_after is None:
+            timeout_retry = details.get("timeout_retry_after")
+            if isinstance(timeout_retry, Real) and float(timeout_retry) > 0:
+                retry_after = float(timeout_retry)
+                source = "timeout_cache"
+            elif isinstance(details.get("timeout_retry_in"), Real):
+                pending_retry = float(details["timeout_retry_in"])
+                if pending_retry > 0:
+                    retry_after = pending_retry
+                    source = "timeout_cache"
+
+    if retry_after is None or retry_after <= 0:
+        fallback_candidates: tuple[float | None, ...] = (
+            cfg.backoff_initial_seconds,
+            cfg.delay,
+        )
+        for candidate in fallback_candidates:
+            if isinstance(candidate, Real) and float(candidate) > 0:
+                retry_after = float(candidate)
+                source = "fallback"
+                break
+
+    if retry_after is None or retry_after <= 0:
+        return
+
+    now_monotonic = monotonic()
+    until = now_monotonic + retry_after
+    available_at = datetime.now(UTC) + timedelta(seconds=retry_after)
+    stored_details = dict(details) if details else {}
+    stored_details.setdefault("reason", outcome)
+    stored_details.setdefault("retry_after", retry_after)
+    if source and not stored_details.get("retry_after_source"):
+        stored_details["retry_after_source"] = source
+    stored_details["cooldown_started_at"] = now_monotonic
+    stored_details["cooldown_until"] = until
+    stored_details["cooldown_available_at"] = available_at.isoformat()
+
+    with _SERVICE_OUTAGE_LOCK:
+        global _SERVICE_OUTAGE_UNTIL, _SERVICE_OUTAGE_REASON, _SERVICE_OUTAGE_DETAILS
+        if _SERVICE_OUTAGE_UNTIL is not None and until <= _SERVICE_OUTAGE_UNTIL:
+            return
+        _SERVICE_OUTAGE_UNTIL = until
+        _SERVICE_OUTAGE_REASON = outcome
+        _SERVICE_OUTAGE_DETAILS = stored_details
 
 
 def last_request_outcome() -> tuple[str | None, dict[str, Any] | None]:
@@ -370,6 +464,18 @@ def make_request(
         return None
     logger.debug("cache_miss", url=url, rps=cfg.rps, status="miss", method=method_upper)
 
+    outage_remaining, outage_outcome, outage_details = _service_outage_remaining()
+    if outage_remaining is not None:
+        skip_context: dict[str, Any] = {"url": url, "remaining": outage_remaining}
+        if outage_outcome:
+            skip_context["outcome"] = outage_outcome
+        logger.debug("request_service_unavailable_skip", **skip_context)
+        details = dict(outage_details) if outage_details else {}
+        details.setdefault("reason", outage_outcome)
+        details["cooldown_remaining"] = outage_remaining
+        _set_last_outcome(outage_outcome, details)
+        return None
+
     api_cfg = ApiCfg(user_agent=cfg.user_agent)
 
     total_attempts = cfg.retries + 1
@@ -422,6 +528,7 @@ def make_request(
             )
             outcome_details = dict(last_failure_details or {})
             outcome_details.setdefault("reason", "timeout")
+            _start_service_outage("timeout", outcome_details, cfg)
             _set_last_outcome("timeout", outcome_details)
             return None
         event = "request_start" if attempt == 1 else "request_retry"
@@ -513,6 +620,7 @@ def make_request(
                             status=status,
                             **details_excluding("status"),
                         )
+                        _start_service_outage(reason, last_failure_details, cfg)
                         _set_last_outcome(reason, last_failure_details)
                         return None
                     if retry_after is not None:
@@ -635,6 +743,7 @@ def make_request(
                         **details_excluding("status"),
                     )
                     outcome_name = last_failure_details.get("reason") if last_failure_details else None
+                    _start_service_outage(outcome_name, last_failure_details, cfg)
                     _set_last_outcome(outcome_name, last_failure_details)
                     return None
 
@@ -666,6 +775,7 @@ def make_request(
                             status=status,
                             **details_excluding("status"),
                         )
+                        _start_service_outage("response_error", last_failure_details, cfg)
                         _set_last_outcome("response_error", last_failure_details)
                         return None
                     if cfg.delay > 0:
@@ -740,6 +850,7 @@ def make_request(
                     rps=cfg.rps,
                     **details_excluding("status"),
                 )
+                _start_service_outage("network_error", last_failure_details, cfg)
                 _set_last_outcome("network_error", last_failure_details)
                 return None
             if cfg.delay > 0:
@@ -747,6 +858,7 @@ def make_request(
             continue
 
     outcome_name = (last_failure_details or {}).get("reason")
+    _start_service_outage(outcome_name, last_failure_details, cfg)
     _set_last_outcome(outcome_name, last_failure_details)
     return None
 
