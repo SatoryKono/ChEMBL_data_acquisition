@@ -259,3 +259,51 @@ def test_get_cid_from_smiles__uses_post_for_stereochemistry(
     entry = cache.get(cache_key)
     assert entry is not None
     assert entry.is_hit
+
+
+def test_get_cid__falls_back_to_pug_when_rdf_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = PubChemCfg()
+    calls: list[str] = []
+
+    def _fake_make_request(url: str, _cfg: PubChemCfg, **_kwargs: object) -> dict[str, Any] | None:
+        calls.append(url)
+        if "/rdf/query" in url:
+            return None
+        assert url.endswith(
+            f"/compound/name/{pubchem.url_encode('Example')}/cids/JSON"
+        )
+        return {"IdentifierList": {"CID": ["10", "2", "10"]}}
+
+    monkeypatch.setattr(pubchem, "make_request", _fake_make_request)
+
+    result = pubchem.get_cid("Example", cfg)
+
+    assert result == "10|2"
+    assert any("/rdf/query" in call for call in calls)
+    assert any("/compound/name/" in call for call in calls)
+
+
+def test_get_all_cid__falls_back_to_pug_when_rdf_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = PubChemCfg()
+    calls: list[str] = []
+
+    def _fake_make_request(url: str, _cfg: PubChemCfg, **_kwargs: object) -> dict[str, Any] | None:
+        calls.append(url)
+        if "/rdf/query" in url:
+            return None
+        assert url.endswith(
+            f"/compound/name/{pubchem.url_encode('Sample')}/cids/JSON?name_type=word"
+        )
+        return {"IdentifierList": {"CID": ["77", "42"]}}
+
+    monkeypatch.setattr(pubchem, "make_request", _fake_make_request)
+
+    result = pubchem.get_all_cid("Sample", cfg)
+
+    assert result == "42|77"
+    assert any("/rdf/query" in call for call in calls)
+    assert any("name_type=word" in call for call in calls)
