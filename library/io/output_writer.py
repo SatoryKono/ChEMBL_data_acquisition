@@ -41,9 +41,9 @@ def save_standard_outputs(
     dataset: pd.DataFrame,
     correlation_report: pd.DataFrame,
     quality_report: pd.DataFrame,
-    *,
     table_name: str,
     date_tag: str,
+    *,
     cfg: IoCfg | None = None,
     key_columns: Sequence[str] | None = None,
 ) -> StandardOutputArtifacts:
