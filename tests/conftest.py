@@ -20,6 +20,8 @@ import pandas as pd
 import pytest
 import yaml
 
+from tests.helpers.reporting_policy import ReportingPolicyPlugin
+
 from config.paths import DICTIONARY_DIR
 from library.config import Config
 from library.orchestration import ETLContext
@@ -251,3 +253,32 @@ def make_dataframe() -> Iterable[pd.DataFrame]:
 @pytest.fixture()
 def utc_now_iso() -> str:
     return FROZEN_UTC.isoformat()
+
+
+_REPORTING_POLICY_PLUGIN_ATTR = "_reporting_policy_plugin"
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Register the reporting policy plugin and prepare report directories."""
+
+    plugin = getattr(config, _REPORTING_POLICY_PLUGIN_ATTR, None)
+    if plugin is None:
+        plugin = ReportingPolicyPlugin(config)
+        config.pluginmanager.register(plugin, "reporting_policy")
+        setattr(config, _REPORTING_POLICY_PLUGIN_ATTR, plugin)
+
+    config.addinivalue_line(
+        "markers",
+        "pipeline_scenario(name): mark test as covering a key pipeline scenario",
+    )
+
+    json_report_file = getattr(config.option, "json_report_file", None)
+    if json_report_file:
+        try:
+            report_path = Path(json_report_file)
+        except TypeError:  # pragma: no cover - defensive against unexpected types
+            return
+        try:
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError:  # pragma: no cover - filesystem issues should not abort tests
+            pass

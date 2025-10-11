@@ -74,6 +74,7 @@ def test_testitem_pipeline_e2e__deterministic_output(
 
 
 @pytest.mark.e2e
+@pytest.mark.pipeline_scenario("idempotence")
 def test_testitem_pipeline_e2e__finalize_stage_idempotent(
     tmp_path: Path, sample_input_csv: Path, cfg
 ) -> None:
@@ -101,27 +102,38 @@ def test_testitem_pipeline_e2e__finalize_stage_idempotent(
 
     output_path = tmp_path / "finalized.csv"
 
-    first_exit = cli.finalize_output(
+    first_result = cli.finalize_output(
         [chunk],
         cfg=cfg,
         output=output_path,
         parent_stats_supplier=supplier,
         input_csv=sample_input_csv,
     )
+    if isinstance(first_result, tuple):
+        first_exit, artifacts = first_result
+        dataset_path = Path(artifacts.dataset)
+    else:
+        first_exit = first_result
+        dataset_path = output_path
     assert first_exit == 0
-    first_hash = sha256_file(output_path)
+    first_hash = sha256_file(dataset_path)
 
-    second_exit = cli.finalize_output(
+    second_result = cli.finalize_output(
         [chunk.copy()],
         cfg=cfg,
         output=output_path,
         parent_stats_supplier=supplier,
         input_csv=sample_input_csv,
     )
+    if isinstance(second_result, tuple):
+        second_exit, second_artifacts = second_result
+        assert Path(second_artifacts.dataset) == dataset_path
+    else:
+        second_exit = second_result
     assert second_exit == 0
-    second_hash = sha256_file(output_path)
+    second_hash = sha256_file(dataset_path)
 
     assert first_hash == second_hash
 
-    final_frame = pd.read_csv(output_path)
+    final_frame = pd.read_csv(dataset_path)
     assert list(final_frame["molecule_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]

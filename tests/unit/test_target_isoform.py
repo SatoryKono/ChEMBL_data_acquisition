@@ -64,6 +64,7 @@ def test_transform__supports_alias_columns():
 
 
 @pytest.mark.unit
+@pytest.mark.pipeline_scenario("degradation")
 def test_transform__missing_identifier_columns_warns_and_returns_empty_result():
     """A warning is emitted and an empty result returned when IDs are absent."""
 
