@@ -72,12 +72,20 @@ def _load_module() -> ModuleType:
             f"  Error: {exc.msg}\n"
         )
         text = getattr(exc, "text", "") or ""
-        if any(marker in text for marker in ("<<<<<<<", "=======", ">>>>>>>")):
+        if text and _has_merge_conflict_markers(text):
             message += (
                 "\nUnresolved merge conflict markers were detected. "
                 "Please resolve the conflict in the reported file and rerun the command."
             )
         raise SystemExit(message) from exc
+
+
+def _has_merge_conflict_markers(text: str) -> bool:
+    try:
+        from tools.merge_conflict import has_merge_conflict_markers
+    except ModuleNotFoundError:  # pragma: no cover - import safety net
+        return any(marker in text for marker in ("<<<<<<<", "=======", ">>>>>>>"))
+    return has_merge_conflict_markers(text)
 
 
 _MODULE = _load_module()
