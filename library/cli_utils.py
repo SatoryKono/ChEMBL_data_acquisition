@@ -531,6 +531,7 @@ def run_pipeline(
     logger: Logger | None = None,
     emit_standard_outputs: bool = True,
     emit_legacy_artifacts: bool = True,
+    cleanup_standard_source: bool | None = None,
     **legacy_kwargs: object,
 ) -> PipelineExecutionResult:
     """Execute a data pipeline and write deterministic CSV output.
@@ -560,6 +561,10 @@ def run_pipeline(
     emit_legacy_artifacts:
         When ``True`` the historical deterministic writer and sidecar artefacts are
         produced.
+    cleanup_standard_source:
+        Optional override controlling whether :func:`library.io.save_standard_outputs`
+        removes the original dataset when the canonical path differs. Defaults to
+        ``True`` when omitted, matching the historical behaviour.
     legacy_kwargs:
         Deprecated keyword arguments matching the historical signature. When
         provided they are converted into a :class:`PipelineDefinition`.
@@ -1026,6 +1031,12 @@ def run_pipeline(
         if output_dir_value is None:
             raise ValueError("cfg.io.output_dir must be configured for standard outputs")
 
+        cleanup_canonical_source = (
+            bool(cleanup_standard_source)
+            if cleanup_standard_source is not None
+            else True
+        )
+
         standard_artifacts = save_standard_outputs(
             dataset_frame,
             correlation_report,
@@ -1034,7 +1045,7 @@ def run_pipeline(
             date_tag=date_tag,
             output_path=output_path,
             key_columns=resolved_keys or key_columns,
-            cleanup_source=not emit_legacy_artifacts,
+            cleanup_source=cleanup_canonical_source,
         )
         use_logger.info(
             "standard_outputs_written",

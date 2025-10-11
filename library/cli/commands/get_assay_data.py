@@ -560,6 +560,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 cfg=cfg,
                 logger=logger,
                 emit_legacy_artifacts=emit_legacy,
+                cleanup_standard_source=not emit_legacy,
             )
         finally:
             if emit_legacy:
