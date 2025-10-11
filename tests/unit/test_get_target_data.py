@@ -335,6 +335,49 @@ def test_prepare_raw_destination__fails_when_parent_missing_and_exist_ok_false(
         get_target_data._prepare_raw_destination(destination, cfg=cfg)
 
 
+def test_restore_legacy_output__restores_missing_file(
+    tmp_path: Path, cfg: Config, logger_stub: _MemoryLogger
+) -> None:
+    source = tmp_path / "output" / "canonical.csv"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text("value\n", encoding="utf-8")
+
+    destination = tmp_path / "final" / "legacy.csv"
+
+    get_target_data._restore_legacy_output(destination, source, cfg=cfg)
+
+    assert destination.exists()
+    assert destination.read_text(encoding="utf-8") == source.read_text(
+        encoding="utf-8"
+    )
+    restored_events = [
+        payload
+        for level, event, payload in logger_stub.events
+        if level == "warning" and event == "legacy_output_restored"
+    ]
+    assert restored_events
+    assert restored_events[0]["source"] == str(source)
+    assert restored_events[0]["destination"] == str(destination)
+
+
+def test_restore_legacy_output__skips_when_destination_exists(
+    tmp_path: Path, cfg: Config, logger_stub: _MemoryLogger
+) -> None:
+    source = tmp_path / "output.csv"
+    source.write_text("new\n", encoding="utf-8")
+
+    destination = tmp_path / "output.csv"
+    destination.write_text("existing\n", encoding="utf-8")
+
+    get_target_data._restore_legacy_output(destination, source, cfg=cfg)
+
+    assert destination.read_text(encoding="utf-8") == "existing\n"
+    restored_events = [
+        event for _, event, _ in logger_stub.events if event == "legacy_output_restored"
+    ]
+    assert not restored_events
+
+
 def test_collect_uniprot_candidate_columns__orders_columns(cfg: Config) -> None:
     frame = pd.DataFrame(
         {
