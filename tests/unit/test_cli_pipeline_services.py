@@ -187,6 +187,40 @@ def test_run_document_service__copies_cli_output_when_canonical_missing(
     assert working_output.read_text(encoding="utf-8").splitlines()[1] == "CHEMBL2"
 
 
+def test_run_document_service__recovers_plain_dataset_name(
+    cfg: Config, tmp_path: Path, sample_csv: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    working_output = tmp_path / ".output.documents_20240101.csv.tmp"
+    cfg.io.output_dir = tmp_path
+    options = DocumentPipelineOptions(
+        input_csv=sample_csv,
+        output_csv=working_output,
+        mode="all",
+        date_prefix="20240101",
+        output_stem="documents",
+    )
+
+    def _fake_run(
+        cfg_arg: Config,
+        args_arg,
+        *,
+        pipeline: DocumentPipeline | None = None,
+    ) -> int:
+        plain_path = Path(args_arg.final_out).with_name("documents.csv")
+        plain_path.write_text("id\nCHEMBL3\n", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(get_document_data, "run_all", _fake_run)
+    monkeypatch.setitem(get_document_data.MODE_HANDLERS, "all", _fake_run)
+    monkeypatch.setattr(document_service, "_MODE_HANDLERS_CACHE", None)
+
+    result = get_document_data.run_document_service(cfg, options)
+
+    assert result.exit_code == 0
+    assert working_output.exists()
+    assert working_output.read_text(encoding="utf-8").splitlines()[1] == "CHEMBL3"
+
+
 def test_document_pipeline_run__delegates_to_service(
     cfg: Config, tmp_path: Path, sample_csv: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

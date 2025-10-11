@@ -1080,6 +1080,75 @@ def _canonical_dataset_path(
     return output_dir / f"output.{table_name}_{date_tag}.csv"
 
 
+def _expand_dataset_path_candidates(
+    table_name: str, date_tag: str, cli_output: Path
+) -> list[Path]:
+    """Return additional filesystem paths that may contain the dataset.
+
+    Historically the document pipeline always produced files using the
+    ``output.<table>_<date>.csv`` naming scheme.  Recent configuration options
+    allow callers to omit date stamps or the ``output.`` prefix altogether when
+    integrating with legacy tooling.  The orchestrator still relies on the
+    working artefact name (``.output.<table>_<date>.csv.tmp``), so we probe a
+    selection of deterministic alternatives when the canonical destination is
+    missing.
+    """
+
+    suffix = cli_output.suffix or ".csv"
+    canonical_stem = cli_output.with_suffix("").name
+    base_names: set[str] = {canonical_stem, table_name}
+    prefix = "output."
+    if not canonical_stem.startswith(prefix):
+        base_names.add(f"{prefix}{table_name}")
+    else:
+        base_names.add(canonical_stem[len(prefix) :] or canonical_stem)
+
+    if date_tag:
+        token = f"_{date_tag}"
+        base_names.update({f"{table_name}{token}", f"{prefix}{table_name}{token}"})
+        if canonical_stem.endswith(token):
+            trimmed = canonical_stem[: -len(token)]
+            if trimmed:
+                base_names.add(trimmed)
+                if trimmed.startswith(prefix):
+                    base_names.add(trimmed[len(prefix) :] or trimmed)
+
+    candidates: list[Path] = []
+    seen: set[Path] = set()
+    for name in base_names:
+        if not name:
+            continue
+        if name.endswith(suffix):
+            candidate = cli_output.with_name(name)
+        else:
+            candidate = cli_output.with_name(f"{name}{suffix}")
+        resolved = _safe_resolve(candidate)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        candidates.append(candidate)
+    return candidates
+
+
+def _candidate_dataset_paths(
+    canonical_path: Path, cli_output: Path, table_name: str, date_tag: str
+) -> list[Path]:
+    """Return ordered dataset paths to probe for the working artefact copy."""
+
+    paths: list[Path] = [canonical_path, cli_output]
+    paths.extend(_expand_dataset_path_candidates(table_name, date_tag, cli_output))
+
+    deduplicated: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        resolved = _safe_resolve(path)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        deduplicated.append(path)
+    return deduplicated
+
+
 def _safe_resolve(path: Path) -> Path:
     """Best-effort ``Path.resolve`` handling ``OSError`` gracefully."""
 
@@ -1157,16 +1226,10 @@ def run_document_service(
 
     if exit_code == 0 and not working_output.exists():
         canonical_path = _canonical_dataset_path(cfg, table_name, date_tag, cli_output)
-        candidate_paths: list[Path] = []
-        if canonical_path.exists():
-            candidate_paths.append(canonical_path)
-
-        cli_output_resolved = _safe_resolve(cli_output)
-
-        if cli_output.exists() and all(
-            _safe_resolve(path) != cli_output_resolved for path in candidate_paths
-        ):
-            candidate_paths.append(cli_output)
+        all_candidates = _candidate_dataset_paths(
+            canonical_path, cli_output, table_name, date_tag
+        )
+        candidate_paths = [path for path in all_candidates if path.exists()]
 
         working_resolved = _safe_resolve(working_output)
 
@@ -1207,6 +1270,7 @@ def run_document_service(
                 expected=str(working_output),
                 canonical=str(canonical_path),
                 fallback=str(cli_output),
+                candidates=[str(path) for path in all_candidates],
             )
             return PipelineRunResult(
                 exit_code=1,
