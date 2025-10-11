@@ -313,3 +313,67 @@ def test_default_output_path__normalises_chained_hidden_prefix(tmp_path: Path) -
     )
 
     assert output_path == tmp_path / "output.activities_20240101.csv"
+
+
+@pytest.mark.unit
+def test_prepare_io_paths__strips_csv_suffix_from_output_stem(tmp_path: Path) -> None:
+    args = SimpleNamespace(
+        base_path=tmp_path,
+        input_dir=None,
+        output_dir=tmp_path,
+        cache_dir=None,
+        input_csv=tmp_path / "activities.csv",
+        final_out=None,
+        output_csv=None,
+        raw_format=None,
+        output_stamp_mode="date",
+        raw_out=None,
+        checkpoint=None,
+        date="20251011",
+        force=False,
+        skip_existing=False,
+    )
+
+    parser_module.prepare_io_paths(
+        args,
+        output_stem="output.testitems_20240101.csv",
+        suffix=".csv",
+    )
+
+    expected = (tmp_path / "output.testitems_20240101_20251011.csv").resolve()
+    assert args.final_out == expected
+    assert args.output_csv == expected
+    assert expected.name.count(".csv") == 1
+    assert "..output" not in expected.name
+
+
+@pytest.mark.unit
+def test_prepare_io_paths__normalises_prefixed_stem_without_date(tmp_path: Path) -> None:
+    args = SimpleNamespace(
+        base_path=tmp_path,
+        input_dir=None,
+        output_dir=tmp_path,
+        cache_dir=None,
+        input_csv=tmp_path / "activities.csv",
+        final_out=None,
+        output_csv=None,
+        raw_format=None,
+        output_stamp_mode=None,
+        raw_out=None,
+        checkpoint=None,
+        date=None,
+        force=False,
+        skip_existing=False,
+    )
+
+    parser_module.prepare_io_paths(
+        args,
+        output_stem="output..output.testitems_20240101.csv",
+        suffix=".csv",
+    )
+
+    expected = (tmp_path / "output.testitems_20240101.csv").resolve()
+    assert args.final_out == expected
+    assert args.output_csv == expected
+    assert expected.name.count(".csv") == 1
+    assert "..output" not in expected.name
