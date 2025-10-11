@@ -200,6 +200,62 @@ def test_merge_pubchem_properties__preserves_existing_values_on_skip(cfg) -> Non
         assert merged.loc[0, column] == frame.loc[0, column]
 
 
+@pytest.mark.integration
+def test_add_pubchem_data__keeps_existing_when_lookup_empty(
+    cfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pubchem_cfg = cfg.pubchem
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1"],
+            "pubchem_cid": ["CID1"],
+            "pubchem_canonical_smiles": ["LOCAL_SMILES"],
+        }
+    )
+
+    def fake_prepare_caches(*_args, **_kwargs):
+        return {}, {}, {}, set(), lambda *_a, **_kw: None
+
+    def fake_prefetch(*_args, **_kwargs):
+        return None
+
+    def fake_resolve(*_args, **_kwargs):
+        cid_series = pd.Series(["CID1"], index=frame.index, dtype="string")
+        return cid_series, set(), False
+
+    def fake_merge(
+        frame_arg: pd.DataFrame,
+        cid_series: pd.Series,
+        lookup_cids: set[str],
+        *,
+        cfg,
+        skip_mask: pd.Series,
+        prefer_local_mask: pd.Series,
+    ) -> pd.DataFrame:
+        assert lookup_cids == set()
+        assert skip_mask.tolist() == [False]
+        assert prefer_local_mask.tolist() == [False]
+        return pd.DataFrame(
+            {
+                "pubchem_cid": cid_series,
+                "pubchem_canonical_smiles": pd.Series(
+                    [pd.NA], index=frame_arg.index, dtype="string"
+                ),
+            }
+        )
+
+    monkeypatch.setattr(pubchem, "_prepare_pubchem_caches", fake_prepare_caches)
+    monkeypatch.setattr(pubchem, "_prefetch_parents", fake_prefetch)
+    monkeypatch.setattr(pubchem, "_resolve_pubchem_cids", fake_resolve)
+    monkeypatch.setattr(pubchem, "_merge_pubchem_properties", fake_merge)
+    monkeypatch.setattr(pubchem, "_write_pubchem_cid_cache", lambda *args, **kwargs: None)
+
+    result = pubchem.add_pubchem_data(frame, pubchem_cfg)
+
+    assert result.loc[0, "pubchem_cid"] == "CID1"
+    assert result.loc[0, "pubchem_canonical_smiles"] == "LOCAL_SMILES"
+
+
 def test_merge_pubchem_properties__retains_partial_values_on_failed_lookup(
     cfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -951,10 +951,27 @@ def add_pubchem_data(
         prefer_local_mask=prefer_local_mask,
     )
 
-    result = result.drop(
-        columns=[col for col in PUBCHEM_COLUMNS if col in result.columns]
-    )
-    result = result.join(pubchem_df)
+    # ``pubchem_df`` already aligns with ``result`` and contains the
+    # best-effort lookups returned by the PubChem integration.  When the
+    # external API cannot provide additional data (for example due to
+    # rate limits or compounds absent from the catalogue) we must retain
+    # the values previously obtained from the ChEMBL API instead of
+    # replacing them with ``<NA>`` placeholders.
+    for column in pubchem_df.columns:
+        replacement = pubchem_df[column]
+        if column in result.columns:
+            original = result[column]
+            result[column] = replacement.combine_first(original)
+        else:
+            result[column] = replacement
+
+    # Ensure downstream schema validation consistently sees every
+    # PubChem column even when no data was available for a particular
+    # attribute.
+    for column in PUBCHEM_COLUMNS:
+        if column not in result.columns:
+            dtype = object if column == "pubchem_cid" else "string"
+            result[column] = pd.Series(pd.NA, index=result.index, dtype=dtype)
 
     if cache_dirty:
         _write_pubchem_cid_cache(cache_path, cid_cache)
