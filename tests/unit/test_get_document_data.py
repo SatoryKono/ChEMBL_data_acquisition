@@ -551,55 +551,6 @@ def test_finalise_export__normalises_table_name_and_date(
         "save_standard_outputs",
         fake_save_standard_outputs,
     )
-        columns=get_document_data.DOCUMENT_SCHEMA_COLUMNS,
-        fill_missing=False,
-    )
-
-    monkeypatch.setattr(
-        get_document_data,
-        "validate_documents",
-        lambda df, return_result=True: SimpleNamespace(
-            data=df, failure_cases=pd.DataFrame()
-        ),
-    )
-
-    monkeypatch.setattr(
-        get_document_data,
-        "generate_qc_report",
-        lambda *_, **__: pd.DataFrame({"metric": [1]}),
-    )
-    monkeypatch.setattr(
-        get_document_data,
-        "generate_correlation_report",
-        lambda *_, **__: pd.DataFrame({"metric": [1]}),
-    )
-
-    captured: dict[str, object] = {}
-
-    def fake_save_standard_outputs(
-        dataset: pd.DataFrame,
-        correlation_report: pd.DataFrame,
-        quality_report: pd.DataFrame,
-        *,
-        table_name: str,
-        date_tag: str,
-        cfg: any,
-        key_columns: Sequence[str] | None = None,
-    ) -> get_document_data.io.StandardOutputArtifacts:
-        captured["table_name"] = table_name
-        captured["date_tag"] = date_tag
-        output_csv.parent.mkdir(parents=True, exist_ok=True)
-        return get_document_data.io.StandardOutputArtifacts(
-            dataset=output_csv,
-            correlation_report=output_csv,
-            quality_report=output_csv,
-        )
-
-    monkeypatch.setattr(
-        get_document_data.io,
-        "save_standard_outputs",
-        fake_save_standard_outputs,
-    )
     result = get_document_data._finalise_export(
         frame,
         output_csv,

@@ -46,7 +46,6 @@ def test_save_standard_outputs__writes_expected_csvs(
     def _fake_write_csv(
         frame: pd.DataFrame,
         destination: Path,
-        *,
         **_: object,
     ) -> Path:
         path = Path(destination)

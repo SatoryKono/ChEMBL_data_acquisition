@@ -124,6 +124,7 @@ def test_run_tests__verbose_creates_debug_log(
         run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False
     )
     monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
+    monkeypatch.setattr(run_tests, "_parse_line_coverage", lambda path: 100.0)
 
     captured_log_path: Path | None = None
 
@@ -149,8 +150,13 @@ def test_run_tests__verbose_creates_debug_log(
 
     captured_commands: list[list[str]] = []
 
-    def _fake_run_pytest(command: Sequence[str]) -> int:
+    captured_timeouts: list[float | None] = []
+
+    def _fake_run_pytest(
+        command: Sequence[str], *, timeout: float | None = None
+    ) -> int:
         captured_commands.append(list(command))
+        captured_timeouts.append(timeout)
         return 0
 
     captured_configs: list[LoggerConfig] = []
@@ -165,7 +171,29 @@ def test_run_tests__verbose_creates_debug_log(
     monkeypatch.setattr(
         run_tests,
         "_load_raw_report",
-        lambda: {"tests": [], "duration": 0.0},
+        lambda: {
+            "tests": [
+                {
+                    "nodeid": "tests/unit/dummy.py::test_ok",
+                    "outcome": "passed",
+                    "call": {
+                        "duration": 0.01,
+                        "stdout": "",
+                        "stderr": "",
+                        "log": [],
+                    },
+                }
+            ],
+            "summary": {
+                "total": 1,
+                "passed": 1,
+                "failed": 0,
+                "skipped": 0,
+                "xfailed": 0,
+                "xpassed": 0,
+                "error": 0,
+            },
+        },
     )
 
     exit_code = run_tests.main(
@@ -195,6 +223,8 @@ def test_run_tests__verbose_creates_debug_log(
     assert level_value == "DEBUG"
 
     assert command[-2:] == ["-k", "unit"]
+
+    assert captured_timeouts == [None]
 
     assert report_file.exists()
     assert summary_file.exists()
@@ -340,12 +370,17 @@ def test_main__returns_exit_code_one_when_quality_gate_fails(
     )
 
     captured_commands: list[list[str]] = []
+    captured_timeouts: list[float | None] = []
 
-    def _fake_run_pytest(command: Sequence[str]) -> int:
+    def _fake_run_pytest(
+        command: Sequence[str], *, timeout: float | None = None
+    ) -> int:
         captured_commands.append(list(command))
+        captured_timeouts.append(timeout)
         return 0
 
     monkeypatch.setattr(run_tests, "run_pytest", _fake_run_pytest)
+    monkeypatch.setattr(run_tests, "_parse_line_coverage", lambda path: 100.0)
 
     structured_template = {
         "meta": {
@@ -415,6 +450,7 @@ def test_main__returns_exit_code_one_when_quality_gate_fails(
     assert exit_code == 1
     assert "below the required 95.00% threshold" in caplog.text
     assert captured_commands, "run_pytest should be invoked"
+    assert captured_timeouts == [None]
 
     payload = json.loads(report_file.read_text(encoding="utf-8"))
     assert payload["summary"]["success_rate"] == pytest.approx(0.94)
@@ -461,15 +497,20 @@ def test_main__zero_tests_trigger_quality_gate_error(
     monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
 
     captured_commands: list[list[str]] = []
+    captured_timeouts: list[float | None] = []
 
-    def _fake_run_pytest(command: Sequence[str]) -> int:
+    def _fake_run_pytest(
+        command: Sequence[str], *, timeout: float | None = None
+    ) -> int:
         captured_commands.append(list(command))
+        captured_timeouts.append(timeout)
         return 0
 
     monkeypatch.setattr(run_tests, "run_pytest", _fake_run_pytest)
     monkeypatch.setattr(
         run_tests, "_load_raw_report", lambda: {"tests": [], "duration": 0.0}
     )
+    monkeypatch.setattr(run_tests, "_parse_line_coverage", lambda path: 100.0)
 
     captured_configs: list[LoggerConfig] = []
 
@@ -505,6 +546,7 @@ def test_main__zero_tests_trigger_quality_gate_error(
 
     assert exit_code == run_tests.QUALITY_FAILURE_EXIT_CODE
     assert captured_commands, "run_pytest should be invoked"
+    assert captured_timeouts == [None]
     assert "below the required 95.00% threshold" in caplog.text
 
     payload = json.loads(report_file.read_text(encoding="utf-8"))
@@ -552,13 +594,18 @@ def test_main__writes_reports_when_pytest_fails(
     monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
 
     captured_commands: list[list[str]] = []
+    captured_timeouts: list[float | None] = []
 
-    def _fake_run_pytest(command: Sequence[str]) -> int:
+    def _fake_run_pytest(
+        command: Sequence[str], *, timeout: float | None = None
+    ) -> int:
         captured_commands.append(list(command))
+        captured_timeouts.append(timeout)
         return 2
 
     monkeypatch.setattr(run_tests, "run_pytest", _fake_run_pytest)
     monkeypatch.setattr(run_tests, "_load_raw_report", lambda: {})
+    monkeypatch.setattr(run_tests, "_parse_line_coverage", lambda path: 100.0)
 
     def _fake_configure_logger(cfg: LoggerConfig) -> object:
         return object()
@@ -579,6 +626,7 @@ def test_main__writes_reports_when_pytest_fails(
 
     assert exit_code == 2
     assert captured_commands, "run_pytest should be invoked"
+    assert captured_timeouts == [None]
     assert report_file.exists()
     assert summary_file.exists()
 
@@ -631,10 +679,19 @@ def test_main__fails_fast_on_summary_filesystem_error(
     )
     monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
 
-    monkeypatch.setattr(run_tests, "run_pytest", lambda command: 0)
+    captured_timeouts: list[float | None] = []
+
+    def _fake_run_pytest(
+        command: Sequence[str], *, timeout: float | None = None
+    ) -> int:
+        captured_timeouts.append(timeout)
+        return 0
+
+    monkeypatch.setattr(run_tests, "run_pytest", _fake_run_pytest)
     monkeypatch.setattr(
         run_tests, "_load_raw_report", lambda: {"tests": [], "duration": 0.0}
     )
+    monkeypatch.setattr(run_tests, "_parse_line_coverage", lambda path: 100.0)
 
     def _fake_configure_logger(cfg: LoggerConfig) -> object:
         return object()
@@ -662,6 +719,7 @@ def test_main__fails_fast_on_summary_filesystem_error(
     exit_code = run_tests.main([])
 
     assert exit_code == run_tests.VALIDATION_FAILURE_EXIT_CODE
+    assert captured_timeouts == [None]
     assert summary_attempts == 1
     assert not summary_file.exists()
     assert report_file.exists(), "JSON report should still be produced"

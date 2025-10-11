@@ -2157,16 +2157,6 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=False,
         help="Enable activity postprocessing after the main pipeline",
     )
-    parser.add_argument(
-        "--emit-legacy-artifacts",
-        dest="emit_legacy_artifacts",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help=(
-            "Persist the historical CSV, metadata and diagnostics files in addition "
-            "to the standard activity output bundle (default: disabled)."
-        ),
-    )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg
 

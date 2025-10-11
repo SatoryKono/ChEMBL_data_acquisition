@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import copy
-import sys
+import argparse
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 import pytest
 
 from library.pipelines.document import DocumentPipelineOptions, run_pipeline
+from library.pipelines.document import service as document_service
+from library.config.models import ApiCfg, RetryCfg, ChemblCacheCfg
+from library.cli.commands import get_document_data as document_cli
 
 
 class _DummySection:
@@ -84,6 +87,10 @@ class _DummyConfig:
             na_markers=("#N/A",),
             keep_na_markers=False,
         )
+        self.local = SimpleNamespace(io=self.io)
+        self.api = ApiCfg()
+        self.retry = RetryCfg()
+        self.chembl = ChemblCacheCfg()
 
     def model_copy(self, *, deep: bool = False) -> _DummyConfig:
         # The real config uses pydantic's copy mechanism. A deepcopy is sufficient
@@ -92,19 +99,26 @@ class _DummyConfig:
 
 
 def _install_fake_cli(monkeypatch: pytest.MonkeyPatch, exit_code: int) -> None:
-    module = ModuleType("scripts.get_document_data")
+    def _runner(cfg: object, args: SimpleNamespace, **_: object) -> int:
+        final_out = Path(args.final_out)
+        final_out.parent.mkdir(parents=True, exist_ok=True)
+        final_out.write_text("identifier\n", encoding="utf-8")
 
-    def _runner(*_: object, **__: object) -> int:
+        date_tag = getattr(args, "_standard_date_tag", "") or "19700101"
+        table_name = Path(args.final_out).stem or "documents"
+        output_dir = Path(getattr(getattr(cfg, "io", SimpleNamespace()), "output_dir", final_out.parent))
+        canonical = output_dir / f"output.{table_name}_{date_tag}.csv"
+        canonical.parent.mkdir(parents=True, exist_ok=True)
+        canonical.write_text("identifier\n", encoding="utf-8")
         return exit_code
 
-    module.run_all = _runner
-    module.run_chembl = _runner
-    module.run_pubmed = _runner
-    package = ModuleType("scripts")
-    package.__path__ = []  # type: ignore[attr-defined]
-    package.get_document_data = module
-    monkeypatch.setitem(sys.modules, "scripts", package)
-    monkeypatch.setitem(sys.modules, "scripts.get_document_data", module)
+    monkeypatch.setattr(
+        document_cli,
+        "MODE_HANDLERS",
+        {"all": _runner, "chembl": _runner, "pubmed": _runner},
+        raising=False,
+    )
+    monkeypatch.setattr(document_service, "_MODE_HANDLERS_CACHE", None, raising=False)
 
 
 @pytest.mark.unit
@@ -113,6 +127,8 @@ def test_run_pipeline__sets_written_flag_on_success(
 ) -> None:
     _install_fake_cli(monkeypatch, exit_code=0)
     cfg = _DummyConfig()
+    cfg.io.output_dir = tmp_path
+    cfg.local.io.output_dir = tmp_path
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("molecule_chembl_id,name,smiles\n", encoding="utf-8")
     options = DocumentPipelineOptions(
@@ -151,21 +167,17 @@ def test_run_pipeline__passes_mode_to_cli(
 ) -> None:
     captured: dict[str, object] = {}
 
-    module = ModuleType("scripts.get_document_data")
-
-    def _runner(cfg: object, args: SimpleNamespace) -> int:
+    def _runner(cfg: object, args: SimpleNamespace, **_: object) -> int:
         captured["cfg"] = cfg
         captured["args"] = args
         return 0
-
-    module.run_all = _runner
-    module.run_chembl = _runner
-    module.run_pubmed = _runner
-    package = ModuleType("scripts")
-    package.__path__ = []  # type: ignore[attr-defined]
-    package.get_document_data = module
-    monkeypatch.setitem(sys.modules, "scripts", package)
-    monkeypatch.setitem(sys.modules, "scripts.get_document_data", module)
+    monkeypatch.setattr(
+        document_cli,
+        "MODE_HANDLERS",
+        {"all": _runner, "chembl": _runner, "pubmed": _runner},
+        raising=False,
+    )
+    monkeypatch.setattr(document_service, "_MODE_HANDLERS_CACHE", None, raising=False)
 
     cfg = _DummyConfig()
     input_csv = tmp_path / "input.csv"
@@ -181,6 +193,6 @@ def test_run_pipeline__passes_mode_to_cli(
     assert result.exit_code == 0
     assert captured
     args = captured["args"]
-    assert isinstance(args, SimpleNamespace)
+    assert isinstance(args, argparse.Namespace)
     assert args.mode == "chembl"
     assert args.command == "chembl"

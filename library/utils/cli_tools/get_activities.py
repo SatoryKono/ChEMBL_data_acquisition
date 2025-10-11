@@ -136,9 +136,10 @@ def _write_output(frame: pd.DataFrame, output_path: Path, *, cfg: Config) -> Pat
         raise
 
     # Clean up any lingering temporary metadata artefacts from the staging write.
-    for orphan in output_path.parent.glob(f".{output_path.name}.*.tmp.meta.yaml"):
-        if orphan != target_meta:
-            orphan.unlink(missing_ok=True)
+    for orphan in output_path.parent.glob(
+        f".{output_path.name}.*.tmp.meta.yaml*"
+    ):
+        orphan.unlink(missing_ok=True)
 
     return output_path
 
