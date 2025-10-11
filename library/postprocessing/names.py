@@ -345,36 +345,57 @@ def _active_component_type(component: Mapping[str, Any]) -> str:
 
 
 _REFERENCE_CACHE: MutableMapping[Path, pd.Series] = {}
-_REFERENCE_TABLE_PATH: Path | None = None
+
+
+def _default_reference_table_path() -> Path:
+    """Return the historical fallback table distributed with the project."""
+
+    return (
+        Path(__file__).resolve().parents[2]
+        / "data"
+        / "reference"
+        / "Table6.csv"
+    ).resolve(strict=False)
+
+
+_DEFAULT_REFERENCE_TABLE_PATH = _default_reference_table_path()
+_REFERENCE_TABLE_PATH: Path | None = _DEFAULT_REFERENCE_TABLE_PATH
 
 
 def set_reference_smiles_table(path: str | Path | None) -> None:
-    """Configure the default reference table consulted by :func:`reference_SMILES`."""
+    """Configure the default reference table consulted by :func:`reference_SMILES`.
+
+    Passing ``None`` restores the historical project default bundled under
+    ``data/reference/Table6.csv``.
+    """
 
     global _REFERENCE_TABLE_PATH
 
-    if _REFERENCE_TABLE_PATH is not None:
-        _REFERENCE_CACHE.pop(_REFERENCE_TABLE_PATH, None)
-
+    previous = _REFERENCE_TABLE_PATH
     if path is None:
-        _REFERENCE_TABLE_PATH = None
-        return
+        resolved: Path | None = _DEFAULT_REFERENCE_TABLE_PATH
+    else:
+        candidate = Path(path).expanduser()
+        resolved = candidate.resolve(strict=False)
 
-    candidate = Path(path).expanduser()
-    resolved = candidate.resolve(strict=False)
     _REFERENCE_TABLE_PATH = resolved
-    _REFERENCE_CACHE.pop(resolved, None)
+
+    if previous is not None:
+        _REFERENCE_CACHE.pop(previous, None)
+    if resolved is not None:
+        _REFERENCE_CACHE.pop(resolved, None)
 
 
 def _resolve_reference_table_path(reference_path: str | Path | None) -> Path:
     if reference_path is not None:
         return Path(reference_path).expanduser().resolve(strict=False)
-    if _REFERENCE_TABLE_PATH is None:
+    configured = _REFERENCE_TABLE_PATH or _DEFAULT_REFERENCE_TABLE_PATH
+    if configured is None:
         raise TargetNamesError(
             "Reference SMILES table path not configured; "
             "provide reference_path or call set_reference_smiles_table()."
         )
-    return _REFERENCE_TABLE_PATH
+    return configured
 
 
 def reference_SMILES(
