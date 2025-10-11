@@ -10,6 +10,13 @@ from library.clients import pubchem
 from library.config import PubChemCfg
 
 
+@pytest.fixture(autouse=True)
+def _reset_service_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pubchem, "_SERVICE_OUTAGE_UNTIL", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_OUTAGE_REASON", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_OUTAGE_DETAILS", None)
+
+
 @dataclass
 class _DummyResponse:
     status_code: int
@@ -51,6 +58,92 @@ class _DummyLimiter:
 
     def acquire(self) -> None:
         self.acquires += 1
+
+
+def test_make_request__skips_during_global_service_cooldown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = PubChemCfg()
+    cfg.retries = 0
+
+    base = cfg.base.rstrip("/")
+    url1 = f"{base}/compound/cid/1/property/MolecularFormula/JSON"
+    url2 = f"{base}/compound/cid/2/property/MolecularFormula/JSON"
+
+    current_time = 0.0
+
+    def fake_monotonic() -> float:
+        return current_time
+
+    def fake_sleep(seconds: float) -> None:
+        nonlocal current_time
+        current_time += float(seconds)
+
+    monkeypatch.setattr(pubchem, "monotonic", fake_monotonic)
+    monkeypatch.setattr(pubchem, "sleep", fake_sleep)
+
+    limiter = _DummyLimiter()
+    monkeypatch.setattr(pubchem, "get_limiter", lambda *_args, **_kwargs: limiter)
+
+    responses = iter(
+        [
+            _DummyResponse(503, {"Retry-After": "30"}),
+            _DummyResponse(200, {}, {"payload": "ok"}),
+        ]
+    )
+
+    def _response() -> _DummyResponse:
+        try:
+            return next(responses)
+        except StopIteration:  # pragma: no cover - defensive
+            raise AssertionError("unexpected request")
+
+    session = _DummySession(_response)
+    monkeypatch.setattr(pubchem, "get_session", lambda *_args, **_kwargs: session)
+    monkeypatch.setattr(pubchem, "_CACHE", None)
+
+    first_result = pubchem.make_request(url1, cfg)
+
+    assert first_result is None
+    assert session.calls == [
+        ("GET", url1, {"timeout": (cfg.timeout_connect, cfg.timeout_read)})
+    ]
+    assert limiter.acquires == 1
+    outcome, details = pubchem.last_request_outcome()
+    assert outcome == "server_error"
+    assert details == {
+        "reason": "server_error",
+        "retry_after": 30.0,
+        "status": 503,
+    }
+
+    second_result = pubchem.make_request(url2, cfg)
+
+    assert second_result is None
+    assert session.calls == [
+        ("GET", url1, {"timeout": (cfg.timeout_connect, cfg.timeout_read)})
+    ]
+    assert limiter.acquires == 1
+    outcome, details = pubchem.last_request_outcome()
+    assert outcome == "server_error"
+    assert details is not None
+    assert details.get("reason") == "server_error"
+    assert details.get("retry_after") == pytest.approx(30.0)
+    assert details.get("cooldown_remaining") == pytest.approx(30.0)
+
+    current_time += 31.0
+
+    third_result = pubchem.make_request(url2, cfg)
+
+    assert third_result == {"payload": "ok"}
+    assert session.calls == [
+        ("GET", url1, {"timeout": (cfg.timeout_connect, cfg.timeout_read)}),
+        ("GET", url2, {"timeout": (cfg.timeout_connect, cfg.timeout_read)}),
+    ]
+    assert limiter.acquires == 2
+    outcome, details = pubchem.last_request_outcome()
+    assert outcome == "hit"
+    assert details == {"status": 200}
 
 
 def test_make_request__caches_server_error_results(
