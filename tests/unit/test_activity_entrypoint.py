@@ -296,6 +296,16 @@ def test_derive_standard_output_labels__strips_output_prefix() -> None:
 
 
 @pytest.mark.unit
+def test_derive_standard_output_labels__deduplicates_output_prefix_chain() -> None:
+    table, date = activity._derive_standard_output_labels(
+        Path("output..output.activities_20251011.csv.tmp")
+    )
+
+    assert table == "activities"
+    assert date == "20251011"
+
+
+@pytest.mark.unit
 def test_derive_standard_output_labels__fallbacks_to_current_date(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(activity, "_current_date_token", lambda: "19990101")
 
