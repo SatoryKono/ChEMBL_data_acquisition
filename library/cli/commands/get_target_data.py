@@ -2538,6 +2538,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     dataset_path = getattr(execution, "dataset_path", None) or raw_output
     raw_output = Path(dataset_path)
 
+    if raw_output != final_output:
+        args.final_out = raw_output
+        args.output_csv = raw_output
+        final_output = raw_output
+
     if not _finalize_raw_dump_writer(
         raw_dump_writer,
         logger=logger,
@@ -2768,7 +2773,8 @@ def fetch_chembl(
     if chunk_size is not None:
         cfg.target.chembl.chunk_size = chunk_size
     try:
-        if run_chembl(cfg, chembl_args) != 0:
+        exit_code = run_chembl(cfg, chembl_args)
+        if exit_code != 0:
             raise RuntimeError("ChEMBL retrieval failed")
     finally:
         if limit is not None:
@@ -2789,7 +2795,11 @@ def fetch_chembl(
             raise FileNotFoundError(output_path)
 
     df = pd.read_csv(
-        output_path, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+        output_path,
+        sep=cfg.io.csv_sep,
+        encoding=cfg.io.csv_encoding,
+        dtype=str,
+    )
     )
     logger.info("fetch_chembl_done", rows=len(df), path=str(output_path))
     return df
