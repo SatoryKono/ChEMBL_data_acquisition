@@ -224,7 +224,7 @@ def add_common_arguments(
     parser.add_argument(
         "--emit-legacy-artifacts",
         dest="emit_legacy_artifacts",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=emit_legacy_default,
         help=(
             "Persist legacy artefacts such as raw exports, metadata sidecars and"

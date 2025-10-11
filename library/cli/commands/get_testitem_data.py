@@ -807,16 +807,6 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=False,
         help="Enable test item postprocessing after the main pipeline",
     )
-    parser.add_argument(
-        "--emit-legacy-artifacts",
-        dest="emit_legacy_artifacts",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help=(
-            "Persist legacy artefacts such as failure cases, metadata YAML files "
-            "and postprocess manifests"
-        ),
-    )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg
 
