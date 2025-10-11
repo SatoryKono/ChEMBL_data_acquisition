@@ -412,9 +412,14 @@ class PipelineRunConfig:
         if stem_path.suffix:
             if stem_path.is_absolute():
                 return stem_path
-            return self.output_dir / stem_path
+            # Treat explicit filenames that already include a CSV extension as
+            # concrete targets.
+            name_lower = stem_path.name.lower()
+            if ".csv" in name_lower:
+                return self.output_dir / stem_path
 
-        filename = f"output.{stem}_{self.date_prefix}.csv"
+        normalised = _normalise_output_stem(str(stem_path))
+        filename = f"output.{normalised}_{self.date_prefix}.csv"
         return self.output_dir / filename
 
     def subcommand_for(self, name: str) -> str | None:
@@ -432,6 +437,33 @@ class PipelineRunConfig:
         object.__setattr__(
             self, "subcommands", PipelineSubcommands.from_mapping(self.subcommands)
         )
+
+
+def _normalise_output_stem(raw_stem: str) -> str:
+    """Return ``raw_stem`` without redundant hidden prefixes."""
+
+    candidate = raw_stem.strip()
+    if not candidate:
+        return raw_stem
+
+    stem_path = Path(candidate)
+    stem_name = stem_path.name
+
+    if stem_name.startswith("."):
+        stripped = stem_name.lstrip(".")
+        stem_name = stripped or stem_name
+
+    prefix = "output."
+    if stem_name.startswith(prefix):
+        stripped = stem_name
+        while stripped.startswith(prefix) and len(stripped) > len(prefix):
+            stripped = stripped[len(prefix) :]
+        stem_name = stripped or stem_name
+
+    if stem_path.parent == Path("."):
+        return stem_name
+
+    return str(stem_path.with_name(stem_name))
 
 
 def _resolve_path(base: Path, candidate: Path) -> Path:
