@@ -2535,8 +2535,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     )
     exit_code_attr = getattr(execution, "exit_code", None)
     exit_code = int(exit_code_attr if exit_code_attr is not None else execution)
-    dataset_path = getattr(execution, "dataset_path", None) or raw_output
-    raw_output = Path(dataset_path)
+    dataset_path_value = getattr(execution, "dataset_path", None) or raw_output
+    dataset_path = Path(dataset_path_value)
+    raw_output = dataset_path
 
     if raw_output != final_output:
         args.final_out = raw_output
@@ -2570,6 +2571,35 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         "chembl_placeholder_replacements",
         total=placeholder_replacements,
     )
+
+    if exit_code == 0 and not final_output.exists():
+        if dataset_path.exists():
+            if dataset_path != final_output:
+                try:
+                    _ensure_parent_directory(final_output, cfg=cfg)
+                    shutil.copy2(dataset_path, final_output)
+                except OSError as exc:
+                    logger.error(
+                        "chembl_final_output_restore_failed",
+                        error=str(exc),
+                        exc_info=exc,
+                        source=str(dataset_path),
+                        destination=str(final_output),
+                    )
+                    return 1
+                else:
+                    logger.info(
+                        "chembl_final_output_restored",
+                        source=str(dataset_path),
+                        destination=str(final_output),
+                    )
+        else:
+            logger.error(
+                "chembl_final_output_missing_dataset",
+                expected=str(final_output),
+                dataset=str(dataset_path),
+            )
+            return 1
 
     return exit_code
 

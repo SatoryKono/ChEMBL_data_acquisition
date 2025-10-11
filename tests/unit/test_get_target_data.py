@@ -568,6 +568,79 @@ def test_fetch_chembl__raises_when_output_missing(
         get_target_data.fetch_chembl(cfg, input_csv, expected_output)
 
 
+def test_run_chembl__restores_final_output_without_legacy(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logger_stub: _MemoryLogger,
+) -> None:
+    input_csv = tmp_path / "identifiers.csv"
+    input_csv.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+    final_out = tmp_path / "output.targets_chembl.csv"
+    dataset_dir = tmp_path / "standard"
+    dataset_dir.mkdir()
+    dataset_path = dataset_dir / "output.targets_chembl.csv"
+    dataset_content = "target_chembl_id\nCHEMBL1\n"
+    dataset_path.write_text(dataset_content, encoding=cfg.io.csv_encoding)
+
+    monkeypatch.setattr(
+        get_target_data.io,
+        "read_ids",
+        lambda path, column, cfg: iter(["CHEMBL1"]),
+    )
+
+    class _StubWriter:
+        def write(self, chunk: pd.DataFrame) -> None:  # pragma: no cover - stub
+            return None
+
+        def finalize(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        get_target_data,
+        "_RawDumpStreamWriter",
+        lambda *_, **__: _StubWriter(),
+    )
+
+    def _fake_run_pipeline(**kwargs: object) -> SimpleNamespace:
+        assert Path(kwargs["output_path"]) == final_out
+        return SimpleNamespace(exit_code=0, dataset_path=str(dataset_path))
+
+    monkeypatch.setattr(
+        get_target_data,
+        "_run_pipeline_with_meta",
+        _fake_run_pipeline,
+    )
+
+    monkeypatch.setattr(
+        get_target_data,
+        "build_table_quality_hook",
+        lambda *_, **__: lambda *_: None,
+    )
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=final_out,
+        raw_out=None,
+        raw_format="csv",
+        no_reindex_raw=False,
+        emit_legacy_artifacts=False,
+    )
+
+    exit_code = get_target_data.run_chembl(cfg, args)
+
+    assert exit_code == 0
+    assert final_out.read_text(encoding=cfg.io.csv_encoding) == dataset_content
+    assert (
+        "info",
+        "chembl_final_output_restored",
+        {
+            "source": str(dataset_path),
+            "destination": str(final_out),
+        },
+    ) in logger_stub.events
+
+
 def test_run_uniprot__doc_quality_reports(
     cfg: Config,
     tmp_path: Path,
