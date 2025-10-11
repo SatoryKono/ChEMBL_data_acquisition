@@ -487,8 +487,18 @@ def _resolve_standard_output_naming(
         name = name[1:-len(".tmp")]
     stem = Path(name).stem if name else output_path.stem
     remainder = stem
-    if remainder.startswith("output."):
-        remainder = remainder.split("output.", 1)[1]
+
+    if remainder.startswith("."):
+        stripped = remainder.lstrip(".")
+        remainder = stripped or remainder
+
+    prefix = "output."
+    while remainder.lower().startswith(prefix) and remainder:
+        candidate = remainder[len(prefix) :]
+        candidate = candidate.lstrip(".")
+        if not candidate:
+            break
+        remainder = candidate
 
     table_name = remainder
     date_tag: str | None = None
@@ -1120,8 +1130,10 @@ def run_pipeline(
         doc_quality_cfg = getattr(getattr(cfg, "system", None), "doc_quality", None)
         fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
 
+        quality_source = dataset_path or csv_path
         try:
-            table_quality(csv_path)
+            if quality_source is not None:
+                table_quality(quality_source)
         except Exception as exc:
             tb = traceback.format_exc()
             record_quality_failure(
@@ -1131,10 +1143,13 @@ def run_pipeline(
                 traceback=tb,
                 fatal=fatal_quality_error,
             )
+            fallback_path = quality_source if quality_source is not None else csv_path
+            if fallback_path is None:
+                fallback_path = output_path
             log_kwargs = {
                 "error": str(exc),
                 "error_type": exc.__class__.__name__,
-                "path": str(csv_path),
+                "path": str(fallback_path),
                 "traceback": tb,
             }
             if fatal_quality_error:

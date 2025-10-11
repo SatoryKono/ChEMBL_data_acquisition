@@ -127,21 +127,21 @@ def test_run_pipeline__persists_standard_outputs(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_run_pipeline__quality_and_metadata_use_canonical_dataset(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_run_pipeline__quality_hook_uses_canonical_dataset(
+    tmp_path: Path,
 ) -> None:
-    frame = pd.DataFrame({"identifier": ["row-1"], "value": [3]})
+    frame = pd.DataFrame({"identifier": ["row-1"], "value": [11]})
 
     def fetcher() -> list[pd.DataFrame]:
-        return [frame.copy()]
+        return [frame]
 
     def writer(
-        chunks: object,
+        chunks: list[pd.DataFrame],
         destination: Path,
         col_order: list[str] | None,
         key_cols: list[str],
     ) -> Path:
-        combined = pd.concat(list(chunks), ignore_index=True)
+        combined = pd.concat(chunks, ignore_index=True)
         combined.to_csv(destination, index=False)
         return destination
 
@@ -178,7 +178,6 @@ def test_run_pipeline__quality_and_metadata_use_canonical_dataset(
         "library.cli_utils.build_reports_from_profiler",
         lambda *_args, **_kwargs: (pd.DataFrame(), pd.DataFrame()),
     )
-
     table_quality_paths: list[Path] = []
 
     def table_quality(path: Path) -> None:
@@ -193,7 +192,6 @@ def test_run_pipeline__quality_and_metadata_use_canonical_dataset(
         return meta_path
 
     monkeypatch.setattr("library.cli_utils.write_meta_yaml", fake_write_meta_yaml)
-
     definition = PipelineDefinition(
         schema=None,
         schema_name="TestSchema",
@@ -207,7 +205,7 @@ def test_run_pipeline__quality_and_metadata_use_canonical_dataset(
         table_quality=table_quality,
     )
 
-    output_path = tmp_path / ".output.targets_20240101.csv.tmp"
+    output_path = tmp_path / ".output.targets_20240101.csv_chembl.csv"
     failure_path = tmp_path / "failures.csv"
     cfg = _make_cfg(tmp_path)
 
@@ -222,11 +220,12 @@ def test_run_pipeline__quality_and_metadata_use_canonical_dataset(
     )
 
     assert int(result) == 0
-    assert result.dataset_path == dataset_path
-    assert table_quality_paths == [dataset_path]
-    assert meta_targets == [dataset_path]
-    assert not output_path.exists()
-    assert not failure_path.exists()
+    artifacts = result.artifacts
+    assert artifacts is not None, "standard outputs must be generated"
+    assert artifacts.dataset.exists()
+    assert not artifacts.dataset.name.startswith("output..")
+    assert table_quality_paths == [artifacts.dataset]
+    assert not output_path.exists(), "legacy file should be cleaned after promotion"
 
 @pytest.mark.unit
 def test_run_pipeline__passes_resolved_key_columns_to_standard_outputs(
