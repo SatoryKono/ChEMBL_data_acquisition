@@ -6,11 +6,9 @@ import sys
 import threading
 import time
 import traceback
-from datetime import UTC, datetime
 from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from functools import lru_cache
 from itertools import chain, islice
 from pathlib import Path
@@ -1099,21 +1097,12 @@ def finalize_output(
     if exit_code != 0:
         return exit_code, None
 
-    def _resolve_table_name_and_tag(path: Path) -> tuple[str, str]:
-        stem = path.stem
-        remainder = stem.split("output.", 1)[-1] if stem.startswith("output.") else stem
-        candidate_table, sep, candidate_tag = remainder.rpartition("_")
-
-        def _normalise_table_name(value: str) -> str:
-            return {"testitems": "testitem"}.get(value, value)
-
-        if sep and len(candidate_tag) == 8 and candidate_tag.isdigit():
-            table_name_candidate = candidate_table or remainder
-            return _normalise_table_name(table_name_candidate or "testitem"), candidate_tag
-        table_name = _normalise_table_name(remainder or "testitem")
-        return (table_name, datetime.now(UTC).strftime("%Y%m%d"))
-
-    table_name, date_tag = _resolve_table_name_and_tag(output)
+    fallback_date = getattr(getattr(cfg, "io", None), "default_date_prefix", None)
+    table_name, date_tag = io.derive_output_labels(
+        output,
+        default_table="testitem",
+        fallback_date=fallback_date,
+    )
 
     dataset_frame: pd.DataFrame
     if validated_chunks_list:
