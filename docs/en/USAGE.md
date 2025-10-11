@@ -95,6 +95,97 @@ part way through so partial results can be inspected. When a step fails, the
 remaining ones are marked as `blocked` with `reason: dependency_failed` to make
 the dependency chain explicit in the manifest.
 
+#### Manifest structure and metadata flow
+
+The JSON manifest exposes a `run` object with timings, exit code, the effective
+configuration (base path, input/output directories, config path, log level,
+force/limit flags) and an optional structured `run_id` propagated from the
+logger. The ordered `steps` array summarises each pipeline stage after
+`finalise_csv_output` merges the metadata sidecars into the manifest entry. Every
+successful step therefore contains:
+
+- `output` — canonical path, existence flag, file size, SHA256 checksum plus
+  `meta_path`/`meta_sha256` and optional `quality_path`/`quality_sha256`
+  references when QA summaries are emitted.【F:library/reporting/run_manifest.py†L27-L166】
+- `stats` — row counters and any additional per-table diagnostics computed when
+  writing `<name>.meta.yaml`. The same payload stores the pipeline version so
+  analysts can confirm which code produced the export.【F:library/common/metadata_writer.py†L69-L157】
+- `sidecars` — auxiliary artefacts resolved on disk (post-process outputs,
+  temporary files, diagnostics). Missing files are captured explicitly via
+  `exists: false` markers.【F:library/cli/commands/get_data.py†L1800-L1889】
+
+```json
+{
+  "run": {
+    "started_at": "2025-03-18T10:41:12.345678+00:00",
+    "completed_at": "2025-03-18T10:43:56.789012+00:00",
+    "duration_sec": 164.443334,
+    "exit_code": 0,
+    "status": "success",
+    "base_path": "/srv/chembl",
+    "input_dir": "/srv/chembl/input",
+    "output_dir": "/srv/chembl/output",
+    "config_path": "/srv/chembl/config/config.yaml",
+    "run_id": "2025-03-18T10:41:12Z/main",
+    "log_level": "INFO",
+    "limit": null,
+    "skip_existing": false,
+    "dry_run": false
+  },
+  "steps": [
+    {
+      "name": "documents",
+      "status": "success",
+      "exit_code": 0,
+      "executed": true,
+      "started_at": "2025-03-18T10:41:13.012345+00:00",
+      "completed_at": "2025-03-18T10:41:52.456789+00:00",
+      "duration_sec": 39.444444,
+      "output": {
+        "path": "/srv/chembl/output/output.documents_20250318.csv",
+        "exists": true,
+        "size_bytes": 275341,
+        "checksum_sha256": "f1d3ff8443297732862df21dc4e57262a76d1b",
+        "meta_path": "/srv/chembl/output/output.documents_20250318.csv.meta.yaml",
+        "meta_sha256": "bc05c1fd2b9dd4d78ebcd1a786ea1d0500bcf9",
+        "quality_path": "/srv/chembl/output/output.documents_20250318.quality.json",
+        "quality_sha256": "0e3396dc8b7c72061aef5ed2687be6f0a6e77b"
+      },
+      "stats": {
+        "rows_total": 1200,
+        "rows_kept": 1187,
+        "rows_dropped": 13,
+        "output_sha256": "f1d3ff8443297732862df21dc4e57262a76d1b",
+        "pipeline_version": "1.4.0"
+      },
+      "sidecars": [
+        {
+          "path": "/srv/chembl/output/output.documents_20250318.quality.json",
+          "exists": true,
+          "size_bytes": 1845,
+          "checksum_sha256": "0e3396dc8b7c72061aef5ed2687be6f0a6e77b"
+        }
+      ]
+    }
+  ]
+}
+```
+
+```mermaid
+flowchart TD
+    A[Pipeline step\nCSV export] -->|finalise_csv_output| B[<name>.meta.yaml]
+    A -->|QA hook| C[<name>.quality.json]
+    A -->|hash + stats| D[run_<timestamp>.json]
+    B -->|merge_run_output| D
+    C -->|checksums| D
+    D -->|alias| E[reports/run_manifest.json]
+```
+
+Automation can read `reports/run_manifest.json` to locate the most recent run
+without scanning timestamps. Historical manifests remain intact for audits, and
+the alias gracefully downgrades to an atomic copy when symlinks are not
+supported by the filesystem.【F:library/cli/commands/get_data.py†L1916-L1958】
+
 ## Document pipeline `get_document_data`
 
 Modes: `chembl`, `pubmed`, `all`.

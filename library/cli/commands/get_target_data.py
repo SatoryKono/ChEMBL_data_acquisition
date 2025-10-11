@@ -2889,7 +2889,7 @@ def fetch_chembl(
     no_reindex_raw: bool = False,
     emit_standard_outputs: bool = True,
     emit_legacy_artifacts: bool = False,
-    cleanup_standard_outputs: bool = True,
+    cleanup_standard_outputs: bool | None = None,
 ) -> pd.DataFrame:
     """Fetch target information from ChEMBL.
 
@@ -2914,9 +2914,10 @@ def fetch_chembl(
         Forwarded to :func:`run_pipeline` to request legacy artefacts in
         addition to ``final_out``.
     cleanup_standard_outputs : bool, optional
-        When ``True`` (the default) remove the dated standard output artefacts
-        that may be produced alongside ``final_out`` by the ChEMBL pipeline.
-        Set to ``False`` to preserve those exports for debugging or auditing.
+        When ``True`` any canonical artefacts generated next to ``final_out``
+        are removed once the export has been loaded. ``None`` defaults to the
+        inverse of ``emit_standard_outputs`` so that callers requesting the
+        canonical artefacts keep them by default.
 
     Returns
     -------
@@ -2980,7 +2981,12 @@ def fetch_chembl(
         dtype=str,
     )
     logger.info("fetch_chembl_done", rows=len(df), path=str(output_path))
-    if cleanup_standard_outputs:
+    should_cleanup = (
+        cleanup_standard_outputs
+        if cleanup_standard_outputs is not None
+        else not emit_standard_outputs
+    )
+    if should_cleanup:
         _cleanup_standard_output_artifacts(final_out)
     return df
 
