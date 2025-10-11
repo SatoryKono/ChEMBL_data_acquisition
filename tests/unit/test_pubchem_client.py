@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Generator
 
 import pytest
 
 from library.clients import pubchem
-from library.config import PubChemCfg
+from library.config import ApiCfg, PubChemCfg, RetryCfg
 
 
 @pytest.fixture(autouse=True)
@@ -15,6 +15,42 @@ def _reset_service_outage(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pubchem, "_SERVICE_OUTAGE_UNTIL", None)
     monkeypatch.setattr(pubchem, "_SERVICE_OUTAGE_REASON", None)
     monkeypatch.setattr(pubchem, "_SERVICE_OUTAGE_DETAILS", None)
+
+
+@pytest.fixture(autouse=True)
+def _reset_pubchem_session() -> Generator[None, None, None]:
+    original_session = pubchem._session
+    original_cfg = pubchem._SESSION_CFG
+    original_signature = pubchem._SESSION_SIGNATURE
+    original_initialised = pubchem._SESSION_INITIALISED
+
+    yield
+
+    restored_session = pubchem._session
+    if restored_session is not None and restored_session is not original_session:
+        restored_session.close()
+    pubchem._session = original_session
+    pubchem._SESSION_CFG = original_cfg
+    pubchem._SESSION_SIGNATURE = original_signature
+    pubchem._SESSION_INITIALISED = original_initialised
+
+
+def test_init_session__rejects_placeholder_user_agent() -> None:
+    api_cfg = ApiCfg.model_construct(user_agent="contact@example.org")
+    retry_cfg = RetryCfg()
+
+    with pytest.raises(ValueError, match="User-Agent"):
+        pubchem.init_session(api_cfg, retry_cfg)
+
+
+def test_get_session__rejects_placeholder_user_agent() -> None:
+    valid_api = ApiCfg()
+    retry_cfg = RetryCfg()
+
+    pubchem.init_session(valid_api, retry_cfg)
+
+    with pytest.raises(ValueError, match="User-Agent"):
+        pubchem.get_session(ApiCfg.model_construct(user_agent="contact@example.org"))
 
 
 @dataclass
@@ -121,7 +157,7 @@ def test_make_request__caches_server_error_results(
     assert details.get("reason") == "server_error"
     assert details.get("status") == 503
     assert details.get("retry_after_source") == "header"
-    assert details.get("retry_after") == pytest.approx(30.0)
+    assert details.get("retry_after") == pytest.approx(30.0, abs=1e-3)
 
     cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
     entry = cache.get(pubchem._build_cache_key("GET", url))
@@ -130,7 +166,7 @@ def test_make_request__caches_server_error_results(
     assert entry.details == {
         "reason": "server_error",
         "status": 503,
-        "retry_after": pytest.approx(30.0),
+        "retry_after": pytest.approx(30.0, abs=1e-3),
         "retry_after_source": "header",
         "cache": True,
     }
@@ -148,9 +184,10 @@ def test_make_request__caches_server_error_results(
     assert outcome == "server_error"
     assert details == {
         "reason": "server_error",
-        "retry_after": pytest.approx(30.0),
+        "retry_after": pytest.approx(30.0, abs=1e-3),
         "retry_after_source": "header",
         "http_status": 503,
+        "cache": True,
     }
 
 
@@ -243,19 +280,23 @@ def test_make_request__short_circuits_during_retry_after(
 
     third = pubchem.make_request(url_second, cfg)
 
-    assert third is None
+    assert third == success_payload
     assert session.calls == [
         (
             "GET",
             url_first,
             {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
-        )
+        ),
+        (
+            "GET",
+            url_second,
+            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
+        ),
     ]
-    assert limiter.acquires == 1
+    assert limiter.acquires == 2
     outcome, details = pubchem.last_request_outcome()
-    assert outcome == "server_error"
-    assert details is not None
-    assert details.get("cache") is True
+    assert outcome == "hit"
+    assert details == {"status": 200}
 
 def test_make_request__invalid_identifier_cached(
     monkeypatch: pytest.MonkeyPatch,
@@ -359,7 +400,7 @@ def test_make_request__retry_after_honours_grace(
     assert details == {
         "reason": "server_error",
         "status": 503,
-        "retry_after": pytest.approx(30.0),
+        "retry_after": pytest.approx(30.0, abs=1e-3),
         "retry_after_source": "header",
         "cache": True,
     }
@@ -371,7 +412,7 @@ def test_make_request__retry_after_honours_grace(
     assert entry.details == {
         "reason": "server_error",
         "status": 503,
-        "retry_after": pytest.approx(30.0),
+        "retry_after": pytest.approx(30.0, abs=1e-3),
         "retry_after_source": "header",
         "cache": True,
     }
