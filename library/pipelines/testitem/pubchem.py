@@ -334,8 +334,13 @@ def resolve_pubchem_cid(
     if cid is not None:
         return cid
 
+    temporary_failure = bool(getattr(resolution, "temporary_failure", False))
+
+    if temporary_failure:
+        return None
+
     if not cfg.use_parent_for_salts:
-        if chembl_id and chembl_id not in cache:
+        if chembl_id and chembl_id not in cache and not temporary_failure:
             cache[chembl_id] = None
         return None
 
@@ -344,12 +349,12 @@ def resolve_pubchem_cid(
         parent_raw = row.get("parent_molecule_chembl_id")
     parent_id = _normalise_identifier(parent_raw, uppercase=True)
     if not parent_id:
-        if chembl_id and chembl_id not in cache:
+        if chembl_id and chembl_id not in cache and not temporary_failure:
             cache[chembl_id] = None
         return None
 
     if parent_loader is None:
-        if chembl_id and chembl_id not in cache:
+        if chembl_id and chembl_id not in cache and not temporary_failure:
             cache[chembl_id] = None
         return None
 
@@ -360,9 +365,9 @@ def resolve_pubchem_cid(
             parent=parent_id,
             reason="parent_cycle_detected",
         )
-        if parent_id not in cache:
+        if parent_id not in cache and not temporary_failure:
             cache[parent_id] = None
-        if chembl_id and chembl_id not in cache:
+        if chembl_id and chembl_id not in cache and not temporary_failure:
             cache[chembl_id] = None
         return None
 
@@ -374,7 +379,7 @@ def resolve_pubchem_cid(
             parent=parent_id,
             reason="parent_unavailable",
         )
-        if chembl_id and chembl_id not in cache:
+        if chembl_id and chembl_id not in cache and not temporary_failure:
             cache[chembl_id] = None
         return None
 
@@ -398,8 +403,9 @@ def resolve_pubchem_cid(
         parent=parent_id,
         reason="structure_unresolved",
     )
-    cache.setdefault(parent_id, None)
-    cache.setdefault(chembl_id or parent_id, None)
+    if not temporary_failure:
+        cache.setdefault(parent_id, None)
+        cache.setdefault(chembl_id or parent_id, None)
     return None
 
 

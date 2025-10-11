@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from numbers import Real
-from threading import Lock
+from threading import Lock, local
 from time import monotonic
 from typing import Any, cast
 from urllib.parse import quote
@@ -24,17 +24,20 @@ from ..config.runtime import session_with_retry
 
 __all__ = [
     "Properties",
-    "init_session",
-    "get_session",
-    "make_request",
-    "url_encode",
-    "get_cid_from_smiles",
+    "PubChemServiceUnavailable",
+    "SERVICE_UNAVAILABLE_OUTCOMES",
+    "get_all_cid",
+    "get_cid",
     "get_cid_from_inchi",
     "get_cid_from_inchikey",
-    "get_cid",
-    "get_all_cid",
-    "get_standard_name",
+    "get_cid_from_smiles",
     "get_properties",
+    "get_session",
+    "get_standard_name",
+    "init_session",
+    "last_request_outcome",
+    "make_request",
+    "url_encode",
     "validate_cid",
 ]
 
@@ -104,6 +107,58 @@ _USER_AGENT_ERROR = (
     "PubChem client requires a custom User-Agent; "
     "call init_session with contact details before making requests."
 )
+
+_THREAD_STATE = local()
+
+
+def _set_last_outcome(outcome: str | None, details: Mapping[str, Any] | None) -> None:
+    if details is not None:
+        details = dict(details)
+    _THREAD_STATE.last_outcome = (outcome, details)
+
+
+def last_request_outcome() -> tuple[str | None, dict[str, Any] | None]:
+    state = getattr(_THREAD_STATE, "last_outcome", (None, None))
+    outcome, details = state
+    if details is None:
+        return outcome, None
+    return outcome, dict(details)
+
+
+SERVICE_UNAVAILABLE_OUTCOMES: frozenset[str] = frozenset(
+    {"network_error", "rate_limited", "response_error", "server_error", "timeout", "unexpected_status"}
+)
+
+
+class PubChemServiceUnavailable(RuntimeError):
+    """Raised when PubChem temporarily cannot satisfy a request."""
+
+    def __init__(
+        self,
+        outcome: str | None,
+        details: Mapping[str, Any] | None = None,
+    ) -> None:
+        detail_map = dict(details) if details else {}
+        status = detail_map.get("status")
+        if isinstance(status, Real):
+            status_value: int | None = int(status)
+        else:
+            status_value = None
+        message = "PubChem service unavailable"
+        if outcome:
+            message = f"{message} ({outcome})"
+        if status_value is not None:
+            message = f"{message}; status={status_value}"
+        super().__init__(message)
+        self.outcome: str | None = outcome
+        self.details: dict[str, Any] = detail_map
+        self.status: int | None = status_value
+
+
+def _raise_for_service_unavailable() -> None:
+    outcome, details = last_request_outcome()
+    if outcome in SERVICE_UNAVAILABLE_OUTCOMES:
+        raise PubChemServiceUnavailable(outcome, details)
 
 
 def _has_contact_details(user_agent: str | None) -> bool:
@@ -191,11 +246,13 @@ def get_cid_from_smiles(smiles: str, cfg: PubChemCfg) -> str | None:
         url = f"{base}/compound/smiles/{safe_smiles}/cids/JSON"
         response = make_request(url, cfg)
         if not response:
+            _raise_for_service_unavailable()
             return None
     else:
         url = f"{base}/compound/smiles/cids/JSON"
         response = make_request(url, cfg, method="POST", payload={"smiles": smiles})
         if not response:
+            _raise_for_service_unavailable()
             return None
     cids = _cids_from_identifier_list(response)
     unique_cids = sorted(set(cids))
@@ -210,6 +267,7 @@ def get_cid_from_inchi(inchi: str, cfg: PubChemCfg) -> str | None:
     url = f"{base}/compound/inchi/{safe_inchi}/cids/JSON"
     response = make_request(url, cfg)
     if not response:
+        _raise_for_service_unavailable()
         return None
     cids = _cids_from_identifier_list(response)
     unique_cids = sorted(set(cids))
@@ -224,6 +282,7 @@ def get_cid_from_inchikey(inchikey: str, cfg: PubChemCfg) -> str | None:
     url = f"{base}/compound/inchikey/{safe_inchikey}/cids/JSON"
     response = make_request(url, cfg)
     if not response:
+        _raise_for_service_unavailable()
         return None
     cids = _cids_from_identifier_list(response)
     unique_cids = sorted(set(cids))
@@ -257,6 +316,7 @@ def make_request(
     """Make an HTTP request and return parsed JSON."""
 
     global _CACHE
+    _set_last_outcome(None, None)
     method_upper = method.upper()
     cache_key = _build_cache_key(method_upper, url, payload)
     timeout_retry_in: float | None = None
@@ -283,6 +343,7 @@ def make_request(
             logger.debug(
                 "cache_hit", url=url, rps=cfg.rps, status="hit", method=method_upper
             )
+            _set_last_outcome("hit", {"cache": True})
             return cast(dict[str, Any], cached.payload)
         miss_details: dict[str, Any] = {}
         for key, value in (cached.details or {}).items():
@@ -303,6 +364,9 @@ def make_request(
             outcome=cached.outcome,
             **miss_details,
         )
+        cache_details = dict(miss_details)
+        cache_details["cache"] = True
+        _set_last_outcome(cached.outcome, cache_details)
         return None
     logger.debug("cache_miss", url=url, rps=cfg.rps, status="miss", method=method_upper)
 
@@ -351,6 +415,9 @@ def make_request(
                 rps=cfg.rps,
                 **details_excluding("status"),
             )
+            outcome_details = dict(last_failure_details or {})
+            outcome_details.setdefault("reason", "timeout")
+            _set_last_outcome("timeout", outcome_details)
             return None
         event = "request_start" if attempt == 1 else "request_retry"
         logger.debug(
@@ -396,6 +463,7 @@ def make_request(
                         status=status,
                         **details_excluding("status"),
                     )
+                    _set_last_outcome("not_found", last_failure_details)
                     return None
                 if status == 429 or 500 <= status < 600:
                     retry_after_header = response.headers.get("Retry-After")
@@ -440,6 +508,7 @@ def make_request(
                             status=status,
                             **details_excluding("status"),
                         )
+                        _set_last_outcome(reason, last_failure_details)
                         return None
                     if retry_after is not None:
                         delay = retry_after
@@ -493,6 +562,9 @@ def make_request(
                                     rps=cfg.rps,
                                     **details_excluding("status"),
                                 )
+                                timeout_info = dict(timeout_details)
+                                timeout_info["reason"] = "timeout"
+                                _set_last_outcome("timeout", timeout_info)
                                 return None
                         sleep(delay)
                     continue
@@ -539,6 +611,8 @@ def make_request(
                         status=status,
                         **details_excluding("status"),
                     )
+                    outcome_name = last_failure_details.get("reason") if last_failure_details else None
+                    _set_last_outcome(outcome_name, last_failure_details)
                     return None
 
                 try:
@@ -569,6 +643,7 @@ def make_request(
                             status=status,
                             **details_excluding("status"),
                         )
+                        _set_last_outcome("response_error", last_failure_details)
                         return None
                     if cfg.delay > 0:
                         sleep(cfg.delay)
@@ -595,6 +670,7 @@ def make_request(
                         status=status,
                         **details_excluding("status"),
                     )
+                    _set_last_outcome("response_not_json", last_failure_details)
                     return None
 
                 logger.debug(
@@ -614,6 +690,7 @@ def make_request(
                     status="hit",
                     method=method_upper,
                 )
+                _set_last_outcome("hit", {"status": status})
                 return response_data
         except requests.RequestException as exc:  # pragma: no cover - network
             last_failure_details = {
@@ -640,11 +717,14 @@ def make_request(
                     rps=cfg.rps,
                     **details_excluding("status"),
                 )
+                _set_last_outcome("network_error", last_failure_details)
                 return None
             if cfg.delay > 0:
                 sleep(cfg.delay)
             continue
 
+    outcome_name = (last_failure_details or {}).get("reason")
+    _set_last_outcome(outcome_name, last_failure_details)
     return None
 
 
@@ -847,6 +927,7 @@ def get_standard_name(cid: str, cfg: PubChemCfg) -> str | None:
     url = f"{base}/compound/cid/{validated}/description/JSON"
     response = make_request(url, cfg)
     if not response:
+        _raise_for_service_unavailable()
         return None
     info = response.get("InformationList", {}).get("Information", [])
     if not info:
@@ -879,6 +960,7 @@ def get_properties(cid: str, cfg: PubChemCfg) -> Properties:
     )
     response = make_request(url, cfg)
     if not response:
+        _raise_for_service_unavailable()
         return Properties(None, None, None, None, None, None)
     props = response.get("PropertyTable", {}).get("Properties", [])
     if not props:

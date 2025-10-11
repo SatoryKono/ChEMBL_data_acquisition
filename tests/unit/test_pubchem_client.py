@@ -92,6 +92,13 @@ def test_make_request__caches_server_error_results(
     ]
     assert sleep_calls == [30.0]
     assert limiter.acquires == cfg.retries + 1
+    outcome, details = pubchem.last_request_outcome()
+    assert outcome == "server_error"
+    assert details == {
+        "reason": "server_error",
+        "retry_after": 30.0,
+        "status": 503,
+    }
 
     cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
     entry = cache.get(pubchem._build_cache_key("GET", url))
@@ -109,6 +116,14 @@ def test_make_request__caches_server_error_results(
     assert len(session.calls) == cfg.retries + 1
     assert limiter.acquires == cfg.retries + 1
     assert sleep_calls == [30.0]
+    outcome, details = pubchem.last_request_outcome()
+    assert outcome == "server_error"
+    assert details == {
+        "cache": True,
+        "reason": "server_error",
+        "retry_after": 30.0,
+        "http_status": 503,
+    }
 
 
 def test_make_request__invalid_identifier_cached(
@@ -140,6 +155,9 @@ def test_make_request__invalid_identifier_cached(
         )
     ]
     assert limiter.acquires == 1
+    outcome, details = pubchem.last_request_outcome()
+    assert outcome == "invalid_identifier"
+    assert details == {"reason": "invalid_identifier", "status": 400}
 
     cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
     entry = cache.get(pubchem._build_cache_key("GET", url))
@@ -158,6 +176,13 @@ def test_make_request__invalid_identifier_cached(
         )
     ]
     assert limiter.acquires == 1
+    outcome, details = pubchem.last_request_outcome()
+    assert outcome == "invalid_identifier"
+    assert details == {
+        "cache": True,
+        "reason": "invalid_identifier",
+        "http_status": 400,
+    }
 
 
 def test_make_request__retry_after_exceeds_deadline(
@@ -196,6 +221,10 @@ def test_make_request__retry_after_exceeds_deadline(
     ]
     assert sleep_calls == []
     assert limiter.acquires == 1
+    outcome, details = pubchem.last_request_outcome()
+    assert outcome == "timeout"
+    assert details is not None
+    assert details.get("timeout_reason") == "retry_after_exceeds_deadline"
 
     cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
     entry = cache.get(pubchem._build_cache_key("GET", url))
@@ -367,3 +396,33 @@ def test_get_all_cid__falls_back_to_pug_when_rdf_fails(
     assert result == "42|77"
     assert any("/rdf/query" in call for call in calls)
     assert any("name_type=word" in call for call in calls)
+
+
+def test_get_cid_from_smiles__raises_on_service_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = PubChemCfg()
+    outcome_details = {"status": 503, "reason": "server_error"}
+
+    monkeypatch.setattr(pubchem, "make_request", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        pubchem, "last_request_outcome", lambda: ("server_error", outcome_details)
+    )
+
+    with pytest.raises(pubchem.PubChemServiceUnavailable) as excinfo:
+        pubchem.get_cid_from_smiles("CCO", cfg)
+
+    assert excinfo.value.outcome == "server_error"
+    assert excinfo.value.status == 503
+    assert excinfo.value.details == outcome_details
+
+
+def test_get_cid_from_smiles__returns_none_on_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = PubChemCfg()
+
+    monkeypatch.setattr(pubchem, "make_request", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pubchem, "last_request_outcome", lambda: ("not_found", {}))
+
+    assert pubchem.get_cid_from_smiles("CCO", cfg) is None
