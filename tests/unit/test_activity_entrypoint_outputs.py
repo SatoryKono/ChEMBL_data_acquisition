@@ -50,3 +50,13 @@ def test_derive_standard_output_labels__uses_default_stem_when_missing(
 
     assert table_name == activity.DEFAULT_OUTPUT_STEM
     assert date_tag == "20240101"
+
+
+@pytest.mark.unit
+def test_derive_standard_output_labels__normalises_dotted_stem(tmp_path: Path) -> None:
+    dataset_path = tmp_path / "output.activity.20240101.csv"
+
+    table_name, date_tag = activity._derive_standard_output_labels(dataset_path)
+
+    assert table_name == activity.DEFAULT_OUTPUT_STEM
+    assert date_tag == "20240101"
