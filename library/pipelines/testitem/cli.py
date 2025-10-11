@@ -42,6 +42,7 @@ from library.orchestration import ETLContext
 from library.qa.reporting import build_table_quality_hook
 from library.qa.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
+from library.pipelines.assay.chembl_assay import TESTITEM_STRUCTURE_COLUMNS
 from library.utils import data_correlation, qc_report
 
 from .catalog import (
@@ -525,15 +526,20 @@ def fetch_testitems(
             return _load_chunk(batch, next_chunk_size)
 
         if fields:
-            missing_fields = [
-                column
-                for column in fields
-                if isinstance(column, str) and column not in frame.columns
+            resolved_targets: dict[str, str] = {}
+            for column in fields:
+                if not isinstance(column, str):
+                    continue
+                target = TESTITEM_STRUCTURE_COLUMNS.get(column, column)
+                resolved_targets[column] = target
+
+            missing_targets = [
+                target for target in resolved_targets.values() if target not in frame.columns
             ]
-            if missing_fields:
+            if missing_targets:
                 na_series = pd.Series(pd.NA, index=frame.index, dtype="object")
-                for column in missing_fields:
-                    frame[column] = na_series.copy()
+                for target in missing_targets:
+                    frame[target] = na_series.copy()
 
         if "molecule_chembl_id" not in frame.columns:
             frame["molecule_chembl_id"] = pd.Series(dtype="string")
