@@ -825,7 +825,7 @@ def test_run_pipeline__propagates_step_failure(
             name="assay",
             main=lambda _: 0,
             input_filename="assay.csv",
-            output_stem="assays",
+            output_stem="assay",
         ),
     )
 
