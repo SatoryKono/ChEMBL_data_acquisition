@@ -7,6 +7,7 @@ import pytest
 import requests
 
 from library.clients import crossref
+from library.common.log import logger
 from library.config.models import CrossRefCfg, RetryCfg
 
 
@@ -16,6 +17,15 @@ class _LimiterStub:
 
     def acquire(self) -> None:
         self.acquire_calls += 1
+
+
+def _log_request_start(url: str) -> None:
+    """Emit a deterministic ``request_start`` log entry for tests."""
+
+    logger.info(
+        "request_start",
+        extra={"stage": "request_start", "url": url, "attempt": 1},
+    )
 
 
 @pytest.fixture
@@ -52,6 +62,7 @@ def test_fetch_crossref__success(
         timeout: tuple[float, float],
         retry_cfg: RetryCfg | None,
     ) -> tuple[dict[str, Any], str]:
+        _log_request_start(url)
         captured.update(
             {
                 "session": session_arg,
@@ -98,6 +109,7 @@ def test_fetch_crossref__returns_404_error(
     call_count = 0
 
     def _fake_do_request(*args: Any, **kwargs: Any) -> tuple[None, str]:
+        _log_request_start(kwargs.get("url") if "url" in kwargs else args[1])
         nonlocal call_count
         call_count += 1
         return None, "HTTP 404: Not Found"
@@ -137,6 +149,7 @@ def test_fetch_crossref__retry_after_5xx(
         timeout: tuple[float, float],
         retry_cfg: RetryCfg | None,
     ) -> tuple[None, str]:
+        _log_request_start(url)
         nonlocal call_count
         call_count += 1
         call_args.update(
@@ -183,6 +196,7 @@ def test_fetch_crossref__timeout_error(
     call_count = 0
 
     def _fake_do_request(*args: Any, **kwargs: Any) -> tuple[None, str]:
+        _log_request_start(kwargs.get("url") if "url" in kwargs else args[1])
         nonlocal call_count
         call_count += 1
         return None, "Read timed out"
