@@ -238,21 +238,27 @@ def add_common_arguments(
         action=argparse.BooleanOptionalAction,
         default=emit_legacy_default,
         help=(
-            "Persist legacy artefacts such as raw exports, metadata sidecars and"
-            " manifest snapshots"
+            "Persist metadata sidecars, failure CSVs and other diagnostics. "
+            "Defaults to off so only the dataset and QA CSV reports are kept."
         ),
     )
     _add_optional_argument(
         "--debug",
         action="store_true",
         default=debug_default,
-        help="Enable verbose diagnostics and retain intermediate artefacts",
+        help=(
+            "Enable verbose diagnostics, retain intermediate artefacts and"
+            " re-enable the legacy diagnostic bundle"
+        ),
     )
     _add_optional_argument(
         "--keep-intermediate",
         action="store_true",
         default=keep_default,
-        help="Preserve intermediate and diagnostic artefacts on disk",
+        help=(
+            "Preserve intermediate artefacts on disk (also enables the legacy"
+            " diagnostic bundle)"
+        ),
     )
     _add_optional_argument(
         "--force",

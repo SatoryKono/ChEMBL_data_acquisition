@@ -136,14 +136,16 @@ bootstrap-хелперы. По умолчанию каждая команда п
 | Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --column activity_id --batch-size 10 --workers 4 --dry-run` | Флаги: переопределение колонки идентификаторов (`--column activity_id`), настройка батчей и таймаутов (`--batch-size`, `--timeout`), ограничение диапазона (`--limit`, `--offset`), dry-run и количество потоков. |
 | Синтетические активности | `python scripts/get_activities.py --limit 25 --dry-run` | Генерирует детерминированные тестовые строки для смоук-тестов и поддерживает те же флаги логирования, что и остальные CLI. |
 
-Каждый пайплайн сохраняет детерминированный CSV, файл метаданных
-`<имя>.meta.yaml` и отчёты качества в том же каталоге. Поле `generated_at`
-формируется детерминированно: при наличии `--date` используется указанная дата,
-иначе в качестве источника берётся нормализованный вызов CLI вместе с
-резольвенным `run_id`. Таргет-пайплайн также создаёт вспомогательные таблицы `organism.output.target_<stamp>.csv`,
-`isoform.output.target_<stamp>.csv`, `names.output.target_<stamp>.csv` и
-`IUPHAR.output.target_<stamp>.csv`, которые подробно описаны в
-[`docs/ru/OUTPUT_TARGETS.md`](./docs/ru/OUTPUT_TARGETS.md) и
+Каждый пайплайн теперь оставляет детерминированный CSV вместе с
+`<имя>_quality_report_table.csv` и `<имя>_data_correlation_report_table.csv` в
+том же каталоге. Метаданные (`<имя>.meta.yaml`), JSON-отчёты качества и CSV с
+ошибками доступны по требованию через `--emit-legacy-artifacts`, `--debug` или
+`--keep-intermediate`. Поле `generated_at` остаётся детерминированным: при
+наличии `--date` используется указанная дата, иначе хэшируется нормализованный
+вызов CLI и вычисленный `run_id`. Таргет-пайплайн также создаёт вспомогательные
+таблицы `organism.output.target_<stamp>.csv`, `isoform.output.target_<stamp>.csv`,
+`names.output.target_<stamp>.csv` и `IUPHAR.output.target_<stamp>.csv`, которые
+подробно описаны в [`docs/ru/OUTPUT_TARGETS.md`](./docs/ru/OUTPUT_TARGETS.md) и
 [`docs/en/OUTPUT_TARGETS.md`](./docs/en/OUTPUT_TARGETS.md). Полную спецификацию
 см. в [`docs/ru/OUTPUT.md`](./docs/ru/OUTPUT.md).
 
@@ -165,10 +167,11 @@ bootstrap-хелперы. По умолчанию каждая команда п
      --uniprot-data-dir cache/uniprot
    ```
 
-3. Проверьте содержимое `output/targets.csv` и вспомогательных файлов:
-   `output/targets.csv.meta.yaml`, `output/targets_quality_report_table.csv`,
-   `output/targets_uniprot.csv`, `output/targets_iuphar.csv`,
-   `output/targets_chembl.csv` и связанные отчёты по качеству.
+3. Проверьте содержимое `output/targets.csv` и QA-отчётов
+   `_quality_report_table.csv`/`_data_correlation_report_table.csv`. При
+   необходимости добавьте `--emit-legacy-artifacts` (или `--debug`/`--keep-intermediate`),
+   чтобы восстановить исторические YAML-файлы метаданных, CSV с ошибками и
+   дополнительные вспомогательные выгрузки для диагностики.
 
 Все артефакты сохраняют описанную выше детерминированность: повторные запуски с
 одинаковыми входами дают байтово идентичные файлы.
