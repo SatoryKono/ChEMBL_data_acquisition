@@ -11,7 +11,9 @@ import pandas as pd
 from ..common.csv_utils import write_csv_deterministic
 
 
-__all__ = ["StandardOutputArtifacts", "save_standard_outputs"]
+OUTPUT_DIR = Path("data/output")
+
+__all__ = ["StandardOutputArtifacts", "save_standard_outputs", "OUTPUT_DIR"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +44,8 @@ def save_standard_outputs(
     *,
     key_columns: Sequence[str] | None = None,
     output_dir: Path | str | None = None,
-    output_path: Path | None = None,
+    output_path: Path | str | None = None,
+    cleanup_source: bool = True,
 ) -> StandardOutputArtifacts:
     """Persist the canonical dataset together with QC artefacts.
 
@@ -61,12 +64,21 @@ def save_standard_outputs(
     key_columns:
         Optional sequence of columns used to deterministically order
         ``df_main`` before writing.
+    output_dir:
+        Directory for writing the artefacts. When omitted, :data:`OUTPUT_DIR`
+        (``data/output``) is used. The parameter is ignored when
+        ``output_path`` is supplied; in that case the parent directory of
+        ``output_path`` becomes the target location.
     output_path:
-        Destination for the primary dataset. When provided, the artefacts are
-        written next to this path, and the dataset is materialised exactly at
-        ``output_path``. Otherwise, the canonical :data:`OUTPUT_DIR` location is
-        used together with the standard naming convention derived from
-        ``table_name`` and ``date_tag``.
+        Optional original dataset path. When provided the canonical artefacts
+        are written next to this file using the standard ``output.<table>``
+        naming scheme. If the resulting dataset path differs from
+        ``output_path`` the original file (and its optional ``.meta.yaml``
+        sidecar) is deleted when ``cleanup_source`` evaluates to ``True``.
+    cleanup_source:
+        Remove ``output_path`` when it does not match the canonical dataset
+        path. Defaults to ``True`` so that legacy exports do not leave stray
+        files behind.
 
     Returns
     -------
@@ -74,20 +86,16 @@ def save_standard_outputs(
         Paths to the dataset, correlation report and quality report.
     """
 
+    resolved_output_dir = Path(output_dir) if output_dir is not None else OUTPUT_DIR
+
     if output_path is not None:
-        dataset_path = Path(output_path)
-        destination_dir = dataset_path.parent
-        if dataset_path.suffix:
-            stem_name = dataset_path.with_suffix("").name
-        else:
-            stem_name = dataset_path.name
+        candidate_path = Path(output_path)
+        destination_dir = candidate_path.parent
     else:
-        if output_dir is None:
-            msg = "output_dir must be provided to save_standard_outputs"
-            raise ValueError(msg)
-        destination_dir = Path(output_dir)
-        stem_name = f"output.{table_name}_{date_tag}"
-        dataset_path = destination_dir / f"{stem_name}.csv"
+        destination_dir = resolved_output_dir
+
+    stem_name = f"output.{table_name}_{date_tag}"
+    dataset_path = destination_dir / f"{stem_name}.csv"
 
     _ensure_output_directory(destination_dir)
 
@@ -112,8 +120,18 @@ def save_standard_outputs(
         corr_key_cols = [str(df_corr.columns[0])]
     write_csv_deterministic(df_corr, correlation_path, key_cols=corr_key_cols)
 
-    return StandardOutputArtifacts(
+    artifacts = StandardOutputArtifacts(
         dataset=dataset_path,
         correlation_report=correlation_path,
         quality_report=quality_path,
     )
+
+    if (
+        cleanup_source
+        and output_path is not None
+        and Path(output_path) != dataset_path
+    ):
+        Path(output_path).unlink(missing_ok=True)
+        Path(f"{output_path}.meta.yaml").unlink(missing_ok=True)
+
+    return artifacts

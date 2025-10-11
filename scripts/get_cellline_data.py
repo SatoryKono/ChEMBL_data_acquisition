@@ -19,6 +19,8 @@ bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 del _bootstrap_module
 
+import pandas as pd
+
 from library import cli, io
 from library.cli import LoggerConfig, configure_logger
 from library.cli import build_parser as base_parser
@@ -30,6 +32,8 @@ from library.pipelines.cellline import (
     CellLinePipelineOptions,
     run_cellline_pipeline,
 )
+from library.utils.data_correlation import generate_correlation_report
+from library.utils.qc_report import generate_qc_report
 
 DEFAULT_INPUT_NAME = "cellline.csv"
 DEFAULT_OUTPUT_STEM = "cellline"
@@ -127,13 +131,135 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
     result = run_cellline_pipeline(cfg, options)
 
-    status = "OK" if result.exit_code == 0 else "ERROR"
+    exit_code = result.exit_code
+    artifacts: io.StandardOutputArtifacts | None = None
+    output_path = result.output_path
+
+    if exit_code == 0 and result.written:
+        try:
+            dataset_frame = pd.read_csv(
+                output_path,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+            )
+        except (
+            OSError,
+            ValueError,
+            pd.errors.EmptyDataError,
+            pd.errors.ParserError,
+        ) as exc:
+            logger.error(
+                "cellline_output_load_failed",
+                error=str(exc),
+                path=str(output_path),
+            )
+            exit_code = 1
+        else:
+            table_name, date_tag = io.derive_output_labels(
+                output_path,
+                default_table=DEFAULT_OUTPUT_STEM,
+            )
+
+            doc_quality_cfg = getattr(getattr(cfg, "system", None), "doc_quality", None)
+            include_columns = (
+                getattr(doc_quality_cfg, "include_columns", None)
+                if doc_quality_cfg is not None
+                else None
+            )
+            exclude_columns = (
+                getattr(doc_quality_cfg, "exclude_columns", None)
+                if doc_quality_cfg is not None
+                else None
+            )
+            sample_rows = (
+                getattr(doc_quality_cfg, "sample_rows", None)
+                if doc_quality_cfg is not None
+                else None
+            )
+            profiler = (
+                getattr(doc_quality_cfg, "profiler", None)
+                if doc_quality_cfg is not None
+                else None
+            )
+
+            try:
+                correlation_report = generate_correlation_report(
+                    dataset_frame,
+                    table_name=table_name,
+                    include_columns=include_columns,
+                    exclude_columns=exclude_columns,
+                    sample_rows=sample_rows,
+                    profiler=profiler,
+                )
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning(
+                    "cellline_correlation_generation_failed",
+                    error=str(exc),
+                    path=str(output_path),
+                )
+                correlation_report = pd.DataFrame()
+
+            try:
+                quality_report = generate_qc_report(
+                    dataset_frame,
+                    table_name=table_name,
+                    include_columns=include_columns,
+                    exclude_columns=exclude_columns,
+                    sample_rows=sample_rows,
+                    profiler=profiler,
+                )
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning(
+                    "cellline_quality_generation_failed",
+                    error=str(exc),
+                    path=str(output_path),
+                )
+                quality_report = pd.DataFrame()
+
+            try:
+                artifacts = io.save_standard_outputs(
+                    dataset_frame,
+                    correlation_report,
+                    quality_report,
+                    table_name=table_name,
+                    date_tag=date_tag,
+                    key_columns=["cell_chembl_id"],
+                    output_path=output_path,
+                )
+            except (OSError, ValueError) as exc:
+                logger.error(
+                    "cellline_standard_outputs_failed",
+                    error=str(exc),
+                    path=str(output_path),
+                )
+                exit_code = 1
+            else:
+                logger.info(
+                    "cellline_standard_outputs_written",
+                    dataset=str(artifacts.dataset),
+                    quality_report=str(artifacts.quality_report),
+                    correlation_report=str(artifacts.correlation_report),
+                )
+                args.output_csv = artifacts.dataset
+                setattr(args, "_cellline_artifacts", artifacts)
+                output_path = artifacts.dataset
+
+    preserve_intermediate = any(
+        bool(getattr(args, flag, False))
+        for flag in ("debug", "keep_intermediate", "emit_legacy_artifacts")
+    )
+
     if result.failure_path and result.failures:
         logger.error(
             "cellline_validation_failed",
             failures=result.failures,
             path=str(result.failure_path),
         )
+        if not preserve_intermediate:
+            result.failure_path.unlink(missing_ok=True)
+    elif result.failure_path and not preserve_intermediate:
+        result.failure_path.unlink(missing_ok=True)
+
     if result.missing_ids:
         sample = list(result.missing_ids[:5])
         logger.warning(
@@ -142,15 +268,16 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             sample=sample,
         )
 
+    status = "OK" if exit_code == 0 else "ERROR"
     logger.info(
         "cellline_pipeline_summary",
         records=result.records,
         duration=result.duration,
-        output=str(result.output_path),
-        exit_code=result.exit_code,
+        output=str(output_path),
+        exit_code=exit_code,
         status=status,
     )
-    return result.exit_code
+    return exit_code
 
 
 def main(argv: Sequence[str] | None = None) -> int:

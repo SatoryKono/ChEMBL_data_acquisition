@@ -1268,8 +1268,22 @@ def _derive_standard_output_labels(dataset_csv: Path) -> tuple[str, str]:
         name = name[: -len(".csv")]
         lowered = name.lower()
 
-    if name.startswith("output."):
-        name = name[len("output.") :]
+    prefix = "output."
+    if name.startswith(prefix):
+        # Drop redundant ``output.`` prefixes that can accumulate when the
+        # pipeline works with hidden temporary artefacts such as
+        # ``.output.activities_*.csv.tmp``.  The intermediate filenames can be
+        # normalised by stripping both the prefix and any leading dots that
+        # remain after the removal.  Repeat the process to guard against
+        # chains like ``output..output.activities`` which would otherwise leak
+        # the extra ``output.`` segment into the derived table name and produce
+        # paths such as ``output.output.activities_*.csv``.
+        while name.startswith(prefix):
+            candidate = name[len(prefix) :]
+            candidate = candidate.lstrip(".")
+            if not candidate:
+                break
+            name = candidate
 
     base = name
     if "_" in base:

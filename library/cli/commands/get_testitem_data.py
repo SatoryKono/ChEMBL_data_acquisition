@@ -57,6 +57,8 @@ from library.pipelines.testitem import (
 )
 from library.pipelines.testitem import catalog as pipeline_catalog
 from library.pipelines.testitem import pubchem as pipeline_pubchem
+from library.utils.data_correlation import generate_correlation_report
+from library.utils.qc_report import generate_qc_report
 
 # ===== Parameters =====
 
@@ -560,15 +562,124 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         emit_legacy_artifacts=getattr(args, "emit_legacy_artifacts", False),
     )
     pipeline_result = run_testitem_pipeline(cfg, options)
+
+    artifacts: io.StandardOutputArtifacts | None = None
+    exit_code: int
+    dataset_hint: Path | None = None
+
     if isinstance(pipeline_result, tuple) and len(pipeline_result) == 2:
-        exit_code, artifacts = pipeline_result
+        exit_code = int(pipeline_result[0])
+        artifacts = pipeline_result[1]
     else:  # pragma: no cover - backward compatibility with legacy shims
-        exit_code = int(pipeline_result)
-        artifacts = None
+        exit_code = int(getattr(pipeline_result, "exit_code", pipeline_result))
+        dataset_attr = getattr(pipeline_result, "dataset_path", None)
+        if dataset_attr is not None:
+            dataset_hint = Path(dataset_attr)
+
+    if exit_code == 0 and artifacts is None:
+        dataset_candidate = dataset_hint or getattr(args, "output_csv", None)
+        if dataset_candidate is not None and not isinstance(dataset_candidate, Path):
+            dataset_candidate = Path(dataset_candidate)
+
+        if isinstance(dataset_candidate, Path) and dataset_candidate.exists():
+            artifacts = _build_standard_outputs_from_path(cfg, dataset_candidate)
+        elif dataset_candidate is not None:
+            logger.debug(
+                "testitem_standard_outputs_missing", path=str(dataset_candidate)
+            )
+
     if artifacts is not None:
         args.output_csv = artifacts.dataset
         setattr(args, "_testitem_artifacts", artifacts)
     return exit_code
+
+
+def _build_standard_outputs_from_path(
+    cfg: Config, dataset_path: Path
+) -> io.StandardOutputArtifacts | None:
+    """Generate and persist standard artefacts for ``dataset_path``."""
+
+    try:
+        dataset_frame = pd.read_csv(
+            dataset_path,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+        )
+    except (OSError, ValueError) as exc:  # pragma: no cover - defensive logging
+        logger.error(
+            "testitem_dataset_load_failed",
+            error=str(exc),
+            path=str(dataset_path),
+        )
+        return None
+
+    doc_quality_cfg = getattr(getattr(cfg, "system", None), "doc_quality", None)
+    include_columns = getattr(doc_quality_cfg, "include_columns", None)
+    exclude_columns = getattr(doc_quality_cfg, "exclude_columns", None)
+    sample_rows = getattr(doc_quality_cfg, "sample_rows", None)
+
+    try:
+        quality_report = generate_qc_report(
+            dataset_frame,
+            table_name=dataset_path.with_suffix("").name,
+            include_columns=include_columns,
+            exclude_columns=exclude_columns,
+            sample_rows=sample_rows,
+        )
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.warning(
+            "testitem_quality_generation_failed",
+            error=str(exc),
+            path=str(dataset_path),
+        )
+        quality_report = pd.DataFrame()
+
+    try:
+        correlation_report = generate_correlation_report(
+            dataset_frame,
+            table_name=dataset_path.with_suffix("").name,
+            include_columns=include_columns,
+            exclude_columns=exclude_columns,
+            sample_rows=sample_rows,
+        )
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.warning(
+            "testitem_correlation_generation_failed",
+            error=str(exc),
+            path=str(dataset_path),
+        )
+        correlation_report = pd.DataFrame()
+
+    table_name, date_tag = io.derive_output_labels(
+        dataset_path, default_table=DEFAULT_OUTPUT_STEM
+    )
+
+    try:
+        artifacts = io.save_standard_outputs(
+            dataset_frame,
+            correlation_report,
+            quality_report,
+            table_name=table_name,
+            date_tag=date_tag,
+            key_columns=["molecule_chembl_id"],
+            output_path=dataset_path,
+        )
+    except (OSError, ValueError) as exc:  # pragma: no cover - defensive guard
+        logger.error(
+            "testitem_standard_outputs_failed",
+            error=str(exc),
+            path=str(dataset_path),
+        )
+        return None
+
+    logger.info(
+        "testitem_standard_outputs",
+        dataset=str(artifacts.dataset),
+        quality_report=str(artifacts.quality_report),
+        correlation_report=str(artifacts.correlation_report),
+    )
+
+    return artifacts
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
@@ -653,7 +764,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         raw_output = Path(getattr(args, "output_csv", output_path))
         postprocess_enabled = bool(getattr(args, "postprocess", False))
         emit_legacy = bool(getattr(args, "emit_legacy_artifacts", False))
-        payload: dict[str, object] = {"output": str(output_path)}
+        payload: dict[str, object] = {"output": str(raw_output)}
         artifacts = getattr(args, "_testitem_artifacts", None)
         if artifacts is not None:
             payload["quality_report"] = str(artifacts.quality_report)

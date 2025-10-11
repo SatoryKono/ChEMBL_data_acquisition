@@ -456,6 +456,10 @@ def make_request(
                                 timeout_details.setdefault(
                                     "retry_after", delay
                                 )
+                                timeout_details.setdefault(
+                                    "retry_after_source",
+                                    "header" if retry_after is not None else "backoff",
+                                )
                                 timeout_details["timeout_reason"] = (
                                     "retry_after_exceeds_deadline"
                                 )
@@ -701,11 +705,12 @@ def _store_cache_miss(
                 if cfg.timeout_seconds and cfg.timeout_seconds > 0
                 else None
             )
+            retry_after_source = details_data.get("retry_after_source")
             effective_backoff = (
                 base_backoff if base_backoff and base_backoff > 0 else None
             )
             if effective_backoff is not None:
-                if max_backoff is not None:
+                if max_backoff is not None and retry_after_source != "header":
                     effective_backoff = min(effective_backoff, max_backoff)
                 stored_at = monotonic()
                 details_data.update(
@@ -767,34 +772,61 @@ def _extract_cids(bindings: list[dict[str, Any]]) -> list[str]:
     return cids
 
 
+def _dedup_join(cids: list[str]) -> str | None:
+    """Return a ``|``-joined, sorted representation of ``cids`` or ``None``."""
+
+    unique_cids = sorted({cid for cid in cids if cid})
+    return "|".join(unique_cids) if unique_cids else None
+
+
+def _get_cids_from_name_via_rdf(
+    compound_name: str, cfg: PubChemCfg, *, partial: bool
+) -> list[str]:
+    safe_name = url_encode(compound_name)
+    rdf_base = cfg.base.rstrip("/").rsplit("/", 1)[0] + "/rdf"
+    contain_suffix = "&contain=true" if partial else ""
+    url = (
+        f"{rdf_base}/query?graph=synonym&return=cid&format=json&name="
+        f"{safe_name}{contain_suffix}"
+    )
+    response = make_request(url, cfg)
+    if not response:
+        return []
+    bindings = response.get("results", {}).get("bindings", [])
+    return _extract_cids(bindings)
+
+
+def _get_cids_from_name_via_pug(
+    compound_name: str, cfg: PubChemCfg, *, partial: bool
+) -> list[str]:
+    safe_name = url_encode(compound_name)
+    base = cfg.base.rstrip("/")
+    url = f"{base}/compound/name/{safe_name}/cids/JSON"
+    if partial:
+        separator = "?" if "?" not in url else "&"
+        url = f"{url}{separator}name_type=word"
+    response = make_request(url, cfg)
+    if not response:
+        return []
+    return _cids_from_identifier_list(response)
+
+
 def get_cid(compound_name: str, cfg: PubChemCfg) -> str | None:
     """Retrieve PubChem CID(s) for *compound_name* (exact match)."""
 
-    safe_name = url_encode(compound_name)
-    rdf_base = cfg.base.rstrip("/").rsplit("/", 1)[0] + "/rdf"
-    url = f"{rdf_base}/query?graph=synonym&return=cid&format=json&name={safe_name}"
-    response = make_request(url, cfg)
-    if not response:
-        return None
-    bindings = response.get("results", {}).get("bindings", [])
-    cids = _extract_cids(bindings)
-    unique_cids = sorted(set(cids))
-    return "|".join(unique_cids) if unique_cids else None
+    cids = _get_cids_from_name_via_rdf(compound_name, cfg, partial=False)
+    if not cids:
+        cids = _get_cids_from_name_via_pug(compound_name, cfg, partial=False)
+    return _dedup_join(cids)
 
 
 def get_all_cid(compound_name: str, cfg: PubChemCfg) -> str | None:
     """Retrieve PubChem CID(s) for *compound_name* (partial match)."""
 
-    safe_name = url_encode(compound_name)
-    rdf_base = cfg.base.rstrip("/").rsplit("/", 1)[0] + "/rdf"
-    url = f"{rdf_base}/query?graph=synonym&return=cid&format=json&name={safe_name}&contain=true"
-    response = make_request(url, cfg)
-    if not response:
-        return None
-    bindings = response.get("results", {}).get("bindings", [])
-    cids = _extract_cids(bindings)
-    unique_cids = sorted(set(cids))
-    return "|".join(unique_cids) if unique_cids else None
+    cids = _get_cids_from_name_via_rdf(compound_name, cfg, partial=True)
+    if not cids:
+        cids = _get_cids_from_name_via_pug(compound_name, cfg, partial=True)
+    return _dedup_join(cids)
 
 
 def validate_cid(cid: str) -> str | None:
