@@ -640,7 +640,7 @@ def _merge_pubchem_properties(
         configured_batch_size = max(int(getattr(cfg, "batch_size", 1)), 1)
         rps_limit = int(getattr(cfg, "rps", configured_batch_size))
         max_workers = max(1, min(configured_batch_size, rps_limit))
-        batch_size = configured_batch_size
+        batch_size = max_workers
 
         pubchem_lib = _load_pubchem_library()
 

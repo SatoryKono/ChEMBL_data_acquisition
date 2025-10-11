@@ -310,6 +310,70 @@ def test_merge_pubchem_properties__stops_after_service_unavailable(
     assert any("pending=3" in msg for msg in unavailable_messages)
 
 
+def test_merge_pubchem_properties__limits_outstanding_requests_on_service_unavailable(
+    cfg, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    pubchem_cfg = cfg.pubchem
+    pubchem_cfg.batch_size = 10
+    pubchem_cfg.rps = 3
+
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": [f"CHEMBL{i}" for i in range(1, 8)],
+        }
+    )
+
+    cid_series = pd.Series(
+        [f"CID{i}" for i in range(1, 8)], index=frame.index, dtype="string"
+    )
+    lookup_cids = set(cid_series.tolist())
+
+    skip_mask = pd.Series([False] * len(frame), index=frame.index, dtype="bool")
+    prefer_local_mask = pd.Series([False] * len(frame), index=frame.index, dtype="bool")
+
+    from library.integration import pubchem_library
+
+    call_count = 0
+
+    class _DummyPubChemLib:
+        Properties = pubchem_library.Properties
+        PubChemServiceUnavailable = pubchem_library.PubChemServiceUnavailable
+
+        def get_properties(self, cid: str, cfg_arg: PubChemCfg) -> pubchem_library.Properties:
+            nonlocal call_count
+            call_count += 1
+            raise pubchem_library.PubChemServiceUnavailable(
+                "server_error", {"status": 503, "retry_after": 30.0}
+            )
+
+    monkeypatch.setattr(pubchem, "_load_pubchem_library", lambda: _DummyPubChemLib())
+
+    with caplog.at_level(logging.WARNING):
+        merged = pubchem._merge_pubchem_properties(
+            frame,
+            cid_series,
+            lookup_cids,
+            cfg=pubchem_cfg,
+            skip_mask=skip_mask,
+            prefer_local_mask=prefer_local_mask,
+        )
+
+    assert call_count == pubchem_cfg.rps
+    assert merged["pubchem_cid"].tolist() == [f"CID{i}" for i in range(1, 8)]
+    remaining_columns = [col for col in pubchem.PUBCHEM_COLUMNS if col != "pubchem_cid"]
+    assert merged[remaining_columns].isna().all().all()
+
+    warning_messages = [
+        record.message for record in caplog.records if record.levelno >= logging.WARNING
+    ]
+    assert sum(msg.startswith("pubchem_properties_failed") for msg in warning_messages) == 1
+    unavailable_messages = [
+        msg for msg in warning_messages if msg.startswith("pubchem_properties_unavailable")
+    ]
+    assert unavailable_messages
+    assert any("pending=7" in msg for msg in unavailable_messages)
+
+
 @pytest.mark.integration
 def test_resolve_pubchem_cid__temporary_failure_does_not_cache(
     cfg, monkeypatch: pytest.MonkeyPatch
