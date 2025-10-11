@@ -182,6 +182,23 @@ def _prepare_targets_for_schema(
     return _prepare(frame)
 
 
+def _remove_failure_artifacts(path: Path) -> None:
+    """Remove residual validation failure artefacts if present."""
+
+    meta_path = path.with_name(path.name + ".meta.yaml")
+    for candidate in (path, meta_path):
+        try:
+            candidate.unlink()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:  # pragma: no cover - defensive guard
+            logger.warning(
+                "failure_artifact_cleanup_failed",
+                path=str(candidate),
+                error=str(exc),
+            )
+
+
 class StoreWithSource(argparse.Action):
     """Store CLI values while tracking their origin."""
 
@@ -3558,6 +3575,12 @@ def validate_and_write(
     )
     logger.info("validate_write_start", output=str(expected_dataset_path))
 
+    failure_path = expected_dataset_path.with_name(
+        f"{expected_dataset_path.stem}_failure_cases.csv"
+    )
+    if not emit_legacy_artifacts:
+        _remove_failure_artifacts(failure_path)
+
     key_columns = list(id_cols) if id_cols else ["target_chembl_id"]
     input_rows = len(df)
 
@@ -3640,13 +3663,13 @@ def validate_and_write(
         try:
             validation = validate_targets(final_df, return_result=True)
         except SchemaErrors as exc:
-            failure_path = expected_dataset_path.with_name(
-                f"{expected_dataset_path.stem}_failure_cases.csv"
-            )
-            errors = SidecarErrors()
-            for row in exc.failure_cases.to_dict("records"):
-                errors.add_error(row)
-            errors.save(failure_path, cfg=cfg)
+            if emit_legacy_artifacts:
+                errors = SidecarErrors()
+                for row in exc.failure_cases.to_dict("records"):
+                    errors.add_error(row)
+                errors.save(failure_path, cfg=cfg)
+            else:
+                _remove_failure_artifacts(failure_path)
             logger.error(
                 "validation_failed",
                 failures=len(exc.failure_cases),
@@ -3674,13 +3697,13 @@ def validate_and_write(
             final_df = validation.data
             failure_cases = validation.failure_cases.copy()
             if not failure_cases.empty:
-                failure_path = expected_dataset_path.with_name(
-                    f"{expected_dataset_path.stem}_failure_cases.csv"
-                )
-                errors = SidecarErrors()
-                for row in failure_cases.to_dict("records"):
-                    errors.add_error(row)
-                errors.save(failure_path, cfg=cfg)
+                if emit_legacy_artifacts:
+                    errors = SidecarErrors()
+                    for row in failure_cases.to_dict("records"):
+                        errors.add_error(row)
+                    errors.save(failure_path, cfg=cfg)
+                else:
+                    _remove_failure_artifacts(failure_path)
                 logger.error(
                     "validation_failed",
                     failures=len(failure_cases),
