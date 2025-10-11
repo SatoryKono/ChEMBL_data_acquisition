@@ -140,6 +140,7 @@ from library.postprocessing.testitem import (
 from library.postprocessing.testitem import (
     run_testitem_pipeline as run_testitem_postprocess,
 )
+from library.io.paths import derive_output_labels
 from library.reporting.run_manifest import load_output_report, merge_run_output
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
@@ -1130,6 +1131,8 @@ def _is_diagnostic_sidecar(path: Path) -> bool:
     """Return ``True`` when ``path`` points to a diagnostic-only artefact."""
 
     name = path.name.lower()
+    if name.startswith("output.") and ".csv_" in name:
+        return True
     if name.endswith(".meta.yaml"):
         return True
     if name.endswith(".postprocess.report.json"):
@@ -1337,6 +1340,24 @@ def _finalize_step_success(
     working_dir = working_output.parent
     final_dir = final_output.parent
 
+    try:
+        table_name, date_tag = derive_output_labels(
+            final_output.name,
+            default_table=final_output.stem or "dataset",
+        )
+    except Exception:  # pragma: no cover - defensive guard
+        canonical_prefix: str | None = None
+        canonical_allowed: frozenset[str] = frozenset()
+    else:
+        canonical_prefix = f"output.{table_name}_{date_tag}"
+        canonical_allowed = frozenset(
+            {
+                f"{canonical_prefix}.csv",
+                f"{canonical_prefix}_data_correlation_report_table.csv",
+                f"{canonical_prefix}_quality_report_table.csv",
+            }
+        )
+
     if working_output.exists():
         if final_output.exists():
             _remove_path(final_output)
@@ -1345,7 +1366,17 @@ def _finalize_step_success(
     for sidecar in sidecars.values():
         working_path = sidecar.working_path
         destination = sidecar.destination
-        if not diagnostics_enabled and _is_diagnostic_sidecar(destination):
+        extra_standard_output = False
+        if canonical_prefix is not None:
+            candidate_name = destination.name
+            if (
+                candidate_name.startswith(canonical_prefix)
+                and candidate_name not in canonical_allowed
+            ):
+                extra_standard_output = True
+        if not diagnostics_enabled and (
+            _is_diagnostic_sidecar(destination) or extra_standard_output
+        ):
             for candidate in (working_path, sidecar.final_path, destination):
                 if candidate is None or not candidate.exists():
                     continue

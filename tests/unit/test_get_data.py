@@ -1175,6 +1175,19 @@ def test_is_diagnostic_sidecar__legacy_suffixes(filename: str) -> None:
 @pytest.mark.parametrize(
     "filename",
     [
+        "output.targets_20240101.csv_chembl_20240101.csv",
+        "output.targets_20240101.csv_chembl_20240101_data_correlation_report_table.csv",
+        "output.targets_20240101.csv_chembl_20240101_quality_report_table.csv",
+    ],
+)
+def test_is_diagnostic_sidecar__intermediate_standard_outputs(filename: str) -> None:
+    assert get_data._is_diagnostic_sidecar(Path(filename)) is True
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "filename",
+    [
         "output.targets_20240101.csv",
         "output.targets_20240101_quality_report_table.csv",
         "output.targets_20240101_data_correlation_report_table.csv",
