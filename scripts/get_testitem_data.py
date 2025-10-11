@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Iterable
 from importlib import import_module
+from pathlib import Path
 from types import ModuleType
 
 
@@ -34,8 +35,30 @@ def _export_module_api(module: ModuleType, *, extra: Iterable[str] = ()) -> tupl
     return tuple(ordered)
 
 
+def _ensure_project_root_on_sys_path() -> None:
+    """Add the project root to :mod:`sys.path` when running from a checkout.
+
+    The compatibility wrappers are often executed directly via
+    ``python scripts/<name>.py``.  In that case Python adds the ``scripts``
+    directory to ``sys.path`` but *not* the project root that contains the
+    actual ``library`` package.  Installing the project as a package does not
+    suffer from this issue, so we only prepend the path when necessary.
+    """
+
+    project_root = Path(__file__).resolve().parent.parent
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+
+
 def _load_module() -> ModuleType:
-    return import_module("library.cli.commands.get_testitem_data")
+    try:
+        return import_module("library.cli.commands.get_testitem_data")
+    except ModuleNotFoundError as exc:
+        if exc.name != "library":
+            raise
+        _ensure_project_root_on_sys_path()
+        return import_module("library.cli.commands.get_testitem_data")
 
 
 _MODULE = _load_module()
