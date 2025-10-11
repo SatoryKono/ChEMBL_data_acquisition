@@ -412,11 +412,9 @@ class PipelineRunConfig:
         if stem_path.suffix:
             if stem_path.is_absolute():
                 return stem_path
-            # Treat explicit filenames that already include a CSV extension as
-            # concrete targets.
-            name_lower = stem_path.name.lower()
-            if ".csv" in name_lower:
-                return self.output_dir / stem_path
+            # Preserve explicit filenames (with any suffix) relative to the
+            # configured output directory.
+            return (self.output_dir / stem_path).resolve()
 
         normalised = _normalise_output_stem(str(stem_path))
         filename = f"output.{normalised}_{self.date_prefix}.csv"
