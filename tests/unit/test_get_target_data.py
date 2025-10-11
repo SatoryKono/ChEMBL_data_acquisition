@@ -1086,6 +1086,78 @@ def test_run_all__enables_standard_outputs_for_chembl(
 
 
 @pytest.mark.unit
+def test_run_chembl__coerces_none_emit_flag(
+    cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``None`` should be treated as ``True`` for ``emit_standard_outputs``."""
+
+    final_out = tmp_path / "output.targets_chembl.csv"
+
+    monkeypatch.setattr(
+        get_target_data.io,
+        "read_ids",
+        lambda *_, **__: iter(["CHEMBL1"]),
+    )
+
+    class _StubWriter:
+        def __init__(
+            self, destination: Path, *, cfg: Config, reindex_columns: bool
+        ) -> None:
+            self.destination = destination
+
+        def write(self, chunk: pd.DataFrame) -> None:  # pragma: no cover - stub
+            return None
+
+        def finalize(self) -> None:  # pragma: no cover - stub
+            return None
+
+    monkeypatch.setattr(get_target_data, "_RawDumpStreamWriter", _StubWriter)
+    monkeypatch.setattr(
+        get_target_data,
+        "_finalize_raw_dump_writer",
+        lambda *_, **__: True,
+    )
+
+    from library.cli_utils import PipelineExecutionResult
+
+    captured: dict[str, object] = {}
+
+    def _fake_pipeline(**kwargs: object) -> PipelineExecutionResult:
+        captured["emit_standard_outputs"] = kwargs["emit_standard_outputs"]
+        captured["emit_legacy_artifacts"] = kwargs["emit_legacy_artifacts"]
+        final_out.write_text(
+            "target_chembl_id\nCHEMBL1\n", encoding=cfg.io.csv_encoding
+        )
+        return PipelineExecutionResult(
+            exit_code=0,
+            dataset_path=final_out,
+            failure_path=None,
+            metadata_path=None,
+        )
+
+    monkeypatch.setattr(get_target_data, "_run_pipeline_with_meta", _fake_pipeline)
+
+    args = argparse.Namespace(
+        input_csv=tmp_path / "input.csv",
+        final_out=final_out,
+        output_csv=final_out,
+        raw_out=None,
+        raw_format="csv",
+        id_cols=None,
+        no_reindex_raw=False,
+        normalize_at_export=True,
+        emit_standard_outputs=None,
+    )
+
+    exit_code = get_target_data.run_chembl(cfg, args)
+
+    assert exit_code == 0
+    assert captured.get("emit_standard_outputs") is True
+    assert captured.get("emit_legacy_artifacts") is False
+    assert final_out.exists()
+
+
+@pytest.mark.unit
 def test_run_all__cleans_up_default_intermediate_outputs(
     cfg: Config,
     tmp_path: Path,

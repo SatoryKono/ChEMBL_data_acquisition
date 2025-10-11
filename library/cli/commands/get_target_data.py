@@ -2255,7 +2255,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     raw_dump_rows_total = 0
     chembl_http_requests = 0
 
-    emit_standard_outputs = bool(getattr(args, "emit_standard_outputs", True))
+    raw_emit_flag = getattr(args, "emit_standard_outputs", argparse.SUPPRESS)
+    if raw_emit_flag in (argparse.SUPPRESS, None):
+        emit_standard_outputs = True
+    else:
+        emit_standard_outputs = bool(raw_emit_flag)
 
     if not normalize_at_export:
 
