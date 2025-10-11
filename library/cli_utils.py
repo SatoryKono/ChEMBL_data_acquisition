@@ -1042,6 +1042,7 @@ def run_pipeline(
             correlation_report=str(standard_artifacts.correlation_report),
         )
         dataset_path = standard_artifacts.dataset
+        csv_path = standard_artifacts.dataset
 
     if dataset_path is None and csv_path is not None:
         dataset_path = csv_path
