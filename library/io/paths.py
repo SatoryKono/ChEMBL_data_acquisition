@@ -2,10 +2,68 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
 from ..config import IoCfg
+
+_DATE_TOKEN_RE = re.compile(r"^\d{8}$", flags=re.ASCII)
+
+
+def _strip_output_prefix(value: str) -> str:
+    """Return ``value`` without redundant ``output.`` prefixes or leading dots."""
+
+    candidate = value.lstrip(".")
+    prefix = "output."
+    while candidate.lower().startswith(prefix) and candidate:
+        candidate = candidate[len(prefix) :].lstrip(".")
+    return candidate
+
+
+def _strip_csv_suffix(value: str) -> str:
+    """Remove trailing ``.csv`` tokens and surrounding dots from ``value``."""
+
+    candidate = value
+    lowered = candidate.lower()
+    while lowered.endswith(".csv") and candidate:
+        candidate = candidate[: -len(".csv")].rstrip(".")
+        lowered = candidate.lower()
+    return candidate
+
+
+def _strip_date_suffix(value: str) -> tuple[str, str | None]:
+    """Return ``value`` without ``.csv_<YYYYMMDD>`` tail and the extracted date."""
+
+    match = re.search(r"\.csv_(\d{8})$", value, flags=re.IGNORECASE)
+    if match and _DATE_TOKEN_RE.match(match.group(1)):
+        stripped = value[: match.start()].rstrip("_" )
+        return stripped, match.group(1)
+    return value, None
+
+
+def _normalise_table_name(raw: str, default: str) -> str:
+    """Return a canonical table label derived from ``raw``."""
+
+    candidate = _strip_output_prefix(_strip_csv_suffix(raw.strip()))
+    if len(candidate) >= 9 and candidate[-9] == "_" and _DATE_TOKEN_RE.match(
+        candidate[-8:]
+    ):
+        candidate = candidate[:-9]
+    candidate = candidate.strip("._")
+    return candidate or default
+
+
+def _coerce_date_token(value: str | None) -> str | None:
+    """Return ``value`` when it encodes an eight digit date, otherwise ``None``."""
+
+    if value is None:
+        return None
+    candidate = value.strip().strip("._")
+    candidate = _strip_csv_suffix(candidate)
+    if _DATE_TOKEN_RE.match(candidate):
+        return candidate
+    return None
 
 
 def default_output_path(
@@ -160,33 +218,29 @@ def derive_output_labels(
     """
 
     path = Path(source)
-    base = path.stem
-
-    if base.endswith(".csv"):
-        base = base[: -len(".csv")]
-
-    # Normalise leading dots introduced by temporary files and repeated
-    # ``output.`` prefixes to ensure the inferred table name and timestamp do
-    # not retain placeholder markers. Use a loop to gracefully handle chained
-    # prefixes such as ``.output.output.activities``.
-    base = base.lstrip(".")
-    prefix = "output."
-    while base.lower().startswith(prefix):
-        base = base[len(prefix) :]
-        base = base.lstrip(".")
+    base = _strip_output_prefix(path.stem)
+    base, trailing_date = _strip_date_suffix(base)
+    base = _strip_csv_suffix(base)
 
     table_candidate = base or default_table
-    date_candidate = fallback_date
-    if not isinstance(date_candidate, str) or not date_candidate.strip():
-        date_candidate = datetime.now(UTC).strftime("%Y%m%d")
 
+    date_candidates: list[str | None] = []
     if "_" in base:
         maybe_table, maybe_date = base.rsplit("_", 1)
         if maybe_table:
             table_candidate = maybe_table
-        if maybe_date:
-            date_candidate = maybe_date
+        date_candidates.append(maybe_date)
+    date_candidates.append(trailing_date)
+    date_candidates.append(fallback_date)
 
-    table_name = table_candidate or default_table
-    date_tag = date_candidate or datetime.now(UTC).strftime("%Y%m%d")
+    table_name = _normalise_table_name(table_candidate, default_table)
+
+    for candidate in date_candidates:
+        token = _coerce_date_token(candidate)
+        if token is not None:
+            date_tag = token
+            break
+    else:
+        date_tag = datetime.now(UTC).strftime("%Y%m%d")
+
     return table_name, date_tag
