@@ -232,6 +232,7 @@ local:
     iuphar_family_csv: "target_iuphar_family"  # IUPHAR family mapping file
     uniprot_data_dir: "target_uniprot_cache"  # Directory containing cached UniProt JSON files
     targets_type_csv: "target_types"  # Target type mapping table
+    reference_smiles_csv: null  # Optional fallback table with canonical SMILES
   io:
     output_dir: "$CHEMBL_DA_BASE_PATH/output"  # Directory for generated datasets
     cache_dir: "~/.cache/chembl-da"  # Directory for cached HTTP responses (env: CHEMBL_DA_CACHE_DIR)

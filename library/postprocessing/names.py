@@ -73,6 +73,7 @@ __all__ = [
     "remove_hidrate",
     "sort_my_list",
     "reference_SMILES",
+    "set_reference_smiles_table",
     "write_csv_deterministic",
 ]
 
@@ -344,6 +345,36 @@ def _active_component_type(component: Mapping[str, Any]) -> str:
 
 
 _REFERENCE_CACHE: MutableMapping[Path, pd.Series] = {}
+_REFERENCE_TABLE_PATH: Path | None = None
+
+
+def set_reference_smiles_table(path: str | Path | None) -> None:
+    """Configure the default reference table consulted by :func:`reference_SMILES`."""
+
+    global _REFERENCE_TABLE_PATH
+
+    if _REFERENCE_TABLE_PATH is not None:
+        _REFERENCE_CACHE.pop(_REFERENCE_TABLE_PATH, None)
+
+    if path is None:
+        _REFERENCE_TABLE_PATH = None
+        return
+
+    candidate = Path(path).expanduser()
+    resolved = candidate.resolve(strict=False)
+    _REFERENCE_TABLE_PATH = resolved
+    _REFERENCE_CACHE.pop(resolved, None)
+
+
+def _resolve_reference_table_path(reference_path: str | Path | None) -> Path:
+    if reference_path is not None:
+        return Path(reference_path).expanduser().resolve(strict=False)
+    if _REFERENCE_TABLE_PATH is None:
+        raise TargetNamesError(
+            "Reference SMILES table path not configured; "
+            "provide reference_path or call set_reference_smiles_table()."
+        )
+    return _REFERENCE_TABLE_PATH
 
 
 def reference_SMILES(
@@ -357,9 +388,10 @@ def reference_SMILES(
         return None
     if overrides and text in overrides:
         return normalise_text(overrides[text]) or None
-    path = Path(reference_path or Path("data/reference/Table6.csv"))
+    path = _resolve_reference_table_path(reference_path)
     if not path.exists():
         raise TargetNamesError(f"Reference SMILES table not found at {path!s}")
+    path = path.resolve()
     if path not in _REFERENCE_CACHE:
         frame = read_csv_with_fallbacks(path, encodings=ENCODING_FALLBACKS)
         required = {"molecule_chembl_id", "canonical_smiles"}
