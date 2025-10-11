@@ -191,6 +191,8 @@ def test_run_target_service__invokes_command_handler(
         command="chembl",
         limit=10,
         offset=3,
+        date="20250115",
+        output_stem="custom_targets",
     )
 
     captured: dict[str, object] = {}
@@ -225,6 +227,8 @@ def test_run_target_service__invokes_command_handler(
     assert Path(args.input_csv) == sample_csv
     assert Path(args.final_out) == output_csv
     assert args.command == "chembl"
+    assert getattr(args, "_auto_output_stem", None) == options.output_stem
+    assert getattr(args, "date", None) == options.date
 
 
 def test_run_target_service__skip_existing(

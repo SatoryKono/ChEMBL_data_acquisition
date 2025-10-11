@@ -84,6 +84,8 @@ def test_build_target_options__forwards_skip_existing(tmp_path: Path) -> None:
     )
     assert options.skip_existing is True
     assert options.force is cfg.force
+    assert options.date == cfg.date_prefix
+    assert options.output_stem == cfg.output_stems.get("target")
 
 
 @pytest.mark.unit

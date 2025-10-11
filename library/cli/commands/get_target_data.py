@@ -4035,6 +4035,11 @@ def run_target_service(
         force=options.force,
     )
 
+    if options.output_stem is not None:
+        setattr(args, "_auto_output_stem", options.output_stem)
+    if options.date is not None:
+        setattr(args, "date", options.date)
+
     command = options.command
     if command == "chembl":
         runner = run_chembl

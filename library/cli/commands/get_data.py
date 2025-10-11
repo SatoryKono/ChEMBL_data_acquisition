@@ -311,6 +311,8 @@ def _build_target_options(
         limit=cfg.limit,
         force=cfg.force,
         skip_existing=cfg.skip_existing,
+        date=cfg.date_prefix,
+        output_stem=cfg.output_stems.get("target"),
     )
 
 
