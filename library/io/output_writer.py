@@ -33,6 +33,17 @@ def _ensure_output_directory(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
+def _paths_reference_same_file(lhs: Path, rhs: Path) -> bool:
+    """Return ``True`` when ``lhs`` and ``rhs`` resolve to the same file."""
+
+    try:
+        return lhs.samefile(rhs)
+    except FileNotFoundError:
+        return False
+    except (OSError, RuntimeError):  # ``samefile`` not supported or circular refs
+        return lhs.resolve(strict=False) == rhs.resolve(strict=False)
+
+
 def save_standard_outputs(
     df_main: pd.DataFrame,
     df_corr: pd.DataFrame,
@@ -124,12 +135,10 @@ def save_standard_outputs(
         quality_report=quality_path,
     )
 
-    if (
-        cleanup_source
-        and output_path is not None
-        and Path(output_path) != dataset_path
-    ):
-        Path(output_path).unlink(missing_ok=True)
-        Path(f"{output_path}.meta.yaml").unlink(missing_ok=True)
+    if cleanup_source and output_path is not None:
+        source_path = Path(output_path)
+        if not _paths_reference_same_file(source_path, dataset_path):
+            source_path.unlink(missing_ok=True)
+            Path(f"{output_path}.meta.yaml").unlink(missing_ok=True)
 
     return artifacts
