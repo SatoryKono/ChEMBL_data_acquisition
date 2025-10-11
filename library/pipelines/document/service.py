@@ -1047,14 +1047,11 @@ def _normalise_working_basename(path: Path) -> Path:
         name = name[1:]
     if name.endswith(".tmp"):
         name = name[:-4]
-    final_path = path.with_name(name)
-    while final_path.suffix:
-        final_path = final_path.with_suffix("")
-    return final_path
+    return path.with_name(name)
 
 
 def _resolve_table_name(
-    options: DocumentPipelineOptions, working_output: Path, date_tag: str
+    options: DocumentPipelineOptions, final_output: Path, date_tag: str
 ) -> str:
     """Derive the logical table name for canonical outputs."""
 
@@ -1064,8 +1061,7 @@ def _resolve_table_name(
         if text:
             return text
 
-    final_path = _normalise_working_basename(working_output)
-    stem = final_path.name
+    stem = final_output.stem
     if date_tag and stem.endswith(f"_{date_tag}"):
         stem = stem[: -len(f"_{date_tag}")]
     if stem.startswith("output."):
@@ -1112,8 +1108,9 @@ def run_document_service(
         except AttributeError:  # pragma: no cover - defensive guard
             pass
     date_tag = _resolve_effective_date(options, cfg)
-    table_name = _resolve_table_name(options, working_output, date_tag)
-    cli_output = working_output.parent / f"{table_name}.csv"
+    final_output = _normalise_working_basename(working_output)
+    table_name = _resolve_table_name(options, final_output, date_tag)
+    cli_output = final_output
 
     args = argparse.Namespace(
         input_csv=Path(options.input_csv),

@@ -53,10 +53,7 @@ def test_run_document_service__invokes_mode_handler(
         captured["cfg"] = cfg_arg
         captured["args"] = args_arg
         captured["pipeline"] = pipeline
-        date_tag = getattr(args_arg, "_standard_date_tag")
-        table_name = Path(args_arg.final_out).stem
-        canonical = Path(cfg_arg.io.output_dir) / f"output.{table_name}_{date_tag}.csv"
-        canonical.write_text("id\nCHEMBL1\n", encoding="utf-8")
+        Path(args_arg.final_out).write_text("id\nCHEMBL1\n", encoding="utf-8")
         return 0
 
     monkeypatch.setattr(get_document_data, "run_chembl", _fake_run)
@@ -83,7 +80,7 @@ def test_run_document_service__invokes_mode_handler(
 
     args = captured["args"]
     assert Path(args.input_csv) == sample_csv
-    assert Path(args.final_out) == tmp_path / "documents.csv"
+    assert Path(args.final_out) == tmp_path / "output.documents_20240101.csv"
     assert getattr(args, "_standard_date_tag") == "20240101"
     assert args.command == "chembl"
 
@@ -140,10 +137,7 @@ def test_run_document_service__copies_canonical_output(
         *,
         pipeline: DocumentPipeline | None = None,
     ) -> int:
-        date_tag = getattr(args_arg, "_standard_date_tag")
-        table_name = Path(args_arg.final_out).stem
-        canonical = Path(cfg_arg.io.output_dir) / f"output.{table_name}_{date_tag}.csv"
-        canonical.write_text("id\nCHEMBL1\n", encoding="utf-8")
+        Path(args_arg.final_out).write_text("id\nCHEMBL1\n", encoding="utf-8")
         return 0
 
     monkeypatch.setattr(get_document_data, "run_all", _fake_run)
