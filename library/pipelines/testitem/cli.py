@@ -9,6 +9,7 @@ import traceback
 from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from functools import lru_cache
 from itertools import chain, islice
 from pathlib import Path
@@ -1063,6 +1064,9 @@ def finalize_output(
         output,
         default_table="testitems",
     )
+
+    if len(date_tag) != 8 or not date_tag.isdigit():
+        date_tag = datetime.now(timezone.utc).strftime("%Y%m%d")
 
     dataset_frame: pd.DataFrame
     if validated_chunks_list:
