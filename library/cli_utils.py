@@ -1005,12 +1005,20 @@ def run_pipeline(
             invocation=invocation_tuple,
         )
 
+        io_cfg = getattr(cfg, "io", None) if cfg is not None else None
+        output_dir_value = (
+            getattr(io_cfg, "output_dir", None) if io_cfg is not None else None
+        )
+        if output_dir_value is None:
+            raise ValueError("cfg.io.output_dir must be configured for standard outputs")
+
         standard_artifacts = save_standard_outputs(
             dataset_frame,
             correlation_report,
             quality_report,
             table_name=table_name,
             date_tag=date_tag,
+            output_dir=Path(output_dir_value),
         )
         use_logger.info(
             "standard_outputs_written",
