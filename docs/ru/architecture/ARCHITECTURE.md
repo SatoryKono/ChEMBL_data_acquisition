@@ -68,7 +68,7 @@ flowchart LR
 | Assay | `scripts/get_assay_data.py` | ChEMBL `/assay`. | `output.assays_<stamp>.csv` с QC-артефактами. |
 | Test item | `scripts/get_testitem_data.py` | ChEMBL `/molecule`, PubChem PUG-REST. | `output.testitems_<stamp>.csv` и метаданные. |
 | Tissue | `scripts/get_tissue_data.py` | ChEMBL `/tissue`, онтологии UBERON, EFO, BTO, Caloha, LINCS, CCLE. | `output.tissue_<stamp>.csv` и отчёты качества; запускается вручную перед пайплайном активностей, если нужны связи по тканям. |
-| Activity | `scripts/get_activity_data.py` | ChEMBL `/activity`. | `output.activities_<stamp>.csv` с обогащениями. |
+| Activity | `scripts/get_activity_data.py` | ChEMBL `/activity`. | `output.activity_<stamp>.csv` с обогащениями. |
 
 Оркестратор выполняет последовательно «документы → таргеты → ассайи → тестовые
 объекты → активности», если отдельные этапы не отключены флагами CLI. Пайплайн

@@ -133,7 +133,7 @@ def test_process_activity_extended__fills_missing_optional_columns(tmp_path, cap
     dictionary_root = tmp_path / "dictionary"
     activity_dir.mkdir()
 
-    activity_path = activity_dir / "output.activities_20240101.csv"
+    activity_path = activity_dir / "output.activity_20240101.csv"
     activity_columns = [
         "activity_id",
         "molecule_chembl_id",
@@ -220,7 +220,7 @@ def test_process_activity_extended__warns_on_unresolved_parent(tmp_path, caplog)
         )
         writer.writeheader()
 
-    activity_path = activity_dir / "output.activities_20240103.csv"
+    activity_path = activity_dir / "output.activity_20240103.csv"
     activity_columns = [
         "activity_id",
         "molecule_chembl_id",
@@ -292,7 +292,7 @@ def test_process_activity_extended__deduplicates_and_deterministic(tmp_path, cap
 
     _prepare_dictionary(dictionary_root)
 
-    activity_path = activity_dir / "output.activities_20240102.csv"
+    activity_path = activity_dir / "output.activity_20240102.csv"
     activity_columns = [
         "activity_id",
         "molecule_chembl_id",

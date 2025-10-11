@@ -39,8 +39,8 @@ def test_default_registry__exposes_expected_steps() -> None:
     activity = _step_by_name(steps, "activity")
     assert activity.supports_dry_run is True
     assert activity.input_filename == "activity.csv"
-    assert activity.output_stem == "activities"
-    assert activity.produces == ("activities",)
+    assert activity.output_stem == "activity"
+    assert activity.produces == ("activity", "activities")
     assert activity.consumes == ("documents", "targets", "assays", "testitems")
 
 

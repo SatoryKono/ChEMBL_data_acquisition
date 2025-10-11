@@ -37,6 +37,7 @@ class _DomainResources:
 
 
 _DOMAIN_RESOURCES: dict[str, _DomainResources] = {
+    "activity": _DomainResources(run_activity_pipeline, ACTIVITY_SCHEMA),
     "activities": _DomainResources(run_activity_pipeline, ACTIVITY_SCHEMA),
     "assays": _DomainResources(run_assay_pipeline, ASSAY_SCHEMA),
     "documents": _DomainResources(run_document_pipeline, DOCUMENT_SCHEMA),
