@@ -681,6 +681,7 @@ class ResourcesCfg(_BaseModel):
     targets_type_csv: Path = Field(
         default_factory=lambda: _dictionary_resource("target_types")
     )
+    reference_smiles_csv: Path | None = None
 
     @field_validator(
         "dictionary_dir",
@@ -688,6 +689,7 @@ class ResourcesCfg(_BaseModel):
         "iuphar_family_csv",
         "uniprot_data_dir",
         "targets_type_csv",
+        "reference_smiles_csv",
         mode="before",
     )
     @classmethod

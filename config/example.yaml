@@ -25,6 +25,7 @@ local:
   resources:
     dictionary_dir: "./config/dictionary"
     uniprot_data_dir: "./config/dictionary/_target/_uniprot"
+    reference_smiles_csv: "./data/reference/Table6.csv"
 
 system:
   log:

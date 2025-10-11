@@ -47,6 +47,8 @@ def test_load_config__resolves_relative_paths_and_calls_runtime(tmp_path, monkey
           io:
             output_dir: output
             cache_dir: cache
+          resources:
+            reference_smiles_csv: ref/Table6.csv
         """.strip()
     )
 
@@ -68,6 +70,10 @@ def test_load_config__resolves_relative_paths_and_calls_runtime(tmp_path, monkey
 
     assert cfg.io.output_dir == (cfg_path.parent / "output").resolve()
     assert cfg.io.cache_dir == (cfg_path.parent / "cache").resolve()
+    assert (
+        cfg.resources.reference_smiles_csv
+        == (cfg_path.parent / "ref" / "Table6.csv").resolve()
+    )
     assert called["cfg"] is cfg
 
 
