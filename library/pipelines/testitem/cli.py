@@ -1134,7 +1134,6 @@ def finalize_output(
         default_table="testitem",
         fallback_date=fallback_date,
     )
-    )
 
     dataset_frame: pd.DataFrame
     if validated_chunks_list:
