@@ -892,13 +892,25 @@ def prepare_io_paths(
             if effective_date is None and stamp_mode == "require":
                 msg = "--date must be provided when io.output_stamp_mode is 'require'"
                 raise ValueError(msg)
-            normalized_stem = output_stem
+            normalized_stem = output_stem.strip()
             prefix = "output."
             if normalized_stem.startswith(prefix):
                 stripped = normalized_stem
                 while stripped.startswith(prefix) and len(stripped) > len(prefix):
                     stripped = stripped[len(prefix) :]
-                normalized_stem = stripped or normalized_stem
+                    stripped = stripped.lstrip(".")
+                    if not stripped:
+                        break
+                normalized_stem = stripped or normalized_stem.lstrip(".") or normalized_stem
+            else:
+                normalized_stem = normalized_stem.lstrip(".") or normalized_stem
+
+            suffix_lower = suffix.lower()
+            if suffix_lower and normalized_stem.lower().endswith(suffix_lower):
+                candidate = normalized_stem[: -len(suffix_lower)].rstrip(".")
+                if candidate:
+                    normalized_stem = candidate
+
             if effective_date is not None:
                 filename = f"output.{normalized_stem}_{effective_date}{suffix}"
             else:
