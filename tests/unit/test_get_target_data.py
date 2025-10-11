@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 from library.config import Config
+from library.postprocess.common import PostprocessingPipelineResult
 from scripts import get_target_data
 
 
@@ -1264,3 +1265,100 @@ def test_validate_and_write__omits_failure_artifacts_when_legacy_disabled(
     assert output_path.exists()
     assert not failure_path.exists()
     assert not failure_meta.exists()
+
+
+def test_validate_and_write__removes_postprocess_sidecars(
+    tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg.io.output_dir = tmp_path
+    output_path = tmp_path / "output.targets_20230101.csv"
+
+    source_df = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1"],
+            "protein_class_pred_rule_id": ["ambiguous"],
+        }
+    )
+
+    processed_df = source_df.assign(protein_class_pred_rule_id=["resolved"])
+
+    monkeypatch.setattr(get_target_data, "normalize_targets", lambda df: df)
+    monkeypatch.setattr(get_target_data, "add_pipeline_metadata", lambda df: df)
+    monkeypatch.setattr(
+        get_target_data,
+        "_prepare_targets_for_schema",
+        lambda df: (df, set(), set()),
+    )
+
+    class _ValidationStub:
+        def __init__(self, data: pd.DataFrame) -> None:
+            self.data = data
+            self.failure_cases = pd.DataFrame()
+
+    monkeypatch.setattr(
+        get_target_data,
+        "validate_targets",
+        lambda df, return_result=True: _ValidationStub(df),
+    )
+    monkeypatch.setattr(
+        get_target_data,
+        "generate_qc_report",
+        lambda *_args, **_kwargs: pd.DataFrame({"metric": [1]}),
+    )
+    monkeypatch.setattr(
+        get_target_data,
+        "generate_correlation_report",
+        lambda *_args, **_kwargs: pd.DataFrame({"metric": [1]}),
+    )
+    monkeypatch.setattr(
+        get_target_data,
+        "build_table_quality_hook",
+        lambda *args, **kwargs: lambda _df: None,
+    )
+
+    postprocess_output = tmp_path / "output_postprocessed.targets.csv"
+    postprocess_report = tmp_path / "targets.postprocess.report.json"
+
+    def _fake_postprocess(*args: object, **kwargs: object) -> PostprocessingPipelineResult:
+        postprocess_output.write_text("postprocessed", encoding="utf-8")
+        postprocess_report.write_text("{}", encoding="utf-8")
+        return PostprocessingPipelineResult(
+            dataframe=processed_df,
+            metrics=None,
+            output_path=postprocess_output,
+            report_path=postprocess_report,
+        )
+
+    monkeypatch.setattr(
+        get_target_data,
+        "run_target_postprocess_if_requested",
+        _fake_postprocess,
+    )
+
+    context = get_target_data.IsoformPostprocessContext(
+        args=argparse.Namespace(postprocess=True)
+    )
+
+    exit_code = get_target_data.validate_and_write(
+        source_df,
+        output_path,
+        cfg,
+        postprocess_context=context,
+    )
+
+    assert exit_code == 0
+    assert not postprocess_output.exists()
+    assert not postprocess_report.exists()
+
+    dataset = pd.read_csv(output_path)
+    pd.testing.assert_frame_equal(
+        dataset[processed_df.columns].reset_index(drop=True),
+        processed_df.reset_index(drop=True),
+    )
+
+    produced = sorted(path.name for path in tmp_path.iterdir())
+    assert produced == [
+        "output.targets_20230101.csv",
+        "output.targets_20230101_data_correlation_report_table.csv",
+        "output.targets_20230101_quality_report_table.csv",
+    ]
