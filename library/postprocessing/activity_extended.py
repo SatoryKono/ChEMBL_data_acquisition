@@ -24,10 +24,13 @@ import pandas as pd
 
 from config.paths import DICTIONARY_DIR
 from library.common.log import logger
+from library.postprocessing.common.runtime import get_default_export_root
 
 from . import helpers
 
-_DEFAULT_SEARCH_DIR = Path("data/output")
+_FALLBACK_SEARCH_DIR = Path("data/output")
+# Backwards compatibility alias preserved for downstream imports.
+_DEFAULT_SEARCH_DIR = _FALLBACK_SEARCH_DIR
 _DEFAULT_DICTIONARY_DIR = DICTIONARY_DIR
 _FILENAME_RE = re.compile(r"output\.activit(?:y|ies)_(\d{8})\.csv\Z")
 
@@ -275,7 +278,10 @@ def _current_default_search_dir() -> Path:
         override = package._DEFAULT_SEARCH_DIR
         if override is not None:
             return Path(override)
-    return _DEFAULT_SEARCH_DIR
+    runtime_default = get_default_export_root()
+    if runtime_default is not None:
+        return Path(runtime_default)
+    return _FALLBACK_SEARCH_DIR
 
 
 def _normalised_activity_basename(path: Path) -> tuple[str, str] | None:
