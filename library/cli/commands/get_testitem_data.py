@@ -653,7 +653,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         raw_output = Path(getattr(args, "output_csv", output_path))
         postprocess_enabled = bool(getattr(args, "postprocess", False))
         emit_legacy = bool(getattr(args, "emit_legacy_artifacts", False))
-        payload: dict[str, object] = {"output": str(output_path)}
+        payload: dict[str, object] = {"output": str(raw_output)}
         artifacts = getattr(args, "_testitem_artifacts", None)
         if artifacts is not None:
             payload["quality_report"] = str(artifacts.quality_report)
