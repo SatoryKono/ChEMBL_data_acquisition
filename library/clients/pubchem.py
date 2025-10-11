@@ -107,6 +107,10 @@ _SESSION_SIGNATURE = _config_signature(*_SESSION_CFG)
 _SESSION_INITIALISED = False
 _session: Session | None = session_with_retry(*_SESSION_CFG)
 
+_SERVICE_UNAVAILABLE_UNTIL: float | None = None
+_SERVICE_UNAVAILABLE_DETAILS: dict[str, Any] | None = None
+_SERVICE_UNAVAILABLE_LOCK = Lock()
+
 _PLACEHOLDER_CONTACT = "contact@example.org"
 _USER_AGENT_ERROR = (
     "PubChem client requires a custom User-Agent; "
@@ -217,6 +221,63 @@ def last_request_outcome() -> tuple[str | None, dict[str, Any] | None]:
     if details is None:
         return outcome, None
     return outcome, dict(details)
+
+
+def _service_unavailable_remaining() -> tuple[float | None, dict[str, Any] | None]:
+    """Return remaining Retry-After seconds from the cached service outage."""
+
+    global _SERVICE_UNAVAILABLE_UNTIL, _SERVICE_UNAVAILABLE_DETAILS
+
+    with _SERVICE_UNAVAILABLE_LOCK:
+        if _SERVICE_UNAVAILABLE_UNTIL is None:
+            return None, None
+        now = monotonic()
+        if now >= _SERVICE_UNAVAILABLE_UNTIL:
+            _SERVICE_UNAVAILABLE_UNTIL = None
+            _SERVICE_UNAVAILABLE_DETAILS = None
+            return None, None
+        remaining = _SERVICE_UNAVAILABLE_UNTIL - now
+        details = (
+            dict(_SERVICE_UNAVAILABLE_DETAILS)
+            if _SERVICE_UNAVAILABLE_DETAILS is not None
+            else None
+        )
+    return remaining, details
+
+
+def _remember_service_unavailable(
+    delay: float,
+    details: Mapping[str, Any] | None,
+    *,
+    source: str,
+) -> None:
+    """Remember ``delay`` seconds of service outage for future requests."""
+
+    if delay <= 0:
+        return
+
+    global _SERVICE_UNAVAILABLE_UNTIL, _SERVICE_UNAVAILABLE_DETAILS
+
+    expires = monotonic() + delay
+    stored_details = dict(details or {})
+    stored_details.setdefault("reason", "server_error")
+    stored_details["retry_after"] = delay
+    stored_details["retry_after_source"] = source
+
+    with _SERVICE_UNAVAILABLE_LOCK:
+        current_until = _SERVICE_UNAVAILABLE_UNTIL
+        if current_until is None or expires > current_until:
+            _SERVICE_UNAVAILABLE_UNTIL = expires
+            _SERVICE_UNAVAILABLE_DETAILS = stored_details
+
+
+def _clear_service_unavailable() -> None:
+    """Clear cached service outage hints after a successful request."""
+
+    global _SERVICE_UNAVAILABLE_UNTIL, _SERVICE_UNAVAILABLE_DETAILS
+    with _SERVICE_UNAVAILABLE_LOCK:
+        _SERVICE_UNAVAILABLE_UNTIL = None
+        _SERVICE_UNAVAILABLE_DETAILS = None
 
 
 SERVICE_UNAVAILABLE_OUTCOMES: frozenset[str] = frozenset(
@@ -500,6 +561,38 @@ def make_request(
         }
 
     for attempt in range(1, total_attempts + 1):
+        remaining_retry, cached_details = _service_unavailable_remaining()
+        if remaining_retry is not None:
+            outcome_details: dict[str, Any] = dict(cached_details or {})
+            outcome_details.setdefault("reason", "server_error")
+            outcome_details["retry_after"] = remaining_retry
+            outcome_details.setdefault("retry_after_source", "cached")
+            outcome_details["cache"] = True
+            last_failure_details = outcome_details
+            log_payload: dict[str, Any] = {
+                "url": url,
+                "method": method_upper,
+                "attempt": attempt,
+                "total_attempts": total_attempts,
+                "rps": cfg.rps,
+                "retry_after": remaining_retry,
+            }
+            status_hint = outcome_details.get("status")
+            if status_hint is not None:
+                log_payload["status"] = status_hint
+            reason_hint = outcome_details.get("reason")
+            if reason_hint:
+                log_payload["reason"] = reason_hint
+            logger.warning("request_service_unavailable_cached", **log_payload)
+            _store_cache_miss(
+                cache_key,
+                cfg,
+                outcome_details["reason"],
+                outcome_details,
+                url=url,
+            )
+            _set_last_outcome(outcome_details["reason"], outcome_details)
+            return None
         if deadline is not None and monotonic() >= deadline:
             logger.warning(
                 "request_timeout",
@@ -582,8 +675,10 @@ def make_request(
                     retry_after = _retry_after_seconds(retry_after_header)
                     reason = "rate_limited" if status == 429 else "server_error"
                     last_failure_details = {"reason": reason, "status": status}
+                    delay_source = "config"
                     if retry_after is not None:
                         last_failure_details["retry_after"] = retry_after
+                        last_failure_details["retry_after_source"] = "header"
                     event_name = (
                         "request_rate_limited"
                         if status == 429
@@ -604,6 +699,31 @@ def make_request(
                         **warning_context,
                     )
                     if attempt >= total_attempts:
+                        delay_for_cache = retry_after
+                        if delay_for_cache is None:
+                            delay_for_cache = (
+                                backoff_delay if backoff_delay > 0 else cfg.delay
+                            )
+                        if (
+                            delay_for_cache
+                            and reason in SERVICE_UNAVAILABLE_OUTCOMES
+                        ):
+                            last_failure_details.setdefault(
+                                "retry_after", delay_for_cache
+                            )
+                            source_for_cache = (
+                                "header"
+                                if retry_after is not None
+                                else ("backoff" if backoff_delay > 0 else "config")
+                            )
+                            last_failure_details.setdefault(
+                                "retry_after_source", source_for_cache
+                            )
+                            _remember_service_unavailable(
+                                delay_for_cache,
+                                last_failure_details,
+                                source=last_failure_details["retry_after_source"],
+                            )
                         _store_cache_miss(
                             cache_key,
                             cfg,
@@ -626,11 +746,24 @@ def make_request(
                     if retry_after is not None:
                         delay = retry_after
                         backoff_delay = delay * 2 if delay > 0 else backoff_delay
+                        delay_source = "header"
                     else:
                         delay = backoff_delay if backoff_delay > 0 else cfg.delay
+                        if backoff_delay > 0:
+                            delay_source = "backoff"
                         if delay > 0:
                             backoff_delay = delay * 2
                     if delay > 0:
+                        if reason in SERVICE_UNAVAILABLE_OUTCOMES:
+                            last_failure_details.setdefault("retry_after", delay)
+                            last_failure_details.setdefault(
+                                "retry_after_source", delay_source
+                            )
+                            _remember_service_unavailable(
+                                delay,
+                                last_failure_details,
+                                source=last_failure_details["retry_after_source"],
+                            )
                         now = monotonic()
                         if (
                             retry_after is not None
@@ -813,6 +946,7 @@ def make_request(
                     method=method_upper,
                     rps=cfg.rps,
                 )
+                _clear_service_unavailable()
                 with _CACHE_LOCK:
                     cache = _ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
                     cache[cache_key] = _CacheEntry(payload=response_data, outcome="hit")
@@ -886,9 +1020,18 @@ def _store_cache_miss(
     details_data = dict(details) if details else {}
     cached = False
     log_details: dict[str, Any] = {}
+
+    service_unavailable_outcome = (
+        outcome in SERVICE_UNAVAILABLE_OUTCOMES and outcome != "timeout"
+    )
+
     with _CACHE_LOCK:
         cache = _ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
-        if outcome == "timeout":
+
+        if service_unavailable_outcome:
+            cache.pop(cache_key, None)
+            log_details = details_data.copy()
+        elif outcome == "timeout":
             base_backoff = (
                 cfg.backoff_initial_seconds
                 if cfg.backoff_initial_seconds > 0

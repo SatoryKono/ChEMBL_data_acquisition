@@ -1134,7 +1134,6 @@ def finalize_output(
         default_table=_DEFAULT_TABLE_NAME,
         fallback_date=getattr(getattr(cfg, "io", None), "default_date_prefix", None),
     )
-    )
 
     dataset_frame: pd.DataFrame
     if validated_chunks_list:
