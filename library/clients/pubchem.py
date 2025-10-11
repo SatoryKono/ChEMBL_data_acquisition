@@ -639,6 +639,8 @@ def make_request(
         get_limiter("pubchem", cfg.rps, cfg.burst).acquire()
         try:
             session = get_session(api_cfg)
+            if getattr(session, "verify", True) != cfg.verify:
+                session.verify = cfg.verify
             request_kwargs: dict[str, Any] = {
                 "timeout": (cfg.timeout_connect, cfg.timeout_read),
             }

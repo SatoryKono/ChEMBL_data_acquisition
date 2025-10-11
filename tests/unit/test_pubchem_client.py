@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Generator
 
+
 import pytest
 
 from library.clients import pubchem
@@ -94,6 +95,37 @@ class _DummyLimiter:
 
     def acquire(self) -> None:
         self.acquires += 1
+
+
+def test_make_request__applies_verify_setting(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = PubChemCfg(verify="/tmp/custom-ca.pem")
+    cfg.retries = 0
+
+    payload = {"status": "ok"}
+    url = f"{cfg.base.rstrip('/')}/compound/cid/42/property/Foo/JSON"
+
+    limiter = _DummyLimiter()
+    monkeypatch.setattr(pubchem, "get_limiter", lambda *_args, **_kwargs: limiter)
+
+    session = _DummySession(lambda: _DummyResponse(200, {}, payload))
+    session.verify = True  # type: ignore[attr-defined]
+    monkeypatch.setattr(pubchem, "get_session", lambda *_args, **_kwargs: session)
+    monkeypatch.setattr(pubchem, "_CACHE", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_UNTIL", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_DETAILS", None)
+
+    result = pubchem.make_request(url, cfg)
+
+    assert result == payload
+    assert session.verify == cfg.verify  # type: ignore[attr-defined]
+    assert session.calls == [
+        (
+            "GET",
+            url,
+            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
+        )
+    ]
+    assert limiter.acquires == 1
 
 
 class _TimeController:

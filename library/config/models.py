@@ -534,6 +534,7 @@ class PubChemCfg(_BaseModel):
         "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)",
         description="Custom User-Agent for PubChem requests including contact details",
     )
+    verify: bool | str = True
     timeout_connect: float = Field(5.0, ge=1)
     timeout_read: float = Field(60.0, ge=1)
     timeout_seconds: float = Field(
@@ -631,6 +632,14 @@ class PubChemCfg(_BaseModel):
                 "pubchem.user_agent must include contact information such as an email",
             )
         return v
+
+    @field_validator("verify", mode="before")
+    @classmethod
+    def _verify_option(cls, value: Any) -> bool | str:
+        coerced = _normalize_verify_option(value)
+        if isinstance(coerced, (bool, str)):
+            return coerced
+        raise TypeError("verify must be a boolean or path string")
 
 
 class PubMedCfg(_BaseModel):
