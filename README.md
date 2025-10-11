@@ -54,11 +54,25 @@ in [`docs/en/SUMMARY.md`](./docs/en/SUMMARY.md) and
 ## Quick start
 
 ```bash
+make init
+source .venv/bin/activate
+pre-commit install --install-hooks
+```
+
+The `init` target enforces the interpreter listed in `.python-version` (when
+available), creates the `.venv`, upgrades `pip`, installs all pinned
+dependencies from `requirements-lock.txt` and finally installs the project in
+editable mode without re-resolving dependency versions.
+
+Prefer running the target, but if you need to bootstrap manually (for example,
+inside a container image) execute the equivalent sequence:
+
+```bash
 python -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
 pip install -r requirements-lock.txt
-pip install .[dev]
-pre-commit install
+pip install --no-deps -e .
 ```
 
 > 📌 Need a specific interpreter? Create a `.python-version` file with the
@@ -83,9 +97,10 @@ pip install pre-commit
 pre-commit install --install-hooks
 ```
 
-If you already executed the quick start commands (`pip install .[dev]`), the
-package is available and only the `pre-commit install --install-hooks` call is
-required. To verify the checks manually without committing, execute:
+If you already executed the quick start commands (`make init` followed by
+`pre-commit install --install-hooks`) the package is available and only the
+`pre-commit install --install-hooks` call is required on subsequent clones. To
+verify the checks manually without committing, execute:
 
 ```bash
 pre-commit run --all-files
