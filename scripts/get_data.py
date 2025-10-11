@@ -62,6 +62,22 @@ def _load_module() -> ModuleType:
             "  pip install -e .[dev]\n"
         )
         raise SystemExit(message) from exc
+    except SyntaxError as exc:  # pragma: no cover - exercised in targeted unit tests
+        location = exc.filename or "library/cli/commands/get_data.py"
+        if exc.lineno:
+            location = f"{location}:{exc.lineno}"
+        message = (
+            "Failed to import CLI implementation due to a syntax error\n"
+            f"  File: {location}\n"
+            f"  Error: {exc.msg}\n"
+        )
+        text = getattr(exc, "text", "") or ""
+        if any(marker in text for marker in ("<<<<<<<", "=======", ">>>>>>>")):
+            message += (
+                "\nUnresolved merge conflict markers were detected. "
+                "Please resolve the conflict in the reported file and rerun the command."
+            )
+        raise SystemExit(message) from exc
 
 
 _MODULE = _load_module()
