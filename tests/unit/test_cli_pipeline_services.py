@@ -88,6 +88,50 @@ def test_run_document_service__invokes_mode_handler(
     assert isinstance(pipeline, DocumentPipeline)
 
 
+def test_run_document_service__respects_custom_output_stem(
+    cfg: Config, tmp_path: Path, sample_csv: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    working_output = tmp_path / ".output.documents_20240101.csv.tmp"
+    cfg.io.output_dir = tmp_path
+    options = DocumentPipelineOptions(
+        input_csv=sample_csv,
+        output_csv=working_output,
+        mode="all",
+        date_prefix="20240101",
+        output_stem="reports",
+    )
+
+    captured: dict[str, object] = {}
+
+    def _fake_run(
+        cfg_arg: Config,
+        args_arg,
+        *,
+        pipeline: DocumentPipeline | None = None,
+    ) -> int:
+        captured["args"] = args_arg
+        Path(args_arg.final_out).write_text("id\nCHEMBL1\n", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(get_document_data, "run_all", _fake_run)
+    monkeypatch.setitem(get_document_data.MODE_HANDLERS, "all", _fake_run)
+    monkeypatch.setattr(document_service, "_MODE_HANDLERS_CACHE", None)
+
+    result = get_document_data.run_document_service(cfg, options)
+
+    assert result.exit_code == 0
+    assert result.output_path == working_output
+
+    args = captured["args"]
+    assert Path(args.final_out) == tmp_path / "output.reports_20240101.csv"
+    assert Path(args.output_csv) == tmp_path / "output.reports_20240101.csv"
+
+    canonical_output = tmp_path / "output.reports_20240101.csv"
+    assert canonical_output.exists()
+    assert working_output.exists()
+    assert working_output.read_text(encoding="utf-8").splitlines()[1] == "CHEMBL1"
+
+
 def test_run_document_service__skip_existing(
     cfg: Config, tmp_path: Path, sample_csv: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -1110,7 +1110,15 @@ def run_document_service(
     date_tag = _resolve_effective_date(options, cfg)
     final_output = _normalise_working_basename(working_output)
     table_name = _resolve_table_name(options, final_output, date_tag)
+
     cli_output = final_output
+    custom_stem = getattr(options, "output_stem", None)
+    if custom_stem:
+        stem_text = str(custom_stem).strip()
+        if stem_text:
+            expected_name = f"output.{table_name}_{date_tag}.csv"
+            if final_output.name != expected_name:
+                cli_output = final_output.with_name(expected_name)
 
     args = argparse.Namespace(
         input_csv=Path(options.input_csv),
