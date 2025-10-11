@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import stat
+
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from types import SimpleNamespace
@@ -1082,6 +1083,82 @@ def test_run_all__enables_standard_outputs_for_chembl(
     assert exit_code == 0
     assert captured.get("emit_standard_outputs") is True
     assert captured.get("cleanup_standard_outputs") is True
+    assert final_out.exists()
+
+
+@pytest.mark.unit
+def test_run_chembl__defaults_emit_standard_outputs_when_unspecified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+    final_out = tmp_path / "output.targets.csv"
+    raw_destination = get_target_data._raw_output_path(final_out)
+    raw_destination.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    cfg.io.output_dir = tmp_path
+    cfg.io.exist_ok = True
+
+    monkeypatch.setattr(
+        get_target_data.io,
+        "read_ids",
+        lambda *_, **__: iter(["CHEMBL1"]),
+    )
+
+    class _DummyWriter:
+        def __init__(self, destination: Path, *, cfg: Config, reindex_columns: bool):
+            self.destination = destination
+
+        def write(self, frame: pd.DataFrame) -> None:  # pragma: no cover - stub
+            return None
+
+        def finalize(self) -> Path:
+            return self.destination
+
+    monkeypatch.setattr(get_target_data, "_RawDumpStreamWriter", _DummyWriter)
+    monkeypatch.setattr(
+        get_target_data,
+        "_finalize_raw_dump_writer",
+        lambda *args, **kwargs: True,
+    )
+    monkeypatch.setattr(
+        get_target_data,
+        "run_target_postprocess_if_requested",
+        lambda *args, **kwargs: None,
+    )
+
+    captured: dict[str, object] = {}
+
+    from library.cli_utils import PipelineExecutionResult
+
+    def _fake_pipeline(**kwargs: object) -> PipelineExecutionResult:
+        captured["emit_standard_outputs"] = kwargs["emit_standard_outputs"]
+        return PipelineExecutionResult(
+            exit_code=0,
+            dataset_path=raw_destination,
+            failure_path=None,
+            metadata_path=None,
+        )
+
+    monkeypatch.setattr(get_target_data, "_run_pipeline_with_meta", _fake_pipeline)
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=final_out,
+        output_csv=final_out,
+        raw_out=None,
+        raw_format="csv",
+        id_cols=None,
+        normalize_at_export=False,
+        no_reindex_raw=False,
+        emit_standard_outputs=None,
+        date=None,
+    )
+
+    exit_code = get_target_data.run_chembl(cfg, args)
+
+    assert exit_code == 0
+    assert captured["emit_standard_outputs"] is True
     assert final_out.exists()
 
 
