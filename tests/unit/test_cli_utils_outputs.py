@@ -106,6 +106,7 @@ def test_run_pipeline__persists_standard_outputs(tmp_path: Path) -> None:
     assert artifacts.dataset.exists()
     assert artifacts.quality_report.exists()
     assert artifacts.correlation_report.exists()
+    assert artifacts.dataset.parent == cfg.io.output_dir
 
     dataset = pd.read_csv(artifacts.dataset)
     pd.testing.assert_frame_equal(dataset, frame)

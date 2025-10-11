@@ -11,8 +11,6 @@ import pandas as pd
 from ..common.csv_utils import write_csv_deterministic
 
 
-OUTPUT_DIR = Path("data/output")
-
 __all__ = ["StandardOutputArtifacts", "save_standard_outputs"]
 
 
@@ -43,6 +41,7 @@ def save_standard_outputs(
     date_tag: str,
     *,
     key_columns: Sequence[str] | None = None,
+    output_dir: Path | str | None = None,
 ) -> StandardOutputArtifacts:
     """Persist the canonical dataset together with QC artefacts.
 
@@ -61,6 +60,9 @@ def save_standard_outputs(
     key_columns:
         Optional sequence of columns used to deterministically order
         ``df_main`` before writing.
+    output_dir:
+        Destination directory for generated artefacts. Usually sourced from
+        ``cfg.io.output_dir``.
 
     Returns
     -------
@@ -68,12 +70,18 @@ def save_standard_outputs(
         Paths to the dataset, correlation report and quality report.
     """
 
-    _ensure_output_directory(OUTPUT_DIR)
+    if output_dir is None:
+        msg = "output_dir must be provided to save_standard_outputs"
+        raise ValueError(msg)
+
+    base_dir = Path(output_dir)
+
+    _ensure_output_directory(base_dir)
 
     stem = f"output.{table_name}_{date_tag}"
-    dataset_path = OUTPUT_DIR / f"{stem}.csv"
-    correlation_path = OUTPUT_DIR / f"{stem}_data_correlation_report_table.csv"
-    quality_path = OUTPUT_DIR / f"{stem}_quality_report_table.csv"
+    dataset_path = base_dir / f"{stem}.csv"
+    correlation_path = base_dir / f"{stem}_data_correlation_report_table.csv"
+    quality_path = base_dir / f"{stem}_quality_report_table.csv"
 
     key_cols = list(key_columns or [])
     if not key_cols and not df_main.empty:

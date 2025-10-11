@@ -35,13 +35,11 @@ def _sample_frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
 @pytest.mark.unit
 def test_save_standard_outputs__writes_expected_csvs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _sample_frames
+    tmp_path: Path, _sample_frames
 ) -> None:
     dataset, correlation, quality = _sample_frames
 
     captured: dict[str, pd.DataFrame] = {}
-
-    monkeypatch.setattr(output_writer, "OUTPUT_DIR", tmp_path)
 
     def _fake_write_csv(
         frame: pd.DataFrame,
@@ -55,6 +53,7 @@ def test_save_standard_outputs__writes_expected_csvs(
         captured[path.name] = frame.copy()
         return path
 
+    monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(output_writer, "write_csv_deterministic", _fake_write_csv)
 
     artefacts = output_writer.save_standard_outputs(
@@ -63,7 +62,9 @@ def test_save_standard_outputs__writes_expected_csvs(
         quality,
         table_name="documents",
         date_tag="20240101",
+        output_dir=tmp_path,
     )
+    monkeypatch.undo()
 
     expected_names = {
         "dataset": "output.documents_20240101.csv",
@@ -75,6 +76,9 @@ def test_save_standard_outputs__writes_expected_csvs(
     assert artefacts.dataset.name == expected_names["dataset"]
     assert artefacts.correlation_report.name == expected_names["correlation"]
     assert artefacts.quality_report.name == expected_names["quality"]
+    assert artefacts.dataset.parent == tmp_path
+    assert artefacts.correlation_report.parent == tmp_path
+    assert artefacts.quality_report.parent == tmp_path
 
     output_files = sorted(p.name for p in tmp_path.glob("*.csv"))
     assert set(output_files) == set(expected_names.values())
@@ -99,14 +103,49 @@ def test_save_standard_outputs__creates_output_directory(
     quality = pd.DataFrame({"column": ["id"]})
 
     output_dir = tmp_path / "missing" / "nested"
-    monkeypatch.setattr(output_writer, "OUTPUT_DIR", output_dir)
-
     output_writer.save_standard_outputs(
         dataset,
         correlation,
         quality,
         table_name="demo",
         date_tag="20240101",
+        output_dir=output_dir,
     )
 
     assert output_dir.exists() and output_dir.is_dir()
+
+
+@pytest.mark.unit
+def test_save_standard_outputs__supports_string_base_directory(
+    tmp_path: Path, _sample_frames
+) -> None:
+    dataset, correlation, quality = _sample_frames
+    base = tmp_path / "custom"
+
+    artifacts = output_writer.save_standard_outputs(
+        dataset,
+        correlation,
+        quality,
+        table_name="documents",
+        date_tag="20240101",
+        output_dir=str(base),
+    )
+
+    assert artifacts.dataset.parent == base
+    assert artifacts.dataset.exists()
+
+
+@pytest.mark.unit
+def test_save_standard_outputs__requires_output_directory(
+    _sample_frames: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
+) -> None:
+    dataset, correlation, quality = _sample_frames
+
+    with pytest.raises(ValueError, match="output_dir must be provided"):
+        output_writer.save_standard_outputs(
+            dataset,
+            correlation,
+            quality,
+            table_name="documents",
+            date_tag="20240101",
+        )
