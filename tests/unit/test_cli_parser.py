@@ -265,3 +265,35 @@ def test_default_output_path__strips_redundant_output_prefix(tmp_path: Path) -> 
     )
 
     assert output_path == tmp_path / "output.documents_20240101_20251010.csv"
+
+
+@pytest.mark.unit
+def test_default_output_path__handles_hidden_temp_files(tmp_path: Path) -> None:
+    cfg = SimpleNamespace(
+        output_dir=tmp_path,
+        default_date_prefix=None,
+        output_stamp_mode="omit",
+    )
+
+    output_path = default_output_path(
+        tmp_path / ".output.assays_20240101.csv.tmp",
+        cfg,
+    )
+
+    assert output_path == tmp_path / "output.assays_20240101.csv"
+
+
+@pytest.mark.unit
+def test_default_output_path__deduplicates_intermediate_suffix(tmp_path: Path) -> None:
+    cfg = SimpleNamespace(
+        output_dir=tmp_path,
+        default_date_prefix=None,
+        output_stamp_mode="omit",
+    )
+
+    output_path = default_output_path(
+        tmp_path / "output.assays_20240101.csv.tmp",
+        cfg,
+    )
+
+    assert output_path == tmp_path / "output.assays_20240101.csv"
