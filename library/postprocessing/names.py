@@ -627,17 +627,34 @@ def _summarise_active_component_type(series: pd.Series | None) -> dict[str, int]
 
 
 def process_target_names(
-    input_path: str | Path, *, verbose: bool = False
+    input_path: str | Path | None = None,
+    *,
+    output_dir: str | Path | None = None,
+    verbose: bool = False,
 ) -> dict[str, Any]:
-    """Process ``input_path`` and emit the target names table."""
+    """Process a target export and emit the target names table.
 
-    source_path = Path(input_path)
+    When ``input_path`` is omitted the helper scans ``output_dir`` (or the
+    legacy default search directory) for the most recent
+    ``output.target_YYYYMMDD.csv`` export.  The resulting CSV is written to
+    ``output_dir`` when provided; otherwise it is saved alongside
+    ``input_path``.
+    """
+
+    if input_path is None:
+        search_dir = Path(output_dir) if output_dir is not None else _current_default_search_dir()
+        source_path = _latest_target_file(search_dir)
+    else:
+        source_path = Path(input_path)
+
     frame = helpers.read_csv_with_fallbacks(source_path)
     frame = helpers.ensure_string_columns(frame, frame.columns)
 
     names_df = _build_names_table(frame)
     base = normalise_export_basename(source_path)
-    output_path = source_path.with_name(f"names.{base}").with_suffix(".csv")
+    destination_dir = Path(output_dir) if output_dir is not None else source_path.parent
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    output_path = destination_dir / f"names.{base}.csv"
     helpers.write_csv(names_df, output_path, columns=TARGET_NAMES_COLUMNS)
 
     summary: dict[str, Any] = {
