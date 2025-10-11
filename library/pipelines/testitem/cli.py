@@ -70,6 +70,51 @@ def _chembl_library() -> Any:
 _FETCH_ERROR_SAMPLE_SIZE = 10
 _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
 _PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
+_DEFAULT_TABLE_NAME = "testitem"
+
+
+def _normalise_output_labels(
+    output: Path | str,
+    *,
+    default_table: str = _DEFAULT_TABLE_NAME,
+    fallback_date: str | None = None,
+) -> tuple[str, str]:
+    """Return canonical table name and date tag derived from ``output``.
+
+    Intermediate filenames produced by the pipeline (for example
+    ``.output.testitem_20240101.csv.tmp``) are normalised so that downstream
+    artefacts re-use the canonical ``testitem`` label. When ``fallback_date`` is
+    omitted the helper mirrors the previous behaviour by falling back to the
+    current UTC date.
+    """
+
+    table_name, date_tag = io.derive_output_labels(
+        output,
+        default_table=default_table,
+        fallback_date=fallback_date,
+    )
+    if table_name.lower() == "testitems":
+        table_name = default_table
+    return table_name, date_tag
+
+# Canonical dataset stem used for standard outputs.
+_DEFAULT_OUTPUT_TABLE = "testitem"
+
+_TABLE_NAME_ALIASES: dict[str, str] = {"testitems": _DEFAULT_OUTPUT_TABLE}
+
+_PUBCHEM_OPTIONAL_COLUMNS = frozenset(
+    {
+        "pubchem_canonical_smiles",
+        "pubchem_cid",
+        "pubchem_inchi",
+        "pubchem_inchikey",
+        "pubchem_isomeric_smiles",
+        "pubchem_iupac_name",
+        "pubchem_molecular_formula",
+    }
+)
+_SALT_OPTIONAL_COLUMN = "salt_chembl_id"
+_DEFAULT_TABLE_NAME = "testitem"
 
 
 @dataclass
@@ -437,6 +482,26 @@ def _batched(iterable: Iterable[str], size: int) -> Iterator[list[str]]:
             chunk = []
     if chunk:
         yield chunk
+
+
+def _disabled_optional_columns(cfg: Config) -> frozenset[str]:
+    """Return optional schema columns disabled by configuration."""
+
+    disabled: set[str] = set()
+
+    pubchem_cfg = getattr(cfg, "pubchem", None)
+    pubchem_enabled = True if pubchem_cfg is None else getattr(pubchem_cfg, "enable", True)
+    if not pubchem_enabled:
+        disabled.update(_PUBCHEM_OPTIONAL_COLUMNS)
+
+    enrichment_cfg = getattr(cfg, "testitem_molecule_enrichment", None)
+    enrichment_enabled = (
+        True if enrichment_cfg is None else getattr(enrichment_cfg, "enable", False)
+    )
+    if not enrichment_enabled:
+        disabled.add(_SALT_OPTIONAL_COLUMN)
+
+    return frozenset(disabled)
 
 
 def fetch_testitems(
@@ -874,8 +939,13 @@ def finalize_output(
 
     schema_model, normalizer = _load_testitem_schema()
     schema_cols = list(schema_model.columns)
-    required_cols = {name for name, col in schema_model.columns.items() if col.required}
-    optional_cols = set(schema_model.columns) - required_cols
+    disabled_optional = _disabled_optional_columns(cfg)
+    required_cols = {
+        name
+        for name, col in schema_model.columns.items()
+        if col.required and name not in disabled_optional
+    }
+    optional_cols = (set(schema_model.columns) - required_cols) - disabled_optional
     col_order = schema_cols
     key_cols = ["molecule_chembl_id"]
 
@@ -1061,7 +1131,8 @@ def finalize_output(
 
     table_name, date_tag = io.derive_output_labels(
         output,
-        default_table="testitems",
+        default_table=_DEFAULT_TABLE_NAME,
+        fallback_date=getattr(getattr(cfg, "io", None), "default_date_prefix", None),
     )
 
     dataset_frame: pd.DataFrame
@@ -1078,6 +1149,7 @@ def finalize_output(
         columns=ordered_columns + extra_columns,
         copy=False,
     )
+    export_column_order = list(dataset_frame.columns)
 
     doc_quality_cfg = cfg.system.doc_quality
     include_columns = getattr(doc_quality_cfg, "include_columns", None)
@@ -1108,6 +1180,7 @@ def finalize_output(
             date_tag=date_tag,
             key_columns=key_cols,
             output_path=output,
+            column_order=export_column_order,
         )
     except (OSError, ValueError) as exc:
         logger.error("write_fail", error=str(exc), path=str(output))

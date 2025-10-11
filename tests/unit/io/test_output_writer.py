@@ -118,18 +118,18 @@ def test_save_standard_outputs__uses_canonical_naming_and_cleans_source(
         dataset,
         correlation,
         quality,
-        table_name="testitems",
+        table_name="testitem",
         date_tag="20240101",
         output_path=legacy_path,
     )
 
-    expected_dataset = legacy_path.parent / "output.testitems_20240101.csv"
+    expected_dataset = legacy_path.parent / "output.testitem_20240101.csv"
     assert artifacts.dataset == expected_dataset
     assert artifacts.correlation_report == legacy_path.parent / (
-        "output.testitems_20240101_data_correlation_report_table.csv"
+        "output.testitem_20240101_data_correlation_report_table.csv"
     )
     assert artifacts.quality_report == legacy_path.parent / (
-        "output.testitems_20240101_quality_report_table.csv"
+        "output.testitem_20240101_quality_report_table.csv"
     )
 
     assert not legacy_path.exists()

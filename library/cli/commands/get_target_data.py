@@ -21,6 +21,7 @@ import shutil
 import stat
 import sys
 import time
+from tempfile import TemporaryDirectory
 from datetime import datetime, timezone
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -111,6 +112,8 @@ def _run_pipeline_with_meta(**kwargs: object) -> PipelineExecutionResult:
         cfg = params.pop("cfg", None)
         logger = params.pop("logger", None)
         definition = params.pop("definition", None)
+        emit_standard_outputs = params.pop("emit_standard_outputs", True)
+        emit_legacy_artifacts = params.pop("emit_legacy_artifacts", True)
 
         pipeline_definition = normalise_definition(definition, params)
 
@@ -121,6 +124,8 @@ def _run_pipeline_with_meta(**kwargs: object) -> PipelineExecutionResult:
             failure_path=failure_path,
             cfg=cfg,
             logger=logger,
+            emit_standard_outputs=emit_standard_outputs,
+            emit_legacy_artifacts=emit_legacy_artifacts,
         )
 
 
@@ -2261,6 +2266,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             table_quality=lambda _: None,
             cfg=cfg,
             logger=logger,
+            emit_standard_outputs=True,
+            emit_legacy_artifacts=False,
         )
         exit_code_attr = getattr(execution, "exit_code", None)
         exit_code = int(exit_code_attr if exit_code_attr is not None else execution)
@@ -2567,6 +2574,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             "target_iuphar_target",
             "target_iuphar_family",
         ),
+        emit_standard_outputs=True,
+        emit_legacy_artifacts=False,
     )
     exit_code_attr = getattr(execution, "exit_code", None)
     exit_code = int(exit_code_attr if exit_code_attr is not None else execution)
@@ -3874,29 +3883,6 @@ def validate_and_write(
         sortable_keys = [col for col in key_columns if col in final_df.columns]
         if sortable_keys:
             final_df = final_df.sort_values(by=sortable_keys).reset_index(drop=True)
-    quality_summary = generate_qc_report(
-        final_df,
-        table_name=inferred_table_name,
-    )
-    correlation_matrix = generate_correlation_report(
-        final_df,
-        table_name=inferred_table_name,
-    )
-    artifacts = io.save_standard_outputs(
-        final_df,
-        correlation_matrix,
-        quality_summary,
-        table_name=inferred_table_name,
-        date_tag=inferred_date_tag,
-        output_path=output_path,
-    )
-    logger.info(
-        "standard_outputs_written",
-        dataset=str(artifacts.dataset),
-        quality=str(artifacts.quality_report),
-        correlation=str(artifacts.correlation_report),
-    )
-    final_csv_path = artifacts.dataset
     ambiguous_count = 0
     if "protein_class_pred_rule_id" in final_df.columns:
         ambiguous_count = int(
@@ -3919,21 +3905,82 @@ def validate_and_write(
         args=postprocess_context.args if postprocess_context else None,
         http_requests=http_requests,
     )
+    export_df = final_df
     pipeline_result: "PostprocessingPipelineResult" | None = None
-    if final_csv_path is not None:
-        if exit_code != 0:
-            logger.warning(
-                "postprocess_running_with_errors",
-                exit_code=exit_code,
-                path=str(final_csv_path),
+    postprocess_output_path: Path | None = None
+    postprocess_report_path: Path | None = None
+    final_csv_path: Path | None = None
+    postprocess_args = postprocess_context.args if postprocess_context else None
+    postprocess_requested = bool(getattr(postprocess_args, "postprocess", False))
+    if exit_code != 0:
+        logger.warning(
+            "postprocess_running_with_errors",
+            exit_code=exit_code,
+            path=str(expected_dataset_path),
+        )
+    if postprocess_requested:
+        with TemporaryDirectory(prefix="target_postprocess_") as temp_dir:
+            temp_source = Path(temp_dir) / (
+                f"output.{inferred_table_name}_{inferred_date_tag}.csv"
             )
+            io.write_csv(
+                final_df,
+                temp_source,
+                cfg=cfg,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+                key_cols=key_columns or None,
+                col_order=export_columns,
+            )
+            pipeline_result = run_target_postprocess_if_requested(
+                temp_source,
+                cfg=cfg,
+                args=postprocess_args,
+                context=isoform_context,
+                ambiguous_classifications=ambiguous_count,
+            )
+    else:
         pipeline_result = run_target_postprocess_if_requested(
-            final_csv_path,
+            expected_dataset_path,
             cfg=cfg,
-            args=isoform_context.args,
+            args=postprocess_args,
             context=isoform_context,
             ambiguous_classifications=ambiguous_count,
         )
+    if pipeline_result is not None:
+        export_df = pipeline_result.dataframe
+        postprocess_output_path = Path(pipeline_result.output_path)
+        if pipeline_result.report_path is not None:
+            postprocess_report_path = Path(pipeline_result.report_path)
+    final_df = export_df
+    quality_summary = generate_qc_report(
+        final_df,
+        table_name=inferred_table_name,
+    )
+    correlation_matrix = generate_correlation_report(
+        final_df,
+        table_name=inferred_table_name,
+    )
+    artifacts = io.save_standard_outputs(
+        final_df,
+        correlation_matrix,
+        quality_summary,
+        table_name=inferred_table_name,
+        date_tag=inferred_date_tag,
+        output_path=output_path,
+        key_columns=key_columns,
+    )
+    logger.info(
+        "standard_outputs_written",
+        dataset=str(artifacts.dataset),
+        quality=str(artifacts.quality_report),
+        correlation=str(artifacts.correlation_report),
+    )
+    final_csv_path = artifacts.dataset
+    if postprocess_output_path is not None and postprocess_output_path != final_csv_path:
+        postprocess_output_path.unlink(missing_ok=True)
+    if postprocess_report_path is not None:
+        postprocess_report_path.unlink(missing_ok=True)
     if final_df.empty:
         logger.info(
             "quality_report_skipped",

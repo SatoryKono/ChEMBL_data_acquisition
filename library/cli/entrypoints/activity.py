@@ -1655,6 +1655,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             table_name=table_name_value,
             date_tag=date_tag,
             output_dir=output_directory,
+            output_path=dataset_csv,
         )
         logger.info(
             "activity_standard_outputs",
