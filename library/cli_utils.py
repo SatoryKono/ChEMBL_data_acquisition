@@ -1033,6 +1033,7 @@ def run_pipeline(
             table_name=table_name,
             date_tag=date_tag,
             output_path=output_path,
+            key_columns=resolved_keys or key_columns,
         )
         use_logger.info(
             "standard_outputs_written",

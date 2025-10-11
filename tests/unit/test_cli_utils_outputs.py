@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -9,6 +10,7 @@ import pytest
 from library.cli.pipeline_definition import PipelineDefinition
 from library.cli_utils import RunPipelineResult, run_pipeline
 from library.config import IoCfg
+from library.io import StandardOutputArtifacts
 
 
 def _make_cfg(tmp_path: Path) -> SimpleNamespace:
@@ -122,6 +124,86 @@ def test_run_pipeline__persists_standard_outputs(tmp_path: Path) -> None:
 
     assert captured_stats, "stats callback must receive payload"
     assert captured_stats[-1]["dataset_path"] == str(artifacts.dataset)
+
+
+@pytest.mark.unit
+def test_run_pipeline__passes_resolved_key_columns_to_standard_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    frame = pd.DataFrame({"identifier": ["a", "b"]})
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [frame.copy()]
+
+    captured_key_columns: list[str] | None = None
+
+    def fake_save_standard_outputs(
+        df_main: pd.DataFrame,
+        df_corr: pd.DataFrame,
+        df_qc: pd.DataFrame,
+        table_name: str,
+        date_tag: str,
+        *,
+        key_columns: Sequence[str] | None = None,
+        **_: object,
+    ) -> StandardOutputArtifacts:
+        nonlocal captured_key_columns
+        captured_key_columns = list(key_columns or [])
+        dataset_path = tmp_path / "artifact.csv"
+        correlation_path = tmp_path / "artifact_corr.csv"
+        quality_path = tmp_path / "artifact_qc.csv"
+        dataset_path.write_text("identifier\n", encoding="utf-8")
+        correlation_path.write_text("", encoding="utf-8")
+        quality_path.write_text("", encoding="utf-8")
+        return StandardOutputArtifacts(
+            dataset=dataset_path,
+            correlation_report=correlation_path,
+            quality_report=quality_path,
+        )
+
+    monkeypatch.setattr(
+        "library.cli_utils.save_standard_outputs", fake_save_standard_outputs
+    )
+    monkeypatch.setattr(
+        "library.cli_utils.build_reports_from_profiler",
+        lambda *_args, **_kwargs: (pd.DataFrame(), pd.DataFrame()),
+    )
+
+    def writer(
+        chunks: list[pd.DataFrame],
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        raise AssertionError("legacy writer must not be invoked when standard outputs are enabled")
+
+    definition = PipelineDefinition(
+        schema=None,
+        schema_name="TestSchema",
+        writer=writer,
+        validators=(),
+        metadata_hooks=(),
+        command="test",
+        config_snapshot={},
+        inputs={},
+        key_columns=("identifier", "value"),
+    )
+
+    output_path = tmp_path / "output.documents_20240101.csv"
+    failure_path = tmp_path / "failures.csv"
+    cfg = _make_cfg(tmp_path)
+
+    run_pipeline(
+        definition=definition,
+        fetcher=fetcher,
+        output_path=output_path,
+        failure_path=failure_path,
+        cfg=cfg,
+        emit_standard_outputs=True,
+        emit_legacy_artifacts=False,
+    )
+
+    assert captured_key_columns == ["identifier"]
 
 
 @pytest.mark.unit
