@@ -1133,9 +1133,6 @@ def test_run_chembl__coerces_none_emit_flag(
             failure_path=None,
             metadata_path=None,
         )
-            failure_path=None,
-            metadata_path=None,
-        )
 
     monkeypatch.setattr(get_target_data, "_run_pipeline_with_meta", _fake_pipeline)
 
