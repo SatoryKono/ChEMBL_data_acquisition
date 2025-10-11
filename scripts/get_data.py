@@ -189,8 +189,11 @@ def _prepare_config_with_canonical_defaults(
 ):
     """Ensure shared defaults match the canonical orchestrator expectations."""
 
-    if hasattr(args, "keep_intermediate") and not getattr(args, "keep_intermediate"):
-        setattr(args, "keep_intermediate", True)
+    if hasattr(args, "keep_intermediate"):
+        keep_intermediate = bool(getattr(args, "keep_intermediate"))
+        debug_enabled = bool(getattr(args, "debug", False))
+        if not keep_intermediate and debug_enabled:
+            setattr(args, "keep_intermediate", True)
     enable_postprocess = bool(
         getattr(args, "rerun_postprocess", False) or getattr(args, "debug", False)
     )

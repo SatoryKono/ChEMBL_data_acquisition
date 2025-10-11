@@ -52,6 +52,7 @@ def save_standard_outputs(
     date_tag: str,
     *,
     key_columns: Sequence[str] | None = None,
+    column_order: Sequence[str] | None = None,
     output_dir: Path | str | None = None,
     output_path: Path | str | None = None,
     cleanup_source: bool = True,
@@ -73,6 +74,8 @@ def save_standard_outputs(
     key_columns:
         Optional sequence of columns used to deterministically order
         ``df_main`` before writing.
+    column_order:
+        Optional preferred column ordering for ``df_main``.
     output_dir:
         Directory for writing the artefacts. When omitted, :data:`OUTPUT_DIR`
         (``data/output``) is used. The parameter is ignored when
@@ -123,7 +126,12 @@ def save_standard_outputs(
     if not key_cols and not df_main.empty:
         key_cols = [str(df_main.columns[0])]
 
-    write_csv_deterministic(df_main, dataset_path, key_cols=key_cols)
+    write_csv_deterministic(
+        df_main,
+        dataset_path,
+        key_cols=key_cols,
+        col_order=list(column_order) if column_order is not None else None,
+    )
     _remove_sidecars(dataset_path)
 
     qc_key_cols: list[str] = []

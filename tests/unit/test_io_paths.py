@@ -33,6 +33,24 @@ from library.io.paths import derive_output_labels
             "20000101",
             ("targets", "20200315"),
         ),
+        (
+            "output.testitems_20240101.csv_20251011.csv",
+            "testitems",
+            "19991231",
+            ("testitems", "20240101"),
+        ),
+        (
+            "output..output.testitems_20240101.csv_20251011.csv",
+            "testitems",
+            "19991231",
+            ("testitems", "20240101"),
+        ),
+        (
+            "output.testitems.csv_20251011.csv",
+            "testitems",
+            "19991231",
+            ("testitems", "20251011"),
+        ),
     ],
 )
 def test_derive_output_labels__normalises_source_names(
