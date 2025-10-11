@@ -449,6 +449,47 @@ def make_request(
                         if delay > 0:
                             backoff_delay = delay * 2
                     if delay > 0:
+                        if deadline is not None:
+                            now = monotonic()
+                            if now + delay >= deadline:
+                                timeout_details = dict(last_failure_details or {})
+                                timeout_details.setdefault(
+                                    "retry_after", delay
+                                )
+                                timeout_details["timeout_reason"] = (
+                                    "retry_after_exceeds_deadline"
+                                )
+                                logger.warning(
+                                    "request_timeout",
+                                    url=url,
+                                    method=method_upper,
+                                    attempt=attempt,
+                                    total_attempts=total_attempts,
+                                    rps=cfg.rps,
+                                    **timeout_details,
+                                )
+                                _store_cache_miss(
+                                    cache_key,
+                                    cfg,
+                                    "timeout",
+                                    timeout_details,
+                                    url=url,
+                                )
+                                status_value = (
+                                    last_failure_details.get("status")
+                                    if last_failure_details
+                                    else None
+                                )
+                                logger.debug(
+                                    "request_fail",
+                                    url=url,
+                                    status=status_value,
+                                    total_attempts=total_attempts,
+                                    method=method_upper,
+                                    rps=cfg.rps,
+                                    **details_excluding("status"),
+                                )
+                                return None
                         sleep(delay)
                     continue
                 if status >= 400:
