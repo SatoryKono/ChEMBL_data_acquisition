@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from library import io
 from library.common.csv_utils import sha256_file
 from library.pipelines.testitem import cli
 from library.pipelines.testitem.catalog import ParentLookupStats
@@ -36,6 +37,14 @@ def _base_stats() -> ParentLookupStats:
     )
 
 
+def _unwrap_finalize_result(
+    result: int | tuple[int, io.StandardOutputArtifacts | None]
+) -> tuple[int, io.StandardOutputArtifacts | None]:
+    if isinstance(result, tuple):
+        return result
+    return result, None
+
+
 @pytest.mark.integration
 def test_finalize_output__writes_csv_and_metadata(
     tmp_path: Path, sample_input_csv: Path, cfg
@@ -54,7 +63,7 @@ def test_finalize_output__writes_csv_and_metadata(
     output_path = tmp_path / "final.csv"
     stats_supplier = _StatsSupplier(_base_stats())
 
-    exit_code = cli.finalize_output(
+    result = cli.finalize_output(
         [chunk],
         cfg=cfg,
         output=output_path,
@@ -63,10 +72,12 @@ def test_finalize_output__writes_csv_and_metadata(
         missing_ids=["CHEMBL999"],
     )
 
+    exit_code, artifacts = _unwrap_finalize_result(result)
     assert exit_code == 0
-    assert output_path.exists()
+    dataset_path = artifacts.dataset if artifacts is not None else output_path
+    assert dataset_path.exists()
 
-    final = pd.read_csv(output_path)
+    final = pd.read_csv(dataset_path)
     assert list(final.columns[:3]) == [
         "molecule_chembl_id",
         "parent_molecule_chembl_id",
@@ -75,7 +86,7 @@ def test_finalize_output__writes_csv_and_metadata(
     assert list(final["molecule_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
     assert "pipeline_version" in final.columns
     assert "timestamp_utc" in final.columns
-    assert sha256_file(output_path)
+    assert sha256_file(dataset_path)
     assert stats_supplier.calls == 1
 
 
@@ -95,14 +106,16 @@ def test_finalize_output__missing_required_columns_fails(
     monkeypatch.setattr(cli.logger, "warning", capture_warning)
     stats_supplier = _StatsSupplier(_base_stats())
 
-    exit_code = cli.finalize_output(
+    result = cli.finalize_output(
         [chunk],
         cfg=cfg,
         output=output_path,
         parent_stats_supplier=stats_supplier,
         input_csv=sample_input_csv,
+        emit_legacy_artifacts=True,
     )
 
+    exit_code, _ = _unwrap_finalize_result(result)
     assert exit_code == 1
     assert (
         "validation_skipped",
@@ -126,16 +139,75 @@ def test_finalize_output__optional_columns_missing_warns(
     monkeypatch.setattr(cli.logger, "warning", capture_warning)
     stats_supplier = _StatsSupplier(_base_stats())
 
-    exit_code = cli.finalize_output(
+    result = cli.finalize_output(
         [chunk],
         cfg=cfg,
         output=output_path,
         parent_stats_supplier=stats_supplier,
         input_csv=sample_input_csv,
+        emit_legacy_artifacts=True,
     )
 
+    exit_code, _ = _unwrap_finalize_result(result)
     assert exit_code == 0
     assert any(event == "optional_columns_missing" for event, _ in warnings)
+
+
+@pytest.mark.integration
+def test_finalize_output__omits_pubchem_columns_when_disabled(
+    tmp_path: Path, sample_input_csv: Path, cfg
+) -> None:
+    cfg.system.doc_quality.enable = False
+    cfg.pubchem.enable = False
+
+    chunk = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    output_path = tmp_path / "no_pubchem.csv"
+    stats_supplier = _StatsSupplier(_base_stats())
+
+    result = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=stats_supplier,
+        input_csv=sample_input_csv,
+        emit_legacy_artifacts=True,
+    )
+
+    exit_code, artifacts = _unwrap_finalize_result(result)
+    assert exit_code == 0
+
+    dataset_path = artifacts.dataset if artifacts is not None else output_path
+    final = pd.read_csv(dataset_path)
+    for column in cli._PUBCHEM_OPTIONAL_COLUMNS:
+        assert column not in final.columns
+
+
+@pytest.mark.integration
+def test_finalize_output__omits_salt_column_when_enrichment_disabled(
+    tmp_path: Path, sample_input_csv: Path, cfg
+) -> None:
+    cfg.system.doc_quality.enable = False
+    cfg.testitem_molecule_enrichment.enable = False
+
+    chunk = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    output_path = tmp_path / "no_salt.csv"
+    stats_supplier = _StatsSupplier(_base_stats())
+
+    result = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=stats_supplier,
+        input_csv=sample_input_csv,
+        emit_legacy_artifacts=True,
+    )
+
+    exit_code, artifacts = _unwrap_finalize_result(result)
+    assert exit_code == 0
+
+    dataset_path = artifacts.dataset if artifacts is not None else output_path
+    final = pd.read_csv(dataset_path)
+    assert cli._SALT_OPTIONAL_COLUMN not in final.columns
 
 
 @pytest.mark.integration
@@ -158,7 +230,7 @@ def test_finalize_output__aligns_nullable_numeric_columns(
     output_path = tmp_path / "numeric_alignment.csv"
     stats_supplier = _StatsSupplier(_base_stats())
 
-    exit_code = cli.finalize_output(
+    result = cli.finalize_output(
         [first_chunk, second_chunk],
         cfg=cfg,
         output=output_path,
@@ -166,9 +238,11 @@ def test_finalize_output__aligns_nullable_numeric_columns(
         input_csv=sample_input_csv,
     )
 
+    exit_code, artifacts = _unwrap_finalize_result(result)
     assert exit_code == 0
 
-    final = pd.read_csv(output_path)
+    dataset_path = artifacts.dataset if artifacts is not None else output_path
+    final = pd.read_csv(dataset_path)
     assert "first_approval" in final.columns
     assert final["first_approval"].iloc[0] == pytest.approx(1999.0)
     assert math.isnan(final["first_approval"].iloc[1])
@@ -189,14 +263,16 @@ def test_finalize_output__writes_failure_cases(
     output_path = tmp_path / "failures.csv"
     stats_supplier = _StatsSupplier(_base_stats())
 
-    exit_code = cli.finalize_output(
+    result = cli.finalize_output(
         [chunk],
         cfg=cfg,
         output=output_path,
         parent_stats_supplier=stats_supplier,
         input_csv=sample_input_csv,
+        emit_legacy_artifacts=True,
     )
 
+    exit_code, _ = _unwrap_finalize_result(result)
     assert exit_code == 1
     failure_path = tmp_path / "failures_failure_cases.csv"
     assert failure_path.exists()
@@ -232,14 +308,16 @@ def test_finalize_output__quality_report_failure_non_fatal(
     monkeypatch.setattr(cli, "build_table_quality_hook", fake_build_quality)
     monkeypatch.setattr(cli, "record_quality_failure", capture_failure)
 
-    exit_code = cli.finalize_output(
+    result = cli.finalize_output(
         [chunk],
         cfg=cfg,
         output=output_path,
         parent_stats_supplier=stats_supplier,
         input_csv=sample_input_csv,
+        emit_legacy_artifacts=True,
     )
 
+    exit_code, _ = _unwrap_finalize_result(result)
     assert exit_code == 0
     assert recorded and recorded[0]["error"] == "quality failed"
 
@@ -266,14 +344,16 @@ def test_finalize_output__quality_report_failure_fatal(
 
     monkeypatch.setattr(cli, "build_table_quality_hook", fake_build_quality)
 
-    exit_code = cli.finalize_output(
+    result = cli.finalize_output(
         [chunk],
         cfg=cfg,
         output=output_path,
         parent_stats_supplier=stats_supplier,
         input_csv=sample_input_csv,
+        emit_legacy_artifacts=True,
     )
 
+    exit_code, _ = _unwrap_finalize_result(result)
     assert exit_code == 1
 
 
@@ -286,7 +366,7 @@ def test_finalize_output__empty_input_produces_placeholder(
     output_path = tmp_path / "empty.csv"
     stats_supplier = _StatsSupplier(_base_stats())
 
-    exit_code = cli.finalize_output(
+    result = cli.finalize_output(
         [],
         cfg=cfg,
         output=output_path,
@@ -294,8 +374,10 @@ def test_finalize_output__empty_input_produces_placeholder(
         input_csv=sample_input_csv,
     )
 
+    exit_code, artifacts = _unwrap_finalize_result(result)
     assert exit_code == 0
-    frame = pd.read_csv(output_path)
+    dataset_path = artifacts.dataset if artifacts is not None else output_path
+    frame = pd.read_csv(dataset_path)
     assert list(frame.columns[:1]) == ["molecule_chembl_id"]
     assert frame.empty
 
@@ -310,23 +392,32 @@ def test_finalize_output__idempotent_results(
     output_path = tmp_path / "stable.csv"
     stats_supplier = _StatsSupplier(_base_stats())
 
-    first_exit = cli.finalize_output(
+    first_result = cli.finalize_output(
         [chunk],
         cfg=cfg,
         output=output_path,
         parent_stats_supplier=stats_supplier,
         input_csv=sample_input_csv,
     )
-    first_hash = sha256_file(output_path)
+    first_exit, first_artifacts = _unwrap_finalize_result(first_result)
+    first_dataset = (
+        first_artifacts.dataset if first_artifacts is not None else output_path
+    )
+    first_hash = sha256_file(first_dataset)
 
-    second_exit = cli.finalize_output(
+    second_result = cli.finalize_output(
         [chunk.copy()],
         cfg=cfg,
         output=output_path,
         parent_stats_supplier=stats_supplier,
         input_csv=sample_input_csv,
     )
-    second_hash = sha256_file(output_path)
+    second_exit, second_artifacts = _unwrap_finalize_result(second_result)
+    second_dataset = (
+        second_artifacts.dataset if second_artifacts is not None else output_path
+    )
+    second_hash = sha256_file(second_dataset)
 
     assert first_exit == 0 == second_exit
+    assert first_dataset == second_dataset
     assert first_hash == second_hash
