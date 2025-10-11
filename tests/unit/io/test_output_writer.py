@@ -34,10 +34,11 @@ def sample_frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
 
 @pytest.mark.unit
-def test_save_standard_outputs__writes_expected_csvs(tmp_path: Path, sample_frames) -> None:
+def test_save_standard_outputs__writes_expected_csvs(
+    tmp_path: Path, sample_frames, monkeypatch: pytest.MonkeyPatch
+) -> None:
     dataset, correlation, quality = sample_frames
 
-    monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(output_writer, "OUTPUT_DIR", tmp_path)
 
     artifacts = output_writer.save_standard_outputs(
@@ -47,7 +48,6 @@ def test_save_standard_outputs__writes_expected_csvs(tmp_path: Path, sample_fram
         table_name="documents",
         date_tag="20240101",
     )
-    monkeypatch.undo()
 
     expected_names = {
         "dataset": "output.documents_20240101.csv",
@@ -134,3 +134,51 @@ def test_save_standard_outputs__uses_canonical_naming_and_cleans_source(
 
     assert not legacy_path.exists()
     assert not (legacy_path.parent / "result.tmp.csv.meta.yaml").exists()
+
+
+@pytest.mark.unit
+def test_save_standard_outputs__idempotent_and_without_extraneous_files(
+    tmp_path: Path, sample_frames, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset, correlation, quality = sample_frames
+
+    monkeypatch.setattr(output_writer, "OUTPUT_DIR", tmp_path)
+
+    artifacts_first = output_writer.save_standard_outputs(
+        dataset,
+        correlation,
+        quality,
+        table_name="targets",
+        date_tag="20240101",
+    )
+
+    first_paths = {
+        "dataset": artifacts_first.dataset,
+        "correlation": artifacts_first.correlation_report,
+        "quality": artifacts_first.quality_report,
+    }
+    first_snapshots = {
+        name: path.read_bytes() for name, path in first_paths.items()
+    }
+
+    artifacts_second = output_writer.save_standard_outputs(
+        dataset.copy(),
+        correlation.copy(),
+        quality.copy(),
+        table_name="targets",
+        date_tag="20240101",
+    )
+
+    assert artifacts_second == artifacts_first
+
+    observed = {child.name for child in tmp_path.iterdir() if child.is_file()}
+    expected = {path.name for path in first_paths.values()}
+    assert observed == expected, "unexpected artefacts detected"
+
+    for name, path in {
+        "dataset": artifacts_second.dataset,
+        "correlation": artifacts_second.correlation_report,
+        "quality": artifacts_second.quality_report,
+    }.items():
+        assert path.exists(), f"missing {name}"
+        assert path.read_bytes() == first_snapshots[name]
