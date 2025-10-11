@@ -983,12 +983,6 @@ def run_pipeline(
             active_profiler
         )
 
-        io_cfg = getattr(cfg, "io", None) if cfg is not None else None
-        if io_cfg is None:
-            raise ValueError(
-                "emit_standard_outputs requires a configuration with an 'io' section"
-            )
-
         table_name, date_tag = _resolve_standard_output_naming(
             output_path,
             cfg=cfg,
@@ -1002,7 +996,6 @@ def run_pipeline(
             quality_report,
             table_name=table_name,
             date_tag=date_tag,
-            cfg=io_cfg,
         )
         use_logger.info(
             "standard_outputs_written",

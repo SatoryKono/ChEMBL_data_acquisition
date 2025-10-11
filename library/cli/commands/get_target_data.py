@@ -3755,7 +3755,6 @@ def validate_and_write(
         quality_summary,
         table_name=inferred_table_name,
         date_tag=inferred_date_tag,
-        cfg=output_io_cfg,
     )
     logger.info(
         "standard_outputs_written",

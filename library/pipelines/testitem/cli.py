@@ -1065,13 +1065,6 @@ def finalize_output(
 
     table_name, date_tag = _resolve_table_name_and_tag(output)
 
-    def _build_output_cfg(target: Path) -> IoCfg:
-        target_dir = target.parent
-        io_cfg = cfg.io
-        if Path(io_cfg.output_dir) != target_dir:
-            return io_cfg.model_copy(update={"output_dir": target_dir})
-        return io_cfg
-
     dataset_frame: pd.DataFrame
     if validated_chunks_list:
         dataset_frame = pd.concat(validated_chunks_list, ignore_index=True)
@@ -1107,8 +1100,6 @@ def finalize_output(
         sample_rows=sample_rows,
     )
 
-    output_cfg = _build_output_cfg(output)
-
     try:
         artifacts = io.save_standard_outputs(
             dataset_frame,
@@ -1116,7 +1107,6 @@ def finalize_output(
             quality_report,
             table_name=table_name,
             date_tag=date_tag,
-            cfg=output_cfg,
             key_columns=key_cols,
         )
     except (OSError, ValueError) as exc:
