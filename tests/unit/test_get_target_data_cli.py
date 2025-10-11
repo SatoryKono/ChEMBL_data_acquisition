@@ -228,6 +228,36 @@ def test_prepare_io_paths__respects_explicit_date(tmp_path):
 
 
 @pytest.mark.unit
+def test_prepare_io_paths__normalizes_prefixed_stem(tmp_path):
+    args = SimpleNamespace(
+        base_path=tmp_path,
+        input_dir=None,
+        output_dir=tmp_path,
+        cache_dir=None,
+        input_csv=tmp_path / "output.targets_20240101.csv",
+        final_out=None,
+        output_csv=None,
+        raw_format=None,
+        output_stamp_mode=None,
+        raw_out=None,
+        checkpoint=None,
+        date=None,
+        force=False,
+        skip_existing=False,
+    )
+
+    cli_parser.prepare_io_paths(
+        args,
+        output_stem="output.targets_20240101",
+        suffix=".csv",
+    )
+
+    expected = (tmp_path / "output.targets_20240101.csv").resolve()
+    assert args.final_out == expected
+    assert args.output_csv == expected
+
+
+@pytest.mark.unit
 def test_target_iuphar_defaults__align_with_cli() -> None:
     cfg = _make_stub_config()
     defaults = TARGET_MODE_DEFAULTS["iuphar"]
