@@ -290,6 +290,68 @@ def test_run_pipeline__legacy_mode_streams_and_writes_sidecars(
 
 
 @pytest.mark.unit
+def test_run_pipeline__quality_hook_targets_canonical_dataset(tmp_path: Path) -> None:
+    frame = pd.DataFrame({"identifier": ["row-1"], "value": [1]})
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [frame]
+
+    def writer(
+        chunks: object,
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        pd.concat(list(chunks), ignore_index=True).to_csv(destination, index=False)
+        return destination
+
+    quality_paths: list[Path] = []
+
+    def table_quality(path: Path) -> None:
+        quality_paths.append(Path(path))
+
+    definition = PipelineDefinition(
+        schema=None,
+        schema_name="TestSchema",
+        writer=writer,
+        validators=(),
+        metadata_hooks=(),
+        command="test",
+        config_snapshot={},
+        inputs={},
+        key_columns=("identifier",),
+        table_quality=table_quality,
+    )
+
+    output_path = tmp_path / ".output.documents_20240101.csv.tmp"
+    failure_path = tmp_path / "failures.csv"
+    cfg = _make_cfg(tmp_path)
+
+    result = run_pipeline(
+        definition=definition,
+        fetcher=fetcher,
+        output_path=output_path,
+        failure_path=failure_path,
+        cfg=cfg,
+        emit_standard_outputs=True,
+        emit_legacy_artifacts=True,
+    )
+
+    assert isinstance(result, RunPipelineResult)
+    canonical_dataset = Path(result.dataset_path)
+    assert canonical_dataset.exists()
+    assert quality_paths == [canonical_dataset]
+
+    canonical_meta = canonical_dataset.with_suffix(
+        canonical_dataset.suffix + ".meta.yaml"
+    )
+    assert canonical_meta.exists()
+    assert not output_path.exists(), "legacy working file should be removed"
+    legacy_meta = output_path.with_suffix(output_path.suffix + ".meta.yaml")
+    assert not legacy_meta.exists()
+
+
+@pytest.mark.unit
 def test_run_pipeline__passes_config_snapshot_to_metadata(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
