@@ -410,6 +410,58 @@ def test_run_uniprot__invokes_target_postprocess(
     assert recorded["ambiguous"] is None
 
 
+def test_fetch_chembl__falls_back_to_normalized_output(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logger_stub: _MemoryLogger,
+) -> None:
+    input_csv = tmp_path / "identifiers.csv"
+    input_csv.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+    expected_output = tmp_path / "targets_chembl.csv"
+    normalized_output = expected_output.with_name(
+        f"{expected_output.stem}_normalized{expected_output.suffix}"
+    )
+    normalized_output.write_text(
+        "target_chembl_id\nCHEMBL1\n", encoding=cfg.io.csv_encoding
+    )
+
+    def _fake_run(cfg_arg: Config, args: argparse.Namespace) -> int:
+        assert args.final_out == expected_output
+        return 0
+
+    monkeypatch.setattr(get_target_data, "run_chembl", _fake_run)
+
+    frame = get_target_data.fetch_chembl(cfg, input_csv, expected_output)
+
+    assert list(frame["target_chembl_id"]) == ["CHEMBL1"]
+    assert (
+        "warning",
+        "fetch_chembl_missing_expected_output",
+        {
+            "expected": str(expected_output),
+            "fallback": str(normalized_output),
+        },
+    ) in logger_stub.events
+
+
+def test_fetch_chembl__raises_when_output_missing(
+    cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_csv = tmp_path / "identifiers.csv"
+    input_csv.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+    expected_output = tmp_path / "targets_chembl.csv"
+
+    def _fake_run(cfg_arg: Config, args: argparse.Namespace) -> int:
+        assert args.final_out == expected_output
+        return 0
+
+    monkeypatch.setattr(get_target_data, "run_chembl", _fake_run)
+
+    with pytest.raises(FileNotFoundError):
+        get_target_data.fetch_chembl(cfg, input_csv, expected_output)
+
+
 def test_run_uniprot__doc_quality_reports(
     cfg: Config,
     tmp_path: Path,
