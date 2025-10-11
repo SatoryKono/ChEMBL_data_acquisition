@@ -273,3 +273,33 @@ def test_load_assay_src_lookup__coerces_numeric_values(tmp_path: Path) -> None:
     assert lookup["CHEMBL_STR"] == "001"
     assert "CHEMBL_EMPTY" not in lookup
     assert "" not in lookup
+
+
+@pytest.mark.unit
+def test_derive_standard_output_labels__handles_hidden_tmp_suffix() -> None:
+    table, date = activity._derive_standard_output_labels(
+        Path(".output.activities_20240101.csv.tmp")
+    )
+
+    assert table == "activities"
+    assert date == "20240101"
+
+
+@pytest.mark.unit
+def test_derive_standard_output_labels__strips_output_prefix() -> None:
+    table, date = activity._derive_standard_output_labels(
+        Path("output.documents_20231231.csv")
+    )
+
+    assert table == "documents"
+    assert date == "20231231"
+
+
+@pytest.mark.unit
+def test_derive_standard_output_labels__fallbacks_to_current_date(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(activity, "_current_date_token", lambda: "19990101")
+
+    table, date = activity._derive_standard_output_labels(Path("custom_export.csv"))
+
+    assert table == "custom"
+    assert date == "19990101"
