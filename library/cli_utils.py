@@ -217,6 +217,9 @@ class RunPipelineResult:
             return self.exit_code == other
         return NotImplemented
 
+    def __hash__(self) -> int:  # pragma: no cover - mirrors hash(int)
+        return hash(self.exit_code)
+
 
 def _callable_name(func: Callable[..., object]) -> str:
     """Return a human readable name for ``func``."""

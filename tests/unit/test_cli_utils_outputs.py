@@ -33,6 +33,10 @@ def test_run_pipeline_result__exposes_attributes() -> None:
     assert 0 == result
     assert result != 1
     assert not result
+    assert hash(result) == hash(int(result))
+    assert {result} == {0}
+    assert result in {0}
+    assert 0 in {result}
     assert result.exit_code == 0
     assert result.dataset_path == dataset
     assert result.artifacts is None
