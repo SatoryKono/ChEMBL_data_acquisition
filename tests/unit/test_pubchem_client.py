@@ -10,6 +10,13 @@ from library.clients import pubchem
 from library.config import PubChemCfg
 
 
+@pytest.fixture(autouse=True)
+def _reset_service_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pubchem, "_SERVICE_OUTAGE_UNTIL", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_OUTAGE_REASON", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_OUTAGE_DETAILS", None)
+
+
 @dataclass
 class _DummyResponse:
     status_code: int
