@@ -663,17 +663,28 @@ def _merge_pubchem_properties(
                 }
                 for future, cid in future_map.items():
                     if service_unavailable:
-                        cancelled = future.cancel()
-                        if not cancelled:
+                        if future.done():
                             try:
-                                future.result()
-                            except (  # pragma: no cover - defensive cleanup
-                                CancelledError,
-                                pubchem_lib.PubChemServiceUnavailable,
-                                Exception,
-                            ):
-                                pass
-                        props = _empty_properties()
+                                props = future.result()
+                            except pubchem_lib.PubChemServiceUnavailable:
+                                props = _empty_properties()
+                            except Exception as exc:  # pragma: no cover - defensive
+                                logger.warning(
+                                    "pubchem_properties_failed", cid=cid, error=str(exc)
+                                )
+                                props = _empty_properties()
+                        else:
+                            cancelled = future.cancel()
+                            if not cancelled:
+                                try:
+                                    future.result()
+                                except (  # pragma: no cover - defensive cleanup
+                                    CancelledError,
+                                    pubchem_lib.PubChemServiceUnavailable,
+                                    Exception,
+                                ):
+                                    pass
+                            props = _empty_properties()
                     else:
                         try:
                             props = future.result()
