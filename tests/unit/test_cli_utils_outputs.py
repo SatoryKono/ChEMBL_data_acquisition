@@ -127,6 +127,108 @@ def test_run_pipeline__persists_standard_outputs(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_run_pipeline__quality_and_metadata_use_canonical_dataset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    frame = pd.DataFrame({"identifier": ["row-1"], "value": [3]})
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [frame.copy()]
+
+    def writer(
+        chunks: object,
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        combined = pd.concat(list(chunks), ignore_index=True)
+        combined.to_csv(destination, index=False)
+        return destination
+
+    dataset_path = tmp_path / "output.targets_20240101.csv"
+    correlation_path = (
+        tmp_path / "output.targets_20240101_data_correlation_report_table.csv"
+    )
+    quality_path = tmp_path / "output.targets_20240101_quality_report_table.csv"
+
+    def fake_save_standard_outputs(
+        df_main: pd.DataFrame,
+        df_corr: pd.DataFrame,
+        df_qc: pd.DataFrame,
+        table_name: str,
+        date_tag: str,
+        *,
+        output_path: Path,
+        **_: object,
+    ) -> StandardOutputArtifacts:
+        dataset_path.write_text("identifier,value\nrow-1,3\n", encoding="utf-8")
+        correlation_path.write_text("", encoding="utf-8")
+        quality_path.write_text("", encoding="utf-8")
+        output_path.unlink(missing_ok=True)
+        return StandardOutputArtifacts(
+            dataset=dataset_path,
+            correlation_report=correlation_path,
+            quality_report=quality_path,
+        )
+
+    monkeypatch.setattr(
+        "library.cli_utils.save_standard_outputs", fake_save_standard_outputs
+    )
+    monkeypatch.setattr(
+        "library.cli_utils.build_reports_from_profiler",
+        lambda *_args, **_kwargs: (pd.DataFrame(), pd.DataFrame()),
+    )
+
+    table_quality_paths: list[Path] = []
+
+    def table_quality(path: Path) -> None:
+        table_quality_paths.append(Path(path))
+
+    meta_targets: list[Path] = []
+
+    def fake_write_meta_yaml(csv_path: Path, **kwargs: object) -> Path:
+        meta_targets.append(Path(csv_path))
+        meta_path = Path(csv_path).with_name(Path(csv_path).name + ".meta.yaml")
+        meta_path.write_text("{}", encoding="utf-8")
+        return meta_path
+
+    monkeypatch.setattr("library.cli_utils.write_meta_yaml", fake_write_meta_yaml)
+
+    definition = PipelineDefinition(
+        schema=None,
+        schema_name="TestSchema",
+        writer=writer,
+        validators=(),
+        metadata_hooks=(),
+        command="test",
+        config_snapshot={},
+        inputs={},
+        key_columns=("identifier",),
+        table_quality=table_quality,
+    )
+
+    output_path = tmp_path / ".output.targets_20240101.csv.tmp"
+    failure_path = tmp_path / "failures.csv"
+    cfg = _make_cfg(tmp_path)
+
+    result = run_pipeline(
+        definition=definition,
+        fetcher=fetcher,
+        output_path=output_path,
+        failure_path=failure_path,
+        cfg=cfg,
+        emit_standard_outputs=True,
+        emit_legacy_artifacts=True,
+    )
+
+    assert int(result) == 0
+    assert result.dataset_path == dataset_path
+    assert table_quality_paths == [dataset_path]
+    assert meta_targets == [dataset_path]
+    assert not output_path.exists()
+    assert not failure_path.exists()
+
+@pytest.mark.unit
 def test_run_pipeline__passes_resolved_key_columns_to_standard_outputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
