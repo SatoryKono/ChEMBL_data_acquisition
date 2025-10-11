@@ -80,6 +80,37 @@ def test_finalize_output__writes_csv_and_metadata(
 
 
 @pytest.mark.integration
+def test_finalize_output__normalises_hidden_output_path(
+    tmp_path: Path, sample_input_csv: Path, cfg
+) -> None:
+    cfg.system.doc_quality.enable = False
+
+    chunk = pd.DataFrame(
+        {
+            "molecule_chembl_id": pd.Series(["CHEMBL1"], dtype="string"),
+            "natural_product": pd.Series([True], dtype="boolean"),
+        }
+    )
+    working_output = tmp_path / ".output.testitems_20240101.csv.tmp"
+    stats_supplier = _StatsSupplier(_base_stats())
+
+    exit_code, artifacts = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=working_output,
+        parent_stats_supplier=stats_supplier,
+        input_csv=sample_input_csv,
+    )
+
+    assert exit_code == 0
+    assert artifacts is not None
+    assert artifacts.dataset.name == "output.testitems_20240101.csv"
+    assert artifacts.dataset.parent == working_output.parent
+    assert artifacts.dataset.exists()
+    assert not working_output.exists()
+
+
+@pytest.mark.integration
 def test_finalize_output__missing_required_columns_fails(
     tmp_path: Path, sample_input_csv: Path, cfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:
