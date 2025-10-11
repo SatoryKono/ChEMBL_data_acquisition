@@ -2889,6 +2889,7 @@ def fetch_chembl(
     no_reindex_raw: bool = False,
     emit_standard_outputs: bool = True,
     emit_legacy_artifacts: bool = False,
+    cleanup_standard_outputs: bool = True,
 ) -> pd.DataFrame:
     """Fetch target information from ChEMBL.
 
@@ -2912,6 +2913,10 @@ def fetch_chembl(
     emit_legacy_artifacts : bool, optional
         Forwarded to :func:`run_pipeline` to request legacy artefacts in
         addition to ``final_out``.
+    cleanup_standard_outputs : bool, optional
+        When ``True`` (the default) remove the dated standard output artefacts
+        that may be produced alongside ``final_out`` by the ChEMBL pipeline.
+        Set to ``False`` to preserve those exports for debugging or auditing.
 
     Returns
     -------
@@ -4249,8 +4254,9 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             chunk_size=cfg.target.all.chunk_size,
             offset=cfg.target.all.offset,
             id_cols=key_columns,
-            emit_standard_outputs=False,
+            emit_standard_outputs=True,
             emit_legacy_artifacts=emit_legacy,
+            cleanup_standard_outputs=True,
         )
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
