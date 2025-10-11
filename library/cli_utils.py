@@ -301,6 +301,13 @@ def run_cli_command(
 ) -> int:
     """Execute CLI boilerplate shared by data acquisition commands."""
 
+    debug_flag = bool(getattr(args, "debug", False))
+    keep_flag = bool(getattr(args, "keep_intermediate", False))
+    legacy_flag = bool(getattr(args, "emit_legacy_artifacts", False))
+    diagnostics_enabled = legacy_flag or debug_flag or keep_flag
+    if diagnostics_enabled != legacy_flag:
+        setattr(args, "emit_legacy_artifacts", diagnostics_enabled)
+
     if not log_cfg.generated_at:
         seed_parts: list[str] = []
         invocation = getattr(args, "invocation", None)
@@ -398,6 +405,11 @@ def run_cli_command(
 
     if metadata is not None:
         use_logger.info("config_snapshot", config=getattr(metadata, "snapshot", {}))
+
+    if not diagnostics_enabled:
+        doc_quality_cfg = getattr(cfg.system, "doc_quality", None)
+        if doc_quality_cfg is not None and hasattr(doc_quality_cfg, "enable"):
+            setattr(doc_quality_cfg, "enable", False)
 
     try:
         if getattr(args, "print_config", False):

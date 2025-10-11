@@ -294,6 +294,7 @@ def _build_document_options(
         limit=cfg.limit,
         force=cfg.force,
         skip_existing=cfg.skip_existing,
+        date_prefix=cfg.date_prefix,
         rerun_postprocess=cfg.rerun_postprocess,
         date_prefix=cfg.date_prefix,
         output_stem=cfg.output_stems.get("document"),
@@ -334,6 +335,7 @@ def _build_testitem_options(
         output_csv=output_path,
         limit=cfg.limit,
         offset=0,
+        emit_legacy_artifacts=cfg.debug or cfg.keep_intermediate,
     )
 
 
@@ -347,6 +349,7 @@ def _build_activity_options(
         force=cfg.force,
         skip_existing=cfg.skip_existing,
         dry_run=cfg.dry_run,
+        emit_legacy_artifacts=cfg.debug or cfg.keep_intermediate,
     )
 
 
@@ -387,6 +390,8 @@ class PipelineRunConfig:
     output_stems: PipelineOutputStems
     subcommands: PipelineSubcommands
     rerun_postprocess: bool = False
+    debug: bool = False
+    keep_intermediate: bool = False
 
     def input_path(self, name: str) -> Path:
         """Return the fully resolved path for ``name`` in the input directory."""
@@ -398,6 +403,16 @@ class PipelineRunConfig:
         """Return the fully resolved path for ``name`` in the output directory."""
 
         stem = self.output_stems[name]
+        stem_path = Path(stem)
+
+        # Allow overrides to provide explicit filenames (e.g. ``output.targets.csv``)
+        # or nested locations. When the stem includes a suffix we treat it as a
+        # concrete path instead of appending the canonical prefix/suffix.
+        if stem_path.suffix:
+            if stem_path.is_absolute():
+                return stem_path
+            return self.output_dir / stem_path
+
         filename = f"output.{stem}_{self.date_prefix}.csv"
         return self.output_dir / filename
 
@@ -800,6 +815,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable verbose diagnostics and keep intermediate artefacts",
+    )
+    parser.add_argument(
+        "--keep-intermediate",
+        action="store_true",
+        help="Preserve intermediate files produced by individual pipelines",
+    )
+    parser.add_argument(
         "--print-config",
         action="store_true",
         help="Print the resolved configuration and exit without running pipelines",
@@ -886,6 +911,8 @@ def _prepare_config(
         input_files=input_files,
         output_stems=output_stems,
         subcommands=subcommands,
+        debug=bool(getattr(args, "debug", False)),
+        keep_intermediate=bool(getattr(args, "keep_intermediate", False)),
     )
 
 
@@ -1883,6 +1910,11 @@ def run_pipeline(
         _LOGGER.error("config_load_failed", error=str(exc), exc_info=exc)
         _LOGGER.info("pipeline_done", stage="pipeline", exit_code=1)
         return 1
+    diagnostics_enabled = cfg.debug or cfg.keep_intermediate
+    if not diagnostics_enabled:
+        doc_quality_cfg = getattr(base_config.system, "doc_quality", None)
+        if doc_quality_cfg is not None and hasattr(doc_quality_cfg, "enable"):
+            setattr(doc_quality_cfg, "enable", False)
     try:
         if not cfg.dry_run:
             ensure_dirs(base_config)
@@ -2196,7 +2228,14 @@ def run_pipeline(
                 )
             postprocess_result: PostprocessResult | None = None
             postprocess_table = _resolve_postprocess_table(step, final_output)
-            if result.executed and postprocess_table is not None:
+            allow_postprocess = (
+                cfg.rerun_postprocess or cfg.debug or cfg.keep_intermediate
+            )
+            if (
+                result.executed
+                and postprocess_table is not None
+                and allow_postprocess
+            ):
                 try:
                     postprocess_result = _run_postprocess_hook(
                         step,
@@ -2284,15 +2323,16 @@ def run_pipeline(
     duration_seconds = time.perf_counter() - run_started_clock
     logger_cfg = getattr(_LOGGER, "_cfg", None)
     manifest_run_id = getattr(logger_cfg, "run_id", None)
-    _write_run_manifest(
-        cfg,
-        run_started_at=run_started_at,
-        run_completed_at=run_completed_at,
-        duration_seconds=duration_seconds,
-        exit_code=overall_status,
-        steps=manifest_entries,
-        run_id=manifest_run_id,
-    )
+    if cfg.debug or cfg.keep_intermediate:
+        _write_run_manifest(
+            cfg,
+            run_started_at=run_started_at,
+            run_completed_at=run_completed_at,
+            duration_seconds=duration_seconds,
+            exit_code=overall_status,
+            steps=manifest_entries,
+            run_id=manifest_run_id,
+        )
 
     _LOGGER.info("pipeline_done", stage="pipeline", exit_code=overall_status)
     return overall_status
@@ -2305,6 +2345,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     desired_level = (
         "DEBUG" if getattr(args, "verbose", False) else str(args.log_level).upper()
     )
+    if getattr(args, "debug", False):
+        desired_level = "DEBUG"
     if desired_level not in {"DEBUG", "INFO", "WARN", "WARNING", "ERROR"}:
         raise SystemExit(f"invalid log level: {args.log_level}")
 

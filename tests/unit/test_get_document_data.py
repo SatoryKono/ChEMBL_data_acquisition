@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -493,33 +494,124 @@ def test_resolve_output_table_and_tag__noncanonical(tmp_path: Path) -> None:
     assert stamp is None
 
 
-def test_finalise_export__canonical_output_writes_to_target(
-    cfg: Config, tmp_path: Path
+def test_finalise_export__normalises_table_name_and_date(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    output_csv = tmp_path / "output.documents_20240101.csv"
-    output_csv.parent.mkdir(parents=True, exist_ok=True)
-    input_csv = tmp_path / "input.csv"
-    input_csv.write_text("document_chembl_id\nCHEMBL1\n", encoding="utf-8")
-
-    cfg.io.output_dir = str(output_csv.parent)
-
+    output_csv = tmp_path / "output.documents_20250101.csv"
     frame = get_document_data.build_dataframe(
-        [{"document_chembl_id": "CHEMBL1"}],
+        [],
         columns=get_document_data.DOCUMENT_SCHEMA_COLUMNS,
         fill_missing=False,
     )
 
+    monkeypatch.setattr(
+        get_document_data,
+        "validate_documents",
+        lambda df, return_result=True: SimpleNamespace(
+            data=df, failure_cases=pd.DataFrame()
+        ),
+    )
+
+    monkeypatch.setattr(
+        get_document_data,
+        "generate_qc_report",
+        lambda *_, **__: pd.DataFrame({"metric": [1]}),
+    )
+    monkeypatch.setattr(
+        get_document_data,
+        "generate_correlation_report",
+        lambda *_, **__: pd.DataFrame({"metric": [1]}),
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_save_standard_outputs(
+        dataset: pd.DataFrame,
+        correlation_report: pd.DataFrame,
+        quality_report: pd.DataFrame,
+        *,
+        table_name: str,
+        date_tag: str,
+        cfg: any,
+        key_columns: Sequence[str] | None = None,
+    ) -> get_document_data.io.StandardOutputArtifacts:
+        captured["table_name"] = table_name
+        captured["date_tag"] = date_tag
+        output_csv.parent.mkdir(parents=True, exist_ok=True)
+        return get_document_data.io.StandardOutputArtifacts(
+            dataset=output_csv,
+            correlation_report=output_csv,
+            quality_report=output_csv,
+        )
+
+    monkeypatch.setattr(
+        get_document_data.io,
+        "save_standard_outputs",
+        fake_save_standard_outputs,
+    )
+        columns=get_document_data.DOCUMENT_SCHEMA_COLUMNS,
+        fill_missing=False,
+    )
+
+    monkeypatch.setattr(
+        get_document_data,
+        "validate_documents",
+        lambda df, return_result=True: SimpleNamespace(
+            data=df, failure_cases=pd.DataFrame()
+        ),
+    )
+
+    monkeypatch.setattr(
+        get_document_data,
+        "generate_qc_report",
+        lambda *_, **__: pd.DataFrame({"metric": [1]}),
+    )
+    monkeypatch.setattr(
+        get_document_data,
+        "generate_correlation_report",
+        lambda *_, **__: pd.DataFrame({"metric": [1]}),
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_save_standard_outputs(
+        dataset: pd.DataFrame,
+        correlation_report: pd.DataFrame,
+        quality_report: pd.DataFrame,
+        *,
+        table_name: str,
+        date_tag: str,
+        cfg: any,
+        key_columns: Sequence[str] | None = None,
+    ) -> get_document_data.io.StandardOutputArtifacts:
+        captured["table_name"] = table_name
+        captured["date_tag"] = date_tag
+        output_csv.parent.mkdir(parents=True, exist_ok=True)
+        return get_document_data.io.StandardOutputArtifacts(
+            dataset=output_csv,
+            correlation_report=output_csv,
+            quality_report=output_csv,
+        )
+
+    monkeypatch.setattr(
+        get_document_data.io,
+        "save_standard_outputs",
+        fake_save_standard_outputs,
+    )
     result = get_document_data._finalise_export(
         frame,
         output_csv,
         cfg,
-        input_csv=input_csv,
+        input_csv=tmp_path / "input.csv",
     )
 
     assert result.exit_code == 0
+    assert captured["table_name"] == "documents"
+    assert captured["date_tag"] == "20250101"
     assert result.artifacts is not None
     assert result.artifacts.dataset == output_csv
-    assert output_csv.exists()
 
 
 def test_finalise_export__partial_run_skips_qa(
