@@ -511,3 +511,62 @@ def test_run_pipeline__passes_config_snapshot_to_metadata(
     assert int(result) == 0
     assert captured_kwargs, "metadata writer must capture invocation"
     assert captured_kwargs[-1]["config"] == config_snapshot
+
+
+@pytest.mark.unit
+def test_run_pipeline__emits_dataset_without_standard_or_legacy(
+    tmp_path: Path,
+) -> None:
+    frame = pd.DataFrame({"identifier": ["row-1"], "value": [17]})
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [frame]
+
+    def writer(
+        chunks: object,
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        combined = pd.concat(list(chunks), ignore_index=True)
+        combined.to_csv(destination, index=False)
+        meta_path = Path(f"{destination}.meta.yaml")
+        meta_path.write_text("{}", encoding="utf-8")
+        return destination
+
+    definition = PipelineDefinition(
+        schema=None,
+        schema_name="TestSchema",
+        writer=writer,
+        validators=(),
+        metadata_hooks=(),
+        command="test",
+        config_snapshot={},
+        inputs={},
+        key_columns=("identifier",),
+    )
+
+    output_path = tmp_path / "output.documents_20240101.csv"
+    failure_path = tmp_path / "failures.csv"
+    cfg = _make_cfg(tmp_path)
+
+    result = run_pipeline(
+        definition=definition,
+        fetcher=fetcher,
+        output_path=output_path,
+        failure_path=failure_path,
+        cfg=cfg,
+        emit_standard_outputs=False,
+        emit_legacy_artifacts=False,
+    )
+
+    assert int(result) == 0
+    dataset_path = Path(result.dataset_path)
+    assert dataset_path == output_path
+    assert dataset_path.exists()
+
+    dataset = pd.read_csv(dataset_path)
+    pd.testing.assert_frame_equal(dataset, frame)
+
+    meta_path = Path(f"{dataset_path}.meta.yaml")
+    assert not meta_path.exists()

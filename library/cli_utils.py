@@ -592,11 +592,6 @@ def run_pipeline(
 
     standard_outputs_enabled = bool(emit_standard_outputs)
     legacy_outputs_enabled = bool(emit_legacy_artifacts)
-    if not standard_outputs_enabled and not legacy_outputs_enabled:
-        raise ValueError(
-            "run_pipeline requires at least one of emit_standard_outputs or "
-            "emit_legacy_artifacts to be enabled"
-        )
 
     definition = normalise_definition(definition, legacy_kwargs)
 
@@ -966,8 +961,10 @@ def run_pipeline(
 
     csv_path: Path | None = None
     chunk_stream = _iter_chunks()
+    should_invoke_writer = legacy_outputs_enabled or not standard_outputs_enabled
+
     try:
-        if legacy_outputs_enabled:
+        if should_invoke_writer:
             csv_path = writer(
                 chunk_stream,
                 output_path,
