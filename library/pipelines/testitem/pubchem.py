@@ -652,6 +652,7 @@ def _merge_pubchem_properties(
 
         service_unavailable = False
         unavailable_error: str | None = None
+        failed_cids: set[str] = set()
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for start in range(0, len(lookup_order), batch_size):
@@ -674,6 +675,7 @@ def _merge_pubchem_properties(
                             ):
                                 pass
                         props = _empty_properties()
+                        failed_cids.add(cid)
                     else:
                         try:
                             props = future.result()
@@ -683,6 +685,7 @@ def _merge_pubchem_properties(
                             )
                             service_unavailable = True
                             unavailable_error = str(exc)
+                            failed_cids.add(cid)
                             props = _empty_properties()
                         except Exception as exc:  # pragma: no cover - defensive
                             logger.warning(
@@ -701,8 +704,14 @@ def _merge_pubchem_properties(
                     }
                     properties_records[cid] = values
 
+                if service_unavailable:
+                    remaining_cids = lookup_order[start + batch_size :]
+                    if remaining_cids:
+                        failed_cids.update(remaining_cids)
+                    break
+
         if service_unavailable:
-            pending = max(len(lookup_order) - len(properties_records), 0)
+            pending = max(len(failed_cids), 0)
             log_payload = {"pending": pending}
             if unavailable_error:
                 log_payload["error"] = unavailable_error

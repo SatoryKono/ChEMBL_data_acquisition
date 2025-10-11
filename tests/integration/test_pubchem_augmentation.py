@@ -303,9 +303,11 @@ def test_merge_pubchem_properties__stops_after_service_unavailable(
         record.message for record in caplog.records if record.levelno >= logging.WARNING
     ]
     assert sum(msg.startswith("pubchem_properties_failed") for msg in warning_messages) == 1
-    assert any(
-        msg.startswith("pubchem_properties_unavailable") for msg in warning_messages
-    )
+    unavailable_messages = [
+        msg for msg in warning_messages if msg.startswith("pubchem_properties_unavailable")
+    ]
+    assert unavailable_messages
+    assert any("pending=3" in msg for msg in unavailable_messages)
 
 
 @pytest.mark.integration
