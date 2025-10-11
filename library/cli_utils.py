@@ -191,7 +191,7 @@ class RunPipelineResult:
     def __index__(self) -> int:  # pragma: no cover - mirrors __int__
         return int(self.exit_code)
 
-    def __bool__(self) -> bool:  # pragma: no cover - mirrors bool(int)
+    def __bool__(self) -> bool:  # pragma: no cover - mirrors ``bool(int)`` semantics
         return bool(self.exit_code)
 
     def __eq__(self, other: object) -> bool:  # pragma: no cover - trivial delegation
