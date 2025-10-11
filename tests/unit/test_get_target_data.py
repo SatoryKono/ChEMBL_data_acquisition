@@ -310,6 +310,76 @@ def test_fetch_chembl__uses_updated_final_out_path(
     assert df.equals(canonical_df)
 
 
+@pytest.mark.unit
+def test_fetch_chembl__cleans_up_standard_outputs_when_requested(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+    final_out = tmp_path / "output.targets_chembl.csv"
+
+    cleanup_calls: list[Path] = []
+
+    def _fake_run_chembl(cfg_obj: Config, args: argparse.Namespace) -> int:
+        Path(args.final_out).write_text(
+            "target_chembl_id\nCHEMBL1\n", encoding="utf-8"
+        )
+        return 0
+
+    def _record_cleanup(path: Path) -> None:
+        cleanup_calls.append(path)
+
+    monkeypatch.setattr(get_target_data, "run_chembl", _fake_run_chembl)
+    monkeypatch.setattr(
+        get_target_data, "_cleanup_standard_output_artifacts", _record_cleanup
+    )
+
+    df = get_target_data.fetch_chembl(
+        cfg,
+        input_csv,
+        final_out,
+        cleanup_standard_outputs=True,
+    )
+
+    assert len(df.index) == 1
+    assert cleanup_calls == [final_out]
+
+
+@pytest.mark.unit
+def test_cleanup_standard_output_artifacts__removes_expected_files(
+    tmp_path: Path,
+) -> None:
+    base_output = tmp_path / "output.targets_chembl.csv"
+    base_output.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    dataset = tmp_path / "output.targets_chembl_20240101.csv"
+    dataset.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+    dataset_meta = Path(f"{dataset}.meta.yaml")
+    dataset_meta.write_text("meta", encoding="utf-8")
+
+    quality = tmp_path / "output.targets_chembl_20240101_quality_report_table.csv"
+    quality.write_text("quality", encoding="utf-8")
+    quality_meta = Path(f"{quality}.meta.yaml")
+    quality_meta.write_text("meta", encoding="utf-8")
+
+    corr = tmp_path / "output.targets_chembl_20240101_data_correlation_report_table.csv"
+    corr.write_text("corr", encoding="utf-8")
+    corr_meta = Path(f"{corr}.meta.yaml")
+    corr_meta.write_text("meta", encoding="utf-8")
+
+    get_target_data._cleanup_standard_output_artifacts(base_output)
+
+    assert base_output.exists()
+    assert not dataset.exists()
+    assert not dataset_meta.exists()
+    assert not quality.exists()
+    assert not quality_meta.exists()
+    assert not corr.exists()
+    assert not corr_meta.exists()
+
+
 def test_prepare_raw_destination__raises_when_unlink_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
@@ -940,7 +1010,7 @@ def test_run__delegates_to_handler(
 
 
 @pytest.mark.unit
-def test_run_all__disables_standard_outputs_for_chembl(
+def test_run_all__enables_standard_outputs_for_chembl(
     cfg: Config,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -958,6 +1028,7 @@ def test_run_all__disables_standard_outputs_for_chembl(
         **kwargs: object,
     ) -> pd.DataFrame:
         captured["emit_standard_outputs"] = kwargs["emit_standard_outputs"]
+        captured["cleanup_standard_outputs"] = kwargs["cleanup_standard_outputs"]
         return pd.DataFrame({"target_chembl_id": ["CHEMBL1"]})
 
     def _fake_fetch_uniprot(
@@ -1009,7 +1080,8 @@ def test_run_all__disables_standard_outputs_for_chembl(
     exit_code = get_target_data.run_all(cfg, args)
 
     assert exit_code == 0
-    assert captured.get("emit_standard_outputs") is False
+    assert captured.get("emit_standard_outputs") is True
+    assert captured.get("cleanup_standard_outputs") is True
     assert final_out.exists()
 
 
