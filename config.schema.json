@@ -1388,6 +1388,13 @@
           "title": "Backoff Initial Seconds",
           "type": "number"
         },
+        "retry_after_grace_seconds": {
+          "default": 120.0,
+          "description": "Additional seconds beyond timeout_seconds allowed to honour Retry-After headers",
+          "minimum": 0,
+          "title": "Retry After Grace Seconds",
+          "type": "number"
+        },
         "resolve_order": {
           "default": [
             "cache",

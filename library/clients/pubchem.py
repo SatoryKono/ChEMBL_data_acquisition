@@ -376,9 +376,14 @@ def make_request(
     if total_attempts <= 0:
         total_attempts = 1
     backoff_delay = cfg.backoff_initial_seconds
+    start_time = monotonic()
     deadline: float | None = None
+    deadline_limit: float | None = None
     if cfg.timeout_seconds > 0:
-        deadline = monotonic() + cfg.timeout_seconds
+        deadline = start_time + cfg.timeout_seconds
+        grace = getattr(cfg, "retry_after_grace_seconds", 0)
+        if grace and grace > 0:
+            deadline_limit = deadline + grace
     last_failure_details: dict[str, Any] | None = None
 
     def details_excluding(*keys: str) -> dict[str, Any]:
@@ -518,9 +523,27 @@ def make_request(
                         if delay > 0:
                             backoff_delay = delay * 2
                     if delay > 0:
-                        if deadline is not None:
-                            now = monotonic()
-                            if now + delay >= deadline:
+                        now = monotonic()
+                        if (
+                            retry_after is not None
+                            and deadline is not None
+                            and deadline_limit is not None
+                            and deadline < deadline_limit
+                        ):
+                            extension_target = max(deadline, now + delay + cfg.timeout_read)
+                            capped_extension = min(extension_target, deadline_limit)
+                            if capped_extension > deadline:
+                                logger.debug(
+                                    "request_deadline_extended",
+                                    url=url,
+                                    method=method_upper,
+                                    delay=delay,
+                                    previous_remaining=max(deadline - now, 0.0),
+                                    new_remaining=max(capped_extension - now, 0.0),
+                                    limit_remaining=max(deadline_limit - now, 0.0),
+                                )
+                                deadline = capped_extension
+                        if deadline is not None and now + delay >= deadline:
                                 timeout_details = dict(last_failure_details or {})
                                 timeout_details.setdefault(
                                     "retry_after", delay

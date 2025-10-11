@@ -15,6 +15,7 @@ from collections.abc import (
 from concurrent.futures import CancelledError, ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
+from numbers import Real
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -56,6 +57,40 @@ _PUBCHEM_SESSION_SIGNATURE: str | None = None
 
 ResolutionCache: TypeAlias = MutableMapping[Hashable, "PubChemResolution"]
 _PUBCHEM_SESSION_LOCK = threading.Lock()
+
+
+def _service_unavailable_log_context(details: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Return structured logging context extracted from PubChem failure details."""
+
+    context: dict[str, Any] = {}
+    if not details:
+        return context
+
+    status = details.get("status")
+    if isinstance(status, Real):
+        context["status"] = int(status)
+
+    retry_after = details.get("retry_after")
+    if isinstance(retry_after, Real):
+        context["retry_after"] = float(retry_after)
+
+    timeout_retry_in = details.get("timeout_retry_in")
+    if isinstance(timeout_retry_in, Real):
+        context["timeout_retry_in"] = float(timeout_retry_in)
+
+    retry_after_source = details.get("retry_after_source")
+    if isinstance(retry_after_source, str) and retry_after_source:
+        context["retry_after_source"] = retry_after_source
+
+    timeout_reason = details.get("timeout_reason")
+    if isinstance(timeout_reason, str) and timeout_reason:
+        context["timeout_reason"] = timeout_reason
+
+    reason = details.get("reason")
+    if isinstance(reason, str) and reason:
+        context.setdefault("reason", reason)
+
+    return context
 
 
 @lru_cache(maxsize=1)
@@ -640,7 +675,7 @@ def _merge_pubchem_properties(
         configured_batch_size = max(int(getattr(cfg, "batch_size", 1)), 1)
         rps_limit = int(getattr(cfg, "rps", configured_batch_size))
         max_workers = max(1, min(configured_batch_size, rps_limit))
-        batch_size = configured_batch_size
+        batch_size = max_workers
 
         pubchem_lib = _load_pubchem_library()
 
@@ -652,6 +687,7 @@ def _merge_pubchem_properties(
 
         service_unavailable = False
         unavailable_error: str | None = None
+        unavailable_context: dict[str, Any] = {}
         failed_cids: set[str] = set()
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -680,11 +716,18 @@ def _merge_pubchem_properties(
                         try:
                             props = future.result()
                         except pubchem_lib.PubChemServiceUnavailable as exc:
+                            log_context = _service_unavailable_log_context(exc.details)
+                            if exc.outcome:
+                                log_context.setdefault("outcome", exc.outcome)
                             logger.warning(
-                                "pubchem_properties_failed", cid=cid, error=str(exc)
+                                "pubchem_properties_failed",
+                                cid=cid,
+                                error=str(exc),
+                                **log_context,
                             )
                             service_unavailable = True
                             unavailable_error = str(exc)
+                            unavailable_context = log_context
                             failed_cids.add(cid)
                             props = _empty_properties()
                         except Exception as exc:  # pragma: no cover - defensive
@@ -715,6 +758,8 @@ def _merge_pubchem_properties(
             log_payload = {"pending": pending}
             if unavailable_error:
                 log_payload["error"] = unavailable_error
+            if unavailable_context:
+                log_payload.update(unavailable_context)
             logger.warning("pubchem_properties_unavailable", **log_payload)
 
     properties_df = pd.DataFrame.from_dict(properties_records, orient="index")
