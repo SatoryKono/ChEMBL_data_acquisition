@@ -5,9 +5,12 @@ from __future__ import annotations
 import warnings
 from pathlib import Path
 
+import importlib
 import pandas as pd
 import pytest
 
+from library.postprocessing import target as target_module
+from library.postprocessing import targets as targets_pipeline
 from library.postprocessing.target import isoform
 from scripts import get_target_data
 
@@ -150,5 +153,36 @@ def test_is_supported_target_export__accepts_cli_default(tmp_path: Path) -> None
     path.write_text("target_chembl_id\n", encoding="utf-8")
 
     assert get_target_data._is_supported_target_export(path)
+
+
+@pytest.mark.unit
+def test_current_default_search_dir__respects_package_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Target helper honours package-level default search directory overrides."""
+
+    importlib.reload(target_module)
+    importlib.reload(isoform)
+
+    target_module.set_default_search_dir(tmp_path)
+    monkeypatch.addfinalizer(lambda: target_module.set_default_search_dir(None))
+
+    assert isoform._current_default_search_dir() == tmp_path
+
+
+@pytest.mark.unit
+def test_targets_module_proxy__updates_isoform_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``library.postprocessing.targets`` proxies search directory overrides."""
+
+    importlib.reload(target_module)
+    importlib.reload(isoform)
+    importlib.reload(targets_pipeline)
+
+    targets_pipeline.set_default_search_dir(tmp_path)
+    monkeypatch.addfinalizer(lambda: targets_pipeline.set_default_search_dir(None))
+
+    assert isoform._current_default_search_dir() == tmp_path
 
 

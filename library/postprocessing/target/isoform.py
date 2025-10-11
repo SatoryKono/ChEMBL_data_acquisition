@@ -145,9 +145,16 @@ def _supported_patterns_text() -> str:
 def _current_default_search_dir() -> Path:
     """Return the current default search directory with package overrides."""
 
-    package = sys.modules.get("library.postprocessing.target")
-    if package is not None and hasattr(package, "_DEFAULT_SEARCH_DIR"):
-        override = package._DEFAULT_SEARCH_DIR
+    for module_name in (
+        __name__,
+        "library.postprocessing.target.isoform",
+        "library.postprocessing.target",
+        "library.postprocessing.targets",
+    ):
+        package = sys.modules.get(module_name)
+        if package is None or not hasattr(package, "_DEFAULT_SEARCH_DIR"):
+            continue
+        override = getattr(package, "_DEFAULT_SEARCH_DIR")
         if override is not None:
             return Path(override)
     return _DEFAULT_SEARCH_DIR
