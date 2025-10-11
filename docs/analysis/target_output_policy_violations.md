@@ -1,30 +1,38 @@
-# get_target_data.py output anomalies
+# Аномалии вывода get_target_data.py
 
-## Expected behaviour
+## Ожидаемое поведение
 
-Per the Output Standardization Policy every `get_*_data.py` command must emit exactly three CSV artefacts via `save_standard_outputs`: the consolidated dataset, a correlation report and a QC report. No other files should remain after a standard run.
+Согласно политике стандартизации вывода каждая команда семейства `get_*_data.py` должна сохранять ровно три CSV-артефакта с помощью `save_standard_outputs`: агрегированный датасет, отчёт по корреляциям и отчёт по контролю качества. После стандартного запуска не должно оставаться никаких других файлов.
 
-## Why extra artefacts are produced
+## Почему появляются лишние артефакты
 
-### 1. Legacy outputs are force-enabled by the CLI harness
+### 1. Обёртка CLI принудительно включает устаревший вывод
 
-`scripts/get_data.py` forcibly sets `args.keep_intermediate = True` before delegating to the underlying target CLI. This implicitly turns on `emit_legacy_artifacts` inside `run_cli_command`, because the helper maps either `--debug` or `--keep-intermediate` to the legacy output bundle. As a result, even when the operator does not pass `--emit-legacy-artifacts`, every orchestrated run keeps the raw dumps, failure CSVs and sidecars. 【F:scripts/get_data.py†L63-L82】【F:library/cli_utils.py†L289-L309】
+`scripts/get_data.py` в обязательном порядке устанавливает `args.keep_intermediate = True` перед передачей управления в целевой CLI. Это неявно активирует `emit_legacy_artifacts` внутри `run_cli_command`, потому что хелпер воспринимает флаги `--debug` или `--keep-intermediate` как сигнал записывать устаревший набор файлов. В результате даже без явного `--emit-legacy-artifacts` любой оркестрированный запуск сохраняет «сырые» дампы, CSV с неуспешными записями и побочные файлы. 【F:scripts/get_data.py†L63-L82】【F:library/cli_utils.py†L289-L309】
 
-### 2. Raw-mode pipelines call `run_pipeline` without disabling legacy writers
+**Подзадача:** убрать или ограничить передачу `keep_intermediate`, чтобы штатные прогоны не активировали режим наследуемого вывода.
 
-When the ChEMBL stage is executed in "raw dump" mode (`normalize_at_export=False`), `_run_pipeline_with_meta` delegates to `run_pipeline` with its default parameters. The latter assumes `emit_legacy_artifacts=True` and therefore writes both the canonical bundle and the historical artefacts (raw CSV, `_failure_cases.csv`, `.meta.yaml`). That reproduces files such as `target_raw.csv` and `target_raw_failure_cases.csv` alongside the standard outputs. 【F:library/cli/commands/get_target_data.py†L2184-L2268】【F:library/cli_utils.py†L524-L583】
+### 2. «Сырой» режим пайплайна вызывает `run_pipeline` без отключения устаревших писателей
 
-### 3. The validation/export step still persists raw and metadata files when legacy mode is active
+Когда стадия ChEMBL выполняется в режиме «сырых дампов» (`normalize_at_export=False`), `_run_pipeline_with_meta` делегирует выполнение `run_pipeline` с параметрами по умолчанию. Этот вызов предполагает `emit_legacy_artifacts=True`, поэтому помимо стандартного набора на диск попадают исторические артефакты (raw CSV, `_failure_cases.csv`, `.meta.yaml`). Так возникают файлы вроде `target_raw.csv` и `target_raw_failure_cases.csv` рядом со стандартными CSV. 【F:library/cli/commands/get_target_data.py†L2184-L2268】【F:library/cli_utils.py†L524-L583】
 
-`validate_and_write` keeps the backwards-compatible branches for `emit_legacy_artifacts`. Once that flag is enabled (see #1), the function writes the raw frame to `raw_out`, stores metadata sidecars and leaves the validation failure CSV in place instead of pruning it. These branches are what generate files such as `target_raw.csv`, `target_raw.meta.yaml` and `target_failure_cases.csv`. 【F:library/cli/commands/get_target_data.py†L3636-L3777】
+**Подзадача:** явно передавать `emit_standard_outputs=True, emit_legacy_artifacts=False` при вызове `_run_pipeline_with_meta` для «сырых» выгрузок.
 
-### 4. Optional post-processing creates yet another export
+### 3. Шаг валидации/экспорта продолжает сохранять «сырые» и метаданные при активном наследуемом режиме
 
-If `--postprocess` is supplied, `run_target_postprocess_if_requested` materialises `output_postprocessed.targets.csv` next to the canonical outputs. Because the standard output bundle is already written, this extra CSV is effectively a duplicate unless post-processing is explicitly required. 【F:library/cli/commands/get_target_data.py†L429-L505】
+`validate_and_write` сохраняет обратсовместимые ветки для `emit_legacy_artifacts`. Как только этот флаг активен (см. пункт 1), функция записывает исходный датафрейм в `raw_out`, создаёт метаданные и оставляет CSV с невалидными записями, вместо того чтобы удалять их. Эти ветки порождают `target_raw.csv`, `target_raw.meta.yaml` и `target_failure_cases.csv`. 【F:library/cli/commands/get_target_data.py†L3636-L3777】
 
-## Remediation suggestions
+**Подзадача:** удалить или жёстко оградить ветки сохранения устаревших артефактов, оставив в штатном режиме только вызов `save_standard_outputs`.
 
-* Remove the forced `keep_intermediate` toggle in `scripts/get_data.py` or gate it behind an explicit debug flag so regular runs keep legacy artefacts disabled.
-* Pass `emit_standard_outputs=True, emit_legacy_artifacts=False` when invoking `_run_pipeline_with_meta` for raw-mode fetches; the raw CSV can still be streamed by the custom writer without the pipeline producing additional files.
-* Simplify `validate_and_write` by dropping the legacy save branches (or guarding them behind an explicit flag) so that only `save_standard_outputs` is executed in normal runs.
-* Consider writing the post-processed dataset to an in-memory buffer and reusing the canonical writer instead of leaving a fourth CSV on disk.
+### 4. Опциональный постпроцессинг создаёт ещё один экспорт
+
+При указании `--postprocess` функция `run_target_postprocess_if_requested` материализует `output_postprocessed.targets.csv` рядом с основными файлами. Поскольку стандартный набор уже сохранён, этот CSV становится дубликатом, если дополнительная обработка не требуется явно. 【F:library/cli/commands/get_target_data.py†L429-L505】
+
+**Подзадача:** пересмотреть сохранение постпроцессинга (например, писать в буфер и использовать стандартный писатель), чтобы избежать появления четвёртого CSV на диске.
+
+## Рекомендации по исправлению
+
+* Удалить принудительную установку `keep_intermediate` в `scripts/get_data.py` либо привязать её к явному отладочному флагу, чтобы обычные запуски не включали устаревшие артефакты.
+* Передавать `emit_standard_outputs=True, emit_legacy_artifacts=False` при вызове `_run_pipeline_with_meta` для «сырых» режимов; при необходимости «сырые» CSV можно по-прежнему получать потоковой записью без сохранения лишних файлов.
+* Упростить `validate_and_write`, удалив устаревшие ветки сохранения (или спрятав их за явным флагом), чтобы в обычных сценариях выполнялся только `save_standard_outputs`.
+* Перенаправить вывод постпроцессинга в общий механизм записи, чтобы на диске оставались только три стандартных файла.
