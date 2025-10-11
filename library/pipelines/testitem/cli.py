@@ -597,6 +597,9 @@ def fetch_testitems(
                 target = TESTITEM_STRUCTURE_COLUMNS.get(column, column)
                 resolved_targets[column] = target
 
+            if resolved_targets:
+                frame = frame.rename(columns=resolved_targets)
+
             missing_targets = [
                 target for target in resolved_targets.values() if target not in frame.columns
             ]

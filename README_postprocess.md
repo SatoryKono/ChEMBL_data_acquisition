@@ -116,6 +116,25 @@ sequenceDiagram
 
 This mirrors the CLI-to-library execution path described in the [Architecture overview](docs/en/ARCHITECTURE.md) while emphasising the YAML-driven orchestration and reporting hook-up.
 
+## QA checklist
+
+### Run manifest
+
+- Verify that the `run` block of `reports/run_*.json` always records `started_at`, `completed_at`, `duration_sec`, `exit_code`, `status`, `date_prefix`, path roots (`base_path`, `input_dir`, `output_dir`), `config_path`, execution toggles (`log_level`, `limit`, `force`, `skip_existing`, `dry_run`) and the optional `run_id` propagated from the orchestrator. 【F:library/cli/commands/get_data.py†L1855-L1889】
+- Ensure each step entry retains its lifecycle fields (`name`, `status`, `exit_code`, `executed`, `reason`, timestamps and duration) even before execution, and that completion rewrites `output` / `sidecars` with the resolved file descriptors including checksums. 【F:library/cli/commands/get_data.py†L1815-L1851】
+- Confirm that `merge_run_output` injects `stats.rows_total`, `rows_kept`, `rows_dropped`, the emitted SHA-256 hashes and sidecar checksums whenever `finalise_csv_output` produced metadata. Missing stats or hashes block QA sign-off. 【F:library/reporting/run_manifest.py†L34-L236】
+
+### Rate limit verification
+
+- Cross-check the active rate-limiter configuration against `system.rate` in `config/config.yaml`: `global_rps`, `global_burst`, cache size and TTL are mandatory knobs for reviewers to compare with environment overrides. 【F:config/config.yaml†L341-L349】
+- During audits inspect the `ETLContext` initialisation trace (DEBUG logs) to ensure non-zero `global_rps` yielded a shared limiter and that instantiated clients reuse it; if the config disables it (`<=0`) the context must surface `None`. 【F:library/orchestration/context.py†L20-L107】
+- When replaying runs, watch for throttling metrics (`rate_limit_hit`, `retry_attempt`) and confirm that the limiter delegates back-off through the shared token-bucket helpers; inconsistent sleep behaviour or missing cache wiring is a release blocker. 【F:library/common/rate_limiter.py†L1-L146】【F:docs/en/QA_PROCESS.md†L74-L78】
+
+### Logging review
+
+- Every structured log record must expose the core fields (`event`, `pipeline`, `run_id`, `level`, `details`) so QA can trace warnings to manifest entries and quality reports. 【F:docs/en/QA_PROCESS.md†L27-L47】
+- Treat any WARN/ERROR about schema validation, profiling failures or retries as actionable: warnings are mirrored into `.quality.json`, while errors should coincide with non-zero step `exit_code` and a failed run manifest. 【F:docs/en/QA_PROCESS.md†L40-L78】【F:library/cli/commands/get_data.py†L1867-L1885】
+
 ## Testing expectations
 
 The pytest suite is partitioned into `tests/unit/`, `tests/integration/`, `tests/integration/postprocessing/` and `tests/e2e/` to mirror the pipeline layers above. Each directory enforces deterministic fixtures, strict naming conventions (`test_<module>.py`, `test_<unit_of_work>__<case>`) and coverage of the key QA checklist (schema validation, normalisation, enrichment, logging, export invariants, degradation paths and idempotence). 【F:tests/README.md†L1-L88】

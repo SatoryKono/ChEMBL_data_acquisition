@@ -20,6 +20,9 @@ sources:
 
 local:
   io:
+    # Final CSVs appear under this directory. Each export writes
+    # `<name>.meta.yaml` with the pipeline version and row statistics alongside
+    # optional `<name>.quality.json` reports.
     output_dir: "./data/output"
     cache_dir: "./data/cache"
   resources:
@@ -35,3 +38,8 @@ system:
     global_burst: 20
     limiter_cache_ttl: 600
     limiter_cache_maxsize: 64
+
+# Run manifests (`reports/run_<timestamp>.json`) and the rolling
+# `reports/run_manifest.json` alias live under the base path resolved by
+# `--base-path`/`CHEMBL_DA_BASE_PATH`. They aggregate the per-step statistics and
+# checksum metadata for downstream QA jobs.

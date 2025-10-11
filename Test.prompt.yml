@@ -222,12 +222,34 @@ messages:
       Фиксированный порядок колонок в финальном выводе.
 
 
-      Сериализация: формат(ы) (to_csv, to_parquet), кодировка, na_rep,
-      float_format, локаль, контроль CRLF/UTF-8-BOM, детерминизм
-      (PYTHONHASHSEED=0).
+        Сериализация: формат(ы) (to_csv, to_parquet), кодировка, na_rep,
+        float_format, локаль, контроль CRLF/UTF-8-BOM, детерминизм
+        (PYTHONHASHSEED=0).
 
 
-      4) Использование словарей и схем
+      3.7 QA-чеклист (новое)
+
+
+      - Манифест `reports/run_*.json` обязан содержать заполненный блок
+        `run` (`started_at`, `completed_at`, `duration_sec`, `exit_code`,
+        `status`, `date_prefix`, `base_path`, `input_dir`, `output_dir`,
+        `config_path`, `log_level`, `limit`, `force`, `skip_existing`,
+        `dry_run`, `run_id` если задан) и для каждого шага —
+        `name/status/exit_code/executed/reason`, таймстемпы, длительность,
+        `output`/`sidecars` с путями и SHA256. Без этих полей QA не
+        принимает описание.
+      - Проверяем, что rate limiter активирован по конфигу
+        (`system.rate.global_rps/global_burst` > 0). В логах
+        подтверждаем инициализацию `ETLContext` с общим лимитером и
+        наличие событий `rate_limit_hit`/`retry_attempt` при тестовых
+        воспроизведениях.
+      - Логирование только в структурном формате: каждое событие должно
+        содержать `event`, `pipeline`, `run_id`, `level`, `details`.
+        WARN/ERROR обязательно к расследованию и должны быть отражены
+        либо в `.quality.json`, либо в статусах шагов манифеста.
+
+
+        4) Использование словарей и схем
 
 
       Словари из config/dictionary/: перечислить задействованные файлы и точно
