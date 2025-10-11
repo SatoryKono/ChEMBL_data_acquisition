@@ -383,10 +383,10 @@ class PipelineRunConfig:
     force: bool
     skip_existing: bool
     dry_run: bool
-    rerun_postprocess: bool
     input_files: PipelineInputFiles
     output_stems: PipelineOutputStems
     subcommands: PipelineSubcommands
+    rerun_postprocess: bool = False
 
     def input_path(self, name: str) -> Path:
         """Return the fully resolved path for ``name`` in the input directory."""
