@@ -114,6 +114,7 @@ _PUBCHEM_OPTIONAL_COLUMNS = frozenset(
     }
 )
 _SALT_OPTIONAL_COLUMN = "salt_chembl_id"
+_DEFAULT_TABLE_NAME = "testitem"
 
 
 @dataclass
@@ -1128,11 +1129,10 @@ def finalize_output(
     if exit_code != 0:
         return exit_code, None
 
-    fallback_date = getattr(getattr(cfg, "io", None), "default_date_prefix", None)
     table_name, date_tag = io.derive_output_labels(
         output,
-        default_table="testitem",
-        fallback_date=fallback_date,
+        default_table=_DEFAULT_TABLE_NAME,
+        fallback_date=getattr(getattr(cfg, "io", None), "default_date_prefix", None),
     )
     )
 
