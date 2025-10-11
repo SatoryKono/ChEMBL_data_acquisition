@@ -129,6 +129,22 @@ def _run_pipeline_with_meta(**kwargs: object) -> PipelineExecutionResult:
         )
 
 
+def _resolve_bool_option(value: object, *, default: bool) -> bool:
+    """Coerce optional CLI flags to ``bool`` while preserving ``None`` defaults."""
+
+    if value in (None, argparse.SUPPRESS):
+        return default
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered == "":
+            return default
+        if lowered in {"0", "false", "no", "off"}:
+            return False
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+    return bool(value)
+
+
 def _cleanup_intermediate_outputs(outputs: Sequence[tuple[Path, bool]] | None) -> None:
     """Remove intermediate artefacts that are no longer required."""
 
@@ -2255,7 +2271,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     raw_dump_rows_total = 0
     chembl_http_requests = 0
 
-    emit_standard_outputs = bool(getattr(args, "emit_standard_outputs", True))
+    emit_standard_outputs = _resolve_bool_option(
+        getattr(args, "emit_standard_outputs", argparse.SUPPRESS),
+        default=True,
+    )
 
     if not normalize_at_export:
 
