@@ -8,9 +8,27 @@ from pathlib import Path
 import pytest
 
 _MERGE_CONFLICT_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"^<<<<<<< ", re.MULTILINE),
-    re.compile(r"^>>>>>>> ", re.MULTILINE),
+    re.compile(r"^[ \t]*<<<<<<< ", re.MULTILINE),
+    re.compile(r"^[ \t]*=======", re.MULTILINE),
+    re.compile(r"^[ \t]*>>>>>>> ", re.MULTILINE),
 )
+
+
+@pytest.mark.parametrize(
+    ("pattern", "snippet"),
+    (
+        (_MERGE_CONFLICT_PATTERNS[0], "    <<<<<<< HEAD"),
+        (_MERGE_CONFLICT_PATTERNS[1], "  ======="),
+        (_MERGE_CONFLICT_PATTERNS[2], "    >>>>>>> feature"),
+    ),
+)
+@pytest.mark.unit
+def test_merge_conflict_patterns__match_indented_markers(
+    pattern: re.Pattern[str], snippet: str
+) -> None:
+    """Ensure guard patterns catch conflict markers even when indented."""
+
+    assert pattern.search(snippet)
 
 
 def _iter_python_sources(root: Path) -> list[Path]:
