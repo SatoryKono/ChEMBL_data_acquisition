@@ -1052,8 +1052,9 @@ def run_pipeline(
     resolved_invocation = invocation_tuple
 
     meta_path: Path | None = None
+    extra_metadata: dict[str, object] | None = None
     if legacy_outputs_enabled and csv_path is not None:
-        extra_metadata: dict[str, object] = {}
+        extra_metadata = {}
         if failed_metadata_hooks:
             extra_metadata["metadata_hook_failures"] = sorted(failed_metadata_hooks)
 
