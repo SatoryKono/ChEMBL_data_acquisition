@@ -1142,7 +1142,7 @@ def run_document_service(
     exit_code = int(handler(cfg, args, pipeline=pipeline))
     reason = None if exit_code == 0 else "pipeline_failed"
 
-    if exit_code == 0 and not working_output.exists():
+    if exit_code == 0:
         canonical_path = _canonical_dataset_path(cfg, table_name, date_tag, cli_output)
         if canonical_path.exists():
             working_output.parent.mkdir(parents=True, exist_ok=True)
