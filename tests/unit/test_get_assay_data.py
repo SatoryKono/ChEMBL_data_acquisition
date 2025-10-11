@@ -93,6 +93,19 @@ def minimal_args(tmp_path: Path) -> argparse.Namespace:
     )
 
 
+@pytest.mark.unit
+def test_derive_standard_output_labels__normalizes_hidden_tmp_path(
+    tmp_path: Path,
+) -> None:
+    dataset_csv = tmp_path / ".output.assays_20240101.csv.tmp"
+    dataset_csv.touch()
+
+    table_name, date_tag = get_assay_data._derive_standard_output_labels(dataset_csv)
+
+    assert table_name == "assays"
+    assert date_tag == "20240101"
+
+
 def test_run_chembl__invalid_limit_logs_error(
     cfg: Config, minimal_args: argparse.Namespace, logger_stub: _MemoryLogger
 ) -> None:
@@ -478,6 +491,92 @@ def test_run_chembl__standard_outputs_created_without_legacy(
         f"{minimal_args.final_out.stem}_fetch_failures.csv"
     )
     assert not fetch_failure.exists()
+
+
+@pytest.mark.unit
+def test_run_chembl__standard_outputs_normalize_hidden_tmp_path(
+    cfg: Config,
+    minimal_args: argparse.Namespace,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hidden_tmp = minimal_args.final_out.parent / ".output.assays_20240101.csv.tmp"
+    minimal_args.final_out = hidden_tmp
+    cfg.io.output_dir = str(hidden_tmp.parent)
+
+    df = pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]})
+    df.to_csv(hidden_tmp, index=False, encoding="utf-8")
+
+    captured_kwargs: dict[str, object] = {}
+
+    def fake_save_standard_outputs(
+        dataset: pd.DataFrame,
+        correlation: pd.DataFrame,
+        quality: pd.DataFrame,
+        **kwargs: object,
+    ) -> StandardOutputArtifacts:
+        del dataset, correlation, quality
+        captured_kwargs.update(kwargs)
+        final_dataset = hidden_tmp.parent / "output.assays_20240101.csv"
+        return StandardOutputArtifacts(
+            dataset=final_dataset,
+            correlation_report=hidden_tmp.parent
+            / "output.assays_20240101_data_correlation_report_table.csv",
+            quality_report=hidden_tmp.parent
+            / "output.assays_20240101_quality_report_table.csv",
+        )
+
+    class FakeTracker:
+        def add_failure(self, *_: object, **__: object) -> None:
+            return None
+
+        def save(self, *_: object, **__: object) -> None:
+            return None
+
+        def stats(self) -> dict[str, object]:
+            return {"failures": 0}
+
+    def fake_run_pipeline(**kwargs: object) -> PipelineExecutionResult:
+        definition = kwargs.get("definition")
+        if definition and definition.stats_callback:
+            definition.stats_callback({"rows_total": 1, "rows_kept": 1, "rows_dropped": 0})
+        return PipelineExecutionResult(exit_code=0, dataset_path=hidden_tmp)
+
+    def fake_prepare_chunked_pipeline(**kwargs: object):
+        del kwargs
+
+        def _fetcher() -> Iterable[pd.DataFrame]:
+            yield df
+
+        def _writer(*_args: object, **_kwargs: object) -> Path:
+            return hidden_tmp
+
+        return _fetcher, _writer
+
+    monkeypatch.setattr(get_assay_data, "ChunkFailureTracker", lambda: FakeTracker())
+    monkeypatch.setattr(get_assay_data, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(
+        get_assay_data,
+        "prepare_chunked_pipeline",
+        fake_prepare_chunked_pipeline,
+    )
+    monkeypatch.setattr(
+        get_assay_data.io,
+        "save_standard_outputs",
+        fake_save_standard_outputs,
+    )
+    monkeypatch.setattr(
+        get_assay_data.io,
+        "read_ids",
+        lambda *_args, **_kwargs: iter(["CHEMBL1"]),
+    )
+    monkeypatch.setattr(get_assay_data.cl, "get_assays", lambda *_, **__: df)
+
+    exit_code = get_assay_data.run_chembl(cfg, minimal_args)
+
+    assert exit_code == 0
+    assert captured_kwargs["table_name"] == "assays"
+    assert captured_kwargs["date_tag"] == "20240101"
+    assert minimal_args.final_out == hidden_tmp.parent / "output.assays_20240101.csv"
 
 
 def test_run__skip_existing_returns_zero(
