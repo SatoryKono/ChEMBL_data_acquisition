@@ -12,6 +12,7 @@ import json
 import math
 import numbers
 import os
+import re
 import sys
 from collections.abc import (
     Callable,
@@ -128,6 +129,38 @@ def _current_date_token() -> str:
     """Return the YYYYMMDD date string derived from :data:`datetime`."""
 
     return _current_utc_datetime().strftime("%Y%m%d")
+
+
+_DATE_SUFFIX_RE = re.compile(r"(?P<table>.*?)(?:_)?(?P<date>\d{8})$")
+
+
+def _derive_standard_output_labels(dataset_csv: Path) -> tuple[str, str]:
+    """Return ``(table_name, date_tag)`` inferred from ``dataset_csv``."""
+
+    candidate = Path(dataset_csv)
+    base_path = candidate
+    for suffix in reversed(candidate.suffixes):
+        if suffix.lower() not in {".csv", ".tmp"}:
+            break
+        base_path = base_path.with_suffix("")
+
+    base = base_path.name.lstrip(".")
+    prefix = "output."
+    while base.lower().startswith(prefix):
+        base = base[len(prefix) :].lstrip(".")
+
+    base = base.strip()
+    if not base:
+        return DEFAULT_OUTPUT_STEM, _current_date_token()
+
+    match = _DATE_SUFFIX_RE.search(base)
+    if match and match.group("date"):
+        table = (match.group("table") or "").rstrip("_")
+        date_tag = match.group("date")
+        table_name = table or DEFAULT_OUTPUT_STEM
+        return table_name, date_tag
+
+    return (base or DEFAULT_OUTPUT_STEM, _current_date_token())
 
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
@@ -1508,7 +1541,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         quality_report = pd.DataFrame()
         correlation_report = pd.DataFrame()
-        table_label = dataset_csv.with_suffix("")
+        table_name_value, date_tag = _derive_standard_output_labels(dataset_csv)
+        table_label = Path(cfg.io.output_dir) / f"output.{table_name_value}_{date_tag}"
         try:
             correlation_report = generate_correlation_report(
                 dataset_frame,
@@ -1533,22 +1567,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 path=str(dataset_csv),
             )
             quality_report = pd.DataFrame()
-        base = dataset_csv.stem
-        if base.startswith("output."):
-            base = base[len("output.") :]
-        if "_" in base:
-            table_name_candidate, date_tag = base.rsplit("_", 1)
-        else:
-            table_name_candidate = base
-            date_tag = _current_date_token()
-        table_name_value = table_name_candidate or DEFAULT_OUTPUT_STEM
+        output_directory = Path(cfg.io.output_dir)
         artifacts = io.save_standard_outputs(
             dataset_frame,
             correlation_report,
             quality_report,
             table_name=table_name_value,
             date_tag=date_tag,
-            output_dir=Path(cfg.io.output_dir),
+            output_dir=output_directory,
         )
         logger.info(
             "activity_standard_outputs",
