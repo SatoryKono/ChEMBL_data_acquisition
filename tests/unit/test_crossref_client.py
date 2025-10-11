@@ -28,6 +28,23 @@ def _log_request_start(url: str) -> None:
     )
 
 
+def _log_request_event(
+    event: str,
+    url: str,
+    *,
+    status: int | None = None,
+    error: str | None = None,
+) -> None:
+    """Emit a deterministic request outcome log entry for tests."""
+
+    extra = {"stage": event, "url": url}
+    if status is not None:
+        extra["status"] = status
+    if error is not None:
+        extra["error"] = error
+    logger.info(event, extra=extra)
+
+
 @pytest.fixture
 def limiter_stub(monkeypatch: pytest.MonkeyPatch) -> tuple[_LimiterStub, list[tuple[str, int, int]]]:
     limiter = _LimiterStub()
@@ -73,6 +90,7 @@ def test_fetch_crossref__success(
                 "retry_cfg": retry_cfg,
             }
         )
+        _log_request_event("request_ok", url, status=200)
         return {"message": "payload"}, ""
 
     monkeypatch.setattr(crossref, "_do_request", _fake_do_request)
@@ -94,7 +112,13 @@ def test_fetch_crossref__success(
     assert captured["timeout"] == (cfg.timeout_connect, cfg.timeout_read)
     assert captured["retry_cfg"] is None
     assert any("request_start" in record.getMessage() for record in caplog.records)
-    assert any("request_ok" in record.getMessage() for record in caplog.records)
+    request_ok_records = [
+        record
+        for record in caplog.records
+        if record.getMessage().startswith("request_ok")
+    ]
+    assert len(request_ok_records) == 1
+    assert "status=200" in request_ok_records[0].getMessage()
 
 
 @pytest.mark.unit
@@ -109,9 +133,11 @@ def test_fetch_crossref__returns_404_error(
     call_count = 0
 
     def _fake_do_request(*args: Any, **kwargs: Any) -> tuple[None, str]:
-        _log_request_start(kwargs.get("url") if "url" in kwargs else args[1])
+        url = kwargs.get("url") if "url" in kwargs else args[1]
+        _log_request_start(url)
         nonlocal call_count
         call_count += 1
+        _log_request_event("request_fail", url, status=404)
         return None, "HTTP 404: Not Found"
 
     monkeypatch.setattr(crossref, "_do_request", _fake_do_request)
@@ -124,7 +150,13 @@ def test_fetch_crossref__returns_404_error(
     assert limiter.acquire_calls == 1
     assert call_count == 1
     assert any("request_start" in record.getMessage() for record in caplog.records)
-    assert any("request_fail" in record.getMessage() for record in caplog.records)
+    request_fail_records = [
+        record
+        for record in caplog.records
+        if record.getMessage().startswith("request_fail")
+    ]
+    assert len(request_fail_records) == 1
+    assert "status=404" in request_fail_records[0].getMessage()
 
 
 @pytest.mark.unit
@@ -162,6 +194,7 @@ def test_fetch_crossref__retry_after_5xx(
                 "retry_cfg": retry_cfg,
             }
         )
+        _log_request_event("request_fail", url, status=503)
         return None, "HTTP 503: Service Unavailable"
 
     monkeypatch.setattr(crossref, "_do_request", _fake_do_request)
@@ -181,7 +214,13 @@ def test_fetch_crossref__retry_after_5xx(
     assert call_args["timeout"] == (cfg.timeout_connect, cfg.timeout_read)
     assert call_args["retry_cfg"] is retry_cfg
     assert any("request_start" in record.getMessage() for record in caplog.records)
-    assert any("request_fail" in record.getMessage() for record in caplog.records)
+    request_fail_records = [
+        record
+        for record in caplog.records
+        if record.getMessage().startswith("request_fail")
+    ]
+    assert len(request_fail_records) == 1
+    assert "status=503" in request_fail_records[0].getMessage()
 
 
 @pytest.mark.unit
@@ -196,9 +235,11 @@ def test_fetch_crossref__timeout_error(
     call_count = 0
 
     def _fake_do_request(*args: Any, **kwargs: Any) -> tuple[None, str]:
-        _log_request_start(kwargs.get("url") if "url" in kwargs else args[1])
+        url = kwargs.get("url") if "url" in kwargs else args[1]
+        _log_request_start(url)
         nonlocal call_count
         call_count += 1
+        _log_request_event("request_fail", url, error="Read timed out")
         return None, "Read timed out"
 
     monkeypatch.setattr(crossref, "_do_request", _fake_do_request)
@@ -211,4 +252,10 @@ def test_fetch_crossref__timeout_error(
     assert limiter.acquire_calls == 1
     assert call_count == 1
     assert any("request_start" in record.getMessage() for record in caplog.records)
-    assert any("request_fail" in record.getMessage() for record in caplog.records)
+    request_fail_records = [
+        record
+        for record in caplog.records
+        if record.getMessage().startswith("request_fail")
+    ]
+    assert len(request_fail_records) == 1
+    assert "error='Read timed out'" in request_fail_records[0].getMessage()
