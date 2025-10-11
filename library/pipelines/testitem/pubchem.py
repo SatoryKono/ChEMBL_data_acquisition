@@ -12,7 +12,7 @@ from collections.abc import (
     MutableMapping,
     Sequence,
 )
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import CancelledError, ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -644,25 +644,51 @@ def _merge_pubchem_properties(
 
         pubchem_lib = _load_pubchem_library()
 
+        def _empty_properties() -> Properties:
+            return pubchem_lib.Properties(None, None, None, None, None, None)
+
         def _fetch_properties(cid: str) -> Properties:
             return pubchem_lib.get_properties(cid, cfg)
 
+        service_unavailable = False
+        unavailable_error: str | None = None
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for start in range(0, len(lookup_order), batch_size):
+                if service_unavailable:
+                    break
                 batch = lookup_order[start : start + batch_size]
                 future_map = {
                     executor.submit(_fetch_properties, cid): cid for cid in batch
                 }
                 for future, cid in future_map.items():
-                    try:
-                        props = future.result()
-                    except Exception as exc:  # pragma: no cover - defensive
-                        logger.warning(
-                            "pubchem_properties_failed", cid=cid, error=str(exc)
-                        )
-                        props = pubchem_lib.Properties(
-                            None, None, None, None, None, None
-                        )
+                    if service_unavailable:
+                        cancelled = future.cancel()
+                        if not cancelled:
+                            try:
+                                future.result()
+                            except (  # pragma: no cover - defensive cleanup
+                                CancelledError,
+                                pubchem_lib.PubChemServiceUnavailable,
+                                Exception,
+                            ):
+                                pass
+                        props = _empty_properties()
+                    else:
+                        try:
+                            props = future.result()
+                        except pubchem_lib.PubChemServiceUnavailable as exc:
+                            logger.warning(
+                                "pubchem_properties_failed", cid=cid, error=str(exc)
+                            )
+                            service_unavailable = True
+                            unavailable_error = str(exc)
+                            props = _empty_properties()
+                        except Exception as exc:  # pragma: no cover - defensive
+                            logger.warning(
+                                "pubchem_properties_failed", cid=cid, error=str(exc)
+                            )
+                            props = _empty_properties()
                     values = {
                         "pubchem_iupac_name": _value_or_na(props.IUPACName),
                         "pubchem_molecular_formula": _value_or_na(
@@ -674,6 +700,13 @@ def _merge_pubchem_properties(
                         "pubchem_inchikey": _value_or_na(props.InChIKey),
                     }
                     properties_records[cid] = values
+
+        if service_unavailable:
+            pending = max(len(lookup_order) - len(properties_records), 0)
+            log_payload = {"pending": pending}
+            if unavailable_error:
+                log_payload["error"] = unavailable_error
+            logger.warning("pubchem_properties_unavailable", **log_payload)
 
     properties_df = pd.DataFrame.from_dict(properties_records, orient="index")
     pubchem_df = cid_series.to_frame("pubchem_cid").join(
