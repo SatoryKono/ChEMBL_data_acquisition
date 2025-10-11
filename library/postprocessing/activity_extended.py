@@ -88,6 +88,16 @@ _REQUIRED_COLUMN_DTYPES: Mapping[str, str] = {
     "nstereo": "Int64",
 }
 
+_TESTITEM_PUBCHEM_COLUMNS: tuple[str, ...] = (
+    "pubchem_canonical_smiles",
+    "pubchem_cid",
+    "pubchem_inchi",
+    "pubchem_inchikey",
+    "pubchem_isomeric_smiles",
+    "pubchem_iupac_name",
+    "pubchem_molecular_formula",
+)
+
 _OPTIONAL_EMPTY_BACKFILL_COLUMNS: frozenset[str] = frozenset(
     {
         "multmol_assay",
@@ -219,6 +229,13 @@ _FINAL_COLUMN_ORDER: tuple[str, ...] = (
     "compound_key",
     "compound_name",
     "standard_inchi_skeleton",
+    "pubchem_canonical_smiles",
+    "pubchem_cid",
+    "pubchem_inchi",
+    "pubchem_inchikey",
+    "pubchem_isomeric_smiles",
+    "pubchem_iupac_name",
+    "pubchem_molecular_formula",
     "unknown_chirality",
     "multmol_assay",
     "assay_with_same_target",
@@ -535,7 +552,14 @@ def _load_testitem_lookup(dictionary_root: Path) -> pd.DataFrame:
         )
     if "standard_inchi_skeleton" not in frame.columns:
         frame["standard_inchi_skeleton"] = pd.Series(pd.NA, dtype="string")
-    result = frame.loc[:, ["molecule_chembl_id", "standard_inchi_skeleton"]]
+
+    additional_columns = [
+        column for column in _TESTITEM_PUBCHEM_COLUMNS if column in frame.columns
+    ]
+    selected_columns = ["molecule_chembl_id", "standard_inchi_skeleton", *additional_columns]
+    result = frame.loc[:, selected_columns]
+    for column in additional_columns:
+        result[column] = result[column].astype("string")
     return result.drop_duplicates(subset=["molecule_chembl_id"])
 
 
@@ -1054,6 +1078,24 @@ def _merge_testitem_metadata(df: pd.DataFrame, dictionary_root: Path) -> pd.Data
     else:
         new_ids = pd.Series(pd.NA, index=merged.index, dtype="string")
     merged["molecule_chembl_id.1"] = new_ids
+
+    for column in _TESTITEM_PUBCHEM_COLUMNS:
+        right_column = f"{column}_testitem"
+        if right_column not in merged.columns:
+            continue
+        right_values = merged[right_column].astype("string")
+        left_values = merged[column].astype("string") if column in merged.columns else None
+        if left_values is None:
+            merged[column] = right_values
+        else:
+            merged[column] = right_values.combine_first(left_values)
+        merged.drop(columns=[right_column], inplace=True)
+
+    for column in _TESTITEM_PUBCHEM_COLUMNS:
+        if column not in merged.columns:
+            merged[column] = pd.Series(pd.NA, index=merged.index, dtype="string")
+        else:
+            merged[column] = merged[column].astype("string")
 
     if "standard_inchi_skeleton" in merged.columns:
         left_inchi = merged["standard_inchi_skeleton"].astype("string")
