@@ -300,6 +300,26 @@ def resolve_pubchem_cid(
 ) -> str | None:
     """Resolve PubChem CID for a ChEMBL record."""
 
+    cid, _ = _resolve_pubchem_cid_internal(
+        row,
+        cache,
+        cfg,
+        parent_loader=parent_loader,
+        resolution_cache=resolution_cache,
+        visited=visited,
+    )
+    return cid
+
+
+def _resolve_pubchem_cid_internal(
+    row: pd.Series,
+    cache: MutableMapping[str, str | None],
+    cfg: PubChemCfg,
+    *,
+    parent_loader: Callable[[str], pd.Series | None] | None,
+    resolution_cache: ResolutionCache | None,
+    visited: set[str] | None,
+) -> tuple[str | None, bool]:
     chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
     identifiers = _pubchem_identifiers(row)
     resolution_key = _pubchem_resolution_key(row)
@@ -317,7 +337,7 @@ def resolve_pubchem_cid(
             )
             if chembl_id not in cache:
                 cache[chembl_id] = None
-            return None
+            return None, False
         visited.add(chembl_id)
 
     pubchem_lib = _load_pubchem_library()
@@ -332,17 +352,17 @@ def resolve_pubchem_cid(
     )
     cid = resolution.cid
     if cid is not None:
-        return cid
+        return cid, False
 
     temporary_failure = bool(getattr(resolution, "temporary_failure", False))
 
     if temporary_failure:
-        return None
+        return None, True
 
     if not cfg.use_parent_for_salts:
         if chembl_id and chembl_id not in cache and not temporary_failure:
             cache[chembl_id] = None
-        return None
+        return None, False
 
     parent_raw = None
     if isinstance(row, pd.Series) and "parent_molecule_chembl_id" in row.index:
@@ -351,12 +371,12 @@ def resolve_pubchem_cid(
     if not parent_id:
         if chembl_id and chembl_id not in cache and not temporary_failure:
             cache[chembl_id] = None
-        return None
+        return None, False
 
     if parent_loader is None:
         if chembl_id and chembl_id not in cache and not temporary_failure:
             cache[chembl_id] = None
-        return None
+        return None, False
 
     if parent_id in visited:
         logger.info(
@@ -369,7 +389,7 @@ def resolve_pubchem_cid(
             cache[parent_id] = None
         if chembl_id and chembl_id not in cache and not temporary_failure:
             cache[chembl_id] = None
-        return None
+        return None, False
 
     parent_row = parent_loader(parent_id)
     if parent_row is None:
@@ -381,9 +401,9 @@ def resolve_pubchem_cid(
         )
         if chembl_id and chembl_id not in cache and not temporary_failure:
             cache[chembl_id] = None
-        return None
+        return None, False
 
-    parent_cid = resolve_pubchem_cid(
+    parent_cid, parent_temp_failure = _resolve_pubchem_cid_internal(
         parent_row,
         cache,
         cfg,
@@ -395,7 +415,10 @@ def resolve_pubchem_cid(
         cache[parent_id] = parent_cid
         if chembl_id:
             cache[chembl_id] = parent_cid
-        return parent_cid
+        return parent_cid, False
+
+    if parent_temp_failure:
+        return None, True
 
     logger.info(
         "pubchem_parent_structure_missing",
@@ -406,7 +429,7 @@ def resolve_pubchem_cid(
     if not temporary_failure:
         cache.setdefault(parent_id, None)
         cache.setdefault(chembl_id or parent_id, None)
-    return None
+    return None, False
 
 
 def _prepare_pubchem_caches(
