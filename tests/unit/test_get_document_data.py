@@ -534,11 +534,12 @@ def test_finalise_export__normalises_table_name_and_date(
         *,
         table_name: str,
         date_tag: str,
-        cfg: any,
+        output_dir: Path,
         key_columns: Sequence[str] | None = None,
     ) -> get_document_data.io.StandardOutputArtifacts:
         captured["table_name"] = table_name
         captured["date_tag"] = date_tag
+        captured["output_dir"] = output_dir
         output_csv.parent.mkdir(parents=True, exist_ok=True)
         return get_document_data.io.StandardOutputArtifacts(
             dataset=output_csv,
@@ -583,11 +584,12 @@ def test_finalise_export__normalises_table_name_and_date(
         *,
         table_name: str,
         date_tag: str,
-        cfg: any,
+        output_dir: Path,
         key_columns: Sequence[str] | None = None,
     ) -> get_document_data.io.StandardOutputArtifacts:
         captured["table_name"] = table_name
         captured["date_tag"] = date_tag
+        captured["output_dir"] = output_dir
         output_csv.parent.mkdir(parents=True, exist_ok=True)
         return get_document_data.io.StandardOutputArtifacts(
             dataset=output_csv,
@@ -610,6 +612,7 @@ def test_finalise_export__normalises_table_name_and_date(
     assert result.exit_code == 0
     assert captured["table_name"] == "documents"
     assert captured["date_tag"] == "20250101"
+    assert captured["output_dir"] == cfg.io.output_dir
     assert result.artifacts is not None
     assert result.artifacts.dataset == output_csv
 
