@@ -106,6 +106,7 @@ DEFAULT_OUTPUT_DIR = "output"
 OUTPUT_DIR = DATA_DIR / DEFAULT_OUTPUT_DIR
 LOGS_DIR = PROJECT_ROOT / "logs"
 _PUBCHEM_ENV_VAR = "CHEMBL_DA_PUBCHEM_ENABLE"
+_BASE_PATH_ENV_VAR = "CHEMBL_DA_BASE_PATH"
 
 
 def _extract_option_value(args: Sequence[str], option: str) -> str | None:
@@ -173,6 +174,26 @@ def _ensure_pubchem_env(args: Sequence[str], env: dict[str, str]) -> None:
 
     env[_PUBCHEM_ENV_VAR] = "true"
     logging.info("[PUBCHEM] Enrichment enabled for testitem table")
+
+
+def _ensure_base_path_env(args: Sequence[str], env: dict[str, str]) -> None:
+    """Populate ``CHEMBL_DA_BASE_PATH`` for subprocesses when unset."""
+
+    current_value = env.get(_BASE_PATH_ENV_VAR)
+    if current_value:
+        return
+
+    base_path_value = _extract_option_value(args, "--base-path")
+    if not base_path_value:
+        return
+
+    candidate = Path(base_path_value).expanduser()
+    if not candidate.is_absolute():
+        candidate = (Path.cwd() / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+
+    env[_BASE_PATH_ENV_VAR] = str(candidate)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> tuple[argparse.Namespace, list[str]]:
@@ -295,6 +316,9 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
 
     forward = _coerce_forward_args(forward_args)
 
+    if not isinstance(forward_args, ForwardArgs):
+        forward_args = ForwardArgs(tuple(forward_args), 0, len(forward_args))
+
     if stage.name == "target":
         stage_args = forward.with_default_subcommand(
             "all", choices=TARGET_SUBCOMMANDS
@@ -309,6 +333,7 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
             stage_args.append("--pubchem-enable")
 
     env = os.environ.copy()
+    _ensure_base_path_env(stage_args, env)
     if stage.name == "testitem":
         _ensure_pubchem_env(stage_args, env)
 

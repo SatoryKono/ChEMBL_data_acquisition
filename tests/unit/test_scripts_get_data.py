@@ -208,3 +208,59 @@ def test_run_stage__respects_enabled_config(monkeypatch, tmp_path) -> None:
     get_data.run_stage(stage, ["--config", str(tmp_path / "config.yaml")])
 
     assert "CHEMBL_DA_PUBCHEM_ENABLE" not in captured_env
+
+
+@pytest.mark.unit
+def test_run_stage__populates_base_path_env(monkeypatch, tmp_path) -> None:
+    from scripts import get_data
+
+    stage = get_data.Stage("document", "get_document_data.py")
+    script_path = tmp_path / stage.script
+    script_path.write_text("print('ok')", encoding="utf-8")
+
+    monkeypatch.setattr(get_data, "SCRIPTS_DIR", tmp_path, raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    captured_env: dict[str, str] = {}
+
+    class _Result:
+        returncode = 0
+
+    def _fake_run(command, check, env):  # type: ignore[override]
+        captured_env.update(env)
+        return _Result()
+
+    monkeypatch.setattr(get_data.subprocess, "run", _fake_run)
+
+    get_data.run_stage(stage, ["--base-path", "workspace"])
+
+    expected_base = (tmp_path / "workspace").resolve()
+    assert captured_env.get("CHEMBL_DA_BASE_PATH") == str(expected_base)
+
+
+@pytest.mark.unit
+def test_run_stage__preserves_existing_base_path_env(monkeypatch, tmp_path) -> None:
+    from scripts import get_data
+
+    stage = get_data.Stage("document", "get_document_data.py")
+    script_path = tmp_path / stage.script
+    script_path.write_text("print('ok')", encoding="utf-8")
+
+    monkeypatch.setattr(get_data, "SCRIPTS_DIR", tmp_path, raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    captured_env: dict[str, str] = {}
+
+    class _Result:
+        returncode = 0
+
+    def _fake_run(command, check, env):  # type: ignore[override]
+        captured_env.update(env)
+        return _Result()
+
+    monkeypatch.setattr(get_data.subprocess, "run", _fake_run)
+    monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(tmp_path / "preset"))
+
+    get_data.run_stage(stage, ["--base-path", "workspace"])
+
+    assert captured_env.get("CHEMBL_DA_BASE_PATH") == str(tmp_path / "preset")
