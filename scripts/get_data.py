@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -294,9 +295,6 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
 
     forward = _coerce_forward_args(forward_args)
 
-    start = datetime.now()
-    logging.info("▶ Запуск %s...", stage.script)
-
     if stage.name == "target":
         stage_args = forward.with_default_subcommand(
             "all", choices=TARGET_SUBCOMMANDS
@@ -315,8 +313,12 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
         _ensure_pubchem_env(stage_args, env)
 
     command = [sys.executable, str(script_path), *stage_args]
+    quoted_command = shlex.join(command)
+    logging.info("▶ Запуск %s", stage.script)
+    logging.info("   Команда: %s", quoted_command)
+    logging.info("   Рабочая директория: %s", os.getcwd())
+
     start = datetime.now()
-    logging.info("▶ Запуск %s...", stage.script)
     result = subprocess.run(command, check=False, env=env)
     duration = (datetime.now() - start).total_seconds()
 
