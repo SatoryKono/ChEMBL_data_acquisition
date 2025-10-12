@@ -122,3 +122,73 @@ def test_parse_args__positional_limit_with_extra_tokens(capsys: pytest.CaptureFi
     assert excinfo.value.code == 2
     captured = capsys.readouterr()
     assert "Неизвестный позиционный аргумент" in captured.err
+
+
+@pytest.mark.unit
+def test_run_stage__forces_pubchem_env_override(monkeypatch, tmp_path) -> None:
+    from scripts import get_data
+
+    stage = get_data.Stage("testitem", "get_testitem_data.py")
+    script_path = tmp_path / stage.script
+    script_path.write_text("print('ok')", encoding="utf-8")
+
+    monkeypatch.setattr(get_data, "SCRIPTS_DIR", tmp_path, raising=False)
+    monkeypatch.delenv("CHEMBL_DA_PUBCHEM_ENABLE", raising=False)
+
+    captured_env: dict[str, str] = {}
+
+    class _Result:
+        returncode = 0
+
+    def _fake_run(command, check, env):  # type: ignore[override]
+        captured_env.update(env)
+        return _Result()
+
+    config = SimpleNamespace(
+        sources=SimpleNamespace(pubchem=SimpleNamespace(enable=False))
+    )
+
+    def _fake_load_config(path, base_path=None):  # type: ignore[override]
+        return config
+
+    monkeypatch.setattr(get_data.subprocess, "run", _fake_run)
+    monkeypatch.setattr(get_data, "load_config", _fake_load_config, raising=False)
+
+    get_data.run_stage(stage, ["--config", str(tmp_path / "config.yaml")])
+
+    assert captured_env.get("CHEMBL_DA_PUBCHEM_ENABLE") == "true"
+
+
+@pytest.mark.unit
+def test_run_stage__respects_enabled_config(monkeypatch, tmp_path) -> None:
+    from scripts import get_data
+
+    stage = get_data.Stage("testitem", "get_testitem_data.py")
+    script_path = tmp_path / stage.script
+    script_path.write_text("print('ok')", encoding="utf-8")
+
+    monkeypatch.setattr(get_data, "SCRIPTS_DIR", tmp_path, raising=False)
+    monkeypatch.delenv("CHEMBL_DA_PUBCHEM_ENABLE", raising=False)
+
+    class _Result:
+        returncode = 0
+
+    captured_env: dict[str, str] = {}
+
+    def _fake_run(command, check, env):  # type: ignore[override]
+        captured_env.update(env)
+        return _Result()
+
+    config = SimpleNamespace(
+        sources=SimpleNamespace(pubchem=SimpleNamespace(enable=True))
+    )
+
+    def _fake_load_config(path, base_path=None):  # type: ignore[override]
+        return config
+
+    monkeypatch.setattr(get_data.subprocess, "run", _fake_run)
+    monkeypatch.setattr(get_data, "load_config", _fake_load_config, raising=False)
+
+    get_data.run_stage(stage, ["--config", str(tmp_path / "config.yaml")])
+
+    assert "CHEMBL_DA_PUBCHEM_ENABLE" not in captured_env

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -44,6 +45,9 @@ def _guard_cli_module() -> None:
         raise SystemExit(f"merge conflict detected in {location}") from exc
 
 
+from library.config import DEFAULT_CONFIG_PATH, load_config
+
+
 _guard_cli_module()
 
 
@@ -68,6 +72,75 @@ DEFAULT_INPUT_DIR = "input"
 DEFAULT_OUTPUT_DIR = "output"
 OUTPUT_DIR = DATA_DIR / DEFAULT_OUTPUT_DIR
 LOGS_DIR = PROJECT_ROOT / "logs"
+_PUBCHEM_ENV_VAR = "CHEMBL_DA_PUBCHEM_ENABLE"
+
+
+def _extract_option_value(args: Sequence[str], option: str) -> str | None:
+    """Return the value for ``option`` (supports ``--opt value`` and ``--opt=value``)."""
+
+    prefixed = f"{option}="
+    for idx, token in enumerate(args):
+        if token == option:
+            return args[idx + 1] if idx + 1 < len(args) else ""
+        if token.startswith(prefixed):
+            return token[len(prefixed) :]
+    return None
+
+
+def _normalize_env_bool(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
+def _resolve_config_location(args: Sequence[str]) -> tuple[Path, Path | None]:
+    config_value = _extract_option_value(args, "--config")
+    if config_value:
+        config_path = Path(config_value)
+    else:
+        config_path = DEFAULT_CONFIG_PATH
+    base_value = _extract_option_value(args, "--base-path")
+    base_path = Path(base_value).expanduser() if base_value else None
+    return Path(config_path).expanduser(), base_path
+
+
+def _pubchem_enabled_from_config(args: Sequence[str]) -> bool | None:
+    config_path, base_path = _resolve_config_location(args)
+    try:
+        config = load_config(config_path, base_path=base_path)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logging.debug(
+            "Не удалось загрузить конфигурацию %s: %s", config_path, exc,
+        )
+        return None
+
+    sources = getattr(config, "sources", None)
+    if sources is None:
+        return None
+    pubchem_cfg = getattr(sources, "pubchem", None)
+    if pubchem_cfg is None:
+        return None
+    return getattr(pubchem_cfg, "enable", None)
+
+
+def _ensure_pubchem_env(args: Sequence[str], env: dict[str, str]) -> None:
+    """Ensure PubChem enrichment is enabled for the test item subprocess."""
+
+    env_state = _normalize_env_bool(env.get(_PUBCHEM_ENV_VAR))
+    if env_state is True:
+        return
+
+    config_enabled = _pubchem_enabled_from_config(args)
+    if config_enabled is True and env_state is not False:
+        return
+
+    env[_PUBCHEM_ENV_VAR] = "true"
+    logging.info("testitem_pubchem_enable_override")
 
 
 def parse_args(argv: Sequence[str] | None = None) -> tuple[argparse.Namespace, list[str]]:
@@ -177,10 +250,14 @@ def run_stage(stage: Stage, extra_args: Iterable[str]) -> float:
         logging.error("❌ Скрипт %s не найден по пути %s", stage.script, script_path)
         sys.exit(1)
 
+    forwarded = tuple(extra_args)
     start = datetime.now()
     logging.info("▶ Запуск %s...", stage.script)
-    command = [sys.executable, str(script_path), *extra_args]
-    result = subprocess.run(command, check=False)
+    env = os.environ.copy()
+    if stage.name == "testitem":
+        _ensure_pubchem_env(forwarded, env)
+    command = [sys.executable, str(script_path), *forwarded]
+    result = subprocess.run(command, check=False, env=env)
     duration = (datetime.now() - start).total_seconds()
 
     if result.returncode != 0:
