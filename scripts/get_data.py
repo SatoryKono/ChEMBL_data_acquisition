@@ -288,7 +288,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if stage.name in args.skip:
             logging.info("⏭ Пропуск этапа %s по флагу --skip", stage.name)
             continue
-        duration = run_stage(stage, forward_args)
+        stage_args = list(forward_args)
+        if stage.name == "testitem" and "--pubchem-enable" not in stage_args:
+            stage_args.append("--pubchem-enable")
+
+        duration = run_stage(stage, stage_args)
         durations.append((stage.name, duration))
 
     log_summary(durations)
