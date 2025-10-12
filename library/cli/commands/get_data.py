@@ -362,9 +362,9 @@ def _assign_pubchem_config(config: Config, pubchem_cfg: PubChemCfg) -> None:
     """Attach *pubchem_cfg* to *config* ensuring downstream access succeeds."""
 
     try:
-        config.sources.pubchem = pubchem_cfg
-    except AttributeError:
-        setattr(config.sources, "pubchem", pubchem_cfg)
+        config.pubchem = pubchem_cfg
+    except (AttributeError, TypeError, ValueError):
+        setattr(config, "pubchem", pubchem_cfg)
 
 
 def _ensure_testitem_pubchem_enabled(config: Config) -> None:
