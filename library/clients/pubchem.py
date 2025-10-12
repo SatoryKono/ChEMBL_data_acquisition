@@ -525,6 +525,15 @@ def make_request(
     method_upper = method.upper()
     cache_key = _build_cache_key(method_upper, url, payload)
     timeout_retry_in: float | None = None
+    configured_verify = cfg.verify
+    allow_ssl_fallback = False
+    verify_mode: bool | str
+    if isinstance(configured_verify, str) and configured_verify.lower() == "auto":
+        allow_ssl_fallback = True
+        verify_mode = True
+    else:
+        verify_mode = configured_verify
+    ssl_verify_fallback_engaged = False
     with _CACHE_LOCK:
         cache = _ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
         cached = cache.get(cache_key) if cache is not None else None
@@ -589,7 +598,8 @@ def make_request(
 
     api_cfg = ApiCfg(user_agent=cfg.user_agent)
 
-    total_attempts = cfg.retries + 1
+    extra_attempts = 1 if allow_ssl_fallback else 0
+    total_attempts = cfg.retries + 1 + extra_attempts
     if total_attempts <= 0:
         total_attempts = 1
     backoff_delay = cfg.backoff_initial_seconds
@@ -685,11 +695,12 @@ def make_request(
         get_limiter("pubchem", cfg.rps, cfg.burst).acquire()
         try:
             session = get_session(api_cfg)
-            if getattr(session, "verify", True) != cfg.verify:
-                session.verify = cfg.verify
             request_kwargs: dict[str, Any] = {
                 "timeout": (cfg.timeout_connect, cfg.timeout_read),
             }
+            if getattr(session, "verify", True) != verify_mode:
+                session.verify = verify_mode
+            request_kwargs["verify"] = verify_mode
             if method_upper != "GET" and payload is not None:
                 request_kwargs["data"] = payload
             with session.request(method_upper, url, **request_kwargs) as response:
@@ -1117,6 +1128,60 @@ def make_request(
                 )
                 _set_last_outcome("hit", {"status": status})
                 return response_data
+        except requests.exceptions.SSLError as exc:  # pragma: no cover - network
+            last_failure_details = {
+                "reason": "ssl_error",
+                "status": None,
+                "error": str(exc),
+            }
+            if allow_ssl_fallback and not ssl_verify_fallback_engaged:
+                logger.warning(
+                    "request_ssl_verify_failed",
+                    url=url,
+                    method=method_upper,
+                    attempt=attempt,
+                    total_attempts=total_attempts,
+                    rps=cfg.rps,
+                )
+                verify_mode = False
+                ssl_verify_fallback_engaged = True
+                continue
+            if attempt >= total_attempts:
+                logger.error(
+                    "request_error",
+                    url=url,
+                    error=str(exc),
+                    attempt=attempt,
+                    total_attempts=total_attempts,
+                    method=method_upper,
+                    rps=cfg.rps,
+                )
+                logger.debug(
+                    "request_fail",
+                    url=url,
+                    status=None,
+                    total_attempts=total_attempts,
+                    method=method_upper,
+                    rps=cfg.rps,
+                    **details_excluding("status"),
+                )
+                _start_service_outage("ssl_error", last_failure_details, cfg)
+                _set_last_outcome("ssl_error", last_failure_details)
+                return None
+            if cfg.delay > 0:
+                sleep_delay, jitter_value = _compute_retry_sleep(cfg.delay, cfg)
+                if jitter_value is not None:
+                    logger.debug(
+                        "request_delay_jitter",
+                        url=url,
+                        method=method_upper,
+                        rps=cfg.rps,
+                        base_delay=cfg.delay,
+                        jitter=jitter_value,
+                        applied_delay=sleep_delay,
+                    )
+                sleep(sleep_delay)
+            continue
         except requests.RequestException as exc:  # pragma: no cover - network
             last_failure_details = {
                 "reason": "network_error",

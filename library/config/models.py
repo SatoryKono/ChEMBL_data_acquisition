@@ -534,7 +534,7 @@ class PubChemCfg(_BaseModel):
         "ChEMBL-ETL/2.1 (mailto:chembl-data@ebi.ac.uk)",
         description="Custom User-Agent for PubChem requests including contact details",
     )
-    verify: bool | str = True
+    verify: bool | str = "auto"
     timeout_connect: float = Field(5.0, ge=1)
     timeout_read: float = Field(60.0, ge=1)
     timeout_seconds: float = Field(
