@@ -1,12 +1,12 @@
 .[dev]
 # Ensure type stubs stay aligned with the optional dev extra and the lock file
 # even when extras are not expanded by the environment consuming this file.
-pandas-stubs==2.3.2.250926
-types-cachetools==5.5.0.20240820
-types-jsonschema==4.25.1.20250822
-types-openpyxl==3.1.5.20250919
-types-PyYAML==6.0.12.20250915
-types-python-dateutil==2.9.0.20250822
-types-requests==2.32.4.20250913
-types-tabulate==0.9.0.20241207
+pandas-stubs==2.2.3.250308
+types-cachetools==5.4.0.20240717
+types-jsonschema==4.23.0.20240712
+types-openpyxl==3.1.5.20250506
+types-PyYAML==6.0.12.20241221
+types-python-dateutil==2.9.0.20241003
+types-requests==2.32.0.20250306
+types-tabulate==0.9.0.20240106
 types-urllib3==1.26.25.14
