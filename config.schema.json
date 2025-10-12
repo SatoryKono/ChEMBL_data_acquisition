@@ -1735,6 +1735,12 @@
           "default": null,
           "title": "Burst"
         },
+        "delay": {
+          "default": 1.0,
+          "minimum": 0,
+          "title": "Delay",
+          "type": "number"
+        },
         "api_key": {
           "anyOf": [
             {

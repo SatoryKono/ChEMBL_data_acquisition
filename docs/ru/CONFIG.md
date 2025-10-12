@@ -157,7 +157,7 @@ system:
 | `sources.iuphar` | нет | Базовый URL и лимиты Guide to Pharmacology. |
 | `sources.pubchem` | `user_agent` (**Да**) | Также настраиваются RPS, порядок поиска CID, кэши. |
 | `sources.pubmed` | нет | Параметры E-utilities (URL, таймауты, повторы). |
-| `sources.semantic_scholar` | нет | Базовый URL, таймауты и лимиты Semantic Scholar. |
+| `sources.semantic_scholar` | нет | Базовый URL, таймауты, лимиты и резервная задержка повторов для Semantic Scholar. |
 
 ## `local`
 

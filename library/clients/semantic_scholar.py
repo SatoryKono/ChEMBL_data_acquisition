@@ -35,10 +35,17 @@ def _build_headers(cfg: SemanticScholarCfg) -> dict[str, str]:
     return headers
 
 
+def _resolve_base_delay(cfg: SemanticScholarCfg) -> float:
+    """Return the base retry delay derived from ``cfg``."""
+
+    if cfg.rps:
+        return 1.0 / cfg.rps
+    return cfg.delay
+
+
 def fetch_semantic_scholar(
     session: requests.Session,
     pmid: str,
-    sleep: float,
     cfg: SemanticScholarCfg | None = None,
     *,
     limiter: RateLimiter | None = None,
@@ -58,10 +65,11 @@ def fetch_semantic_scholar(
     base = cfg.base.rstrip("/")
     url = f"{base}/paper/PMID:{pmid}"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
+    delay = _resolve_base_delay(cfg)
     data, error = _do_request(
         session,
         url,
-        sleep * 5,
+        delay,
         headers=_build_headers(cfg),
         params={"fields": _SEMANTIC_SCHOLAR_FIELDS},
         retries=cfg.retries,
@@ -107,7 +115,6 @@ def fetch_semantic_scholar(
 def fetch_semantic_scholar_batch(
     session: requests.Session,
     pmids: list[str],
-    sleep: float,
     cfg: SemanticScholarCfg | None = None,
     *,
     limiter: RateLimiter | None = None,
@@ -130,10 +137,11 @@ def fetch_semantic_scholar_batch(
     base = cfg.base.rstrip("/")
     url = f"{base}/paper/batch"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
+    delay = _resolve_base_delay(cfg)
     data, error = _do_request(
         session,
         url,
-        sleep,
+        delay,
         headers=_build_headers(cfg),
         json={"ids": [f"PMID:{pmid}" for pmid in pmids]},
         method="POST",

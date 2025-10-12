@@ -699,6 +699,14 @@ class SemanticScholarCfg(_BaseModel):
     retries: int = Field(2, ge=0)
     rps: int | None = Field(default=None, ge=1)
     burst: int | None = Field(default=None, ge=1)
+    delay: float = Field(
+        1.0,
+        ge=0,
+        description=(
+            "Base delay between retries when no Semantic Scholar rate limit is "
+            "configured."
+        ),
+    )
     api_key: str | None = Field(default=None)
 
     @field_validator("base")
