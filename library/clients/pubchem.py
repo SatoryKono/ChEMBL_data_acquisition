@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from numbers import Real
+import random
 from threading import Lock, local
 from time import monotonic
 from typing import Any, cast
@@ -119,11 +120,54 @@ _USER_AGENT_ERROR = (
 
 _THREAD_STATE = local()
 
+_JITTER_LOCK = Lock()
+_JITTER_GENERATORS: dict[int, random.Random] = {}
+
 
 def _set_last_outcome(outcome: str | None, details: Mapping[str, Any] | None) -> None:
     if details is not None:
         details = dict(details)
     _THREAD_STATE.last_outcome = (outcome, details)
+
+
+def _ensure_default_headers(session: Session) -> None:
+    """Ensure the shared session advertises JSON support."""
+
+    headers = getattr(session, "headers", None)
+    if isinstance(headers, Mapping):
+        if "Accept" not in headers:
+            try:
+                session.headers["Accept"] = "application/json"  # type: ignore[index]
+            except Exception:  # pragma: no cover - defensive for custom sessions
+                pass
+        return
+    if hasattr(session, "headers"):
+        try:
+            session.headers.setdefault("Accept", "application/json")  # type: ignore[attr-defined]
+        except AttributeError:
+            pass
+
+
+def _compute_retry_sleep(delay: float, cfg: PubChemCfg) -> tuple[float, float | None]:
+    """Return the sleep duration and applied jitter for retry back-offs."""
+
+    jitter_max = getattr(cfg, "retry_jitter_seconds", 0.0) or 0.0
+    if delay <= 0 or jitter_max <= 0:
+        return delay, None
+    seed = getattr(cfg, "retry_jitter_seed", 0)
+    if seed is None:
+        jitter = random.uniform(0.0, jitter_max)
+    else:
+        with _JITTER_LOCK:
+            rng = _JITTER_GENERATORS.get(seed)
+            if rng is None:
+                rng = random.Random(seed)
+                _JITTER_GENERATORS[seed] = rng
+            jitter = rng.uniform(0.0, jitter_max)
+    applied = delay + jitter
+    if applied < 0:
+        applied = 0.0
+    return applied, jitter
 
 
 def _service_outage_remaining(
@@ -343,6 +387,7 @@ def init_session(api: ApiCfg, retry: RetryCfg) -> None:
     _assert_user_agent(api.user_agent)
     signature = _config_signature(api, retry)
     new_session = session_with_retry(api, retry)
+    _ensure_default_headers(new_session)
     old_session: Session | None = None
     with _SESSION_LOCK:
         old_session = _session
@@ -378,6 +423,7 @@ def get_session(cfg: ApiCfg | None = None) -> Session:
         raise RuntimeError("Failed to initialise PubChem session")
     user_agent = session.headers.get("User-Agent")
     _assert_user_agent(user_agent)
+    _ensure_default_headers(session)
     _SESSION_INITIALISED = True
     return session
 
@@ -819,10 +865,32 @@ def make_request(
                         _start_service_outage(reason, last_failure_details, cfg)
                         _set_last_outcome(reason, last_failure_details)
                         return None
-                    delay_source = "config"
-                    delay = backoff_delay if backoff_delay > 0 else cfg.delay
-                    if backoff_delay > 0:
-                        delay_source = "backoff"
+                    if retry_after is not None:
+                        delay = retry_after
+                        backoff_delay = delay * 2 if delay > 0 else backoff_delay
+                        delay_source = "header"
+                        sleep_delay = delay
+                        jitter_value: float | None = None
+                    else:
+                        delay_source = "config"
+                        delay = backoff_delay if backoff_delay > 0 else cfg.delay
+                        if backoff_delay > 0:
+                            delay_source = "backoff"
+                        if delay > 0:
+                            backoff_delay = delay * 2
+                        sleep_delay, jitter_value = _compute_retry_sleep(delay, cfg)
+                        if jitter_value is not None and delay > 0:
+                            logger.debug(
+                                "request_delay_jitter",
+                                url=url,
+                                method=method_upper,
+                                rps=cfg.rps,
+                                base_delay=delay,
+                                jitter=jitter_value,
+                                applied_delay=sleep_delay,
+                            )
+                        else:
+                            sleep_delay = delay
                     if delay > 0:
                         backoff_delay = delay * 2
                         if reason in SERVICE_UNAVAILABLE_OUTCOMES:
@@ -857,11 +925,16 @@ def make_request(
                                 deadline = capped_extension
                         if deadline is not None and now + delay >= deadline:
                             timeout_details = dict(last_failure_details or {})
-                            timeout_details.setdefault("retry_after", delay)
                             timeout_details.setdefault(
-                                "retry_after_source", delay_source
+                                "retry_after", delay
                             )
-                            timeout_details["timeout_reason"] = "retry_after_exceeds_deadline"
+                            timeout_details.setdefault(
+                                "retry_after_source",
+                                "header" if retry_after is not None else "backoff",
+                            )
+                            timeout_details["timeout_reason"] = (
+                                "retry_after_exceeds_deadline"
+                            )
                             logger.warning(
                                 "request_timeout",
                                 url=url,
@@ -896,7 +969,7 @@ def make_request(
                             timeout_info["reason"] = "timeout"
                             _set_last_outcome("timeout", timeout_info)
                             return None
-                        sleep(delay)
+                    sleep(sleep_delay)
                     continue
                 if status >= 400:
                     if status == 400:
@@ -978,7 +1051,18 @@ def make_request(
                         _set_last_outcome("response_error", last_failure_details)
                         return None
                     if cfg.delay > 0:
-                        sleep(cfg.delay)
+                        sleep_delay, jitter_value = _compute_retry_sleep(cfg.delay, cfg)
+                        if jitter_value is not None:
+                            logger.debug(
+                                "request_delay_jitter",
+                                url=url,
+                                method=method_upper,
+                                rps=cfg.rps,
+                                base_delay=cfg.delay,
+                                jitter=jitter_value,
+                                applied_delay=sleep_delay,
+                            )
+                        sleep(sleep_delay)
                     continue
                 except ValueError:
                     last_failure_details = {
@@ -1054,7 +1138,18 @@ def make_request(
                 _set_last_outcome("network_error", last_failure_details)
                 return None
             if cfg.delay > 0:
-                sleep(cfg.delay)
+                sleep_delay, jitter_value = _compute_retry_sleep(cfg.delay, cfg)
+                if jitter_value is not None:
+                    logger.debug(
+                        "request_delay_jitter",
+                        url=url,
+                        method=method_upper,
+                        rps=cfg.rps,
+                        base_delay=cfg.delay,
+                        jitter=jitter_value,
+                        applied_delay=sleep_delay,
+                    )
+                sleep(sleep_delay)
             continue
 
     outcome_name = (last_failure_details or {}).get("reason")

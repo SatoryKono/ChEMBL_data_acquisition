@@ -192,6 +192,8 @@ sources:
     rps: 5  # (env: CHEMBL_DA_PUBCHEM_RPS)
     burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
     delay: 0.2  # Delay between requests in seconds; must be a float for strict type validation
+    retry_jitter_seconds: 0.35  # Random jitter applied when Retry-After headers are missing
+    retry_jitter_seed: 17  # Deterministic jitter seed; set to null to use system randomness
     backoff_initial_seconds: 0.5
     resolve_order:
       - cache
