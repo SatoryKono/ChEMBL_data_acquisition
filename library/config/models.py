@@ -1626,6 +1626,7 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_PUBMED_BURST": ["sources", "pubmed", "burst"],
     "CHEMBL_DA_PUBMED_TOOL": ["sources", "pubmed", "tool"],
     "CHEMBL_DA_PUBMED_EMAIL": ["sources", "pubmed", "email"],
+    "CHEMBL_DA_PUBCHEM_ENABLE": ["sources", "pubchem", "enable"],
     "CHEMBL_DA_SEMANTIC_SCHOLAR_RPS": ["sources", "semantic_scholar", "rps"],
     "CHEMBL_DA_SEMANTIC_SCHOLAR_BURST": [
         "sources",
