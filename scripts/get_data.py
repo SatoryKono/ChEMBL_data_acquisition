@@ -50,6 +50,7 @@ _guard_cli_module()
 
 
 from library.config import DEFAULT_CONFIG_PATH, load_config
+from library.config.env import _default_base_path as _config_default_base_path
 
 
 @dataclass(frozen=True)
@@ -194,6 +195,38 @@ def _ensure_base_path_env(args: Sequence[str], env: dict[str, str]) -> None:
         candidate = candidate.resolve()
 
     env[_BASE_PATH_ENV_VAR] = str(candidate)
+
+
+def _resolve_forward_base_path(
+    args: argparse.Namespace, forwarded_extras: Sequence[str]
+) -> Path:
+    """Return the base path propagated to pipeline subprocesses."""
+
+    tokens: list[str] = []
+    if args.config is not None:
+        tokens.extend(["--config", str(args.config)])
+    tokens.extend(forwarded_extras)
+
+    config_path, cli_base_path = _resolve_config_location(tokens)
+    if cli_base_path is not None:
+        return cli_base_path
+
+    try:
+        config = load_config(config_path, base_path=None)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logging.debug(
+            "Не удалось вычислить базовый путь из %s: %s", config_path, exc
+        )
+    else:
+        local_cfg = getattr(config, "local", None)
+        io_cfg = getattr(local_cfg, "io", None) if local_cfg is not None else None
+        output_dir = getattr(io_cfg, "output_dir", None) if io_cfg is not None else None
+        if output_dir is not None:
+            output_path = Path(output_dir).expanduser()
+            if output_path.is_absolute():
+                return output_path.resolve().parent
+
+    return _config_default_base_path()
 
 
 def parse_args(argv: Sequence[str] | None = None) -> tuple[argparse.Namespace, list[str]]:
@@ -376,7 +409,8 @@ def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> Forwar
         return option in forward
 
     if not _has_option("--base-path"):
-        forward.extend(["--base-path", str(DATA_DIR)])
+        base_path = _resolve_forward_base_path(args, forwarded_extras)
+        forward.extend(["--base-path", str(base_path)])
     if not _has_option("--input-dir"):
         forward.extend(["--input-dir", DEFAULT_INPUT_DIR])
     if not _has_option("--output-dir"):
