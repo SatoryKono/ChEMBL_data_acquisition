@@ -9,14 +9,18 @@ Changelog
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 import requests
 
+from ..common.rate_limiter import RateLimiter, get_limiter
 from ..config.models import RetryCfg, SemanticScholarCfg
 from .pubmed import _do_request
 
 __all__ = ["fetch_semantic_scholar", "fetch_semantic_scholar_batch"]
+
+logger = logging.getLogger(__name__)
 
 _SEMANTIC_SCHOLAR_FIELDS = "publicationTypes,externalIds,paperId,venue"
 _SEMANTIC_SCHOLAR_HEADERS = {"Accept": "application/json"}
@@ -37,11 +41,20 @@ def fetch_semantic_scholar(
     sleep: float,
     cfg: SemanticScholarCfg | None = None,
     *,
+    limiter: RateLimiter | None = None,
     retry_cfg: RetryCfg | None = None,
 ) -> dict[str, str]:
     """Retrieve Semantic Scholar metadata for ``pmid``."""
 
     cfg = cfg or SemanticScholarCfg()
+    effective_limiter = limiter
+    if effective_limiter is None:
+        rps = cfg.rps
+        if rps is not None and rps > 0:
+            effective_limiter = get_limiter("semantic_scholar", rps, cfg.burst)
+    if effective_limiter is not None:
+        effective_limiter.acquire()
+
     base = cfg.base.rstrip("/")
     url = f"{base}/paper/PMID:{pmid}"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
@@ -55,7 +68,18 @@ def fetch_semantic_scholar(
         timeout=timeout,
         retry_cfg=retry_cfg,
     )
+    if error:
+        logger.warning(
+            "Semantic Scholar request failed for PMID %s with status: %s",
+            pmid,
+            error,
+        )
     if error or not isinstance(data, dict):
+        if not error:
+            logger.warning(
+                "Semantic Scholar request returned invalid response for PMID %s",
+                pmid,
+            )
         return {
             "scholar.PMID": pmid,
             "scholar.Venue": "",
@@ -86,6 +110,7 @@ def fetch_semantic_scholar_batch(
     sleep: float,
     cfg: SemanticScholarCfg | None = None,
     *,
+    limiter: RateLimiter | None = None,
     retry_cfg: RetryCfg | None = None,
 ) -> list[dict[str, str]]:
     """Retrieve Semantic Scholar metadata for multiple PMIDs."""
@@ -94,6 +119,14 @@ def fetch_semantic_scholar_batch(
         return []
 
     cfg = cfg or SemanticScholarCfg()
+    effective_limiter = limiter
+    if effective_limiter is None:
+        rps = cfg.rps
+        if rps is not None and rps > 0:
+            effective_limiter = get_limiter("semantic_scholar", rps, cfg.burst)
+    if effective_limiter is not None:
+        effective_limiter.acquire()
+
     base = cfg.base.rstrip("/")
     url = f"{base}/paper/batch"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
@@ -110,6 +143,12 @@ def fetch_semantic_scholar_batch(
         retry_cfg=retry_cfg,
     )
     if error:
+        for pmid in pmids:
+            logger.warning(
+                "Semantic Scholar batch request failed for PMID %s with status: %s",
+                pmid,
+                error,
+            )
         return [
             {
                 "scholar.PMID": pmid,
@@ -124,6 +163,11 @@ def fetch_semantic_scholar_batch(
         ]
 
     if not isinstance(data, list):
+        for pmid in pmids:
+            logger.warning(
+                "Semantic Scholar batch request returned invalid response for PMID %s",
+                pmid,
+            )
         return [
             {
                 "scholar.PMID": pmid,
