@@ -15,7 +15,6 @@ from typing import Any
 
 import pandas as pd
 import pytest
-from freezegun import freeze_time
 
 from library.common.run_context import RunContext, set_current
 from library.pipelines.tissue import TISSUE_COLUMN_ORDER
@@ -107,7 +106,6 @@ class StubChemblClient:
 
 
 @pytest.mark.e2e
-@freeze_time("2020-01-01")
 def test_get_tissue_data_cli__end_to_end(
     tmp_path: Path,
     cfg,
@@ -278,6 +276,9 @@ def test_get_tissue_data_cli__end_to_end(
         "library.pipelines.tissue.pipeline.write_csv_deterministic",
         _capture_write_csv,
     )
+
+    # Ensure metadata timestamps are deterministic across repeated invocations.
+    monkeypatch.setenv("CHEMBL_DA_RUN_ID", "tissue-e2e-test")
 
     input_csv = tmp_path / "inputs" / "tissues.csv"
     input_csv.parent.mkdir(parents=True, exist_ok=True)
