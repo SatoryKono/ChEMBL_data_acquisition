@@ -984,6 +984,12 @@ def finalize_output(
     pubchem_enabled = (
         True if pubchem_cfg is None else getattr(pubchem_cfg, "enable", True)
     )
+    # ``pubchem_augmentation_enabled`` captures the configuration state so that
+    # downstream telemetry remains stable even when no augmentation takes
+    # place (for example when the dataset is empty).  The pipeline historically
+    # emitted this flag under the ``pubchem_augmentation_enabled`` key, so keep
+    # a dedicated variable instead of reusing ``pubchem_enabled`` directly.
+    pubchem_augmentation_enabled = bool(pubchem_enabled)
     disabled_optional = _disabled_optional_columns(cfg)
     required_cols = {
         name
@@ -1187,6 +1193,7 @@ def finalize_output(
         dataset_frame = pd.DataFrame(columns=list(expected_columns) or col_order)
 
     pubchem_fallback_used = False
+    pubchem_fallback_applied = False
 
     if pubchem_context is not None and not dataset_frame.empty:
         available_columns = [
@@ -1196,7 +1203,6 @@ def finalize_output(
         ]
         if not available_columns or dataset_frame[available_columns].isna().all().all():
             logger.info("pubchem_fallback_augment_start")
-            pubchem_fallback_applied = True
             dataset_frame = _load_pubchem_augmenter()(
                 dataset_frame,
                 pubchem_cfg=pubchem_context.pubchem_cfg,
@@ -1209,6 +1215,7 @@ def finalize_output(
             )
             logger.info("pubchem_fallback_augment_done")
             pubchem_fallback_used = True
+            pubchem_fallback_applied = True
 
     ordered_columns = [column for column in col_order if column in dataset_frame.columns]
     extra_columns = [
@@ -1282,7 +1289,7 @@ def finalize_output(
         "output_sha256": file_sha256(artifacts.dataset),
         "parent_lookup_source": parent_stats.source,
         "parent_lookup_missing": parent_stats.missing,
-        "pubchem_augmentation_enabled": pubchem_enabled_cfg,
+        "pubchem_augmentation_enabled": pubchem_augmentation_enabled,
         "parent_lookup_hierarchy_attached": parent_stats.hierarchy_attached,
         "parent_lookup_fallback_attached": parent_stats.fallback_attached,
         "parent_lookup_no_parent": parent_stats.no_parent,
@@ -1312,6 +1319,7 @@ def finalize_output(
             "pubchem_columns_present": pubchem_columns_present,
             "pubchem_columns_with_values": pubchem_columns_with_values,
             "pubchem_values_present": bool(pubchem_columns_with_values),
+            "pubchem_fallback_applied": pubchem_fallback_applied,
             "pubchem_fallback_used": pubchem_fallback_used,
         }
     )
