@@ -36,7 +36,7 @@ from ..config import (
 from .parsing import EMPTY_PUBMED, combine, parse_pubmed_article
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
-    from ..rate_limiter import RateLimiter
+    from ..common.rate_limiter import RateLimiter
 
 
 __all__ = [
@@ -187,6 +187,7 @@ def fetch_semantic_scholar(
     sleep: float,
     cfg: SemanticScholarCfg | None = None,
     *,
+    limiter: "RateLimiter" | None = None,
     retry_cfg: RetryCfg | None = None,
 ) -> dict[str, str]:
     """Retrieve Semantic Scholar metadata for ``pmid``."""
@@ -195,6 +196,7 @@ def fetch_semantic_scholar(
         pmid,
         sleep,
         cfg=cfg,
+        limiter=limiter,
         retry_cfg=retry_cfg,
     )
 
@@ -205,6 +207,7 @@ def fetch_semantic_scholar_batch(
     sleep: float,
     cfg: SemanticScholarCfg | None = None,
     *,
+    limiter: "RateLimiter" | None = None,
     retry_cfg: RetryCfg | None = None,
 ) -> list[dict[str, str]]:
     """Retrieve Semantic Scholar metadata for multiple PMIDs."""
@@ -213,6 +216,7 @@ def fetch_semantic_scholar_batch(
         pmids,
         sleep,
         cfg=cfg,
+        limiter=limiter,
         retry_cfg=retry_cfg,
     )
 

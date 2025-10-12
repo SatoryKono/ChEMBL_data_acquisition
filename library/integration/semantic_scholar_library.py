@@ -10,6 +10,7 @@ from __future__ import annotations
 import requests
 
 from ..clients import semantic_scholar as _client
+from ..common.rate_limiter import RateLimiter
 from ..config import RetryCfg, SemanticScholarCfg
 
 
@@ -19,6 +20,7 @@ def fetch_semantic_scholar(
     sleep: float,
     cfg: SemanticScholarCfg | None = None,
     *,
+    limiter: RateLimiter | None = None,
     retry_cfg: RetryCfg | None = None,
 ) -> dict[str, str]:
     """Return Semantic Scholar metadata for ``pmid``.
@@ -46,6 +48,7 @@ def fetch_semantic_scholar(
         pmid,
         sleep,
         cfg=cfg,
+        limiter=limiter,
         retry_cfg=retry_cfg,
     )
 
@@ -56,6 +59,7 @@ def fetch_semantic_scholar_batch(
     sleep: float,
     cfg: SemanticScholarCfg | None = None,
     *,
+    limiter: RateLimiter | None = None,
     retry_cfg: RetryCfg | None = None,
 ) -> list[dict[str, str]]:
     """Return Semantic Scholar metadata for a batch of ``pmids``.
@@ -81,5 +85,6 @@ def fetch_semantic_scholar_batch(
         pmids,
         sleep,
         cfg=cfg,
+        limiter=limiter,
         retry_cfg=retry_cfg,
     )
