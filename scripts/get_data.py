@@ -221,10 +221,13 @@ def run_stage(stage: Stage, forward_args: ForwardArgs) -> float:
     else:
         stage_args = forward_args.as_list()
 
-    if stage.name == "testitem" and not any(
-        arg in {"--pubchem-enable", "--no-pubchem-enable"} for arg in stage_args
-    ):
-        stage_args.append("--pubchem-enable")
+    if stage.name == "testitem":
+        if not any(
+            token.startswith("--pubchem-enable")
+            or token.startswith("--no-pubchem-enable")
+            for token in stage_args
+        ):
+            stage_args.append("--pubchem-enable")
     command = [sys.executable, str(script_path), *stage_args]
     result = subprocess.run(command, check=False)
     duration = (datetime.now() - start).total_seconds()
