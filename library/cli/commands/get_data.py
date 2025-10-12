@@ -470,14 +470,42 @@ _TESTITEM_PIPELINE_API = PipelineApi[TestitemPipelineOptions](
     _build_testitem_options, run_testitem_pipeline
 )
 
-_TESTITEM_CONFIG_BASE_PATH = "sources.chembl.pipelines.testitem"
-
-_TESTITEM_CONFIG_MAPPING: dict[str, str] = {
-    "timeout": f"{_TESTITEM_CONFIG_BASE_PATH}.timeout",
-    "column": f"{_TESTITEM_CONFIG_BASE_PATH}.column",
-    "batch_size": f"{_TESTITEM_CONFIG_BASE_PATH}.batch_size",
-    "limit": f"{_TESTITEM_CONFIG_BASE_PATH}.limit",
-    "offset": f"{_TESTITEM_CONFIG_BASE_PATH}.offset",
+_TESTITEM_CONFIG_MAPPING: dict[str, tuple[str, ...]] = {
+    "timeout": (
+        "sources",
+        "chembl",
+        "pipelines",
+        "testitem",
+        "timeout",
+    ),
+    "column": (
+        "sources",
+        "chembl",
+        "pipelines",
+        "testitem",
+        "column",
+    ),
+    "batch_size": (
+        "sources",
+        "chembl",
+        "pipelines",
+        "testitem",
+        "batch_size",
+    ),
+    "limit": (
+        "sources",
+        "chembl",
+        "pipelines",
+        "testitem",
+        "limit",
+    ),
+    "offset": (
+        "sources",
+        "chembl",
+        "pipelines",
+        "testitem",
+        "offset",
+    ),
 }
 
 _PIPELINE_APIS: Mapping[str, PipelineApi[Any]] = {
@@ -1573,8 +1601,9 @@ def _load_pipeline_config(cfg: PipelineRunConfig, path: Path | str) -> Config:
         value = getattr(cfg, arg)
         if value is None:
             continue
-        cli_overrides[target] = value
-        cli_sources[tuple(target.split("."))] = arg
+        path_tuple = target
+        cli_overrides[".".join(path_tuple)] = value
+        cli_sources[path_tuple] = arg
 
     return load_config(
         path,

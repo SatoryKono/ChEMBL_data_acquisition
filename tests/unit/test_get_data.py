@@ -199,6 +199,19 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_load_pipeline_config__applies_testitem_limit_override(tmp_path: Path) -> None:
+    cfg = _make_config(tmp_path)
+    config_source = Path("config/config.yaml")
+    copied_config = tmp_path / "config_full.yaml"
+    copied_config.write_text(config_source.read_text(encoding="utf-8"), encoding="utf-8")
+    cfg = replace(cfg, config_path=copied_config, limit=10)
+
+    loaded = get_data._load_pipeline_config(cfg, cfg.config_path)
+
+    assert loaded.sources.chembl.pipelines.testitem.limit == 10
+
+
+@pytest.mark.unit
 def test_write_run_manifest__fallback_on_unlink_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
