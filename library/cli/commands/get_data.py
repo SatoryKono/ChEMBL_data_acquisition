@@ -1319,9 +1319,31 @@ def _run_step(
 
     options = api.build_options(cfg, input_path, working_output)
 
-    if step.name == "testitem" and getattr(options, "pubchem_enabled", None) is not True:
-        options = replace(options, pubchem_enabled=True)
-    result = api.runner(base_config, options)
+    runner_config = base_config
+    if step.name == "testitem":
+        if getattr(options, "pubchem_enabled", None) is not True:
+            options = replace(options, pubchem_enabled=True)
+        sources_cfg = getattr(base_config, "sources", None)
+        pubchem_cfg = getattr(sources_cfg, "pubchem", None)
+        if (
+            getattr(options, "pubchem_enabled", None) is True
+            and getattr(pubchem_cfg, "enable", None) is not True
+            and hasattr(base_config, "model_copy")
+            and hasattr(sources_cfg, "model_copy")
+            and hasattr(pubchem_cfg, "model_copy")
+        ):
+            runner_config = base_config.model_copy(
+                update={
+                    "sources": sources_cfg.model_copy(
+                        update={
+                            "pubchem": pubchem_cfg.model_copy(
+                                update={"enable": True}
+                            )
+                        }
+                    )
+                }
+            )
+    result = api.runner(runner_config, options)
     executed = bool(result.executed)
     if not executed and result.exit_code == 0:
         status = "skipped"
