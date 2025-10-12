@@ -1,8 +1,8 @@
 {
   "run": {
-    "started_at": "2025-10-12T09:24:39.197449+00:00",
-    "completed_at": "2025-10-12T09:24:40.831038+00:00",
-    "duration_sec": 1.633583,
+    "started_at": "2025-10-12T09:41:38.969499+00:00",
+    "completed_at": "2025-10-12T09:41:40.601271+00:00",
+    "duration_sec": 1.631766,
     "exit_code": 0,
     "status": "success",
     "date_prefix": "20240101",
@@ -10,13 +10,13 @@
     "input_dir": "E:\\github\\ChEMBL_data_acquisition6\\data\\input",
     "output_dir": "E:\\github\\ChEMBL_data_acquisition6\\data\\output",
     "config_path": "E:\\github\\ChEMBL_data_acquisition6\\config\\config.yaml",
-    "log_level": "WARNING",
+    "log_level": "INFO",
     "limit": 10,
     "force": false,
     "skip_existing": true,
     "dry_run": false,
     "pipeline_version": "0.1.3",
-    "run_id": "dc1190624770d542e053c6853650da25"
+    "run_id": "b7e7bdab787d3eef1f6e4021bfbb608f"
   },
   "steps": [
     {
@@ -25,9 +25,9 @@
       "exit_code": 0,
       "executed": false,
       "reason": "skip_existing",
-      "started_at": "2025-10-12T09:24:39.221675+00:00",
-      "completed_at": "2025-10-12T09:24:39.227028+00:00",
-      "duration_sec": 0.005352,
+      "started_at": "2025-10-12T09:41:38.994651+00:00",
+      "completed_at": "2025-10-12T09:41:39.000426+00:00",
+      "duration_sec": 0.005774,
       "output": {
         "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.documents_20240101.csv",
         "exists": true,
@@ -55,9 +55,9 @@
       "exit_code": 0,
       "executed": false,
       "reason": "skip_existing",
-      "started_at": "2025-10-12T09:24:39.231661+00:00",
-      "completed_at": "2025-10-12T09:24:39.236436+00:00",
-      "duration_sec": 0.004775,
+      "started_at": "2025-10-12T09:41:39.005573+00:00",
+      "completed_at": "2025-10-12T09:41:39.010884+00:00",
+      "duration_sec": 0.00531,
       "output": {
         "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.targets_20240101.csv",
         "exists": true,
@@ -85,9 +85,9 @@
       "exit_code": 0,
       "executed": false,
       "reason": "skip_existing",
-      "started_at": "2025-10-12T09:24:39.241330+00:00",
-      "completed_at": "2025-10-12T09:24:39.246136+00:00",
-      "duration_sec": 0.004806,
+      "started_at": "2025-10-12T09:41:39.016203+00:00",
+      "completed_at": "2025-10-12T09:41:39.021817+00:00",
+      "duration_sec": 0.005614,
       "output": {
         "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.assays_20240101.csv",
         "exists": true,
@@ -115,14 +115,14 @@
       "exit_code": 0,
       "executed": true,
       "reason": null,
-      "started_at": "2025-10-12T09:24:39.250641+00:00",
-      "completed_at": "2025-10-12T09:24:40.804006+00:00",
-      "duration_sec": 1.553369,
+      "started_at": "2025-10-12T09:41:39.026638+00:00",
+      "completed_at": "2025-10-12T09:41:40.570743+00:00",
+      "duration_sec": 1.544145,
       "output": {
         "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.testitem_20240101.csv",
         "exists": true,
         "size_bytes": 4148,
-        "checksum_sha256": "961d4f2aac7c08cce25fe58ff278ebce337e51039729ce4727050b8f0af06731"
+        "checksum_sha256": "b1f835091f5a77c2e3cddb861e3f1eddefc855d7d0627177d2a01712484347f5"
       },
       "sidecars": [
         {
@@ -135,7 +135,7 @@
           "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.testitem_20240101_quality_report_table.csv",
           "exists": true,
           "size_bytes": 3366,
-          "checksum_sha256": "1ca7e36df9fad0e261c1391857dba27dbdcef0cb992d5108fe15e742ee187c1e"
+          "checksum_sha256": "de2f1624d5aa90d5cd55db4dbb0a57dbf154da559e802baf2b9b3edca3585d28"
         }
       ]
     },
@@ -145,9 +145,9 @@
       "exit_code": 0,
       "executed": false,
       "reason": "skip_existing",
-      "started_at": "2025-10-12T09:24:40.820387+00:00",
-      "completed_at": "2025-10-12T09:24:40.825865+00:00",
-      "duration_sec": 0.005475,
+      "started_at": "2025-10-12T09:41:40.588248+00:00",
+      "completed_at": "2025-10-12T09:41:40.595042+00:00",
+      "duration_sec": 0.006795,
       "output": {
         "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.activity_20240101.csv",
         "exists": true,
