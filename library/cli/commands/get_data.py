@@ -414,6 +414,30 @@ def _ensure_testitem_pubchem_enabled(config: Config) -> None:
         _assign_pubchem_config(config, pubchem_cfg)
 
 
+def _apply_testitem_option_overrides(
+    options: TestitemPipelineOptions,
+    base_config: Config,
+    *,
+    allow_pubchem_override: bool = True,
+) -> TestitemPipelineOptions:
+    """Merge configuration-driven overrides into ``options`` when provided."""
+
+    updated_options = options
+
+    testitem_cfg = getattr(base_config, "testitem", None)
+    offset_value = getattr(testitem_cfg, "offset", None) if testitem_cfg is not None else None
+    if offset_value is not None and getattr(updated_options, "offset", None) != offset_value:
+        updated_options = replace(updated_options, offset=offset_value)
+
+    if allow_pubchem_override:
+        pubchem_cfg = getattr(base_config, "pubchem", None)
+        pubchem_enabled = getattr(pubchem_cfg, "enable", None) if pubchem_cfg is not None else None
+        if pubchem_enabled is False and getattr(updated_options, "pubchem_enabled", None) is not True:
+            updated_options = replace(updated_options, pubchem_enabled=True)
+
+    return updated_options
+
+
 def _build_testitem_options(
     cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> TestitemPipelineOptions:
@@ -421,7 +445,7 @@ def _build_testitem_options(
         input_csv=input_path,
         output_csv=output_path,
         limit=cfg.limit,
-        offset=0,
+        offset=None,
         emit_legacy_artifacts=_diagnostic_outputs_enabled(cfg),
         pubchem_enabled=True,
     )
@@ -1471,6 +1495,11 @@ def _run_testitem_pipeline_without_pubchem(
     """Fallback to the in-process pipeline with PubChem disabled."""
 
     options = _TESTITEM_PIPELINE_API.build_options(cfg, input_path, working_output)
+    options = _apply_testitem_option_overrides(
+        options,
+        base_config,
+        allow_pubchem_override=False,
+    )
     if getattr(options, "pubchem_enabled", None) is not False:
         options = replace(options, pubchem_enabled=False)
 
@@ -1571,8 +1600,8 @@ def _run_step(
 
     options = api.build_options(cfg, input_path, working_output)
 
-    if step.name == "testitem" and getattr(options, "pubchem_enabled", None) is not True:
-        options = replace(options, pubchem_enabled=True)
+    if step.name == "testitem":
+        options = _apply_testitem_option_overrides(options, base_config)
     result = api.runner(base_config, options)
     executed = bool(result.executed)
     if not executed and result.exit_code == 0:
