@@ -722,6 +722,7 @@ def _resolve_path(base: Path, candidate: Path) -> Path:
 
 
 _TRUE_FLAG_VALUES = frozenset({"1", "true", "yes", "on"})
+_FALSE_FLAG_VALUES = frozenset({"0", "false", "no", "off"})
 
 
 def _flag_to_bool(value: object) -> bool:
@@ -1510,6 +1511,44 @@ def _ensure_pubchem_enabled(config: Config) -> None:
         setattr(pubchem_cfg, "enable", True)
 
 
+def _parse_cli_bool(value: str) -> bool | None:
+    """Parse CLI boolean tokens, returning ``None`` when *value* is unknown."""
+
+    normalised = value.strip().lower()
+    if not normalised:
+        return None
+    if normalised in _TRUE_FLAG_VALUES:
+        return True
+    if normalised in _FALSE_FLAG_VALUES:
+        return False
+    return None
+
+
+def _resolve_pubchem_cli_flag(arguments: Sequence[str]) -> bool | None:
+    """Return the last explicit PubChem flag state encoded in *arguments*."""
+
+    explicit: bool | None = None
+    index = 0
+    total = len(arguments)
+    while index < total:
+        token = arguments[index]
+        if token == "--pubchem-enable":
+            explicit = True
+            if index + 1 < total:
+                parsed = _parse_cli_bool(arguments[index + 1])
+                if parsed is not None:
+                    explicit = parsed
+                    index += 1
+        elif token == "--no-pubchem-enable":
+            explicit = False
+        elif token.startswith("--pubchem-enable="):
+            parsed = _parse_cli_bool(token.split("=", 1)[1])
+            if parsed is not None:
+                explicit = parsed
+        index += 1
+    return explicit
+
+
 def _run_testitem_subprocess(
     step: PipelineStep,
     cfg: PipelineRunConfig,
@@ -1533,12 +1572,10 @@ def _run_testitem_subprocess(
     if diagnostics_enabled and "--emit-legacy-artifacts" not in arguments:
         arguments.append("--emit-legacy-artifacts")
 
-    has_pubchem_flag = any(
-        option in {"--pubchem-enable", "--no-pubchem-enable"}
-        or option.startswith("--pubchem-enable=")
-        for option in arguments
-    )
-    if not has_pubchem_flag:
+    explicit_pubchem_flag = _resolve_pubchem_cli_flag(arguments)
+    if explicit_pubchem_flag is not True:
+        if explicit_pubchem_flag is False:
+            _LOGGER.info("testitem_pubchem_enable_override")
         arguments.append("--pubchem-enable")
 
     command = [sys.executable, str(_TESTITEM_SCRIPT), *arguments]
