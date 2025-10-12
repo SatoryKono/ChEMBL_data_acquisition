@@ -285,6 +285,9 @@ def run_stage(stage: Stage, forward_args: ForwardArgs) -> float:
         logging.error("❌ Скрипт %s не найден по пути %s", stage.script, script_path)
         sys.exit(1)
 
+    start = datetime.now()
+    logging.info("▶ Запуск %s...", stage.script)
+
     if stage.name == "target":
         stage_args = forward_args.with_default_subcommand(
             "all", choices=TARGET_SUBCOMMANDS
