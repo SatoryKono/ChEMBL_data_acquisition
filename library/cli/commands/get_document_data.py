@@ -12,6 +12,9 @@ single entry point configured via ``--mode``:
 ``--mode all``
     Run the ChEMBL and PubMed pipelines and merge the results.
 
+When ``--mode`` is omitted the command defaults to ``all`` to keep parity with the
+combined pipeline invoked by :mod:`library.orchestration`.
+
 Example
 -------
 Fetch PubMed metadata for identifiers listed in ``pmids.csv``::
@@ -106,6 +109,7 @@ from library.validation import validate_documents
 
 DEFAULT_INPUT_NAME = "document.csv"
 DEFAULT_OUTPUT_STEM = "documents"
+DEFAULT_MODE = "all"
 
 
 class _FallbackPathAction(argparse.Action):
@@ -2048,7 +2052,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         choices=("chembl", "pubmed", "all"),
         required=False,
         default=None,
-        help="Document pipeline to execute",
+        help=f"Document pipeline to execute (default: {DEFAULT_MODE})",
     )
     parser.add_argument(
         "command",
@@ -2293,12 +2297,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     mode = getattr(args, "mode", None)
     command_value = getattr(args, "command", None)
-    if not mode and command_value:
+    if not mode and command_value not in (None, ""):
         mode = command_value
         args.mode = mode
     if not mode:
-        parser.error("--mode is required")
-    if command_value is None and mode is not None:
+        default_mode = parser.get_default("mode")
+        if isinstance(default_mode, str) and default_mode.strip():
+            mode = default_mode.strip()
+        else:
+            mode = DEFAULT_MODE
+        args.mode = mode
+    if command_value in (None, "") and mode is not None:
         args.command = mode
     mode = str(mode)
     if limit_value is not None and limit_value < 0:
