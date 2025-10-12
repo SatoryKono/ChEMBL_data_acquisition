@@ -67,7 +67,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 DEFAULT_INPUT_DIR = "input"
 DEFAULT_OUTPUT_DIR = "output"
 OUTPUT_DIR = DATA_DIR / DEFAULT_OUTPUT_DIR
-LOGS_DIR = PROJECT_ROOT / "logs"
+LOGS_DIR = DATA_DIR / "logs"
 
 
 def parse_args(argv: Sequence[str] | None = None) -> tuple[argparse.Namespace, list[str]]:
