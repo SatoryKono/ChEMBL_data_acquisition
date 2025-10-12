@@ -1360,6 +1360,7 @@ def _run_testitem_subprocess(
     step: PipelineStep,
     cfg: PipelineRunConfig,
     *,
+    final_output: Path,
     working_output: Path,
 ) -> StepExecutionResult:
     """Execute the testitem stage via ``scripts/get_testitem_data.py``."""
@@ -1373,13 +1374,15 @@ def _run_testitem_subprocess(
 
     diagnostics_enabled = _diagnostic_outputs_enabled(cfg)
     working_output.parent.mkdir(parents=True, exist_ok=True)
-    if working_output.exists():
-        try:
-            working_output.unlink()
-        except OSError:
-            pass
+    final_output.parent.mkdir(parents=True, exist_ok=True)
+    for candidate in (working_output, final_output):
+        if candidate.exists():
+            try:
+                candidate.unlink()
+            except OSError:
+                pass
 
-    arguments = step.build_arguments(cfg, output_path=working_output)
+    arguments = step.build_arguments(cfg, output_path=final_output)
     _ensure_argument(arguments, "--base-path", getattr(cfg, "base_path", None))
     _ensure_argument(arguments, "--input-dir", getattr(cfg, "input_dir", None))
     _ensure_argument(arguments, "--output-dir", getattr(cfg, "output_dir", None))
@@ -1513,7 +1516,12 @@ def _run_step(
                 cfg, base_config, input_path, working_output
             )
         _ensure_pubchem_enabled(base_config)
-        return _run_testitem_subprocess(step, cfg, working_output=working_output)
+        return _run_testitem_subprocess(
+            step,
+            cfg,
+            final_output=final_output,
+            working_output=working_output,
+        )
 
     api = _PIPELINE_APIS.get(step.name)
     if api is None:
