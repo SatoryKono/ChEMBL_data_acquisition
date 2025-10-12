@@ -1319,27 +1319,8 @@ def _run_step(
 
     options = api.build_options(cfg, input_path, working_output)
 
-    if step.name == "testitem":
-        if getattr(options, "pubchem_enabled", True) is not True:
-            options = replace(options, pubchem_enabled=True)
-
-        pubchem_cfg = getattr(base_config, "pubchem", None)
-        if pubchem_cfg is not None and hasattr(pubchem_cfg, "enable"):
-            was_enabled = getattr(pubchem_cfg, "enable", False)
-            if not was_enabled:
-                _LOGGER.info("testitem_pubchem_enable_override")
-
-            if hasattr(pubchem_cfg, "model_copy"):
-                updated_pubchem_cfg = pubchem_cfg.model_copy(update={"enable": True})
-                try:
-                    base_config.sources.pubchem = updated_pubchem_cfg
-                except AttributeError:
-                    pubchem_cfg = updated_pubchem_cfg
-                else:
-                    pubchem_cfg = updated_pubchem_cfg
-            else:
-                setattr(pubchem_cfg, "enable", True)
-                base_config.sources.pubchem = pubchem_cfg
+    if step.name == "testitem" and getattr(options, "pubchem_enabled", None) is not True:
+        options = replace(options, pubchem_enabled=True)
     result = api.runner(base_config, options)
     executed = bool(result.executed)
     if not executed and result.exit_code == 0:
