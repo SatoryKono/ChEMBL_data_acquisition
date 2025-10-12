@@ -182,3 +182,26 @@ def test_save_standard_outputs__idempotent_and_without_extraneous_files(
     }.items():
         assert path.exists(), f"missing {name}"
         assert path.read_bytes() == first_snapshots[name]
+
+
+@pytest.mark.unit
+def test_set_output_directory__updates_default(tmp_path: Path, sample_frames) -> None:
+    dataset, correlation, quality = sample_frames
+
+    original_dir = output_writer.OUTPUT_DIR
+    try:
+        output_writer.set_output_directory(tmp_path)
+
+        artifacts = output_writer.save_standard_outputs(
+            dataset,
+            correlation,
+            quality,
+            table_name="documents",
+            date_tag="20240202",
+        )
+
+        assert artifacts.dataset.parent == tmp_path
+        assert artifacts.correlation_report.parent == tmp_path
+        assert artifacts.quality_report.parent == tmp_path
+    finally:
+        output_writer.set_output_directory(original_dir)

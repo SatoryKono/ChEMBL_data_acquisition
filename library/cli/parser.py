@@ -719,6 +719,16 @@ def apply_config_overrides(
                 "--date is required when io.output_stamp_mode is 'require'"
             )
 
+    try:
+        from ..io import output_writer as _output_writer
+
+        _output_writer.set_output_directory(cfg.io.output_dir)
+    except Exception:  # pragma: no cover - defensive fallback
+        logger.warning(
+            "output_directory_configure_failed",
+            path=str(getattr(getattr(cfg, "io", None), "output_dir", "")),
+        )
+
     metadata.cli_paths = {
         arg: path for arg, path in normalized_cli_paths.items() if path
     }

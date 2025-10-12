@@ -486,6 +486,10 @@ def ensure_dirs(cfg: Config) -> None:
             else:
                 raise FileNotFoundError(f"{path} does not exist")
 
+    from ..io import output_writer as _output_writer
+
+    _output_writer.set_output_directory(cfg.io.output_dir)
+
 
 def _serialize_paths(data: Any) -> Any:
     if isinstance(data, dict):
