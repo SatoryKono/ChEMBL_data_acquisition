@@ -159,9 +159,6 @@ from library.reporting.run_manifest import load_output_report, merge_run_output
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
-_TESTITEM_SCRIPT = _PROJECT_ROOT / "scripts" / "get_testitem_data.py"
-_PUBCHEM_ENABLE_ENV = "CHEMBL_DA_PUBCHEM_ENABLE"
 
 
 StepValueT = TypeVar("StepValueT")
@@ -424,7 +421,7 @@ def _build_testitem_options(
         limit=cfg.limit,
         offset=0,
         emit_legacy_artifacts=_diagnostic_outputs_enabled(cfg),
-        pubchem_enabled=True,
+        pubchem_enabled=not cfg.disable_pubchem,
     )
 
 
@@ -1356,120 +1353,6 @@ def _ensure_pubchem_enabled(config: Config) -> None:
         setattr(pubchem_cfg, "enable", True)
 
 
-def _run_testitem_subprocess(
-    step: PipelineStep,
-    cfg: PipelineRunConfig,
-    *,
-    final_output: Path,
-    working_output: Path,
-) -> StepExecutionResult:
-    """Execute the testitem stage via ``scripts/get_testitem_data.py``."""
-
-    def _ensure_argument(arguments: list[str], option: str, value: object | None) -> None:
-        if value in (None, argparse.SUPPRESS):
-            return
-        if option in arguments:
-            return
-        arguments.extend([option, str(value)])
-
-    diagnostics_enabled = _diagnostic_outputs_enabled(cfg)
-    working_output.parent.mkdir(parents=True, exist_ok=True)
-    final_output.parent.mkdir(parents=True, exist_ok=True)
-    for candidate in (working_output, final_output):
-        if candidate.exists():
-            try:
-                candidate.unlink()
-            except OSError:
-                pass
-
-    arguments = step.build_arguments(cfg, output_path=final_output)
-    _ensure_argument(arguments, "--base-path", getattr(cfg, "base_path", None))
-    _ensure_argument(arguments, "--input-dir", getattr(cfg, "input_dir", None))
-    _ensure_argument(arguments, "--output-dir", getattr(cfg, "output_dir", None))
-    _ensure_argument(arguments, "--date", getattr(cfg, "date_prefix", None))
-    if diagnostics_enabled and "--emit-legacy-artifacts" not in arguments:
-        arguments.append("--emit-legacy-artifacts")
-
-    command = [sys.executable, str(_TESTITEM_SCRIPT), *arguments]
-    env = os.environ.copy()
-    env[_PUBCHEM_ENABLE_ENV] = "true"
-
-    _LOGGER.info(
-        "testitem_subprocess_start",
-        command=command,
-        script=str(_TESTITEM_SCRIPT),
-    )
-
-    try:
-        completed = subprocess.run(
-            command,
-            check=False,
-            cwd=str(_PROJECT_ROOT),
-            env=env,
-        )
-    except OSError as exc:
-        _LOGGER.error(
-            "testitem_subprocess_error",
-            error=str(exc),
-            command=command,
-        )
-        return StepExecutionResult(
-            exit_code=1,
-            executed=True,
-            status="failed",
-            reason="subprocess_error",
-        )
-
-    exit_code = int(completed.returncode)
-    status = "success" if exit_code == 0 else "failed"
-    reason = None if exit_code == 0 else "non_zero_exit"
-
-    if exit_code == 0:
-        _LOGGER.info("testitem_subprocess_done", command=command)
-    else:
-        _LOGGER.error(
-            "testitem_subprocess_exit",
-            exit_code=exit_code,
-            command=command,
-        )
-
-    return StepExecutionResult(
-        exit_code=exit_code,
-        executed=True,
-        status=status,
-        reason=reason,
-    )
-
-
-def _run_testitem_pipeline_without_pubchem(
-    cfg: PipelineRunConfig,
-    base_config: Config,
-    input_path: Path,
-    working_output: Path,
-) -> StepExecutionResult:
-    """Fallback to the in-process pipeline with PubChem disabled."""
-
-    options = _TESTITEM_PIPELINE_API.build_options(cfg, input_path, working_output)
-    if getattr(options, "pubchem_enabled", None) is not False:
-        options = replace(options, pubchem_enabled=False)
-
-    result = _TESTITEM_PIPELINE_API.runner(base_config, options)
-    executed = bool(result.executed)
-    if not executed and result.exit_code == 0:
-        status = "skipped"
-    else:
-        status = "success" if result.exit_code == 0 else "failed"
-    reason = result.reason
-    if reason is None and status == "failed":
-        reason = "non_zero_exit"
-    return StepExecutionResult(
-        exit_code=result.exit_code,
-        executed=executed,
-        status=status,
-        reason=reason,
-    )
-
-
 def _run_step(
     step: PipelineStep,
     cfg: PipelineRunConfig,
@@ -1504,23 +1387,6 @@ def _run_step(
             executed=False,
             status="skipped",
             reason="limit",
-        )
-
-    if step.name == "testitem":
-        if cfg.disable_pubchem:
-            _LOGGER.warning(
-                "testitem_pubchem_disabled",
-                reason="cli_flag_disabled",
-            )
-            return _run_testitem_pipeline_without_pubchem(
-                cfg, base_config, input_path, working_output
-            )
-        _ensure_pubchem_enabled(base_config)
-        return _run_testitem_subprocess(
-            step,
-            cfg,
-            final_output=final_output,
-            working_output=working_output,
         )
 
     api = _PIPELINE_APIS.get(step.name)
