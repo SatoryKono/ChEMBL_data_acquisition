@@ -23,7 +23,9 @@ except ModuleNotFoundError as exc:  # pragma: no cover - import guard
         raise
     current_dir = Path(__file__).resolve().parent
     project_root = current_dir.parent
-    sys.path.insert(0, str(project_root))
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    sys.modules.pop("scripts", None)
     from scripts._bootstrap import ensure_project_root
 
 
