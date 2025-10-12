@@ -760,6 +760,8 @@ def run_testitem_pipeline(
             reason="config_disabled",
             detail="PubChem augmentation is disabled; pubchem_* columns will remain empty.",
         )
+    else:
+        logger.info("pubchem_augmentation_enabled")
     pubchem_api_cfg = api_cfg
     if pubchem_enabled:
         pubchem_api_cfg = _prepare_pubchem_api_cfg(cfg, api_cfg)
@@ -978,6 +980,10 @@ def finalize_output(
 
     schema_model, normalizer = _load_testitem_schema()
     schema_cols = list(schema_model.columns)
+    pubchem_cfg = getattr(cfg, "pubchem", None)
+    pubchem_enabled = (
+        True if pubchem_cfg is None else getattr(pubchem_cfg, "enable", True)
+    )
     disabled_optional = _disabled_optional_columns(cfg)
     required_cols = {
         name
@@ -1180,6 +1186,8 @@ def finalize_output(
     else:
         dataset_frame = pd.DataFrame(columns=list(expected_columns) or col_order)
 
+    pubchem_fallback_used = False
+
     if pubchem_context is not None and not dataset_frame.empty:
         available_columns = [
             column
@@ -1199,6 +1207,7 @@ def finalize_output(
                 request_limit=pubchem_context.request_limit,
             )
             logger.info("pubchem_fallback_augment_done")
+            pubchem_fallback_used = True
 
     ordered_columns = [column for column in col_order if column in dataset_frame.columns]
     extra_columns = [
@@ -1276,6 +1285,34 @@ def finalize_output(
         "parent_lookup_fallback_attached": parent_stats.fallback_attached,
         "parent_lookup_no_parent": parent_stats.no_parent,
     }
+
+    pubchem_columns_present = [
+        column
+        for column in _PUBCHEM_OPTIONAL_COLUMNS
+        if column in dataset_frame.columns
+    ]
+    pubchem_columns_present.sort()
+    pubchem_columns_with_values = [
+        column
+        for column in pubchem_columns_present
+        if not dataset_frame[column].isna().all()
+    ]
+    pubchem_columns_with_values.sort()
+    if pubchem_enabled and dataset_frame.size and pubchem_columns_present and not pubchem_columns_with_values:
+        logger.warning(
+            "pubchem_augmentation_missing_values",
+            columns=pubchem_columns_present,
+        )
+
+    stats.update(
+        {
+            "pubchem_enabled": pubchem_enabled,
+            "pubchem_columns_present": pubchem_columns_present,
+            "pubchem_columns_with_values": pubchem_columns_with_values,
+            "pubchem_values_present": bool(pubchem_columns_with_values),
+            "pubchem_fallback_used": pubchem_fallback_used,
+        }
+    )
     if missing_ids_tuple:
         stats["missing_molecule_ids"] = list(missing_ids_tuple)
         stats["missing_molecule_ids_count"] = len(missing_ids_tuple)
