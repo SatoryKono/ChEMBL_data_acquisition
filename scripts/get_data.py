@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -45,10 +46,10 @@ def _guard_cli_module() -> None:
         raise SystemExit(f"merge conflict detected in {location}") from exc
 
 
-from library.config import DEFAULT_CONFIG_PATH, load_config
-
-
 _guard_cli_module()
+
+
+from library.config import DEFAULT_CONFIG_PATH, load_config
 
 
 @dataclass(frozen=True)
@@ -165,15 +166,14 @@ def _ensure_pubchem_env(args: Sequence[str], env: dict[str, str]) -> None:
     """Ensure PubChem enrichment is enabled for the test item subprocess."""
 
     env_state = _normalize_env_bool(env.get(_PUBCHEM_ENV_VAR))
-    if env_state is True:
-        return
-
     config_enabled = _pubchem_enabled_from_config(args)
-    if config_enabled is True and env_state is not False:
+
+    if env_state is True or (config_enabled is True and env_state is not False):
+        logging.info("[PUBCHEM] Enrichment enabled for testitem table")
         return
 
     env[_PUBCHEM_ENV_VAR] = "true"
-    logging.info("testitem_pubchem_enable_override")
+    logging.info("[PUBCHEM] Enrichment enabled for testitem table")
 
 
 def _ensure_base_path_env(args: Sequence[str], env: dict[str, str]) -> None:
@@ -300,27 +300,37 @@ def configure_logging(level_name: str | None) -> Path:
 TARGET_SUBCOMMANDS: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
 
 
+def _coerce_forward_args(
+    forward_args: ForwardArgs | Sequence[str],
+) -> ForwardArgs:
+    if isinstance(forward_args, ForwardArgs):
+        return forward_args
+    return ForwardArgs(tuple(forward_args), extras_start=len(forward_args), extra_len=0)
+
+
 def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
     script_path = SCRIPTS_DIR / stage.script
     if not script_path.exists():
         logging.error("❌ Скрипт %s не найден по пути %s", stage.script, script_path)
         sys.exit(1)
 
-    start = datetime.now()
-    logging.info("▶ Запуск %s...", stage.script)
+    forward = _coerce_forward_args(forward_args)
 
     if not isinstance(forward_args, ForwardArgs):
         forward_args = ForwardArgs(tuple(forward_args), 0, len(forward_args))
 
     if stage.name == "target":
-        stage_args = forward_args.with_default_subcommand(
+        stage_args = forward.with_default_subcommand(
             "all", choices=TARGET_SUBCOMMANDS
         )
     else:
-        stage_args = forward_args.as_list()
+        stage_args = forward.as_list()
 
-    if stage.name == "testitem" and "--pubchem-enable" not in stage_args:
-        stage_args.append("--pubchem-enable")
+    if stage.name == "testitem":
+        # Ensure PubChem enrichment mirrors direct CLI invocation of the
+        # get_testitem_data.py script.
+        if "--pubchem-enable" not in stage_args:
+            stage_args.append("--pubchem-enable")
 
     env = os.environ.copy()
     _ensure_base_path_env(stage_args, env)
@@ -328,8 +338,12 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
         _ensure_pubchem_env(stage_args, env)
 
     command = [sys.executable, str(script_path), *stage_args]
+    quoted_command = shlex.join(command)
+    logging.info("▶ Запуск %s", stage.script)
+    logging.info("   Команда: %s", quoted_command)
+    logging.info("   Рабочая директория: %s", os.getcwd())
+
     start = datetime.now()
-    logging.info("▶ Запуск %s...", stage.script)
     result = subprocess.run(command, check=False, env=env)
     duration = (datetime.now() - start).total_seconds()
 
