@@ -273,9 +273,14 @@ py -3 scripts\get_target_data.py all ^
 | Опция | Значение по умолчанию | Описание |
 |-------|------------------------|----------|
 | `--column` | `assay_chembl_id` | Колонка с идентификаторами. |
-| `--batch-size` | `50` | Записей на запрос. |
-| `--timeout` | `30.0` | Таймаут HTTP. |
+| `--batch-size` | `25` | Количество записей в запросе (берётся из `sources.chembl.pipelines.assay.batch_size`).【F:config/config.yaml†L35-L47】 |
+| `--timeout` | `60.0` | Таймаут HTTP, определённый в конфигурации (`sources.chembl.pipelines.assay.timeout`).【F:config/config.yaml†L35-L47】 |
 | `--limit`, `--offset` | `None`, `0` | Управление диапазоном. |
+| `--postprocess` / `--no-postprocess` | `False` | Включает постобработку, удаляющую запрещённые столбцы и пересоздающую QA-артефакты.【F:library/cli/commands/get_assay_data.py†L864-L908】 |
+
+Парсер держит облегчённые CLI-значения (10 идентификаторов, таймаут 30 с), но
+фактические параметры берутся из `config/config.yaml`, поэтому YAML остаётся
+единственным источником правды для автоматизации.【F:library/cli/commands/get_assay_data.py†L864-L908】【F:config/config.yaml†L35-L47】
 
 Пример запуска с ограничением в 100 записей:
 
@@ -324,12 +329,14 @@ python scripts/get_activity_data.py \
 | Опция | Значение по умолчанию | Описание |
 |-------|-----------------------|----------|
 | `--column` | `molecule_chembl_id` | Колонка с идентификаторами молекул. |
-| `--batch-size` | `250` | Количество идентификаторов в одном запросе. |
-| `--timeout` | `90.0` | HTTP-таймаут на запрос. |
+| `--batch-size` | `250` | Количество идентификаторов в одном запросе (`sources.chembl.pipelines.testitem.batch_size`).【F:config/config.yaml†L35-L69】 |
+| `--timeout` | `90.0` | HTTP-таймаут на запрос (значение из YAML).【F:config/config.yaml†L35-L69】 |
 | `--limit`, `--offset` | `None`, `0` | Диапазон обработки. |
+| `--pubchem-enable` / `--no-pubchem-enable` | `Зависит от YAML` | Принудительно включает или отключает обогащение PubChem вне зависимости от конфигурации.【F:library/cli/commands/get_testitem_data.py†L896-L934】 |
+| `--postprocess` / `--no-postprocess` | `False` | Запускает детерминированную постобработку (слияние PubChem-полей, иерархии, QA).【F:library/cli/commands/get_testitem_data.py†L896-L934】 |
 
-Параметры ретраев, бэкоффа и настроек PubChem задаются в YAML-конфигурации
-(`testitem`).
+Параметры ретраев, бэкоффа и поведения PubChem централизованы в YAML (блок
+`testitem`), поэтому CLI и оркестратор работают с единым набором значений.【F:config/config.yaml†L35-L69】
 
 ## Конвейер тканей `get_tissue_data`
 

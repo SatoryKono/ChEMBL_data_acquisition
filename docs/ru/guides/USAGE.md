@@ -263,11 +263,13 @@ get-target-data all \
 ```
 get-assay-data --input data/input/assay.csv \
     --final-out output/assay_$(date +%Y%m%d).csv \
-    --batch-size 100 --timeout 60 --limit 200
+    --batch-size 50 --timeout 60 --limit 200 --postprocess
 ```
 
 Скрипт выгружает данные из ChEMBL, вычисляет счётчики по таргетам, нормализует и
 валидирует таблицу, затем формирует стандартный набор артефактов.
+Флаг `--postprocess` запускает этап очистки, который удаляет устаревшие
+колонки и пересоздаёт QA-артефакты тем же кодом, что и оркестратор.【F:library/cli/commands/get_assay_data.py†L864-L908】
 
 ## Пайплайн активностей (`get-activity-data`)
 
@@ -286,14 +288,16 @@ get-activity-data --input data/input/activity.csv \
 ```
 get-testitem-data --input data/input/testitem.csv \
     --final-out output/testitems_$(date +%Y%m%d).csv \
-    --batch-size 250 --timeout 90 --limit 400
+    --batch-size 250 --timeout 90 --limit 400 --pubchem-enable --postprocess
 ```
 
 Пайплайн объединяет молекулы из ChEMBL с данными PubChem, нормализует результат и
 по умолчанию сохраняет три CSV: датасет, `*_quality_report_table.csv` и
-`*_data_correlation_report_table.csv`. Флаг `--emit-legacy-artifacts` включает
-наследуемые диагностические файлы (failure cases, `.meta.yaml`, отчёты
-постобработки). 【F:library/pipelines/testitem/cli.py†L864-L1186】【F:library/cli/commands/get_testitem_data.py†L564-L738】
+`*_data_correlation_report_table.csv`. Используйте `--pubchem-enable`, чтобы
+принудительно включить обогащение (а `--no-pubchem-enable` — для тестовых прогонов)
+и `--postprocess`, чтобы запустить детерминированную постобработку с иерархиями и
+QA. В связке с `--emit-legacy-artifacts` это возвращает исторические диагностические
+файлы (failure cases, `.meta.yaml`, отчёты постобработки).【F:library/cli/commands/get_testitem_data.py†L896-L934】【F:library/pipelines/testitem/cli.py†L812-L902】
 
 ## Вспомогательные утилиты
 
