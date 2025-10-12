@@ -674,12 +674,13 @@ class DocumentPipeline:
 
                 semsch_map: dict[str, dict[str, str]] = {}
                 if semantic_pmids:
-                    _acquire_documents(semantic_service_limiter)
+                    _acquire_documents(None)
                     semsch_list = ssl.fetch_semantic_scholar_batch(
                         base_session,
                         semantic_pmids,
                         sleep,
                         cfg=semantic_scholar_cfg,
+                        limiter=semantic_service_limiter,
                         retry_cfg=session_cfg.retry,
                     )
 
@@ -699,12 +700,13 @@ class DocumentPipeline:
                         if record is None or record.get("scholar.Error"):
                             fallback_pmids.append(pmid)
                     for pmid in fallback_pmids:
-                        _acquire_documents(semantic_service_limiter)
+                        _acquire_documents(None)
                         fallback_record = ssl.fetch_semantic_scholar(
                             base_session,
                             pmid,
                             sleep,
                             cfg=semantic_scholar_cfg,
+                            limiter=semantic_service_limiter,
                             retry_cfg=session_cfg.retry,
                         )
                         semsch_map[pmid] = fallback_record

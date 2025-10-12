@@ -14,6 +14,7 @@ from typing import Any
 
 import requests
 
+from ..common.rate_limiter import RateLimiter, get_limiter
 from ..config.models import RetryCfg, SemanticScholarCfg
 from .pubmed import _do_request
 
@@ -40,11 +41,20 @@ def fetch_semantic_scholar(
     sleep: float,
     cfg: SemanticScholarCfg | None = None,
     *,
+    limiter: RateLimiter | None = None,
     retry_cfg: RetryCfg | None = None,
 ) -> dict[str, str]:
     """Retrieve Semantic Scholar metadata for ``pmid``."""
 
     cfg = cfg or SemanticScholarCfg()
+    effective_limiter = limiter
+    if effective_limiter is None:
+        rps = cfg.rps
+        if rps is not None and rps > 0:
+            effective_limiter = get_limiter("semantic_scholar", rps, cfg.burst)
+    if effective_limiter is not None:
+        effective_limiter.acquire()
+
     base = cfg.base.rstrip("/")
     url = f"{base}/paper/PMID:{pmid}"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
@@ -100,6 +110,7 @@ def fetch_semantic_scholar_batch(
     sleep: float,
     cfg: SemanticScholarCfg | None = None,
     *,
+    limiter: RateLimiter | None = None,
     retry_cfg: RetryCfg | None = None,
 ) -> list[dict[str, str]]:
     """Retrieve Semantic Scholar metadata for multiple PMIDs."""
@@ -108,6 +119,14 @@ def fetch_semantic_scholar_batch(
         return []
 
     cfg = cfg or SemanticScholarCfg()
+    effective_limiter = limiter
+    if effective_limiter is None:
+        rps = cfg.rps
+        if rps is not None and rps > 0:
+            effective_limiter = get_limiter("semantic_scholar", rps, cfg.burst)
+    if effective_limiter is not None:
+        effective_limiter.acquire()
+
     base = cfg.base.rstrip("/")
     url = f"{base}/paper/batch"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
