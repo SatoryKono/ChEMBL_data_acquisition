@@ -1384,9 +1384,18 @@ def _run_testitem_subprocess(
     def _ensure_argument(arguments: list[str], option: str, value: object | None) -> None:
         if value in (None, argparse.SUPPRESS):
             return
-        if option in arguments:
+        argument_value = str(value)
+        try:
+            index = arguments.index(option)
+        except ValueError:
+            arguments.extend([option, argument_value])
             return
-        arguments.extend([option, str(value)])
+
+        next_index = index + 1
+        if next_index < len(arguments):
+            arguments[next_index] = argument_value
+        else:
+            arguments.append(argument_value)
 
     diagnostics_enabled = _diagnostic_outputs_enabled(cfg)
     working_output.parent.mkdir(parents=True, exist_ok=True)

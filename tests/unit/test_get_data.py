@@ -4,6 +4,7 @@ import argparse
 import importlib
 import io
 import json
+import subprocess
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -1208,6 +1209,57 @@ def test_run_step__testitem_forces_pubchem_enabled(
     assert result.exit_code == 0
     assert result.status == "success"
     assert cfg.sources.pubchem.enable is False
+
+
+@pytest.mark.unit
+def test_run_testitem_subprocess__replaces_config_argument(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_cfg = _make_config(tmp_path)
+    final_output = run_cfg.output_path("testitem")
+    working_output = final_output.with_name(f"{final_output.name}.tmp")
+
+    class _StubStep:
+        def build_arguments(self, cfg_arg: get_data.PipelineRunConfig, output_path: Path) -> list[str]:
+            return [
+                "--config",
+                str(cfg_arg.config_path),
+                "--input",
+                str(cfg_arg.input_path("testitem")),
+                "--final-out",
+                str(output_path),
+            ]
+
+    captured_command: dict[str, list[str]] = {}
+
+    def _capture_run(command: list[str], check: bool, cwd: str, env: dict[str, str]):
+        captured_command["command"] = command
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(get_data.subprocess, "run", _capture_run)
+
+    removed_paths: list[Path] = []
+    original_unlink = get_data.os.unlink
+
+    def _record_unlink(path: str) -> None:
+        removed_paths.append(Path(path))
+        original_unlink(path)
+
+    monkeypatch.setattr(get_data.os, "unlink", _record_unlink)
+
+    result = get_data._run_testitem_subprocess(
+        _StubStep(),
+        run_cfg,
+        final_output=final_output,
+        working_output=working_output,
+    )
+
+    assert result.exit_code == 0
+    command = captured_command["command"]
+    config_index = command.index("--config")
+    config_path = Path(command[config_index + 1])
+    assert config_path != run_cfg.config_path
+    assert config_path in removed_paths
 
 
 @pytest.mark.unit
