@@ -24,7 +24,7 @@ sources:
   chembl:
     api:
       chembl_base: https://www.ebi.ac.uk/chembl/api/data
-      user_agent: "chembl-da/1.0 (mailto:team@example.org)"
+      user_agent: "ChEMBL-ETL/2.1 (mailto:team@example.org)"
     pipelines:
       document:
         pubmed:
@@ -70,7 +70,7 @@ whether user input is required (`Yes` = must be provided explicitly).
 | `backoff_factor` | No | `0.5` | Exponential backoff multiplier. |
 | `rps` | No | `20` | Requests-per-second limit. |
 | `burst` | No | `20` | Token bucket burst capacity. |
-| `user_agent` | **Yes** | `chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)` | Replace with your team contact before production. |
+| `user_agent` | **Yes** | `ChEMBL-ETL/2.1 (mailto:chembl-data@ebi.ac.uk)` | Replace with your team contact before production. |
 
 ### `sources.chembl.cache`
 
