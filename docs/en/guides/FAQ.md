@@ -6,11 +6,12 @@ corresponding remediation steps. The Russian counterpart lives at
 
 ## Why does `get_document_data` exit with "--mode is required"?
 
-`get_document_data` accepts a `--mode` flag (`chembl`, `pubmed`, `all`) and
-refuses to run without it. The parser eventually calls
-[`prepare_io_paths`](../../../library/cli/parser.py) which expects the mode to be set
-when building log messages. Supply `--mode` explicitly or use the positional
-alias (`python scripts/get_document_data.py all ...`).
+`get_document_data` accepts a `--mode` flag (`chembl`, `pubmed`, `all`). When the
+flag is omitted, the CLI now falls back to the combined `all` mode so that
+orchestrated runs do not fail with a missing argument. The positional alias still
+works (`python scripts/get_document_data.py all ...`). Passing both the flag and
+the positional command must result in the same mode; otherwise argument parsing
+aborts with an error.
 
 ## I passed `--limit 0` and nothing happened. Is that expected?
 
