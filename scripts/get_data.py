@@ -19,11 +19,13 @@ from typing import Iterable, Sequence
 try:  # pragma: no cover - exercised via CLI invocation
     from scripts._bootstrap import ensure_project_root
 except ModuleNotFoundError as exc:  # pragma: no cover - import guard
-    if exc.name != "scripts._bootstrap":
+    if exc.name not in {"scripts", "scripts._bootstrap"}:
         raise
     current_dir = Path(__file__).resolve().parent
     project_root = current_dir.parent
-    sys.path.insert(0, str(project_root))
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    sys.modules.pop("scripts", None)
     from scripts._bootstrap import ensure_project_root
 
 
