@@ -45,10 +45,10 @@ def _guard_cli_module() -> None:
         raise SystemExit(f"merge conflict detected in {location}") from exc
 
 
-from library.config import DEFAULT_CONFIG_PATH, load_config
-
-
 _guard_cli_module()
+
+
+from library.config import DEFAULT_CONFIG_PATH, load_config
 
 
 @dataclass(frozen=True)
