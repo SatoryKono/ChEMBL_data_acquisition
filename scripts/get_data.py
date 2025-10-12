@@ -162,7 +162,11 @@ def run_stage(stage: Stage, extra_args: Iterable[str]) -> float:
     return duration
 
 
-def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> list[str]:
+def build_forward_args(
+    args: argparse.Namespace,
+    extra: Sequence[str],
+    stage: Stage | None = None,
+) -> list[str]:
     forward: list[str] = []
     if args.limit is not None:
         forward.extend(["--limit", str(args.limit)])
@@ -181,6 +185,15 @@ def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> list[s
         forward.extend(["--input-dir", DEFAULT_INPUT_DIR])
     if not _has_option("--output-dir"):
         forward.extend(["--output-dir", DEFAULT_OUTPUT_DIR])
+
+    if stage is not None and stage.name == "testitem":
+        has_pubchem_flag = any(
+            option in {"--pubchem-enable", "--no-pubchem-enable"}
+            or option.startswith("--pubchem-enable=")
+            for option in forward
+        )
+        if not has_pubchem_flag:
+            forward.append("--pubchem-enable")
     return forward
 
 
@@ -205,13 +218,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     log_file = configure_logging(args.log_level)
     logging.info("Логи сохраняются в %s", log_file)
 
-    forward_args = build_forward_args(args, unknown)
-
     durations: list[tuple[str, float]] = []
     for stage in STAGES:
         if stage.name in args.skip:
             logging.info("⏭ Пропуск этапа %s по флагу --skip", stage.name)
             continue
+        forward_args = build_forward_args(args, unknown, stage)
         duration = run_stage(stage, forward_args)
         durations.append((stage.name, duration))
 
