@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 import warnings
+from collections.abc import Sequence
 
 import pandas as pd
 
 from ..common.log import logger
 from ..table_quality import TableQualityProfiler as _LegacyTableQualityProfiler
 from .qc_report import (
-    TableQualityProfilerLike,
     _TABLE_PROFILER_TYPES,
+    TableQualityProfilerLike,
     _build_reports_from_profiler,
     _is_table_profiler_instance,
     _prepare_filtered_frame,

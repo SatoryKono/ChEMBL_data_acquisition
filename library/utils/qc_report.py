@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
 from ..common.log import logger
 from ..table_quality import (
     TableQualityProfiler as _LegacyTableQualityProfiler,
+)
+from ..table_quality import (
     _apply_sampling_and_filters,
 )
 
@@ -50,8 +52,8 @@ def _is_table_profiler_instance(candidate: object) -> bool:
     if not all(hasattr(candidate, attr) for attr in required_attrs):
         return False
 
-    columns = getattr(candidate, "_columns")
-    accumulators = getattr(candidate, "_accumulators")
+    columns = candidate._columns
+    accumulators = candidate._accumulators
 
     if not isinstance(columns, Sequence) or not isinstance(accumulators, Mapping):
         return False
@@ -97,7 +99,7 @@ def _prepare_filtered_frame(
 
 def _build_reports_from_profiler(
     profiler: TableQualityProfilerLike,
-) -> Tuple[pd.DataFrame, dict[str, pd.Series]]:
+) -> tuple[pd.DataFrame, dict[str, pd.Series]]:
     """Generate quality report rows and numeric candidates without file writes."""
 
     rows: list[dict[str, object]] = []

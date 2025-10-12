@@ -11,13 +11,13 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
 from collections.abc import Mapping, MutableMapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-import threading
 from typing import Any, cast
-from xml.etree import ElementTree
 from uuid import NAMESPACE_URL, uuid5
+from xml.etree import ElementTree
 
 import pytest
 
@@ -432,7 +432,7 @@ def _ensure_failure_record(
 ) -> dict[str, Any]:
     summary = cast(MutableMapping[str, object], report.setdefault("summary", {}))
     raw_total = summary.get("total", 0)
-    total_value = int(raw_total) if isinstance(raw_total, (int, float)) else 0
+    total_value = int(raw_total) if isinstance(raw_total, int | float) else 0
     summary["total"] = max(total_value, 1)
     summary["passed"] = 0
     summary["failed"] = 0
@@ -440,7 +440,7 @@ def _ensure_failure_record(
     summary["xfailed"] = 0
     summary["xpassed"] = 0
     raw_error = summary.get("error", 0)
-    error_value = int(raw_error) if isinstance(raw_error, (int, float)) else 0
+    error_value = int(raw_error) if isinstance(raw_error, int | float) else 0
     summary["error"] = max(error_value, 1)
     summary["success_rate"] = 0.0
 

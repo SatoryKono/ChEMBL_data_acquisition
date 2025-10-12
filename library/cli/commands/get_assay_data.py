@@ -49,9 +49,9 @@ from library.pipelines.common import (
 )
 from library.pipelines.common.metadata import get_pipeline_version
 from library.qa.reporting import build_table_quality_hook
+from library.schemas import AssaysSchema, normalize_assays
 from library.utils.data_correlation import generate_correlation_report
 from library.utils.qc_report import generate_qc_report
-from library.schemas import AssaysSchema, normalize_assays
 from library.validation import validate_assays as validate_assays_schema
 
 __all__ = [
@@ -301,23 +301,29 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     StepError = None
 
     if postprocess_enabled:
-        from library.postprocessing import enrich_assay_metadata
-        from library.pipelines.assay import postprocessing as ap  # noqa: WPS433
-        from library.postprocessing.assays import (
-            ASSAY_SCHEMA as POSTPROCESS_ASSAY_SCHEMA,
-            run_assay_pipeline as run_assay_postprocess,
-            validate_assays as validate_postprocess_assays,
-        )
-        from library.postprocessing.common.types import (  # noqa: WPS433
-            SchemaValidationError as PostprocessSchemaError,
-            StepError as PostprocessStepError,
-        )
-        from library.postprocess import (  # noqa: WPS433
+        from library.pipelines.assay import postprocessing as ap
+        from library.postprocess import (
             PostprocessingPipelineConfig,
             generate_metrics_report,
             get_csv_runtime_config,
             get_pipeline_config,
             run_postprocessing_pipeline,
+        )
+        from library.postprocessing import enrich_assay_metadata
+        from library.postprocessing.assays import (
+            ASSAY_SCHEMA as POSTPROCESS_ASSAY_SCHEMA,
+        )
+        from library.postprocessing.assays import (
+            run_assay_pipeline as run_assay_postprocess,
+        )
+        from library.postprocessing.assays import (
+            validate_assays as validate_postprocess_assays,
+        )
+        from library.postprocessing.common.types import (
+            SchemaValidationError as PostprocessSchemaError,
+        )
+        from library.postprocessing.common.types import (
+            StepError as PostprocessStepError,
         )
 
         dictionary_resources = ("dictionary_root",)
@@ -360,7 +366,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             destination=output_path.parent,
         )
     else:
-        table_quality = lambda _: None  # type: ignore[assignment]
+        def _noop_table_quality(_: Path) -> None:
+            return None
+
+        table_quality = _noop_table_quality
 
     def _persist_standard_outputs(dataset_csv: Path) -> io.StandardOutputArtifacts:
         dataset_frame = pd.read_csv(

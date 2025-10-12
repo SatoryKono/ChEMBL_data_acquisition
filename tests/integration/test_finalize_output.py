@@ -6,6 +6,7 @@ from typing import cast
 
 import pandas as pd
 import pytest
+
 from library import io
 from library.common.csv_utils import sha256_file
 from library.integration.chembl_client import ChemblClient

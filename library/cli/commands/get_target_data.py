@@ -21,13 +21,13 @@ import shutil
 import stat
 import sys
 import time
-from tempfile import TemporaryDirectory
-from datetime import datetime, timezone
-from collections.abc import Collection, Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from itertools import islice
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
@@ -73,10 +73,10 @@ from library.pipelines.target import protein_classification as pc
 from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
 from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS, ModeDefaults
 from library.qa.reporting import build_table_quality_hook, is_quality_enabled
-from library.utils.data_correlation import generate_correlation_report
-from library.utils.qc_report import generate_qc_report
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
+from library.utils.data_correlation import generate_correlation_report
+from library.utils.qc_report import generate_qc_report
 from library.validation import ValidationResult, validate_targets
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
@@ -499,7 +499,7 @@ def _resolve_output_metadata(
     if date_hint and re.fullmatch(r"\d{8}", date_hint):
         resolved_date = date_hint
     else:
-        resolved_date = datetime.now(timezone.utc).strftime("%Y%m%d")
+        resolved_date = datetime.now(UTC).strftime("%Y%m%d")
     return normalized_table, resolved_date
 
 
@@ -510,7 +510,7 @@ def run_target_postprocess_if_requested(
     args: argparse.Namespace | None,
     context: IsoformPostprocessContext | None = None,
     ambiguous_classifications: int | None = None,
-) -> "PostprocessingPipelineResult" | None:
+) -> PostprocessingPipelineResult | None:
     """Execute the consolidated target postprocess pipeline when enabled."""
 
     postprocess_enabled = bool(getattr(args, "postprocess", False)) if args else False
@@ -546,7 +546,11 @@ def run_target_postprocess_if_requested(
         )
         from library.postprocessing.targets import (
             TARGET_SCHEMA as _TARGET_POSTPROCESS_SCHEMA,
+        )
+        from library.postprocessing.targets import (
             run_target_pipeline as _run_target_postprocess,
+        )
+        from library.postprocessing.targets import (
             validate_targets as _validate_target_postprocess,
         )
     except ImportError as exc:  # pragma: no cover - optional dependency missing
@@ -2280,9 +2284,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             reason="run_pipeline_requires_outputs",
         )
         emit_standard_outputs = True
-        setattr(args, "emit_standard_outputs", True)
+        args.emit_standard_outputs = True
 
-    setattr(args, "emit_legacy_artifacts", emit_legacy_artifacts)
+    args.emit_legacy_artifacts = emit_legacy_artifacts
 
     if not normalize_at_export:
 
@@ -4018,7 +4022,7 @@ def validate_and_write(
         http_requests=http_requests,
     )
     export_df = final_df
-    pipeline_result: "PostprocessingPipelineResult" | None = None
+    pipeline_result: PostprocessingPipelineResult | None = None
     postprocess_output_path: Path | None = None
     postprocess_report_path: Path | None = None
     final_csv_path: Path | None = None
@@ -4362,9 +4366,9 @@ def run_target_service(
     )
 
     if options.output_stem is not None:
-        setattr(args, "_auto_output_stem", options.output_stem)
+        args._auto_output_stem = options.output_stem
     if options.date is not None:
-        setattr(args, "date", options.date)
+        args.date = options.date
 
     command = options.command
     if command == "chembl":

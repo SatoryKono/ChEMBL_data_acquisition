@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime as dt
+from datetime import UTC
+from datetime import datetime as dt
 from types import SimpleNamespace
 
 import pytest

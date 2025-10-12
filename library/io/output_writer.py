@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 import pandas as pd
 
 from ..common.csv_utils import write_csv_deterministic
-
 
 OUTPUT_DIR = Path("data/output")
 

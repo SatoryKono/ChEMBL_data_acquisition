@@ -29,13 +29,22 @@ import os
 import shutil
 import time
 from collections import deque
-from collections.abc import Callable, Iterable, ItemsView, KeysView, Mapping, Sequence, ValuesView
+from collections.abc import (
+    Callable,
+    ItemsView,
+    Iterable,
+    Iterator,
+    KeysView,
+    Mapping,
+    Sequence,
+    ValuesView,
+)
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from fnmatch import fnmatch
 from heapq import heappop, heappush
 from pathlib import Path
-from typing import IO, Any, Optional, TypeVar, Generic, Iterator
+from typing import IO, Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -52,6 +61,7 @@ from library.config import (
     load_config,
     print_config,
 )
+from library.io.paths import derive_output_labels
 from library.orchestration import ETLContext
 from library.orchestration.workflow import (
     PreparedPipelineStep,
@@ -140,7 +150,6 @@ from library.postprocessing.testitem import (
 from library.postprocessing.testitem import (
     run_testitem_pipeline as run_testitem_postprocess,
 )
-from library.io.paths import derive_output_labels
 from library.reporting.run_manifest import load_output_report, merge_run_output
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
@@ -187,8 +196,8 @@ class _PipelineMapping(BaseModel, Mapping[str, StepValueT], Generic[StepValueT])
 
     @classmethod
     def from_mapping(
-        cls, mapping: Mapping[str, StepValueT] | "_PipelineMapping[StepValueT]"
-    ) -> "_PipelineMapping[StepValueT]":
+        cls, mapping: Mapping[str, StepValueT] | _PipelineMapping[StepValueT]
+    ) -> _PipelineMapping[StepValueT]:
         if isinstance(mapping, cls):
             return mapping
         return cls(entries=dict(mapping))
@@ -2085,7 +2094,7 @@ def run_pipeline(
         if system_cfg is not None:
             doc_quality_cfg = getattr(system_cfg, "doc_quality", None)
             if doc_quality_cfg is not None and hasattr(doc_quality_cfg, "enable"):
-                setattr(doc_quality_cfg, "enable", False)
+                doc_quality_cfg.enable = False
     try:
         if not cfg.dry_run:
             ensure_dirs(base_config)

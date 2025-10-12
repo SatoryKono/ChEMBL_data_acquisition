@@ -278,7 +278,7 @@ def test_run_chembl__builds_standard_outputs_when_missing_artifacts(
     exit_code = get_testitem_data.run_chembl(cfg, args)
 
     assert exit_code == 0
-    assert isinstance(getattr(args, "_testitem_artifacts"), StandardOutputArtifacts)
+    assert isinstance(args._testitem_artifacts, StandardOutputArtifacts)
     pdt.assert_frame_equal(captured["qc_frame"], source_frame)
     pdt.assert_frame_equal(captured["corr_frame"], source_frame)
     pdt.assert_frame_equal(captured["save_dataset"], source_frame)

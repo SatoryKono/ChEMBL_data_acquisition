@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from itertools import islice
 from dataclasses import dataclass
+from itertools import islice
 from pathlib import Path
 from typing import Any
 

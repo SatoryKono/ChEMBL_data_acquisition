@@ -344,7 +344,7 @@ def _resolve_dictionary_root(
     if isinstance(resources, ResourcesCfg):
         return Path(resources.dictionary_dir)
     if hasattr(resources, "dictionary_dir"):
-        return Path(getattr(resources, "dictionary_dir"))
+        return Path(resources.dictionary_dir)
     return Path(resources)
 
 

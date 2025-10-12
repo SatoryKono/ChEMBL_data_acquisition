@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, Sequence
+from typing import TYPE_CHECKING
 
 from ..common.log import logger as default_logger
 from ..project_version import get_pipeline_version
@@ -80,7 +81,7 @@ def list_legacy_artifacts(
 def _write_sentinel(path: Path, *, removed: Iterable[Path], errors: Iterable[tuple[Path, str]]) -> None:
     data = {
         "version": get_pipeline_version(),
-        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "timestamp_utc": datetime.now(UTC).isoformat(),
         "removed": [str(item) for item in removed],
         "errors": [
             {"path": str(path), "error": message}
@@ -96,7 +97,7 @@ def cleanup_legacy_outputs(
     patterns: Sequence[str] | None = None,
     dry_run: bool = False,
     force: bool = False,
-    logger: "Logger" | None = None,
+    logger: Logger | None = None,
 ) -> CleanupResult:
     """Remove legacy artefacts from ``output_dir`` once per installation."""
 
@@ -192,7 +193,7 @@ def cleanup_legacy_outputs(
 
 
 def ensure_legacy_cleanup(
-    cfg: "Config", *, logger: "Logger" | None = None, dry_run: bool = False
+    cfg: Config, *, logger: Logger | None = None, dry_run: bool = False
 ) -> CleanupResult:
     """Ensure the legacy cleanup runs once using the configured output dir."""
 

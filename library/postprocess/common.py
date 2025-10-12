@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Callable, Mapping
+from typing import Any
 
 import pandas as pd
 
@@ -218,11 +219,11 @@ def _write_output_frame(
 class PostprocessingPipelineConfig:
     """Configuration bundle required to execute a postprocessing pipeline."""
 
-    pipeline_config: "PipelineConfig"
-    csv_runtime_config: "CsvRuntimeConfig"
-    runner: Callable[..., tuple["pd.DataFrame", "PipelineRunMetrics"]]
-    validator: Callable[..., "pd.DataFrame"]
-    schema: "DataFrameSchema"
+    pipeline_config: PipelineConfig
+    csv_runtime_config: CsvRuntimeConfig
+    runner: Callable[..., tuple[pd.DataFrame, PipelineRunMetrics]]
+    validator: Callable[..., pd.DataFrame]
+    schema: DataFrameSchema
     logger: Logger
     pipeline_version: str | None = None
 
