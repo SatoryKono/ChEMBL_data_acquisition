@@ -27,6 +27,8 @@ import json
 import logging
 import os
 import shutil
+import subprocess
+import sys
 import time
 from collections import deque
 from collections.abc import (
@@ -157,6 +159,8 @@ from library.reporting.run_manifest import load_output_report, merge_run_output
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_TESTITEM_SCRIPT = _PROJECT_ROOT / "scripts" / "get_testitem_data.py"
 
 
 StepValueT = TypeVar("StepValueT")
@@ -419,7 +423,7 @@ def _build_testitem_options(
         limit=cfg.limit,
         offset=0,
         emit_legacy_artifacts=_diagnostic_outputs_enabled(cfg),
-        pubchem_enabled=not cfg.disable_pubchem,
+        pubchem_enabled=True,
     )
 
 
@@ -1320,6 +1324,144 @@ def _cleanup_empty_directories(path: Path, *, root: Path) -> None:
         current = parent
 
 
+def _ensure_pubchem_enabled(config: Config) -> None:
+    """Force-enable PubChem enrichment on ``config`` for the test item step."""
+
+    sources = getattr(config, "sources", None)
+    if sources is None:
+        return
+
+    pubchem_cfg = getattr(sources, "pubchem", None)
+    if pubchem_cfg is None:
+        try:
+            sources.pubchem = PubChemCfg(enable=True)
+        except AttributeError:
+            return
+        _LOGGER.info("testitem_pubchem_enable_override")
+        return
+
+    was_enabled = getattr(pubchem_cfg, "enable", None)
+    if was_enabled is True:
+        return
+
+    _LOGGER.info("testitem_pubchem_enable_override")
+    if hasattr(pubchem_cfg, "model_copy"):
+        updated_pubchem_cfg = pubchem_cfg.model_copy(update={"enable": True})
+        try:
+            sources.pubchem = updated_pubchem_cfg
+        except AttributeError:
+            setattr(pubchem_cfg, "enable", True)
+    else:
+        setattr(pubchem_cfg, "enable", True)
+
+
+import tempfile
+import yaml
+
+def _run_testitem_subprocess(
+    step: PipelineStep,
+    cfg: PipelineRunConfig,
+    *,
+    final_output: Path,
+    working_output: Path,
+) -> StepExecutionResult:
+    """Execute the testitem stage via ``scripts/get_testitem_data.py``."""
+
+    def _ensure_argument(arguments: list[str], option: str, value: object | None) -> None:
+        if value in (None, argparse.SUPPRESS):
+            return
+        if option in arguments:
+            return
+        arguments.extend([option, str(value)])
+
+    diagnostics_enabled = _diagnostic_outputs_enabled(cfg)
+    working_output.parent.mkdir(parents=True, exist_ok=True)
+    final_output.parent.mkdir(parents=True, exist_ok=True)
+    for candidate in (working_output, final_output):
+        if candidate.exists():
+            try:
+                candidate.unlink()
+            except OSError:
+                pass
+
+    with tempfile.NamedTemporaryFile(mode="w+", suffix=".yaml", delete=False) as tmp_config_file:
+        try:
+            with open(cfg.config_path) as f:
+                config_data = yaml.safe_load(f)
+
+            if 'sources' not in config_data:
+                config_data['sources'] = {}
+            if 'pubchem' not in config_data['sources']:
+                config_data['sources']['pubchem'] = {}
+            config_data['sources']['pubchem']['enable'] = True
+
+            yaml.dump(config_data, tmp_config_file)
+            tmp_config_path = tmp_config_file.name
+        except Exception as e:
+            _LOGGER.error(f"Failed to create temporary config file: {e}")
+            return StepExecutionResult(exit_code=1, executed=False, status="failed", reason="config_error")
+
+    arguments = step.build_arguments(cfg, output_path=final_output)
+    _ensure_argument(arguments, "--config", tmp_config_path)
+    _ensure_argument(arguments, "--base-path", getattr(cfg, "base_path", None))
+    _ensure_argument(arguments, "--input-dir", getattr(cfg, "input_dir", None))
+    _ensure_argument(arguments, "--output-dir", getattr(cfg, "output_dir", None))
+    _ensure_argument(arguments, "--date", getattr(cfg, "date_prefix", None))
+    if diagnostics_enabled and "--emit-legacy-artifacts" not in arguments:
+        arguments.append("--emit-legacy-artifacts")
+
+    command = [sys.executable, str(_TESTITEM_SCRIPT), *arguments]
+    env = os.environ.copy()
+
+    _LOGGER.info(
+        "testitem_subprocess_start",
+        command=command,
+        script=str(_TESTITEM_SCRIPT),
+    )
+
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            cwd=str(_PROJECT_ROOT),
+            env=env,
+        )
+    except OSError as exc:
+        _LOGGER.error(
+            "testitem_subprocess_error",
+            error=str(exc),
+            command=command,
+        )
+        return StepExecutionResult(
+            exit_code=1,
+            executed=True,
+            status="failed",
+            reason="subprocess_error",
+        )
+    finally:
+        os.unlink(tmp_config_path)
+
+    exit_code = int(completed.returncode)
+    status = "success" if exit_code == 0 else "failed"
+    reason = None if exit_code == 0 else "non_zero_exit"
+
+    if exit_code == 0:
+        _LOGGER.info("testitem_subprocess_done", command=command)
+    else:
+        _LOGGER.error(
+            "testitem_subprocess_exit",
+            exit_code=exit_code,
+            command=command,
+        )
+
+    return StepExecutionResult(
+        exit_code=exit_code,
+        executed=True,
+        status=status,
+        reason=reason,
+    )
+
+
 def _run_testitem_pipeline_without_pubchem(
     cfg: PipelineRunConfig,
     base_config: Config,
@@ -1394,7 +1536,13 @@ def _run_step(
             return _run_testitem_pipeline_without_pubchem(
                 cfg, base_config, input_path, working_output
             )
-        _ensure_testitem_pubchem_enabled(base_config)
+        _ensure_pubchem_enabled(base_config)
+        return _run_testitem_subprocess(
+            step,
+            cfg,
+            final_output=final_output,
+            working_output=working_output,
+        )
 
     api = _PIPELINE_APIS.get(step.name)
     if api is None:
