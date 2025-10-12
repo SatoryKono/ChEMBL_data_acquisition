@@ -8,6 +8,7 @@ import sys
 import time
 from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime
+from importlib import import_module
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +20,20 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+
+try:  # pragma: no cover - optional dependency shim
+    import pandera.pandas as pa  # type: ignore  # noqa: F401
+except ModuleNotFoundError:  # pragma: no cover - fallback for Pandera >=0.20
+    import pandera  # type: ignore
+    import types
+
+    pandas_model = import_module("pandera.api.pandas.model")
+    shim = types.ModuleType("pandera.pandas")
+    for attr in dir(pandas_model):
+        if attr.startswith("__"):
+            continue
+        setattr(shim, attr, getattr(pandas_model, attr))
+    sys.modules["pandera.pandas"] = shim
 
 from config.paths import DICTIONARY_DIR
 from library.config import Config
