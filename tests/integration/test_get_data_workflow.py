@@ -772,6 +772,67 @@ def test_pipeline_subset__testitem_skip_existing_avoids_parent_warm(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("pubchem_enabled", [True, False])
+def test_testitem_pipeline_receives_pubchem_toggle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pubchem_enabled: bool
+) -> None:
+    cfg = _prepare_environment(tmp_path)
+    _write_input(
+        cfg,
+        "testitem",
+        pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]}),
+    )
+
+    recorded: dict[str, object] = {}
+
+    def _testitem_runner(
+        config: Config, options: get_data.TestitemPipelineOptions
+    ) -> get_data.PipelineRunResult:
+        recorded["pubchem_enabled"] = getattr(options, "pubchem_enabled", None)
+        working_path = Path(options.output_csv)
+        working_path.parent.mkdir(parents=True, exist_ok=True)
+        working_path.write_text(
+            "molecule_chembl_id\nCHEMBL1\n",
+            encoding="utf-8",
+        )
+        return get_data.PipelineRunResult(
+            exit_code=0,
+            output_path=working_path,
+            executed=True,
+            reason=None,
+            written=True,
+        )
+
+    pipeline_api = get_data.PipelineApi(
+        get_data._build_testitem_options,
+        _testitem_runner,
+    )
+    monkeypatch.setattr(
+        get_data, "_PIPELINE_APIS", {"testitem": pipeline_api}, raising=False
+    )
+    monkeypatch.setattr(get_data, "_warm_parent_catalog", lambda *_: None, raising=False)
+    monkeypatch.setattr(get_data, "ensure_dirs", lambda *_: None, raising=False)
+
+    base_config = Config()
+    base_config.sources.pubchem.enable = pubchem_enabled
+
+    monkeypatch.setattr(
+        get_data,
+        "load_config",
+        lambda *_args, **_kwargs: base_config,
+        raising=False,
+    )
+
+    step = next(
+        step for step in get_data.DEFAULT_PIPELINE_STEPS if step.name == "testitem"
+    )
+
+    status = get_data.run_pipeline(cfg, steps=(step,))
+    assert status == 0
+    assert recorded["pubchem_enabled"] is pubchem_enabled
+
+
+@pytest.mark.integration
 def test_pipeline_subset__retry_after_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -1317,6 +1317,20 @@ def _run_step(
         )
 
     options = api.build_options(cfg, input_path, working_output)
+    if step.name == "testitem" and hasattr(options, "pubchem_enabled"):
+        pubchem_enabled = True
+        try:
+            pubchem_cfg = getattr(base_config, "pubchem")
+        except AttributeError:
+            pubchem_cfg = None
+        if pubchem_cfg is not None and hasattr(pubchem_cfg, "enable"):
+            pubchem_enabled = bool(pubchem_cfg.enable)
+        current_override = getattr(options, "pubchem_enabled", None)
+        if current_override != pubchem_enabled:
+            try:
+                options = replace(options, pubchem_enabled=pubchem_enabled)
+            except TypeError:
+                options.pubchem_enabled = pubchem_enabled
     result = api.runner(base_config, options)
     executed = bool(result.executed)
     if not executed and result.exit_code == 0:
