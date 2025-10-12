@@ -325,7 +325,7 @@ class ApiCfg(_BaseModel):
     backoff_factor: float = Field(0.5, ge=0)
     rps: int = Field(5, ge=1)
     burst: int = Field(5, ge=1)
-    user_agent: str = "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)"
+    user_agent: str = "ChEMBL-ETL/2.1 (mailto:chembl-data@ebi.ac.uk)"
 
     @field_validator("chembl_base")
     @classmethod
@@ -531,27 +531,27 @@ class PubChemCfg(_BaseModel):
     )
     base: str = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
     user_agent: str = Field(
-        "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)",
+        "ChEMBL-ETL/2.1 (mailto:chembl-data@ebi.ac.uk)",
         description="Custom User-Agent for PubChem requests including contact details",
     )
     verify: bool | str = True
     timeout_connect: float = Field(5.0, ge=1)
     timeout_read: float = Field(60.0, ge=1)
     timeout_seconds: float = Field(
-        30.0,
+        45.0,
         ge=0,
         description="Overall timeout applied to individual PubChem lookups",
     )
-    retries: int = Field(3, ge=0)
+    retries: int = Field(5, ge=0)
     rps: int = Field(3, ge=1)
-    burst: int = Field(5, ge=1)
+    burst: int = Field(3, ge=1)
     delay: float = Field(
-        0.2,
+        1.0,
         ge=0,
         description="Base delay between retries for network errors",
     )
     retry_jitter_seconds: float = Field(
-        0.0,
+        0.5,
         ge=0,
         description="Random jitter added to fallback retry delays when Retry-After headers are absent",
     )
@@ -560,7 +560,7 @@ class PubChemCfg(_BaseModel):
         description="Seed controlling deterministic jitter; set to null to use system randomness",
     )
     backoff_initial_seconds: float = Field(
-        0.5,
+        1.0,
         ge=0,
         description="Initial delay when backing off after 429/5xx responses",
     )

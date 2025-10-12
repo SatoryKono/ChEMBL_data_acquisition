@@ -26,7 +26,7 @@ The default configuration lives in `config/config.yaml`. Create
 sources:
   chembl:
     api:
-      user_agent: "chembl-da/1.0 (mailto:your-team@example.org)"
+      user_agent: "ChEMBL-ETL/2.1 (mailto:your-team@example.org)"
 ```
 
 Confirm the final configuration:
