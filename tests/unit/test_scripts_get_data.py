@@ -101,6 +101,22 @@ def test_parse_args__coerces_positional_limit() -> None:
 
 
 @pytest.mark.unit
+def test_build_forward_args__target_command_precedes_limit() -> None:
+    from scripts import get_data
+
+    args = SimpleNamespace(limit=7, log_level=None, config=None)
+    forwarded = get_data.build_forward_args(args, [])
+
+    stage_args = forwarded.with_default_subcommand(
+        "all", choices=get_data.TARGET_SUBCOMMANDS
+    )
+
+    assert stage_args.count("all") == 1
+    assert "--limit" in stage_args
+    assert stage_args.index("--limit") > stage_args.index("all")
+
+
+@pytest.mark.unit
 def test_parse_args__positional_limit_conflict(capsys: pytest.CaptureFixture[str]) -> None:
     from scripts import get_data
 
