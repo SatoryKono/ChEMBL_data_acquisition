@@ -470,12 +470,14 @@ _TESTITEM_PIPELINE_API = PipelineApi[TestitemPipelineOptions](
     _build_testitem_options, run_testitem_pipeline
 )
 
+_TESTITEM_CONFIG_BASE_PATH = "sources.chembl.pipelines.testitem"
+
 _TESTITEM_CONFIG_MAPPING: dict[str, str] = {
-    "timeout": "testitem.timeout",
-    "column": "testitem.column",
-    "batch_size": "testitem.batch_size",
-    "limit": "testitem.limit",
-    "offset": "testitem.offset",
+    "timeout": f"{_TESTITEM_CONFIG_BASE_PATH}.timeout",
+    "column": f"{_TESTITEM_CONFIG_BASE_PATH}.column",
+    "batch_size": f"{_TESTITEM_CONFIG_BASE_PATH}.batch_size",
+    "limit": f"{_TESTITEM_CONFIG_BASE_PATH}.limit",
+    "offset": f"{_TESTITEM_CONFIG_BASE_PATH}.offset",
 }
 
 _PIPELINE_APIS: Mapping[str, PipelineApi[Any]] = {
