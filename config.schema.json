@@ -1337,6 +1337,19 @@
           "title": "User Agent",
           "type": "string"
         },
+        "verify": {
+          "default": true,
+          "description": "TLS verification configuration for PubChem requests; accepts a boolean or path to a CA bundle",
+          "title": "Verify",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
         "timeout_connect": {
           "default": 5.0,
           "minimum": 1,

@@ -114,7 +114,7 @@ _SERVICE_UNAVAILABLE_LOCK = Lock()
 _PLACEHOLDER_CONTACT = "contact@example.org"
 _USER_AGENT_ERROR = (
     "PubChem client requires a custom User-Agent; "
-    "call init_session with contact details before making requests."
+    "set sources.pubchem.user_agent to include valid contact details before making requests."
 )
 
 _THREAD_STATE = local()
@@ -147,6 +147,8 @@ def _service_outage_remaining(
             if _SERVICE_OUTAGE_DETAILS is not None
             else None
         )
+        if details is not None:
+            details.setdefault("cache", True)
         return remaining, _SERVICE_OUTAGE_REASON, details
 
 
@@ -327,15 +329,24 @@ def _has_contact_details(user_agent: str | None) -> bool:
     return "@" in lowered
 
 
+def _assert_user_agent(user_agent: str | None) -> None:
+    """Raise :class:`ValueError` when *user_agent* lacks contact details."""
+
+    if not _has_contact_details(user_agent):
+        raise ValueError(_USER_AGENT_ERROR)
+
+
 def init_session(api: ApiCfg, retry: RetryCfg) -> None:
     """Initialise the shared HTTP session."""
 
     global _SESSION_CFG, _SESSION_SIGNATURE, _SESSION_INITIALISED, _session
+    _assert_user_agent(api.user_agent)
     signature = _config_signature(api, retry)
+    new_session = session_with_retry(api, retry)
     old_session: Session | None = None
     with _SESSION_LOCK:
         old_session = _session
-        _session = None
+        _session = new_session
         _SESSION_CFG = (api, retry)
         _SESSION_SIGNATURE = signature
         _SESSION_INITIALISED = True
@@ -355,26 +366,19 @@ def get_session(cfg: ApiCfg | None = None) -> Session:
         needs_refresh = signature != _SESSION_SIGNATURE or _session is None
         _SESSION_CFG = (target_api, current_retry)
         if needs_refresh:
-            if not _SESSION_INITIALISED and not _has_contact_details(
-                target_api.user_agent
-            ):
-                raise ValueError(_USER_AGENT_ERROR)
+            _assert_user_agent(target_api.user_agent)
             new_session = session_with_retry(target_api, current_retry)
             old_session = _session
             _session = new_session
             _SESSION_SIGNATURE = signature
-            if not _SESSION_INITIALISED:
-                _SESSION_INITIALISED = True
         session = _session
     if old_session is not None:
         old_session.close()
     if session is None:
         raise RuntimeError("Failed to initialise PubChem session")
-    if not _SESSION_INITIALISED:
-        user_agent = session.headers.get("User-Agent")
-        if not _has_contact_details(user_agent):
-            raise ValueError(_USER_AGENT_ERROR)
-        _SESSION_INITIALISED = True
+    user_agent = session.headers.get("User-Agent")
+    _assert_user_agent(user_agent)
+    _SESSION_INITIALISED = True
     return session
 
 
@@ -635,6 +639,8 @@ def make_request(
         get_limiter("pubchem", cfg.rps, cfg.burst).acquire()
         try:
             session = get_session(api_cfg)
+            if getattr(session, "verify", True) != cfg.verify:
+                session.verify = cfg.verify
             request_kwargs: dict[str, Any] = {
                 "timeout": (cfg.timeout_connect, cfg.timeout_read),
             }
@@ -1029,8 +1035,15 @@ def _store_cache_miss(
         cache = _ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
 
         if service_unavailable_outcome:
-            cache.pop(cache_key, None)
-            log_details = details_data.copy()
+            cache_details = details_data.copy()
+            cache_details.setdefault("cache", True)
+            cache[cache_key] = _CacheEntry(
+                payload=None,
+                outcome=outcome,
+                details=cache_details,
+            )
+            cached = True
+            log_details = cache_details.copy()
         elif outcome == "timeout":
             base_backoff = (
                 cfg.backoff_initial_seconds

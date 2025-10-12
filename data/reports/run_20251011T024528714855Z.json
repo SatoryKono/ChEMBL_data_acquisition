@@ -1,8 +1,8 @@
 {
   "run": {
-    "started_at": "2025-10-11T15:50:02.441219+00:00",
-    "completed_at": "2025-10-11T22:33:15.591546+00:00",
-    "duration_sec": 24195.548737,
+    "started_at": "2025-10-11T02:45:28.714855+00:00",
+    "completed_at": "2025-10-11T02:46:22.759619+00:00",
+    "duration_sec": 54.04443,
     "exit_code": 1,
     "status": "failed",
     "date_prefix": "20240101",
@@ -24,9 +24,9 @@
       "exit_code": 0,
       "executed": true,
       "reason": null,
-      "started_at": "2025-10-11T15:50:02.450372+00:00",
-      "completed_at": "2025-10-11T20:18:23.638586+00:00",
-      "duration_sec": 16103.586631,
+      "started_at": "2025-10-11T02:45:28.740823+00:00",
+      "completed_at": "2025-10-11T02:45:40.865279+00:00",
+      "duration_sec": 12.123496,
       "output": {
         "path": "C:\\Users\\HP3168\\Documents\\GitHub\\ChEMBL_data_acquisition\\data\\output\\output.documents_20240101.csv",
         "exists": true,
@@ -162,23 +162,6 @@
       "sidecars": []
     },
     {
-      "name": "compound",
-      "status": "blocked",
-      "exit_code": null,
-      "executed": false,
-      "reason": "dependency_failed",
-      "started_at": null,
-      "completed_at": null,
-      "duration_sec": null,
-      "output": {
-        "path": "C:\\Users\\HP3168\\Documents\\GitHub\\ChEMBL_data_acquisition\\data\\output\\output.compounds_20240101.csv",
-        "exists": false,
-        "size_bytes": null,
-        "checksum_sha256": null
-      },
-      "sidecars": []
-    },
-    {
       "name": "activity",
       "status": "blocked",
       "exit_code": null,
@@ -188,7 +171,7 @@
       "completed_at": null,
       "duration_sec": null,
       "output": {
-        "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.activities_20240101.csv",
+        "path": "C:\\Users\\HP3168\\Documents\\GitHub\\ChEMBL_data_acquisition\\data\\output\\output.activities_20240101.csv",
         "exists": false,
         "size_bytes": null,
         "checksum_sha256": null
