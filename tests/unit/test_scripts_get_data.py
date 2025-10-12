@@ -51,21 +51,29 @@ def test_load_module__merge_conflict_hint(monkeypatch):
 
 
 @pytest.mark.unit
-def test_build_forward_args__injects_project_paths() -> None:
+def test_build_forward_args__injects_project_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     from scripts import get_data
+
+    base_path = tmp_path / "data-root"
+    monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
 
     args = SimpleNamespace(limit=None, log_level=None, config=None)
     forwarded = get_data.build_forward_args(args, [])
 
+    tokens = list(forwarded.tokens)
+    assert "--base-path" in tokens
+    base_index = tokens.index("--base-path")
+    assert Path(tokens[base_index + 1]) == base_path
+
     expected_tail = [
-        "--base-path",
-        str(get_data.DATA_DIR),
         "--input-dir",
         get_data.DEFAULT_INPUT_DIR,
         "--output-dir",
         get_data.DEFAULT_OUTPUT_DIR,
     ]
-    assert list(forwarded.tokens[-len(expected_tail) :]) == expected_tail
+    assert tokens[-len(expected_tail) :] == expected_tail
 
 
 @pytest.mark.unit
