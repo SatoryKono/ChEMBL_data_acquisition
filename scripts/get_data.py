@@ -164,15 +164,14 @@ def _ensure_pubchem_env(args: Sequence[str], env: dict[str, str]) -> None:
     """Ensure PubChem enrichment is enabled for the test item subprocess."""
 
     env_state = _normalize_env_bool(env.get(_PUBCHEM_ENV_VAR))
-    if env_state is True:
-        return
-
     config_enabled = _pubchem_enabled_from_config(args)
-    if config_enabled is True and env_state is not False:
+
+    if env_state is True or (config_enabled is True and env_state is not False):
+        logging.info("[PUBCHEM] Enrichment enabled for testitem table")
         return
 
     env[_PUBCHEM_ENV_VAR] = "true"
-    logging.info("testitem_pubchem_enable_override")
+    logging.info("[PUBCHEM] Enrichment enabled for testitem table")
 
 
 def parse_args(argv: Sequence[str] | None = None) -> tuple[argparse.Namespace, list[str]]:
