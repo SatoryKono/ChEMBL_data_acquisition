@@ -2320,6 +2320,14 @@ class ActivityPipelineCLI(PipelineCLIBase):
             input_default=DEFAULT_INPUT_NAME,
             output_stem=DEFAULT_OUTPUT_STEM,
         )
+        if not hasattr(args, "_initial_output_stamp_mode"):
+            args._initial_output_stamp_mode = getattr(
+                args, "output_stamp_mode", None
+            )
+        if not hasattr(args, "_initial_auto_output_generated"):
+            args._initial_auto_output_generated = bool(
+                getattr(args, "_auto_output_generated", False)
+            )
         return args
 
     def handle_pre_run(
@@ -2436,7 +2444,29 @@ class ActivityPipelineCLI(PipelineCLIBase):
                 pass
 
     def run_pipeline(self, cfg: Config, args: argparse.Namespace) -> int:
+        self._refresh_output_paths(cfg, args)
         return run(cfg, args)
+
+    def _refresh_output_paths(self, cfg: Config, args: argparse.Namespace) -> None:
+        initial_mode = getattr(args, "_initial_output_stamp_mode", None)
+        current_mode = getattr(args, "output_stamp_mode", None)
+        if initial_mode == current_mode:
+            return
+        if current_mode == "require" and getattr(args, "date", None) in (None, ""):
+            try:
+                from library.cli.commands import get_activity_data as _activity_commands
+
+                _activity_commands._ensure_default_date(cfg, args)
+            except Exception:  # pragma: no cover - defensive fallback
+                pass
+        if bool(getattr(args, "_initial_auto_output_generated", False)):
+            args.final_out = None
+            args.output_csv = None
+        output_stem = getattr(args, "_auto_output_stem", None)
+        suffix = getattr(args, "_auto_output_suffix", None)
+        if not isinstance(output_stem, str) or not isinstance(suffix, str):
+            return
+        cli.prepare_io_paths(args, output_stem=output_stem, suffix=suffix)
 
 
 _CLI = ActivityPipelineCLI()

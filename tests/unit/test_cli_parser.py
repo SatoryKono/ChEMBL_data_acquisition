@@ -115,8 +115,11 @@ def test_apply_config_overrides__require_date_enforced(
 
     monkeypatch.setattr(parser_module, "load_config", _fake_load_config)
 
-    with pytest.raises(ValueError, match="--date is required"):
-        apply_config_overrides(args, parser, cfg_path)
+    cfg = apply_config_overrides(args, parser, cfg_path)
+
+    assert cfg.local.io.output_stamp_mode == "require"
+    assert args.output_stamp_mode == "require"
+    assert getattr(args, "date", None) is None
 
 
 @pytest.mark.unit

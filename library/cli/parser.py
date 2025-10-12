@@ -710,9 +710,26 @@ def apply_config_overrides(
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc
 
-    stamp_mode = getattr(cfg.local.io, "output_stamp_mode", _DEFAULT_OUTPUT_STAMP_MODE)
-    args.output_stamp_mode = stamp_mode
-    if stamp_mode == "require":
+    io_cfg = getattr(cfg, "io", None)
+    if io_cfg is None:
+        local_cfg = getattr(cfg, "local", None)
+        io_cfg = getattr(local_cfg, "io", None)
+    configured_mode = (
+        getattr(io_cfg, "output_stamp_mode", _DEFAULT_OUTPUT_STAMP_MODE)
+        if io_cfg is not None
+        else _DEFAULT_OUTPUT_STAMP_MODE
+    )
+    normalized_config_mode = (
+        _normalize_stamp_mode(configured_mode) or _DEFAULT_OUTPUT_STAMP_MODE
+    )
+    explicit_flag = bool(getattr(args, "_has_output_stamp_mode", False))
+    cli_mode = _normalize_stamp_mode(getattr(args, "output_stamp_mode", None))
+    if explicit_flag and cli_mode is not None:
+        effective_mode = cli_mode
+    else:
+        effective_mode = normalized_config_mode
+    args.output_stamp_mode = effective_mode
+    if effective_mode == "require" and explicit_flag:
         date_value = getattr(args, "date", None)
         if not isinstance(date_value, str) or not date_value.strip():
             raise ValueError(
@@ -846,7 +863,10 @@ def prepare_io_paths(
     if resolved_input is not None:
         args.input_csv = resolved_input
 
-    final_candidate = getattr(args, "final_out", None)
+    previous_final_out = getattr(args, "final_out", None)
+    previous_auto_output = bool(getattr(args, "_auto_output_generated", False))
+
+    final_candidate = previous_final_out
     if final_candidate in (None, argparse.SUPPRESS):
         final_candidate = None
 
@@ -865,7 +885,15 @@ def prepare_io_paths(
         args._auto_output_stem = output_stem
     args._auto_output_suffix = suffix
 
-    stamp_mode = _normalize_stamp_mode(getattr(args, "output_stamp_mode", None))
+    raw_stamp_mode = getattr(args, "output_stamp_mode", None)
+    existing_flag = getattr(args, "_has_output_stamp_mode", None)
+    if existing_flag is None:
+        has_stamp_flag = raw_stamp_mode not in (None, argparse.SUPPRESS)
+    else:
+        has_stamp_flag = bool(existing_flag)
+    args._has_output_stamp_mode = has_stamp_flag
+
+    stamp_mode = _normalize_stamp_mode(raw_stamp_mode)
     if stamp_mode is None:
         stamp_mode = _DEFAULT_OUTPUT_STAMP_MODE
     args.output_stamp_mode = stamp_mode
@@ -931,7 +959,19 @@ def prepare_io_paths(
         )
         args.final_out = resolved_output
         args.output_csv = resolved_output
-        args._auto_output_generated = auto_output
+        auto_generated = bool(auto_output and resolved_output is not None)
+        if not auto_generated and previous_auto_output:
+            try:
+                previous_path = (
+                    Path(previous_final_out)
+                    if isinstance(previous_final_out, (str, Path))
+                    else None
+                )
+            except TypeError:
+                previous_path = None
+            if previous_path is not None and previous_path == resolved_output:
+                auto_generated = True
+        args._auto_output_generated = auto_generated
     elif isinstance(final_candidate, str | Path):
         candidate_path = Path(final_candidate)
         args.final_out = candidate_path
