@@ -149,6 +149,7 @@ class TestitemPipelineOptions:
     limit: int | None = None
     offset: int | None = None
     emit_legacy_artifacts: bool = False
+    pubchem_enabled: bool | None = None
 
 
 def _is_placeholder_user_agent(user_agent: str | None) -> bool:
@@ -753,7 +754,11 @@ def run_testitem_pipeline(
         api_overrides["backoff_factor"] = cfg.testitem.backoff_factor
     api_cfg = cfg.api.model_copy(update=api_overrides) if api_overrides else cfg.api
 
-    pubchem_enabled = getattr(cfg.pubchem, "enable", True)
+    pubchem_override = getattr(options, "pubchem_enabled", None)
+    if pubchem_override is not None:
+        pubchem_enabled = bool(pubchem_override)
+    else:
+        pubchem_enabled = getattr(cfg.pubchem, "enable", True)
     if not pubchem_enabled:
         logger.warning(
             "pubchem_augmentation_disabled",
