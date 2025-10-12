@@ -1201,7 +1201,15 @@ def finalize_output(
             for column in _PUBCHEM_OPTIONAL_COLUMNS
             if column in dataset_frame.columns
         ]
-        if not available_columns or dataset_frame[available_columns].isna().all().all():
+        if available_columns:
+            pubchem_columns = dataset_frame[available_columns].replace("", pd.NA)
+            if not pubchem_columns.equals(dataset_frame[available_columns]):
+                dataset_frame.loc[:, available_columns] = pubchem_columns
+            pubchem_columns_missing = pubchem_columns.isna().all().all()
+        else:
+            pubchem_columns_missing = True
+
+        if pubchem_columns_missing:
             logger.info("pubchem_fallback_augment_start")
             dataset_frame = _load_pubchem_augmenter()(
                 dataset_frame,
