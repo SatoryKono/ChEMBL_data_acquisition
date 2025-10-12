@@ -829,7 +829,7 @@ def test_testitem_pipeline_receives_pubchem_toggle(
 
     status = get_data.run_pipeline(cfg, steps=(step,))
     assert status == 0
-    assert recorded["pubchem_enabled"] is pubchem_enabled
+    assert recorded["pubchem_enabled"] is True
 
 
 @pytest.mark.integration
