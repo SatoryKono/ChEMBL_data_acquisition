@@ -81,9 +81,8 @@ def save_standard_outputs(
         ``output_path`` is supplied; in that case the parent directory of
         ``output_path`` becomes the target location.
     output_path:
-        Optional original dataset path. When provided, the dataset is written
-        back to this location and the accompanying reports reuse the same
-        stem. When omitted the artefacts default to the canonical
+        Optional original dataset path. When provided the canonical artefacts
+        are written next to this file using the standard
         ``output.<table>_<date>`` naming scheme. If the resulting dataset path
         differs from ``output_path`` the original file (and its optional
         ``.meta.yaml`` sidecar) is deleted when ``cleanup_source`` evaluates
@@ -109,22 +108,19 @@ def save_standard_outputs(
 
     dataset_path: Path
     destination_dir: Path
-    dataset_stem: str
+    stem_name = f"output.{table_name}_{date_tag}"
     if output_path is not None:
-        dataset_path = Path(output_path)
-        destination_dir = dataset_path.parent
-        dataset_stem = dataset_path.stem
+        destination_dir = Path(output_path).parent
     else:
         destination_dir = resolved_output_dir
-        dataset_stem = f"output.{table_name}_{date_tag}"
-        dataset_path = destination_dir / f"{dataset_stem}.csv"
+    dataset_path = destination_dir / f"{stem_name}.csv"
 
     _ensure_output_directory(destination_dir)
 
     correlation_path = destination_dir / (
-        f"{dataset_stem}_data_correlation_report_table.csv"
+        f"{stem_name}_data_correlation_report_table.csv"
     )
-    quality_path = destination_dir / f"{dataset_stem}_quality_report_table.csv"
+    quality_path = destination_dir / f"{stem_name}_quality_report_table.csv"
 
     key_cols = list(key_columns or [])
     if not key_cols and not df_main.empty:
