@@ -5,9 +5,30 @@ import logging
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
+from importlib import import_module
 from pathlib import Path
 from typing import Iterable, Sequence
+
+from scripts._bootstrap import ensure_project_root
+
+
+def _guard_cli_module() -> None:
+    """Ensure the core ``library.cli.commands.get_data`` module imports cleanly."""
+
+    try:
+        import_module("library.cli.commands.get_data")
+    except ModuleNotFoundError as exc:
+        if exc.name != "library":
+            raise
+        ensure_project_root(__file__)
+        import_module("library.cli.commands.get_data")
+    except SyntaxError as exc:
+        location = f"{exc.filename}:{exc.lineno}"
+        raise SystemExit(f"merge conflict detected in {location}") from exc
+
+
+_guard_cli_module()
 
 
 @dataclass(frozen=True)
@@ -26,7 +47,10 @@ STAGES: tuple[Stage, ...] = (
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPTS_DIR.parent
-OUTPUT_DIR = PROJECT_ROOT / "data" / "output"
+DATA_DIR = PROJECT_ROOT / "data"
+DEFAULT_INPUT_DIR = "input"
+DEFAULT_OUTPUT_DIR = "output"
+OUTPUT_DIR = DATA_DIR / DEFAULT_OUTPUT_DIR
 LOGS_DIR = PROJECT_ROOT / "logs"
 
 
@@ -80,7 +104,7 @@ def configure_logging(level_name: str | None) -> Path:
     if level_name is not None:
         level = logging._nameToLevel.get(level_name, logging.INFO)
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     log_file = LOGS_DIR / f"get_data_{timestamp}.log"
 
     handlers: list[logging.Handler] = [
@@ -131,6 +155,16 @@ def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> list[s
     if args.config is not None:
         forward.extend(["--config", str(args.config)])
     forward.extend(extra)
+
+    def _has_option(option: str) -> bool:
+        return option in forward
+
+    if not _has_option("--base-path"):
+        forward.extend(["--base-path", str(DATA_DIR)])
+    if not _has_option("--input-dir"):
+        forward.extend(["--input-dir", DEFAULT_INPUT_DIR])
+    if not _has_option("--output-dir"):
+        forward.extend(["--output-dir", DEFAULT_OUTPUT_DIR])
     return forward
 
 

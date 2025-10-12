@@ -5,6 +5,7 @@ import importlib.util
 import sys
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -19,6 +20,7 @@ def test_load_module__merge_conflict_hint(monkeypatch):
     spec = importlib.util.spec_from_loader(module_name, loader)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
 
     original_import_module = importlib.import_module
 
@@ -46,3 +48,43 @@ def test_load_module__merge_conflict_hint(monkeypatch):
     message = str(excinfo.value)
     assert "library/cli_utils.py:201" in message
     assert "merge conflict" in message
+
+
+@pytest.mark.unit
+def test_build_forward_args__injects_project_paths() -> None:
+    from scripts import get_data
+
+    args = SimpleNamespace(limit=None, log_level=None, config=None)
+    forwarded = get_data.build_forward_args(args, [])
+
+    expected_tail = [
+        "--base-path",
+        str(get_data.DATA_DIR),
+        "--input-dir",
+        get_data.DEFAULT_INPUT_DIR,
+        "--output-dir",
+        get_data.DEFAULT_OUTPUT_DIR,
+    ]
+    assert forwarded[-len(expected_tail) :] == expected_tail
+
+
+@pytest.mark.unit
+def test_build_forward_args__keeps_user_supplied_paths() -> None:
+    from scripts import get_data
+
+    args = SimpleNamespace(limit=None, log_level=None, config=None)
+    extra = [
+        "--base-path",
+        "/custom/base",
+        "--input-dir",
+        "incoming",
+        "--output-dir",
+        "processed",
+    ]
+
+    forwarded = get_data.build_forward_args(args, extra)
+
+    assert forwarded.count("--base-path") == 1
+    assert forwarded.count("--input-dir") == 1
+    assert forwarded.count("--output-dir") == 1
+    assert forwarded[: len(extra)] == extra
