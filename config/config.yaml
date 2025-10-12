@@ -228,6 +228,7 @@ sources:
     retries: 2  # (env: CHEMBL_DA_SEMANTIC_SCHOLAR_RETRIES)
     rps: null  # Optional requests-per-second override for document acquisition
     burst: null  # Optional burst override for document acquisition
+    delay: 1.0  # Base retry delay when Semantic Scholar rate limits are not specified
 
 local:
   resources:

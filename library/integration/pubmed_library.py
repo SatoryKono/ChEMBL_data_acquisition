@@ -183,7 +183,6 @@ def _stream_pubmed_batches(
             semsch_list = fetch_semantic_scholar_batch(
                 session,
                 batch_pmids,
-                delay,
                 cfg=semantic_scholar_cfg,
                 retry_cfg=retry_cfg,
             )

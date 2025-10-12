@@ -678,7 +678,6 @@ class DocumentPipeline:
                     semsch_list = ssl.fetch_semantic_scholar_batch(
                         base_session,
                         semantic_pmids,
-                        sleep,
                         cfg=semantic_scholar_cfg,
                         retry_cfg=session_cfg.retry,
                     )
@@ -703,7 +702,6 @@ class DocumentPipeline:
                         fallback_record = ssl.fetch_semantic_scholar(
                             base_session,
                             pmid,
-                            sleep,
                             cfg=semantic_scholar_cfg,
                             retry_cfg=session_cfg.retry,
                         )

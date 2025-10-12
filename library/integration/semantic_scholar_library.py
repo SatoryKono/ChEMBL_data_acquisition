@@ -16,7 +16,6 @@ from ..config import RetryCfg, SemanticScholarCfg
 def fetch_semantic_scholar(
     session: requests.Session,
     pmid: str,
-    sleep: float,
     cfg: SemanticScholarCfg | None = None,
     *,
     retry_cfg: RetryCfg | None = None,
@@ -29,10 +28,9 @@ def fetch_semantic_scholar(
         :class:`requests.Session` instance used for the HTTP call.
     pmid:
         PubMed identifier of the article.
-    sleep:
-        Delay in seconds before making the request.  Semantic Scholar is more
-        restrictive than PubMed; therefore the caller typically supplies a
-        larger delay here.
+    cfg:
+        Optional :class:`~library.config.SemanticScholarCfg` describing rate
+        limits and the fallback retry delay.
 
     Returns
     -------
@@ -44,7 +42,6 @@ def fetch_semantic_scholar(
     return _client.fetch_semantic_scholar(
         session,
         pmid,
-        sleep,
         cfg=cfg,
         retry_cfg=retry_cfg,
     )
@@ -53,7 +50,6 @@ def fetch_semantic_scholar(
 def fetch_semantic_scholar_batch(
     session: requests.Session,
     pmids: list[str],
-    sleep: float,
     cfg: SemanticScholarCfg | None = None,
     *,
     retry_cfg: RetryCfg | None = None,
@@ -66,8 +62,9 @@ def fetch_semantic_scholar_batch(
         :class:`requests.Session` instance used for the HTTP call.
     pmids:
         A list of PubMed identifiers.
-    sleep:
-        Delay in seconds before making the request.
+    cfg:
+        Optional :class:`~library.config.SemanticScholarCfg` describing rate
+        limits and the fallback retry delay.
 
     Returns
     -------
@@ -79,7 +76,6 @@ def fetch_semantic_scholar_batch(
     return _client.fetch_semantic_scholar_batch(
         session,
         pmids,
-        sleep,
         cfg=cfg,
         retry_cfg=retry_cfg,
     )

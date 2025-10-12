@@ -163,7 +163,7 @@ production use.
 | `sources.iuphar` | None | Base URL and rate limits for the Guide to Pharmacology API. |
 | `sources.pubchem` | `user_agent` (**Yes**), `mailto` implicit via contact string | Configure enable flag, base URL, rate limits, resolution order and caches. |
 | `sources.pubmed` | None | E-utilities base URL, timeouts, retries and optional rate limits. |
-| `sources.semantic_scholar` | None | API base, timeouts and rate limits for the Semantic Scholar enrichment stage. |
+| `sources.semantic_scholar` | None | API base, timeouts, rate limits and fallback retry delay for the Semantic Scholar enrichment stage. |
 
 ## `local`
 

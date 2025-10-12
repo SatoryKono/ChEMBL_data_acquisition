@@ -15,6 +15,7 @@ def test_fetch_semantic_scholar__includes_api_key_header(
 
     def _fake_do_request(session, url, delay, *, headers, **kwargs):  # type: ignore[override]
         captured["headers"] = headers
+        captured["delay"] = delay
         return (
             {
                 "paperId": "S2:123",
@@ -28,15 +29,17 @@ def test_fetch_semantic_scholar__includes_api_key_header(
     monkeypatch.setattr(semantic_scholar, "_do_request", _fake_do_request)
 
     session = requests.Session()
-    cfg = SemanticScholarCfg(api_key="  secret-token  ")
+    cfg = SemanticScholarCfg(api_key="  secret-token  ", rps=2, delay=3.0)
 
-    result = semantic_scholar.fetch_semantic_scholar(session, "123456", 0.0, cfg=cfg)
+    result = semantic_scholar.fetch_semantic_scholar(session, "123456", cfg=cfg)
 
     assert result["scholar.Error"] == ""
     headers = captured.get("headers")
     assert isinstance(headers, dict)
     assert headers["Accept"] == "application/json"
     assert headers["x-api-key"] == "secret-token"
+    delay = captured.get("delay")
+    assert delay == pytest.approx(0.5)
 
 
 @pytest.mark.unit
@@ -47,6 +50,7 @@ def test_fetch_semantic_scholar_batch__omits_api_key_header_when_missing(
 
     def _fake_do_request(session, url, delay, *, headers, **kwargs):  # type: ignore[override]
         captured["headers"] = headers
+        captured["delay"] = delay
         return (
             [
                 {
@@ -64,7 +68,11 @@ def test_fetch_semantic_scholar_batch__omits_api_key_header_when_missing(
 
     session = requests.Session()
 
-    results = semantic_scholar.fetch_semantic_scholar_batch(session, ["123456"], 0.0)
+    cfg = SemanticScholarCfg(delay=2.5)
+
+    results = semantic_scholar.fetch_semantic_scholar_batch(
+        session, ["123456"], cfg=cfg
+    )
 
     assert results
     assert results[0]["scholar.Error"] == ""
@@ -72,6 +80,37 @@ def test_fetch_semantic_scholar_batch__omits_api_key_header_when_missing(
     assert isinstance(headers, dict)
     assert headers["Accept"] == "application/json"
     assert "x-api-key" not in headers
+    delay = captured.get("delay")
+    assert delay == pytest.approx(2.5)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "cfg_kwargs,expected",
+    [
+        ({"rps": 4, "delay": 3.0}, 0.25),
+        ({"rps": None, "delay": 1.7}, 1.7),
+    ],
+)
+def test_fetch_semantic_scholar_batch__delay_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+    cfg_kwargs: dict[str, object],
+    expected: float,
+) -> None:
+    captured: dict[str, float] = {}
+
+    def _fake_do_request(session, url, delay, **kwargs):  # type: ignore[override]
+        captured["delay"] = delay
+        return ([{"pmid": "1"}], "")
+
+    monkeypatch.setattr(semantic_scholar, "_do_request", _fake_do_request)
+
+    session = requests.Session()
+    cfg = SemanticScholarCfg(**cfg_kwargs)
+
+    semantic_scholar.fetch_semantic_scholar_batch(session, ["1"], cfg=cfg)
+
+    assert captured["delay"] == pytest.approx(expected)
 
 
 @pytest.mark.unit

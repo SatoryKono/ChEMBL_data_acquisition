@@ -184,7 +184,6 @@ def fetch_pubmed(
 def fetch_semantic_scholar(
     session: requests.Session,
     pmid: str,
-    sleep: float,
     cfg: SemanticScholarCfg | None = None,
     *,
     retry_cfg: RetryCfg | None = None,
@@ -193,7 +192,6 @@ def fetch_semantic_scholar(
     return semantic_client.fetch_semantic_scholar(
         session,
         pmid,
-        sleep,
         cfg=cfg,
         retry_cfg=retry_cfg,
     )
@@ -202,7 +200,6 @@ def fetch_semantic_scholar(
 def fetch_semantic_scholar_batch(
     session: requests.Session,
     pmids: list[str],
-    sleep: float,
     cfg: SemanticScholarCfg | None = None,
     *,
     retry_cfg: RetryCfg | None = None,
@@ -211,7 +208,6 @@ def fetch_semantic_scholar_batch(
     return semantic_client.fetch_semantic_scholar_batch(
         session,
         pmids,
-        sleep,
         cfg=cfg,
         retry_cfg=retry_cfg,
     )
