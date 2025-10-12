@@ -1139,7 +1139,8 @@ def test_run_step__testitem_forces_pubchem_enabled(
 
     def _runner(config: Config, options: TestitemPipelineOptions) -> PipelineRunResult:
         assert options.pubchem_enabled is True
-        assert config.sources.pubchem.enable is False
+        assert config is not cfg
+        assert config.sources.pubchem.enable is True
         destination = Path(options.output_csv)
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text("molecule_chembl_id\nCHEMBL1\n", encoding="utf-8")
