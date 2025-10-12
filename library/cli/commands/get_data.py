@@ -580,6 +580,20 @@ def _resolve_path(base: Path, candidate: Path) -> Path:
     return (base / expanded).resolve()
 
 
+_TRUE_FLAG_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
+def _flag_to_bool(value: object) -> bool:
+    """Return ``True`` when ``value`` represents an enabled CLI flag."""
+
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    text = str(value).strip().lower()
+    return text in _TRUE_FLAG_VALUES
+
+
 def _resolve_consumed_artifact_path(cfg: PipelineRunConfig, artefact: str) -> Path:
     """Return the filesystem path associated with a consumed artefact name."""
 
@@ -1057,7 +1071,7 @@ def _prepare_config(
         subcommands=subcommands,
         debug=bool(getattr(args, "debug", False)),
         keep_intermediate=bool(getattr(args, "keep_intermediate", False)),
-        disable_pubchem=bool(getattr(args, "disable_pubchem", False)),
+        disable_pubchem=_flag_to_bool(getattr(args, "disable_pubchem", False)),
     )
 
 
