@@ -26,6 +26,21 @@ def _stub_parent_catalog_calls(monkeypatch: pytest.MonkeyPatch) -> None:
         "fetch_parent_catalog_for",
         lambda *args, **kwargs: {},
     )
+    monkeypatch.setattr(
+        catalog.molecule_catalog,
+        "fetch_parent_catalog",
+        lambda *args, **kwargs: {},
+    )
+    monkeypatch.setattr(
+        catalog.molecule_catalog,
+        "load_parent_catalog",
+        lambda *args, **kwargs: {},
+    )
+    monkeypatch.setattr(
+        catalog.molecule_catalog,
+        "query_parent_catalog",
+        lambda *args, **kwargs: {},
+    )
 
 
 def _build_catalog_cfg(tmp_path: Path) -> MoleculeCatalogCfg:
@@ -74,20 +89,9 @@ def _run_parent_lookup(
     )
 
     return events
-
-
-def _extract_event(
-    events: list[tuple[str, str, dict[str, object]]], name: str
-) -> tuple[str, dict[str, object]]:
-    level, fields = next(
-        (level, fields) for level, event, fields in events if event == name
-    )
-    return level, fields
-
-
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "child_ids, truncated",
+    "child_ids, truncated, catalog_filters, expected_level, expected_severity",
     [
         (
             [
@@ -96,22 +100,44 @@ def _extract_event(
                 "CHEMBL0003",
             ],
             False,
+            None,
+            "info",
+            "info",
         ),
         (
             [f"CHEMBL{value:07d}" for value in range(1024, 998, -1)],
             True,
+            None,
+            "info",
+            "info",
+        ),
+        (
+            [
+                "CHEMBL0005",
+                "CHEMBL0002",
+                "CHEMBL0003",
+            ],
+            False,
+            {"parent_molecule_chembl_id__isnull": "true"},
+            "warning",
+            "warning",
         ),
     ],
-    ids=["no-truncation", "truncated"],
+    ids=["no-truncation", "truncated", "include-parentless"],
 )
 def test_attach_parent_molecule_ids__summarises_identifier_payload(
     child_ids: list[str],
     truncated: bool,
+    catalog_filters: dict[str, str] | None,
+    expected_level: str,
+    expected_severity: str,
     tmp_path,
     cfg,
     monkeypatch,
 ) -> None:
     catalog_cfg = _build_catalog_cfg(tmp_path)
+    if catalog_filters is not None:
+        catalog_cfg.filters = catalog_filters
     events = _run_parent_lookup(
         child_ids,
         cfg=catalog_cfg,
@@ -124,20 +150,40 @@ def test_attach_parent_molecule_ids__summarises_identifier_payload(
         assert len(expected_identifiers) > 20
         expected_identifiers = expected_identifiers[:20]
 
-    skip_level, skip_event = _extract_event(
-        events, "parent_lookup_full_sync_skipped_parentless"
-    )
-    missing_level, missing_event = _extract_event(
-        events, "parent_lookup_missing_parents"
-    )
+    skip_events = [
+        (level, fields)
+        for level, event, fields in events
+        if event == "parent_lookup_full_sync_skipped_parentless"
+    ]
+    missing_events = [
+        (level, fields)
+        for level, event, fields in events
+        if event == "parent_lookup_missing_parents"
+    ]
 
-    assert skip_level == "info"
-    assert missing_level == "info"
+    assert len(missing_events) == 1
+    missing_level, missing_event = missing_events[0]
+
+    assert missing_level == expected_level
+    assert missing_event["severity"] == expected_severity
+    assert missing_event["count"] == len(child_ids)
+    assert missing_event["identifiers"] == expected_identifiers
+    assert missing_event["truncated"] is truncated
+
+    if expected_level == "info":
+        assert len(skip_events) == 1
+        skip_level, skip_event = skip_events[0]
+        assert skip_level == "info"
+        assert skip_event["count"] == len(child_ids)
+        assert skip_event["identifiers"] == expected_identifiers
+        assert skip_event["truncated"] is truncated
+    else:
+        assert not skip_events
 
     warning_events = [event for event in events if event[0] == "warning"]
-    assert not warning_events
-
-    for payload in (skip_event, missing_event):
-        assert payload["count"] == len(child_ids)
-        assert payload["identifiers"] == expected_identifiers
-        assert payload["truncated"] is truncated
+    if expected_level == "warning":
+        assert warning_events == [
+            ("warning", "parent_lookup_missing_parents", missing_event)
+        ]
+    else:
+        assert not warning_events
