@@ -705,7 +705,7 @@ def test_override_subcommand__target_pipeline_uses_selected_command(
     monkeypatch.setattr(
         get_data,
         "load_config",
-        lambda *args, **kwargs: SimpleNamespace(),
+        lambda *args, **kwargs: SimpleNamespace(sources=SimpleNamespace()),
         raising=False,
     )
     monkeypatch.setattr(get_data, "ensure_dirs", lambda _cfg: None, raising=False)
@@ -713,6 +713,73 @@ def test_override_subcommand__target_pipeline_uses_selected_command(
     status = get_data.run_pipeline(cfg, steps=target_only)
     assert status == 0
     assert captured == ["chembl"]
+
+
+@pytest.mark.unit
+def test_override_subcommand__target_alias_normalised(tmp_path: Path) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("{}", encoding="utf-8")
+    (input_dir / "target.csv").write_text("target_chembl_id\nT1\n", encoding="utf-8")
+
+    args = argparse.Namespace(
+        base_path=base_path,
+        input_dir=Path("input"),
+        output_dir=Path("output"),
+        config=config_path,
+        date_prefix="20240214",
+        log_level="INFO",
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        verbose=False,
+        pipeline_registry=None,
+        override_input=[],
+        override_output_stem=[],
+        override_subcommand=["target=фдд"],
+    )
+
+    resolved_steps = get_data._resolve_pipeline_steps(args)
+    cfg = get_data._prepare_config(args, resolved_steps)
+
+    assert cfg.subcommand_for("target") == "all"
+
+
+@pytest.mark.unit
+def test_override_subcommand__target_invalid_value(tmp_path: Path) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("{}", encoding="utf-8")
+
+    args = argparse.Namespace(
+        base_path=base_path,
+        input_dir=Path("input"),
+        output_dir=Path("output"),
+        config=config_path,
+        date_prefix="20240214",
+        log_level="INFO",
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        verbose=False,
+        pipeline_registry=None,
+        override_input=[],
+        override_output_stem=[],
+        override_subcommand=["target=10"],
+    )
+
+    with pytest.raises(ValueError, match="invalid target subcommand override"):
+        get_data._resolve_pipeline_steps(args)
 
 
 @pytest.mark.unit
@@ -788,7 +855,7 @@ def test_override_subcommand__document_pipeline_uses_selected_mode(
     monkeypatch.setattr(
         cli_get_data,
         "load_config",
-        lambda *args, **kwargs: SimpleNamespace(),
+        lambda *args, **kwargs: SimpleNamespace(sources=SimpleNamespace()),
         raising=False,
     )
     monkeypatch.setattr(
