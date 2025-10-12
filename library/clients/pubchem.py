@@ -681,7 +681,6 @@ def make_request(
                     retry_after = _retry_after_seconds(retry_after_header)
                     reason = "rate_limited" if status == 429 else "server_error"
                     last_failure_details = {"reason": reason, "status": status}
-                    delay_source = "config"
                     if retry_after is not None:
                         last_failure_details["retry_after"] = retry_after
                         last_failure_details["retry_after_source"] = "header"
@@ -704,12 +703,83 @@ def make_request(
                         event_name,
                         **warning_context,
                     )
-                    if attempt >= total_attempts:
-                        delay_for_cache = retry_after
-                        if delay_for_cache is None:
-                            delay_for_cache = (
-                                backoff_delay if backoff_delay > 0 else cfg.delay
+                    if retry_after is not None:
+                        now_retry = monotonic()
+                        can_extend_deadline = (
+                            deadline is not None
+                            and deadline_limit is not None
+                            and deadline < deadline_limit
+                        )
+                        if (
+                            deadline is not None
+                            and now_retry + retry_after >= deadline
+                            and not can_extend_deadline
+                        ):
+                            timeout_details = dict(last_failure_details)
+                            timeout_details.setdefault("retry_after", retry_after)
+                            timeout_details.setdefault("retry_after_source", "header")
+                            timeout_details["timeout_reason"] = "retry_after_exceeds_deadline"
+                            logger.warning(
+                                "request_timeout",
+                                url=url,
+                                method=method_upper,
+                                attempt=attempt,
+                                total_attempts=total_attempts,
+                                rps=cfg.rps,
+                                **timeout_details,
                             )
+                            _store_cache_miss(
+                                cache_key,
+                                cfg,
+                                "timeout",
+                                timeout_details,
+                                url=url,
+                            )
+                            status_value = last_failure_details.get("status")
+                            logger.debug(
+                                "request_fail",
+                                url=url,
+                                status=status_value,
+                                total_attempts=total_attempts,
+                                method=method_upper,
+                                rps=cfg.rps,
+                                **details_excluding("status"),
+                            )
+                            timeout_info = dict(timeout_details)
+                            timeout_info["reason"] = "timeout"
+                            _set_last_outcome("timeout", timeout_info)
+                            return None
+                        if retry_after > 0:
+                            _remember_service_unavailable(
+                                retry_after,
+                                last_failure_details,
+                                source=last_failure_details.get(
+                                    "retry_after_source", "header"
+                                ),
+                            )
+                        _store_cache_miss(
+                            cache_key,
+                            cfg,
+                            reason,
+                            last_failure_details,
+                            url=url,
+                        )
+                        if reason in SERVICE_UNAVAILABLE_OUTCOMES:
+                            last_failure_details.setdefault("cache", True)
+                        logger.debug(
+                            "request_fail",
+                            url=url,
+                            total_attempts=total_attempts,
+                            method=method_upper,
+                            rps=cfg.rps,
+                            status=status,
+                            **details_excluding("status"),
+                        )
+                        _start_service_outage(reason, last_failure_details, cfg)
+                        _set_last_outcome(reason, last_failure_details)
+                        return None
+                    if attempt >= total_attempts:
+                        delay_for_cache = backoff_delay if backoff_delay > 0 else cfg.delay
                         if (
                             delay_for_cache
                             and reason in SERVICE_UNAVAILABLE_OUTCOMES
@@ -718,9 +788,7 @@ def make_request(
                                 "retry_after", delay_for_cache
                             )
                             source_for_cache = (
-                                "header"
-                                if retry_after is not None
-                                else ("backoff" if backoff_delay > 0 else "config")
+                                "backoff" if backoff_delay > 0 else "config"
                             )
                             last_failure_details.setdefault(
                                 "retry_after_source", source_for_cache
@@ -737,6 +805,8 @@ def make_request(
                             last_failure_details,
                             url=url,
                         )
+                        if reason in SERVICE_UNAVAILABLE_OUTCOMES:
+                            last_failure_details.setdefault("cache", True)
                         logger.debug(
                             "request_fail",
                             url=url,
@@ -749,17 +819,12 @@ def make_request(
                         _start_service_outage(reason, last_failure_details, cfg)
                         _set_last_outcome(reason, last_failure_details)
                         return None
-                    if retry_after is not None:
-                        delay = retry_after
-                        backoff_delay = delay * 2 if delay > 0 else backoff_delay
-                        delay_source = "header"
-                    else:
-                        delay = backoff_delay if backoff_delay > 0 else cfg.delay
-                        if backoff_delay > 0:
-                            delay_source = "backoff"
-                        if delay > 0:
-                            backoff_delay = delay * 2
+                    delay_source = "config"
+                    delay = backoff_delay if backoff_delay > 0 else cfg.delay
+                    if backoff_delay > 0:
+                        delay_source = "backoff"
                     if delay > 0:
+                        backoff_delay = delay * 2
                         if reason in SERVICE_UNAVAILABLE_OUTCOMES:
                             last_failure_details.setdefault("retry_after", delay)
                             last_failure_details.setdefault(
@@ -772,7 +837,7 @@ def make_request(
                             )
                         now = monotonic()
                         if (
-                            retry_after is not None
+                            delay_source == "header"
                             and deadline is not None
                             and deadline_limit is not None
                             and deadline < deadline_limit
@@ -791,51 +856,46 @@ def make_request(
                                 )
                                 deadline = capped_extension
                         if deadline is not None and now + delay >= deadline:
-                                timeout_details = dict(last_failure_details or {})
-                                timeout_details.setdefault(
-                                    "retry_after", delay
-                                )
-                                timeout_details.setdefault(
-                                    "retry_after_source",
-                                    "header" if retry_after is not None else "backoff",
-                                )
-                                timeout_details["timeout_reason"] = (
-                                    "retry_after_exceeds_deadline"
-                                )
-                                logger.warning(
-                                    "request_timeout",
-                                    url=url,
-                                    method=method_upper,
-                                    attempt=attempt,
-                                    total_attempts=total_attempts,
-                                    rps=cfg.rps,
-                                    **timeout_details,
-                                )
-                                _store_cache_miss(
-                                    cache_key,
-                                    cfg,
-                                    "timeout",
-                                    timeout_details,
-                                    url=url,
-                                )
-                                status_value = (
-                                    last_failure_details.get("status")
-                                    if last_failure_details
-                                    else None
-                                )
-                                logger.debug(
-                                    "request_fail",
-                                    url=url,
-                                    status=status_value,
-                                    total_attempts=total_attempts,
-                                    method=method_upper,
-                                    rps=cfg.rps,
-                                    **details_excluding("status"),
-                                )
-                                timeout_info = dict(timeout_details)
-                                timeout_info["reason"] = "timeout"
-                                _set_last_outcome("timeout", timeout_info)
-                                return None
+                            timeout_details = dict(last_failure_details or {})
+                            timeout_details.setdefault("retry_after", delay)
+                            timeout_details.setdefault(
+                                "retry_after_source", delay_source
+                            )
+                            timeout_details["timeout_reason"] = "retry_after_exceeds_deadline"
+                            logger.warning(
+                                "request_timeout",
+                                url=url,
+                                method=method_upper,
+                                attempt=attempt,
+                                total_attempts=total_attempts,
+                                rps=cfg.rps,
+                                **timeout_details,
+                            )
+                            _store_cache_miss(
+                                cache_key,
+                                cfg,
+                                "timeout",
+                                timeout_details,
+                                url=url,
+                            )
+                            status_value = (
+                                last_failure_details.get("status")
+                                if last_failure_details
+                                else None
+                            )
+                            logger.debug(
+                                "request_fail",
+                                url=url,
+                                status=status_value,
+                                total_attempts=total_attempts,
+                                method=method_upper,
+                                rps=cfg.rps,
+                                **details_excluding("status"),
+                            )
+                            timeout_info = dict(timeout_details)
+                            timeout_info["reason"] = "timeout"
+                            _set_last_outcome("timeout", timeout_info)
+                            return None
                         sleep(delay)
                     continue
                 if status >= 400:

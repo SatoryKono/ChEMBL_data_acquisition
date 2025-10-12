@@ -181,7 +181,7 @@ def test_make_request__caches_server_error_results(
             {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
         )
     ]
-    assert sleep_calls == [30.0]
+    assert sleep_calls == []
     assert limiter.acquires == 1
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "server_error"
@@ -211,7 +211,7 @@ def test_make_request__caches_server_error_results(
     assert second_result is None
     assert len(session.calls) == 1
     assert limiter.acquires == 1
-    assert sleep_calls == [30.0]
+    assert sleep_calls == []
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "server_error"
     assert details == {
@@ -425,7 +425,7 @@ def test_make_request__retry_after_honours_grace(
             {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
         )
     ]
-    assert sleep_calls == [30.0]
+    assert sleep_calls == []
     assert limiter.acquires == 1
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "server_error"
