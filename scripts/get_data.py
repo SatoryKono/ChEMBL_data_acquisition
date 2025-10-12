@@ -241,12 +241,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     forward_args = build_forward_args(args, unknown)
 
     durations: list[tuple[str, float]] = []
+    def _has_pubchem_flag(options: Sequence[str]) -> bool:
+        return any(
+            option in {"--pubchem-enable", "--no-pubchem-enable"}
+            or option.startswith("--pubchem-enable=")
+            or option.startswith("--no-pubchem-enable=")
+            for option in options
+        )
+
     for stage in STAGES:
         if stage.name in args.skip:
             logging.info("⏭ Пропуск этапа %s по флагу --skip", stage.name)
             continue
         stage_args = list(forward_args)
-        if stage.name == "testitem" and "--pubchem-enable" not in stage_args:
+        if stage.name == "testitem" and not _has_pubchem_flag(stage_args):
             stage_args.append("--pubchem-enable")
 
         duration = run_stage(stage, stage_args)
