@@ -1225,7 +1225,7 @@ def test_run_step__testitem_forces_pubchem_enabled(
 
 
 @pytest.mark.unit
-def test_run_testitem_subprocess__replaces_config_argument(
+def test_run_testitem_subprocess__invokes_script_with_pubchem_enable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     run_cfg = _make_config(tmp_path)
@@ -1243,22 +1243,18 @@ def test_run_testitem_subprocess__replaces_config_argument(
                 str(output_path),
             ]
 
-    captured_command: dict[str, list[str]] = {}
+    captured: dict[str, object] = {}
 
-    def _capture_run(command: list[str], check: bool, cwd: str, env: dict[str, str]):
-        captured_command["command"] = command
+    def _capture_run(
+        command: list[str], *, check: bool, cwd: str, env: dict[str, str]
+    ) -> subprocess.CompletedProcess[object]:
+        captured["command"] = command
+        captured["check"] = check
+        captured["cwd"] = cwd
+        captured["env"] = env
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(get_data.subprocess, "run", _capture_run)
-
-    removed_paths: list[Path] = []
-    original_unlink = get_data.os.unlink
-
-    def _record_unlink(path: str) -> None:
-        removed_paths.append(Path(path))
-        original_unlink(path)
-
-    monkeypatch.setattr(get_data.os, "unlink", _record_unlink)
 
     result = get_data._run_testitem_subprocess(
         _StubStep(),
@@ -1268,11 +1264,16 @@ def test_run_testitem_subprocess__replaces_config_argument(
     )
 
     assert result.exit_code == 0
-    command = captured_command["command"]
+    command = captured["command"]
+    assert command[0] == get_data.sys.executable
+    assert command[1] == str(get_data._TESTITEM_SCRIPT)
+    assert "--pubchem-enable" in command
     config_index = command.index("--config")
-    config_path = Path(command[config_index + 1])
-    assert config_path != run_cfg.config_path
-    assert config_path in removed_paths
+    assert Path(command[config_index + 1]) == run_cfg.config_path
+    output_index = command.index("--final-out")
+    assert Path(command[output_index + 1]) == final_output
+    assert captured["check"] is True
+    assert captured["cwd"] == str(get_data._PROJECT_ROOT)
 
 
 @pytest.mark.unit

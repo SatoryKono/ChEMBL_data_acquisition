@@ -202,6 +202,37 @@ def test_run_chembl__passes_limit_and_offset(
     assert options.offset == 2
 
 
+def test_run_chembl__passes_pubchem_enable_flag(
+    cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("molecule_chembl_id\nCHEMBL1\n", encoding="utf-8")
+    output_csv = tmp_path / "output.csv"
+
+    captured: dict[str, object] = {}
+
+    def fake_run_pipeline(
+        config: Config, options: get_testitem_data.TestitemPipelineOptions
+    ) -> int:
+        captured["options"] = options
+        return 0
+
+    monkeypatch.setattr(get_testitem_data, "run_testitem_pipeline", fake_run_pipeline)
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=output_csv,
+        pubchem_enable=True,
+    )
+
+    exit_code = get_testitem_data.run_chembl(cfg, args)
+
+    assert exit_code == 0
+    options = captured["options"]
+    assert isinstance(options, get_testitem_data.TestitemPipelineOptions)
+    assert options.pubchem_enabled is True
+
+
 @pytest.mark.unit
 def test_run_chembl__builds_standard_outputs_when_missing_artifacts(
     cfg: Config,

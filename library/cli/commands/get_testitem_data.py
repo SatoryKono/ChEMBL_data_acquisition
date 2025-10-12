@@ -560,6 +560,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         limit=getattr(args, "limit", None),
         offset=getattr(args, "offset", None),
         emit_legacy_artifacts=getattr(args, "emit_legacy_artifacts", False),
+        pubchem_enabled=getattr(args, "pubchem_enable", None),
     )
     pipeline_result = run_testitem_pipeline(cfg, options)
 
@@ -912,6 +913,16 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=int,
         default=0,
         help="Number of identifiers to skip before processing",
+    )
+    parser.add_argument(
+        "--pubchem-enable",
+        dest="pubchem_enable",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Enable PubChem enrichment regardless of configuration; use "
+            "--no-pubchem-enable to disable it explicitly"
+        ),
     )
     parser.add_argument(
         "--postprocess",
