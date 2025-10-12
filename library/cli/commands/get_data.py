@@ -52,6 +52,7 @@ from library.cli.logging import setup_cli_logging
 from library.cli_utils import resolve_invocation
 from library.clients import ChemblClient
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
+from library.common.run_context import get_current as get_run_context
 from library.config import (
     DEFAULT_CONFIG_PATH,
     Config,
@@ -150,6 +151,7 @@ from library.postprocessing.testitem import (
 from library.postprocessing.testitem import (
     run_testitem_pipeline as run_testitem_postprocess,
 )
+from library.project_version import get_pipeline_version
 from library.reporting.run_manifest import load_output_report, merge_run_output
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
@@ -1890,12 +1892,20 @@ def _write_run_manifest(
             "force": cfg.force,
             "skip_existing": cfg.skip_existing,
             "dry_run": cfg.dry_run,
+            "pipeline_version": get_pipeline_version(),
         },
         "steps": list(steps),
     }
 
     if run_id is not None:
         manifest["run"]["run_id"] = run_id
+
+    context = get_run_context()
+    git_sha = getattr(context, "git_sha", None) if context is not None else None
+    if not git_sha:
+        git_sha = os.getenv("GIT_SHA")
+    if git_sha:
+        manifest["run"]["git_sha"] = git_sha
 
     reports_dir = cfg.base_path / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
