@@ -1309,6 +1309,37 @@ def _cleanup_empty_directories(path: Path, *, root: Path) -> None:
         current = parent
 
 
+def _ensure_pubchem_enabled(config: Config) -> None:
+    """Force-enable PubChem enrichment on ``config`` for the test item step."""
+
+    sources = getattr(config, "sources", None)
+    if sources is None:
+        return
+
+    pubchem_cfg = getattr(sources, "pubchem", None)
+    if pubchem_cfg is None:
+        try:
+            sources.pubchem = PubChemCfg(enable=True)
+        except AttributeError:
+            return
+        _LOGGER.info("testitem_pubchem_enable_override")
+        return
+
+    was_enabled = getattr(pubchem_cfg, "enable", None)
+    if was_enabled is True:
+        return
+
+    _LOGGER.info("testitem_pubchem_enable_override")
+    if hasattr(pubchem_cfg, "model_copy"):
+        updated_pubchem_cfg = pubchem_cfg.model_copy(update={"enable": True})
+        try:
+            sources.pubchem = updated_pubchem_cfg
+        except AttributeError:
+            setattr(pubchem_cfg, "enable", True)
+    else:
+        setattr(pubchem_cfg, "enable", True)
+
+
 def _run_step(
     step: PipelineStep,
     cfg: PipelineRunConfig,
@@ -1373,9 +1404,8 @@ def _run_step(
     options = api.build_options(cfg, input_path, working_output)
 
     if step.name == "testitem":
-        if getattr(options, "pubchem_enabled", True) is not True:
-            options = replace(options, pubchem_enabled=True)
-        _ensure_testitem_pubchem_enabled(base_config)
+        options = replace(options, pubchem_enabled=True)
+        _ensure_pubchem_enabled(base_config)
     result = api.runner(base_config, options)
     executed = bool(result.executed)
     if not executed and result.exit_code == 0:

@@ -755,10 +755,20 @@ def run_testitem_pipeline(
     api_cfg = cfg.api.model_copy(update=api_overrides) if api_overrides else cfg.api
 
     pubchem_override = getattr(options, "pubchem_enabled", None)
+    try:
+        default_pubchem_enabled = getattr(cfg.pubchem, "enable", True)
+    except AttributeError:
+        logger.warning(
+            "pubchem_configuration_missing",
+            reason="missing_attribute",
+            detail="cfg.pubchem.enable is not accessible; defaulting to enabled.",
+        )
+        default_pubchem_enabled = True
+
     if pubchem_override is not None:
         pubchem_enabled = bool(pubchem_override)
     else:
-        pubchem_enabled = getattr(cfg.pubchem, "enable", True)
+        pubchem_enabled = bool(default_pubchem_enabled)
     if not pubchem_enabled:
         logger.warning(
             "pubchem_augmentation_disabled",
