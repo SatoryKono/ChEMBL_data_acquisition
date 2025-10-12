@@ -160,10 +160,20 @@ class PipelineCLIBase:
             log_cfg.run_id = explicit_run_id
 
         if not hasattr(args, "invocation"):
-            from ..cli_utils import resolve_invocation as _resolve_invocation
+            from ..cli_utils import resolve_invocation
 
-            invocation = _resolve_invocation(parser.prog, argv)
+            invocation = resolve_invocation(parser.prog, argv)
             args.invocation = invocation
+
+        run_id_value = getattr(args, "run_id", None)
+        if not run_id_value and not log_cfg.run_id:
+            from ..cli_utils import _canonical_run_descriptor, uuid
+
+            descriptor = _canonical_run_descriptor(args, parser)
+            if descriptor:
+                run_id_value = uuid.uuid5(uuid.NAMESPACE_URL, descriptor).hex
+                args.run_id = run_id_value
+                log_cfg.run_id = run_id_value
 
         exit_code = self.handle_pre_run(parser, args)
         if exit_code is not None:
