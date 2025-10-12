@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
 import platform
 import subprocess
 import time
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 import pytest
 
@@ -109,8 +110,8 @@ class ReportingPolicyState:
     # synthesis ----------------------------------------------------
     def finalise(self, duration_sec: float) -> None:
         self.duration_sec = max(float(duration_sec), 0.0)
-        for field in SUMMARY_FIELDS:
-            self.summary[field] = 0
+        for summary_field in SUMMARY_FIELDS:
+            self.summary[summary_field] = 0
         self.summary["total"] = len(self.node_status)
 
         for status in self.node_status.values():

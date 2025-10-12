@@ -20,12 +20,11 @@ import pandas as pd
 import pytest
 import yaml
 
-from tests.helpers.reporting_policy import ReportingPolicyPlugin
-
 from config.paths import DICTIONARY_DIR
 from library.config import Config
 from library.orchestration import ETLContext
 from library.resources import dictionaries as dictionary_resources
+from tests.helpers.reporting_policy import ReportingPolicyPlugin
 
 FROZEN_UTC = datetime(2020, 1, 1, 0, 0, 0, tzinfo=dt.UTC)
 FROZEN_TIMESTAMP = FROZEN_UTC.timestamp()

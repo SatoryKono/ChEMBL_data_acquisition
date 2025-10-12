@@ -9,7 +9,8 @@ from typing import Literal
 from library.config import Config
 from library.pipelines.common import PipelineRunResult
 
-from . import pipeline, postprocessing, service as document_service, type_classifier, type_terms
+from . import pipeline, postprocessing, type_classifier, type_terms
+from . import service as document_service
 from .chembl_document import get_documents
 
 

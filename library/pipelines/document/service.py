@@ -5,16 +5,16 @@ from __future__ import annotations
 import argparse
 import difflib
 import heapq
+import shutil
 import weakref
 from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock, local
 from typing import TYPE_CHECKING, Any, TypeVar
-import shutil
 
 import pandas as pd
 import requests
@@ -1036,7 +1036,7 @@ def _resolve_effective_date(options: DocumentPipelineOptions, cfg: Config) -> st
         text = str(candidate).strip()
         if text:
             return text
-    return datetime.now(timezone.utc).strftime("%Y%m%d")
+    return datetime.now(UTC).strftime("%Y%m%d")
 
 
 def _normalise_working_basename(path: Path) -> Path:

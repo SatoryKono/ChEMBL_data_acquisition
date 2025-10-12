@@ -165,7 +165,7 @@ def _ensure_no_legacy_artifacts(module: ModuleType) -> None:
                     try:
                         options = replace(options, emit_legacy_artifacts=False)
                     except TypeError:
-                        setattr(options, "emit_legacy_artifacts", False)
+                        options.emit_legacy_artifacts = False
                 return options
 
             return _wrapped
@@ -178,7 +178,7 @@ def _ensure_no_legacy_artifacts(module: ModuleType) -> None:
 
 DEFAULT_PIPELINE_STEPS = _canonicalise_default_steps(_MODULE)
 DEFAULT_PIPELINE_NAMES: tuple[str, ...] = tuple(step.name for step in DEFAULT_PIPELINE_STEPS)
-setattr(_MODULE, "DEFAULT_PIPELINE_NAMES", DEFAULT_PIPELINE_NAMES)
+_MODULE.DEFAULT_PIPELINE_NAMES = DEFAULT_PIPELINE_NAMES
 _ensure_no_legacy_artifacts(_MODULE)
 
 _ORIGINAL_PREPARE_CONFIG = getattr(_MODULE, "_prepare_config", None)
@@ -192,13 +192,13 @@ def _prepare_config_with_canonical_defaults(
     enable_postprocess = bool(
         getattr(args, "rerun_postprocess", False) or getattr(args, "debug", False)
     )
-    setattr(_MODULE, "_WRAPPER_ENABLE_POSTPROCESS", enable_postprocess)
+    _MODULE._WRAPPER_ENABLE_POSTPROCESS = enable_postprocess
     if callable(_ORIGINAL_PREPARE_CONFIG):
         return _ORIGINAL_PREPARE_CONFIG(args, steps)
     raise AttributeError("library.cli.commands.get_data._prepare_config is missing")
 
 
-setattr(_MODULE, "_prepare_config", _prepare_config_with_canonical_defaults)
+_MODULE._prepare_config = _prepare_config_with_canonical_defaults
 globals()["_prepare_config"] = _prepare_config_with_canonical_defaults
 
 _ORIGINAL_RUN_POSTPROCESS = getattr(_MODULE, "_run_postprocess_hook", None)
@@ -212,7 +212,7 @@ def _run_postprocess_hook_if_enabled(*args: Any, **kwargs: Any) -> Any:
     raise AttributeError("library.cli.commands.get_data._run_postprocess_hook is missing")
 
 
-setattr(_MODULE, "_run_postprocess_hook", _run_postprocess_hook_if_enabled)
+_MODULE._run_postprocess_hook = _run_postprocess_hook_if_enabled
 globals()["_run_postprocess_hook"] = _run_postprocess_hook_if_enabled
 
 __all__ = _export_module_api(

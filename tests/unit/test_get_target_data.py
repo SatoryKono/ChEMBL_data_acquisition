@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import stat
-
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from types import SimpleNamespace

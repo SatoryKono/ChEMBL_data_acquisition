@@ -39,10 +39,10 @@ import sys
 import tempfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from itertools import chain, islice
 from numbers import Integral, Real
 from pathlib import Path
-from datetime import datetime, timezone
 from typing import Any
 
 import pandas as pd
@@ -56,10 +56,10 @@ from library.cli import (
     LoggerConfig,
     build_root_parser,
     configure_logger,
-    set_emit_legacy_help,
     path_argument,
     positive_int,
     prepare_io_paths,
+    set_emit_legacy_help,
 )
 from library.cli.logging import setup_cli_logging
 from library.cli.metadata import prepare_option
@@ -76,7 +76,6 @@ from library.integration import chembl_library as cl
 from library.orchestration import ETLContext
 from library.pipelines.common import add_pipeline_metadata
 from library.pipelines.common.metadata import get_pipeline_version
-from library.pipelines.document import DocumentPipelineOptions
 from library.pipelines.document import postprocessing as dp
 from library.pipelines.document.pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
@@ -91,7 +90,6 @@ from library.pipelines.document.service import (
     DocumentPipeline,
     FallbackDoiMetrics,
     FallbackDoiState,
-    run_document_service,
 )
 from library.qa.reporting import build_table_quality_hook
 from library.qa.table_quality import TableQualityProfiler
@@ -100,10 +98,10 @@ from library.reporting.run_manifest import (
     QualityReportError,
     finalise_csv_output,
 )
-from library.utils.data_correlation import generate_correlation_report
-from library.utils.qc_report import generate_qc_report
 from library.schemas import DocumentsSchema, normalize_documents
 from library.schemas.document_spec import DOCUMENT_EXPORT_COLUMNS
+from library.utils.data_correlation import generate_correlation_report
+from library.utils.qc_report import generate_qc_report
 from library.validation import validate_documents
 
 DEFAULT_INPUT_NAME = "document.csv"
@@ -503,10 +501,14 @@ def _run_documents_postprocess(
     )
     from library.postprocessing.documents import (
         DOCUMENT_SCHEMA as POSTPROCESS_DOCUMENT_SCHEMA,
+    )
+    from library.postprocessing.documents import (
         run_document_pipeline as run_document_postprocess,
-        validate_documents as validate_document_postprocess,
     )
     from library.postprocessing.documents import steps as document_steps
+    from library.postprocessing.documents import (
+        validate_documents as validate_document_postprocess,
+    )
 
     pipeline_config = get_pipeline_config("documents", config_override)
     csv_cfg = get_csv_runtime_config(pipeline_config)
@@ -681,7 +683,7 @@ def _finalise_export(
     resolved_date_tag = (
         date_tag
         or inferred_date
-        or datetime.now(timezone.utc).strftime("%Y%m%d")
+        or datetime.now(UTC).strftime("%Y%m%d")
     )
 
     try:
@@ -746,7 +748,10 @@ def _finalise_export(
         destination = csv_path.with_name("output_postprocessed.documents.csv")
 
         try:
-            from library.postprocessing.common.types import SchemaValidationError, StepError
+            from library.postprocessing.common.types import (
+                SchemaValidationError,
+                StepError,
+            )
         except ImportError:  # pragma: no cover - defensive guard
             SchemaValidationError = StepError = RuntimeError  # type: ignore[assignment]
 
@@ -1918,9 +1923,9 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         explicit_date
         or fallback_date
         or inferred_date
-        or datetime.now(timezone.utc).strftime("%Y%m%d")
+        or datetime.now(UTC).strftime("%Y%m%d")
     )
-    setattr(args, "_standard_date_tag", standard_date_tag)
+    args._standard_date_tag = standard_date_tag
     emit_legacy = bool(getattr(args, "emit_legacy_artifacts", False))
 
     output_dir_value = getattr(cfg.io, "output_dir", None)

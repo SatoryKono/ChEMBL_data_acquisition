@@ -8,7 +8,6 @@ applications or tests.
 from __future__ import annotations
 
 import argparse
-import json
 import math
 import numbers
 import os
@@ -37,6 +36,7 @@ from urllib.parse import urlsplit
 
 import pandas as pd
 import requests
+from pandera import DataFrameSchema
 
 import library.cli.logging as cli_logging
 from library import cli, io
@@ -61,6 +61,8 @@ from library.config import Config, _serialize_paths
 from library.integration import chembl_library as cl
 from library.metadata import (
     file_sha256 as _metadata_file_sha256,
+)
+from library.metadata import (
     write_meta_yaml as _metadata_write_meta_yaml,
 )
 from library.orchestration import ETLContext
@@ -74,22 +76,26 @@ from library.pipelines.common import (
 from library.pipelines.common.metadata import get_pipeline_version
 from library.postprocess import (
     PostprocessingPipelineConfig,
-    get_csv_runtime_config as get_postprocess_csv_config,
-    get_pipeline_config as get_postprocess_pipeline_config,
     run_postprocessing_pipeline,
+)
+from library.postprocess import (
+    get_csv_runtime_config as get_postprocess_csv_config,
+)
+from library.postprocess import (
+    get_pipeline_config as get_postprocess_pipeline_config,
 )
 from library.processing.activity import (
     apply_activity_annotations,
     compute_activity_bounds,
 )
 from library.qa.reporting import build_table_quality_hook
-from library.utils.data_correlation import generate_correlation_report
-from library.utils.qc_report import generate_qc_report
 from library.schemas import (
     ActivitiesSchema,
     configure_activity_schema,
     normalize_activities,
 )
+from library.utils.data_correlation import generate_correlation_report
+from library.utils.qc_report import generate_qc_report
 from library.validation import validate_activities
 
 _DEFAULT_LOGGING_DATE_FUNC = cli_logging._current_date_str
@@ -1227,13 +1233,17 @@ class _ActivityPostprocessDeps:
     process_activity_extended: Callable[..., Path]
     run_activity_postprocess: Callable[..., tuple[pd.DataFrame, object]]
     validate_postprocess: Callable[..., pd.DataFrame]
-    activity_schema: "DataFrameSchema"
+    activity_schema: DataFrameSchema
 
 
 def _load_activity_postprocess_deps() -> _ActivityPostprocessDeps:
     from library.postprocessing.activities import (
         ACTIVITY_SCHEMA as _ACTIVITY_SCHEMA,
+    )
+    from library.postprocessing.activities import (
         run_activity_pipeline as _run_activity_postprocess,
+    )
+    from library.postprocessing.activities import (
         validate_activities as _validate_postprocess,
     )
     from library.postprocessing.activity_extended import process_activity_extended
@@ -1610,7 +1620,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             destination=Path(output_path).parent,
         )
     else:
-        table_quality = lambda _: None  # type: ignore[assignment]
+        def _noop_table_quality(_: Path) -> None:
+            return None
+
+        table_quality = _noop_table_quality
 
     def _persist_standard_outputs(dataset_csv: Path) -> io.StandardOutputArtifacts:
         dataset_frame = pd.read_csv(

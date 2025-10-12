@@ -6,8 +6,8 @@ import pandas as pd
 import pytest
 
 from library.config import IoCfg
-from library.postprocessing import document
 from library.pipelines.document import postprocessing as stage_postprocessing
+from library.postprocessing import document
 
 
 @pytest.mark.unit

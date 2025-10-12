@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import importlib
 import warnings
 from pathlib import Path
 
-import importlib
 import pandas as pd
 import pytest
 

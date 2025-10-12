@@ -590,7 +590,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     if artifacts is not None:
         args.output_csv = artifacts.dataset
-        setattr(args, "_testitem_artifacts", artifacts)
+        args._testitem_artifacts = artifacts
     return exit_code
 
 
@@ -782,8 +782,10 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 )
                 from library.postprocessing.testitem import (
                     TESTITEM_SCHEMA,
-                    run_testitem_pipeline as run_testitem_postprocess,
                     validate_testitems,
+                )
+                from library.postprocessing.testitem import (
+                    run_testitem_pipeline as run_testitem_postprocess,
                 )
             except Exception as exc:  # pragma: no cover - defensive guard
                 logger.exception(

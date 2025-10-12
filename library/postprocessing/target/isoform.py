@@ -154,7 +154,7 @@ def _current_default_search_dir() -> Path:
         package = sys.modules.get(module_name)
         if package is None or not hasattr(package, "_DEFAULT_SEARCH_DIR"):
             continue
-        override = getattr(package, "_DEFAULT_SEARCH_DIR")
+        override = package._DEFAULT_SEARCH_DIR
         if override is not None:
             return Path(override)
     return _DEFAULT_SEARCH_DIR

@@ -46,11 +46,11 @@ from .cli.run_context import compute_generated_at
 from .common.log import logger as default_logger
 from .config import Config, ConfigError, ensure_dirs, print_config
 from .config.loader import DEFAULT_CONFIG_PATH
-from .metadata import Stats, file_sha256, record_quality_failure, write_meta_yaml
+from .io import StandardOutputArtifacts, save_standard_outputs
 from .maintenance import ensure_legacy_cleanup
+from .metadata import Stats, file_sha256, record_quality_failure, write_meta_yaml
 from .sidecar import SidecarErrors
 from .table_quality import TableQualityProfiler
-from .io import save_standard_outputs, StandardOutputArtifacts
 from .utils.qc_report import build_reports_from_profiler
 
 __all__ = [
@@ -307,7 +307,7 @@ def run_cli_command(
     legacy_flag = bool(getattr(args, "emit_legacy_artifacts", False))
     diagnostics_enabled = legacy_flag or debug_flag or keep_flag
     if diagnostics_enabled != legacy_flag:
-        setattr(args, "emit_legacy_artifacts", diagnostics_enabled)
+        args.emit_legacy_artifacts = diagnostics_enabled
 
     if not log_cfg.generated_at:
         seed_parts: list[str] = []
@@ -410,7 +410,7 @@ def run_cli_command(
     if not diagnostics_enabled:
         doc_quality_cfg = getattr(cfg.system, "doc_quality", None)
         if doc_quality_cfg is not None and hasattr(doc_quality_cfg, "enable"):
-            setattr(doc_quality_cfg, "enable", False)
+            doc_quality_cfg.enable = False
 
     try:
         if getattr(args, "print_config", False):

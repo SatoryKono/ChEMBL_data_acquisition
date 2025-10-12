@@ -11,8 +11,8 @@ import pytest
 
 from library.cli import parser as parser_module
 from library.cli.parser import apply_config_overrides
-from library.io.paths import default_output_path
 from library.config import ConfigMetadata
+from library.io.paths import default_output_path
 
 
 class _SpyLogger:

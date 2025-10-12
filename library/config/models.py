@@ -418,7 +418,7 @@ class OpenAlexCfg(_BaseModel):
     @classmethod
     def _verify_option(cls, value: Any) -> bool | str:
         coerced = _normalize_verify_option(value)
-        if isinstance(coerced, (bool, str)):
+        if isinstance(coerced, bool | str):
             return coerced
         raise TypeError("verify must be a boolean or path string")
 
@@ -449,7 +449,7 @@ class CrossRefCfg(_BaseModel):
     @classmethod
     def _verify_option(cls, value: Any) -> bool | str:
         coerced = _normalize_verify_option(value)
-        if isinstance(coerced, (bool, str)):
+        if isinstance(coerced, bool | str):
             return coerced
         raise TypeError("verify must be a boolean or path string")
 
@@ -655,7 +655,7 @@ class PubChemCfg(_BaseModel):
     @classmethod
     def _verify_option(cls, value: Any) -> bool | str:
         coerced = _normalize_verify_option(value)
-        if isinstance(coerced, (bool, str)):
+        if isinstance(coerced, bool | str):
             return coerced
         raise TypeError("verify must be a boolean or path string")
 

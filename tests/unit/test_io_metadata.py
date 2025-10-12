@@ -6,7 +6,8 @@ from pathlib import Path
 
 import yaml
 
-from library.common.metadata import Stats, file_sha256, write_meta_yaml as write_common_meta
+from library.common.metadata import Stats, file_sha256
+from library.common.metadata import write_meta_yaml as write_common_meta
 from library.io.metadata import write_meta_yaml
 from library.pipelines.common.metadata import get_pipeline_version
 

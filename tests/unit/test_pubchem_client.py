@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
-from typing import Any, Generator
-
+from typing import Any
 
 import pytest
 

@@ -121,10 +121,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(
-        "Removed {removed} legacy artefact(s) from {directory}. "
+        f"Removed {result.removed_count} legacy artefact(s) from {result.output_dir}. "
         "Future runs keep only the dataset and QA CSVs; re-enable diagnostics "
         "with --emit-legacy-artifacts/--debug/--keep-intermediate when needed."
-        .format(removed=result.removed_count, directory=result.output_dir)
+        
     )
     return 0
 

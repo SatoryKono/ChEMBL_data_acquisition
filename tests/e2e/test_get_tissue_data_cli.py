@@ -17,7 +17,7 @@ import pandas as pd
 import pytest
 from freezegun import freeze_time
 
-from library.common.run_context import RunContext, get_current, set_current
+from library.common.run_context import RunContext, set_current
 from library.pipelines.tissue import TISSUE_COLUMN_ORDER
 from scripts import get_tissue_data
 
@@ -403,8 +403,8 @@ def test_get_tissue_data_cli__end_to_end(
     assert hashlib.sha256(quality_path.read_bytes()).hexdigest() == quality_hash_first
     assert hashlib.sha256(correlation_path.read_bytes()).hexdigest() == correlation_hash_first
 
-    failure_meta = Path(f"{failure_path}.meta.yaml")
     assert not failure_path.exists()
+    assert not Path(f"{failure_path}.meta.yaml").exists()
 
     new_events = logger.events[first_event_count:]
     assert any(event == "tissue_pipeline_start" for _, event, _ in new_events)

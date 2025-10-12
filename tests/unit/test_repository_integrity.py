@@ -3,10 +3,9 @@ from __future__ import annotations
 import py_compile
 import tempfile
 from pathlib import Path
+from re import Pattern
 
 import pytest
-
-from re import Pattern
 
 from tools.merge_conflict import (
     MERGE_CONFLICT_PATTERNS,

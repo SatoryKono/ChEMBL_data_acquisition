@@ -7,7 +7,6 @@ from urllib.parse import quote
 
 import requests
 
-from ..common.log import logger
 from ..common.rate_limiter import RateLimiter, get_limiter
 from ..config.models import CrossRefCfg, RetryCfg
 from .pubmed import _do_request

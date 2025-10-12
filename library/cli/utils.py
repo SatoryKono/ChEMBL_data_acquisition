@@ -20,6 +20,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pandas as pd
 from pandera.errors import SchemaErrors
@@ -37,7 +38,16 @@ from ..cli import (
 from ..common.log import logger as default_logger
 from ..common.metadata import record_quality_failure
 from ..common.sidecar import SidecarErrors
-from ..config import DEFAULT_CONFIG_PATH, Config, ConfigError, ensure_dirs, print_config
+from ..config import (
+    DEFAULT_CONFIG_PATH,
+    Config,
+    ConfigError,
+    ensure_dirs,
+    print_config,
+)
+
+if TYPE_CHECKING:
+    from ..postprocess import PostprocessingPipelineResult
 from ..reporting.run_manifest import finalise_csv_output
 from .pipeline_definition import (
     Fetcher,
@@ -82,43 +92,64 @@ class _PostprocessOptions:
     config_override: Path | str | None
 
 
-_POSTPROCESS_OPTIONS: ContextVar[_PostprocessOptions] = ContextVar(
-    "_POSTPROCESS_OPTIONS", default=_PostprocessOptions(False, None)
+_POSTPROCESS_OPTIONS: ContextVar[_PostprocessOptions | None] = ContextVar(
+    "_POSTPROCESS_OPTIONS", default=None
 )
+
+
+def _get_postprocess_options() -> _PostprocessOptions:
+    options = _POSTPROCESS_OPTIONS.get(None)
+    if options is None:
+        return _PostprocessOptions(False, None)
+    return options
 
 
 @lru_cache(maxsize=1)
 def _load_postprocess_runtime() -> _PostprocessRuntime:
     from ..postprocess.common import (
         PostprocessingPipelineConfig,
-        get_csv_runtime_config as get_postprocess_csv_config,
-        get_pipeline_config as load_postprocess_pipeline_config,
         run_postprocessing_pipeline,
+    )
+    from ..postprocess.common import (
+        get_csv_runtime_config as get_postprocess_csv_config,
+    )
+    from ..postprocess.common import (
+        get_pipeline_config as load_postprocess_pipeline_config,
     )
     from ..postprocessing.activities import (
         ACTIVITY_SCHEMA,
-        run_activity_pipeline as run_activity_postprocess,
         validate_activities,
+    )
+    from ..postprocessing.activities import (
+        run_activity_pipeline as run_activity_postprocess,
     )
     from ..postprocessing.assays import (
         ASSAY_SCHEMA,
-        run_assay_pipeline as run_assay_postprocess,
         validate_assays,
+    )
+    from ..postprocessing.assays import (
+        run_assay_pipeline as run_assay_postprocess,
     )
     from ..postprocessing.documents import (
         DOCUMENT_SCHEMA,
-        run_document_pipeline as run_document_postprocess,
         validate_documents,
+    )
+    from ..postprocessing.documents import (
+        run_document_pipeline as run_document_postprocess,
     )
     from ..postprocessing.targets import (
         TARGET_SCHEMA,
-        run_target_pipeline as run_target_postprocess,
         validate_targets,
+    )
+    from ..postprocessing.targets import (
+        run_target_pipeline as run_target_postprocess,
     )
     from ..postprocessing.testitem import (
         TESTITEM_SCHEMA,
-        run_testitem_pipeline as run_testitem_postprocess,
         validate_testitems,
+    )
+    from ..postprocessing.testitem import (
+        run_testitem_pipeline as run_testitem_postprocess,
     )
 
     handlers: dict[str, _PostprocessHandlers] = {
@@ -181,7 +212,7 @@ def _maybe_run_postprocessing(
     *,
     postprocess_enabled: bool,
     config_override: Path | str | None,
-) -> "PostprocessingPipelineResult" | None:
+) -> PostprocessingPipelineResult | None:
     token = _extract_output_token(csv_path)
     if not token:
         return None
@@ -442,7 +473,7 @@ def run_cli_command(
 
     postprocess_config: Path | str | None
     config_attr = getattr(args, "config", None)
-    if isinstance(config_attr, (str, Path)):
+    if isinstance(config_attr, str | Path):
         postprocess_config = config_attr
     else:
         postprocess_config = config_path
@@ -525,7 +556,7 @@ def run_pipeline(
 
     definition = normalise_definition(definition, legacy_kwargs)
 
-    context_options = _POSTPROCESS_OPTIONS.get()
+    context_options = _get_postprocess_options()
     effective_postprocess_enabled = (
         postprocess_enabled
         if postprocess_enabled is not None
@@ -854,7 +885,7 @@ def run_pipeline(
     if failed_metadata_hooks:
         extra_metadata["metadata_hook_failures"] = sorted(failed_metadata_hooks)
 
-    postprocess_result: "PostprocessingPipelineResult" | None = None
+    postprocess_result: PostprocessingPipelineResult | None = None
     if exit_code == 0:
         try:
             postprocess_result = _maybe_run_postprocessing(

@@ -5,10 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from functools import lru_cache
 
-from ...common.run_context import get_current
-
 import pandas as pd
 
+from ...common.run_context import get_current
 from ...project_version import get_pipeline_version as _get_pipeline_version
 
 # Re-export ``get_pipeline_version`` for backwards compatibility with existing imports.

@@ -240,7 +240,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                     correlation_report=str(artifacts.correlation_report),
                 )
                 args.output_csv = artifacts.dataset
-                setattr(args, "_tissue_artifacts", artifacts)
+                args._tissue_artifacts = artifacts
                 output_path = artifacts.dataset
 
     preserve_intermediate = any(

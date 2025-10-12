@@ -6,7 +6,7 @@ import sys
 from collections.abc import Iterable
 from importlib import import_module
 from types import ModuleType
-from typing import Iterable, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 # ruff: noqa: E402 - bootstrap adjusts import order for script execution
 if TYPE_CHECKING:

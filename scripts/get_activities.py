@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from importlib import import_module
 from types import ModuleType
-from typing import Iterable, TYPE_CHECKING, Callable, cast
+from typing import TYPE_CHECKING, cast
 
 # ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if TYPE_CHECKING:
