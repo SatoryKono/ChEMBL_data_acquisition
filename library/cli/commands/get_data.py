@@ -29,7 +29,9 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
+import yaml
 from collections import deque
 from collections.abc import (
     Callable,
@@ -161,6 +163,7 @@ _LOGGER: Logger = configure_logger(LoggerConfig())
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _TESTITEM_SCRIPT = _PROJECT_ROOT / "scripts" / "get_testitem_data.py"
+_PUBCHEM_ENABLE_ENV = "CHEMBL_DA_PUBCHEM_ENABLE"
 
 
 StepValueT = TypeVar("StepValueT")
@@ -1393,12 +1396,10 @@ def _ensure_pubchem_enabled(config: Config) -> None:
         setattr(pubchem_cfg, "enable", True)
 
 
-import tempfile
-import yaml
-
 def _run_testitem_subprocess(
     step: PipelineStep,
     cfg: PipelineRunConfig,
+    base_config: Config,
     *,
     final_output: Path,
     working_output: Path,
@@ -1424,15 +1425,7 @@ def _run_testitem_subprocess(
 
     with tempfile.NamedTemporaryFile(mode="w+", suffix=".yaml", delete=False) as tmp_config_file:
         try:
-            with open(cfg.config_path) as f:
-                config_data = yaml.safe_load(f)
-
-            if 'sources' not in config_data:
-                config_data['sources'] = {}
-            if 'pubchem' not in config_data['sources']:
-                config_data['sources']['pubchem'] = {}
-            config_data['sources']['pubchem']['enable'] = True
-
+            config_data = base_config.model_dump(mode="json")
             yaml.dump(config_data, tmp_config_file)
             tmp_config_path = tmp_config_file.name
         except Exception as e:
@@ -1583,6 +1576,7 @@ def _run_step(
         return _run_testitem_subprocess(
             step,
             cfg,
+            base_config,
             final_output=final_output,
             working_output=working_output,
         )
