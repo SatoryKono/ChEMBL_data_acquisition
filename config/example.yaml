@@ -16,6 +16,9 @@ sources:
     # explicitly need to skip augmentation (for example, when running in an
     # offline sandbox).
     enable: true
+    # Example: tighten retry jitter locally when running against mocked APIs.
+    retry_jitter_seconds: 0.1
+    retry_jitter_seed: 7
   openalex:
     mailto: "team@example.org"
   crossref:

@@ -550,6 +550,15 @@ class PubChemCfg(_BaseModel):
         ge=0,
         description="Base delay between retries for network errors",
     )
+    retry_jitter_seconds: float = Field(
+        0.0,
+        ge=0,
+        description="Random jitter added to fallback retry delays when Retry-After headers are absent",
+    )
+    retry_jitter_seed: int | None = Field(
+        0,
+        description="Seed controlling deterministic jitter; set to null to use system randomness",
+    )
     backoff_initial_seconds: float = Field(
         0.5,
         ge=0,
@@ -632,6 +641,15 @@ class PubChemCfg(_BaseModel):
                 "pubchem.user_agent must include contact information such as an email",
             )
         return v
+
+    @field_validator("retry_jitter_seed")
+    @classmethod
+    def _retry_jitter_seed(cls, value: int | None) -> int | None:
+        if value is None:
+            return None
+        if value < 0:
+            raise ValueError("retry_jitter_seed must be >= 0")
+        return value
 
     @field_validator("verify", mode="before")
     @classmethod
