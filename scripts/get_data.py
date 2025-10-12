@@ -304,8 +304,11 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
     else:
         stage_args = forward.as_list()
 
-    if stage.name == "testitem" and "--pubchem-enable" not in stage_args:
-        stage_args.append("--pubchem-enable")
+    if stage.name == "testitem":
+        # Ensure PubChem enrichment mirrors direct CLI invocation of the
+        # get_testitem_data.py script.
+        if "--pubchem-enable" not in stage_args:
+            stage_args.append("--pubchem-enable")
 
     env = os.environ.copy()
     if stage.name == "testitem":
