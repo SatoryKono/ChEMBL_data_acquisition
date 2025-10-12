@@ -9,6 +9,7 @@ Changelog
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 import requests
@@ -17,6 +18,8 @@ from ..config.models import RetryCfg, SemanticScholarCfg
 from .pubmed import _do_request
 
 __all__ = ["fetch_semantic_scholar", "fetch_semantic_scholar_batch"]
+
+logger = logging.getLogger(__name__)
 
 _SEMANTIC_SCHOLAR_FIELDS = "publicationTypes,externalIds,paperId,venue"
 _SEMANTIC_SCHOLAR_HEADERS = {"Accept": "application/json"}
@@ -55,7 +58,18 @@ def fetch_semantic_scholar(
         timeout=timeout,
         retry_cfg=retry_cfg,
     )
+    if error:
+        logger.warning(
+            "Semantic Scholar request failed for PMID %s with status: %s",
+            pmid,
+            error,
+        )
     if error or not isinstance(data, dict):
+        if not error:
+            logger.warning(
+                "Semantic Scholar request returned invalid response for PMID %s",
+                pmid,
+            )
         return {
             "scholar.PMID": pmid,
             "scholar.Venue": "",
@@ -110,6 +124,12 @@ def fetch_semantic_scholar_batch(
         retry_cfg=retry_cfg,
     )
     if error:
+        for pmid in pmids:
+            logger.warning(
+                "Semantic Scholar batch request failed for PMID %s with status: %s",
+                pmid,
+                error,
+            )
         return [
             {
                 "scholar.PMID": pmid,
@@ -124,6 +144,11 @@ def fetch_semantic_scholar_batch(
         ]
 
     if not isinstance(data, list):
+        for pmid in pmids:
+            logger.warning(
+                "Semantic Scholar batch request returned invalid response for PMID %s",
+                pmid,
+            )
         return [
             {
                 "scholar.PMID": pmid,
