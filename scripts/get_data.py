@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import import_module
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Collection, Sequence
 
 # NOTE:
 #   ``python scripts/get_data.py`` executed from Windows adds ``scripts``
@@ -55,6 +55,38 @@ _guard_cli_module()
 class Stage:
     name: str
     script: str
+
+
+@dataclass(frozen=True)
+class ForwardArgs:
+    """Tokenised command line forwarded to pipeline scripts."""
+
+    tokens: tuple[str, ...]
+    extras_start: int
+    extra_len: int
+
+    @property
+    def extras_end(self) -> int:
+        """Return the exclusive end offset for forwarded extras."""
+
+        return self.extras_start + self.extra_len
+
+    def as_list(self) -> list[str]:
+        """Return a mutable copy of the token sequence."""
+
+        return list(self.tokens)
+
+    def with_default_subcommand(
+        self, default_command: str, *, choices: Collection[str]
+    ) -> list[str]:
+        """Ensure a recognised sub-command is present in the extras slice."""
+
+        tokens = self.as_list()
+        extras = tokens[self.extras_start : self.extras_end]
+        if any(token in choices for token in extras):
+            return tokens
+        tokens.insert(self.extras_start, default_command)
+        return tokens
 
 
 STAGES: tuple[Stage, ...] = (
@@ -244,7 +276,10 @@ def configure_logging(level_name: str | None) -> Path:
     return log_file
 
 
-def run_stage(stage: Stage, extra_args: Iterable[str]) -> float:
+TARGET_SUBCOMMANDS: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
+
+
+def run_stage(stage: Stage, forward_args: ForwardArgs) -> float:
     script_path = SCRIPTS_DIR / stage.script
     if not script_path.exists():
         logging.error("❌ Скрипт %s не найден по пути %s", stage.script, script_path)
@@ -258,6 +293,14 @@ def run_stage(stage: Stage, extra_args: Iterable[str]) -> float:
         _ensure_pubchem_env(forwarded, env)
     command = [sys.executable, str(script_path), *forwarded]
     result = subprocess.run(command, check=False, env=env)
+    if stage.name == "target":
+        stage_args = forward_args.with_default_subcommand(
+            "all", choices=TARGET_SUBCOMMANDS
+        )
+    else:
+        stage_args = forward_args.as_list()
+    command = [sys.executable, str(script_path), *stage_args]
+    result = subprocess.run(command, check=False)
     duration = (datetime.now() - start).total_seconds()
 
     if result.returncode != 0:
@@ -272,7 +315,7 @@ def run_stage(stage: Stage, extra_args: Iterable[str]) -> float:
     return duration
 
 
-def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> list[str]:
+def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> ForwardArgs:
     forward: list[str] = []
     if args.limit is not None:
         forward.extend(["--limit", str(args.limit)])
@@ -280,7 +323,9 @@ def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> list[s
         forward.extend(["--log-level", args.log_level])
     if args.config is not None:
         forward.extend(["--config", str(args.config)])
+    extras_start = len(forward)
     forward.extend(extra)
+    extra_len = len(extra)
 
     def _has_option(option: str) -> bool:
         return option in forward
@@ -291,7 +336,7 @@ def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> list[s
         forward.extend(["--input-dir", DEFAULT_INPUT_DIR])
     if not _has_option("--output-dir"):
         forward.extend(["--output-dir", DEFAULT_OUTPUT_DIR])
-    return forward
+    return ForwardArgs(tuple(forward), extras_start, extra_len)
 
 
 def log_summary(durations: list[tuple[str, float]]) -> None:
@@ -322,7 +367,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if stage.name in args.skip:
             logging.info("⏭ Пропуск этапа %s по флагу --skip", stage.name)
             continue
-        duration = run_stage(stage, forward_args)
+        stage_args = list(forward_args)
+        if stage.name == "testitem" and "--pubchem-enable" not in stage_args:
+            stage_args.append("--pubchem-enable")
+
+        duration = run_stage(stage, stage_args)
         durations.append((stage.name, duration))
 
     log_summary(durations)

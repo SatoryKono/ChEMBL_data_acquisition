@@ -65,7 +65,7 @@ def test_build_forward_args__injects_project_paths() -> None:
         "--output-dir",
         get_data.DEFAULT_OUTPUT_DIR,
     ]
-    assert forwarded[-len(expected_tail) :] == expected_tail
+    assert list(forwarded.tokens[-len(expected_tail) :]) == expected_tail
 
 
 @pytest.mark.unit
@@ -84,10 +84,10 @@ def test_build_forward_args__keeps_user_supplied_paths() -> None:
 
     forwarded = get_data.build_forward_args(args, extra)
 
-    assert forwarded.count("--base-path") == 1
-    assert forwarded.count("--input-dir") == 1
-    assert forwarded.count("--output-dir") == 1
-    assert forwarded[: len(extra)] == extra
+    assert forwarded.tokens.count("--base-path") == 1
+    assert forwarded.tokens.count("--input-dir") == 1
+    assert forwarded.tokens.count("--output-dir") == 1
+    assert list(forwarded.tokens[: len(extra)]) == extra
 
 
 @pytest.mark.unit
