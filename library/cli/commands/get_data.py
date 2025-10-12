@@ -2500,6 +2500,8 @@ def run_pipeline(
         _LOGGER.error("config_load_failed", error=str(exc), exc_info=exc)
         _LOGGER.info("pipeline_done", stage="pipeline", exit_code=1)
         return 1
+    if not cfg.disable_pubchem:
+        _ensure_testitem_pubchem_enabled(base_config)
     diagnostics_enabled = _diagnostic_outputs_enabled(cfg)
     if not diagnostics_enabled:
         system_cfg = getattr(base_config, "system", None)
