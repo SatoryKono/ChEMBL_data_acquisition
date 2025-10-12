@@ -544,14 +544,14 @@ def attach_parent_molecule_ids(
 
     if missing_ids:
         identifiers, truncated = _summarise_identifiers(missing_ids)
-        log_missing = logger.warning
-        if skip_full_sync and parentless_filtered:
-            log_missing = logger.info
+        severity = "info" if parentless_filtered else "warning"
+        log_missing = logger.info if severity == "info" else logger.warning
         log_missing(
             "parent_lookup_missing_parents",
             count=len(missing_ids),
             identifiers=identifiers,
             truncated=truncated,
+            severity=severity,
         )
 
     refreshed_parent = normalised_child.map(parent_map).astype("string")

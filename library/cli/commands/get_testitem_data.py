@@ -399,13 +399,13 @@ def attach_parent_molecule_ids(
             uncovered_children = len(missing_ids)
 
     if missing_ids:
-        log_missing = logger.warning
-        if skip_full_sync and parentless_filtered:
-            log_missing = logger.info
+        severity = "info" if parentless_filtered else "warning"
+        log_missing = logger.info if severity == "info" else logger.warning
         log_missing(
             "parent_lookup_missing_parents",
             count=len(missing_ids),
             identifiers=missing_ids,
+            severity=severity,
         )
 
     refreshed_parent = normalised_child.map(parent_map).astype("string")
@@ -560,6 +560,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         limit=getattr(args, "limit", None),
         offset=getattr(args, "offset", None),
         emit_legacy_artifacts=getattr(args, "emit_legacy_artifacts", False),
+        pubchem_enabled=getattr(args, "pubchem_enable", None),
     )
     pipeline_result = run_testitem_pipeline(cfg, options)
 
@@ -590,7 +591,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     if artifacts is not None:
         args.output_csv = artifacts.dataset
-        setattr(args, "_testitem_artifacts", artifacts)
+        args._testitem_artifacts = artifacts
     return exit_code
 
 
@@ -782,8 +783,10 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 )
                 from library.postprocessing.testitem import (
                     TESTITEM_SCHEMA,
-                    run_testitem_pipeline as run_testitem_postprocess,
                     validate_testitems,
+                )
+                from library.postprocessing.testitem import (
+                    run_testitem_pipeline as run_testitem_postprocess,
                 )
             except Exception as exc:  # pragma: no cover - defensive guard
                 logger.exception(
@@ -910,6 +913,16 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=int,
         default=0,
         help="Number of identifiers to skip before processing",
+    )
+    parser.add_argument(
+        "--pubchem-enable",
+        dest="pubchem_enable",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Enable PubChem enrichment regardless of configuration; use "
+            "--no-pubchem-enable to disable it explicitly"
+        ),
     )
     parser.add_argument(
         "--postprocess",

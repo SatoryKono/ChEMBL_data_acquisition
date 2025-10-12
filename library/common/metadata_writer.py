@@ -47,6 +47,8 @@ class Stats(_StatsRequired, total=False):
 
     parent_lookup_source: str
     parent_lookup_missing: int
+    pubchem_augmentation_enabled: bool
+    pubchem_fallback_applied: bool
     missing_molecule_ids: list[str]
     missing_molecule_ids_count: int
     chunk_fetch_failure_chunks: int

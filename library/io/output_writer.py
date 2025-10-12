@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 import pandas as pd
 
 from ..common.csv_utils import write_csv_deterministic
-
 
 OUTPUT_DIR = Path("data/output")
 
@@ -82,11 +81,13 @@ def save_standard_outputs(
         ``output_path`` is supplied; in that case the parent directory of
         ``output_path`` becomes the target location.
     output_path:
-        Optional original dataset path. When provided the canonical artefacts
-        are written next to this file using the standard ``output.<table>``
-        naming scheme. If the resulting dataset path differs from
-        ``output_path`` the original file (and its optional ``.meta.yaml``
-        sidecar) is deleted when ``cleanup_source`` evaluates to ``True``.
+        Optional original dataset path. When provided, the dataset is written
+        back to this location and the accompanying reports reuse the same
+        stem. When omitted the artefacts default to the canonical
+        ``output.<table>_<date>`` naming scheme. If the resulting dataset path
+        differs from ``output_path`` the original file (and its optional
+        ``.meta.yaml`` sidecar) is deleted when ``cleanup_source`` evaluates
+        to ``True``.
     cleanup_source:
         Remove ``output_path`` when it does not match the canonical dataset
         path. Defaults to ``True`` so that legacy exports do not leave stray
@@ -106,31 +107,39 @@ def save_standard_outputs(
 
     resolved_output_dir = Path(output_dir) if output_dir is not None else OUTPUT_DIR
 
+    dataset_path: Path
+    destination_dir: Path
+    dataset_stem: str
     if output_path is not None:
-        candidate_path = Path(output_path)
-        destination_dir = candidate_path.parent
+        dataset_path = Path(output_path)
+        destination_dir = dataset_path.parent
+        dataset_stem = dataset_path.stem
     else:
         destination_dir = resolved_output_dir
-
-    stem_name = f"output.{table_name}_{date_tag}"
-    dataset_path = destination_dir / f"{stem_name}.csv"
+        dataset_stem = f"output.{table_name}_{date_tag}"
+        dataset_path = destination_dir / f"{dataset_stem}.csv"
 
     _ensure_output_directory(destination_dir)
 
     correlation_path = destination_dir / (
-        f"{stem_name}_data_correlation_report_table.csv"
+        f"{dataset_stem}_data_correlation_report_table.csv"
     )
-    quality_path = destination_dir / f"{stem_name}_quality_report_table.csv"
+    quality_path = destination_dir / f"{dataset_stem}_quality_report_table.csv"
 
     key_cols = list(key_columns or [])
     if not key_cols and not df_main.empty:
         key_cols = [str(df_main.columns[0])]
 
+    effective_column_order = (
+        list(column_order)
+        if column_order is not None
+        else list(df_main.columns)
+    )
     write_csv_deterministic(
         df_main,
         dataset_path,
         key_cols=key_cols,
-        col_order=list(column_order) if column_order is not None else None,
+        col_order=effective_column_order,
     )
     _remove_sidecars(dataset_path)
 

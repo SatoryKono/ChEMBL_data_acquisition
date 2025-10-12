@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import importlib
 import io
+import json
+import subprocess
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -14,6 +16,8 @@ import pytest
 from library.cli.commands import get_data
 from library.config import Config
 from library.pipelines.common import PipelineRunResult
+from library.pipelines.testitem import TestitemPipelineOptions
+from library.project_version import get_pipeline_version
 from tests.helpers.logs import iter_events, parse_log_lines
 from tests.helpers.manifests import load_latest_manifest
 
@@ -195,6 +199,19 @@ def test_parse_args__custom_paths(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_load_pipeline_config__applies_testitem_limit_override(tmp_path: Path) -> None:
+    cfg = _make_config(tmp_path)
+    config_source = Path("config/config.yaml")
+    copied_config = tmp_path / "config_full.yaml"
+    copied_config.write_text(config_source.read_text(encoding="utf-8"), encoding="utf-8")
+    cfg = replace(cfg, config_path=copied_config, limit=10)
+
+    loaded = get_data._load_pipeline_config(cfg, cfg.config_path)
+
+    assert loaded.sources.chembl.pipelines.testitem.limit == 10
+
+
+@pytest.mark.unit
 def test_write_run_manifest__fallback_on_unlink_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -203,6 +220,8 @@ def test_write_run_manifest__fallback_on_unlink_failure(
     reports_dir.mkdir(parents=True, exist_ok=True)
     alias_path = reports_dir / "run_manifest.json"
     alias_path.write_text("stale", encoding="utf-8")
+
+    monkeypatch.setenv("GIT_SHA", "unit-test-sha")
 
     original_unlink = Path.unlink
 
@@ -234,6 +253,11 @@ def test_write_run_manifest__fallback_on_unlink_failure(
 
     assert alias_path.read_text(encoding="utf-8") == manifest_content
     assert not alias_path.with_name("run_manifest.json.tmp").exists()
+
+    payload = json.loads(manifest_content)
+    run_info = payload["run"]
+    assert run_info["pipeline_version"] == get_pipeline_version()
+    assert run_info["git_sha"] == "unit-test-sha"
 
 
 @pytest.mark.unit
@@ -440,6 +464,37 @@ def test_prepare_config__verbose_overrides_level(tmp_path: Path) -> None:
 
     cfg = get_data._prepare_config(args)
     assert cfg.log_level == "DEBUG"
+
+
+@pytest.mark.unit
+def test_prepare_config__coerces_disable_pubchem_false_string(
+    tmp_path: Path,
+) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
+
+    args = argparse.Namespace(
+        base_path=base_path,
+        input_dir=Path("input"),
+        output_dir=Path("output"),
+        config=config_path,
+        date_prefix="20240204",
+        log_level="info",
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        disable_pubchem="False",
+    )
+
+    cfg = get_data._prepare_config(args)
+
+    assert cfg.disable_pubchem is False
 
 
 @pytest.mark.unit
@@ -1070,6 +1125,155 @@ def test_run_step__forwards_skip_and_dry_run_options(
         "skip_existing": skip_existing,
         "dry_run": dry_run,
     }
+
+
+@pytest.mark.unit
+def test_run_step__testitem_forces_pubchem_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    config_path = base_path / "config.yaml"
+    config_path.write_text("{}", encoding="utf-8")
+
+    input_files = get_data.PipelineInputFiles.from_mapping({"testitem": "testitem.csv"})
+    output_stems = get_data.PipelineOutputStems.from_mapping({"testitem": "testitem"})
+    subcommands = get_data.PipelineSubcommands.from_mapping({"testitem": None})
+
+    run_cfg = get_data.PipelineRunConfig(
+        base_path=base_path,
+        input_dir=input_dir,
+        output_dir=output_dir,
+        config_path=config_path,
+        date_prefix="20240229",
+        log_level="INFO",
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        input_files=input_files,
+        output_stems=output_stems,
+        subcommands=subcommands,
+    )
+
+    input_path = run_cfg.input_path("testitem")
+    input_path.write_text("molecule_chembl_id\nCHEMBL1\n", encoding="utf-8")
+    final_output = run_cfg.output_path("testitem")
+    working_output = final_output.with_name(f"{final_output.name}.tmp")
+
+    cfg.sources.pubchem.enable = False
+
+    def _build_options(
+        run_cfg_arg: get_data.PipelineRunConfig,
+        received_input: Path,
+        received_output: Path,
+    ) -> TestitemPipelineOptions:
+        assert run_cfg_arg is run_cfg
+        return TestitemPipelineOptions(
+            input_csv=received_input,
+            output_csv=received_output,
+            limit=None,
+            offset=None,
+            emit_legacy_artifacts=False,
+            pubchem_enabled=False,
+        )
+
+    def _runner(config: Config, options: TestitemPipelineOptions) -> PipelineRunResult:
+        assert options.pubchem_enabled is True
+        assert config.sources.pubchem.enable is False
+        destination = Path(options.output_csv)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text("molecule_chembl_id\nCHEMBL1\n", encoding="utf-8")
+        return PipelineRunResult(
+            exit_code=0,
+            output_path=destination,
+            executed=True,
+            reason=None,
+            written=True,
+        )
+
+    step = get_data.PipelineStep(
+        name="testitem",
+        main=lambda _: 0,
+        input_filename="testitem.csv",
+        output_stem="testitem",
+    )
+
+    monkeypatch.setattr(
+        get_data,
+        "_PIPELINE_APIS",
+        {"testitem": get_data.PipelineApi(_build_options, _runner)},
+        raising=False,
+    )
+
+    result = get_data._run_step(
+        step,
+        run_cfg,
+        cfg,
+        input_path,
+        final_output,
+        working_output,
+    )
+
+    assert result.exit_code == 0
+    assert result.status == "success"
+    assert cfg.sources.pubchem.enable is False
+
+
+@pytest.mark.unit
+def test_run_testitem_subprocess__invokes_script_with_pubchem_enable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_cfg = _make_config(tmp_path)
+    final_output = run_cfg.output_path("testitem")
+    working_output = final_output.with_name(f"{final_output.name}.tmp")
+
+    class _StubStep:
+        def build_arguments(self, cfg_arg: get_data.PipelineRunConfig, output_path: Path) -> list[str]:
+            return [
+                "--config",
+                str(cfg_arg.config_path),
+                "--input",
+                str(cfg_arg.input_path("testitem")),
+                "--final-out",
+                str(output_path),
+            ]
+
+    captured: dict[str, object] = {}
+
+    def _capture_run(
+        command: list[str], *, check: bool, cwd: str, env: dict[str, str]
+    ) -> subprocess.CompletedProcess[object]:
+        captured["command"] = command
+        captured["check"] = check
+        captured["cwd"] = cwd
+        captured["env"] = env
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(get_data.subprocess, "run", _capture_run)
+
+    result = get_data._run_testitem_subprocess(
+        _StubStep(),
+        run_cfg,
+        final_output=final_output,
+        working_output=working_output,
+    )
+
+    assert result.exit_code == 0
+    command = captured["command"]
+    assert command[0] == get_data.sys.executable
+    assert command[1] == str(get_data._TESTITEM_SCRIPT)
+    assert "--pubchem-enable" in command
+    config_index = command.index("--config")
+    assert Path(command[config_index + 1]) == run_cfg.config_path
+    output_index = command.index("--final-out")
+    assert Path(command[output_index + 1]) == final_output
+    assert captured["check"] is True
+    assert captured["cwd"] == str(get_data._PROJECT_ROOT)
 
 
 @pytest.mark.unit

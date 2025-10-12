@@ -16,6 +16,7 @@ from library.cli.base import PipelineCLIBase
 from library.config import Config
 from library.pipelines.common import PipelineRunResult
 from library.reporting.run_manifest import PipelineOutputReport
+from library.utils.cli_tools import get_document_type
 from scripts import (
     get_activity_data,
     get_assay_data,
@@ -24,7 +25,6 @@ from scripts import (
     get_target_data,
     get_testitem_data,
 )
-from library.utils.cli_tools import get_document_type
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 
 

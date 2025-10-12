@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+import random
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
-from typing import Any, Generator
+from typing import Any
 
 import pytest
 
@@ -96,6 +97,37 @@ class _DummyLimiter:
         self.acquires += 1
 
 
+def test_make_request__applies_verify_setting(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = PubChemCfg(verify="/tmp/custom-ca.pem")
+    cfg.retries = 0
+
+    payload = {"status": "ok"}
+    url = f"{cfg.base.rstrip('/')}/compound/cid/42/property/Foo/JSON"
+
+    limiter = _DummyLimiter()
+    monkeypatch.setattr(pubchem, "get_limiter", lambda *_args, **_kwargs: limiter)
+
+    session = _DummySession(lambda: _DummyResponse(200, {}, payload))
+    session.verify = True  # type: ignore[attr-defined]
+    monkeypatch.setattr(pubchem, "get_session", lambda *_args, **_kwargs: session)
+    monkeypatch.setattr(pubchem, "_CACHE", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_UNTIL", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_DETAILS", None)
+
+    result = pubchem.make_request(url, cfg)
+
+    assert result == payload
+    assert session.verify == cfg.verify  # type: ignore[attr-defined]
+    assert session.calls == [
+        (
+            "GET",
+            url,
+            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
+        )
+    ]
+    assert limiter.acquires == 1
+
+
 class _TimeController:
     def __init__(self) -> None:
         self._now = 0.0
@@ -149,7 +181,7 @@ def test_make_request__caches_server_error_results(
             {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
         )
     ]
-    assert sleep_calls == [30.0]
+    assert sleep_calls == []
     assert limiter.acquires == 1
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "server_error"
@@ -179,7 +211,7 @@ def test_make_request__caches_server_error_results(
     assert second_result is None
     assert len(session.calls) == 1
     assert limiter.acquires == 1
-    assert sleep_calls == [30.0]
+    assert sleep_calls == []
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "server_error"
     assert details == {
@@ -393,7 +425,7 @@ def test_make_request__retry_after_honours_grace(
             {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
         )
     ]
-    assert sleep_calls == [30.0]
+    assert sleep_calls == []
     assert limiter.acquires == 1
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "server_error"
@@ -481,6 +513,44 @@ def test_make_request__retry_after_grace_disabled_causes_timeout(
         "retry_after_source": "header",
         "timeout_reason": "retry_after_exceeds_deadline",
     }
+
+
+def test_make_request__applies_jitter_without_retry_after(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = PubChemCfg()
+    cfg.retries = 1
+    cfg.retry_jitter_seconds = 0.35
+    cfg.retry_jitter_seed = 17
+
+    url = (
+        f"{cfg.base.rstrip('/')}/compound/cid/64972/property/"
+        "MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
+    )
+
+    limiter = _DummyLimiter()
+    monkeypatch.setattr(pubchem, "get_limiter", lambda *_args, **_kwargs: limiter)
+    monkeypatch.setattr(pubchem, "_CACHE", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_UNTIL", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_DETAILS", None)
+    monkeypatch.setattr(pubchem, "_JITTER_GENERATORS", {})
+
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(pubchem, "sleep", lambda seconds: sleep_calls.append(float(seconds)))
+
+    session = _DummySession(lambda: _DummyResponse(503, {}))
+    monkeypatch.setattr(pubchem, "get_session", lambda *_args, **_kwargs: session)
+
+    result = pubchem.make_request(url, cfg)
+
+    assert result is None
+    assert limiter.acquires == 1
+    assert len(sleep_calls) == 1
+    expected_jitter = random.Random(cfg.retry_jitter_seed).uniform(
+        0.0, cfg.retry_jitter_seconds
+    )
+    expected_delay = cfg.backoff_initial_seconds + expected_jitter
+    assert sleep_calls[0] == pytest.approx(expected_delay, rel=1e-9)
 
 
 def test_make_request__timeout_cache_uses_config_backoff(

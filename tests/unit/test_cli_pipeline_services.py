@@ -81,7 +81,7 @@ def test_run_document_service__invokes_mode_handler(
     args = captured["args"]
     assert Path(args.input_csv) == sample_csv
     assert Path(args.final_out) == tmp_path / "output.documents_20240101.csv"
-    assert getattr(args, "_standard_date_tag") == "20240101"
+    assert args._standard_date_tag == "20240101"
     assert args.command == "chembl"
 
     pipeline = captured["pipeline"]

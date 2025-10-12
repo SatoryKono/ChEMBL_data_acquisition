@@ -22,20 +22,32 @@ that the pipelines can be executed programmatically from other callers as well.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import logging
 import os
 import shutil
+import subprocess
+import sys
 import time
 from collections import deque
-from collections.abc import Callable, Iterable, ItemsView, KeysView, Mapping, Sequence, ValuesView
+from collections.abc import (
+    Callable,
+    ItemsView,
+    Iterable,
+    Iterator,
+    KeysView,
+    Mapping,
+    Sequence,
+    ValuesView,
+)
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from fnmatch import fnmatch
 from heapq import heappop, heappush
 from pathlib import Path
-from typing import IO, Any, Optional, TypeVar, Generic, Iterator
+from typing import IO, Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -43,15 +55,18 @@ from library.cli.logging import setup_cli_logging
 from library.cli_utils import resolve_invocation
 from library.clients import ChemblClient
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
+from library.common.run_context import get_current as get_run_context
 from library.config import (
     DEFAULT_CONFIG_PATH,
     Config,
     ConfigError,
     ConfigLoaderError,
+    PubChemCfg,
     ensure_dirs,
     load_config,
     print_config,
 )
+from library.io.paths import derive_output_labels
 from library.orchestration import ETLContext
 from library.orchestration.workflow import (
     PreparedPipelineStep,
@@ -140,10 +155,13 @@ from library.postprocessing.testitem import (
 from library.postprocessing.testitem import (
     run_testitem_pipeline as run_testitem_postprocess,
 )
-from library.io.paths import derive_output_labels
+from library.project_version import get_pipeline_version
 from library.reporting.run_manifest import load_output_report, merge_run_output
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_TESTITEM_SCRIPT = _PROJECT_ROOT / "scripts" / "get_testitem_data.py"
 
 
 StepValueT = TypeVar("StepValueT")
@@ -187,8 +205,8 @@ class _PipelineMapping(BaseModel, Mapping[str, StepValueT], Generic[StepValueT])
 
     @classmethod
     def from_mapping(
-        cls, mapping: Mapping[str, StepValueT] | "_PipelineMapping[StepValueT]"
-    ) -> "_PipelineMapping[StepValueT]":
+        cls, mapping: Mapping[str, StepValueT] | _PipelineMapping[StepValueT]
+    ) -> _PipelineMapping[StepValueT]:
         if isinstance(mapping, cls):
             return mapping
         return cls(entries=dict(mapping))
@@ -345,6 +363,82 @@ def _diagnostic_outputs_enabled(cfg: PipelineRunConfig) -> bool:
     return cfg.debug or cfg.keep_intermediate or cfg.rerun_postprocess
 
 
+def _assign_pubchem_config(config: Config, pubchem_cfg: PubChemCfg) -> None:
+    """Attach *pubchem_cfg* to *config* ensuring downstream access succeeds."""
+
+    try:
+        config.sources.pubchem = pubchem_cfg
+    except AttributeError:
+        setattr(config.sources, "pubchem", pubchem_cfg)
+
+
+def _ensure_testitem_pubchem_enabled(config: Config) -> None:
+    """Force-enable PubChem enrichment for the aggregated ``get_data`` run."""
+
+    pubchem_cfg = getattr(config, "pubchem", None)
+    if pubchem_cfg is None:
+        _LOGGER.warning(
+            "testitem_pubchem_config_missing",
+            reason="cfg_pubchem_absent",
+            detail="cfg.pubchem section missing; default configuration will be used.",
+        )
+        _assign_pubchem_config(config, PubChemCfg())
+        return
+
+    enabled_value = getattr(pubchem_cfg, "enable", None)
+    if enabled_value is True:
+        # Already enabled – nothing to do.
+        return
+
+    if enabled_value is False:
+        _LOGGER.info("testitem_pubchem_enable_override")
+    else:
+        _LOGGER.warning(
+            "testitem_pubchem_enable_missing",
+            reason="cfg_pubchem_enable_missing",
+            detail=(
+                "cfg.pubchem.enable is undefined or null; enabling PubChem enrichment for "
+                "testitem stage executed via get_data."
+            ),
+        )
+
+    try:
+        setattr(pubchem_cfg, "enable", True)
+    except (AttributeError, TypeError, ValueError):
+        updated_pubchem_cfg: PubChemCfg
+        if hasattr(pubchem_cfg, "model_copy"):
+            updated_pubchem_cfg = pubchem_cfg.model_copy(update={"enable": True})
+        else:
+            updated_pubchem_cfg = PubChemCfg()
+        _assign_pubchem_config(config, updated_pubchem_cfg)
+    else:
+        _assign_pubchem_config(config, pubchem_cfg)
+
+
+def _apply_testitem_option_overrides(
+    options: TestitemPipelineOptions,
+    base_config: Config,
+    *,
+    allow_pubchem_override: bool = True,
+) -> TestitemPipelineOptions:
+    """Merge configuration-driven overrides into ``options`` when provided."""
+
+    updated_options = options
+
+    testitem_cfg = getattr(base_config, "testitem", None)
+    offset_value = getattr(testitem_cfg, "offset", None) if testitem_cfg is not None else None
+    if offset_value is not None and getattr(updated_options, "offset", None) != offset_value:
+        updated_options = replace(updated_options, offset=offset_value)
+
+    if allow_pubchem_override:
+        pubchem_cfg = getattr(base_config, "pubchem", None)
+        pubchem_enabled = getattr(pubchem_cfg, "enable", None) if pubchem_cfg is not None else None
+        if pubchem_enabled is False and getattr(updated_options, "pubchem_enabled", None) is not True:
+            updated_options = replace(updated_options, pubchem_enabled=True)
+
+    return updated_options
+
+
 def _build_testitem_options(
     cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> TestitemPipelineOptions:
@@ -352,8 +446,9 @@ def _build_testitem_options(
         input_csv=input_path,
         output_csv=output_path,
         limit=cfg.limit,
-        offset=0,
+        offset=None,
         emit_legacy_artifacts=_diagnostic_outputs_enabled(cfg),
+        pubchem_enabled=True,
     )
 
 
@@ -371,6 +466,48 @@ def _build_activity_options(
     )
 
 
+_TESTITEM_PIPELINE_API = PipelineApi[TestitemPipelineOptions](
+    _build_testitem_options, run_testitem_pipeline
+)
+
+_TESTITEM_CONFIG_MAPPING: dict[str, tuple[str, ...]] = {
+    "timeout": (
+        "sources",
+        "chembl",
+        "pipelines",
+        "testitem",
+        "timeout",
+    ),
+    "column": (
+        "sources",
+        "chembl",
+        "pipelines",
+        "testitem",
+        "column",
+    ),
+    "batch_size": (
+        "sources",
+        "chembl",
+        "pipelines",
+        "testitem",
+        "batch_size",
+    ),
+    "limit": (
+        "sources",
+        "chembl",
+        "pipelines",
+        "testitem",
+        "limit",
+    ),
+    "offset": (
+        "sources",
+        "chembl",
+        "pipelines",
+        "testitem",
+        "offset",
+    ),
+}
+
 _PIPELINE_APIS: Mapping[str, PipelineApi[Any]] = {
     "document": PipelineApi[DocumentPipelineOptions](
         _build_document_options, run_document_pipeline
@@ -381,9 +518,7 @@ _PIPELINE_APIS: Mapping[str, PipelineApi[Any]] = {
     "assay": PipelineApi[AssayPipelineOptions](
         _build_assay_options, run_assay_pipeline
     ),
-    "testitem": PipelineApi[TestitemPipelineOptions](
-        _build_testitem_options, run_testitem_pipeline
-    ),
+    "testitem": _TESTITEM_PIPELINE_API,
     "activity": PipelineApi[ActivityPipelineOptions](
         _build_activity_options, run_activity_pipeline
     ),
@@ -410,6 +545,7 @@ class PipelineRunConfig:
     rerun_postprocess: bool = False
     debug: bool = False
     keep_intermediate: bool = False
+    disable_pubchem: bool = False
 
     def input_path(self, name: str) -> Path:
         """Return the fully resolved path for ``name`` in the input directory."""
@@ -505,6 +641,20 @@ def _resolve_path(base: Path, candidate: Path) -> Path:
     if expanded.is_absolute():
         return expanded.resolve()
     return (base / expanded).resolve()
+
+
+_TRUE_FLAG_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
+def _flag_to_bool(value: object) -> bool:
+    """Return ``True`` when ``value`` represents an enabled CLI flag."""
+
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    text = str(value).strip().lower()
+    return text in _TRUE_FLAG_VALUES
 
 
 def _resolve_consumed_artifact_path(cfg: PipelineRunConfig, artefact: str) -> Path:
@@ -707,6 +857,7 @@ def _canonical_run_descriptor(args: argparse.Namespace, *, base_path: Path) -> s
         "dry_run",
         "verbose",
         "print_config",
+        "disable_pubchem",
     )
     for field in bool_fields:
         parts.append(f"{field}={bool(getattr(args, field, False))}")
@@ -890,6 +1041,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Preserve intermediate files produced by individual pipelines",
     )
     parser.add_argument(
+        "--disable-pubchem",
+        action="store_true",
+        help="Disable PubChem enrichment for the testitem stage",
+    )
+    parser.add_argument(
         "--print-config",
         action="store_true",
         help="Print the resolved configuration and exit without running pipelines",
@@ -978,6 +1134,7 @@ def _prepare_config(
         subcommands=subcommands,
         debug=bool(getattr(args, "debug", False)),
         keep_intermediate=bool(getattr(args, "keep_intermediate", False)),
+        disable_pubchem=_flag_to_bool(getattr(args, "disable_pubchem", False)),
     )
 
 
@@ -1244,6 +1401,183 @@ def _cleanup_empty_directories(path: Path, *, root: Path) -> None:
         current = parent
 
 
+def _ensure_pubchem_enabled(config: Config) -> None:
+    """Force-enable PubChem enrichment on ``config`` for the test item step."""
+
+    sources = getattr(config, "sources", None)
+    if sources is None:
+        return
+
+    pubchem_cfg = getattr(sources, "pubchem", None)
+    if pubchem_cfg is None:
+        try:
+            sources.pubchem = PubChemCfg(enable=True)
+        except AttributeError:
+            return
+        _LOGGER.info("testitem_pubchem_enable_override")
+        return
+
+    was_enabled = getattr(pubchem_cfg, "enable", None)
+    if was_enabled is True:
+        return
+
+    _LOGGER.info("testitem_pubchem_enable_override")
+    if hasattr(pubchem_cfg, "model_copy"):
+        updated_pubchem_cfg = pubchem_cfg.model_copy(update={"enable": True})
+        try:
+            sources.pubchem = updated_pubchem_cfg
+        except AttributeError:
+            setattr(pubchem_cfg, "enable", True)
+    else:
+        setattr(pubchem_cfg, "enable", True)
+
+
+def _run_testitem_subprocess(
+    step: PipelineStep,
+    cfg: PipelineRunConfig,
+    *,
+    final_output: Path,
+    working_output: Path,
+) -> StepExecutionResult:
+    """Execute the testitem stage via ``scripts/get_testitem_data.py``."""
+
+    diagnostics_enabled = _diagnostic_outputs_enabled(cfg)
+    working_output.parent.mkdir(parents=True, exist_ok=True)
+    final_output.parent.mkdir(parents=True, exist_ok=True)
+    for candidate in (working_output, final_output):
+        if candidate.exists():
+            try:
+                candidate.unlink()
+            except OSError:
+                pass
+
+    arguments = step.build_arguments(cfg, output_path=final_output)
+    if diagnostics_enabled and "--emit-legacy-artifacts" not in arguments:
+        arguments.append("--emit-legacy-artifacts")
+
+    has_pubchem_flag = any(
+        option in {"--pubchem-enable", "--no-pubchem-enable"}
+        or option.startswith("--pubchem-enable=")
+        for option in arguments
+    )
+    if not has_pubchem_flag:
+        arguments.append("--pubchem-enable")
+
+    command = [sys.executable, str(_TESTITEM_SCRIPT), *arguments]
+    env = os.environ.copy()
+
+    _LOGGER.info(
+        "testitem_subprocess_start",
+        command=command,
+        script=str(_TESTITEM_SCRIPT),
+    )
+
+    try:
+        subprocess.run(
+            command,
+            check=True,
+            cwd=str(_PROJECT_ROOT),
+            env=env,
+        )
+    except subprocess.CalledProcessError as exc:
+        _LOGGER.error(
+            "testitem_subprocess_exit",
+            exit_code=int(exc.returncode),
+            command=command,
+        )
+        return StepExecutionResult(
+            exit_code=int(exc.returncode),
+            executed=True,
+            status="failed",
+            reason="non_zero_exit",
+        )
+    except OSError as exc:
+        _LOGGER.error(
+            "testitem_subprocess_error",
+            error=str(exc),
+            command=command,
+        )
+        return StepExecutionResult(
+            exit_code=1,
+            executed=True,
+            status="failed",
+            reason="subprocess_error",
+        )
+    _LOGGER.info("testitem_subprocess_done", command=command)
+
+    return StepExecutionResult(
+        exit_code=0,
+        executed=True,
+        status="success",
+        reason=None,
+    )
+
+
+def _run_testitem_pipeline_without_pubchem(
+    cfg: PipelineRunConfig,
+    base_config: Config,
+    input_path: Path,
+    working_output: Path,
+) -> StepExecutionResult:
+    """Fallback to the in-process pipeline with PubChem disabled."""
+
+    options = _TESTITEM_PIPELINE_API.build_options(cfg, input_path, working_output)
+    options = _apply_testitem_option_overrides(
+        options,
+        base_config,
+        allow_pubchem_override=False,
+    )
+    if getattr(options, "pubchem_enabled", None) is not False:
+        options = replace(options, pubchem_enabled=False)
+
+    result = _TESTITEM_PIPELINE_API.runner(base_config, options)
+    executed = bool(result.executed)
+    if not executed and result.exit_code == 0:
+        status = "skipped"
+    else:
+        status = "success" if result.exit_code == 0 else "failed"
+    reason = result.reason
+    if reason is None and status == "failed":
+        reason = "non_zero_exit"
+    return StepExecutionResult(
+        exit_code=result.exit_code,
+        executed=executed,
+        status=status,
+        reason=reason,
+    )
+
+
+def _clone_config(config: Config) -> Config:
+    """Return a deep copy of ``config`` for per-step adjustments."""
+
+    if hasattr(config, "model_copy"):
+        return config.model_copy(deep=True)
+    return copy.deepcopy(config)
+
+
+def _load_pipeline_config(cfg: PipelineRunConfig, path: Path | str) -> Config:
+    """Load configuration applying overrides derived from ``cfg``."""
+
+    cli_overrides: dict[str, object] = {}
+    cli_sources: dict[tuple[str, ...], str] = {}
+    for arg, target in _TESTITEM_CONFIG_MAPPING.items():
+        if not hasattr(cfg, arg):
+            continue
+        value = getattr(cfg, arg)
+        if value is None:
+            continue
+        path_tuple = target
+        cli_overrides[".".join(path_tuple)] = value
+        cli_sources[path_tuple] = arg
+
+    return load_config(
+        path,
+        base_path=cfg.base_path,
+        cli_overrides=cli_overrides or None,
+        cli_sources=cli_sources or None,
+    )
+
+
 def _run_step(
     step: PipelineStep,
     cfg: PipelineRunConfig,
@@ -1281,6 +1615,27 @@ def _run_step(
         )
 
     api = _PIPELINE_APIS.get(step.name)
+
+    if step.name == "testitem":
+        if cfg.disable_pubchem:
+            _LOGGER.warning(
+                "testitem_pubchem_disabled",
+                reason="cli_flag_disabled",
+            )
+            step_config = _clone_config(base_config)
+            return _run_testitem_pipeline_without_pubchem(
+                cfg, step_config, input_path, working_output
+            )
+        if api is None or api is _TESTITEM_PIPELINE_API:
+            _ensure_pubchem_enabled(base_config)
+            return _run_testitem_subprocess(
+                step,
+                cfg,
+                final_output=final_output,
+                working_output=working_output,
+            )
+        # fall through to the API runner below when a custom mapping is provided
+
     if api is None:
         arguments = step.build_arguments(cfg, output_path=working_output)
         _LOGGER.debug("step_arguments", step=step.name, arguments=arguments)
@@ -1305,8 +1660,12 @@ def _run_step(
             reason=None if status == "success" else "non_zero_exit",
         )
 
+    step_config = _clone_config(base_config)
     options = api.build_options(cfg, input_path, working_output)
-    result = api.runner(base_config, options)
+
+    if step.name == "testitem" and getattr(options, "pubchem_enabled", None) is not True:
+        options = replace(options, pubchem_enabled=True)
+    result = api.runner(step_config, options)
     executed = bool(result.executed)
     if not executed and result.exit_code == 0:
         status = "skipped"
@@ -1852,6 +2211,23 @@ def _pending_manifest_entry(
     return entry
 
 
+def _resolve_run_git_sha(context: Any | None = None) -> str | None:
+    """Return the Git SHA associated with the current run, if available."""
+
+    resolved_context = context if context is not None else get_run_context()
+    git_sha = (
+        getattr(resolved_context, "git_sha", None)
+        if resolved_context is not None
+        else None
+    )
+    if git_sha:
+        return git_sha
+    env_sha = os.getenv("GIT_SHA")
+    if env_sha:
+        return env_sha
+    return None
+
+
 def _write_run_manifest(
     cfg: PipelineRunConfig,
     *,
@@ -1861,8 +2237,12 @@ def _write_run_manifest(
     exit_code: int,
     steps: Sequence[dict[str, Any]],
     run_id: str | None = None,
+    pipeline_version: str | None = None,
+    git_sha: str | None = None,
 ) -> None:
     """Persist the manifest for the pipeline execution."""
+
+    resolved_pipeline_version = pipeline_version or get_pipeline_version()
 
     manifest = {
         "run": {
@@ -1881,12 +2261,18 @@ def _write_run_manifest(
             "force": cfg.force,
             "skip_existing": cfg.skip_existing,
             "dry_run": cfg.dry_run,
+            "disable_pubchem": cfg.disable_pubchem,
+            "pipeline_version": resolved_pipeline_version,
         },
         "steps": list(steps),
     }
 
     if run_id is not None:
         manifest["run"]["run_id"] = run_id
+
+    resolved_git_sha = git_sha or _resolve_run_git_sha()
+    if resolved_git_sha:
+        manifest["run"]["git_sha"] = resolved_git_sha
 
     reports_dir = cfg.base_path / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -2074,18 +2460,20 @@ def run_pipeline(
     effective_steps = plan.steps
     external_requirements = plan.external_artifacts
     try:
-        base_config = load_config(cfg.config_path, base_path=cfg.base_path)
+        base_config = _load_pipeline_config(cfg, cfg.config_path)
     except (ConfigError, ConfigLoaderError, ValidationError) as exc:
         _LOGGER.error("config_load_failed", error=str(exc), exc_info=exc)
         _LOGGER.info("pipeline_done", stage="pipeline", exit_code=1)
         return 1
+    if not cfg.disable_pubchem:
+        _ensure_testitem_pubchem_enabled(base_config)
     diagnostics_enabled = _diagnostic_outputs_enabled(cfg)
     if not diagnostics_enabled:
         system_cfg = getattr(base_config, "system", None)
         if system_cfg is not None:
             doc_quality_cfg = getattr(system_cfg, "doc_quality", None)
             if doc_quality_cfg is not None and hasattr(doc_quality_cfg, "enable"):
-                setattr(doc_quality_cfg, "enable", False)
+                doc_quality_cfg.enable = False
     try:
         if not cfg.dry_run:
             ensure_dirs(base_config)
@@ -2498,6 +2886,9 @@ def run_pipeline(
     duration_seconds = time.perf_counter() - run_started_clock
     logger_cfg = getattr(_LOGGER, "_cfg", None)
     manifest_run_id = getattr(logger_cfg, "run_id", None)
+    pipeline_version = get_pipeline_version()
+    run_context = get_run_context()
+    git_sha = _resolve_run_git_sha(run_context)
     _write_run_manifest(
         cfg,
         run_started_at=run_started_at,
@@ -2506,6 +2897,8 @@ def run_pipeline(
         exit_code=overall_status,
         steps=manifest_entries,
         run_id=manifest_run_id,
+        pipeline_version=pipeline_version,
+        git_sha=git_sha,
     )
 
     _LOGGER.info("pipeline_done", stage="pipeline", exit_code=overall_status)

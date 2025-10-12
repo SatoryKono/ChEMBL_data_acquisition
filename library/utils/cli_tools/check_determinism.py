@@ -32,7 +32,7 @@ from library.common.csv_utils import (
 )
 from library.common.log import logger
 from library.common.timing import log_duration
-from library.config import Config, DEFAULT_CONFIG_PATH
+from library.config import DEFAULT_CONFIG_PATH, Config
 from library.utils.cli_tools import run_cli_tool
 
 

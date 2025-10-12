@@ -67,3 +67,7 @@ build/
 # Prevent committing Word documents (docx) in scripts directory and subdirectories
 scripts/**/*.docx
 scripts/~$*.docx
+/data/reports
+/data/reports
+/data/reports
+/data/reports

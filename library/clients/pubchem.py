@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -100,7 +101,7 @@ _SERVICE_OUTAGE_REASON: str | None = None
 _SERVICE_OUTAGE_DETAILS: dict[str, Any] | None = None
 
 _SESSION_LOCK = Lock()
-_DEFAULT_API_CFG = ApiCfg(user_agent="chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)")
+_DEFAULT_API_CFG = ApiCfg(user_agent="ChEMBL-ETL/2.1 (mailto:chembl-data@ebi.ac.uk)")
 _DEFAULT_RETRY_CFG = RetryCfg()
 _SESSION_CFG: tuple[ApiCfg, RetryCfg] = (_DEFAULT_API_CFG, _DEFAULT_RETRY_CFG)
 _SESSION_SIGNATURE = _config_signature(*_SESSION_CFG)
@@ -119,11 +120,54 @@ _USER_AGENT_ERROR = (
 
 _THREAD_STATE = local()
 
+_JITTER_LOCK = Lock()
+_JITTER_GENERATORS: dict[int, random.Random] = {}
+
 
 def _set_last_outcome(outcome: str | None, details: Mapping[str, Any] | None) -> None:
     if details is not None:
         details = dict(details)
     _THREAD_STATE.last_outcome = (outcome, details)
+
+
+def _ensure_default_headers(session: Session) -> None:
+    """Ensure the shared session advertises JSON support."""
+
+    headers = getattr(session, "headers", None)
+    if isinstance(headers, Mapping):
+        if "Accept" not in headers:
+            try:
+                session.headers["Accept"] = "application/json"  # type: ignore[index]
+            except Exception:  # pragma: no cover - defensive for custom sessions
+                pass
+        return
+    if hasattr(session, "headers"):
+        try:
+            session.headers.setdefault("Accept", "application/json")  # type: ignore[attr-defined]
+        except AttributeError:
+            pass
+
+
+def _compute_retry_sleep(delay: float, cfg: PubChemCfg) -> tuple[float, float | None]:
+    """Return the sleep duration and applied jitter for retry back-offs."""
+
+    jitter_max = getattr(cfg, "retry_jitter_seconds", 0.0) or 0.0
+    if delay <= 0 or jitter_max <= 0:
+        return delay, None
+    seed = getattr(cfg, "retry_jitter_seed", 0)
+    if seed is None:
+        jitter = random.uniform(0.0, jitter_max)
+    else:
+        with _JITTER_LOCK:
+            rng = _JITTER_GENERATORS.get(seed)
+            if rng is None:
+                rng = random.Random(seed)
+                _JITTER_GENERATORS[seed] = rng
+            jitter = rng.uniform(0.0, jitter_max)
+    applied = delay + jitter
+    if applied < 0:
+        applied = 0.0
+    return applied, jitter
 
 
 def _service_outage_remaining(
@@ -343,6 +387,7 @@ def init_session(api: ApiCfg, retry: RetryCfg) -> None:
     _assert_user_agent(api.user_agent)
     signature = _config_signature(api, retry)
     new_session = session_with_retry(api, retry)
+    _ensure_default_headers(new_session)
     old_session: Session | None = None
     with _SESSION_LOCK:
         old_session = _session
@@ -378,6 +423,7 @@ def get_session(cfg: ApiCfg | None = None) -> Session:
         raise RuntimeError("Failed to initialise PubChem session")
     user_agent = session.headers.get("User-Agent")
     _assert_user_agent(user_agent)
+    _ensure_default_headers(session)
     _SESSION_INITIALISED = True
     return session
 
@@ -639,6 +685,8 @@ def make_request(
         get_limiter("pubchem", cfg.rps, cfg.burst).acquire()
         try:
             session = get_session(api_cfg)
+            if getattr(session, "verify", True) != cfg.verify:
+                session.verify = cfg.verify
             request_kwargs: dict[str, Any] = {
                 "timeout": (cfg.timeout_connect, cfg.timeout_read),
             }
@@ -679,7 +727,6 @@ def make_request(
                     retry_after = _retry_after_seconds(retry_after_header)
                     reason = "rate_limited" if status == 429 else "server_error"
                     last_failure_details = {"reason": reason, "status": status}
-                    delay_source = "config"
                     if retry_after is not None:
                         last_failure_details["retry_after"] = retry_after
                         last_failure_details["retry_after_source"] = "header"
@@ -702,12 +749,91 @@ def make_request(
                         event_name,
                         **warning_context,
                     )
-                    if attempt >= total_attempts:
-                        delay_for_cache = retry_after
-                        if delay_for_cache is None:
-                            delay_for_cache = (
-                                backoff_delay if backoff_delay > 0 else cfg.delay
+                    if retry_after is not None:
+                        now_retry = monotonic()
+                        can_extend_deadline = (
+                            deadline is not None
+                            and deadline_limit is not None
+                            and deadline < deadline_limit
+                        )
+                        if (
+                            deadline is not None
+                            and now_retry + retry_after >= deadline
+                            and not can_extend_deadline
+                        ):
+                            if retry_after > 0:
+                                _remember_service_unavailable(
+                                    retry_after,
+                                    last_failure_details,
+                                    source=last_failure_details.get(
+                                        "retry_after_source", "header"
+                                    ),
+                                )
+                            timeout_details = dict(last_failure_details)
+                            timeout_details.setdefault("retry_after", retry_after)
+                            timeout_details.setdefault("retry_after_source", "header")
+                            timeout_details["timeout_reason"] = "retry_after_exceeds_deadline"
+                            logger.warning(
+                                "request_timeout",
+                                url=url,
+                                method=method_upper,
+                                attempt=attempt,
+                                total_attempts=total_attempts,
+                                rps=cfg.rps,
+                                **timeout_details,
                             )
+                            _store_cache_miss(
+                                cache_key,
+                                cfg,
+                                "timeout",
+                                timeout_details,
+                                url=url,
+                            )
+                            status_value = last_failure_details.get("status")
+                            logger.debug(
+                                "request_fail",
+                                url=url,
+                                status=status_value,
+                                total_attempts=total_attempts,
+                                method=method_upper,
+                                rps=cfg.rps,
+                                **details_excluding("status"),
+                            )
+                            timeout_info = dict(timeout_details)
+                            timeout_info["reason"] = "timeout"
+                            _set_last_outcome("timeout", timeout_info)
+                            return None
+                        if retry_after > 0:
+                            _remember_service_unavailable(
+                                retry_after,
+                                last_failure_details,
+                                source=last_failure_details.get(
+                                    "retry_after_source", "header"
+                                ),
+                            )
+                        _store_cache_miss(
+                            cache_key,
+                            cfg,
+                            reason,
+                            last_failure_details,
+                            url=url,
+                        )
+                        if reason in SERVICE_UNAVAILABLE_OUTCOMES:
+                            last_failure_details.setdefault("cache", True)
+                        logger.debug(
+                            "request_fail",
+                            url=url,
+                            total_attempts=total_attempts,
+                            method=method_upper,
+                            rps=cfg.rps,
+                            status=status,
+                            **details_excluding("status"),
+                        )
+                        _start_service_outage(reason, last_failure_details, cfg)
+                        _set_last_outcome(reason, last_failure_details)
+                        return None
+                    if attempt >= total_attempts:
+                        delay_for_cache = backoff_delay if backoff_delay > 0 else cfg.delay
                         if (
                             delay_for_cache
                             and reason in SERVICE_UNAVAILABLE_OUTCOMES
@@ -716,9 +842,7 @@ def make_request(
                                 "retry_after", delay_for_cache
                             )
                             source_for_cache = (
-                                "header"
-                                if retry_after is not None
-                                else ("backoff" if backoff_delay > 0 else "config")
+                                "backoff" if backoff_delay > 0 else "config"
                             )
                             last_failure_details.setdefault(
                                 "retry_after_source", source_for_cache
@@ -735,6 +859,8 @@ def make_request(
                             last_failure_details,
                             url=url,
                         )
+                        if reason in SERVICE_UNAVAILABLE_OUTCOMES:
+                            last_failure_details.setdefault("cache", True)
                         logger.debug(
                             "request_fail",
                             url=url,
@@ -751,13 +877,30 @@ def make_request(
                         delay = retry_after
                         backoff_delay = delay * 2 if delay > 0 else backoff_delay
                         delay_source = "header"
+                        sleep_delay = delay
+                        jitter_value: float | None = None
                     else:
+                        delay_source = "config"
                         delay = backoff_delay if backoff_delay > 0 else cfg.delay
                         if backoff_delay > 0:
                             delay_source = "backoff"
                         if delay > 0:
                             backoff_delay = delay * 2
+                        sleep_delay, jitter_value = _compute_retry_sleep(delay, cfg)
+                        if jitter_value is not None and delay > 0:
+                            logger.debug(
+                                "request_delay_jitter",
+                                url=url,
+                                method=method_upper,
+                                rps=cfg.rps,
+                                base_delay=delay,
+                                jitter=jitter_value,
+                                applied_delay=sleep_delay,
+                            )
+                        else:
+                            sleep_delay = delay
                     if delay > 0:
+                        backoff_delay = delay * 2
                         if reason in SERVICE_UNAVAILABLE_OUTCOMES:
                             last_failure_details.setdefault("retry_after", delay)
                             last_failure_details.setdefault(
@@ -770,7 +913,7 @@ def make_request(
                             )
                         now = monotonic()
                         if (
-                            retry_after is not None
+                            delay_source == "header"
                             and deadline is not None
                             and deadline_limit is not None
                             and deadline < deadline_limit
@@ -789,52 +932,52 @@ def make_request(
                                 )
                                 deadline = capped_extension
                         if deadline is not None and now + delay >= deadline:
-                                timeout_details = dict(last_failure_details or {})
-                                timeout_details.setdefault(
-                                    "retry_after", delay
-                                )
-                                timeout_details.setdefault(
-                                    "retry_after_source",
-                                    "header" if retry_after is not None else "backoff",
-                                )
-                                timeout_details["timeout_reason"] = (
-                                    "retry_after_exceeds_deadline"
-                                )
-                                logger.warning(
-                                    "request_timeout",
-                                    url=url,
-                                    method=method_upper,
-                                    attempt=attempt,
-                                    total_attempts=total_attempts,
-                                    rps=cfg.rps,
-                                    **timeout_details,
-                                )
-                                _store_cache_miss(
-                                    cache_key,
-                                    cfg,
-                                    "timeout",
-                                    timeout_details,
-                                    url=url,
-                                )
-                                status_value = (
-                                    last_failure_details.get("status")
-                                    if last_failure_details
-                                    else None
-                                )
-                                logger.debug(
-                                    "request_fail",
-                                    url=url,
-                                    status=status_value,
-                                    total_attempts=total_attempts,
-                                    method=method_upper,
-                                    rps=cfg.rps,
-                                    **details_excluding("status"),
-                                )
-                                timeout_info = dict(timeout_details)
-                                timeout_info["reason"] = "timeout"
-                                _set_last_outcome("timeout", timeout_info)
-                                return None
-                        sleep(delay)
+                            timeout_details = dict(last_failure_details or {})
+                            timeout_details.setdefault(
+                                "retry_after", delay
+                            )
+                            timeout_details.setdefault(
+                                "retry_after_source",
+                                "header" if retry_after is not None else "backoff",
+                            )
+                            timeout_details["timeout_reason"] = (
+                                "retry_after_exceeds_deadline"
+                            )
+                            logger.warning(
+                                "request_timeout",
+                                url=url,
+                                method=method_upper,
+                                attempt=attempt,
+                                total_attempts=total_attempts,
+                                rps=cfg.rps,
+                                **timeout_details,
+                            )
+                            _store_cache_miss(
+                                cache_key,
+                                cfg,
+                                "timeout",
+                                timeout_details,
+                                url=url,
+                            )
+                            status_value = (
+                                last_failure_details.get("status")
+                                if last_failure_details
+                                else None
+                            )
+                            logger.debug(
+                                "request_fail",
+                                url=url,
+                                status=status_value,
+                                total_attempts=total_attempts,
+                                method=method_upper,
+                                rps=cfg.rps,
+                                **details_excluding("status"),
+                            )
+                            timeout_info = dict(timeout_details)
+                            timeout_info["reason"] = "timeout"
+                            _set_last_outcome("timeout", timeout_info)
+                            return None
+                    sleep(sleep_delay)
                     continue
                 if status >= 400:
                     if status == 400:
@@ -916,7 +1059,18 @@ def make_request(
                         _set_last_outcome("response_error", last_failure_details)
                         return None
                     if cfg.delay > 0:
-                        sleep(cfg.delay)
+                        sleep_delay, jitter_value = _compute_retry_sleep(cfg.delay, cfg)
+                        if jitter_value is not None:
+                            logger.debug(
+                                "request_delay_jitter",
+                                url=url,
+                                method=method_upper,
+                                rps=cfg.rps,
+                                base_delay=cfg.delay,
+                                jitter=jitter_value,
+                                applied_delay=sleep_delay,
+                            )
+                        sleep(sleep_delay)
                     continue
                 except ValueError:
                     last_failure_details = {
@@ -992,7 +1146,18 @@ def make_request(
                 _set_last_outcome("network_error", last_failure_details)
                 return None
             if cfg.delay > 0:
-                sleep(cfg.delay)
+                sleep_delay, jitter_value = _compute_retry_sleep(cfg.delay, cfg)
+                if jitter_value is not None:
+                    logger.debug(
+                        "request_delay_jitter",
+                        url=url,
+                        method=method_upper,
+                        rps=cfg.rps,
+                        base_delay=cfg.delay,
+                        jitter=jitter_value,
+                        applied_delay=sleep_delay,
+                    )
+                sleep(sleep_delay)
             continue
 
     outcome_name = (last_failure_details or {}).get("reason")
@@ -1244,8 +1409,8 @@ def get_properties(cid: str, cfg: PubChemCfg) -> Properties:
         return Properties(None, None, None, None, None, None)
     base = cfg.base.rstrip("/")
     url = (
-        f"{base}/compound/cid/{validated}/property/MolecularFormula,IUPACName,SMILES,"
-        "ConnectivitySMILES,InChI,InChIKey/JSON"
+        f"{base}/compound/cid/{validated}/property/MolecularFormula,IUPACName,"
+        "IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
     )
     response = make_request(url, cfg)
     if not response:
@@ -1258,8 +1423,8 @@ def get_properties(cid: str, cfg: PubChemCfg) -> Properties:
     return Properties(
         cast(str | None, item.get("IUPACName")),
         cast(str | None, item.get("MolecularFormula")),
-        cast(str | None, item.get("SMILES")),
-        cast(str | None, item.get("ConnectivitySMILES")),
+        cast(str | None, item.get("IsomericSMILES")),
+        cast(str | None, item.get("CanonicalSMILES")),
         cast(str | None, item.get("InChI")),
         cast(str | None, item.get("InChIKey")),
     )

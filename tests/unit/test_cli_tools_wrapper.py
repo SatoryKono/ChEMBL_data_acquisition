@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Callable
 
 import pytest
 

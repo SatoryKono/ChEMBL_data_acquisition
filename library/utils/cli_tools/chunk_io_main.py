@@ -15,7 +15,7 @@ from library.cli import (
 )
 from library.common.chunk_io import process_csv_chunks
 from library.common.log import logger
-from library.config import DEFAULT_CONFIG_PATH, Config
+from library.config import DEFAULT_CONFIG_PATH, Config, ensure_dirs
 from library.io.paths import default_output_path
 from library.utils.cli_tools import run_cli_tool
 

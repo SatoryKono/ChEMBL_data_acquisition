@@ -264,7 +264,7 @@ def _prepare_output(df: pd.DataFrame) -> pd.DataFrame:
 
 def _resolve_search_directory(
     search_dir: Path | str | None,
-    cfg: "Config | None",
+    cfg: Config | None,
 ) -> Path:
     """Return the directory containing target exports for the helper."""
 
@@ -294,7 +294,7 @@ def process_iuphar_targets(
     *,
     output_csv: str | Path | None = None,
     search_dir: str | Path | None = None,
-    cfg: "Config | None" = None,
+    cfg: Config | None = None,
     verbose: bool = False,
 ) -> Path:
     """Process the canonical target export to reproduce the legacy IUPHAR helper.

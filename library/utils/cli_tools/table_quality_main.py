@@ -7,8 +7,6 @@ from argparse import BooleanOptionalAction
 from collections.abc import Sequence
 from pathlib import Path
 
-import pandas as pd
-
 from library import cli, io
 from library.cli import (
     LoggerConfig,

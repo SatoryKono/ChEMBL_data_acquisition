@@ -25,7 +25,7 @@ pre-commit install
 sources:
   chembl:
     api:
-      user_agent: "chembl-da/1.0 (mailto:team@example.org)"
+      user_agent: "ChEMBL-ETL/2.1 (mailto:team@example.org)"
 ```
 
 Проверить итоговые значения можно командой:

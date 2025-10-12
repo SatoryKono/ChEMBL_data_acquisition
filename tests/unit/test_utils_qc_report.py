@@ -10,7 +10,6 @@ from library.qa.table_quality import TableQualityProfiler as QaTableQualityProfi
 from library.table_quality import TableQualityProfiler as LegacyTableQualityProfiler
 from library.utils.qc_report import build_qc_summary
 
-
 EXPECTED_COLUMNS = [
     "column",
     "non_null",

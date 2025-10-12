@@ -6,18 +6,19 @@ import argparse
 import importlib
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from typing import Any
 from types import SimpleNamespace
+from typing import Any
 
 import pandas as pd
 import pytest
 import requests
 import yaml
 
-from library.cli_utils import PipelineExecutionResult, run_pipeline as cli_run_pipeline
+from library.cli_utils import PipelineExecutionResult
+from library.cli_utils import run_pipeline as cli_run_pipeline
 from library.common import metadata_writer as metadata
-from library.io import StandardOutputArtifacts
 from library.config import Config
+from library.io import StandardOutputArtifacts
 from library.pipelines.assay.chembl_assay import MAX_ASSAY_CHUNK_SIZE
 from library.schemas import AssaysSchema
 from scripts import get_assay_data
@@ -456,7 +457,7 @@ def test_run_chembl__standard_outputs_created_without_legacy(
     )
     monkeypatch.setattr(get_assay_data.cl, "get_assays", lambda *_, **__: df)
     class _DummyClient:
-        def __enter__(self) -> "_DummyClient":
+        def __enter__(self) -> _DummyClient:
             return self
 
         def __exit__(self, *_: object) -> None:
@@ -715,8 +716,8 @@ def test_run_pipeline__adds_missing_assay_optional_columns(
     )
 
     exit_code = int(result)
-    if hasattr(result, "dataset_path") and getattr(result, "dataset_path") is not None:
-        dataset_path = Path(getattr(result, "dataset_path"))
+    if hasattr(result, "dataset_path") and result.dataset_path is not None:
+        dataset_path = Path(result.dataset_path)
     else:
         dataset_path = output_path
 

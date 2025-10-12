@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import csv
-import importlib
 import argparse
+import csv
 import importlib
 from pathlib import Path
 from typing import Any

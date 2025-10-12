@@ -325,7 +325,7 @@ class ApiCfg(_BaseModel):
     backoff_factor: float = Field(0.5, ge=0)
     rps: int = Field(5, ge=1)
     burst: int = Field(5, ge=1)
-    user_agent: str = "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)"
+    user_agent: str = "ChEMBL-ETL/2.1 (mailto:chembl-data@ebi.ac.uk)"
 
     @field_validator("chembl_base")
     @classmethod
@@ -418,7 +418,7 @@ class OpenAlexCfg(_BaseModel):
     @classmethod
     def _verify_option(cls, value: Any) -> bool | str:
         coerced = _normalize_verify_option(value)
-        if isinstance(coerced, (bool, str)):
+        if isinstance(coerced, bool | str):
             return coerced
         raise TypeError("verify must be a boolean or path string")
 
@@ -449,7 +449,7 @@ class CrossRefCfg(_BaseModel):
     @classmethod
     def _verify_option(cls, value: Any) -> bool | str:
         coerced = _normalize_verify_option(value)
-        if isinstance(coerced, (bool, str)):
+        if isinstance(coerced, bool | str):
             return coerced
         raise TypeError("verify must be a boolean or path string")
 
@@ -531,26 +531,36 @@ class PubChemCfg(_BaseModel):
     )
     base: str = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
     user_agent: str = Field(
-        "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)",
+        "ChEMBL-ETL/2.1 (mailto:chembl-data@ebi.ac.uk)",
         description="Custom User-Agent for PubChem requests including contact details",
     )
+    verify: bool | str = True
     timeout_connect: float = Field(5.0, ge=1)
     timeout_read: float = Field(60.0, ge=1)
     timeout_seconds: float = Field(
-        30.0,
+        45.0,
         ge=0,
         description="Overall timeout applied to individual PubChem lookups",
     )
-    retries: int = Field(3, ge=0)
+    retries: int = Field(5, ge=0)
     rps: int = Field(3, ge=1)
-    burst: int = Field(5, ge=1)
+    burst: int = Field(3, ge=1)
     delay: float = Field(
-        0.2,
+        1.0,
         ge=0,
         description="Base delay between retries for network errors",
     )
-    backoff_initial_seconds: float = Field(
+    retry_jitter_seconds: float = Field(
         0.5,
+        ge=0,
+        description="Random jitter added to fallback retry delays when Retry-After headers are absent",
+    )
+    retry_jitter_seed: int | None = Field(
+        0,
+        description="Seed controlling deterministic jitter; set to null to use system randomness",
+    )
+    backoff_initial_seconds: float = Field(
+        1.0,
         ge=0,
         description="Initial delay when backing off after 429/5xx responses",
     )
@@ -632,6 +642,23 @@ class PubChemCfg(_BaseModel):
             )
         return v
 
+    @field_validator("retry_jitter_seed")
+    @classmethod
+    def _retry_jitter_seed(cls, value: int | None) -> int | None:
+        if value is None:
+            return None
+        if value < 0:
+            raise ValueError("retry_jitter_seed must be >= 0")
+        return value
+
+    @field_validator("verify", mode="before")
+    @classmethod
+    def _verify_option(cls, value: Any) -> bool | str:
+        coerced = _normalize_verify_option(value)
+        if isinstance(coerced, bool | str):
+            return coerced
+        raise TypeError("verify must be a boolean or path string")
+
 
 class PubMedCfg(_BaseModel):
     base: str = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -672,6 +699,14 @@ class SemanticScholarCfg(_BaseModel):
     retries: int = Field(2, ge=0)
     rps: int | None = Field(default=None, ge=1)
     burst: int | None = Field(default=None, ge=1)
+    delay: float = Field(
+        1.0,
+        ge=0,
+        description=(
+            "Base delay between retries when no Semantic Scholar rate limit is "
+            "configured."
+        ),
+    )
     api_key: str | None = Field(default=None)
 
     @field_validator("base")
@@ -1591,6 +1626,7 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_PUBMED_BURST": ["sources", "pubmed", "burst"],
     "CHEMBL_DA_PUBMED_TOOL": ["sources", "pubmed", "tool"],
     "CHEMBL_DA_PUBMED_EMAIL": ["sources", "pubmed", "email"],
+    "CHEMBL_DA_PUBCHEM_ENABLE": ["sources", "pubchem", "enable"],
     "CHEMBL_DA_SEMANTIC_SCHOLAR_RPS": ["sources", "semantic_scholar", "rps"],
     "CHEMBL_DA_SEMANTIC_SCHOLAR_BURST": [
         "sources",

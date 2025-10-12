@@ -32,16 +32,18 @@ from library.config import (
     ApiCfg,
     Config,
     IoCfg,
+    PubChemCfg,
+    RetryCfg,
     TestitemBatchRetryCfg,
     TestitemMoleculeEnrichmentCfg,
     _serialize_paths,
 )
 from library.integration.chembl_client import ChemblClient
 from library.orchestration import ETLContext
+from library.pipelines.assay.chembl_assay import TESTITEM_STRUCTURE_COLUMNS
 from library.qa.reporting import build_table_quality_hook
 from library.qa.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
-from library.pipelines.assay.chembl_assay import TESTITEM_STRUCTURE_COLUMNS
 from library.utils import data_correlation, qc_report
 
 from .catalog import (
@@ -147,6 +149,7 @@ class TestitemPipelineOptions:
     limit: int | None = None
     offset: int | None = None
     emit_legacy_artifacts: bool = False
+    pubchem_enabled: bool | None = None
 
 
 def _is_placeholder_user_agent(user_agent: str | None) -> bool:
@@ -751,13 +754,29 @@ def run_testitem_pipeline(
         api_overrides["backoff_factor"] = cfg.testitem.backoff_factor
     api_cfg = cfg.api.model_copy(update=api_overrides) if api_overrides else cfg.api
 
-    pubchem_enabled = getattr(cfg.pubchem, "enable", True)
+    pubchem_override = getattr(options, "pubchem_enabled", None)
+    try:
+        default_pubchem_enabled = getattr(cfg.pubchem, "enable", True)
+    except AttributeError:
+        logger.warning(
+            "pubchem_configuration_missing",
+            reason="missing_attribute",
+            detail="cfg.pubchem.enable is not accessible; defaulting to enabled.",
+        )
+        default_pubchem_enabled = True
+
+    if pubchem_override is not None:
+        pubchem_enabled = bool(pubchem_override)
+    else:
+        pubchem_enabled = bool(default_pubchem_enabled)
     if not pubchem_enabled:
         logger.warning(
             "pubchem_augmentation_disabled",
             reason="config_disabled",
             detail="PubChem augmentation is disabled; pubchem_* columns will remain empty.",
         )
+    else:
+        logger.info("pubchem_augmentation_enabled")
     pubchem_api_cfg = api_cfg
     if pubchem_enabled:
         pubchem_api_cfg = _prepare_pubchem_api_cfg(cfg, api_cfg)
@@ -976,6 +995,16 @@ def finalize_output(
 
     schema_model, normalizer = _load_testitem_schema()
     schema_cols = list(schema_model.columns)
+    pubchem_cfg = getattr(cfg, "pubchem", None)
+    pubchem_enabled = (
+        True if pubchem_cfg is None else getattr(pubchem_cfg, "enable", True)
+    )
+    # ``pubchem_augmentation_enabled`` captures the configuration state so that
+    # downstream telemetry remains stable even when no augmentation takes
+    # place (for example when the dataset is empty).  The pipeline historically
+    # emitted this flag under the ``pubchem_augmentation_enabled`` key, so keep
+    # a dedicated variable instead of reusing ``pubchem_enabled`` directly.
+    pubchem_augmentation_enabled = bool(pubchem_enabled)
     disabled_optional = _disabled_optional_columns(cfg)
     required_cols = {
         name
@@ -1178,13 +1207,24 @@ def finalize_output(
     else:
         dataset_frame = pd.DataFrame(columns=list(expected_columns) or col_order)
 
+    pubchem_fallback_used = False
+    pubchem_fallback_applied = False
+
     if pubchem_context is not None and not dataset_frame.empty:
         available_columns = [
             column
             for column in _PUBCHEM_OPTIONAL_COLUMNS
             if column in dataset_frame.columns
         ]
-        if not available_columns or dataset_frame[available_columns].isna().all().all():
+        if available_columns:
+            pubchem_columns = dataset_frame[available_columns].replace("", pd.NA)
+            if not pubchem_columns.equals(dataset_frame[available_columns]):
+                dataset_frame.loc[:, available_columns] = pubchem_columns
+            pubchem_columns_missing = pubchem_columns.isna().all().all()
+        else:
+            pubchem_columns_missing = True
+
+        if pubchem_columns_missing:
             logger.info("pubchem_fallback_augment_start")
             dataset_frame = _load_pubchem_augmenter()(
                 dataset_frame,
@@ -1197,6 +1237,8 @@ def finalize_output(
                 request_limit=pubchem_context.request_limit,
             )
             logger.info("pubchem_fallback_augment_done")
+            pubchem_fallback_used = True
+            pubchem_fallback_applied = True
 
     ordered_columns = [column for column in col_order if column in dataset_frame.columns]
     extra_columns = [
@@ -1270,10 +1312,41 @@ def finalize_output(
         "output_sha256": file_sha256(artifacts.dataset),
         "parent_lookup_source": parent_stats.source,
         "parent_lookup_missing": parent_stats.missing,
+        "pubchem_augmentation_enabled": pubchem_augmentation_enabled,
         "parent_lookup_hierarchy_attached": parent_stats.hierarchy_attached,
         "parent_lookup_fallback_attached": parent_stats.fallback_attached,
         "parent_lookup_no_parent": parent_stats.no_parent,
     }
+
+    pubchem_columns_present = [
+        column
+        for column in _PUBCHEM_OPTIONAL_COLUMNS
+        if column in dataset_frame.columns
+    ]
+    pubchem_columns_present.sort()
+    pubchem_columns_with_values = [
+        column
+        for column in pubchem_columns_present
+        if not dataset_frame[column].isna().all()
+    ]
+    pubchem_columns_with_values.sort()
+    if pubchem_enabled and dataset_frame.size and pubchem_columns_present and not pubchem_columns_with_values:
+        logger.warning(
+            "pubchem_augmentation_missing_values",
+            columns=pubchem_columns_present,
+        )
+
+    stats.update(
+        {
+            "pubchem_enabled": pubchem_enabled,
+            "pubchem_columns_present": pubchem_columns_present,
+            "pubchem_columns_with_values": pubchem_columns_with_values,
+            "pubchem_values_present": bool(pubchem_columns_with_values),
+            "pubchem_fallback_applied": pubchem_fallback_applied,
+            "pubchem_fallback_used": pubchem_fallback_used,
+        }
+    )
+
     if missing_ids_tuple:
         stats["missing_molecule_ids"] = list(missing_ids_tuple)
         stats["missing_molecule_ids_count"] = len(missing_ids_tuple)

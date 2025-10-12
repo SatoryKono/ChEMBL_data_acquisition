@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Mapping, Sequence
-from datetime import UTC as _UTC, datetime as _datetime
+from datetime import UTC as _UTC
+from datetime import datetime as _datetime
 from pathlib import Path
 from typing import Any
 

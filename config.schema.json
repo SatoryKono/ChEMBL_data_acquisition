@@ -376,7 +376,7 @@
           "type": "integer"
         },
         "user_agent": {
-          "default": "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)",
+          "default": "ChEMBL-ETL/2.1 (mailto:chembl-data@ebi.ac.uk)",
           "title": "User Agent",
           "type": "string"
         }
@@ -1332,10 +1332,23 @@
           "type": "string"
         },
         "user_agent": {
-          "default": "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)",
+          "default": "ChEMBL-ETL/2.1 (mailto:chembl-data@ebi.ac.uk)",
           "description": "Custom User-Agent for PubChem requests including contact details",
           "title": "User Agent",
           "type": "string"
+        },
+        "verify": {
+          "default": true,
+          "description": "TLS verification configuration for PubChem requests; accepts a boolean or path to a CA bundle",
+          "title": "Verify",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ]
         },
         "timeout_connect": {
           "default": 5.0,
@@ -1350,14 +1363,14 @@
           "type": "number"
         },
         "timeout_seconds": {
-          "default": 30.0,
+          "default": 45.0,
           "description": "Overall timeout applied to individual PubChem lookups",
           "minimum": 0,
           "title": "Timeout Seconds",
           "type": "number"
         },
         "retries": {
-          "default": 3,
+          "default": 5,
           "minimum": 0,
           "title": "Retries",
           "type": "integer"
@@ -1369,20 +1382,20 @@
           "type": "integer"
         },
         "burst": {
-          "default": 5,
+          "default": 3,
           "minimum": 1,
           "title": "Burst",
           "type": "integer"
         },
         "delay": {
-          "default": 0.2,
+          "default": 1.0,
           "description": "Base delay between retries for network errors",
           "minimum": 0,
           "title": "Delay",
           "type": "number"
         },
         "backoff_initial_seconds": {
-          "default": 0.5,
+          "default": 1.0,
           "description": "Initial delay when backing off after 429/5xx responses",
           "minimum": 0,
           "title": "Backoff Initial Seconds",
@@ -1721,6 +1734,12 @@
           ],
           "default": null,
           "title": "Burst"
+        },
+        "delay": {
+          "default": 1.0,
+          "minimum": 0,
+          "title": "Delay",
+          "type": "number"
         },
         "api_key": {
           "anyOf": [

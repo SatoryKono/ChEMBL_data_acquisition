@@ -7,8 +7,8 @@ from pathlib import Path
 
 from library.config import Config
 from library.pipelines.activity.runner import (
-    ActivityCommandOptions,
     MAX_ACTIVITY_CHUNK_SIZE,
+    ActivityCommandOptions,
     run_activity_pipeline,
 )
 from library.pipelines.common import PipelineRunResult

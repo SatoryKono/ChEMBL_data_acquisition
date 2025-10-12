@@ -15,6 +15,7 @@ def test_fetch_semantic_scholar__includes_api_key_header(
 
     def _fake_do_request(session, url, delay, *, headers, **kwargs):  # type: ignore[override]
         captured["headers"] = headers
+        captured["delay"] = delay
         return (
             {
                 "paperId": "S2:123",
@@ -27,16 +28,33 @@ def test_fetch_semantic_scholar__includes_api_key_header(
 
     monkeypatch.setattr(semantic_scholar, "_do_request", _fake_do_request)
 
-    session = requests.Session()
-    cfg = SemanticScholarCfg(api_key="  secret-token  ")
+    class DummyLimiter:
+        def __init__(self) -> None:
+            self.calls = 0
 
-    result = semantic_scholar.fetch_semantic_scholar(session, "123456", 0.0, cfg=cfg)
+        def acquire(self) -> None:
+            self.calls += 1
+
+    session = requests.Session()
+    cfg = SemanticScholarCfg(api_key="  secret-token  ", rps=2, delay=3.0)
+
+    limiter = DummyLimiter()
+
+    result = semantic_scholar.fetch_semantic_scholar(
+        session,
+        "123456",
+        cfg=cfg,
+        limiter=limiter,
+    )
 
     assert result["scholar.Error"] == ""
     headers = captured.get("headers")
     assert isinstance(headers, dict)
     assert headers["Accept"] == "application/json"
     assert headers["x-api-key"] == "secret-token"
+    assert limiter.calls == 1
+    delay = captured.get("delay")
+    assert delay == pytest.approx(0.5)
 
 
 @pytest.mark.unit
@@ -47,6 +65,7 @@ def test_fetch_semantic_scholar_batch__omits_api_key_header_when_missing(
 
     def _fake_do_request(session, url, delay, *, headers, **kwargs):  # type: ignore[override]
         captured["headers"] = headers
+        captured["delay"] = delay
         return (
             [
                 {
@@ -62,9 +81,20 @@ def test_fetch_semantic_scholar_batch__omits_api_key_header_when_missing(
 
     monkeypatch.setattr(semantic_scholar, "_do_request", _fake_do_request)
 
-    session = requests.Session()
+    class DummyLimiter:
+        def __init__(self) -> None:
+            self.calls = 0
 
-    results = semantic_scholar.fetch_semantic_scholar_batch(session, ["123456"], 0.0)
+        def acquire(self) -> None:
+            self.calls += 1
+
+    session = requests.Session()
+    limiter = DummyLimiter()
+    cfg = SemanticScholarCfg(delay=2.5)
+
+    results = semantic_scholar.fetch_semantic_scholar_batch(
+        session, ["123456"], cfg=cfg, limiter=limiter
+    )
 
     assert results
     assert results[0]["scholar.Error"] == ""
@@ -72,6 +102,75 @@ def test_fetch_semantic_scholar_batch__omits_api_key_header_when_missing(
     assert isinstance(headers, dict)
     assert headers["Accept"] == "application/json"
     assert "x-api-key" not in headers
+    delay = captured.get("delay")
+    assert delay == pytest.approx(2.5)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "cfg_kwargs,expected",
+    [
+        ({"rps": 4, "delay": 3.0}, 0.25),
+        ({"rps": None, "delay": 1.7}, 1.7),
+    ],
+)
+def test_fetch_semantic_scholar_batch__delay_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+    cfg_kwargs: dict[str, object],
+    expected: float,
+) -> None:
+    captured: dict[str, float] = {}
+
+    def _fake_do_request(session, url, delay, **kwargs):  # type: ignore[override]
+        captured["delay"] = delay
+        return ([{"pmid": "1"}], "")
+
+    monkeypatch.setattr(semantic_scholar, "_do_request", _fake_do_request)
+
+    session = requests.Session()
+    cfg = SemanticScholarCfg(**cfg_kwargs)
+
+    semantic_scholar.fetch_semantic_scholar_batch(session, ["1"], cfg=cfg)
+
+    assert captured["delay"] == pytest.approx(expected)
+
+    monkeypatch.setattr(semantic_scholar, "_do_request", _fake_do_request)
+
+    session = requests.Session()
+
+    pmids = ["123456", "789012"]
+    with caplog.at_level("WARNING"):
+        results = semantic_scholar.fetch_semantic_scholar_batch(session, pmids, 0.0)
+
+    assert all(entry["scholar.Error"] == "HTTP 500 Internal Server Error" for entry in results)
+    for pmid in pmids:
+        assert any(
+            pmid in record.getMessage() and "500" in record.getMessage()
+            for record in caplog.records
+        )
+
+
+@pytest.mark.unit
+def test_fetch_semantic_scholar_batch__logs_warning_on_invalid_response(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def _fake_do_request(session, url, delay, *, headers, **kwargs):  # type: ignore[override]
+        return ({"unexpected": "structure"}, "")
+
+    monkeypatch.setattr(semantic_scholar, "_do_request", _fake_do_request)
+
+    session = requests.Session()
+    pmids = ["123456"]
+
+    with caplog.at_level("WARNING"):
+        results = semantic_scholar.fetch_semantic_scholar_batch(session, pmids, 0.0)
+
+    assert results[0]["scholar.Error"] == "Invalid batch response format"
+    assert any(
+        "123456" in record.getMessage() and "invalid" in record.getMessage().lower()
+        for record in caplog.records
+    )
 
 
 @pytest.mark.unit

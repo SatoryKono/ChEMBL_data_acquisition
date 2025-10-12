@@ -129,6 +129,7 @@ def test_run_pipeline__persists_standard_outputs(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_run_pipeline__quality_hook_uses_canonical_dataset(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     frame = pd.DataFrame({"identifier": ["row-1"], "value": [11]})
 

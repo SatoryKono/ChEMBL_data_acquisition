@@ -6,6 +6,7 @@ from typing import cast
 
 import pandas as pd
 import pytest
+
 from library import io
 from library.common.csv_utils import sha256_file
 from library.integration.chembl_client import ChemblClient
@@ -247,6 +248,44 @@ def test_finalize_output__omits_pubchem_columns_when_disabled(
     final = pd.read_csv(dataset_path)
     for column in cli._PUBCHEM_OPTIONAL_COLUMNS:
         assert column not in final.columns
+
+
+@pytest.mark.integration
+def test_finalize_output__records_pubchem_disabled_metric(
+    tmp_path: Path,
+    sample_input_csv: Path,
+    cfg,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg.system.doc_quality.enable = False
+    cfg.pubchem.enable = False
+
+    chunk = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    output_path = tmp_path / "pubchem_disabled.csv"
+    stats_supplier = _StatsSupplier(_base_stats())
+    info_events: list[tuple[str, dict[str, object]]] = []
+
+    def capture_info(event: str, **fields: object) -> None:
+        info_events.append((event, fields))
+
+    monkeypatch.setattr(cli.logger, "info", capture_info)
+
+    exit_code, _ = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=stats_supplier,
+        input_csv=sample_input_csv,
+        emit_legacy_artifacts=False,
+    )
+
+    assert exit_code == 0
+
+    stats_events = [fields for event, fields in info_events if event == "testitem_stats"]
+    assert stats_events, "expected testitem_stats event to be emitted"
+    latest_stats = stats_events[-1]
+    assert latest_stats["pubchem_augmentation_enabled"] is False
+    assert latest_stats["pubchem_fallback_applied"] is False
 
 
 @pytest.mark.integration

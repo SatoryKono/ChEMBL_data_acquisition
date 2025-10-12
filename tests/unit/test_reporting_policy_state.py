@@ -8,8 +8,8 @@ import pytest
 
 from tests.helpers.reporting_policy import (
     PIPELINE_SCENARIOS,
-    ReportingPolicyState,
     SUCCESS_RATE_THRESHOLD,
+    ReportingPolicyState,
 )
 
 

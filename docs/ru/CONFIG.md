@@ -23,7 +23,7 @@ sources:
   chembl:
     api:
       chembl_base: https://www.ebi.ac.uk/chembl/api/data
-      user_agent: "chembl-da/1.0 (mailto:team@example.org)"
+      user_agent: "ChEMBL-ETL/2.1 (mailto:team@example.org)"
     pipelines:
       document:
         pubmed:
@@ -68,7 +68,7 @@ system:
 | `backoff_factor` | Нет | `0.5` | Множитель экспоненциальной задержки. |
 | `rps` | Нет | `20` | Лимит запросов в секунду. |
 | `burst` | Нет | `20` | Размер «всплеска» токен-бакета. |
-| `user_agent` | **Да** | `chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)` | Перед продакшеном замените на контакт команды. |
+| `user_agent` | **Да** | `ChEMBL-ETL/2.1 (mailto:chembl-data@ebi.ac.uk)` | Перед продакшеном замените на контакт команды. |
 
 ### `sources.chembl.cache`
 
@@ -157,7 +157,7 @@ system:
 | `sources.iuphar` | нет | Базовый URL и лимиты Guide to Pharmacology. |
 | `sources.pubchem` | `user_agent` (**Да**) | Также настраиваются RPS, порядок поиска CID, кэши. |
 | `sources.pubmed` | нет | Параметры E-utilities (URL, таймауты, повторы). |
-| `sources.semantic_scholar` | нет | Базовый URL, таймауты и лимиты Semantic Scholar. |
+| `sources.semantic_scholar` | нет | Базовый URL, таймауты, лимиты и резервная задержка повторов для Semantic Scholar. |
 
 ## `local`
 

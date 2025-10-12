@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Hashable, Mapping, MutableMapping
 from pathlib import Path
 
 import pandas as pd
@@ -89,6 +90,79 @@ def test_add_pubchem_data__normal_flow_populates_cache(
 
 
 @pytest.mark.integration
+def test_add_pubchem_data__makes_pubchem_requests_when_enabled(
+    tmp_path: Path, cfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pubchem_cfg = cfg.pubchem
+    pubchem_cfg.enable = True
+    pubchem_cfg.cid_cache_path = tmp_path / "cid_cache.json"
+
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1"],
+            "canonical_smiles": ["CC(=O)OC1=CC=CC=C1C(=O)O"],
+        }
+    )
+
+    cid_cache: dict[str, str | None] = {}
+    resolution_cache: dict[str, object] = {}
+    parent_record_cache: dict[str, pd.Series | None] = {}
+
+    from library.integration import pubchem_library
+
+    resolve_calls: list[dict[str, object]] = []
+
+    def fake_resolve(
+        identifiers: Mapping[str, str | None],
+        cfg_arg: PubChemCfg,
+        *,
+        cid_cache: MutableMapping[str, str | None] | None = None,
+        cache_key: str | None = None,
+        resolution_cache: MutableMapping[Hashable, pubchem_library.PubChemResolution]
+        | None = None,
+        resolution_key: Hashable | None = None,
+    ) -> pubchem_library.PubChemResolution:
+        resolve_calls.append({"identifiers": dict(identifiers), "cache_key": cache_key})
+        assert cache_key == "CHEMBL1"
+        assert identifiers.get("canonical_smiles") == "CC(=O)OC1=CC=CC=C1C(=O)O"
+        if cid_cache is not None and cache_key is not None:
+            cid_cache[cache_key] = "CID321"
+        return pubchem_library.PubChemResolution(cid="CID321", source="smiles")
+
+    properties_calls: list[str] = []
+
+    def fake_get_properties(cid: str, cfg_arg: PubChemCfg) -> pubchem_library.Properties:
+        properties_calls.append(cid)
+        assert cid == "CID321"
+        return pubchem_library.Properties(
+            "Acetylsalicylic acid",
+            "C9H8O4",
+            "CC(=O)OC1=CC=CC=C1C(=O)O",
+            "CC(=O)OC1=CC=CC=C1C(=O)O",
+            "InChI=1S/C9H8O4/...",
+            "BSYNRYMUTXBXSQ-UHFFFAOYSA-N",
+        )
+
+    monkeypatch.setattr(pubchem_library, "resolve_pubchem_record", fake_resolve)
+    monkeypatch.setattr(pubchem_library, "get_properties", fake_get_properties)
+
+    result = pubchem.add_pubchem_data(
+        frame,
+        pubchem_cfg,
+        cid_cache=cid_cache,
+        resolution_cache=resolution_cache,
+        parent_record_cache=parent_record_cache,
+    )
+
+    assert resolve_calls, "Expected PubChem resolution to be triggered"
+    assert properties_calls == ["CID321"]
+    assert result.loc[0, "pubchem_cid"] == "CID321"
+    assert result.loc[0, "pubchem_iupac_name"] == "Acetylsalicylic acid"
+    assert result.loc[0, "pubchem_molecular_formula"] == "C9H8O4"
+    assert cid_cache == {"CHEMBL1": "CID321"}
+
+
+@pytest.mark.integration
 def test_add_pubchem_data__skips_polymers_when_disallowed(
     tmp_path: Path,
     cfg,
@@ -166,6 +240,70 @@ def test_add_pubchem_data__skips_polymers_when_disallowed(
         for record in caplog.records
         if record.name == "pubchem-test"
     )
+
+
+@pytest.mark.integration
+def test_add_pubchem_data__uses_dictionary_mapping(
+    tmp_path: Path, cfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pubchem_cfg = cfg.pubchem
+    pubchem_cfg.enable = True
+    pubchem_cfg.cid_cache_path = tmp_path / "cid_cache.json"
+
+    dictionary_path = (
+        Path(__file__).resolve().parents[1]
+        / "resources"
+        / "dictionaries"
+        / "_testitem"
+        / "chembl_to_pubchem.csv"
+    )
+    mapping_frame = pd.read_csv(dictionary_path)
+
+    cid_cache: dict[str, str | None] = {
+        str(row.molecule_chembl_id).strip().upper(): str(row.pubchem_cid).strip()
+        for row in mapping_frame.itertuples()
+    }
+    expected_cache = cid_cache.copy()
+
+    from library.integration import pubchem_library
+
+    def forbid_resolve(*_args, **_kwargs) -> None:
+        raise AssertionError("resolve_pubchem_cid should not be invoked for cached IDs")
+
+    property_calls: list[str] = []
+
+    def fake_get_properties(cid: str, cfg_arg: PubChemCfg) -> pubchem_library.Properties:
+        property_calls.append(cid)
+        return pubchem_library.Properties(
+            f"Name-{cid}",
+            f"Formula-{cid}",
+            f"iSMILES-{cid}",
+            f"cSMILES-{cid}",
+            f"InChI-{cid}",
+            f"InChIKey-{cid}",
+        )
+
+    monkeypatch.setattr(pubchem, "resolve_pubchem_cid", forbid_resolve)
+    monkeypatch.setattr(pubchem_library, "get_properties", fake_get_properties)
+
+    frame = pd.DataFrame({"molecule_chembl_id": mapping_frame["molecule_chembl_id"]})
+
+    result = pubchem.add_pubchem_data(
+        frame,
+        pubchem_cfg,
+        cid_cache=cid_cache,
+        resolution_cache={},
+        parent_record_cache={},
+    )
+
+    expected_cids = mapping_frame["pubchem_cid"].tolist()
+    assert result["pubchem_cid"].tolist() == expected_cids
+    assert result["pubchem_iupac_name"].tolist() == [f"Name-{cid}" for cid in expected_cids]
+    assert result["pubchem_molecular_formula"].tolist() == [
+        f"Formula-{cid}" for cid in expected_cids
+    ]
+    assert cid_cache == expected_cache
+    assert set(property_calls) == set(expected_cids)
 
 
 @pytest.mark.integration
@@ -676,6 +814,9 @@ def test_add_pubchem_data__disabled_mode_passthrough(
 
     assert result is frame
     assert "pubchem_disabled" in info_events
+    for column in pubchem.PUBCHEM_COLUMNS:
+        assert column in result.columns
+        assert result[column].isna().all()
     assert any(
         record.message == "pubchem_disabled"
         for record in caplog.records

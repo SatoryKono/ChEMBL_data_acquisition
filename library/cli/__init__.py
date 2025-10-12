@@ -12,10 +12,10 @@ from .parser import (
     build_root_parser,
     configure_logger,
     create_logger_config,
-    set_emit_legacy_help,
     path_argument,
     positive_int,
     prepare_io_paths,
+    set_emit_legacy_help,
 )
 
 __all__ = [

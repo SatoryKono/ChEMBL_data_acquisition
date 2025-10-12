@@ -18,6 +18,8 @@ from library.pipelines.activity.runner import (
     ActivityCommandOptions,
     register_activity_pipeline_hooks,
     resolve_activity_pipeline_hooks,
+)
+from library.pipelines.activity.runner import (
     run_activity_pipeline as _run_activity_pipeline,
 )
 
@@ -146,8 +148,8 @@ def ensure_entrypoint_exports(entrypoint: ModuleType | None = None) -> ModuleTyp
 
             return result
 
-        setattr(_emit_completion_message_with_skip, "_commands_skip_wrapper", True)
-        setattr(entrypoint, "_emit_completion_message", _emit_completion_message_with_skip)
+        _emit_completion_message_with_skip._commands_skip_wrapper = True
+        entrypoint._emit_completion_message = _emit_completion_message_with_skip
 
-    setattr(entrypoint, "_activity_cli_commands", entrypoint)
+    entrypoint._activity_cli_commands = entrypoint
     return entrypoint
