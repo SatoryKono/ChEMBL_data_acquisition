@@ -10,7 +10,21 @@ from importlib import import_module
 from pathlib import Path
 from typing import Iterable, Sequence
 
-from scripts._bootstrap import ensure_project_root
+# NOTE:
+#   ``python scripts/get_data.py`` executed from Windows adds ``scripts``
+#   directory to ``sys.path`` but not the project root.  The import below then
+#   fails because Python looks for ``scripts`` package inside the ``scripts``
+#   directory itself.  Import the helper lazily and, on failure, prepend the
+#   project root so the package resolves when the script is executed directly.
+try:  # pragma: no cover - exercised via CLI invocation
+    from scripts._bootstrap import ensure_project_root
+except ModuleNotFoundError as exc:  # pragma: no cover - import guard
+    if exc.name != "scripts._bootstrap":
+        raise
+    current_dir = Path(__file__).resolve().parent
+    project_root = current_dir.parent
+    sys.path.insert(0, str(project_root))
+    from scripts._bootstrap import ensure_project_root
 
 
 def _guard_cli_module() -> None:
