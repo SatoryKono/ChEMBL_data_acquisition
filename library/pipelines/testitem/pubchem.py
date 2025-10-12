@@ -56,6 +56,15 @@ _PUBCHEM_CACHE_SCHEMA_VERSION = 1
 _PUBCHEM_SESSION_SIGNATURE: str | None = None
 
 
+def _ensure_pubchem_columns(frame: pd.DataFrame) -> None:
+    """Ensure all PubChem columns exist on ``frame``."""
+
+    for column in PUBCHEM_COLUMNS:
+        if column not in frame.columns:
+            dtype = "object" if column == "pubchem_cid" else "string"
+            frame[column] = pd.Series(pd.NA, index=frame.index, dtype=dtype)
+
+
 ResolutionCache: TypeAlias = MutableMapping[Hashable, "PubChemResolution"]
 _PUBCHEM_SESSION_LOCK = threading.Lock()
 
@@ -852,9 +861,11 @@ def add_pubchem_data(
     """Return ``df`` augmented with PubChem annotations."""
 
     if df.empty:
+        _ensure_pubchem_columns(df)
         return df
 
     if not getattr(cfg, "enable", True):
+        _ensure_pubchem_columns(df)
         logger.info("pubchem_disabled")
         return df
 
@@ -1004,10 +1015,7 @@ def add_pubchem_data(
     # Ensure downstream schema validation consistently sees every
     # PubChem column even when no data was available for a particular
     # attribute.
-    for column in PUBCHEM_COLUMNS:
-        if column not in result.columns:
-            dtype = object if column == "pubchem_cid" else "string"
-            result[column] = pd.Series(pd.NA, index=result.index, dtype=dtype)
+    _ensure_pubchem_columns(result)
 
     if cache_dirty:
         _write_pubchem_cid_cache(cache_path, cid_cache)

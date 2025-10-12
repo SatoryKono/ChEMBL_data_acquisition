@@ -676,6 +676,9 @@ def test_add_pubchem_data__disabled_mode_passthrough(
 
     assert result is frame
     assert "pubchem_disabled" in info_events
+    for column in pubchem.PUBCHEM_COLUMNS:
+        assert column in result.columns
+        assert result[column].isna().all()
     assert any(
         record.message == "pubchem_disabled"
         for record in caplog.records
