@@ -357,6 +357,58 @@ def _diagnostic_outputs_enabled(cfg: PipelineRunConfig) -> bool:
     return cfg.debug or cfg.keep_intermediate or cfg.rerun_postprocess
 
 
+def _assign_pubchem_config(config: Config, pubchem_cfg: PubChemCfg) -> None:
+    """Attach *pubchem_cfg* to *config* ensuring downstream access succeeds."""
+
+    try:
+        config.sources.pubchem = pubchem_cfg
+    except AttributeError:
+        setattr(config.sources, "pubchem", pubchem_cfg)
+
+
+def _ensure_testitem_pubchem_enabled(config: Config) -> None:
+    """Force-enable PubChem enrichment for the aggregated ``get_data`` run."""
+
+    pubchem_cfg = getattr(config, "pubchem", None)
+    if pubchem_cfg is None:
+        _LOGGER.warning(
+            "testitem_pubchem_config_missing",
+            reason="cfg_pubchem_absent",
+            detail="cfg.pubchem section missing; default configuration will be used.",
+        )
+        _assign_pubchem_config(config, PubChemCfg())
+        return
+
+    enabled_value = getattr(pubchem_cfg, "enable", None)
+    if enabled_value is True:
+        # Already enabled – nothing to do.
+        return
+
+    if enabled_value is False:
+        _LOGGER.info("testitem_pubchem_enable_override")
+    else:
+        _LOGGER.warning(
+            "testitem_pubchem_enable_missing",
+            reason="cfg_pubchem_enable_missing",
+            detail=(
+                "cfg.pubchem.enable is undefined or null; enabling PubChem enrichment for "
+                "testitem stage executed via get_data."
+            ),
+        )
+
+    try:
+        setattr(pubchem_cfg, "enable", True)
+    except (AttributeError, TypeError, ValueError):
+        updated_pubchem_cfg: PubChemCfg
+        if hasattr(pubchem_cfg, "model_copy"):
+            updated_pubchem_cfg = pubchem_cfg.model_copy(update={"enable": True})
+        else:
+            updated_pubchem_cfg = PubChemCfg()
+        _assign_pubchem_config(config, updated_pubchem_cfg)
+    else:
+        _assign_pubchem_config(config, pubchem_cfg)
+
+
 def _build_testitem_options(
     cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> TestitemPipelineOptions:
