@@ -58,6 +58,7 @@ from library.config import (
     Config,
     ConfigError,
     ConfigLoaderError,
+    PubChemCfg,
     ensure_dirs,
     load_config,
     print_config,
@@ -1324,22 +1325,41 @@ def _run_step(
             options = replace(options, pubchem_enabled=True)
 
         pubchem_cfg = getattr(base_config, "pubchem", None)
-        if pubchem_cfg is not None and hasattr(pubchem_cfg, "enable"):
-            was_enabled = getattr(pubchem_cfg, "enable", False)
-            if not was_enabled:
-                _LOGGER.info("testitem_pubchem_enable_override")
-
+        override_reason: str | None = None
+        if pubchem_cfg is None:
+            updated_pubchem_cfg = PubChemCfg(enable=True)
+            override_reason = "missing"
+        elif hasattr(pubchem_cfg, "enable"):
+            was_enabled = bool(getattr(pubchem_cfg, "enable", False))
             if hasattr(pubchem_cfg, "model_copy"):
                 updated_pubchem_cfg = pubchem_cfg.model_copy(update={"enable": True})
-                try:
-                    base_config.sources.pubchem = updated_pubchem_cfg
-                except AttributeError:
-                    pubchem_cfg = updated_pubchem_cfg
-                else:
-                    pubchem_cfg = updated_pubchem_cfg
             else:
                 setattr(pubchem_cfg, "enable", True)
-                base_config.sources.pubchem = pubchem_cfg
+                updated_pubchem_cfg = pubchem_cfg
+            if not was_enabled:
+                override_reason = "disabled"
+        else:
+            updated_pubchem_cfg = PubChemCfg(enable=True)
+            override_reason = "incompatible"
+
+        if override_reason is not None:
+            _LOGGER.info("testitem_pubchem_enable_override", reason=override_reason)
+
+        assigned = False
+        sources_cfg = getattr(base_config, "sources", None)
+        if sources_cfg is not None and hasattr(sources_cfg, "pubchem"):
+            try:
+                sources_cfg.pubchem = updated_pubchem_cfg
+            except AttributeError:
+                pass
+            else:
+                assigned = True
+
+        if not assigned:
+            try:
+                setattr(base_config, "pubchem", updated_pubchem_cfg)
+            except AttributeError:
+                pass
     result = api.runner(base_config, options)
     executed = bool(result.executed)
     if not executed and result.exit_code == 0:
