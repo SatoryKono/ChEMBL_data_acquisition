@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import io
+import json
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -14,6 +15,7 @@ import pytest
 from library.cli.commands import get_data
 from library.config import Config
 from library.pipelines.common import PipelineRunResult
+from library.project_version import get_pipeline_version
 from tests.helpers.logs import iter_events, parse_log_lines
 from tests.helpers.manifests import load_latest_manifest
 
@@ -204,6 +206,8 @@ def test_write_run_manifest__fallback_on_unlink_failure(
     alias_path = reports_dir / "run_manifest.json"
     alias_path.write_text("stale", encoding="utf-8")
 
+    monkeypatch.setenv("GIT_SHA", "unit-test-sha")
+
     original_unlink = Path.unlink
 
     def fail_unlink(self: Path, *args, **kwargs):
@@ -234,6 +238,11 @@ def test_write_run_manifest__fallback_on_unlink_failure(
 
     assert alias_path.read_text(encoding="utf-8") == manifest_content
     assert not alias_path.with_name("run_manifest.json.tmp").exists()
+
+    payload = json.loads(manifest_content)
+    run_info = payload["run"]
+    assert run_info["pipeline_version"] == get_pipeline_version()
+    assert run_info["git_sha"] == "unit-test-sha"
 
 
 @pytest.mark.unit

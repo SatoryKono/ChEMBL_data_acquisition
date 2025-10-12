@@ -13,11 +13,15 @@ import pandas as pd
 import pytest
 
 from library.common.csv_utils import sha256_file
+from library.project_version import get_pipeline_version
 from scripts import get_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_file, parse_log_lines
 
 PipelineFunc = Callable[[list[str]], int]
+
+
+E2E_TEST_GIT_SHA = "e2e-test-sha"
 
 
 def _build_stub_pipeline(
@@ -217,6 +221,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     config_path.write_text("io:\n  csv_sep: ','\n  csv_encoding: 'utf-8'\n")
 
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
+    monkeypatch.setenv("GIT_SHA", E2E_TEST_GIT_SHA)
     monkeypatch.setattr(get_data, "_warm_parent_catalog", lambda _cfg, _base: None)
 
     log_streams: deque[io.StringIO] = deque()
@@ -403,6 +408,9 @@ def test_get_data_end_to_end__miniature_pipeline(
         manifest_alias = base_path / "reports" / "run_manifest.json"
         assert manifest_alias.exists(), "expected manifest alias to exist"
         payload = json.loads(manifest_alias.read_text(encoding="utf-8"))
+        run_info = payload["run"]
+        assert run_info["pipeline_version"] == get_pipeline_version()
+        assert run_info["git_sha"] == E2E_TEST_GIT_SHA
         value = payload["run"].get("run_id")
         assert value, "manifest must include run_id"
         return str(value)
@@ -683,6 +691,7 @@ def test_get_data_end_to_end__blocked_steps_after_failure(
 
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
     monkeypatch.setattr(get_data, "_warm_parent_catalog", lambda _cfg, _base: None)
+    monkeypatch.setenv("GIT_SHA", E2E_TEST_GIT_SHA)
 
     stub_steps = (
         get_data.PipelineStep(
@@ -787,6 +796,9 @@ def test_get_data_end_to_end__blocked_steps_after_failure(
     manifest_path = base_path / "reports" / "run_manifest.json"
     assert manifest_path.exists()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    run_info = manifest["run"]
+    assert run_info["pipeline_version"] == get_pipeline_version()
+    assert run_info["git_sha"] == E2E_TEST_GIT_SHA
     entries_by_name = {entry["name"]: entry for entry in manifest["steps"]}
 
     assert entries_by_name["document"]["status"] == "success"

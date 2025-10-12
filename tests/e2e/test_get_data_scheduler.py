@@ -6,8 +6,12 @@ from types import SimpleNamespace
 import pytest
 
 from library.pipelines.common import PipelineRunResult
+from library.project_version import get_pipeline_version
 from scripts import get_data
 from tests.helpers.manifests import list_manifest_files, load_latest_manifest
+
+
+_TEST_GIT_SHA = "scheduler-test-sha"
 
 
 def _build_run_config(
@@ -110,6 +114,7 @@ def test_scheduler__selective_run_respects_dependencies(
         lambda *args, **kwargs: SimpleNamespace(),
         raising=False,
     )
+    monkeypatch.setenv("GIT_SHA", _TEST_GIT_SHA)
 
     status = get_data.run_pipeline(cfg, steps=steps)
     assert status == 0
@@ -126,6 +131,9 @@ def test_scheduler__selective_run_respects_dependencies(
     step_names = [entry["name"] for entry in manifest["steps"]]
     assert step_names == ["transform", "audit"]
     assert manifest["run"]["status"] == "success"
+    run_info = manifest["run"]
+    assert run_info["pipeline_version"] == get_pipeline_version()
+    assert run_info["git_sha"] == _TEST_GIT_SHA
 
 
 @pytest.mark.e2e
@@ -169,6 +177,7 @@ def test_scheduler__fails_on_missing_external_dependency(
         lambda *args, **kwargs: SimpleNamespace(),
         raising=False,
     )
+    monkeypatch.setenv("GIT_SHA", _TEST_GIT_SHA)
 
     status = get_data.run_pipeline(cfg, steps=steps)
     assert status == 1
@@ -178,6 +187,9 @@ def test_scheduler__fails_on_missing_external_dependency(
     assert len(manifests) == 1
     _, manifest = load_latest_manifest(cfg.base_path)
     assert manifest["run"]["status"] == "failed"
+    run_info = manifest["run"]
+    assert run_info["pipeline_version"] == get_pipeline_version()
+    assert run_info["git_sha"] == _TEST_GIT_SHA
     transform_entry = next(
         entry for entry in manifest["steps"] if entry["name"] == "transform"
     )
