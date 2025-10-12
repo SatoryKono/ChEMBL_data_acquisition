@@ -1344,6 +1344,62 @@ def test_run_testitem_subprocess__invokes_script_with_pubchem_enable(
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    "disable_flag",
+    (
+        "--no-pubchem-enable",
+        "--pubchem-enable=false",
+    ),
+)
+def test_run_testitem_subprocess__forces_pubchem_enable_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, disable_flag: str
+) -> None:
+    run_cfg = _make_config(tmp_path)
+    final_output = run_cfg.output_path("testitem")
+    working_output = final_output.with_name(f"{final_output.name}.tmp")
+
+    class _StubStep:
+        def build_arguments(
+            self, cfg_arg: get_data.PipelineRunConfig, output_path: Path
+        ) -> list[str]:
+            return [
+                disable_flag,
+                "--config",
+                str(cfg_arg.config_path),
+                "--input",
+                str(cfg_arg.input_path("testitem")),
+                "--final-out",
+                str(output_path),
+            ]
+
+    captured: dict[str, object] = {}
+
+    def _capture_run(
+        command: list[str], *, check: bool, cwd: str, env: dict[str, str]
+    ) -> subprocess.CompletedProcess[object]:
+        captured["command"] = command
+        captured["check"] = check
+        captured["cwd"] = cwd
+        captured["env"] = env
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(get_data.subprocess, "run", _capture_run)
+
+    result = get_data._run_testitem_subprocess(
+        _StubStep(),
+        run_cfg,
+        final_output=final_output,
+        working_output=working_output,
+    )
+
+    assert result.exit_code == 0
+    command = captured["command"]
+    assert disable_flag in command
+    assert command[-1] == "--pubchem-enable"
+    assert command.count("--pubchem-enable") == 1
+
+
+@pytest.mark.unit
 def test_run_pipeline__dry_run_manifest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
