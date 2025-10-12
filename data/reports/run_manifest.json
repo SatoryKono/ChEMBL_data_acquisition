@@ -1,8 +1,8 @@
 {
   "run": {
-    "started_at": "2025-10-12T09:46:47.158331+00:00",
-    "completed_at": "2025-10-12T09:46:48.795705+00:00",
-    "duration_sec": 1.637368,
+    "started_at": "2025-10-12T10:00:05.082278+00:00",
+    "completed_at": "2025-10-12T10:00:10.693213+00:00",
+    "duration_sec": 5.610928,
     "exit_code": 0,
     "status": "success",
     "date_prefix": "20240101",
@@ -15,8 +15,9 @@
     "force": false,
     "skip_existing": true,
     "dry_run": false,
+    "disable_pubchem": false,
     "pipeline_version": "0.1.3",
-    "run_id": "b7e7bdab787d3eef1f6e4021bfbb608f"
+    "run_id": "96faaaf34f47ae9e289bf902159cc1e2"
   },
   "steps": [
     {
@@ -25,9 +26,9 @@
       "exit_code": 0,
       "executed": false,
       "reason": "skip_existing",
-      "started_at": "2025-10-12T09:46:47.183723+00:00",
-      "completed_at": "2025-10-12T09:46:47.189416+00:00",
-      "duration_sec": 0.005692,
+      "started_at": "2025-10-12T10:00:05.107056+00:00",
+      "completed_at": "2025-10-12T10:00:05.112821+00:00",
+      "duration_sec": 0.005763,
       "output": {
         "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.documents_20240101.csv",
         "exists": true,
@@ -55,9 +56,9 @@
       "exit_code": 0,
       "executed": false,
       "reason": "skip_existing",
-      "started_at": "2025-10-12T09:46:47.194504+00:00",
-      "completed_at": "2025-10-12T09:46:47.199863+00:00",
-      "duration_sec": 0.00536,
+      "started_at": "2025-10-12T10:00:05.117737+00:00",
+      "completed_at": "2025-10-12T10:00:05.123172+00:00",
+      "duration_sec": 0.005436,
       "output": {
         "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.targets_20240101.csv",
         "exists": true,
@@ -85,9 +86,9 @@
       "exit_code": 0,
       "executed": false,
       "reason": "skip_existing",
-      "started_at": "2025-10-12T09:46:47.205140+00:00",
-      "completed_at": "2025-10-12T09:46:47.210745+00:00",
-      "duration_sec": 0.005604,
+      "started_at": "2025-10-12T10:00:05.128940+00:00",
+      "completed_at": "2025-10-12T10:00:05.134175+00:00",
+      "duration_sec": 0.005236,
       "output": {
         "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.assays_20240101.csv",
         "exists": true,
@@ -115,14 +116,14 @@
       "exit_code": 0,
       "executed": true,
       "reason": null,
-      "started_at": "2025-10-12T09:46:47.215631+00:00",
-      "completed_at": "2025-10-12T09:46:48.766900+00:00",
-      "duration_sec": 1.551273,
+      "started_at": "2025-10-12T10:00:05.139068+00:00",
+      "completed_at": "2025-10-12T10:00:10.663533+00:00",
+      "duration_sec": 5.524471,
       "output": {
         "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.testitem_20240101.csv",
         "exists": true,
-        "size_bytes": 4148,
-        "checksum_sha256": "c969ee44dc7fcdf5e8da4cde488964e2a7a7dbaf924ee56554c913d9c1cf1f9f"
+        "size_bytes": 4078,
+        "checksum_sha256": "da521f55d037860a410d48b69bbe8959b456e6ab09cf485dd1906f1b2137a28c"
       },
       "sidecars": [
         {
@@ -134,8 +135,8 @@
         {
           "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.testitem_20240101_quality_report_table.csv",
           "exists": true,
-          "size_bytes": 3366,
-          "checksum_sha256": "a21bc0a950d5762652c6cac9add4e21d3be8729e0468deb8353abca715b32f9f"
+          "size_bytes": 3359,
+          "checksum_sha256": "5192d38b0002c5703edaebfaa7489b6824decdce920ed4931031bc30e96b3aa6"
         }
       ]
     },
@@ -145,9 +146,9 @@
       "exit_code": 0,
       "executed": false,
       "reason": "skip_existing",
-      "started_at": "2025-10-12T09:46:48.783544+00:00",
-      "completed_at": "2025-10-12T09:46:48.789917+00:00",
-      "duration_sec": 0.006374,
+      "started_at": "2025-10-12T10:00:10.680771+00:00",
+      "completed_at": "2025-10-12T10:00:10.686810+00:00",
+      "duration_sec": 0.006037,
       "output": {
         "path": "E:\\github\\ChEMBL_data_acquisition6\\data\\output\\output.activity_20240101.csv",
         "exists": true,
