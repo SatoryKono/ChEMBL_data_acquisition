@@ -65,7 +65,7 @@ def test_build_forward_args__injects_project_paths() -> None:
         "--output-dir",
         get_data.DEFAULT_OUTPUT_DIR,
     ]
-    assert forwarded[-len(expected_tail) :] == expected_tail
+    assert list(forwarded.tokens[-len(expected_tail) :]) == expected_tail
 
 
 @pytest.mark.unit
@@ -84,10 +84,10 @@ def test_build_forward_args__keeps_user_supplied_paths() -> None:
 
     forwarded = get_data.build_forward_args(args, extra)
 
-    assert forwarded.count("--base-path") == 1
-    assert forwarded.count("--input-dir") == 1
-    assert forwarded.count("--output-dir") == 1
-    assert forwarded[: len(extra)] == extra
+    assert forwarded.tokens.count("--base-path") == 1
+    assert forwarded.tokens.count("--input-dir") == 1
+    assert forwarded.tokens.count("--output-dir") == 1
+    assert list(forwarded.tokens[: len(extra)]) == extra
 
 
 @pytest.mark.unit
@@ -122,3 +122,56 @@ def test_parse_args__positional_limit_with_extra_tokens(capsys: pytest.CaptureFi
     assert excinfo.value.code == 2
     captured = capsys.readouterr()
     assert "Неизвестный позиционный аргумент" in captured.err
+
+
+@pytest.mark.unit
+def test_run_stage__target_injects_all_by_default(monkeypatch):
+    from scripts import get_data
+
+    args = SimpleNamespace(limit=None, log_level=None, config=None)
+    forward = get_data.build_forward_args(args, [])
+
+    executed: list[list[str]] = []
+
+    def _fake_run(command: list[str], check: bool = False):  # type: ignore[override]
+        executed.append(command)
+
+        class _Result:
+            returncode = 0
+
+        return _Result()
+
+    monkeypatch.setattr(get_data.subprocess, "run", _fake_run)
+
+    get_data.run_stage(get_data.Stage("target", "get_target_data.py"), forward)
+
+    assert executed, "subprocess.run should be invoked"
+    command = executed[0]
+    assert command[2] == "all"
+
+
+@pytest.mark.unit
+def test_run_stage__target_respects_explicit_subcommand(monkeypatch):
+    from scripts import get_data
+
+    args = SimpleNamespace(limit=None, log_level=None, config=None)
+    forward = get_data.build_forward_args(args, ["chembl"])
+
+    executed: list[list[str]] = []
+
+    def _fake_run(command: list[str], check: bool = False):  # type: ignore[override]
+        executed.append(command)
+
+        class _Result:
+            returncode = 0
+
+        return _Result()
+
+    monkeypatch.setattr(get_data.subprocess, "run", _fake_run)
+
+    get_data.run_stage(get_data.Stage("target", "get_target_data.py"), forward)
+
+    assert executed, "subprocess.run should be invoked"
+    command = executed[0]
+    assert command[2] == "chembl"
+    assert "all" not in command
