@@ -978,6 +978,10 @@ def finalize_output(
 
     schema_model, normalizer = _load_testitem_schema()
     schema_cols = list(schema_model.columns)
+    pubchem_cfg = getattr(cfg, "pubchem", None)
+    pubchem_enabled_cfg = (
+        True if pubchem_cfg is None else getattr(pubchem_cfg, "enable", True)
+    )
     disabled_optional = _disabled_optional_columns(cfg)
     required_cols = {
         name
@@ -1180,6 +1184,8 @@ def finalize_output(
     else:
         dataset_frame = pd.DataFrame(columns=list(expected_columns) or col_order)
 
+    pubchem_fallback_applied = False
+
     if pubchem_context is not None and not dataset_frame.empty:
         available_columns = [
             column
@@ -1188,6 +1194,7 @@ def finalize_output(
         ]
         if not available_columns or dataset_frame[available_columns].isna().all().all():
             logger.info("pubchem_fallback_augment_start")
+            pubchem_fallback_applied = True
             dataset_frame = _load_pubchem_augmenter()(
                 dataset_frame,
                 pubchem_cfg=pubchem_context.pubchem_cfg,
@@ -1272,10 +1279,12 @@ def finalize_output(
         "output_sha256": file_sha256(artifacts.dataset),
         "parent_lookup_source": parent_stats.source,
         "parent_lookup_missing": parent_stats.missing,
+        "pubchem_augmentation_enabled": pubchem_enabled_cfg,
         "parent_lookup_hierarchy_attached": parent_stats.hierarchy_attached,
         "parent_lookup_fallback_attached": parent_stats.fallback_attached,
         "parent_lookup_no_parent": parent_stats.no_parent,
     }
+    stats["pubchem_fallback_applied"] = pubchem_fallback_applied
     if missing_ids_tuple:
         stats["missing_molecule_ids"] = list(missing_ids_tuple)
         stats["missing_molecule_ids_count"] = len(missing_ids_tuple)
