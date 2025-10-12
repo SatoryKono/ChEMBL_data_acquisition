@@ -95,7 +95,6 @@ def test_fetch_semantic_scholar_batch__omits_api_key_header_when_missing(
     results = semantic_scholar.fetch_semantic_scholar_batch(
         session, ["123456"], cfg=cfg, limiter=limiter
     )
-    )
 
     assert results
     assert results[0]["scholar.Error"] == ""
