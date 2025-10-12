@@ -1863,6 +1863,23 @@ def _pending_manifest_entry(
     return entry
 
 
+def _resolve_run_git_sha(context: Any | None = None) -> str | None:
+    """Return the Git SHA associated with the current run, if available."""
+
+    resolved_context = context if context is not None else get_run_context()
+    git_sha = (
+        getattr(resolved_context, "git_sha", None)
+        if resolved_context is not None
+        else None
+    )
+    if git_sha:
+        return git_sha
+    env_sha = os.getenv("GIT_SHA")
+    if env_sha:
+        return env_sha
+    return None
+
+
 def _write_run_manifest(
     cfg: PipelineRunConfig,
     *,
@@ -1872,8 +1889,12 @@ def _write_run_manifest(
     exit_code: int,
     steps: Sequence[dict[str, Any]],
     run_id: str | None = None,
+    pipeline_version: str | None = None,
+    git_sha: str | None = None,
 ) -> None:
     """Persist the manifest for the pipeline execution."""
+
+    resolved_pipeline_version = pipeline_version or get_pipeline_version()
 
     manifest = {
         "run": {
@@ -1892,7 +1913,7 @@ def _write_run_manifest(
             "force": cfg.force,
             "skip_existing": cfg.skip_existing,
             "dry_run": cfg.dry_run,
-            "pipeline_version": get_pipeline_version(),
+            "pipeline_version": resolved_pipeline_version,
         },
         "steps": list(steps),
     }
@@ -1900,12 +1921,9 @@ def _write_run_manifest(
     if run_id is not None:
         manifest["run"]["run_id"] = run_id
 
-    context = get_run_context()
-    git_sha = getattr(context, "git_sha", None) if context is not None else None
-    if not git_sha:
-        git_sha = os.getenv("GIT_SHA")
-    if git_sha:
-        manifest["run"]["git_sha"] = git_sha
+    resolved_git_sha = git_sha or _resolve_run_git_sha()
+    if resolved_git_sha:
+        manifest["run"]["git_sha"] = resolved_git_sha
 
     reports_dir = cfg.base_path / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -2517,6 +2535,9 @@ def run_pipeline(
     duration_seconds = time.perf_counter() - run_started_clock
     logger_cfg = getattr(_LOGGER, "_cfg", None)
     manifest_run_id = getattr(logger_cfg, "run_id", None)
+    pipeline_version = get_pipeline_version()
+    run_context = get_run_context()
+    git_sha = _resolve_run_git_sha(run_context)
     _write_run_manifest(
         cfg,
         run_started_at=run_started_at,
@@ -2525,6 +2546,8 @@ def run_pipeline(
         exit_code=overall_status,
         steps=manifest_entries,
         run_id=manifest_run_id,
+        pipeline_version=pipeline_version,
+        git_sha=git_sha,
     )
 
     _LOGGER.info("pipeline_done", stage="pipeline", exit_code=overall_status)
