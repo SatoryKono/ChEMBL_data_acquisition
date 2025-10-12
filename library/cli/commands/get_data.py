@@ -157,6 +157,8 @@ from library.reporting.run_manifest import load_output_report, merge_run_output
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
 
+
+
 StepValueT = TypeVar("StepValueT")
 
 
@@ -417,7 +419,7 @@ def _build_testitem_options(
         limit=cfg.limit,
         offset=0,
         emit_legacy_artifacts=_diagnostic_outputs_enabled(cfg),
-        pubchem_enabled=True,
+        pubchem_enabled=not cfg.disable_pubchem,
     )
 
 
