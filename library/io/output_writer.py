@@ -11,9 +11,15 @@ import pandas as pd
 from ..common.csv_utils import write_csv_deterministic
 
 
-OUTPUT_DIR = Path("data/output")
+_DEFAULT_OUTPUT_DIR = Path("data/output")
+OUTPUT_DIR = _DEFAULT_OUTPUT_DIR
 
-__all__ = ["StandardOutputArtifacts", "save_standard_outputs", "OUTPUT_DIR"]
+__all__ = [
+    "StandardOutputArtifacts",
+    "save_standard_outputs",
+    "OUTPUT_DIR",
+    "set_output_directory",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +48,19 @@ def _remove_sidecars(path: Path) -> None:
     lock = Path(f"{meta}.lock")
     meta.unlink(missing_ok=True)
     lock.unlink(missing_ok=True)
+
+
+def set_output_directory(path: Path | str | None) -> Path:
+    """Set the module level default output directory used by the writer."""
+
+    global OUTPUT_DIR
+
+    if path is None:
+        OUTPUT_DIR = _DEFAULT_OUTPUT_DIR
+        return OUTPUT_DIR
+
+    OUTPUT_DIR = Path(path)
+    return OUTPUT_DIR
 
 
 def save_standard_outputs(
