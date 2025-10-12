@@ -279,21 +279,31 @@ def configure_logging(level_name: str | None) -> Path:
 TARGET_SUBCOMMANDS: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
 
 
-def run_stage(stage: Stage, forward_args: ForwardArgs) -> float:
+def _coerce_forward_args(
+    forward_args: ForwardArgs | Sequence[str],
+) -> ForwardArgs:
+    if isinstance(forward_args, ForwardArgs):
+        return forward_args
+    return ForwardArgs(tuple(forward_args), extras_start=len(forward_args), extra_len=0)
+
+
+def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
     script_path = SCRIPTS_DIR / stage.script
     if not script_path.exists():
         logging.error("❌ Скрипт %s не найден по пути %s", stage.script, script_path)
         sys.exit(1)
 
+    forward = _coerce_forward_args(forward_args)
+
     start = datetime.now()
     logging.info("▶ Запуск %s...", stage.script)
 
     if stage.name == "target":
-        stage_args = forward_args.with_default_subcommand(
+        stage_args = forward.with_default_subcommand(
             "all", choices=TARGET_SUBCOMMANDS
         )
     else:
-        stage_args = forward_args.as_list()
+        stage_args = forward.as_list()
 
     if stage.name == "testitem" and "--pubchem-enable" not in stage_args:
         stage_args.append("--pubchem-enable")
