@@ -285,14 +285,6 @@ def run_stage(stage: Stage, forward_args: ForwardArgs) -> float:
         logging.error("❌ Скрипт %s не найден по пути %s", stage.script, script_path)
         sys.exit(1)
 
-    forwarded = tuple(extra_args)
-    start = datetime.now()
-    logging.info("▶ Запуск %s...", stage.script)
-    env = os.environ.copy()
-    if stage.name == "testitem":
-        _ensure_pubchem_env(forwarded, env)
-    command = [sys.executable, str(script_path), *forwarded]
-    result = subprocess.run(command, check=False, env=env)
     if stage.name == "target":
         stage_args = forward_args.with_default_subcommand(
             "all", choices=TARGET_SUBCOMMANDS
@@ -302,8 +294,15 @@ def run_stage(stage: Stage, forward_args: ForwardArgs) -> float:
 
     if stage.name == "testitem" and "--pubchem-enable" not in stage_args:
         stage_args.append("--pubchem-enable")
+
+    env = os.environ.copy()
+    if stage.name == "testitem":
+        _ensure_pubchem_env(stage_args, env)
+
     command = [sys.executable, str(script_path), *stage_args]
-    result = subprocess.run(command, check=False)
+    start = datetime.now()
+    logging.info("▶ Запуск %s...", stage.script)
+    result = subprocess.run(command, check=False, env=env)
     duration = (datetime.now() - start).total_seconds()
 
     if result.returncode != 0:
@@ -370,11 +369,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if stage.name in args.skip:
             logging.info("⏭ Пропуск этапа %s по флагу --skip", stage.name)
             continue
-        stage_args = list(forward_args)
-        if stage.name == "testitem" and "--pubchem-enable" not in stage_args:
-            stage_args.append("--pubchem-enable")
-
-        duration = run_stage(stage, stage_args)
+        duration = run_stage(stage, forward_args)
         durations.append((stage.name, duration))
 
     log_summary(durations)
