@@ -715,6 +715,14 @@ def make_request(
                             and now_retry + retry_after >= deadline
                             and not can_extend_deadline
                         ):
+                            if retry_after > 0:
+                                _remember_service_unavailable(
+                                    retry_after,
+                                    last_failure_details,
+                                    source=last_failure_details.get(
+                                        "retry_after_source", "header"
+                                    ),
+                                )
                             timeout_details = dict(last_failure_details)
                             timeout_details.setdefault("retry_after", retry_after)
                             timeout_details.setdefault("retry_after_source", "header")
