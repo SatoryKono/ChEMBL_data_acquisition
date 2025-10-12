@@ -31,6 +31,7 @@ import shutil
 import subprocess
 import sys
 import time
+from functools import lru_cache
 from collections import deque
 from collections.abc import (
     Callable,
@@ -237,6 +238,83 @@ DEFAULT_OUTPUT_STEMS: PipelineOutputStems = PipelineOutputStems.from_mapping(
 DEFAULT_SUBCOMMANDS: PipelineSubcommands = PipelineSubcommands.from_mapping(
     {step.name: step.subcommand for step in DEFAULT_PIPELINE_STEPS}
 )
+
+
+_TARGET_SUBCOMMAND_FALLBACK_CHOICES: frozenset[str] = frozenset(
+    {"chembl", "uniprot", "iuphar", "all"}
+)
+_TARGET_SUBCOMMAND_FALLBACK_ALIASES: dict[str, str] = {
+    "гтшзкще": "uniprot",
+    "Гтшзкще": "uniprot",
+    "ГТШЗКЩЕ": "uniprot",
+    "сруьид": "chembl",
+    "Сруьид": "chembl",
+    "СРУЬИД": "chembl",
+    "шгзрфк": "iuphar",
+    "Шгзрфк": "iuphar",
+    "ШГЗРФК": "iuphar",
+    "фдд": "all",
+    "Фдд": "all",
+    "ФДД": "all",
+}
+
+
+@lru_cache(maxsize=1)
+def _load_target_subcommand_registry() -> tuple[set[str], dict[str, str]]:
+    """Return canonical target subcommands and alias mappings."""
+
+    canonical = set(_TARGET_SUBCOMMAND_FALLBACK_CHOICES)
+    aliases = dict(_TARGET_SUBCOMMAND_FALLBACK_ALIASES)
+    try:
+        from library.cli.commands import get_target_data as target_cli
+    except Exception:  # pragma: no cover - defensive import guard
+        return canonical, aliases
+
+    cli_choices = getattr(target_cli, "COMMAND_CHOICES", None)
+    if cli_choices:
+        canonical = set(cli_choices)
+    cli_aliases = getattr(target_cli, "COMMAND_ALIAS_TO_CANONICAL", None)
+    if isinstance(cli_aliases, dict):
+        aliases = dict(cli_aliases)
+    return canonical, aliases
+
+
+def _normalise_target_subcommand(value: str | None) -> str | None:
+    """Return canonical target subcommand respecting keyboard aliases."""
+
+    if value is None:
+        return None
+    candidate = value.strip()
+    if not candidate:
+        return None
+    canonical_choices, alias_map = _load_target_subcommand_registry()
+    resolved = alias_map.get(candidate)
+    if resolved is None:
+        lowered = candidate.lower()
+        resolved = alias_map.get(lowered)
+        if resolved is None:
+            if candidate in canonical_choices:
+                resolved = candidate
+            elif lowered in canonical_choices:
+                resolved = lowered
+    if resolved is None:
+        allowed = ", ".join(sorted(canonical_choices))
+        raise ValueError(
+            "invalid target subcommand override: "
+            f"{candidate!r} (expected one of: {allowed})"
+        )
+    return resolved
+
+
+def _normalise_subcommand(step_name: str, value: str | None) -> str | None:
+    """Return canonical subcommand for ``step_name`` when overridden."""
+
+    if value is None:
+        return None
+    if step_name == "target":
+        return _normalise_target_subcommand(value)
+    candidate = value.strip()
+    return candidate or None
 
 # Backwards compatibility for existing callers/tests that patch the legacy names.
 _PIPELINE_STEPS = DEFAULT_PIPELINE_STEPS
@@ -727,7 +805,7 @@ def _resolve_pipeline_steps(
             updated = replace(updated, output_stem=output_overrides[step.name])
         if step.name in subcommand_overrides:
             raw_value = subcommand_overrides[step.name]
-            new_subcommand = raw_value if raw_value else None
+            new_subcommand = _normalise_subcommand(step.name, raw_value)
             updated = replace(updated, subcommand=new_subcommand)
         mutated.append(updated)
     return tuple(mutated)
