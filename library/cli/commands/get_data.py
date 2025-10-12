@@ -22,6 +22,7 @@ that the pipelines can be executed programmatically from other callers as well.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import logging
@@ -444,6 +445,14 @@ def _build_activity_options(
 _TESTITEM_PIPELINE_API = PipelineApi[TestitemPipelineOptions](
     _build_testitem_options, run_testitem_pipeline
 )
+
+_TESTITEM_CONFIG_MAPPING: dict[str, str] = {
+    "timeout": "testitem.timeout",
+    "column": "testitem.column",
+    "batch_size": "testitem.batch_size",
+    "limit": "testitem.limit",
+    "offset": "testitem.offset",
+}
 
 _PIPELINE_APIS: Mapping[str, PipelineApi[Any]] = {
     "document": PipelineApi[DocumentPipelineOptions](
@@ -1491,6 +1500,36 @@ def _run_testitem_pipeline_without_pubchem(
     )
 
 
+def _clone_config(config: Config) -> Config:
+    """Return a deep copy of ``config`` for per-step adjustments."""
+
+    if hasattr(config, "model_copy"):
+        return config.model_copy(deep=True)
+    return copy.deepcopy(config)
+
+
+def _load_pipeline_config(cfg: PipelineRunConfig, path: Path | str) -> Config:
+    """Load configuration applying overrides derived from ``cfg``."""
+
+    cli_overrides: dict[str, object] = {}
+    cli_sources: dict[tuple[str, ...], str] = {}
+    for arg, target in _TESTITEM_CONFIG_MAPPING.items():
+        if not hasattr(cfg, arg):
+            continue
+        value = getattr(cfg, arg)
+        if value is None:
+            continue
+        cli_overrides[target] = value
+        cli_sources[tuple(target.split("."))] = arg
+
+    return load_config(
+        path,
+        base_path=cfg.base_path,
+        cli_overrides=cli_overrides or None,
+        cli_sources=cli_sources or None,
+    )
+
+
 def _run_step(
     step: PipelineStep,
     cfg: PipelineRunConfig,
@@ -1527,24 +1566,28 @@ def _run_step(
             reason="limit",
         )
 
+    api = _PIPELINE_APIS.get(step.name)
+
     if step.name == "testitem":
         if cfg.disable_pubchem:
             _LOGGER.warning(
                 "testitem_pubchem_disabled",
                 reason="cli_flag_disabled",
             )
+            step_config = _clone_config(base_config)
             return _run_testitem_pipeline_without_pubchem(
-                cfg, base_config, input_path, working_output
+                cfg, step_config, input_path, working_output
             )
-        _ensure_pubchem_enabled(base_config)
-        return _run_testitem_subprocess(
-            step,
-            cfg,
-            final_output=final_output,
-            working_output=working_output,
-        )
+        if api is None or api is _TESTITEM_PIPELINE_API:
+            _ensure_pubchem_enabled(base_config)
+            return _run_testitem_subprocess(
+                step,
+                cfg,
+                final_output=final_output,
+                working_output=working_output,
+            )
+        # fall through to the API runner below when a custom mapping is provided
 
-    api = _PIPELINE_APIS.get(step.name)
     if api is None:
         arguments = step.build_arguments(cfg, output_path=working_output)
         _LOGGER.debug("step_arguments", step=step.name, arguments=arguments)
@@ -1569,11 +1612,12 @@ def _run_step(
             reason=None if status == "success" else "non_zero_exit",
         )
 
+    step_config = _clone_config(base_config)
     options = api.build_options(cfg, input_path, working_output)
 
     if step.name == "testitem" and getattr(options, "pubchem_enabled", None) is not True:
         options = replace(options, pubchem_enabled=True)
-    result = api.runner(base_config, options)
+    result = api.runner(step_config, options)
     executed = bool(result.executed)
     if not executed and result.exit_code == 0:
         status = "skipped"
@@ -2368,7 +2412,7 @@ def run_pipeline(
     effective_steps = plan.steps
     external_requirements = plan.external_artifacts
     try:
-        base_config = load_config(cfg.config_path, base_path=cfg.base_path)
+        base_config = _load_pipeline_config(cfg, cfg.config_path)
     except (ConfigError, ConfigLoaderError, ValidationError) as exc:
         _LOGGER.error("config_load_failed", error=str(exc), exc_info=exc)
         _LOGGER.info("pipeline_done", stage="pipeline", exit_code=1)
