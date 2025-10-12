@@ -101,7 +101,7 @@ _SERVICE_OUTAGE_REASON: str | None = None
 _SERVICE_OUTAGE_DETAILS: dict[str, Any] | None = None
 
 _SESSION_LOCK = Lock()
-_DEFAULT_API_CFG = ApiCfg(user_agent="chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)")
+_DEFAULT_API_CFG = ApiCfg(user_agent="ChEMBL-ETL/2.1 (mailto:chembl-data@ebi.ac.uk)")
 _DEFAULT_RETRY_CFG = RetryCfg()
 _SESSION_CFG: tuple[ApiCfg, RetryCfg] = (_DEFAULT_API_CFG, _DEFAULT_RETRY_CFG)
 _SESSION_SIGNATURE = _config_signature(*_SESSION_CFG)

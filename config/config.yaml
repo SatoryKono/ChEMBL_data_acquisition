@@ -18,7 +18,7 @@ sources:
       backoff_factor: 0.5  # Exponential backoff multiplier
       rps: 20  # Requests per second limit (env: CHEMBL_DA_RPS)
       burst: 20  # Burst size for token bucket limiter (env: CHEMBL_DA_BURST)
-      user_agent: "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)"  # User-Agent header; override via CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT
+      user_agent: "ChEMBL-ETL/2.1 (mailto:chembl-data@ebi.ac.uk)"  # User-Agent header; override via CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT
     cache:
       cache_ttl: 3600  # Seconds to cache ChEMBL API responses (env: CHEMBL_DA_CACHE_TTL)
       cache_maxsize: 1024  # Max cached ChEMBL responses (env: CHEMBL_DA_CACHE_MAXSIZE)
@@ -184,17 +184,17 @@ sources:
   pubchem:
     enable: true  # Toggle PubChem augmentation (env: CHEMBL_DA_PUBCHEM_ENABLE)
     base: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"  # PubChem PUG REST API (env: CHEMBL_DA__SOURCES__PUBCHEM__BASE / CHEMBL_DA_PUBCHEM_BASE)
-    user_agent: "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)"  # Contact details for PubChem requests (env: CHEMBL_DA_PUBCHEM_USER_AGENT)
+    user_agent: "ChEMBL-ETL/2.1 (mailto:chembl-data@ebi.ac.uk)"  # Contact details for PubChem requests (env: CHEMBL_DA_PUBCHEM_USER_AGENT)
     timeout_connect: 5  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT)
     timeout_read: 60  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_READ)
-    timeout_seconds: 30.0
-    retries: 3
-    rps: 5  # (env: CHEMBL_DA_PUBCHEM_RPS)
-    burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
-    delay: 0.2  # Delay between requests in seconds; must be a float for strict type validation
-    retry_jitter_seconds: 0.35  # Random jitter applied when Retry-After headers are missing
+    timeout_seconds: 45.0
+    retries: 5
+    rps: 3  # (env: CHEMBL_DA_PUBCHEM_RPS)
+    burst: 3  # (env: CHEMBL_DA_PUBCHEM_BURST)
+    delay: 1.0  # Delay between requests in seconds; must be a float for strict type validation
+    retry_jitter_seconds: 0.5  # Random jitter applied when Retry-After headers are missing
     retry_jitter_seed: 17  # Deterministic jitter seed; set to null to use system randomness
-    backoff_initial_seconds: 0.5
+    backoff_initial_seconds: 1.0
     resolve_order:
       - cache
       - smiles
