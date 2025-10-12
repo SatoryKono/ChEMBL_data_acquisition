@@ -15,6 +15,7 @@ import pytest
 from library.cli.commands import get_data
 from library.config import Config
 from library.pipelines.common import PipelineRunResult
+from library.pipelines.testitem import TestitemPipelineOptions
 from library.project_version import get_pipeline_version
 from tests.helpers.logs import iter_events, parse_log_lines
 from tests.helpers.manifests import load_latest_manifest
@@ -1079,6 +1080,104 @@ def test_run_step__forwards_skip_and_dry_run_options(
         "skip_existing": skip_existing,
         "dry_run": dry_run,
     }
+
+
+@pytest.mark.unit
+def test_run_step__testitem_forces_pubchem_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    config_path = base_path / "config.yaml"
+    config_path.write_text("{}", encoding="utf-8")
+
+    input_files = get_data.PipelineInputFiles.from_mapping({"testitem": "testitem.csv"})
+    output_stems = get_data.PipelineOutputStems.from_mapping({"testitem": "testitem"})
+    subcommands = get_data.PipelineSubcommands.from_mapping({"testitem": None})
+
+    run_cfg = get_data.PipelineRunConfig(
+        base_path=base_path,
+        input_dir=input_dir,
+        output_dir=output_dir,
+        config_path=config_path,
+        date_prefix="20240229",
+        log_level="INFO",
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        input_files=input_files,
+        output_stems=output_stems,
+        subcommands=subcommands,
+    )
+
+    input_path = run_cfg.input_path("testitem")
+    input_path.write_text("molecule_chembl_id\nCHEMBL1\n", encoding="utf-8")
+    final_output = run_cfg.output_path("testitem")
+    working_output = final_output.with_name(f"{final_output.name}.tmp")
+
+    cfg.sources.pubchem.enable = False
+
+    def _build_options(
+        run_cfg_arg: get_data.PipelineRunConfig,
+        received_input: Path,
+        received_output: Path,
+    ) -> TestitemPipelineOptions:
+        assert run_cfg_arg is run_cfg
+        return TestitemPipelineOptions(
+            input_csv=received_input,
+            output_csv=received_output,
+            limit=None,
+            offset=None,
+            emit_legacy_artifacts=False,
+            pubchem_enabled=False,
+        )
+
+    def _runner(config: Config, options: TestitemPipelineOptions) -> PipelineRunResult:
+        assert options.pubchem_enabled is True
+        assert config.pubchem.enable is True
+        assert config.sources.pubchem.enable is True
+        destination = Path(options.output_csv)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text("molecule_chembl_id\nCHEMBL1\n", encoding="utf-8")
+        return PipelineRunResult(
+            exit_code=0,
+            output_path=destination,
+            executed=True,
+            reason=None,
+            written=True,
+        )
+
+    step = get_data.PipelineStep(
+        name="testitem",
+        main=lambda _: 0,
+        input_filename="testitem.csv",
+        output_stem="testitem",
+    )
+
+    monkeypatch.setattr(
+        get_data,
+        "_PIPELINE_APIS",
+        {"testitem": get_data.PipelineApi(_build_options, _runner)},
+        raising=False,
+    )
+
+    result = get_data._run_step(
+        step,
+        run_cfg,
+        cfg,
+        input_path,
+        final_output,
+        working_output,
+    )
+
+    assert result.exit_code == 0
+    assert result.status == "success"
+    assert cfg.pubchem.enable is True
 
 
 @pytest.mark.unit
