@@ -26,6 +26,7 @@ from typing import (
 
 import pandas as pd
 import requests
+from pandas.api import types as pd_types
 
 from library.common.log import logger
 from library.config import ApiCfg, PubChemCfg, RetryCfg
@@ -813,6 +814,28 @@ def _merge_pubchem_properties(
     return pubchem_df.convert_dtypes()
 
 
+def _normalise_pubchem_column_dtype(result: pd.DataFrame, column: str) -> pd.Series:
+    """Ensure ``result[column]`` can store the PubChem value types."""
+
+    series = result[column]
+    target_dtype = "object" if column == "pubchem_cid" else "string"
+
+    if target_dtype == "object" and pd_types.is_object_dtype(series.dtype):
+        return series
+
+    if target_dtype == "string" and (
+        pd_types.is_string_dtype(series.dtype) or pd_types.is_object_dtype(series.dtype)
+    ):
+        return series
+
+    try:
+        result[column] = series.astype(target_dtype)
+    except (TypeError, ValueError):
+        result[column] = series.astype("string")
+
+    return result[column]
+
+
 def add_pubchem_data(
     df: pd.DataFrame,
     cfg: PubChemCfg,
@@ -960,7 +983,7 @@ def add_pubchem_data(
     for column in pubchem_df.columns:
         replacement = pubchem_df[column]
         if column in result.columns:
-            original = result[column]
+            _normalise_pubchem_column_dtype(result, column)
 
             if replacement.empty:
                 continue
