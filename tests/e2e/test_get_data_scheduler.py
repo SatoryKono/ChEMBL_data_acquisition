@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from library.pipelines.common import PipelineRunResult
+from library.project_version import get_pipeline_version
 from scripts import get_data
 from tests.helpers.manifests import list_manifest_files, load_latest_manifest
 
@@ -125,6 +126,8 @@ def test_scheduler__selective_run_respects_dependencies(
     _, manifest = load_latest_manifest(cfg.base_path)
     step_names = [entry["name"] for entry in manifest["steps"]]
     assert step_names == ["transform", "audit"]
+    assert manifest["run"]["pipeline_version"] == get_pipeline_version()
+    assert manifest["run"].get("git_sha")
     assert manifest["run"]["status"] == "success"
 
 
@@ -177,6 +180,8 @@ def test_scheduler__fails_on_missing_external_dependency(
     manifests = list_manifest_files(cfg.base_path)
     assert len(manifests) == 1
     _, manifest = load_latest_manifest(cfg.base_path)
+    assert manifest["run"]["pipeline_version"] == get_pipeline_version()
+    assert manifest["run"].get("git_sha")
     assert manifest["run"]["status"] == "failed"
     transform_entry = next(
         entry for entry in manifest["steps"] if entry["name"] == "transform"

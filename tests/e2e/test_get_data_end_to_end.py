@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 
 from library.common.csv_utils import sha256_file
+from library.project_version import get_pipeline_version
 from scripts import get_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_file, parse_log_lines
@@ -788,6 +789,8 @@ def test_get_data_end_to_end__blocked_steps_after_failure(
     assert manifest_path.exists()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     entries_by_name = {entry["name"]: entry for entry in manifest["steps"]}
+    assert manifest["run"]["pipeline_version"] == get_pipeline_version()
+    assert manifest["run"].get("git_sha")
 
     assert entries_by_name["document"]["status"] == "success"
     assert entries_by_name["target"]["status"] == "failed"

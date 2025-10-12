@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import io
+import json
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -12,8 +13,10 @@ from types import SimpleNamespace
 import pytest
 
 from library.cli.commands import get_data
+from library.common.run_context import RunContext, get_current, set_current
 from library.config import Config
 from library.pipelines.common import PipelineRunResult
+from library.project_version import get_pipeline_version
 from tests.helpers.logs import iter_events, parse_log_lines
 from tests.helpers.manifests import load_latest_manifest
 
@@ -214,15 +217,27 @@ def test_write_run_manifest__fallback_on_unlink_failure(
     monkeypatch.setattr(Path, "unlink", fail_unlink)
 
     run_started_at = datetime(2024, 1, 1, tzinfo=UTC)
-
-    get_data._write_run_manifest(
-        cfg,
-        run_started_at=run_started_at,
-        run_completed_at=run_started_at,
-        duration_seconds=0.0,
-        exit_code=0,
-        steps=[],
+    git_sha = "stub-sha"
+    previous_context = get_current()
+    set_current(
+        RunContext(
+            run_id="unit-test",
+            generated_at=run_started_at.isoformat(),
+            git_sha=git_sha,
+        )
     )
+
+    try:
+        get_data._write_run_manifest(
+            cfg,
+            run_started_at=run_started_at,
+            run_completed_at=run_started_at,
+            duration_seconds=0.0,
+            exit_code=0,
+            steps=[],
+        )
+    finally:
+        set_current(previous_context)
 
     manifest_files = sorted(
         p
@@ -231,9 +246,12 @@ def test_write_run_manifest__fallback_on_unlink_failure(
     )
     assert len(manifest_files) == 1
     manifest_content = manifest_files[0].read_text(encoding="utf-8")
+    manifest_payload = json.loads(manifest_content)
 
     assert alias_path.read_text(encoding="utf-8") == manifest_content
     assert not alias_path.with_name("run_manifest.json.tmp").exists()
+    assert manifest_payload["run"]["pipeline_version"] == get_pipeline_version()
+    assert manifest_payload["run"]["git_sha"] == git_sha
 
 
 @pytest.mark.unit
@@ -847,6 +865,8 @@ def test_run_pipeline__propagates_step_failure(
     assert failure_calls, "expected failing step to execute"
 
     manifest = _load_manifest(cfg)
+    assert manifest["run"]["pipeline_version"] == get_pipeline_version()
+    assert manifest["run"].get("git_sha")
     assert manifest["run"]["exit_code"] == 2
     step_entries = manifest["steps"]
     assert len(step_entries) == 3
@@ -912,6 +932,8 @@ def test_run_pipeline__fails_when_output_missing(
     assert status == 1
 
     manifest = _load_manifest(cfg)
+    assert manifest["run"]["pipeline_version"] == get_pipeline_version()
+    assert manifest["run"].get("git_sha")
     step_entry = manifest["steps"][0]
     assert step_entry["status"] == "failed"
     assert step_entry["exit_code"] == 1
@@ -959,6 +981,8 @@ def test_run_pipeline__handles_step_exception(
     status = get_data.run_pipeline(cfg, steps=steps)
     assert status == 1
     manifest = _load_manifest(cfg)
+    assert manifest["run"]["pipeline_version"] == get_pipeline_version()
+    assert manifest["run"].get("git_sha")
     assert manifest["run"]["exit_code"] == 1
     step_entries = manifest["steps"]
     assert len(step_entries) == 1
@@ -1112,6 +1136,8 @@ def test_run_pipeline__dry_run_manifest(
     assert not executions
 
     manifest = _load_manifest(cfg)
+    assert manifest["run"]["pipeline_version"] == get_pipeline_version()
+    assert manifest["run"].get("git_sha")
     assert manifest["run"]["dry_run"] is True
     assert manifest["run"]["exit_code"] == 0
     step_entries = manifest["steps"]

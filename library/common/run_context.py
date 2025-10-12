@@ -11,6 +11,7 @@ class RunContext:
 
     run_id: str
     generated_at: str
+    git_sha: str | None = None
 
 
 _CURRENT: RunContext | None = None

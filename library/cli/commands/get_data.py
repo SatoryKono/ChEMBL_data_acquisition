@@ -42,7 +42,9 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from library.cli.logging import setup_cli_logging
 from library.cli_utils import resolve_invocation
 from library.clients import ChemblClient
+from library.common.git import _git_sha
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
+from library.common.run_context import get_current
 from library.config import (
     DEFAULT_CONFIG_PATH,
     Config,
@@ -141,6 +143,7 @@ from library.postprocessing.testitem import (
     run_testitem_pipeline as run_testitem_postprocess,
 )
 from library.io.paths import derive_output_labels
+from library.project_version import get_pipeline_version
 from library.reporting.run_manifest import load_output_report, merge_run_output
 
 _LOGGER: Logger = configure_logger(LoggerConfig())
@@ -1864,29 +1867,43 @@ def _write_run_manifest(
 ) -> None:
     """Persist the manifest for the pipeline execution."""
 
-    manifest = {
-        "run": {
-            "started_at": run_started_at.isoformat(),
-            "completed_at": run_completed_at.isoformat(),
-            "duration_sec": round(duration_seconds, 6),
-            "exit_code": exit_code,
-            "status": "success" if exit_code == 0 else "failed",
-            "date_prefix": cfg.date_prefix,
-            "base_path": str(cfg.base_path),
-            "input_dir": str(cfg.input_dir),
-            "output_dir": str(cfg.output_dir),
-            "config_path": str(cfg.config_path),
-            "log_level": cfg.log_level,
-            "limit": cfg.limit,
-            "force": cfg.force,
-            "skip_existing": cfg.skip_existing,
-            "dry_run": cfg.dry_run,
-        },
-        "steps": list(steps),
+    run_context = get_current()
+    run_metadata: dict[str, Any] = {
+        "started_at": run_started_at.isoformat(),
+        "completed_at": run_completed_at.isoformat(),
+        "duration_sec": round(duration_seconds, 6),
+        "exit_code": exit_code,
+        "status": "success" if exit_code == 0 else "failed",
+        "date_prefix": cfg.date_prefix,
+        "base_path": str(cfg.base_path),
+        "input_dir": str(cfg.input_dir),
+        "output_dir": str(cfg.output_dir),
+        "config_path": str(cfg.config_path),
+        "log_level": cfg.log_level,
+        "limit": cfg.limit,
+        "force": cfg.force,
+        "skip_existing": cfg.skip_existing,
+        "dry_run": cfg.dry_run,
+        "pipeline_version": get_pipeline_version(),
     }
 
+    git_sha: str | None = None
+    if run_context is not None:
+        git_sha = getattr(run_context, "git_sha", None)
+    if not git_sha:
+        candidate = _git_sha()
+        if candidate and candidate != "UNKNOWN":
+            git_sha = candidate
+    if git_sha:
+        run_metadata["git_sha"] = git_sha
+
     if run_id is not None:
-        manifest["run"]["run_id"] = run_id
+        run_metadata["run_id"] = run_id
+
+    manifest = {
+        "run": run_metadata,
+        "steps": list(steps),
+    }
 
     reports_dir = cfg.base_path / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
