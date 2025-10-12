@@ -40,3 +40,12 @@ def test_pubchem_enable__cli_defaults_true() -> None:
     cfg = apply_config_overrides(args, parser, args.config, mapping=mapping)
 
     assert cfg.pubchem.enable is True
+
+
+@pytest.mark.unit
+def test_pubchem_enable__env_alias_short(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CHEMBL_DA_PUBCHEM_ENABLE", "false")
+
+    cfg = load_config(DEFAULT_CONFIG_PATH)
+
+    assert cfg.pubchem.enable is False
