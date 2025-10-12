@@ -322,15 +322,16 @@ def run_stage(stage: Stage, forward_args: ForwardArgs) -> float:
 
 def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> ForwardArgs:
     forward: list[str] = []
+    forwarded_extras = list(extra)
     if args.limit is not None:
-        forward.extend(["--limit", str(args.limit)])
+        forwarded_extras = ["--limit", str(args.limit), *forwarded_extras]
     if args.log_level is not None:
         forward.extend(["--log-level", args.log_level])
     if args.config is not None:
         forward.extend(["--config", str(args.config)])
     extras_start = len(forward)
-    forward.extend(extra)
-    extra_len = len(extra)
+    forward.extend(forwarded_extras)
+    extra_len = len(forwarded_extras)
 
     def _has_option(option: str) -> bool:
         return option in forward
