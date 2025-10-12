@@ -1404,7 +1404,20 @@ def _run_step(
     options = api.build_options(cfg, input_path, working_output)
 
     if step.name == "testitem":
-        options = replace(options, pubchem_enabled=True)
+        pubchem_cfg = getattr(base_config, "pubchem", None)
+        if pubchem_cfg is not None and getattr(pubchem_cfg, "enable", None) is not True:
+            try:
+                pubchem_cfg.enable = True
+            except AttributeError:
+                if hasattr(pubchem_cfg, "model_copy") and hasattr(base_config, "sources"):
+                    try:
+                        base_config.sources.pubchem = pubchem_cfg.model_copy(
+                            update={"enable": True}
+                        )
+                    except AttributeError:
+                        pass
+        if getattr(options, "pubchem_enabled", True) is not True:
+            options = replace(options, pubchem_enabled=True)
     result = api.runner(base_config, options)
     executed = bool(result.executed)
     if not executed and result.exit_code == 0:
