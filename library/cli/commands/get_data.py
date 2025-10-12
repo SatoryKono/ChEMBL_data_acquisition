@@ -1432,9 +1432,6 @@ def _ensure_pubchem_enabled(config: Config) -> None:
         setattr(pubchem_cfg, "enable", True)
 
 
-import tempfile
-import yaml
-
 def _run_testitem_subprocess(
     step: PipelineStep,
     cfg: PipelineRunConfig,
@@ -1443,22 +1440,6 @@ def _run_testitem_subprocess(
     working_output: Path,
 ) -> StepExecutionResult:
     """Execute the testitem stage via ``scripts/get_testitem_data.py``."""
-
-    def _ensure_argument(arguments: list[str], option: str, value: object | None) -> None:
-        if value in (None, argparse.SUPPRESS):
-            return
-        argument_value = str(value)
-        try:
-            index = arguments.index(option)
-        except ValueError:
-            arguments.extend([option, argument_value])
-            return
-
-        next_index = index + 1
-        if next_index < len(arguments):
-            arguments[next_index] = argument_value
-        else:
-            arguments.append(argument_value)
 
     diagnostics_enabled = _diagnostic_outputs_enabled(cfg)
     working_output.parent.mkdir(parents=True, exist_ok=True)
@@ -1470,31 +1451,17 @@ def _run_testitem_subprocess(
             except OSError:
                 pass
 
-    with tempfile.NamedTemporaryFile(mode="w+", suffix=".yaml", delete=False) as tmp_config_file:
-        try:
-            with open(cfg.config_path) as f:
-                config_data = yaml.safe_load(f)
-
-            if 'sources' not in config_data:
-                config_data['sources'] = {}
-            if 'pubchem' not in config_data['sources']:
-                config_data['sources']['pubchem'] = {}
-            config_data['sources']['pubchem']['enable'] = True
-
-            yaml.dump(config_data, tmp_config_file)
-            tmp_config_path = tmp_config_file.name
-        except Exception as e:
-            _LOGGER.error(f"Failed to create temporary config file: {e}")
-            return StepExecutionResult(exit_code=1, executed=False, status="failed", reason="config_error")
-
     arguments = step.build_arguments(cfg, output_path=final_output)
-    _ensure_argument(arguments, "--config", tmp_config_path)
-    _ensure_argument(arguments, "--base-path", getattr(cfg, "base_path", None))
-    _ensure_argument(arguments, "--input-dir", getattr(cfg, "input_dir", None))
-    _ensure_argument(arguments, "--output-dir", getattr(cfg, "output_dir", None))
-    _ensure_argument(arguments, "--date", getattr(cfg, "date_prefix", None))
     if diagnostics_enabled and "--emit-legacy-artifacts" not in arguments:
         arguments.append("--emit-legacy-artifacts")
+
+    has_pubchem_flag = any(
+        option in {"--pubchem-enable", "--no-pubchem-enable"}
+        or option.startswith("--pubchem-enable=")
+        for option in arguments
+    )
+    if not has_pubchem_flag:
+        arguments.append("--pubchem-enable")
 
     command = [sys.executable, str(_TESTITEM_SCRIPT), *arguments]
     env = os.environ.copy()
@@ -1506,11 +1473,23 @@ def _run_testitem_subprocess(
     )
 
     try:
-        completed = subprocess.run(
+        subprocess.run(
             command,
-            check=False,
+            check=True,
             cwd=str(_PROJECT_ROOT),
             env=env,
+        )
+    except subprocess.CalledProcessError as exc:
+        _LOGGER.error(
+            "testitem_subprocess_exit",
+            exit_code=int(exc.returncode),
+            command=command,
+        )
+        return StepExecutionResult(
+            exit_code=int(exc.returncode),
+            executed=True,
+            status="failed",
+            reason="non_zero_exit",
         )
     except OSError as exc:
         _LOGGER.error(
@@ -1524,27 +1503,13 @@ def _run_testitem_subprocess(
             status="failed",
             reason="subprocess_error",
         )
-    finally:
-        os.unlink(tmp_config_path)
-
-    exit_code = int(completed.returncode)
-    status = "success" if exit_code == 0 else "failed"
-    reason = None if exit_code == 0 else "non_zero_exit"
-
-    if exit_code == 0:
-        _LOGGER.info("testitem_subprocess_done", command=command)
-    else:
-        _LOGGER.error(
-            "testitem_subprocess_exit",
-            exit_code=exit_code,
-            command=command,
-        )
+    _LOGGER.info("testitem_subprocess_done", command=command)
 
     return StepExecutionResult(
-        exit_code=exit_code,
+        exit_code=0,
         executed=True,
-        status=status,
-        reason=reason,
+        status="success",
+        reason=None,
     )
 
 
