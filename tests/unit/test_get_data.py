@@ -453,6 +453,37 @@ def test_prepare_config__verbose_overrides_level(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_prepare_config__coerces_disable_pubchem_false_string(
+    tmp_path: Path,
+) -> None:
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_path / "config.yaml"
+    config_path.write_text("io:\n  csv_sep: ','\n", encoding="utf-8")
+
+    args = argparse.Namespace(
+        base_path=base_path,
+        input_dir=Path("input"),
+        output_dir=Path("output"),
+        config=config_path,
+        date_prefix="20240204",
+        log_level="info",
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=False,
+        disable_pubchem="False",
+    )
+
+    cfg = get_data._prepare_config(args)
+
+    assert cfg.disable_pubchem is False
+
+
+@pytest.mark.unit
 def test_prepare_config__csv_override_output_path(tmp_path: Path) -> None:
     base_path = tmp_path
     input_dir = base_path / "input"
