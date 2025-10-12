@@ -29,7 +29,9 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
+import yaml
 from collections import deque
 from collections.abc import (
     Callable,
@@ -1356,9 +1358,6 @@ def _ensure_pubchem_enabled(config: Config) -> None:
         setattr(pubchem_cfg, "enable", True)
 
 
-import tempfile
-import yaml
-
 def _run_testitem_subprocess(
     step: PipelineStep,
     cfg: PipelineRunConfig,
@@ -1420,8 +1419,6 @@ def _run_testitem_subprocess(
             cwd=str(_PROJECT_ROOT),
             env=env,
         )
-    finally:
-        os.unlink(tmp_config_path)
     except OSError as exc:
         _LOGGER.error(
             "testitem_subprocess_error",
@@ -1434,6 +1431,8 @@ def _run_testitem_subprocess(
             status="failed",
             reason="subprocess_error",
         )
+    finally:
+        os.unlink(tmp_config_path)
 
     exit_code = int(completed.returncode)
     status = "success" if exit_code == 0 else "failed"
