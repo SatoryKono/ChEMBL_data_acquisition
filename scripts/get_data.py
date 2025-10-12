@@ -303,6 +303,8 @@ def run_stage(stage: Stage, forward_args: ForwardArgs) -> float:
         _ensure_pubchem_env(stage_args, env)
 
     command = [sys.executable, str(script_path), *stage_args]
+    start = datetime.now()
+    logging.info("▶ Запуск %s...", stage.script)
     result = subprocess.run(command, check=False, env=env)
     duration = (datetime.now() - start).total_seconds()
 
