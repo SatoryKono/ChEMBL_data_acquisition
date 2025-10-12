@@ -88,3 +88,37 @@ def test_build_forward_args__keeps_user_supplied_paths() -> None:
     assert forwarded.count("--input-dir") == 1
     assert forwarded.count("--output-dir") == 1
     assert forwarded[: len(extra)] == extra
+
+
+@pytest.mark.unit
+def test_parse_args__coerces_positional_limit() -> None:
+    from scripts import get_data
+
+    args, unknown = get_data.parse_args(["10"])
+
+    assert args.limit == 10
+    assert unknown == []
+
+
+@pytest.mark.unit
+def test_parse_args__positional_limit_conflict(capsys: pytest.CaptureFixture[str]) -> None:
+    from scripts import get_data
+
+    with pytest.raises(SystemExit) as excinfo:
+        get_data.parse_args(["--limit", "5", "10"])
+
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr()
+    assert "Ограничение уже указано" in captured.err
+
+
+@pytest.mark.unit
+def test_parse_args__positional_limit_with_extra_tokens(capsys: pytest.CaptureFixture[str]) -> None:
+    from scripts import get_data
+
+    with pytest.raises(SystemExit) as excinfo:
+        get_data.parse_args(["10", "chembl"])
+
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr()
+    assert "Неизвестный позиционный аргумент" in captured.err

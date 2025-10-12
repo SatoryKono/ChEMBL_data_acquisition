@@ -102,7 +102,40 @@ def parse_args(argv: Sequence[str] | None = None) -> tuple[argparse.Namespace, l
     )
 
     args, unknown = parser.parse_known_args(argv)
-    return args, unknown
+
+    extras = list(unknown)
+
+    def _looks_like_positional_limit(token: str, index: int) -> bool:
+        if not token:
+            return False
+        if token.startswith("-"):
+            return False
+        if index > 0 and extras[index - 1].startswith("-"):
+            return False
+        return token.isdigit()
+
+    positional_index: int | None = None
+    for idx, candidate in enumerate(extras):
+        if _looks_like_positional_limit(candidate, idx):
+            positional_index = idx
+            break
+
+    if positional_index is not None:
+        value_token = extras[positional_index]
+        if len(extras) > 1:
+            parser.error(
+                "Неизвестный позиционный аргумент "
+                f"'{value_token}'. Используйте '--limit {value_token}'."
+            )
+        if args.limit is not None:
+            parser.error(
+                "Ограничение уже указано через '--limit'. "
+                "Удалите позиционный аргумент или используйте только флаг."
+            )
+        args.limit = int(value_token, 10)
+        extras.pop(positional_index)
+
+    return args, extras
 
 
 def _parse_log_level(value: str) -> str:
