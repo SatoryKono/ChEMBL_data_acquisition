@@ -19,6 +19,104 @@ For an output named `output.targets_20250228.csv` the sidecars are:
 
 These artefacts support reproducibility and downstream QA pipelines.
 
+### Metadata payload keys
+
+The metadata writer records a stable set of attributes so downstream tools can
+reconstruct the execution context without reopening logs. The table below lists
+the canonical keys together with the source of each value.
+
+| Key | Description | Source |
+|-----|-------------|--------|
+| `generated_at` | UTC timestamp of the export. Falls back to the active run context when available. | `write_meta_yaml` timestamp resolution.【F:library/common/metadata_writer.py†L109-L134】 |
+| `git_sha` | Repository commit hash at execution time. | Git helper invoked by the metadata writer.【F:library/common/metadata_writer.py†L115-L134】 |
+| `python_version`, `platform` | Runtime information for the interpreter and OS. | Captured from `platform.python_version()` / `platform.platform()`.【F:library/common/metadata_writer.py†L115-L134】 |
+| `command` / `invocation` | CLI string (or tokenised form) used to launch the pipeline. | Passed in by the CLI wrapper and persisted verbatim.【F:library/common/metadata_writer.py†L115-L137】 |
+| `config` | Effective configuration snapshot with secrets masked. | Forwarded from the caller after `_mask_secrets` is applied.【F:library/common/metadata_writer.py†L115-L137】 |
+| `inputs` | Structured description of input artefacts (paths, options). | Provided by the pipeline definition. | 
+| `stats` | Row counters plus export hash and any extra diagnostics (for example chunk retry summaries or post-processing metrics). | Built via `_build_stats` or supplied through `stats_extra`.【F:library/reporting/run_manifest.py†L64-L148】【F:library/cli_utils.py†L1089-L1134】 |
+| `schema` | Schema name used for validation. | Provided by the pipeline definition. |
+| `columns`, `dtypes` | Column order and pandas dtypes for the exported CSV. | Derived from the validated dataframe before writing. | 
+| `pipeline_version` | Semantic version of the pipeline package. | Recorded via `get_pipeline_version()`.【F:library/common/metadata_writer.py†L115-L168】 |
+| `run_id` | Active run identifier supplied by the caller (for example from the logging context). | Any `extra_metadata` field named `run_id` is merged directly into the payload.【F:library/common/metadata_writer.py†L139-L140】 |
+| `metadata_hook_failures`, `postprocess_*` | Optional diagnostic entries surfaced when hooks fail or post-processing emits extra artefacts. | Added by the CLI layer before the metadata writer is invoked.【F:library/cli/utils.py†L853-L906】 |
+| `quality_report` | Error details recorded when quality analysis fails. | Populated by `record_quality_failure`.【F:library/common/metadata_writer.py†L188-L216】 |
+| `dictionaries` | Version and checksum of any dictionary resources declared for the run. | Resolved from the manifest loader when `dictionary_resources` are provided.【F:library/common/metadata_writer.py†L143-L179】 |
+
+Because `extra_metadata` is merged verbatim, pipelines can persist additional
+keys (such as `run_id`, staging identifiers or bespoke audit markers) without
+changing the writer implementation.【F:library/common/metadata_writer.py†L139-L140】 The
+examples below illustrate the most common layouts.
+
+#### Example without dictionary resources
+
+```yaml
+generated_at: '2025-03-18T10:41:12+00:00'
+git_sha: 0123456789abcdef0123456789abcdef01234567
+python_version: '3.11.9'
+platform: 'Linux-6.6.14-generic-x86_64-with-glibc2.39'
+command: "python scripts/get_document_data.py --mode chembl --final-out output/documents.csv"
+config:
+  output_dir: /srv/chembl/output
+  csv_sep: ','
+  csv_encoding: utf-8-sig
+inputs:
+  input_csv: /srv/chembl/input/document.csv
+stats:
+  rows_total: 1200
+  rows_kept: 1187
+  rows_dropped: 13
+  output_sha256: f1d3ff8443297732862df21dc4e57262a76d1b
+schema: DocumentsSchema
+columns:
+  - document_chembl_id
+  - title
+  - doi
+dtypes:
+  document_chembl_id: string
+  title: string
+  doi: string
+pipeline_version: 1.4.0
+run_id: '2025-03-18T10:41:12Z/main'
+```
+
+#### Example with dictionary resources
+
+When pipelines declare `dictionary_resources`, the metadata writer enriches the
+payload with versions and checksums gathered from `config/dictionary/manifest.yaml`.
+
+```yaml
+generated_at: '2025-03-18T10:41:12+00:00'
+git_sha: 0123456789abcdef0123456789abcdef01234567
+python_version: '3.11.9'
+platform: 'Linux-6.6.14-generic-x86_64-with-glibc2.39'
+command: "python scripts/get_target_data.py all --final-out output/targets.csv"
+stats:
+  rows_total: 2500
+  rows_kept: 2473
+  rows_dropped: 27
+  output_sha256: 3fa041266066939dcbe2fb356f9055d2845fb4a4
+schema: TargetsSchema
+pipeline_version: 1.4.0
+run_id: '2025-03-18T10:41:12Z/main'
+dictionaries:
+  target_uniprot_cache:
+    version: '2025-03-15'
+    sha256: 3fa041266066939dcbe2fb356f9055d2845fb4a46d874fef682c02d4314542cc
+  target_iuphar_target:
+    version: '2025-03-15'
+    sha256: 842895e301f9214ba3d2073ca5fde821efefaf68f9686088e91ce1a6e0be0461
+```
+
+### Controlling legacy sidecars
+
+The canonical CSV, metadata sidecar and quality reports are always produced via
+`finalise_csv_output`. Additional legacy artefacts (historical deterministic
+writer CSVs, failure-case dumps and duplicate metadata YAML files) are gated by
+the `--emit-legacy-artifacts/--no-emit-legacy-artifacts` flag exposed on every
+CLI parser.【F:library/cli/parser.py†L228-L260】 The helper logic automatically enables
+the legacy bundle when `--debug` or `--keep-intermediate` is active so that
+diagnostics are preserved during investigations.【F:library/cli_utils.py†L303-L312】
+
 ## Document export (`documents`)
 
 Schema: [`library/schemas/documents.py`](../../library/schemas/documents.py).

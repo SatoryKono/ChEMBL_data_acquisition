@@ -15,6 +15,92 @@
 - `output.targets_20250228.quality.json` — JSON-сводка с теми же метриками и
   уровнями серьёзности (`info`/`warn`/`error`).
 
+### Ключи файла метаданных
+
+Помощник записи метаданных фиксирует устойчивый набор полей, чтобы downstream-инструменты могли восстановить контекст запуска без анализа логов. Таблица ниже перечисляет основные ключи и источник значений.
+
+| Ключ | Описание | Источник |
+|------|----------|----------|
+| `generated_at` | Временная метка экспорта в UTC. При наличии активного контекста запуска использует его значение. | Формируется внутри `write_meta_yaml`.【F:library/common/metadata_writer.py†L109-L134】 |
+| `git_sha` | Коммит репозитория во время запуска. | Получается через вспомогательную функцию Git.【F:library/common/metadata_writer.py†L115-L134】 |
+| `python_version`, `platform` | Версия интерпретатора и сведения об ОС. | Берутся из `platform.python_version()`/`platform.platform()`.【F:library/common/metadata_writer.py†L115-L134】 |
+| `command` / `invocation` | Строка CLI или список аргументов, с которыми запустили конвейер. | Передаётся оболочкой CLI и сохраняется как есть.【F:library/common/metadata_writer.py†L115-L137】 |
+| `config` | Снимок эффективной конфигурации (секреты замаскированы). | Формируется вызывающим кодом после `_mask_secrets`.【F:library/common/metadata_writer.py†L115-L137】 |
+| `inputs` | Структурированное описание входных артефактов (пути, параметры). | Передаётся определением конвейера. |
+| `stats` | Счётчики строк, SHA-256 выгрузки и дополнительные метрики (например, статистика повторных попыток). | Собирается через `_build_stats` и/или `stats_extra`.【F:library/reporting/run_manifest.py†L64-L148】【F:library/cli_utils.py†L1089-L1134】 |
+| `schema` | Имя схемы Pandera, использованной при валидации. | Задаётся определением конвейера. |
+| `columns`, `dtypes` | Порядок колонок и типы данных из pandas. | Получаются из финального датафрейма перед записью. |
+| `pipeline_version` | Семантическая версия пакета. | Добавляется через `get_pipeline_version()`.【F:library/common/metadata_writer.py†L115-L168】 |
+| `run_id` | Идентификатор запуска, переданный вызывающим кодом (например, из контекста логирования). | Любые поля из `extra_metadata` (включая `run_id`) добавляются без изменений.【F:library/common/metadata_writer.py†L139-L140】 |
+| `metadata_hook_failures`, `postprocess_*` | Диагностика, появляющаяся при сбоях хуков или постобработки. | Формируется слоем CLI перед вызовом записи метаданных.【F:library/cli/utils.py†L853-L906】 |
+| `quality_report` | Сведения об ошибке генерации отчёта качества. | Записываются через `record_quality_failure`.【F:library/common/metadata_writer.py†L188-L216】 |
+| `dictionaries` | Версии и хэши словарных ресурсов, задекларированных для запуска. | Подтягиваются из `config/dictionary/manifest.yaml`, если указаны `dictionary_resources`.【F:library/common/metadata_writer.py†L143-L179】 |
+
+Поскольку `extra_metadata` сливается как есть, конвейеры могут добавлять собственные ключи (например, `run_id`, идентификаторы стадий или маркеры аудита) без модификации писателя метаданных.【F:library/common/metadata_writer.py†L139-L140】 Ниже приведены типовые примеры.
+
+#### Пример без словарей (`dictionary_resources` не заданы)
+
+```yaml
+generated_at: '2025-03-18T10:41:12+00:00'
+git_sha: 0123456789abcdef0123456789abcdef01234567
+python_version: '3.11.9'
+platform: 'Linux-6.6.14-generic-x86_64-with-glibc2.39'
+command: "python scripts/get_document_data.py --mode chembl --final-out output/documents.csv"
+config:
+  output_dir: /srv/chembl/output
+  csv_sep: ','
+  csv_encoding: utf-8-sig
+inputs:
+  input_csv: /srv/chembl/input/document.csv
+stats:
+  rows_total: 1200
+  rows_kept: 1187
+  rows_dropped: 13
+  output_sha256: f1d3ff8443297732862df21dc4e57262a76d1b
+schema: DocumentsSchema
+columns:
+  - document_chembl_id
+  - title
+  - doi
+dtypes:
+  document_chembl_id: string
+  title: string
+  doi: string
+pipeline_version: 1.4.0
+run_id: '2025-03-18T10:41:12Z/main'
+```
+
+#### Пример со словарями (`dictionary_resources` заданы)
+
+Если конвейер объявляет `dictionary_resources`, писатель добавляет блок с версиями и контрольными суммами из `config/dictionary/manifest.yaml`.
+
+```yaml
+generated_at: '2025-03-18T10:41:12+00:00'
+git_sha: 0123456789abcdef0123456789abcdef01234567
+python_version: '3.11.9'
+platform: 'Linux-6.6.14-generic-x86_64-with-glibc2.39'
+command: "python scripts/get_target_data.py all --final-out output/targets.csv"
+stats:
+  rows_total: 2500
+  rows_kept: 2473
+  rows_dropped: 27
+  output_sha256: 3fa041266066939dcbe2fb356f9055d2845fb4a4
+schema: TargetsSchema
+pipeline_version: 1.4.0
+run_id: '2025-03-18T10:41:12Z/main'
+dictionaries:
+  target_uniprot_cache:
+    version: '2025-03-15'
+    sha256: 3fa041266066939dcbe2fb356f9055d2845fb4a46d874fef682c02d4314542cc
+  target_iuphar_target:
+    version: '2025-03-15'
+    sha256: 842895e301f9214ba3d2073ca5fde821efefaf68f9686088e91ce1a6e0be0461
+```
+
+### Управление генерацией sidecar-файлов
+
+Канонические артефакты (CSV, `.meta.yaml`, отчёты качества) формируются всегда через `finalise_csv_output`. Дополнительный «наследуемый» набор (исторический детерминированный CSV, `*_failure_cases.csv`, дублирующие метаданные) включается флагом `--emit-legacy-artifacts` и отключается `--no-emit-legacy-artifacts`, который доступен во всех CLI.【F:library/cli/parser.py†L228-L260】 При активации `--debug` или `--keep-intermediate` помощник автоматически выставляет этот флаг, чтобы сохранять диагностику на диск.【F:library/cli_utils.py†L303-L312】
+
 ## Таблица документов (`documents`)
 
 Схема: [`library/schemas/documents.py`](../../library/schemas/documents.py).
