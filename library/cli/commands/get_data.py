@@ -164,6 +164,18 @@ _TESTITEM_SCRIPT = _PROJECT_ROOT / "scripts" / "get_testitem_data.py"
 _PUBCHEM_ENABLE_ENV = "CHEMBL_DA_PUBCHEM_ENABLE"
 
 
+@dataclass(frozen=True)
+class _TestitemSubprocessContext:
+    """Carry state required for the testitem subprocess runner."""
+
+    step: PipelineStep
+    cfg: "PipelineRunConfig"
+    working_output: Path
+
+
+_TESTITEM_SUBPROCESS_CONTEXT: _TestitemSubprocessContext | None = None
+
+
 StepValueT = TypeVar("StepValueT")
 
 
@@ -428,6 +440,32 @@ def _build_testitem_options(
     )
 
 
+def _run_testitem_pipeline_default(
+    config: Config, options: TestitemPipelineOptions
+) -> PipelineRunResult:
+    """Execute the testitem stage respecting subprocess overrides."""
+
+    if getattr(options, "pubchem_enabled", None) is False:
+        return run_testitem_pipeline(config, options)
+
+    context = _TESTITEM_SUBPROCESS_CONTEXT
+    if context is None:
+        return run_testitem_pipeline(config, options)
+
+    step_result = _run_testitem_subprocess(
+        context.step,
+        context.cfg,
+        working_output=context.working_output,
+        options=options,
+    )
+    return PipelineRunResult(
+        exit_code=step_result.exit_code,
+        output_path=context.working_output,
+        executed=step_result.executed,
+        reason=step_result.reason,
+    )
+
+
 def _build_activity_options(
     cfg: PipelineRunConfig, input_path: Path, output_path: Path
 ) -> ActivityPipelineOptions:
@@ -443,7 +481,7 @@ def _build_activity_options(
 
 
 _TESTITEM_PIPELINE_API = PipelineApi[TestitemPipelineOptions](
-    _build_testitem_options, run_testitem_pipeline
+    _build_testitem_options, _run_testitem_pipeline_default
 )
 
 _PIPELINE_APIS: Mapping[str, PipelineApi[Any]] = {
@@ -1361,6 +1399,7 @@ def _run_testitem_subprocess(
     cfg: PipelineRunConfig,
     *,
     working_output: Path,
+    options: TestitemPipelineOptions | None = None,
 ) -> StepExecutionResult:
     """Execute the testitem stage via ``scripts/get_testitem_data.py``."""
 
@@ -1386,6 +1425,14 @@ def _run_testitem_subprocess(
     _ensure_argument(arguments, "--date", getattr(cfg, "date_prefix", None))
     if diagnostics_enabled and "--emit-legacy-artifacts" not in arguments:
         arguments.append("--emit-legacy-artifacts")
+    if options is not None:
+        _ensure_argument(arguments, "--limit", getattr(options, "limit", None))
+        _ensure_argument(arguments, "--offset", getattr(options, "offset", None))
+        if (
+            getattr(options, "emit_legacy_artifacts", False)
+            and "--emit-legacy-artifacts" not in arguments
+        ):
+            arguments.append("--emit-legacy-artifacts")
 
     command = [sys.executable, str(_TESTITEM_SCRIPT), *arguments]
     env = os.environ.copy()
@@ -1503,6 +1550,7 @@ def _run_step(
             reason="limit",
         )
 
+    testitem_context: _TestitemSubprocessContext | None = None
     if step.name == "testitem":
         if cfg.disable_pubchem:
             _LOGGER.warning(
@@ -1512,11 +1560,25 @@ def _run_step(
             return _run_testitem_pipeline_without_pubchem(
                 cfg, base_config, input_path, working_output
             )
-        _ensure_pubchem_enabled(base_config)
-        return _run_testitem_subprocess(step, cfg, working_output=working_output)
+        testitem_context = _TestitemSubprocessContext(
+            step=step,
+            cfg=cfg,
+            working_output=working_output,
+        )
 
     api = _PIPELINE_APIS.get(step.name)
     if api is None:
+        if testitem_context is not None:
+            _ensure_pubchem_enabled(base_config)
+            options = _TESTITEM_PIPELINE_API.build_options(
+                cfg, input_path, working_output
+            )
+            return _run_testitem_subprocess(
+                step,
+                cfg,
+                working_output=working_output,
+                options=options,
+            )
         arguments = step.build_arguments(cfg, output_path=working_output)
         _LOGGER.debug("step_arguments", step=step.name, arguments=arguments)
         try:
@@ -1540,11 +1602,24 @@ def _run_step(
             reason=None if status == "success" else "non_zero_exit",
         )
 
+    if testitem_context is not None and api is _TESTITEM_PIPELINE_API:
+        _ensure_pubchem_enabled(base_config)
+
     options = api.build_options(cfg, input_path, working_output)
 
     if step.name == "testitem" and getattr(options, "pubchem_enabled", None) is not True:
         options = replace(options, pubchem_enabled=True)
-    result = api.runner(base_config, options)
+
+    if testitem_context is not None:
+        global _TESTITEM_SUBPROCESS_CONTEXT
+        previous_context = _TESTITEM_SUBPROCESS_CONTEXT
+        _TESTITEM_SUBPROCESS_CONTEXT = testitem_context
+        try:
+            result = api.runner(base_config, options)
+        finally:
+            _TESTITEM_SUBPROCESS_CONTEXT = previous_context
+    else:
+        result = api.runner(base_config, options)
     executed = bool(result.executed)
     if not executed and result.exit_code == 0:
         status = "skipped"
