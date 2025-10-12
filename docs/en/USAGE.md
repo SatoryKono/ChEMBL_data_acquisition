@@ -340,9 +340,14 @@ Options include:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--column` | `assay_chembl_id` | Identifier column in the input CSV. |
-| `--batch-size` | `50` | Identifiers per request. |
-| `--timeout` | `30.0` | HTTP timeout. |
+| `--batch-size` | `25` | Identifiers per request (configuration default from `sources.chembl.pipelines.assay.batch_size`).【F:config/config.yaml†L35-L47】 |
+| `--timeout` | `60.0` | HTTP timeout resolved from the configuration (`sources.chembl.pipelines.assay.timeout`).【F:config/config.yaml†L35-L47】 |
 | `--limit`, `--offset` | `None`, `0` | Range selection. |
+| `--postprocess` / `--no-postprocess` | `False` | Toggle the bundled post-processing stage that trims disallowed columns and rebuilds QA sidecars.【F:library/cli/commands/get_assay_data.py†L864-L908】 |
+
+The parser keeps lightweight CLI defaults (10 identifiers, 30 s timeout) but the
+effective execution values come from `config/config.yaml`, so overridable YAML
+settings remain the single source of truth in automation.【F:library/cli/commands/get_assay_data.py†L864-L908】【F:config/config.yaml†L35-L47】
 
 Example smoke run limiting to 100 assays:
 
@@ -389,12 +394,15 @@ flags are:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--column` | `molecule_chembl_id` | Identifier column in the input CSV. |
-| `--batch-size` | `250` | Identifiers fetched per request. |
-| `--timeout` | `90.0` | HTTP timeout per request. |
+| `--batch-size` | `250` | Identifiers fetched per request (see `sources.chembl.pipelines.testitem.batch_size`).【F:config/config.yaml†L35-L69】 |
+| `--timeout` | `90.0` | HTTP timeout per request (derived from the YAML defaults).【F:config/config.yaml†L35-L69】 |
 | `--limit`, `--offset` | `None`, `0` | Range selection. |
+| `--pubchem-enable` / `--no-pubchem-enable` | `Config driven` | Force-enable or disable PubChem enrichment regardless of the YAML flag.【F:library/cli/commands/get_testitem_data.py†L896-L934】 |
+| `--postprocess` / `--no-postprocess` | `False` | Run the deterministic clean-up pipeline that merges PubChem columns, applies hierarchy lookups and emits QA artefacts.【F:library/cli/commands/get_testitem_data.py†L896-L934】 |
 
-Retry, back-off and PubChem enrichment settings are sourced from the YAML
-configuration (`testitem` section).
+Retry, back-off and enrichment settings stay centralised in the YAML
+configuration (`testitem` block) so batch size, timeout and PubChem behaviour
+remain consistent between CLI runs and orchestrated workflows.【F:config/config.yaml†L35-L69】
 
 ## Tissue pipeline `get_tissue_data`
 
