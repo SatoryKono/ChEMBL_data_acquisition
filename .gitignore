@@ -69,3 +69,4 @@ scripts/**/*.docx
 scripts/~$*.docx
 /data/reports
 /data/reports
+/data/reports
