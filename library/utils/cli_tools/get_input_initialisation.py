@@ -40,6 +40,7 @@ from library.cli import (  # noqa: E402
 from library.cli import (  # noqa: E402
     build_parser as base_parser,
 )
+from library.cli_utils import ensure_run_id  # noqa: E402
 from library.common.log import logger  # noqa: E402
 from library.config import Config, ConfigError, ensure_dirs, print_config  # noqa: E402
 from library.integration import input_initialisation_library as lib  # noqa: E402
@@ -181,11 +182,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     input_path = getattr(args, "input_csv", None)
     output_stem = Path(input_path).stem if input_path else None
     cli.prepare_io_paths(args, output_stem=output_stem)
-    run_id_value = getattr(args, "run_id", None)
-    if isinstance(run_id_value, str):
-        run_id_value = run_id_value.strip() or None
-    if run_id_value is not None:
-        log_cfg.run_id = run_id_value
+    ensure_run_id(args, parser, log_cfg)
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)

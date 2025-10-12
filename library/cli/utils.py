@@ -14,7 +14,6 @@ import argparse
 import shlex
 import sys
 import traceback
-import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -35,6 +34,7 @@ from ..cli import (
     positive_int,
     prepare_io_paths,
 )
+from ..cli_utils import ensure_run_id
 from ..common.log import logger as default_logger
 from ..common.metadata import record_quality_failure
 from ..common.sidecar import SidecarErrors
@@ -366,8 +366,10 @@ def run_cli_command(
     if getattr(args, "verbose", False):
         level = "DEBUG"
     log_cfg.level = level
-    configured_logger = configure_logger(log_cfg)
-    use_logger = logger or configured_logger
+
+    def _configure_logging() -> Logger:
+        configured_logger = configure_logger(log_cfg)
+        return logger or configured_logger
 
     try:
         config_arg = getattr(args, "config", None)
@@ -380,6 +382,8 @@ def run_cli_command(
                 raise ValueError(msg)
             config_path = default_config
     except ValueError as exc:
+        ensure_run_id(args, parser, log_cfg)
+        use_logger = _configure_logging()
         use_logger.error(
             "config_error",
             error=str(exc),
@@ -392,6 +396,8 @@ def run_cli_command(
     try:
         prepare_io_paths(args)
     except (ValueError, FileNotFoundError) as exc:
+        ensure_run_id(args, parser, log_cfg)
+        use_logger = _configure_logging()
         use_logger.error(
             "config_error",
             error=str(exc),
@@ -401,22 +407,8 @@ def run_cli_command(
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
 
-    run_id_value = getattr(args, "run_id", None)
-    if isinstance(run_id_value, str):
-        run_id_value = run_id_value.strip() or None
-    if not run_id_value:
-        descriptor = _canonical_run_descriptor(args, parser)
-        if descriptor:
-            run_id_value = uuid.uuid5(uuid.NAMESPACE_URL, descriptor).hex
-        else:
-            run_id_value = log_cfg.run_id
-    if run_id_value is not None:
-        log_cfg.run_id = run_id_value
-        args.run_id = run_id_value
-    if logger is None:
-        use_logger = configure_logger(log_cfg)
-    else:
-        configure_logger(log_cfg)
+    ensure_run_id(args, parser, log_cfg)
+    use_logger = _configure_logging()
 
     use_logger.info("pipeline_start", run_id=log_cfg.run_id)
 

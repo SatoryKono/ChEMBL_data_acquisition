@@ -22,7 +22,7 @@ import pandas as pd
 
 from library import cli
 from library.cli import LoggerConfig, configure_logger, create_logger_config
-from library.cli_utils import build_parser
+from library.cli_utils import build_parser, ensure_run_id
 from library.common.csv_utils import write_csv_chunks_deterministic
 from library.common.log import logger
 from library.config import ConfigError, ensure_dirs, print_config
@@ -80,6 +80,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if isinstance(run_id_value, str):
         run_id_value = run_id_value.strip() or None
     log_cfg: LoggerConfig = create_logger_config(ns.log_level, run_id=run_id_value)
+    ensure_run_id(ns, parser, log_cfg)
     if getattr(ns, "print_config", False):
         print_config(cfg)
         configure_logger(log_cfg)

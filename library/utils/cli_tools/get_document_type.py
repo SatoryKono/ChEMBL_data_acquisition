@@ -20,6 +20,7 @@ from library.cli import (
 from library.cli import (
     configure_logger,
 )
+from library.cli_utils import ensure_run_id
 from library.common.log import logger
 from library.common.metadata import Stats, file_sha256, write_meta_yaml
 from library.config import Config, ConfigError, ensure_dirs, print_config
@@ -144,11 +145,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     cli.prepare_io_paths(args, output_stem=output_stem)
     if args.limit is not None and args.limit <= 0:
         parser.error("--limit must be a positive integer")
-    run_id_value = getattr(args, "run_id", None)
-    if isinstance(run_id_value, str):
-        run_id_value = run_id_value.strip() or None
-    if run_id_value is not None:
-        log_cfg.run_id = run_id_value
+    ensure_run_id(args, parser, log_cfg)
     log_cfg.level = args.log_level
     logger_inst = configure_logger(log_cfg)
     logger_inst.info("pipeline_start", run_id=log_cfg.run_id)

@@ -6,7 +6,7 @@ import argparse
 from collections.abc import Callable, Mapping, Sequence
 
 from library.cli import Logger, LoggerConfig
-from library.cli_utils import resolve_invocation, run_cli_command
+from library.cli_utils import ensure_run_id, resolve_invocation, run_cli_command
 from library.config import Config
 
 PrepareCallback = Callable[
@@ -67,17 +67,10 @@ def run_cli_tool(
         if prepared is not None:
             args = prepared
 
-    run_id_value = getattr(args, "run_id", None)
-    if isinstance(run_id_value, str):
-        run_id_value = run_id_value.strip() or None
-    elif run_id_value in (argparse.SUPPRESS,):
-        run_id_value = None
-    if run_id_value is not None:
-        args.run_id = run_id_value
-        log_cfg.run_id = run_id_value
-
     if not hasattr(args, "invocation"):
         args.invocation = resolve_invocation(parser.prog, argv)
+
+    ensure_run_id(args, parser, log_cfg)
 
     return run_cli_command(
         args=args,
