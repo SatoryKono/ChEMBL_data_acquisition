@@ -202,7 +202,9 @@ def resolve_pubchem_record(
                     continue
                 if key not in log_fields:
                     log_fields[key] = value
-            logger.warning("pubchem_unavailable", **log_fields)
+            cooldown_remaining = exc.details.get("cooldown_remaining")
+            log_level = "INFO" if cooldown_remaining is not None else "WARNING"
+            logger.log(log_level, "pubchem_unavailable", **log_fields)
             resolution = PubChemResolution(
                 cid=None,
                 source=None,

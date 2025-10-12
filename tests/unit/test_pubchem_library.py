@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from library.clients import pubchem
@@ -48,4 +50,48 @@ def test_resolve_pubchem_record__service_unavailable_stops_resolution(
     assert resolution_cache[resolution_key] == resolution
     assert any(
         record.message.startswith("pubchem_unavailable") for record in caplog.records
+    )
+
+
+@pytest.mark.unit
+def test_resolve_pubchem_record__service_unavailable_cooldown_logs_info(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    cfg = PubChemCfg()
+    cfg.resolve_order = ("smiles",)
+
+    identifiers = {"canonical_smiles": "CCO"}
+
+    details = {
+        "status": 503,
+        "cooldown_remaining": 12.5,
+        "cooldown_started_at": 100.0,
+        "cooldown_until": 112.5,
+        "retry_after": 30.0,
+        "retry_after_source": "header",
+        "cache": True,
+    }
+
+    def fail_with_cooldown(value: str, cfg_arg: PubChemCfg) -> str | None:
+        raise pubchem.PubChemServiceUnavailable("server_error", details)
+
+    monkeypatch.setattr(pubchem_library, "get_cid_from_smiles", fail_with_cooldown)
+
+    caplog.set_level("INFO", logger="chembl")
+
+    resolution = pubchem_library.resolve_pubchem_record(identifiers, cfg)
+
+    assert resolution.cid is None
+    assert resolution.temporary_failure is True
+    assert resolution.status == 503
+    assert any(
+        record.levelno == logging.INFO
+        and record.message.startswith("pubchem_unavailable")
+        for record in caplog.records
+    )
+    assert not any(
+        record.levelno >= logging.WARNING
+        and record.message.startswith("pubchem_unavailable")
+        for record in caplog.records
     )
