@@ -12,9 +12,12 @@ diving into the specialised references.
   metadata.
 - **Unified CLI layer** that shares common flags across scripts and provides
   namespaced overrides for complex scenarios.
-- **Configurable orchestration** via `scripts/get_data.py`, which resolves paths,
-  configuration files, logging and retry policies once and executes the full ETL
-  chain in a reproducible fashion.
+- **Configurable orchestration** via the `get-data` console script
+  (`library.cli.entrypoints:get_data_main`). It resolves paths, configuration
+  files, logging and retry policies once and executes the full ETL chain in a
+  reproducible fashion. The compatibility wrapper `python scripts/get_data.py`
+  remains for legacy automation but only forwards the shared stage flags and
+  omits the advanced orchestrator overrides.
 - **Quality controls** including Pandera schema validation, deterministic CSV
   ordering, metadata sidecars, hash comparison helpers and table-quality
   profiling.

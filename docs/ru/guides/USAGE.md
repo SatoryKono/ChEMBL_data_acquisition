@@ -91,7 +91,7 @@ get-data --base-path /data/chembl \
 всему плану.
 
 ```bash
-python scripts/get_data.py \
+get-data \
   --base-path /data/chembl \
   --input-dir input --output-dir exports \
   --config /data/chembl/config.yaml \
@@ -104,7 +104,7 @@ python scripts/get_data.py \
 данные PubMed, сохранив настройки лимитов и директорий:
 
 ```bash
-python scripts/get_data.py \
+get-data \
   --base-path /data/chembl \
   --input-dir input --output-dir exports \
   --config /data/chembl/config.yaml \
@@ -114,7 +114,8 @@ python scripts/get_data.py \
 
 Если нужно переименовать результат (например, чтобы отличать `chembl` и
 `pubmed`-варианты), добавьте `--override-output-stem document=document_pubmed` —
-этот флаг воздействует только на выбранный шаг и не требует правок реестра.
+флаг доступен только в `get-data`, воздействует на выбранный шаг и не требует
+правок реестра.
 
 ## Пайплайн документов (`python scripts/get_document_data.py`)
 

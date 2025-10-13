@@ -21,12 +21,16 @@ flowchart LR
     style F fill:#dfeaff,stroke:#1e3a8a,stroke-width:2px
 ```
 
-Каждый пайплайн идемпотентен и может запускаться независимо. Оркестратор
-[`get-data`](./scripts/get_data.py) использует единую конфигурацию и настройки
-логирования, чтобы выполнить цепочку («документы → таргеты → ассайи → тестовые
-объекты → активности») автоматически и воспроизводимо. Когда нужны связи по
-тканям, `get_tissue_data` запускают отдельно, чтобы обновить справочные таблицы
-перед запуском пайплайна активностей.
+Каждый пайплайн идемпотентен и может запускаться независимо. Консольная команда
+`get-data` (entry point `library.cli.entrypoints:get_data_main`) использует
+единую конфигурацию и настройки логирования, чтобы выполнить цепочку
+«документы → таргеты → ассайи → тестовые объекты → активности» автоматически и
+воспроизводимо. Совместимая обёртка `python scripts/get_data.py` сохранена для
+автоматизации, которая полагается на исторический путь, но она прокидывает
+только общие флаги этапов (например, `--limit`, `--force`, `--skip-existing`,
+`--dry-run`) и не понимает оркестратор-специфичные переопределения. Когда нужны
+связи по тканям, `get_tissue_data` запускают отдельно, чтобы обновить
+справочные таблицы перед запуском пайплайна активностей.
 
 ## Структура репозитория
 
@@ -116,14 +120,15 @@ pre-commit run --all-files
 Изучите флаги оркестратора и отдельных пайплайнов:
 
 ```bash
-python scripts/get_data.py --help
+get-data --help
+python scripts/get_data.py --help  # обёртка совместимости (только общие флаги)
 python scripts/get_document_data.py --help
 ```
 
 Полный прогон на образцах идентификаторов с выводом в `./output`:
 
 ```bash
-python scripts/get_data.py \
+get-data \
   --base-path . \
   --input-dir data/input \
   --output-dir output \
@@ -193,7 +198,7 @@ bootstrap-хелперы. По умолчанию каждая команда п
 
 | Команда | Пример запуска | Особенности |
 |---------|----------------|-------------|
-| Оркестратор | `python scripts/get_data.py --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --dry-run` | Запускает всю цепочку один раз, прокидывая `--limit`, `--force`, `--skip-existing` и `--dry-run` на отдельные этапы. Дополнительно поддерживает `--pipeline-registry` для загрузки альтернативных определений шагов и `--override-{input,output-stem,subcommand}` для точечных переопределений. |
+| Оркестратор | `get-data --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --dry-run` | Запускает всю цепочку один раз, сохраняет манифесты прогонов и понимает оркестратор-специфичные флаги (`--pipeline-registry`, `--override-{input,output-stem,subcommand}`). Обёртка `python scripts/get_data.py` прокидывает только общие флаги этапов (`--limit`, `--force`, `--skip-existing`, `--dry-run`). |
 | Document | `python scripts/get_document_data.py --mode all --input data/input/document.csv --final-out output/documents.csv --fallback-doi-enabled --fallback-doi-path data/input/fallback.csv --openalex-rps 2` | Поддерживает режимы `chembl`, `pubmed`, `all`, настройку размера батчей и CSV с резервными DOI. |
 | Target | `python scripts/get_target_data.py all --input data/input/target.csv --final-out output/targets.csv --chembl-chunk-size 10 --uniprot-data-dir cache/uniprot --raw-out output/targets_raw.parquet --raw-format parquet` | Подкоманды (`uniprot`, `chembl`, `iuphar`, `all`) принимают префиксные оверрайды и позволяют сохранять «сырые» выгрузки. |
 | Assay | `python scripts/get_assay_data.py --input data/input/assay.csv --final-out output/assay.csv --chunk-size 25 --timeout 45` | Требует словари assay, taxonomy и target в `config/dictionary` для обогащения полей `assay_group`, `assay_strain`, `year` и `accession` перед нормализацией; общие флаги плюс настройка размера пачки и таймаута запросов. |

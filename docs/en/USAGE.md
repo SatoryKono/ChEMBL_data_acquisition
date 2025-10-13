@@ -2,7 +2,11 @@
 
 All command line entry points are available through `python scripts/<name>.py`
 or via the console scripts installed from `pyproject.toml` (`get-data`,
-`get-document-data`, `get-target-data`, etc.).
+`get-document-data`, `get-target-data`, etc.). The `get-data` console command is
+the authoritative orchestrator entry point. The legacy wrapper
+`python scripts/get_data.py` remains for backwards compatibility but only
+forwards the shared stage flags described below and does not understand the
+orchestrator-specific overrides.
 
 ## Common conventions
 
@@ -46,7 +50,7 @@ repeat the sweep or perform a dry run.
 Run the full sequence of pipelines with shared configuration:
 
 ```bash
-python scripts/get_data.py \
+get-data \
   --base-path /data/chembl \
   --input-dir inbound \
   --output-dir outbound \
@@ -54,6 +58,10 @@ python scripts/get_data.py \
   --date 20250228 \
   --log-level INFO
 ```
+
+> ℹ️ `python scripts/get_data.py` forwards the same baseline flags to individual
+> pipelines but cannot emit manifests or parse the advanced orchestrator options
+> described later in this section.
 
 Important flags:
 
@@ -75,13 +83,13 @@ Important flags:
 | `--print-config` | Emit the resolved configuration and exit. | Capture canonical settings for reviews. |
 | `--run-id` | Provide a deterministic identifier for logs and manifests. | Correlate orchestrator runs with external schedulers. |
 
-These toggles are handled by `_parse_args` and `PipelineRunConfig`, so they maintain the canonical registry while adjusting runtime behaviour.【F:library/cli/commands/get_data.py†L949-L1108】
+These toggles are handled by `_parse_args` and `PipelineRunConfig`, so they maintain the canonical registry while adjusting runtime behaviour.【F:library/cli/commands/get_data.py†L949-L1108】 The console command also writes run manifests summarising every step, whereas the compatibility wrapper omits manifest emission.
 
 PubChem controls follow a strict priority chain: the orchestrator honours `--disable-pubchem` first, applies `--force-pubchem` next when present, and otherwise relies on `sources.pubchem.enable` from the configuration file.【F:library/cli/commands/get_data.py†L1060-L1108】【F:library/cli/commands/get_data.py†L1427-L1471】
 
 ### Advanced overrides
 
-Use advanced overrides when you must reshape the plan (partial reruns, bespoke integration tests) rather than for day-to-day execution:
+Use advanced overrides when you must reshape the plan (partial reruns, bespoke integration tests) rather than for day-to-day execution. These options are available exclusively via the `get-data` console script — the compatibility wrapper does not parse them:
 
 | Option | Use when… |
 |--------|-----------|

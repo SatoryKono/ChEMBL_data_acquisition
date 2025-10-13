@@ -9,7 +9,7 @@ Use `--base-path` with date-stamped subdirectories to isolate runs:
 
 ```bash
 BASE=/data/releases/chembl-35
-python scripts/get_data.py \
+get-data \
   --base-path "$BASE" \
   --input-dir inbound/2025-02-01 \
   --output-dir outbound/2025-02-01 \
@@ -88,10 +88,10 @@ pipelines:
     output: audit_report
 ```
 
-Invoke the orchestrator with targeted overrides:
+Invoke the orchestrator with targeted overrides (available only via the `get-data` console command):
 
 ```bash
-python scripts/get_data.py \
+get-data \
   --base-path /data/chembl \
   --pipeline-registry config/custom_registry.yaml \
   --override-input document=document_snapshot.csv \

@@ -78,8 +78,9 @@ Key schema definitions are enforced by Pandera models:
 
 ## 4. Extraction workflow
 
-### 4.1 Orchestrator `scripts/get_data.py`
+### 4.1 Orchestrator `get-data` (console script)
 
+- Invoked via the `get-data` console command (`library.cli.entrypoints:get_data_main`). The compatibility wrapper `python scripts/get_data.py` remains available for automation but only forwards the shared stage flags and omits manifest emission and advanced overrides.
 - Loads the default registry (`library/pipelines/registry.load_pipeline_registry`) with the sequence document → target → assay → testitem → activity.【F:library/pipelines/registry.py†L80-L128】
 - Baseline invocation flags keep the canonical plan intact while letting operators tune paths, logging and rerun behaviour:
 
@@ -98,8 +99,8 @@ Key schema definitions are enforced by Pandera models:
   | `--print-config` | Emit the resolved configuration and exit. | Capture canonical settings for audit trails. |
   | `--run-id` | Supply a deterministic identifier instead of the computed hash. | Correlate orchestrator logs with external schedulers. |
 
-  These switches are parsed by `_parse_args` and normalised in `PipelineRunConfig`, ensuring the canonical step order and validation rules remain enforced.【F:library/cli/commands/get_data.py†L949-L1108】
-- Advanced override knobs reshape the execution graph and should be reserved for targeted reruns or bespoke registries:
+  These switches are parsed by `_parse_args` and normalised in `PipelineRunConfig`, ensuring the canonical step order and validation rules remain enforced.【F:library/cli/commands/get_data.py†L949-L1108】 The manifest summarising each run is written only when invoking the console command.
+- Advanced override knobs reshape the execution graph and should be reserved for targeted reruns or bespoke registries. They are available exclusively on the console command:
 
   | Option | Use when… |
   |--------|-----------|
