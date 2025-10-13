@@ -132,7 +132,12 @@ EMPTY_COLUMNS = [
 def _drop_empty_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
     """Remove known empty columns from the activity export frame."""
 
-    columns_to_drop = [col for col in EMPTY_COLUMNS if col in frame.columns]
+    columns_to_drop: list[str] = []
+    for column in EMPTY_COLUMNS:
+        if column not in frame.columns:
+            continue
+        if frame[column].isna().all():
+            columns_to_drop.append(column)
     if not columns_to_drop:
         return frame
 
