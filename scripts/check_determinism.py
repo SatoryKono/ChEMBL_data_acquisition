@@ -226,30 +226,37 @@ def main(argv: list[str] | None = None) -> int:
             _report_process_failure("second run", second_run)
             return 1
 
+        if args.dry_run:
+            unexpected_outputs = [path for path in (first, second) if path.exists()]
+            if unexpected_outputs:
+                print("Dry-run output check: unexpected files produced")
+                for output in unexpected_outputs:
+                    print(f"  produced: {output}")
+                print(
+                    "Dry-run mode must not create output files; inspect the pipeline for"
+                    " unintended side effects."
+                )
+                return 1
+
+            first_logs_hash = _hash_process_output(first_run)
+            second_logs_hash = _hash_process_output(second_run)
+
+            if first_logs_hash != second_logs_hash:
+                print("Dry-run log hash check: mismatch")
+                print(f"  first stdout/stderr SHA256:  {first_logs_hash}")
+                print(f"  second stdout/stderr SHA256: {second_logs_hash}")
+                print(
+                    "Dry-run outputs diverged; inspect the captured logs for"
+                    " non-deterministic behaviour."
+                )
+                return 1
+
+            print("Dry-run log hash check: matched")
+            print(f"stdout/stderr SHA256: {first_logs_hash}")
+            print("Deterministic dry-run output confirmed")
+            return 0
+
         if not first.exists() or not second.exists():
-            if args.dry_run:
-                first_logs_hash = _hash_process_output(first_run)
-                second_logs_hash = _hash_process_output(second_run)
-
-                if first_logs_hash != second_logs_hash:
-                    print("Dry-run log hash check: mismatch")
-                    print(
-                        f"  first stdout/stderr SHA256:  {first_logs_hash}"
-                    )
-                    print(
-                        f"  second stdout/stderr SHA256: {second_logs_hash}"
-                    )
-                    print(
-                        "Dry-run outputs diverged; inspect the captured logs for"
-                        " non-deterministic behaviour."
-                    )
-                    return 1
-
-                print("Dry-run log hash check: matched")
-                print(f"stdout/stderr SHA256: {first_logs_hash}")
-                print("Deterministic dry-run output confirmed")
-                return 0
-
             sys.stderr.write(
                 "Determinism check failed: the pipeline exited without writing output files.\n"
             )

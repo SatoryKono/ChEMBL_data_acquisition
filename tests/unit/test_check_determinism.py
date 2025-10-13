@@ -266,12 +266,12 @@ def test_main__dry_run_without_outputs_compares_logs(
         assert not directory.exists()
 
 
-def test_main__dry_run_with_outputs_succeeds(
+def test_main__dry_run_with_outputs_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Dry-run mode succeeds when the pipeline still writes outputs."""
+    """Dry-run mode fails when the pipeline still writes outputs."""
 
     input_csv = tmp_path / "activity.csv"
     input_csv.write_text("activity_chembl_id\nCHEMBL1\n", encoding="utf-8")
@@ -305,11 +305,11 @@ def test_main__dry_run_with_outputs_succeeds(
         ["--limit", "2", "--input", str(input_csv), "--dry-run"]
     )
 
-    assert exit_code == 0
+    assert exit_code == 1
 
     captured = capsys.readouterr()
-    assert "Deterministic output confirmed" in captured.out
-    assert "Metadata hash check: matched" in captured.out
+    assert "Dry-run output check: unexpected files produced" in captured.out
+    assert "Deterministic output confirmed" not in captured.out
     assert captured.err == ""
 
     assert len(runs) == 2

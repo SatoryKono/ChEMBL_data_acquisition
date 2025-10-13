@@ -222,9 +222,11 @@ Pipeline promotions must follow a strict determinism check list:
 4. Compare the resulting files (the helper computes SHA256 digests for CSVs and
    `.meta.yaml` sidecars). Any mismatch indicates a determinism regression.
 5. In read-only environments rely on
-   `python scripts/check_determinism.py --dry-run`. The helper hashes the
-   combined stdout/stderr logs from two consecutive runs and prints
-   `Dry-run log hash check: matched` when the execution plan is deterministic.
+   `python scripts/check_determinism.py --dry-run`. The helper first asserts
+   that neither run wrote CSV artefacts; if any appear it reports a failure.
+   Otherwise it hashes the combined stdout/stderr logs from two consecutive
+   runs and prints `Dry-run log hash check: matched` when the execution plan is
+   deterministic.
 
 The log contract above ensures both executions append to the same
 `<program>_<YYYYMMDD>.log` file, making it straightforward to diff the emitted
