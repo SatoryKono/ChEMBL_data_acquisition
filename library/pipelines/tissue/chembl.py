@@ -12,6 +12,8 @@ from ...common.log import logger
 from ...common.pandas_utils import json_normalize_pyarrow
 from ...config import ApiCfg
 
+MAX_TISSUE_CHUNK_SIZE = 1000
+
 TISSUE_BASE_COLUMNS: list[str] = [
     "tissue_chembl_id",
     "pref_name",
@@ -58,7 +60,19 @@ def get_tissues(
     base = f"{cfg.chembl_base.rstrip('/')}/tissue.json?format=json"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
 
-    for chunk in _chunked(valid, max(1, chunk_size)):
+    effective_chunk_size = max(1, min(int(chunk_size), MAX_TISSUE_CHUNK_SIZE))
+    if effective_chunk_size != chunk_size:
+        logger.debug(
+            "tissue_chunk_clamped",
+            extra={
+                "requested_chunk_size": chunk_size,
+                "effective_chunk_size": effective_chunk_size,
+                "limit": MAX_TISSUE_CHUNK_SIZE,
+                "stage": "chunk_prepare",
+            },
+        )
+
+    for chunk in _chunked(valid, effective_chunk_size):
         chunk_key = ",".join(chunk)
         logger.info(
             "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}

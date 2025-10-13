@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from unittest.mock import create_autospec
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 import requests
 
+from library.clients import ChemblClient
 from library.config import ApiCfg, UniprotMappingCfg
 from library.pipelines.target.chembl_target import (
     TARGET_INCLUDE_PARAMS,
+    get_target,
+    get_target_payload,
     iter_target_batches,
 )
 
@@ -180,3 +185,50 @@ def test_iter_target_batches__splits_chunk_on_connection_error(
         record.getMessage().startswith("chembl_request_split")
         for record in caplog.records
     )
+
+
+@pytest.mark.unit
+def test_get_target__requests_json_format() -> None:
+    """Single target lookups always request JSON payloads with include fields."""
+
+    cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=8.0)
+    mapping_cfg = UniprotMappingCfg()
+    client = create_autospec(ChemblClient, instance=True)
+    client.request_json.return_value = {}
+
+    get_target(
+        "CHEMBL25",
+        cfg=cfg,
+        client=client,
+        mapping_cfg=mapping_cfg,
+        timeout=3.5,
+    )
+
+    assert client.request_json.call_count == 1
+    url = client.request_json.call_args[0][0]
+    query = parse_qs(urlsplit(url).query)
+    assert query.get("format") == ["json"]
+    assert query.get("include") == [TARGET_INCLUDE_PARAMS]
+    assert client.request_json.call_args[1]["timeout"] == 3.5
+
+
+@pytest.mark.unit
+def test_get_target_payload__requests_json_format() -> None:
+    """Raw payload helper mirrors the JSON include parameters."""
+
+    cfg = ApiCfg(chembl_base="https://example.test/api", timeout_read=11.0)
+    client = create_autospec(ChemblClient, instance=True)
+    client.request_json.return_value = {}
+
+    get_target_payload(
+        "CHEMBL30",
+        cfg=cfg,
+        client=client,
+        timeout=None,
+    )
+
+    url = client.request_json.call_args[0][0]
+    query = parse_qs(urlsplit(url).query)
+    assert query.get("format") == ["json"]
+    assert query.get("include") == [TARGET_INCLUDE_PARAMS]
+    assert client.request_json.call_args[1]["timeout"] == cfg.timeout_read

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import deque
 from typing import Any
 from unittest.mock import create_autospec
+from urllib.parse import parse_qs, urlsplit
 
 import pandas as pd
 import pytest
@@ -170,3 +171,31 @@ def test_get_tissues__skips_invalid_identifiers() -> None:
     client.request_json.assert_not_called()
     assert df.empty
     assert df.columns.tolist() == TISSUE_BASE_COLUMNS
+
+
+@pytest.mark.unit
+def test_get_tissues__caps_chunk_size_to_service_limit() -> None:
+    """Chunk size above API limits is clamped to the maximum of 1000."""
+
+    cfg = ApiCfg(chembl_base="https://example.test/base", timeout_read=5.0)
+    client = create_autospec(ChemblClient, instance=True)
+    client.request_json.return_value = {"tissues": [], "page_meta": {}}
+
+    identifiers = [f"TIS_{index}" for index in range(1050)]
+    df = get_tissues(
+        identifiers,
+        cfg=cfg,
+        client=client,
+        chunk_size=5000,
+        timeout=None,
+    )
+
+    assert df.empty
+    assert df.columns.tolist() == TISSUE_BASE_COLUMNS
+
+    urls = [call.args[0] for call in client.request_json.call_args_list]
+    assert len(urls) == 2
+    first_limit = parse_qs(urlsplit(urls[0]).query).get("limit", [])
+    second_limit = parse_qs(urlsplit(urls[1]).query).get("limit", [])
+    assert first_limit == ["1000"]
+    assert second_limit == ["50"]

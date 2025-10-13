@@ -12,6 +12,8 @@ from ...common.log import logger
 from ...common.pandas_utils import json_normalize_pyarrow
 from ...config import ApiCfg
 
+MAX_CELLLINE_CHUNK_SIZE = 1000
+
 CELL_LINE_BASE_COLUMNS: list[str] = [
     "cell_chembl_id",
     "cell_name",
@@ -101,7 +103,19 @@ def get_cell_lines(
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
 
     records: list[pd.DataFrame] = []
-    for chunk in _chunked(valid, max(1, chunk_size)):
+    effective_chunk_size = max(1, min(int(chunk_size), MAX_CELLLINE_CHUNK_SIZE))
+    if effective_chunk_size != chunk_size:
+        logger.debug(
+            "cellline_chunk_clamped",
+            extra={
+                "requested_chunk_size": chunk_size,
+                "effective_chunk_size": effective_chunk_size,
+                "limit": MAX_CELLLINE_CHUNK_SIZE,
+                "stage": "chunk_prepare",
+            },
+        )
+
+    for chunk in _chunked(valid, effective_chunk_size):
         chunk_key = ",".join(chunk)
         logger.info("cellline_chunk_start", chunk_key=chunk_key)
         url = f"{base}&cell_chembl_id__in={chunk_key}&limit={len(chunk)}"
