@@ -193,7 +193,25 @@ Post-processing is driven by YAML definitions in `config/pipeline/*.yaml` and ex
 
 ---
 
-## 8. Change log
+## 8. DOCX export for external distribution
+
+The approved DOCX package is generated on demand prior to publication so the
+repository only tracks the Markdown source. Run the conversion script after
+verifying that `pandoc` is available in `PATH`:
+
+```bash
+python scripts/convert_md_to_docx.py docs/en/PROTOCOL_EN.md \
+    --output docs/ChEMBL_Data_Acquisition_Protocol_v2.1.docx \
+    --number-sections --toc --toc-depth 2
+```
+
+The helper validates the inputs, adds optional numbering/table-of-contents
+controls and produces the release artefact without committing it to Git. This
+step is part of the documentation distribution checklist captured in
+`documentation_update_report.md`. Use the same invocation with
+`docs/ru/PROTOCOL_RU.md` to generate the Russian deliverable when required.【F:scripts/convert_md_to_docx.py†L15-L128】【F:docs/documentation_update_report.md†L1-L13】
+
+## 9. Change log
 
 | Version | Date | Author | Key updates |
 |---------|------|--------|-------------|
