@@ -37,6 +37,7 @@ from .cli import (
     _extract_metadata_parameters,
     _write_primary_metadata,
     ensure_raw_index_column,
+    stream_missing_placeholder_frames,
     run_testitem_pipeline,
 )
 from .core import *  # noqa: F401,F403
@@ -62,6 +63,7 @@ __all__ = list(
             "_write_primary_metadata",
             "run_pipeline",
             "run_testitem_pipeline",
+            "stream_missing_placeholder_frames",
             "testitem_enrichment",
             "validate_testitems",
             "write_csv_deterministic",
