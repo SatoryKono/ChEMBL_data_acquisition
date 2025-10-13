@@ -16,7 +16,7 @@ ifneq ($(ENV_FILES),)
   export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' $(ENV_FILES))
 endif
 
-.PHONY: init lint test smoke test-report get-activities build release clean
+.PHONY: init lint test smoke test-report get-activities build release clean clean-artifacts clean-venv
 
 init: $(PYTHON_BIN)
 
@@ -61,10 +61,13 @@ build: $(PYTHON_BIN)
 release: build
 	$(PYTHON_BIN) -m twine check dist/*
 
-clean:
-	rm -rf $(VENV) build dist .pytest_cache
-	find . -name '.mypy_cache' -prune -exec rm -rf {} +
-	find . -type d -name '__pycache__' -prune -exec rm -rf {} +
+clean: clean-artifacts clean-venv
+
+clean-artifacts:
+	$(PYTHON) scripts/cleanup_project.py --all
+
+clean-venv:
+	rm -rf $(VENV) $(DEV_SENTINEL)
 
 .PHONY: protocol-docx
 protocol-docx: $(PYTHON_BIN)
