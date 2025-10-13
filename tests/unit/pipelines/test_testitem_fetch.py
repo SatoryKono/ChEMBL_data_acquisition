@@ -5,14 +5,7 @@ from itertools import islice
 from typing import Any
 
 import pandas as pd
-import sys
-import types
-
 import pytest
-
-_cli_utils_stub = types.ModuleType("library.cli_utils")
-_cli_utils_stub.run_pipeline = lambda *args, **kwargs: None
-sys.modules.setdefault("library.cli_utils", _cli_utils_stub)
 
 from library.config import ApiCfg, TestitemBatchRetryCfg
 from library.pipelines.testitem import cli

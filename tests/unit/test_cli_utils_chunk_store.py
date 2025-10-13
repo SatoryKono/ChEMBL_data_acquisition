@@ -21,7 +21,6 @@ def test_parquet_chunk_store__falls_back_to_pickle_when_engine_missing(monkeypat
 
     monkeypatch.setattr(importlib, "import_module", fake_import_module)
 
-    real_to_parquet = pd.DataFrame.to_parquet
     real_to_pickle = pd.DataFrame.to_pickle
     pickle_calls: list[str] = []
 
