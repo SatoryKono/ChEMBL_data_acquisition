@@ -11,6 +11,7 @@ metadata files.
 from __future__ import annotations
 
 import argparse
+import importlib
 import shlex
 import sys
 import tempfile
@@ -86,26 +87,41 @@ StatsExtraMapping = Mapping[str, object]
 
 
 class _ParquetChunkStore:
-    """Persist prepared chunks to temporary parquet files for later reuse."""
+    """Persist prepared chunks to temporary parquet files for later reuse.
 
-    __slots__ = ("_tmpdir", "_paths", "_row_count")
+    The store attempts to use pandas' parquet backends when available.  In
+    environments where optional parquet dependencies (``pyarrow`` or
+    ``fastparquet``) are missing, the implementation degrades gracefully to a
+    pickle-based format so that pipelines remain usable without additional
+    system packages.
+    """
+
+    __slots__ = ("_tmpdir", "_paths", "_row_count", "_engine", "_extension")
 
     def __init__(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory(prefix="pipeline_chunks_")
         self._paths: list[Path] = []
         self._row_count = 0
+        self._engine = _detect_parquet_engine()
+        self._extension = "parquet" if self._engine else "pkl"
 
     def append(self, frame: pd.DataFrame) -> None:
         if not isinstance(frame, pd.DataFrame):
             raise TypeError("chunk store expects pandas DataFrame inputs")
-        path = Path(self._tmpdir.name) / f"chunk_{len(self._paths):05d}.parquet"
-        frame.to_parquet(path, index=False)
+        path = Path(self._tmpdir.name) / f"chunk_{len(self._paths):05d}.{self._extension}"
+        if self._engine:
+            frame.to_parquet(path, index=False, engine=self._engine)
+        else:
+            frame.to_pickle(path)
         self._paths.append(path)
         self._row_count += len(frame)
 
     def iter_frames(self) -> Iterator[pd.DataFrame]:
         for path in self._paths:
-            yield pd.read_parquet(path)
+            if self._engine:
+                yield pd.read_parquet(path, engine=self._engine)
+            else:
+                yield pd.read_pickle(path)
 
     @property
     def row_count(self) -> int:
@@ -114,6 +130,18 @@ class _ParquetChunkStore:
     def cleanup(self) -> None:
         self._paths.clear()
         self._tmpdir.cleanup()
+
+
+def _detect_parquet_engine() -> str | None:
+    """Return the name of an available parquet engine if possible."""
+
+    for candidate in ("pyarrow", "fastparquet"):
+        try:
+            importlib.import_module(candidate)
+        except ImportError:
+            continue
+        return candidate
+    return None
 
 
 @dataclass(slots=True, frozen=True)
