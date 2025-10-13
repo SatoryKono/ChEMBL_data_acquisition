@@ -114,6 +114,14 @@ class DocumentPipeline:
 
     def __init__(self, cfg: Config | None = None) -> None:
         self.cfg = cfg or Config()
+        self.stats_extra: dict[str, Any] = {}
+        self._stats_lock = Lock()
+
+    def stats_snapshot(self) -> dict[str, Any]:
+        """Return a shallow copy of the accumulated pipeline statistics."""
+
+        with self._stats_lock:
+            return dict(self.stats_extra)
 
     @staticmethod
     def limit_iterable(
@@ -402,6 +410,19 @@ class DocumentPipeline:
 
         settings = cfg or self.cfg or Config()
 
+        with self._stats_lock:
+            self.stats_extra.clear()
+            self.stats_extra.update(
+                {
+                    "openalex_total": 0,
+                    "openalex_unique": 0,
+                    "openalex_cache_hits": 0,
+                    "crossref_total": 0,
+                    "crossref_unique": 0,
+                    "crossref_cache_hits": 0,
+                }
+            )
+
         if sleep is None:
             sleep = settings.document.pubmed.sleep
         if pubmed_cfg is None:
@@ -569,6 +590,11 @@ class DocumentPipeline:
                 yield cached
 
         thread_local_state = local()
+
+        stats_lock = Lock()
+        openalex_seen: set[str] = set()
+        crossref_seen: set[str] = set()
+        stats_counter = {"openalex_total": 0, "crossref_total": 0}
 
         def _close_thread_resources(resources: _ThreadResources) -> None:
             try:
@@ -842,6 +868,31 @@ class DocumentPipeline:
                         for future in as_completed(future_to_key):
                             key = future_to_key[future]
                             crossref_by_key[key] = future.result()
+
+                with stats_lock:
+                    stats_counter["openalex_total"] += openalex_total
+                    stats_counter["crossref_total"] += crossref_total
+                    if openalex_jobs:
+                        openalex_seen.update(openalex_jobs)
+                    if crossref_jobs:
+                        crossref_seen.update(crossref_jobs)
+                    openalex_unique = len(openalex_seen)
+                    crossref_unique = len(crossref_seen)
+                    stats_snapshot = {
+                        "openalex_total": stats_counter["openalex_total"],
+                        "openalex_unique": openalex_unique,
+                        "openalex_cache_hits": max(
+                            stats_counter["openalex_total"] - openalex_unique, 0
+                        ),
+                        "crossref_total": stats_counter["crossref_total"],
+                        "crossref_unique": crossref_unique,
+                        "crossref_cache_hits": max(
+                            stats_counter["crossref_total"] - crossref_unique, 0
+                        ),
+                    }
+
+                with self._stats_lock:
+                    self.stats_extra.update(stats_snapshot)
 
                 for doi, indexes in crossref_lookup.items():
                     result = crossref_by_key.get(doi, {})

@@ -100,6 +100,7 @@ def save_metadata(
     artifacts: Sequence[Path] | None = None,
     sources: Sequence[str] | None = None,
     run_context: RunContext | None = None,
+    stats_extra: Mapping[str, Any] | None = None,
 ) -> Path:
     """Persist pipeline metadata for ``table_name`` outputs."""
 
@@ -119,6 +120,7 @@ def save_metadata(
         csv_path=csv_stub_path,
         command="",
         generated_at=generated_at,
+        stats=dict(stats_extra) if stats_extra else None,
         extra_metadata={
             "table": table_name,
             "parameters": parameters,
