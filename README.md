@@ -377,6 +377,22 @@ languages:
   (distribution artefact, not tracked in git). Sources are
   [`docs/en/PROTOCOL_EN.md`](./docs/en/PROTOCOL_EN.md) and the synced Russian
   variant [`docs/ru/PROTOCOL_RU.md`](./docs/ru/PROTOCOL_RU.md).
+  To rebuild the DOCX locally:
+  1. Install [Pandoc](https://pandoc.org/installing.html) so it is available on
+     `PATH`.
+  2. Run the helper script from the repository root:
+
+     ```bash
+     python scripts/convert_md_to_docx.py \
+       docs/en/PROTOCOL_EN.md \
+       docs/ru/PROTOCOL_RU.md \
+       --output docs/ChEMBL_Data_Acquisition_Protocol_v2.1.docx \
+       --toc --number-sections \
+       --resource-path docs/en docs/ru
+     ```
+
+  Adjust the arguments if you need a different output path or additional Pandoc
+  filters.
 - Overview and table of contents: [`docs/en/README.md`](./docs/en/README.md),
   [`docs/ru/README.md`](./docs/ru/README.md)
 - Usage and CLI reference: [`docs/en/USAGE.md`](./docs/en/USAGE.md),

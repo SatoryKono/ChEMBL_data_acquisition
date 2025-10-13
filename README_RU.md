@@ -286,6 +286,22 @@ bootstrap-хелперы. По умолчанию каждая команда п
   не хранится в git). Исходники: [`docs/ru/PROTOCOL_RU.md`](./docs/ru/PROTOCOL_RU.md)
   и синхронизированная английская версия
   [`docs/en/PROTOCOL_EN.md`](./docs/en/PROTOCOL_EN.md).
+  Чтобы пересобрать DOCX локально:
+  1. Установите [Pandoc](https://pandoc.org/installing.html) и убедитесь, что он
+     доступен в `PATH`.
+  2. Выполните скрипт из корня репозитория:
+
+     ```bash
+     python scripts/convert_md_to_docx.py \
+       docs/en/PROTOCOL_EN.md \
+       docs/ru/PROTOCOL_RU.md \
+       --output docs/ChEMBL_Data_Acquisition_Protocol_v2.1.docx \
+       --toc --number-sections \
+       --resource-path docs/en docs/ru
+     ```
+
+  Параметры можно скорректировать при необходимости другого пути или фильтров
+  Pandoc.
 - Обзор и оглавление: [`docs/ru/README.md`](./docs/ru/README.md),
   [`docs/en/README.md`](./docs/en/README.md)
 - Использование и CLI: [`docs/ru/USAGE.md`](./docs/ru/USAGE.md),
