@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import shlex
 import sys
+import tempfile
 import traceback
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -82,6 +83,37 @@ class StatsExtra(TypedDict, total=False):
 
 
 StatsExtraMapping = Mapping[str, object]
+
+
+class _ParquetChunkStore:
+    """Persist prepared chunks to temporary parquet files for later reuse."""
+
+    __slots__ = ("_tmpdir", "_paths", "_row_count")
+
+    def __init__(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory(prefix="pipeline_chunks_")
+        self._paths: list[Path] = []
+        self._row_count = 0
+
+    def append(self, frame: pd.DataFrame) -> None:
+        if not isinstance(frame, pd.DataFrame):
+            raise TypeError("chunk store expects pandas DataFrame inputs")
+        path = Path(self._tmpdir.name) / f"chunk_{len(self._paths):05d}.parquet"
+        frame.to_parquet(path, index=False)
+        self._paths.append(path)
+        self._row_count += len(frame)
+
+    def iter_frames(self) -> Iterator[pd.DataFrame]:
+        for path in self._paths:
+            yield pd.read_parquet(path)
+
+    @property
+    def row_count(self) -> int:
+        return self._row_count
+
+    def cleanup(self) -> None:
+        self._paths.clear()
+        self._tmpdir.cleanup()
 
 
 @dataclass(slots=True, frozen=True)
@@ -616,8 +648,8 @@ def run_pipeline(
     profiler: TableQualityProfiler | None = (
         TableQualityProfiler() if standard_outputs_enabled else None
     )
-    collected_chunks: list[pd.DataFrame] | None = (
-        [] if standard_outputs_enabled else None
+    chunk_store: _ParquetChunkStore | None = (
+        _ParquetChunkStore() if standard_outputs_enabled else None
     )
     standard_artifacts: StandardOutputArtifacts | None = None
     dataset_path: Path | None = None
@@ -669,6 +701,10 @@ def run_pipeline(
     def _build_result(
         code: int, *, dataset: Path | None = None
     ) -> PipelineExecutionResult:
+        nonlocal chunk_store
+        if chunk_store is not None:
+            chunk_store.cleanup()
+            chunk_store = None
         failure_artifact = failure_path if emit_legacy_artifacts else None
         metadata_artifact = meta_path if emit_legacy_artifacts else None
         return PipelineExecutionResult(
@@ -951,8 +987,8 @@ def run_pipeline(
         prepared_first = _prepare_chunk(first_chunk)
         if profiler is not None:
             profiler.consume(prepared_first)
-        if collected_chunks is not None:
-            collected_chunks.append(prepared_first)
+        if chunk_store is not None:
+            chunk_store.append(prepared_first)
 
     def _iter_chunks() -> Iterator[pd.DataFrame]:
         if prepared_first is not None:
@@ -961,8 +997,8 @@ def run_pipeline(
             prepared = _prepare_chunk(chunk)
             if profiler is not None:
                 profiler.consume(prepared)
-            if collected_chunks is not None:
-                collected_chunks.append(prepared)
+            if chunk_store is not None:
+                chunk_store.append(prepared)
             yield prepared
 
     csv_path: Path | None = None
@@ -1014,9 +1050,10 @@ def run_pipeline(
 
     # Standard outputs logic
     if standard_outputs_enabled and exit_code == 0:
-        frames_to_merge = list(collected_chunks or [])
-        if frames_to_merge:
-            dataset_frame = pd.concat(frames_to_merge, ignore_index=True)
+        if chunk_store is not None and chunk_store.row_count:
+            dataset_frame = pd.concat(
+                chunk_store.iter_frames(), ignore_index=True
+            )
         else:
             empty_columns = list(col_order) if col_order else sorted(all_columns)
             dataset_frame = pd.DataFrame(columns=empty_columns)
@@ -1169,6 +1206,9 @@ def run_pipeline(
     if exit_code == 0:
         write_path = dataset_path or csv_path or output_path
         use_logger.info("write_done", rows=metrics.rows_kept, path=str(write_path))
+    if chunk_store is not None:
+        chunk_store.cleanup()
+        chunk_store = None
     return RunPipelineResult(exit_code, dataset_path, standard_artifacts)
 
 

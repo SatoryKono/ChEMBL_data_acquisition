@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import warnings
+from array import array
 from collections import Counter
 from collections.abc import Iterable, Sequence, Sized
 from pathlib import Path
@@ -296,12 +297,12 @@ class _ColumnAccumulator:
         self.bool_like_matches = 0
         self.unique_hashes: set[int] = set()
         self.top_counter: Counter[str] = Counter()
-        self.numeric_values: list[float] = []
-        self.numeric_full: list[float] = []
+        self.numeric_values = array("d")
+        self.numeric_full = array("d")
         self.numeric_valid = 0
         self.date_values: list[pd.Timestamp] = []
         self.date_valid = 0
-        self.text_lengths: list[int] = []
+        self.text_lengths = array("Q")
         self.numeric_cov = 0.0
         if prefilled:
             self.pad(prefilled)
@@ -312,7 +313,7 @@ class _ColumnAccumulator:
         if count <= 0:
             return
         self.total += count
-        self.numeric_full.extend([np.nan] * count)
+        self.numeric_full.extend([float("nan")] * count)
 
     def process(self, series: pd.Series) -> None:
         """Update statistics based on ``series`` values."""
@@ -346,7 +347,7 @@ class _ColumnAccumulator:
         if not non_na.empty:
             trimmed = non_na.map(lambda x: str(x).strip())
             self.top_counter.update(trimmed)
-            self.text_lengths.extend(trimmed.map(len).tolist())
+            self.text_lengths.extend(int(length) for length in trimmed.map(len))
             try:
                 hashes = pd.util.hash_pandas_object(non_na, index=False)
             except TypeError:
@@ -356,12 +357,14 @@ class _ColumnAccumulator:
             self.unique_hashes.update(hashes.astype(np.uint64).tolist())
 
         numeric = pd.to_numeric(series, errors="coerce").astype(float)
-        self.numeric_full.extend(numeric.tolist())
+        self.numeric_full.extend(numeric.to_numpy(dtype=float, copy=True))
         numeric_valid = numeric.dropna()
         valid_len = len(numeric_valid)
         if valid_len:
             self.numeric_valid += valid_len
-            self.numeric_values.extend(numeric_valid.tolist())
+            self.numeric_values.extend(
+                numeric_valid.to_numpy(dtype=float, copy=True)
+            )
 
         def _normalise(val: object) -> object:
             if isinstance(val, str) and re.fullmatch(r"\d{4}", val.strip()):
