@@ -232,7 +232,7 @@ def test_run_pipeline__quality_hook_uses_canonical_dataset(
 
 
 @pytest.mark.unit
-def test_run_pipeline__passes_resolved_key_columns_to_standard_outputs(
+def test_run_pipeline__passes_definition_key_columns_to_standard_outputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     frame = pd.DataFrame({"identifier": ["a", "b"]})
@@ -310,7 +310,52 @@ def test_run_pipeline__passes_resolved_key_columns_to_standard_outputs(
         emit_legacy_artifacts=False,
     )
 
-    assert captured_key_columns == ["identifier"]
+    assert captured_key_columns == ["identifier", "value"]
+
+
+@pytest.mark.unit
+def test_run_pipeline__raises_without_key_columns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    frame = pd.DataFrame({"identifier": ["row-1"]})
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [frame]
+
+    def writer(*_: object, **__: object) -> Path:
+        raise AssertionError("legacy writer must not be invoked")
+
+    monkeypatch.setattr(
+        "library.cli_utils.build_reports_from_profiler",
+        lambda *_args, **_kwargs: (pd.DataFrame(), pd.DataFrame()),
+    )
+
+    definition = PipelineDefinition(
+        schema=None,
+        schema_name="TestSchema",
+        writer=writer,
+        validators=(),
+        metadata_hooks=(),
+        command="test",
+        config_snapshot={},
+        inputs={},
+        key_columns=(),
+    )
+
+    output_path = tmp_path / "output.documents_20240101.csv"
+    failure_path = tmp_path / "failures.csv"
+    cfg = _make_cfg(tmp_path)
+
+    with pytest.raises(ValueError, match="key_columns must not be empty"):
+        run_pipeline(
+            definition=definition,
+            fetcher=fetcher,
+            output_path=output_path,
+            failure_path=failure_path,
+            cfg=cfg,
+            emit_standard_outputs=True,
+            emit_legacy_artifacts=False,
+        )
 
 
 @pytest.mark.unit
