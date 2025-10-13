@@ -4,6 +4,7 @@ PYTHON ?= python3
 VENV := .venv
 PYTHON_BIN := $(VENV)/bin/python
 PIP := $(VENV)/bin/pip
+DEV_SENTINEL := $(VENV)/.dev-deps-installed
 ACTIVITY_LIMIT ?= 25
 
 ENV_FILES := $(wildcard .env .env.local)
@@ -25,12 +26,16 @@ $(PYTHON_BIN): requirements.txt pyproject.toml
 	$(PIP) install -r requirements-lock.txt
 	$(PIP) install --no-deps -e .
 
+$(DEV_SENTINEL): $(PYTHON_BIN) requirements-dev.txt
+	$(PIP) install -r requirements-dev.txt
+	touch $(DEV_SENTINEL)
+
 lint: $(PYTHON_BIN)
 	$(VENV)/bin/ruff check .
 	$(VENV)/bin/black --check .
 	$(VENV)/bin/mypy
 
-test: $(PYTHON_BIN)
+test: $(DEV_SENTINEL)
 	$(PYTHON_BIN) scripts/run_tests.py
 
 smoke: $(PYTHON_BIN)
@@ -38,7 +43,7 @@ smoke: $(PYTHON_BIN)
         CHEMBL_DA_BASE_PATH=$(PWD)/tests/resources/pipeline_inputs \
         $(VENV)/bin/pytest -m "smoke"
 
-test-report: $(PYTHON_BIN)
+test-report: $(DEV_SENTINEL)
 	PYTHONHASHSEED=$${PYTHONHASHSEED:-0} \
 	CHEMBL_DA_BASE_PATH=$(PWD)/tests/resources/pipeline_inputs \
 	$(PYTHON_BIN) scripts/run_tests.py
