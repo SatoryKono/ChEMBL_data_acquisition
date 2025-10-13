@@ -96,6 +96,7 @@ Key schema definitions are enforced by Pandera models:
   | `--dry-run` | Resolve the execution plan without writing artefacts. | Validate configuration in CI and notebooks. |
   | `--debug`, `--keep-intermediate` | Retain intermediate artefacts for inspection; `--debug` also enables verbose diagnostics. | Investigate data issues or rerun a failing stage locally. |
   | `--disable-pubchem` | Skip PubChem enrichment during the test item stage. | Reproduce legacy behaviour or isolate upstream causes of enrichment drift. |
+  | `--force-pubchem` | Force-enable PubChem enrichment even when the YAML disables it. | Override temporary configuration toggles during investigations. |
   | `--print-config` | Emit the resolved configuration and exit. | Capture canonical settings for audit trails. |
   | `--run-id` | Supply a deterministic identifier instead of the computed hash. | Correlate orchestrator logs with external schedulers. |
 
