@@ -111,6 +111,39 @@ DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activity"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
 
+EMPTY_COLUMNS = [
+    "approx_cited_activity",
+    "compound_key",
+    "exact_cited_activity",
+    "higly_correlated_cit",
+    "multmol_assay",
+    "nstereo",
+    "original_activity_approx",
+    "original_activity_exact",
+    "review_doc",
+    "rounded_data_citation",
+    "salt_chembl_id",
+    "shuffled_cit",
+    "standard_lower_value",
+    "standard_upper_value",
+]
+
+
+def _drop_empty_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Remove known empty columns from the activity export frame."""
+
+    columns_to_drop = [col for col in EMPTY_COLUMNS if col in frame.columns]
+    if not columns_to_drop:
+        return frame
+
+    pruned = frame.drop(columns=columns_to_drop, errors="ignore")
+    logger.info(
+        "activity_empty_columns_removed",
+        removed=len(columns_to_drop),
+        columns=columns_to_drop,
+    )
+    return pruned
+
 # ---------------------------------------------------------------------------
 # Compatibility hooks
 # ---------------------------------------------------------------------------
@@ -1631,6 +1664,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             sep=cfg.io.csv_sep,
             encoding=cfg.io.csv_encoding,
         )
+        dataset_frame = _drop_empty_activity_columns(dataset_frame)
         quality_report = pd.DataFrame()
         correlation_report = pd.DataFrame()
         table_name_value, date_tag = _derive_standard_output_labels(dataset_csv)
