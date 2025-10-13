@@ -57,37 +57,13 @@ def _ensure_pytest_json_report() -> None:
 
     message_lines = [
         "The pytest-json-report plugin is required to run scripts/run_tests.py.",
-        "Install the development dependencies (make init or pip install -r requirements-dev.txt) before rerunning the command.",
+        "Install the development dependencies before rerunning the command:",
+        "  pip install -r requirements-dev.txt",
+        "or run 'make init' if you prefer the make-based workflow.",
+        "If you are working offline, ensure the dependencies are already available in your environment before retrying.",
     ]
     print("\n".join(message_lines), file=sys.stderr)
-    print("Attempting to install pytest-json-report automatically...", file=sys.stderr)
-
-    install_result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "pytest-json-report"],
-        check=False,
-    )
-    if install_result.returncode != 0:
-        print(
-            "Automatic installation of pytest-json-report failed. Please install the development dependencies and retry.",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-
-    importlib.invalidate_caches()
-
-    spec = importlib.util.find_spec(module_name)
-    if spec is None:
-        print(
-            "pytest-json-report is still unavailable after the automatic installation attempt.",
-            file=sys.stderr,
-        )
-        print(
-            "Install dev dependencies with make init or pip install -r requirements-dev.txt before running scripts/run_tests.py.",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-
-    importlib.import_module(module_name)
+    sys.exit(2)
 
 
 _ensure_pytest_json_report()
