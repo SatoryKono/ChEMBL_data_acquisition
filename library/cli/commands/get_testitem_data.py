@@ -614,6 +614,14 @@ def _build_standard_outputs_from_path(
         )
         return None
 
+    raw_index_added = pipeline.ensure_raw_index_column(dataset_frame)
+    logger.info(
+        "raw_index_column_added",
+        column=pipeline.RAW_INDEX_COLUMN,
+        rows=int(len(dataset_frame)),
+        inserted=raw_index_added,
+    )
+
     doc_quality_cfg = getattr(getattr(cfg, "system", None), "doc_quality", None)
     include_columns = getattr(doc_quality_cfg, "include_columns", None)
     exclude_columns = getattr(doc_quality_cfg, "exclude_columns", None)
