@@ -11,7 +11,7 @@ from typing import Any
 
 from dataclasses import asdict, is_dataclass
 
-import yaml
+from library.common.metadata_writer import write_meta_yaml
 
 
 logger = logging.getLogger(__name__)
@@ -90,23 +90,28 @@ def save_metadata(
     resolved_output_dir = Path(output_dir) if output_dir is not None else Path("data/output")
     resolved_output_dir.mkdir(parents=True, exist_ok=True)
 
-    meta_path = resolved_output_dir / f"output.{table_name}_{date_tag}.meta.yaml"
-
     parameters = _serialise_parameters(args)
     outputs = _resolve_outputs(table_name, date_tag, artifacts=artifacts)
 
-    meta: dict[str, Any] = {
-        "table": table_name,
-        "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-        "pipeline_version": "2.1",
-        "parameters": parameters,
-        "sources": list(sources or []),
-        "outputs": outputs,
-        "qc_summary": dict(qc_summary or {}),
-    }
+    generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+        "+00:00",
+        "Z",
+    )
 
-    with meta_path.open("w", encoding="utf-8") as buffer:
-        yaml.safe_dump(meta, buffer, sort_keys=False, allow_unicode=True)
+    csv_stub_path = resolved_output_dir / f"output.{table_name}_{date_tag}"
+
+    meta_path = write_meta_yaml(
+        csv_path=csv_stub_path,
+        command="",
+        generated_at=generated_at,
+        extra_metadata={
+            "table": table_name,
+            "parameters": parameters,
+            "sources": list(sources or []),
+            "outputs": outputs,
+            "qc_summary": dict(qc_summary or {}),
+        },
+    )
 
     logger.info("[META] Метаданные сохранены: %s", meta_path)
     return meta_path
