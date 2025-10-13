@@ -754,3 +754,33 @@ def test_get_cid_from_smiles__returns_none_on_not_found(
     monkeypatch.setattr(pubchem, "last_request_outcome", lambda: ("not_found", {}))
 
     assert pubchem.get_cid_from_smiles("CCO", cfg) is None
+
+
+def test_get_properties__falls_back_to_smiles_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = PubChemCfg()
+
+    payload = {
+        "PropertyTable": {
+            "Properties": [
+                {
+                    "CID": 2244,
+                    "MolecularFormula": "C9H8O4",
+                    "SMILES": "CC(=O)OC1=CC=CC=C1C(=O)O",
+                    "ConnectivitySMILES": "CC(=O)OC1=CC=CC=C1C(=O)O",
+                    "InChI": "InChI=1S/C9H8O4/c1-6(10)13-8-5-3-2-4-7(8)9(11)12/h2-5H,1H3,(H,11,12)",
+                    "InChIKey": "BSYNRYMUTXBXSQ-UHFFFAOYSA-N",
+                    "IUPACName": "2-acetyloxybenzoic acid",
+                }
+            ]
+        }
+    }
+
+    monkeypatch.setattr(pubchem, "make_request", lambda *_args, **_kwargs: payload)
+
+    props = pubchem.get_properties("2244", cfg)
+
+    assert props.cSMILES == "CC(=O)OC1=CC=CC=C1C(=O)O"
+    assert props.iSMILES == "CC(=O)OC1=CC=CC=C1C(=O)O"
+    assert props.IUPACName == "2-acetyloxybenzoic acid"
