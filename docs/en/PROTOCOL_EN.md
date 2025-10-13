@@ -73,8 +73,34 @@ Key schema definitions are enforced by Pandera models:
 ### 4.1 Orchestrator `scripts/get_data.py`
 
 - Loads the default registry (`library/pipelines/registry.load_pipeline_registry`) with the sequence document → target → assay → testitem → activity.【F:library/pipelines/registry.py†L80-L128】
-- Shared CLI options include `--base-path`, `--input-dir`, `--output-dir`, `--config`, `--date`, `--force`, `--skip-existing`, `--dry-run`. 【F:library/cli/commands/get_data.py†L533-L657】
-- Advanced overrides: `--pipeline-registry`, `--override-input`, `--override-output-stem`, `--override-subcommand`. 【F:library/cli/commands/get_data.py†L657-L848】
+- Baseline invocation flags keep the canonical plan intact while letting operators tune paths, logging and rerun behaviour:
+
+  | Option | Purpose | When to use |
+  |--------|---------|-------------|
+  | `--base-path`, `--input-dir`, `--output-dir` | Resolve shared input/output directories for all delegated pipelines. | Configure consistent staging areas for smoke runs, QA and production exports. |
+  | `--config` | Load an alternative YAML configuration. | Point to environment-specific credentials or dictionary bundles. |
+  | `--date` | Override the output filename prefix. | Align artefacts with a reporting cut-off or replay historical drops. |
+  | `--log-level`, `--verbose` | Control orchestrator and child pipeline logging. `--verbose` forces `DEBUG`. | Raise verbosity during investigation without editing config files. |
+  | `--limit` | Cap identifiers processed per pipeline (`0` skips execution). | Produce deterministic smoke builds. |
+  | `--force`, `--skip-existing` | Decide whether to overwrite or skip when outputs already exist. | Recover from partial runs without clearing directories manually. |
+  | `--rerun-postprocess` | Rebuild stage-aligned exports even when staging artefacts are present. | Refresh downstream tables after editing post-processing rules. |
+  | `--dry-run` | Resolve the execution plan without writing artefacts. | Validate configuration in CI and notebooks. |
+  | `--debug`, `--keep-intermediate` | Retain intermediate artefacts for inspection; `--debug` also enables verbose diagnostics. | Investigate data issues or rerun a failing stage locally. |
+  | `--disable-pubchem` | Skip PubChem enrichment during the test item stage. | Reproduce legacy behaviour or isolate upstream causes of enrichment drift. |
+  | `--print-config` | Emit the resolved configuration and exit. | Capture canonical settings for audit trails. |
+  | `--run-id` | Supply a deterministic identifier instead of the computed hash. | Correlate orchestrator logs with external schedulers. |
+
+  These switches are parsed by `_parse_args` and normalised in `PipelineRunConfig`, ensuring the canonical step order and validation rules remain enforced.【F:library/cli/commands/get_data.py†L949-L1108】
+- Advanced override knobs reshape the execution graph and should be reserved for targeted reruns or bespoke registries:
+
+  | Option | Use when… |
+  |--------|-----------|
+  | `--pipeline-registry <path>` | Load an alternate registry YAML to add/remove steps or reorder execution for integration tests. |
+  | `--override-input STEP=FILENAME` | Replace the input file for an individual stage without editing the registry. |
+  | `--override-output-stem STEP=STEM` | Redirect the output stem (and sidecar names) for a single stage. |
+  | `--override-subcommand STEP=SUBCOMMAND` | Run a non-default CLI sub-command (for example `target=chembl`) within the orchestrated flow. |
+
+  Overrides are optional and cascade through `PipelineRunConfig` so ad-hoc plans behave the same as the CLI invocation.【F:library/cli/commands/get_data.py†L1048-L1108】
 
 ### 4.2 Document pipeline `scripts/get_document_data.py`
 
