@@ -331,6 +331,10 @@ def configure_logging(level_name: str | None) -> Path:
 
 
 TARGET_SUBCOMMANDS: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
+DOCUMENT_SUBCOMMANDS: tuple[str, ...] = ("chembl", "pubmed", "all")
+
+_DEFAULT_TARGET_SUBCOMMAND = "all"
+_DEFAULT_DOCUMENT_SUBCOMMAND = "all"
 
 
 def _coerce_forward_args(
@@ -354,7 +358,13 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
 
     if stage.name == "target":
         stage_args = forward.with_default_subcommand(
-            "all", choices=TARGET_SUBCOMMANDS
+
+            _DEFAULT_TARGET_SUBCOMMAND, choices=TARGET_SUBCOMMANDS
+        )
+    elif stage.name == "document":
+        stage_args = forward.with_default_subcommand(
+            _DEFAULT_DOCUMENT_SUBCOMMAND, choices=DOCUMENT_SUBCOMMANDS
+
         )
     else:
         stage_args = forward.as_list()
