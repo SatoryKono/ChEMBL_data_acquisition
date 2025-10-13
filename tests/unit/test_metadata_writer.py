@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from argparse import Namespace
 
-from library.common.metadata import write_meta_yaml
-from library.common.run_context import RunContext, set_current
-
-from library.config.models import ConfigMetadata, ConfigSource
-
 import yaml
 
+from library.common.metadata import write_meta_yaml
+from library.common.run_context import RunContext, set_current
+from library.config.models import ConfigMetadata, ConfigSource
 from library.io.metadata_writer import save_metadata
 
 

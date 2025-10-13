@@ -2,18 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-
 import gc
-import sys
 import types
+from collections.abc import Iterable
 
 import pandas as pd
 import pytest
-
-_cli_utils_stub = types.ModuleType("library.cli_utils")
-_cli_utils_stub.run_pipeline = lambda *args, **kwargs: None
-sys.modules.setdefault("library.cli_utils", _cli_utils_stub)
 
 from library.config import ApiCfg, TestitemBatchRetryCfg
 from library.pipelines.testitem import cli
