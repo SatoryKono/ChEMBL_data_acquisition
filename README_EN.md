@@ -108,7 +108,16 @@ tests or pipeline code to confirm the outputs stay identical apart from the
 timestamp – any drift indicates a determinism regression that must be fixed
 before opening a pull request. When sharing results, commit the code changes and
 attach the generated reports to the PR so reviewers can audit the exact pass
-rate without reproducing the run locally.
+rate without reproducing the run locally. Successful runs exit with status `0`,
+threshold breaches (success rate or coverage) return `1`, and report
+generation/validation issues return `11` so CI pipelines can distinguish
+environmental failures from quality regressions.
+
+Each invocation also keeps the raw pytest payload (`reports/pytest_raw_report.json`)
+next to the curated exports. When redirecting the aggregated outputs via
+`--json` or `--markdown`, point them at dedicated directories – the harness
+empties the parent folder before writing fresh artefacts to guarantee there are
+no stale files.
 
 ### Logging contract
 

@@ -16,6 +16,14 @@
 - Test success rate ≥ 95 % (`reports/test_report.json::summary.success_rate`).
 - No flake8/ruff/mypy errors.
 - Optional: fail pipeline when `check-determinism` detects CSV hash differences.
+- `scripts/run_tests.py` exits with `0` on success, `1` when thresholds fail and
+  `11` when JSON/Markdown reports cannot be produced or validated – surface the
+  codes in CI to separate quality regressions from infrastructure errors.
+
+> Raw pytest output is preserved as `reports/pytest_raw_report.json` for auditing.
+> When overriding `--json` or `--markdown`, point them to dedicated directories
+> because the wrapper clears the destination folder before writing fresh
+> artefacts.
 
 ## Artefacts
 

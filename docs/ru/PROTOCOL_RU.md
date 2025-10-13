@@ -181,6 +181,12 @@ flowchart LR
 2. Проверка детерминизма: `python scripts/check_determinism.py --no-dry-run` сравнивает экспорты пайплайнов.【F:scripts/check_determinism.py†L34-L114】
 3. CI выполняет `ruff check` и `mypy --strict library`.【F:pyproject.toml†L67-L118】
 4. Падающие или флейковые тесты изолируются через `xfail(strict=True)` с заводом задачи.【F:tests/README.md†L45-L120】
+5. `python scripts/run_tests.py` возвращает `0` при успехе, `1` при нарушении
+   порогов успешности/покрытия и `11` при ошибках генерации или валидации
+   JSON/Markdown-отчётов; учитывайте коды в CI-дашбордах. Обёртка также сохраняет
+   сырой отчёт pytest в `reports/pytest_raw_report.json` и очищает каталоги перед
+   записью путей из `--json`/`--markdown`, поэтому для переопределённых выходов
+   используйте отдельные директории.
 
 ---
 
