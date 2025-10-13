@@ -96,7 +96,9 @@ performs:
 
 - Static analysis and linting.
 - `pytest --json-report` producing `reports/test_report.json` and Markdown
-  summaries.
+  summaries. The workflow fails fast if either `reports/test_report.json` or
+  `reports/test_summary.md` is missing so broken artefact uploads are caught
+  before publication.
 - Optional smoke execution of the pipelines using the sample data followed by
   `check-determinism`.
 - Threshold enforcement: success rate ≥ 95% (configurable via pipeline policy).

@@ -1,0 +1,77 @@
+{
+  "meta": {
+    "repo": "SatoryKono/ChEMBL_data_acquisition",
+    "commit": "89cf470b699f358702460c216fc171d6032b4189",
+    "branch": "work",
+    "ts_utc": "2025-10-13T15:26:19.969321+00:00",
+    "duration_sec": 14.927196979522705,
+    "python": "3.13.3",
+    "pytest": "8.4.2",
+    "exit_code": 1
+  },
+  "summary": {
+    "total": 4,
+    "passed": 3,
+    "failed": 1,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0,
+    "error": 0,
+    "success_rate": 0.75
+  },
+  "tests": [
+    {
+      "nodeid": "tests/unit/io/test_output_writer.py::test_save_standard_outputs__writes_expected_csvs",
+      "status": "passed",
+      "duration_ms": 6117.084,
+      "stdout": "[2020-01-01 00:00:00,000] [INFO] [chembl] git_sha_head rps=None sha='89cf470b699f358702460c216fc171d6032b4189' status=None\n[2020-01-01 00:00:00,000] [INFO] [chembl] metadata_written path='/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__wr0/output.documents_20240101.csv.meta.yaml' rps=None status=None\n[2020-01-01 00:00:00,000] [INFO] [chembl] metadata_written path='/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__wr0/output.documents_20240101_quality_report_table.csv.meta.yaml' rps=None status=None\n[2020-01-01 00:00:00,000] [INFO] [chembl] metadata_written path='/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__wr0/output.documents_20240101_data_correlation_report_table.csv.meta.yaml' rps=None status=None",
+      "stderr": "",
+      "log": [
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess\ntaskName\nasctime",
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess\ntaskName\nasctime",
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess\ntaskName\nasctime",
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess\ntaskName\nasctime"
+      ],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/io/test_output_writer.py::test_save_standard_outputs__creates_output_directory",
+      "status": "passed",
+      "duration_ms": 32.966,
+      "stdout": "[2020-01-01 00:00:00,000] [INFO] [chembl] metadata_written path='/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__cr0/nested/dir/output.assays_20240101.csv.meta.yaml' rps=None status=None\n[2020-01-01 00:00:00,000] [INFO] [chembl] metadata_written path='/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__cr0/nested/dir/output.assays_20240101_quality_report_table.csv.meta.yaml' rps=None status=None\n[2020-01-01 00:00:00,000] [INFO] [chembl] metadata_written path='/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__cr0/nested/dir/output.assays_20240101_data_correlation_report_table.csv.meta.yaml' rps=None status=None",
+      "stderr": "",
+      "log": [
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess\ntaskName\nasctime",
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess\ntaskName\nasctime",
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess\ntaskName\nasctime"
+      ],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/io/test_output_writer.py::test_save_standard_outputs__supports_string_output_dir",
+      "status": "passed",
+      "duration_ms": 34.086,
+      "stdout": "[2020-01-01 00:00:00,000] [INFO] [chembl] metadata_written path='/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__su0/string-dir/output.targets_20240101.csv.meta.yaml' rps=None status=None\n[2020-01-01 00:00:00,000] [INFO] [chembl] metadata_written path='/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__su0/string-dir/output.targets_20240101_quality_report_table.csv.meta.yaml' rps=None status=None\n[2020-01-01 00:00:00,000] [INFO] [chembl] metadata_written path='/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__su0/string-dir/output.targets_20240101_data_correlation_report_table.csv.meta.yaml' rps=None status=None",
+      "stderr": "",
+      "log": [
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess\ntaskName\nasctime",
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess\ntaskName\nasctime",
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess\ntaskName\nasctime"
+      ],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/io/test_output_writer.py::test_save_standard_outputs__uses_canonical_naming_and_cleans_source",
+      "status": "failed",
+      "duration_ms": 34.275,
+      "stdout": "[2020-01-01 00:00:00,000] [INFO] [chembl] metadata_written path='/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__us0/legacy/result.tmp.csv.meta.yaml' rps=None status=None\n[2020-01-01 00:00:00,000] [INFO] [chembl] metadata_written path='/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__us0/legacy/result.tmp_quality_report_table.csv.meta.yaml' rps=None status=None\n[2020-01-01 00:00:00,000] [INFO] [chembl] metadata_written path='/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__us0/legacy/result.tmp_data_correlation_report_table.csv.meta.yaml' rps=None status=None",
+      "stderr": "",
+      "log": [
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess\ntaskName\nasctime",
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess\ntaskName\nasctime",
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess\ntaskName\nasctime"
+      ],
+      "error": "tmp_path = PosixPath('/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__us0')\nsample_frames = (  identifier  value\n0      row-1      1\n1      row-2      2,   identifier  value\n0      row-1   0.75\n1      row-2   1.00,        column  non_null\n0  identifier         2\n1       value         2)\n\n    @pytest.mark.unit\n    def test_save_standard_outputs__uses_canonical_naming_and_cleans_source(\n        tmp_path: Path, sample_frames\n    ) -> None:\n        dataset, correlation, quality = sample_frames\n    \n        legacy_path = tmp_path / \"legacy\" / \"result.tmp.csv\"\n        legacy_path.parent.mkdir(parents=True, exist_ok=True)\n        legacy_path.write_text(\"legacy\")\n        (legacy_path.parent / \"result.tmp.csv.meta.yaml\").write_text(\"meta\")\n    \n        artifacts = output_writer.save_standard_outputs(\n            dataset,\n            correlation,\n            quality,\n            table_name=\"testitem\",\n            date_tag=\"20240101\",\n            output_path=legacy_path,\n        )\n    \n        expected_dataset = legacy_path.parent / \"output.testitem_20240101.csv\"\n>       assert artifacts.dataset == expected_dataset\nE       AssertionError: assert PosixPath('/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__us0/legacy/result.tmp.csv') == PosixPath('/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__us0/legacy/output.testitem_20240101.csv')\nE        +  where PosixPath('/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__us0/legacy/result.tmp.csv') = StandardOutputArtifacts(dataset=PosixPath('/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__us0/legacy/result.tmp.csv'), correlation_report=PosixPath('/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__us0/legacy/result.tmp_data_correlation_report_table.csv'), quality_report=PosixPath('/tmp/pytest-of-root/pytest-1/test_save_standard_outputs__us0/legacy/result.tmp_quality_report_table.csv')).dataset\n\ntests/unit/io/test_output_writer.py:133: AssertionError"
+    }
+  ]
+}
