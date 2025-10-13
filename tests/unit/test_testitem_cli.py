@@ -38,6 +38,33 @@ def _stub_parent_stats() -> ParentLookupStats:
 
 
 @pytest.mark.unit
+def test_requested_ids_snapshot_cleanup__retries_on_permission_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows ``PermissionError`` should not leak during temporary cleanup."""
+
+    target = tmp_path / "snapshot.txt"
+    target.write_text("demo", encoding="utf-8")
+
+    attempts = {"count": 0}
+    original_remove = testitem_cli.os.remove
+
+    def _flaky_remove(path: Path) -> None:
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            raise PermissionError("locked")
+        original_remove(path)
+
+    monkeypatch.setattr(testitem_cli.os, "remove", _flaky_remove)
+    monkeypatch.setattr(testitem_cli.time, "sleep", lambda *_: None)
+
+    testitem_cli.RequestedIdsSnapshot._cleanup_path(target)
+
+    assert attempts["count"] == 3
+    assert not target.exists()
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "output, fallback_date, expected",
     [
