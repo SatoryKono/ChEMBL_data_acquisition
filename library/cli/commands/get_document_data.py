@@ -107,6 +107,18 @@ from library.validation import validate_documents
 DEFAULT_INPUT_NAME = "document.csv"
 DEFAULT_OUTPUT_STEM = "documents"
 
+_CHEMBL_METADATA_SOURCES: tuple[str, ...] = ("ChEMBL Document API",)
+_PUBMED_METADATA_SOURCES: tuple[str, ...] = (
+    "PubMed",
+    "Semantic Scholar",
+    "OpenAlex",
+    "CrossRef",
+)
+_ALL_METADATA_SOURCES: tuple[str, ...] = (
+    *_CHEMBL_METADATA_SOURCES,
+    *_PUBMED_METADATA_SOURCES,
+)
+
 
 class _FallbackPathAction(argparse.Action):
     """Store fallback DOI CSV path under both legacy and new attribute names."""
@@ -567,6 +579,8 @@ def _finalise_export(
     postprocess_config_path: Path | str | None = None,
     emit_legacy_artifacts: bool = False,
     date_tag: str | None = None,
+    cli_args: argparse.Namespace | None = None,
+    metadata_sources: Sequence[str] | None = None,
 ) -> FinaliseExportResult:
     """Validate input frames and persist standard pipeline artefacts."""
 
@@ -725,6 +739,22 @@ def _finalise_export(
         return FinaliseExportResult(exit_code=1, date_tag=resolved_date_tag)
 
     csv_path = artifacts.dataset
+
+    qc_summary_payload = quality_summary.build()
+
+    io.save_metadata(
+        table_name=table_name,
+        date_tag=resolved_date_tag,
+        args=cli_args,
+        qc_summary=qc_summary_payload,
+        output_dir=csv_path.parent,
+        artifacts=[
+            artifacts.dataset,
+            artifacts.quality_report,
+            artifacts.correlation_report,
+        ],
+        sources=metadata_sources,
+    )
 
     logger.info(
         "document_standard_outputs_written",
@@ -1221,6 +1251,8 @@ def run_pubmed(
             postprocess_config_path=getattr(args, "config", None),
             emit_legacy_artifacts=bool(getattr(args, "emit_legacy_artifacts", False)),
             date_tag=getattr(args, "_standard_date_tag", None),
+            cli_args=args,
+            metadata_sources=_PUBMED_METADATA_SOURCES,
         )
         exit_code = finalise_result.exit_code
     except (FileNotFoundError, ValueError, OSError) as exc:
@@ -1428,6 +1460,8 @@ def run_chembl(
             postprocess_config_path=getattr(args, "config", None),
             emit_legacy_artifacts=bool(getattr(args, "emit_legacy_artifacts", False)),
             date_tag=getattr(args, "_standard_date_tag", None),
+            cli_args=args,
+            metadata_sources=_CHEMBL_METADATA_SOURCES,
         )
         exit_code = finalise_result.exit_code
         if exit_code == 0:
@@ -1695,6 +1729,8 @@ def run_all(
             postprocess_config_path=getattr(args, "config", None),
             emit_legacy_artifacts=bool(getattr(args, "emit_legacy_artifacts", False)),
             date_tag=getattr(args, "_standard_date_tag", None),
+            cli_args=args,
+            metadata_sources=_ALL_METADATA_SOURCES,
         )
         exit_code = finalise_result.exit_code
         if fallback_state is not None:
@@ -1829,6 +1865,8 @@ def run_all(
         postprocess_config_path=getattr(args, "config", None),
         emit_legacy_artifacts=bool(getattr(args, "emit_legacy_artifacts", False)),
         date_tag=getattr(args, "_standard_date_tag", None),
+        cli_args=args,
+        metadata_sources=_ALL_METADATA_SOURCES,
     )
     exit_code = finalise_result.exit_code
     if fallback_state is not None:

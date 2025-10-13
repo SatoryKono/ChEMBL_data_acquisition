@@ -11,6 +11,7 @@ _metadata = import_module(f"{__name__}.metadata")
 _paths = import_module(f"{__name__}.paths")
 _writers = import_module(f"{__name__}.writers")
 _output_writer = import_module(f"{__name__}.output_writer")
+_metadata_writer = import_module(f"{__name__}.metadata_writer")
 _readers = reload(import_module(f"{__name__}.readers"))
 
 pa = _readers.pa
@@ -24,6 +25,7 @@ StandardOutputArtifacts = _output_writer.StandardOutputArtifacts
 default_output_path = _paths.default_output_path
 derive_output_labels = _paths.derive_output_labels
 write_meta_yaml = _metadata.write_meta_yaml
+save_metadata = _metadata_writer.save_metadata
 
 __all__ = [
     "CsvReadError",
@@ -35,6 +37,7 @@ __all__ = [
     "read_ids",
     "write_csv",
     "save_standard_outputs",
+    "save_metadata",
     "StandardOutputArtifacts",
     "write_meta_yaml",
 ]

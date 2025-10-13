@@ -111,6 +111,8 @@ DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activity"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
 
+_ACTIVITY_METADATA_SOURCES: tuple[str, ...] = ("ChEMBL Activity API",)
+
 EMPTY_COLUMNS = [
     "approx_cited_activity",
     "compound_key",
@@ -127,6 +129,20 @@ EMPTY_COLUMNS = [
     "standard_lower_value",
     "standard_upper_value",
 ]
+
+
+def _build_metadata_summary(frame: pd.DataFrame) -> dict[str, Any]:
+    """Return a concise QC summary suitable for metadata sidecars."""
+
+    total_rows = int(len(frame))
+    if total_rows == 0:
+        return {"total_rows": 0, "non_null_ratio": {}}
+
+    ratios: dict[str, float] = {}
+    for column in frame.columns:
+        valid = int(frame[column].notna().sum())
+        ratios[column] = float(valid / total_rows)
+    return {"total_rows": total_rows, "non_null_ratio": ratios}
 
 
 def _drop_empty_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
@@ -1703,6 +1719,20 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             date_tag=date_tag,
             output_dir=output_directory,
             output_path=dataset_csv,
+        )
+        qc_summary = _build_metadata_summary(dataset_frame)
+        io.save_metadata(
+            table_name=table_name_value,
+            date_tag=date_tag,
+            args=args,
+            qc_summary=qc_summary,
+            output_dir=artifacts.dataset.parent,
+            artifacts=[
+                artifacts.dataset,
+                artifacts.quality_report,
+                artifacts.correlation_report,
+            ],
+            sources=_ACTIVITY_METADATA_SOURCES,
         )
         logger.info(
             "activity_standard_outputs",

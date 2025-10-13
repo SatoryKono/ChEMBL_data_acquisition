@@ -12,11 +12,9 @@ from typing import Any
 import pandas as pd
 import pytest
 import requests
-import yaml
 
 from library.cli_utils import PipelineExecutionResult
 from library.cli_utils import run_pipeline as cli_run_pipeline
-from library.common import metadata_writer as metadata
 from library.config import Config
 from library.io import StandardOutputArtifacts
 from library.pipelines.assay.chembl_assay import MAX_ASSAY_CHUNK_SIZE
@@ -689,20 +687,6 @@ def test_run_pipeline__adds_missing_assay_optional_columns(
     output_path = tmp_path / "assay.csv"
     failure_path = tmp_path / "assay_failures.csv"
 
-    captured_meta: dict[str, object] = {}
-
-    original_write_meta = metadata.write_meta_yaml
-
-    def _capture_meta(*args, **kwargs):
-        path = original_write_meta(*args, **kwargs)
-        try:
-            captured_meta["data"] = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            captured_meta["data"] = None
-        return path
-
-    monkeypatch.setattr(metadata, "write_meta_yaml", _capture_meta)
-
     cfg_stub = SimpleNamespace(io=SimpleNamespace(output_dir=tmp_path))
 
     result = cli_run_pipeline(
@@ -739,7 +723,6 @@ def test_run_pipeline__adds_missing_assay_optional_columns(
     assert "assay_strain" in result_frame.columns
     assert result_frame["assay_group"].isna().all()
     assert result_frame["assay_strain"].isna().all()
-    assert captured_meta.get("data") is None
 
     meta_path = dataset_path.with_suffix(dataset_path.suffix + ".meta.yaml")
     assert not meta_path.exists()
