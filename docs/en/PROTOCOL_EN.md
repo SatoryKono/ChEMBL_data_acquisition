@@ -99,7 +99,7 @@ Key schema definitions are enforced by Pandera models:
 ### 4.5 Test item pipeline `scripts/get_testitem_data.py`
 
 - Fetch stages defined in `library/pipelines/testitem/cli.py` (identifier read, ChEMBL enrichment, PubChem enrichment, final export). 【F:library/pipelines/testitem/cli.py†L651-L1136】
-- Flags: `--input`, `--final-out`, `--batch-size`, `--timeout`, `--limit`, `--offset`, `--request-limit`, `--config`. 【F:library/cli/commands/get_testitem_data.py†L646-L714】
+- Flags: `--input`, `--final-out`, `--batch-size`, `--timeout`, `--limit`, `--offset`, `--pubchem-enable`/`--no-pubchem-enable`, `--postprocess`, `--config`. 【F:library/cli/commands/get_testitem_data.py†L891-L934】
 - Default outputs: deterministic dataset CSV plus the table quality and data correlation reports. Pass `--emit-legacy-artifacts` to restore the legacy bundle (`<stem>_failure_cases.csv`, metadata `.meta.yaml`, postprocess manifests) for diagnostics. 【F:library/pipelines/testitem/cli.py†L864-L1186】【F:library/cli/commands/get_testitem_data.py†L564-L738】
 
 ### 4.6 Activity pipeline `scripts/get_activity_data.py`
