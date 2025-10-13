@@ -349,6 +349,7 @@ class TestitemPipelineOptions:
     offset: int | None = None
     emit_legacy_artifacts: bool = False
     pubchem_enabled: bool | None = None
+    date: str | None = None
 
 
 def _resolve_metadata_sources(pubchem_enabled: bool | None) -> list[str]:
