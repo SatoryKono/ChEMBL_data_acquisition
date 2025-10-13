@@ -2,7 +2,7 @@
 
 *Version:* 2.1 (October 2025)
 *Repository:* `SatoryKono/ChEMBL_data_acquisition`
-*Scope:* End-to-end ETL for ChEMBL documents, targets, assays, test items and activities with deterministic QA sidecars.
+*Scope:* End-to-end ETL for ChEMBL documents, targets, assays, test items and activities with deterministic QA tables and optional legacy sidecars.
 *Status:* Approved for test environment (see §7).
 
 > **Change control — CHEMBL-DM01**
@@ -137,13 +137,13 @@ Key schema definitions are enforced by Pandera models:
 
 - Fetch stages defined in `library/pipelines/testitem/cli.py` (identifier read, ChEMBL enrichment, PubChem enrichment, final export). 【F:library/pipelines/testitem/cli.py†L651-L1136】
 - Flags: `--input`, `--final-out`, `--batch-size`, `--timeout`, `--limit`, `--offset`, `--request-limit`, `--config`. 【F:library/cli/commands/get_testitem_data.py†L646-L714】
-- Default outputs: deterministic dataset CSV with its `.meta.yaml` metadata sidecar plus the table quality and data correlation reports. Pass `--emit-legacy-artifacts` to restore the legacy bundle (`<stem>_failure_cases.csv`, `<stem>.quality.json`, postprocess manifests) for diagnostics. 【F:library/pipelines/testitem/cli.py†L864-L1186】【F:library/cli/commands/get_testitem_data.py†L564-L738】
+- Default outputs: deterministic dataset CSV together with the table quality and data correlation reports. Pass `--emit-legacy-artifacts` to add the legacy bundle (`<stem>.meta.yaml`, `<stem>.quality.json`, `<stem>_failure_cases.csv`, postprocess manifests) for diagnostics. 【F:library/pipelines/testitem/cli.py†L864-L1186】【F:library/cli/commands/get_testitem_data.py†L564-L738】
 
 ### 4.6 Activity pipeline `scripts/get_activity_data.py`
 
 - Delegates to `library.cli.entrypoints.activity.ActivityPipelineCLI`. 【F:library/cli/entrypoints/activity.py†L1879-L1966】
 - Options: `--input`, `--final-out`, `--batch-size`, `--timeout`, `--limit`, `--offset`, `--workers`, `--dry-run`. 【F:library/cli/entrypoints/activity.py†L1888-L1934】
-- Applies enrichment (`apply_activity_annotations`), bounds computation (`compute_activity_bounds`), Pandera validation (`validate_activities`) and QA sidecars. 【F:library/cli/entrypoints/activity.py†L1216-L1448】
+- Applies enrichment (`apply_activity_annotations`), bounds computation (`compute_activity_bounds`), Pandera validation (`validate_activities`) and produces QA tables; enable `--emit-legacy-artifacts` to add diagnostic sidecars. 【F:library/cli/entrypoints/activity.py†L1216-L1448】【F:library/cli_utils.py†L682-L705】【F:library/cli_utils.py†L1158-L1299】
 
 ### 4.7 Optional reference pipelines
 
@@ -157,7 +157,7 @@ Key schema definitions are enforced by Pandera models:
 | Component | Artefacts | Implementation |
 |-----------|-----------|----------------|
 | Pandera validation | Ensures required columns, dtype coercion, nullability. | `library/schemas/*.py`, `library/pipelines/*/validation.py`. |
-| Table quality profiler | `<stem>_quality_report_table.csv`, `<stem>.quality.json`. | `library/qa/table_quality.py`, invoked via hooks in CLI entry points. 【F:library/cli/entrypoints/activity.py†L1450-L1539】 |
+| Table quality profiler | `<stem>_quality_report_table.csv`; `<stem>.quality.json` is emitted when `--emit-legacy-artifacts` is enabled. | `library/qa/table_quality.py`, invoked via hooks in CLI entry points. 【F:library/cli/entrypoints/activity.py†L1450-L1539】【F:library/cli_utils.py†L1158-L1299】 |
 | Post-processing metrics | `<stem>.postprocess.report.json` summarising rows, duration, validation status. | `library/postprocessing/common/utils.py`. 【F:library/postprocessing/common/utils.py†L180-L258】 |
 | Logging | Structured JSON events (`*_pipeline_done`, `quality_report_generated`). | `library/common/logging_setup.py`. 【F:library/common/logging_setup.py†L1-L160】 |
 | Test harness | `reports/test_report.json`, `reports/test_summary.md`; success-rate ≥95 %. | `scripts/run_tests.py`. 【F:scripts/run_tests.py†L40-L160】 |
@@ -174,7 +174,7 @@ Post-processing is driven by YAML definitions in `config/pipeline/*.yaml` and ex
 | Assay | `normalize_assay_metadata` → `enrich_assay_flags` → `finalize_assay_records` | `library/postprocessing/assays/schema.py` | Enriches BAO categories from dictionaries. 【F:library/postprocessing/assays/steps.py†L20-L73】 |
 | Document | `normalize_document_fields` → `enrich_document_publication_year` → `finalize_document_records` | `config/schema/document.yaml` | Schema groups maintained in YAML to avoid drift. 【F:config/schema/document.yaml†L1-L200】 |
 | Target | `normalize_target_fields` → `enrich_target_synonyms` → `finalize_target_records` | `library/postprocessing/targets/schema.py` | Preserves `AddCellularitySmart ` column for backwards compatibility. 【F:library/postprocessing/targets/steps.py†L24-L76】 |
-| Test item | `prepare_parent_enrichment` → `run_parent_enrichment` → `finalize_output` | `library/schemas/testitems.py` | Emits the dataset with `.meta.yaml` metadata plus QA/correlation reports; legacy failure-case and `.quality.json` artefacts are opt-in via `--emit-legacy-artifacts`. 【F:library/pipelines/testitem/cli.py†L864-L1186】【F:library/cli/commands/get_testitem_data.py†L564-L738】 |
+| Test item | `prepare_parent_enrichment` → `run_parent_enrichment` → `finalize_output` | `library/schemas/testitems.py` | Emits the dataset with QA/correlation reports; add `--emit-legacy-artifacts` to persist `.meta.yaml`, `.quality.json`, and failure-case diagnostics. 【F:library/pipelines/testitem/cli.py†L864-L1186】【F:library/cli/commands/get_testitem_data.py†L564-L738】 |
 
 ---
 

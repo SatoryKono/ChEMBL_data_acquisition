@@ -209,8 +209,9 @@ bootstrap-хелперы. По умолчанию каждая команда п
 3. Немедленно повторите ту же команду или вызовите
    `python scripts/check_determinism.py --no-dry-run` с нужным входным CSV,
    чтобы получить второй экспорт.
-4. Сравните результаты (скрипт вычисляет SHA256 для CSV и `.meta.yaml`). Любое
-   расхождение трактуется как регрессия детерминизма.
+4. Сравните результаты (скрипт вычисляет SHA256 для CSV и, при наличии
+   `--emit-legacy-artifacts`, `.meta.yaml`). Любое расхождение трактуется как
+   регрессия детерминизма.
 5. В средах только для чтения используйте
    `python scripts/check_determinism.py --dry-run`. Скрипт хэширует объединённые
    stdout/stderr двух последовательных запусков и выводит
@@ -233,16 +234,15 @@ bootstrap-хелперы. По умолчанию каждая команда п
 | Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --column activity_id --batch-size 10 --workers 4 --dry-run` | Флаги: переопределение колонки идентификаторов (`--column activity_id`), настройка батчей и таймаутов (`--batch-size`, `--timeout`), ограничение диапазона (`--limit`, `--offset`), dry-run и количество потоков. |
 | Синтетические активности | `python scripts/get_activities.py --limit 25 --dry-run` | Генерирует детерминированные тестовые строки для смоук-тестов и поддерживает те же флаги логирования, что и остальные CLI. |
 
-Каждый пайплайн теперь оставляет детерминированный CSV вместе с
-`<имя>.meta.yaml`, `<имя>_quality_report_table.csv` и
-`<имя>_data_correlation_report_table.csv` в том же каталоге. Метаданные пишутся
-через `io.save_metadata` и содержат параметры запуска, схему и контрольные
-суммы. Наследуемые диагностические файлы (`<имя>.quality.json`,
-`<имя>_failure_cases.csv` и др.) подключаются по требованию через
-`--emit-legacy-artifacts`, `--debug` или `--keep-intermediate`. Поле
-`generated_at` остаётся детерминированным: при наличии `--date` используется
-указанная дата, иначе хэшируется нормализованный вызов CLI и вычисленный
-`run_id`. Таргет-пайплайн также создаёт вспомогательные таблицы
+Каждый пайплайн оставляет детерминированный CSV вместе с
+`<имя>_quality_report_table.csv` и `<имя>_data_correlation_report_table.csv` в
+том же каталоге. Добавьте `--emit-legacy-artifacts` (или
+`--debug`/`--keep-intermediate`, которые автоматически включают этот флаг),
+чтобы восстановить исторический набор: `<имя>.meta.yaml`, `<имя>.quality.json`,
+таблицы failure cases и манифесты постобработки. Поле `generated_at` остаётся
+детерминированным: при наличии `--date` используется указанная дата, иначе
+хэшируется нормализованный вызов CLI и вычисленный `run_id`. Таргет-пайплайн
+также создаёт вспомогательные таблицы
 `organism.output.target_<stamp>.csv`, `isoform.output.target_<stamp>.csv`,
 `names.output.target_<stamp>.csv` и `IUPHAR.output.target_<stamp>.csv`, которые
 подробно описаны в [`docs/ru/OUTPUT_TARGETS.md`](./docs/ru/OUTPUT_TARGETS.md) и
