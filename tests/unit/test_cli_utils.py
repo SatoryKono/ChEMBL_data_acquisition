@@ -9,6 +9,7 @@ from unittest.mock import Mock
 
 import pytest
 
+import library.cli.utils as modern_cli_utils
 from library import cli_utils
 from library.cli import LoggerConfig
 
@@ -121,7 +122,7 @@ def test_run_cli_command__run_id_determinism(tmp_path, monkeypatch):
         )
         return namespace
 
-    def run_and_get_id(namespace: argparse.Namespace) -> str:
+    def run_and_get_metadata(namespace: argparse.Namespace) -> tuple[str, str]:
         captured_cfgs.clear()
         log_cfg = LoggerConfig(level="INFO")
         exit_code = cli_utils.run_cli_command(
@@ -135,18 +136,122 @@ def test_run_cli_command__run_id_determinism(tmp_path, monkeypatch):
         )
         assert exit_code == 0
         assert captured_cfgs, "configure_logger must be invoked"
-        return captured_cfgs[-1].run_id
+        latest_cfg = captured_cfgs[-1]
+        return latest_cfg.run_id, latest_cfg.generated_at
 
     first_args = make_namespace(input_name="input.csv", output_name="out.csv", limit=5)
     second_args = make_namespace(input_name="input.csv", output_name="out.csv", limit=5)
     third_args = make_namespace(input_name="input.csv", output_name="out.csv", limit=7)
 
-    run_id_a = run_and_get_id(first_args)
-    run_id_b = run_and_get_id(second_args)
-    run_id_c = run_and_get_id(third_args)
+    run_id_a, generated_a = run_and_get_metadata(first_args)
+    run_id_b, generated_b = run_and_get_metadata(second_args)
+    run_id_c, generated_c = run_and_get_metadata(third_args)
 
     assert run_id_a == run_id_b
     assert run_id_a != run_id_c
+    assert generated_a == generated_b
+    assert generated_a != generated_c
+
+
+@pytest.mark.unit
+def test_run_cli_command_modern__generated_at_depends_on_invocation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parser = argparse.ArgumentParser(prog="activity")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("{}", encoding="utf-8")
+
+    class DummyLogger:
+        def info(self, *_, **__):
+            return None
+
+        def error(self, *_, **__):
+            return None
+
+        def warning(self, *_, **__):
+            return None
+
+        def debug(self, *_, **__):
+            return None
+
+    dummy_logger = DummyLogger()
+
+    monkeypatch.setattr(modern_cli_utils, "configure_logger", lambda cfg: dummy_logger)
+    monkeypatch.setattr(
+        modern_cli_utils,
+        "apply_config_overrides",
+        lambda *_, **__: SimpleNamespace(),
+    )
+    monkeypatch.setattr(modern_cli_utils, "prepare_io_paths", lambda _: None)
+    monkeypatch.setattr(modern_cli_utils, "ensure_dirs", lambda _: None)
+
+    def fake_run(cfg, args):
+        del cfg, args
+        return 0
+
+    def make_namespace(*, limit: int) -> argparse.Namespace:
+        input_path = tmp_path / "input.csv"
+        input_path.write_text("activity_id\nACT1\n", encoding="utf-8")
+        output_path = tmp_path / "out.csv"
+        namespace = argparse.Namespace(
+            config=str(config_path),
+            log_level="INFO",
+            verbose=False,
+            run_id=None,
+            input_csv=input_path,
+            final_out=output_path,
+            output_csv=output_path,
+            base_path=None,
+            input_dir=None,
+            output_dir=None,
+            cache_dir=None,
+            raw_out=None,
+            date=None,
+            sep=",",
+            encoding="utf8",
+            raw_format="csv",
+            force=False,
+            skip_existing=False,
+            print_config=False,
+            postprocess=False,
+            limit=limit,
+            invocation=(
+                parser.prog,
+                "--input",
+                str(input_path),
+                "--final-out",
+                str(output_path),
+                "--limit",
+                str(limit),
+            ),
+        )
+        return namespace
+
+    def run_and_get_generated(namespace: argparse.Namespace) -> str:
+        log_cfg = LoggerConfig(level="INFO")
+        exit_code = modern_cli_utils.run_cli_command(
+            args=namespace,
+            parser=parser,
+            base_parser=None,
+            log_cfg=log_cfg,
+            mapping={},
+            run=fake_run,
+            logger=dummy_logger,
+        )
+        assert exit_code == 0
+        return log_cfg.generated_at
+
+    first_args = make_namespace(limit=5)
+    second_args = make_namespace(limit=5)
+    third_args = make_namespace(limit=7)
+
+    generated_a = run_and_get_generated(first_args)
+    generated_b = run_and_get_generated(second_args)
+    generated_c = run_and_get_generated(third_args)
+
+    assert generated_a
+    assert generated_a == generated_b
+    assert generated_a != generated_c
 
 
 @pytest.mark.unit

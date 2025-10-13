@@ -35,6 +35,7 @@ from ..cli import (
     positive_int,
     prepare_io_paths,
 )
+from ..cli.run_context import compute_generated_at
 from ..common.log import logger as default_logger
 from ..common.metadata import record_quality_failure
 from ..common.sidecar import SidecarErrors
@@ -347,6 +348,26 @@ def _canonical_run_descriptor(
     return "\n".join(parts)
 
 
+def _derive_generated_at(
+    *, args: argparse.Namespace, parser: argparse.ArgumentParser, log_cfg: LoggerConfig
+) -> str:
+    invocation = getattr(args, "invocation", None)
+    seed_parts: list[str] = []
+    if isinstance(invocation, Sequence) and invocation and not isinstance(invocation, (str, bytes)):
+        seed_parts.extend(str(part) for part in invocation)
+    else:
+        program = getattr(parser, "prog", None)
+        if program:
+            seed_parts.append(str(program))
+        seed_parts.extend(str(part) for part in sys.argv[1:])
+
+    return compute_generated_at(
+        date_token=getattr(args, "date", None),
+        run_id=log_cfg.run_id,
+        seed_parts=seed_parts,
+    )
+
+
 def run_cli_command(
     *,
     args: argparse.Namespace,
@@ -359,6 +380,13 @@ def run_cli_command(
     postprocess_enabled: bool | None = None,
 ) -> int:
     """Execute CLI boilerplate shared by data acquisition commands."""
+
+    if not log_cfg.generated_at:
+        log_cfg.generated_at = _derive_generated_at(
+            args=args,
+            parser=parser,
+            log_cfg=log_cfg,
+        )
 
     level_candidate = getattr(args, "log_level", log_cfg.level)
     level = str(level_candidate).upper()
