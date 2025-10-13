@@ -60,6 +60,35 @@ def test_make_document_postprocessing__end_to_end(tmp_path, monkeypatch):
     assert output_path.read_bytes() == snapshot
 
 
+def test_make_document_postprocessing__fills_missing_title_from_known_sources(
+    tmp_path, monkeypatch
+):
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("CHEMBL_POSTPROCESS_LOG_DIR", str(log_dir))
+
+    input_path = tmp_path / "documents_raw.csv"
+    df = pd.DataFrame(
+        {
+            "document_chembl_id": ["CHEMBL_DOC3"],
+            "ChEMBL.title": ["  Derived Title  "],
+            "doc_type": ["article"],
+            "year": [2022],
+            "journal": [" Example Journal "],
+        }
+    )
+    df.to_csv(input_path, index=False)
+
+    output_path = tmp_path / "documents_processed.csv"
+    exit_code = cli.main(["--input", str(input_path), "--output", str(output_path)])
+    assert exit_code == 0
+
+    result = pd.read_csv(output_path)
+    assert "title" in result.columns
+    assert result.loc[0, "title"] == "Derived Title"
+    assert result.loc[0, "doc_type"] == "article"
+    assert result.loc[0, "journal"] == "Example Journal"
+
+
 def test_make_document_postprocessing__uses_cli_pipeline_override(
     tmp_path, monkeypatch
 ):

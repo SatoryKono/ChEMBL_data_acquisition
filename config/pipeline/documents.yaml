@@ -1,6 +1,9 @@
 # Default document post-processing pipeline configuration.
 pipeline_version: "${CHEMBL_DOCUMENT_PIPELINE_VERSION:-auto}"
 enabled_steps:
+  - name: harmonize_document_titles
+    callable: "library.postprocessing.documents.steps:harmonize_document_titles"
+    description: "Backfill missing canonical titles from known source columns."
   - name: normalize_document_fields
     callable: "library.postprocessing.documents.steps:normalize_document_fields"
     description: "Normalize document metadata and harmonise citation fields."
