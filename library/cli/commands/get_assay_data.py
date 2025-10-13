@@ -67,6 +67,8 @@ __all__ = [
 DEFAULT_INPUT_NAME = "assay.csv"
 DEFAULT_OUTPUT_STEM = "assay"
 
+_ASSAY_METADATA_SOURCES: tuple[str, ...] = ("ChEMBL Assay API",)
+
 # Backwards compatibility: legacy configs referenced the private
 # ``_ASSAY_MAX_IDS_PER_REQUEST`` constant before it was renamed to
 # :data:`MAX_ASSAY_CHUNK_SIZE`.  Re-expose the alias so that pipelines relying on
@@ -142,6 +144,20 @@ ASSAY_EMPTY_OUTPUT_COLUMNS: list[str] = [
     "assay_strain",
     "year",
 ]
+
+
+def _build_metadata_summary(frame: pd.DataFrame) -> dict[str, Any]:
+    """Return a concise QC summary for metadata sidecars."""
+
+    total_rows = int(len(frame))
+    if total_rows == 0:
+        return {"total_rows": 0, "non_null_ratio": {}}
+
+    ratios: dict[str, float] = {}
+    for column in frame.columns:
+        valid = int(frame[column].notna().sum())
+        ratios[column] = float(valid / total_rows)
+    return {"total_rows": total_rows, "non_null_ratio": ratios}
 
 
 def remove_assay_output_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -436,6 +452,20 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             date_tag=date_tag,
             output_path=dataset_csv,
             cleanup_source=not emit_legacy,
+        )
+        qc_summary = _build_metadata_summary(dataset_frame)
+        io.save_metadata(
+            table_name=table_name_value,
+            date_tag=date_tag,
+            args=args,
+            qc_summary=qc_summary,
+            output_dir=artifacts.dataset.parent,
+            artifacts=[
+                artifacts.dataset,
+                artifacts.quality_report,
+                artifacts.correlation_report,
+            ],
+            sources=_ASSAY_METADATA_SOURCES,
         )
         logger.info(
             "assay_standard_outputs",
