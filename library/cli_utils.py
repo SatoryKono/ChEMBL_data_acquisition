@@ -99,26 +99,27 @@ class _ParquetChunkStore:
         self._tmpdir = tempfile.TemporaryDirectory(prefix="pipeline_chunks_")
         self._paths: list[Path] = []
         self._row_count = 0
-        # Detect if we can use parquet or must fall back to pickle
-        self._use_pickle = False
+        self._backend = "parquet"
+
         try:
             from pandas.io import parquet as pd_parquet  # type: ignore
-            try:
-                pd_parquet.get_engine("auto")
-            except Exception as exc:
-                self._use_pickle = True
-                default_logger.warning(
-                    "chunk_store_backend_fallback",
-                    backend="pickle",
-                    reason=str(exc) or "parquet engine unavailable",
-                )
         except Exception as exc:
-            self._use_pickle = True
+            self._backend = "pickle"
             default_logger.warning(
                 "chunk_store_backend_fallback",
                 backend="pickle",
                 reason=str(exc) or "parquet engine unavailable",
             )
+        else:
+            try:
+                pd_parquet.get_engine("auto")
+            except Exception as exc:
+                self._backend = "pickle"
+                default_logger.warning(
+                    "chunk_store_backend_fallback",
+                    backend="pickle",
+                    reason=str(exc) or "parquet engine unavailable",
+                )
 
     @staticmethod
     def _write_pickle(frame: pd.DataFrame, path: Path) -> None:
@@ -130,7 +131,7 @@ class _ParquetChunkStore:
 
         base_path = Path(self._tmpdir.name) / f"chunk_{len(self._paths):05d}"
 
-        if self._use_pickle:
+        if self._backend == "pickle":
             path = base_path.with_suffix(".pkl")
             self._write_pickle(frame, path)
         else:
@@ -143,26 +144,20 @@ class _ParquetChunkStore:
                 # the pipeline functional while maintaining deterministic
                 # behaviour.
                 default_logger.warning(
-                    "pyarrow/fastparquet unavailable, falling back to pickle for chunk storage: %s",
-                    exc,
+                    "chunk_store_backend_fallback",
+                    backend="pickle",
+                    reason=str(exc) or "parquet engine unavailable",
                 )
-                self._use_pickle = True
+                self._backend = "pickle"
                 path = base_path.with_suffix(".pkl")
                 self._write_pickle(frame, path)
-            else:
-                self._paths.append(path)
-                self._row_count += len(frame)
-                return
-
-        self._paths.append(path)
-        self._row_count += len(frame)
 
         self._paths.append(path)
         self._row_count += len(frame)
 
     def iter_frames(self) -> Iterator[pd.DataFrame]:
         for path in self._paths:
-            if self._use_pickle or path.suffix == ".pkl":
+            if path.suffix == ".pkl":
                 yield pd.read_pickle(path)
             else:
                 yield pd.read_parquet(path)
