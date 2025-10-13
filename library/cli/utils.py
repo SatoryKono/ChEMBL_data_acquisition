@@ -37,7 +37,7 @@ from ..cli import (
 )
 from ..common.log import logger as default_logger
 from ..common.metadata import record_quality_failure
-from ..common.sidecar import SidecarErrors
+from ..common.sidecar import SidecarErrors, resolve_failure_chunk_size
 from ..config import (
     DEFAULT_CONFIG_PATH,
     Config,
@@ -648,7 +648,7 @@ def run_pipeline(
         required_cols = set()
         optional_cols = set()
 
-    errors = SidecarErrors()
+    errors = SidecarErrors(chunk_size=resolve_failure_chunk_size(cfg))
     rows_total = 0
     rows_kept = 0
     rows_dropped = 0

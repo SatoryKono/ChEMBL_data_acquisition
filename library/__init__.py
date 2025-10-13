@@ -60,6 +60,7 @@ _EXPORTS: dict[str, str] = {
     "TYPE_UNICELLULAR": "library.pipelines.target.organism_classification:TYPE_UNICELLULAR",
     "TYPE_VIRAL": "library.pipelines.target.organism_classification:TYPE_VIRAL",
     "SidecarErrors": "library.sidecar:SidecarErrors",
+    "resolve_failure_chunk_size": "library.sidecar:resolve_failure_chunk_size",
 }
 
 
@@ -95,6 +96,7 @@ __all__ = [
     "Config",
     "load_config",
     "SidecarErrors",
+    "resolve_failure_chunk_size",
     "write_csv_deterministic",
     "write_csv_chunks_deterministic",
     "sha256_file",

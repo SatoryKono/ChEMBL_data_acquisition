@@ -746,6 +746,7 @@ class DocQualityCfg(_BaseModel):
     fatal_on_error: bool = False
     auto_sample_row_limit: int | None = Field(default=None, ge=1)
     correlation_max_columns: int | None = Field(default=None, ge=1)
+    failure_chunk_size: int = Field(default=1000, ge=1)
 
 
 class ResourcesCfg(_BaseModel):

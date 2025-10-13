@@ -12,6 +12,29 @@ from ..config import Config
 from ..io.metadata import write_meta_yaml
 
 
+def resolve_failure_chunk_size(cfg: Config | None) -> int | None:
+    """Return the configured chunk size for failure sidecar buffers.
+
+    Parameters
+    ----------
+    cfg:
+        Optional application configuration.  When provided and the
+        ``doc_quality`` section exposes a ``failure_chunk_size`` attribute the
+        value is returned.  Missing configuration fragments fall back to
+        ``None`` which disables chunked spilling.
+    """
+
+    if cfg is None:
+        return None
+    system_cfg = getattr(cfg, "system", None)
+    if system_cfg is None:
+        return None
+    doc_quality_cfg = getattr(system_cfg, "doc_quality", None)
+    if doc_quality_cfg is None:
+        return None
+    return getattr(doc_quality_cfg, "failure_chunk_size", None)
+
+
 class SidecarErrors:
     """Collect tabular error records and persist them to CSV.
 
