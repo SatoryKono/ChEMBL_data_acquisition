@@ -77,7 +77,11 @@ def _chembl_library() -> Any:
 
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
+# ``_MISSING_IDENTIFIER_STATS_SAMPLE_SIZE`` controls how many missing identifiers
+# are persisted in execution stats to avoid generating extremely large log
+# payloads or metadata entries for massive gaps in the source dataset.
 _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
+_MISSING_IDENTIFIER_STATS_SAMPLE_SIZE = 100
 # ``finalize_output`` may consume placeholder rows from streaming sources, so
 # keep the chunk size moderate to avoid large peak allocations when many IDs are
 # missing from the source dataset.
@@ -1832,8 +1836,16 @@ def finalize_output(
     )
 
     if missing_ids_tuple:
-        stats["missing_molecule_ids"] = list(missing_ids_tuple)
-        stats["missing_molecule_ids_count"] = len(missing_ids_tuple)
+        _log_missing_identifier_summary(missing_ids_tuple)
+        missing_ids_sample = list(
+            islice(missing_ids_tuple, _MISSING_IDENTIFIER_STATS_SAMPLE_SIZE)
+        )
+        total_missing = len(missing_ids_tuple)
+        stats["missing_molecule_ids"] = missing_ids_sample
+        stats["missing_ids_sample"] = missing_ids_sample
+        stats["missing_molecule_ids_count"] = total_missing
+        stats["missing_molecule_ids_total"] = total_missing
+        stats["missing_molecule_ids_truncated"] = len(missing_ids_sample) < total_missing
     if parent_stats.failed_ids:
         stats["parent_lookup_failed_ids"] = list(parent_stats.failed_ids)
         stats["parent_lookup_failed_count"] = len(parent_stats.failed_ids)

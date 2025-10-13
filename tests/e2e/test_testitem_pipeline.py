@@ -141,6 +141,67 @@ def test_testitem_pipeline_e2e__finalize_stage_idempotent(
 
 
 @pytest.mark.e2e
+def test_testitem_pipeline_e2e__missing_identifier_stats_fields(
+    tmp_path: Path,
+    sample_input_csv: Path,
+    cfg,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg.system.doc_quality.enable = False
+
+    chunk = pd.DataFrame(
+        {
+            "molecule_chembl_id": pd.Series(["CHEMBL1"], dtype="string"),
+            "parent_molecule_chembl_id": pd.Series([pd.NA], dtype="string"),
+        }
+    )
+
+    stats = ParentLookupStats(
+        source="lookup",
+        missing=0,
+        unique=1,
+        attached=1,
+        uncovered=0,
+    )
+
+    def supplier() -> ParentLookupStats:
+        return stats
+
+    info_events: list[tuple[str, dict[str, object]]] = []
+
+    def capture_info(event: str, *args: object, **fields: object) -> None:
+        if args:
+            return
+        info_events.append((event, fields))
+
+    monkeypatch.setattr(cli.logger, "info", capture_info)
+
+    missing_ids = ["CHEMBL999"]
+
+    exit_code, _ = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=tmp_path / "missing.csv",
+        parent_stats_supplier=supplier,
+        input_csv=sample_input_csv,
+        missing_ids=missing_ids,
+        emit_legacy_artifacts=False,
+    )
+
+    assert exit_code == 0
+
+    stats_events = [fields for event, fields in info_events if event == "testitem_stats"]
+    assert stats_events, "expected testitem_stats event to be emitted"
+    payload = stats_events[-1]
+
+    assert payload["missing_molecule_ids"] == missing_ids
+    assert payload["missing_ids_sample"] == missing_ids
+    assert payload["missing_molecule_ids_total"] == len(missing_ids)
+    assert payload["missing_molecule_ids_count"] == len(missing_ids)
+    assert payload["missing_molecule_ids_truncated"] is False
+
+
+@pytest.mark.e2e
 @pytest.mark.pipeline_scenario("missing_identifiers_streaming")
 def test_testitem_pipeline_e2e__placeholder_generation_streaming_memory() -> None:
     missing_total = 6500
