@@ -88,24 +88,58 @@ StatsExtraMapping = Mapping[str, object]
 class _ParquetChunkStore:
     """Persist prepared chunks to temporary parquet files for later reuse."""
 
-    __slots__ = ("_tmpdir", "_paths", "_row_count")
+    __slots__ = ("_tmpdir", "_paths", "_row_count", "_use_pickle")
 
     def __init__(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory(prefix="pipeline_chunks_")
         self._paths: list[Path] = []
         self._row_count = 0
+        self._use_pickle = False
+
+    @staticmethod
+    def _write_pickle(frame: pd.DataFrame, path: Path) -> None:
+        frame.to_pickle(path, protocol=5)
 
     def append(self, frame: pd.DataFrame) -> None:
         if not isinstance(frame, pd.DataFrame):
             raise TypeError("chunk store expects pandas DataFrame inputs")
-        path = Path(self._tmpdir.name) / f"chunk_{len(self._paths):05d}.parquet"
-        frame.to_parquet(path, index=False)
+
+        base_path = Path(self._tmpdir.name) / f"chunk_{len(self._paths):05d}"
+
+        if self._use_pickle:
+            path = base_path.with_suffix(".pkl")
+            self._write_pickle(frame, path)
+        else:
+            path = base_path.with_suffix(".parquet")
+            try:
+                frame.to_parquet(path, index=False)
+            except ImportError as exc:
+                # Optional parquet engines are not installed in the execution
+                # environment.  Fall back to using pickle serialisation to keep
+                # the pipeline functional while maintaining deterministic
+                # behaviour.
+                default_logger.warning(
+                    "pyarrow/fastparquet unavailable, falling back to pickle for "
+                    "chunk storage: %s",
+                    exc,
+                )
+                self._use_pickle = True
+                path = base_path.with_suffix(".pkl")
+                self._write_pickle(frame, path)
+            else:
+                self._paths.append(path)
+                self._row_count += len(frame)
+                return
+
         self._paths.append(path)
         self._row_count += len(frame)
 
     def iter_frames(self) -> Iterator[pd.DataFrame]:
         for path in self._paths:
-            yield pd.read_parquet(path)
+            if self._use_pickle or path.suffix == ".pkl":
+                yield pd.read_pickle(path)
+            else:
+                yield pd.read_parquet(path)
 
     @property
     def row_count(self) -> int:
