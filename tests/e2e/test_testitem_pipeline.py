@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tracemalloc
 
 import pandas as pd
 import pytest
@@ -137,3 +138,28 @@ def test_testitem_pipeline_e2e__finalize_stage_idempotent(
 
     final_frame = pd.read_csv(dataset_path)
     assert list(final_frame["molecule_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
+
+
+@pytest.mark.e2e
+@pytest.mark.pipeline_scenario("missing_data")
+def test_testitem_pipeline_e2e__missing_identifiers_streaming_memory_budget() -> None:
+    missing_ids = [f"CHEMBL{i:07d}" for i in range(100_000, 105_000)]
+    chunk_size = cli.PLACEHOLDER_CHUNK_SIZE
+    tracemalloc.start()
+    _, baseline_peak = tracemalloc.get_traced_memory()
+    peak_bytes = baseline_peak
+    total_rows = 0
+    try:
+        for chunk in cli.stream_missing_placeholder_frames(
+            missing_ids, chunk_size=chunk_size
+        ):
+            _, peak = tracemalloc.get_traced_memory()
+            peak_bytes = max(peak_bytes, peak)
+            assert len(chunk) <= chunk_size
+            assert list(chunk.columns) == ["molecule_chembl_id"]
+            total_rows += len(chunk)
+    finally:
+        tracemalloc.stop()
+
+    assert total_rows == len(missing_ids)
+    assert peak_bytes - baseline_peak < 10 * 1024 * 1024
