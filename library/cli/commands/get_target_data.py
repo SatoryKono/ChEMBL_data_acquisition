@@ -35,7 +35,7 @@ import requests
 from pandera.errors import SchemaErrors
 
 import library.cli_utils as cli_utils_module
-from library import SidecarErrors, cli, io, resolve_failure_chunk_size
+from library import SidecarErrors, cli, io, offline, resolve_failure_chunk_size
 from library.cli import (
     Logger,
     LoggerConfig,
@@ -1493,6 +1493,11 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """
 
     root, shared, log_cfg = build_root_parser()
+    root.add_argument(
+        "--offline",
+        action="store_true",
+        help="Use cached fixtures for all pipelines instead of contacting remote APIs",
+    )
 
     def _add_output_arguments(
         parser_obj: argparse.ArgumentParser, *, defaults: bool
@@ -1583,6 +1588,12 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         description="Target data utilities",
         parents=[root],
     )
+    if not any("--offline" in action.option_strings for action in parser._actions):
+        parser.add_argument(
+            "--offline",
+            action="store_true",
+            help="Use cached fixtures instead of contacting remote APIs",
+        )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     def _add_common_cli_options(
@@ -2248,108 +2259,305 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         fetching data from the ChEMBL API, validating the result or writing the
         CSV artefact failed. All errors are logged with structured context.
     """
-    limit = cfg.target.chembl.limit
-    if limit is not None and limit < 1:
-        logger.error(
-            "invalid_limit",
-            section="target.chembl.limit",
-            limit=limit,
-        )
-        return 1
-
-    try:
-        ids_iter = io.read_ids(
-            args.input_csv, column=cfg.target.chembl.column, cfg=cfg.io
-        )
-    except (FileNotFoundError, ValueError) as exc:
-        logger.error(
-            "read_fail",
-            error=str(exc),
-            exc_info=exc,
-            path=str(args.input_csv),
-        )
-        return 1
-
-    offset = cfg.target.chembl.offset
-    base_ids_iter: Iterator[str] = ids_iter
-    if offset:
-        base_ids_iter = islice(base_ids_iter, offset, None)
-        logger.info("process_offset", offset=offset)
-    if limit is not None:
-        base_ids_iter = islice(base_ids_iter, limit)
-
-    processed_ids = 0
-
-    def _counted_ids() -> Iterator[str]:
-        nonlocal processed_ids
-        for target_id in base_ids_iter:
-            processed_ids += 1
-            yield target_id
-
-    counted_ids_iter = _counted_ids()
-
-    final_out_attr = getattr(args, "final_out", None)
-    if final_out_attr in (None, argparse.SUPPRESS):
-        base_output = Path(
-            io.default_output_path(
-                args.input_csv,
-                cfg.io,
-                date=getattr(args, "date", None),
+    offline_flag = offline.is_enabled(getattr(args, "offline", None))
+    args.offline = offline_flag
+    fixtures: offline.OfflineFixtures | None = None
+    if offline_flag:
+        try:
+            fixtures = offline.OfflineFixtures()
+        except FileNotFoundError as exc:
+            logger.error("target_offline_fixtures_missing", error=str(exc))
+            return 1
+        logger.info("target_offline_mode", base=str(fixtures.base_dir))
+    def _execute() -> int:
+        limit = cfg.target.chembl.limit
+        if limit is not None and limit < 1:
+            logger.error(
+                "invalid_limit",
+                section="target.chembl.limit",
+                limit=limit,
             )
-        )
-        args.final_out = base_output
-    else:
-        base_output = Path(final_out_attr)
-        if not isinstance(final_out_attr, Path):
+            return 1
+        
+        try:
+            ids_iter = io.read_ids(
+                args.input_csv, column=cfg.target.chembl.column, cfg=cfg.io
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            logger.error(
+                "read_fail",
+                error=str(exc),
+                exc_info=exc,
+                path=str(args.input_csv),
+            )
+            return 1
+        
+        offset = cfg.target.chembl.offset
+        base_ids_iter: Iterator[str] = ids_iter
+        if offset:
+            base_ids_iter = islice(base_ids_iter, offset, None)
+            logger.info("process_offset", offset=offset)
+        if limit is not None:
+            base_ids_iter = islice(base_ids_iter, limit)
+        
+        processed_ids = 0
+        
+        def _counted_ids() -> Iterator[str]:
+            nonlocal processed_ids
+            for target_id in base_ids_iter:
+                processed_ids += 1
+                yield target_id
+        
+        counted_ids_iter = _counted_ids()
+        
+        final_out_attr = getattr(args, "final_out", None)
+        if final_out_attr in (None, argparse.SUPPRESS):
+            base_output = Path(
+                io.default_output_path(
+                    args.input_csv,
+                    cfg.io,
+                    date=getattr(args, "date", None),
+                )
+            )
             args.final_out = base_output
-
-    raw_candidate = getattr(args, "raw_out", None)
-    if raw_candidate in (None, argparse.SUPPRESS):
-        legacy_raw_candidate = getattr(args, "raw_output", None)
-        if legacy_raw_candidate not in (None, argparse.SUPPRESS):
-            raw_candidate = legacy_raw_candidate
-    raw_path_override = (
-        Path(raw_candidate) if raw_candidate not in (None, argparse.SUPPRESS) else None
-    )
-    raw_destination = raw_path_override or _raw_output_path(base_output)
-    normalized_output = _normalized_output_path(base_output)
-
-    normalize_flag = getattr(args, "normalize_at_export", None)
-    if normalize_flag in (None, argparse.SUPPRESS):
-        normalize_at_export = True
-    else:
-        normalize_at_export = bool(normalize_flag)
-    reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
-
-    fetched_rows_total = 0
-    raw_dump_rows_total = 0
-    chembl_http_requests = 0
-
-    emit_standard_outputs = bool(getattr(args, "emit_standard_outputs", True))
-    emit_legacy_artifacts = bool(getattr(args, "emit_legacy_artifacts", False))
-
-    if not (emit_standard_outputs or emit_legacy_artifacts):
-        logger.info(
-            "chembl_pipeline_outputs_forced",
-            reason="run_pipeline_requires_outputs",
+        else:
+            base_output = Path(final_out_attr)
+            if not isinstance(final_out_attr, Path):
+                args.final_out = base_output
+        
+        raw_candidate = getattr(args, "raw_out", None)
+        if raw_candidate in (None, argparse.SUPPRESS):
+            legacy_raw_candidate = getattr(args, "raw_output", None)
+            if legacy_raw_candidate not in (None, argparse.SUPPRESS):
+                raw_candidate = legacy_raw_candidate
+        raw_path_override = (
+            Path(raw_candidate) if raw_candidate not in (None, argparse.SUPPRESS) else None
         )
-        emit_standard_outputs = True
-        args.emit_standard_outputs = True
-
-    args.emit_legacy_artifacts = emit_legacy_artifacts
-
-    if not normalize_at_export:
-
-        def _raw_fetcher() -> Iterator[pd.DataFrame]:
+        raw_destination = raw_path_override or _raw_output_path(base_output)
+        normalized_output = _normalized_output_path(base_output)
+        
+        normalize_flag = getattr(args, "normalize_at_export", None)
+        if normalize_flag in (None, argparse.SUPPRESS):
+            normalize_at_export = True
+        else:
+            normalize_at_export = bool(normalize_flag)
+        reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
+        
+        fetched_rows_total = 0
+        raw_dump_rows_total = 0
+        chembl_http_requests = 0
+        
+        emit_standard_outputs = bool(getattr(args, "emit_standard_outputs", True))
+        emit_legacy_artifacts = bool(getattr(args, "emit_legacy_artifacts", False))
+        
+        if not (emit_standard_outputs or emit_legacy_artifacts):
+            logger.info(
+                "chembl_pipeline_outputs_forced",
+                reason="run_pipeline_requires_outputs",
+            )
+            emit_standard_outputs = True
+            args.emit_standard_outputs = True
+        
+        args.emit_legacy_artifacts = emit_legacy_artifacts
+        
+        if not normalize_at_export:
+        
+            def _raw_fetcher() -> Iterator[pd.DataFrame]:
+                nonlocal fetched_rows_total, raw_dump_rows_total, chembl_http_requests
+                try:
+                    with ETLContext(cfg) as context:
+                        client = context.chembl_client
+        
+                        def _count_attempt() -> None:
+                            nonlocal chembl_http_requests
+                            chembl_http_requests += 1
+        
+                        batch_iter = cl.iter_target_batches_with_retry(
+                            counted_ids_iter,
+                            cfg=cfg.api,
+                            client=client,
+                            mapping_cfg=cfg.uniprot_mapping,
+                            chunk_size=cfg.target.chembl.chunk_size,
+                            timeout=cfg.target.chembl.timeout,
+                            retry_cfg=cfg.target.chembl.batch_retry,
+                            log=logger,
+                            on_attempt=_count_attempt,
+                        )
+                        for _, raw_chunk, parsed_chunk in batch_iter:
+                            raw_dump_rows_total += len(raw_chunk)
+                            fetched_rows_total += len(parsed_chunk)
+                            if raw_chunk.empty:
+                                continue
+                            yield raw_chunk
+                except (requests.RequestException, ValueError) as exc:
+                    logger.error(
+                        "chembl_fetch_failed",
+                        error=str(exc),
+                        exc_info=exc,
+                        chunk_size=cfg.target.chembl.chunk_size,
+                        timeout=cfg.target.chembl.timeout,
+                    )
+                    raise PipelineError(str(exc)) from exc
+        
+            def _raw_writer(
+                chunks: Iterator[pd.DataFrame],
+                destination: Path,
+                col_order: Sequence[str] | None,
+                key_cols: Sequence[str],
+            ) -> Path:
+                writer = _RawDumpStreamWriter(
+                    destination, cfg=cfg, reindex_columns=reindex_raw
+                )
+                for chunk in chunks:
+                    writer.write(chunk)
+                return writer.finalize()
+        
+            failure_path = raw_destination.with_name(
+                f"{raw_destination.stem}_failure_cases.csv"
+            )
+            execution = _run_pipeline_with_meta(
+                fetcher=_raw_fetcher,
+                schema=None,
+                schema_name="raw_target_payload",
+                validators=[],
+                metadata_hooks=[],
+                writer=_raw_writer,
+                output_path=raw_destination,
+                failure_path=failure_path,
+                command=" ".join(sys.argv),
+                config_snapshot=_serialize_paths(cfg.to_dict()),
+                inputs={"input_csv": str(args.input_csv)},
+                key_columns=[],
+                table_quality=lambda _: None,
+                cfg=cfg,
+                logger=logger,
+                emit_standard_outputs=emit_standard_outputs,
+                emit_legacy_artifacts=emit_legacy_artifacts,
+            )
+            exit_code_attr = getattr(execution, "exit_code", None)
+            exit_code = int(exit_code_attr if exit_code_attr is not None else execution)
+            dataset_path = getattr(execution, "dataset_path", None) or raw_destination
+            raw_destination = Path(dataset_path)
+            if exit_code != 0:
+                return exit_code
+        
+            destination = base_output
+            if raw_destination != destination:
+                _ensure_parent_directory(destination, cfg=cfg)
+                try:
+                    shutil.copy2(raw_destination, destination)
+                except OSError as exc:
+                    logger.error(
+                        "raw_to_final_copy_failed",
+                        error=str(exc),
+                        exc_info=exc,
+                        source=str(raw_destination),
+                        destination=str(destination),
+                    )
+                    return 1
+        
+            run_target_postprocess_if_requested(
+                destination,
+                cfg=cfg,
+                args=args,
+                context=IsoformPostprocessContext(
+                    args=args,
+                    http_requests=chembl_http_requests,
+                ),
+            )
+            if limit is not None:
+                logger.info("process_limit", limit=processed_ids)
+            logger.info(
+                "chembl_normalization_skipped",
+                output=str(destination),
+                rows=raw_dump_rows_total,
+            )
+            return 0
+        
+        final_candidate = getattr(args, "final_out", None)
+        if final_candidate in (None, argparse.SUPPRESS):
+            final_output = Path(
+                io.default_output_path(
+                    args.input_csv,
+                    cfg.io,
+                    date=getattr(args, "date", None),
+                )
+            )
+            args.final_out = final_output
+        else:
+            final_output = Path(final_candidate)
+            if not isinstance(final_candidate, Path):
+                args.final_out = final_output
+        
+        if raw_path_override is None:
+            raw_output = final_output
+        else:
+            raw_output = raw_path_override
+        
+        raw_format = str(getattr(args, "raw_format", "csv") or "csv").lower()
+        if raw_format not in {"csv", "parquet"}:
+            logger.warning("unsupported_raw_format", format=raw_format, fallback="csv")
+            raw_format = "csv"
+        
+        reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
+        # ``normalize_at_export`` already coerced above to avoid divergent values.
+        
+        id_cols_value = getattr(args, "id_cols", None)
+        if id_cols_value in (None, argparse.SUPPRESS):
+            key_columns = ["target_chembl_id"]
+        elif isinstance(id_cols_value, str):
+            key_columns = [id_cols_value]
+        else:
+            key_columns = list(id_cols_value) or ["target_chembl_id"]
+        failure_path = final_output.with_name(f"{final_output.stem}_failure_cases.csv")
+        
+        missing_optional_columns: set[str] = set()
+        placeholder_replacements = 0
+        post_cleanup_rows_total = 0
+        
+        def _prepare_chunk(frame: pd.DataFrame) -> pd.DataFrame:
+            nonlocal placeholder_replacements, post_cleanup_rows_total
+            prepared, _, missing_optional = _prepare_targets_for_schema(frame)
+            if missing_optional and not frame.empty:
+                placeholder_replacements += len(frame) * len(missing_optional)
+            post_cleanup_rows_total += len(prepared)
+            missing_optional_columns.update(missing_optional)
+            return prepared
+        
+        def _normalize_chunk(frame: pd.DataFrame) -> pd.DataFrame:
+            nonlocal raw_dump_rows_total
+            normalized_chunk = normalize_targets(frame)
+            raw_dump_rows_total += len(normalized_chunk)
+            return normalized_chunk
+        
+        def _validate_chunk(frame: pd.DataFrame) -> ValidationResult:
+            try:
+                validation = validate_targets(frame, return_result=True)
+            except SchemaErrors as exc:
+                validated_subset = getattr(exc, "validated_data", frame)
+                return ValidationResult(
+                    validated_subset,
+                    exc.failure_cases.copy(),
+                    "TargetsSchema",
+                )
+            return validation
+        
+        raw_dump_writer = _RawDumpStreamWriter(
+            raw_destination, cfg=cfg, reindex_columns=reindex_raw
+        )
+        
+        def fetcher() -> Iterator[pd.DataFrame]:
+        
             nonlocal fetched_rows_total, raw_dump_rows_total, chembl_http_requests
+        
             try:
                 with ETLContext(cfg) as context:
                     client = context.chembl_client
-
+        
                     def _count_attempt() -> None:
                         nonlocal chembl_http_requests
                         chembl_http_requests += 1
-
+        
                     batch_iter = cl.iter_target_batches_with_retry(
                         counted_ids_iter,
                         cfg=cfg.api,
@@ -2363,10 +2571,20 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     )
                     for _, raw_chunk, parsed_chunk in batch_iter:
                         raw_dump_rows_total += len(raw_chunk)
-                        fetched_rows_total += len(parsed_chunk)
-                        if raw_chunk.empty:
+                        try:
+                            raw_dump_writer.write(raw_chunk)
+                        except OSError as exc:
+                            logger.error(
+                                "raw_dump_failed",
+                                error=str(exc),
+                                exc_info=exc,
+                                path=str(raw_destination),
+                            )
+                            raise PipelineError(str(exc)) from exc
+                        if parsed_chunk.empty:
                             continue
-                        yield raw_chunk
+                        fetched_rows_total += len(parsed_chunk)
+                        yield parsed_chunk
             except (requests.RequestException, ValueError) as exc:
                 logger.error(
                     "chembl_fetch_failed",
@@ -2376,231 +2594,109 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     timeout=cfg.target.chembl.timeout,
                 )
                 raise PipelineError(str(exc)) from exc
-
-        def _raw_writer(
+        
+        metadata_summary: dict[str, Any] | None = None
+        
+        def writer(
             chunks: Iterator[pd.DataFrame],
             destination: Path,
             col_order: Sequence[str] | None,
             key_cols: Sequence[str],
         ) -> Path:
-            writer = _RawDumpStreamWriter(
-                destination, cfg=cfg, reindex_columns=reindex_raw
-            )
+            nonlocal metadata_summary
+            resolved_keys = list(key_cols) if key_cols else key_columns
+            column_order: Sequence[str] | None = col_order if reindex_raw else None
+        
+            if raw_format == "csv" and not normalize_at_export:
+                raw_path = io.write_csv(
+                    chunks,
+                    raw_output,
+                    cfg=cfg,
+                    sep=cfg.io.csv_sep,
+                    encoding=cfg.io.csv_encoding,
+                    key_cols=resolved_keys or None,
+                    col_order=column_order,
+                    chunksize=cfg.io.csv_chunksize,
+                )
+                if final_output != raw_output:
+                    shutil.copy2(raw_path, final_output)
+                    final_path = final_output
+                else:
+                    final_path = raw_path
+                run_target_postprocess_if_requested(
+                    final_path,
+                    cfg=cfg,
+                    args=args,
+                    context=IsoformPostprocessContext(
+                        args=args,
+                        http_requests=chembl_http_requests,
+                    ),
+                )
+                metadata_summary = {"total_rows": int(post_cleanup_rows_total)}
+                return final_path
+        
+            frames: list[pd.DataFrame] = []
             for chunk in chunks:
-                writer.write(chunk)
-            return writer.finalize()
-
-        failure_path = raw_destination.with_name(
-            f"{raw_destination.stem}_failure_cases.csv"
-        )
-        execution = _run_pipeline_with_meta(
-            fetcher=_raw_fetcher,
-            schema=None,
-            schema_name="raw_target_payload",
-            validators=[],
-            metadata_hooks=[],
-            writer=_raw_writer,
-            output_path=raw_destination,
-            failure_path=failure_path,
-            command=" ".join(sys.argv),
-            config_snapshot=_serialize_paths(cfg.to_dict()),
-            inputs={"input_csv": str(args.input_csv)},
-            key_columns=[],
-            table_quality=lambda _: None,
-            cfg=cfg,
-            logger=logger,
-            emit_standard_outputs=emit_standard_outputs,
-            emit_legacy_artifacts=emit_legacy_artifacts,
-        )
-        exit_code_attr = getattr(execution, "exit_code", None)
-        exit_code = int(exit_code_attr if exit_code_attr is not None else execution)
-        dataset_path = getattr(execution, "dataset_path", None) or raw_destination
-        raw_destination = Path(dataset_path)
-        if exit_code != 0:
-            return exit_code
-
-        destination = base_output
-        if raw_destination != destination:
-            _ensure_parent_directory(destination, cfg=cfg)
-            try:
-                shutil.copy2(raw_destination, destination)
-            except OSError as exc:
-                logger.error(
-                    "raw_to_final_copy_failed",
-                    error=str(exc),
-                    exc_info=exc,
-                    source=str(raw_destination),
-                    destination=str(destination),
-                )
-                return 1
-
-        run_target_postprocess_if_requested(
-            destination,
-            cfg=cfg,
-            args=args,
-            context=IsoformPostprocessContext(
-                args=args,
-                http_requests=chembl_http_requests,
-            ),
-        )
-        if limit is not None:
-            logger.info("process_limit", limit=processed_ids)
-        logger.info(
-            "chembl_normalization_skipped",
-            output=str(destination),
-            rows=raw_dump_rows_total,
-        )
-        return 0
-
-    final_candidate = getattr(args, "final_out", None)
-    if final_candidate in (None, argparse.SUPPRESS):
-        final_output = Path(
-            io.default_output_path(
-                args.input_csv,
-                cfg.io,
-                date=getattr(args, "date", None),
-            )
-        )
-        args.final_out = final_output
-    else:
-        final_output = Path(final_candidate)
-        if not isinstance(final_candidate, Path):
-            args.final_out = final_output
-
-    if raw_path_override is None:
-        raw_output = final_output
-    else:
-        raw_output = raw_path_override
-
-    raw_format = str(getattr(args, "raw_format", "csv") or "csv").lower()
-    if raw_format not in {"csv", "parquet"}:
-        logger.warning("unsupported_raw_format", format=raw_format, fallback="csv")
-        raw_format = "csv"
-
-    reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
-    # ``normalize_at_export`` already coerced above to avoid divergent values.
-
-    id_cols_value = getattr(args, "id_cols", None)
-    if id_cols_value in (None, argparse.SUPPRESS):
-        key_columns = ["target_chembl_id"]
-    elif isinstance(id_cols_value, str):
-        key_columns = [id_cols_value]
-    else:
-        key_columns = list(id_cols_value) or ["target_chembl_id"]
-    failure_path = final_output.with_name(f"{final_output.stem}_failure_cases.csv")
-
-    missing_optional_columns: set[str] = set()
-    placeholder_replacements = 0
-    post_cleanup_rows_total = 0
-
-    def _prepare_chunk(frame: pd.DataFrame) -> pd.DataFrame:
-        nonlocal placeholder_replacements, post_cleanup_rows_total
-        prepared, _, missing_optional = _prepare_targets_for_schema(frame)
-        if missing_optional and not frame.empty:
-            placeholder_replacements += len(frame) * len(missing_optional)
-        post_cleanup_rows_total += len(prepared)
-        missing_optional_columns.update(missing_optional)
-        return prepared
-
-    def _normalize_chunk(frame: pd.DataFrame) -> pd.DataFrame:
-        nonlocal raw_dump_rows_total
-        normalized_chunk = normalize_targets(frame)
-        raw_dump_rows_total += len(normalized_chunk)
-        return normalized_chunk
-
-    def _validate_chunk(frame: pd.DataFrame) -> ValidationResult:
-        try:
-            validation = validate_targets(frame, return_result=True)
-        except SchemaErrors as exc:
-            validated_subset = getattr(exc, "validated_data", frame)
-            return ValidationResult(
-                validated_subset,
-                exc.failure_cases.copy(),
-                "TargetsSchema",
-            )
-        return validation
-
-    raw_dump_writer = _RawDumpStreamWriter(
-        raw_destination, cfg=cfg, reindex_columns=reindex_raw
-    )
-
-    def fetcher() -> Iterator[pd.DataFrame]:
-
-        nonlocal fetched_rows_total, raw_dump_rows_total, chembl_http_requests
-
-        try:
-            with ETLContext(cfg) as context:
-                client = context.chembl_client
-
-                def _count_attempt() -> None:
-                    nonlocal chembl_http_requests
-                    chembl_http_requests += 1
-
-                batch_iter = cl.iter_target_batches_with_retry(
-                    counted_ids_iter,
-                    cfg=cfg.api,
-                    client=client,
-                    mapping_cfg=cfg.uniprot_mapping,
-                    chunk_size=cfg.target.chembl.chunk_size,
-                    timeout=cfg.target.chembl.timeout,
-                    retry_cfg=cfg.target.chembl.batch_retry,
-                    log=logger,
-                    on_attempt=_count_attempt,
-                )
-                for _, raw_chunk, parsed_chunk in batch_iter:
-                    raw_dump_rows_total += len(raw_chunk)
-                    try:
-                        raw_dump_writer.write(raw_chunk)
-                    except OSError as exc:
-                        logger.error(
-                            "raw_dump_failed",
-                            error=str(exc),
-                            exc_info=exc,
-                            path=str(raw_destination),
-                        )
-                        raise PipelineError(str(exc)) from exc
-                    if parsed_chunk.empty:
-                        continue
-                    fetched_rows_total += len(parsed_chunk)
-                    yield parsed_chunk
-        except (requests.RequestException, ValueError) as exc:
-            logger.error(
-                "chembl_fetch_failed",
-                error=str(exc),
-                exc_info=exc,
-                chunk_size=cfg.target.chembl.chunk_size,
-                timeout=cfg.target.chembl.timeout,
-            )
-            raise PipelineError(str(exc)) from exc
-
-    metadata_summary: dict[str, Any] | None = None
-
-    def writer(
-        chunks: Iterator[pd.DataFrame],
-        destination: Path,
-        col_order: Sequence[str] | None,
-        key_cols: Sequence[str],
-    ) -> Path:
-        nonlocal metadata_summary
-        resolved_keys = list(key_cols) if key_cols else key_columns
-        column_order: Sequence[str] | None = col_order if reindex_raw else None
-
-        if raw_format == "csv" and not normalize_at_export:
-            raw_path = io.write_csv(
-                chunks,
-                raw_output,
-                cfg=cfg,
-                sep=cfg.io.csv_sep,
-                encoding=cfg.io.csv_encoding,
-                key_cols=resolved_keys or None,
-                col_order=column_order,
-                chunksize=cfg.io.csv_chunksize,
-            )
-            if final_output != raw_output:
-                shutil.copy2(raw_path, final_output)
-                final_path = final_output
+                working = chunk
+                if column_order is not None:
+                    working = working.reindex(columns=column_order)
+                frames.append(working)
+        
+            if frames:
+                combined = pd.concat(frames, ignore_index=True)
             else:
+                combined = pd.DataFrame(columns=column_order or [])
+        
+            if resolved_keys:
+                missing_keys = [col for col in resolved_keys if col not in combined.columns]
+                if not missing_keys and resolved_keys:
+                    combined = combined.sort_values(by=list(resolved_keys)).reset_index(
+                        drop=True
+                    )
+        
+            if raw_format == "parquet":
+                try:
+                    combined.to_parquet(raw_output, index=False)
+                except ImportError as exc:  # pragma: no cover - optional dependency
+                    raise ValueError(
+                        "Parquet export requires optional pyarrow or fastparquet"
+                    ) from exc
+                raw_path = raw_output
+            else:
+                raw_path = io.write_csv(
+                    combined,
+                    raw_output,
+                    cfg=cfg,
+                    sep=cfg.io.csv_sep,
+                    encoding=cfg.io.csv_encoding,
+                    key_cols=resolved_keys or None,
+                    col_order=column_order,
+                )
+        
+            final_df = combined
+            if normalize_at_export:
+                final_df = normalize_targets(final_df)
+                final_df, _, missing_optional = _prepare_targets_for_schema(final_df)
+                if missing_optional is not None:
+                    missing_optional_columns.update(missing_optional)
+                    missing_optional_columns.update(missing_optional)
+        
+            if (
+                final_output == raw_output
+                and not normalize_at_export
+                and raw_format == "parquet"
+            ):
                 final_path = raw_path
+            else:
+                final_path = io.write_csv(
+                    final_df,
+                    final_output,
+                    cfg=cfg,
+                    sep=cfg.io.csv_sep,
+                    encoding=cfg.io.csv_encoding,
+                    key_cols=resolved_keys or None,
+                    col_order=TARGETS_COLUMN_ORDER,
+                )
             run_target_postprocess_if_requested(
                 final_path,
                 cfg=cfg,
@@ -2610,232 +2706,162 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     http_requests=chembl_http_requests,
                 ),
             )
-            metadata_summary = {"total_rows": int(post_cleanup_rows_total)}
+            metadata_summary = _build_metadata_summary(final_df)
             return final_path
-
-        frames: list[pd.DataFrame] = []
-        for chunk in chunks:
-            working = chunk
-            if column_order is not None:
-                working = working.reindex(columns=column_order)
-            frames.append(working)
-
-        if frames:
-            combined = pd.concat(frames, ignore_index=True)
-        else:
-            combined = pd.DataFrame(columns=column_order or [])
-
-        if resolved_keys:
-            missing_keys = [col for col in resolved_keys if col not in combined.columns]
-            if not missing_keys and resolved_keys:
-                combined = combined.sort_values(by=list(resolved_keys)).reset_index(
-                    drop=True
-                )
-
-        if raw_format == "parquet":
-            try:
-                combined.to_parquet(raw_output, index=False)
-            except ImportError as exc:  # pragma: no cover - optional dependency
-                raise ValueError(
-                    "Parquet export requires optional pyarrow or fastparquet"
-                ) from exc
-            raw_path = raw_output
-        else:
-            raw_path = io.write_csv(
-                combined,
-                raw_output,
-                cfg=cfg,
-                sep=cfg.io.csv_sep,
-                encoding=cfg.io.csv_encoding,
-                key_cols=resolved_keys or None,
-                col_order=column_order,
-            )
-
-        final_df = combined
-        if normalize_at_export:
-            final_df = normalize_targets(final_df)
-            final_df, _, missing_optional = _prepare_targets_for_schema(final_df)
-            if missing_optional is not None:
-                missing_optional_columns.update(missing_optional)
-                missing_optional_columns.update(missing_optional)
-
-        if (
-            final_output == raw_output
-            and not normalize_at_export
-            and raw_format == "parquet"
-        ):
-            final_path = raw_path
-        else:
-            final_path = io.write_csv(
-                final_df,
-                final_output,
-                cfg=cfg,
-                sep=cfg.io.csv_sep,
-                encoding=cfg.io.csv_encoding,
-                key_cols=resolved_keys or None,
-                col_order=TARGETS_COLUMN_ORDER,
-            )
-        run_target_postprocess_if_requested(
-            final_path,
+        
+        failure_path = normalized_output.with_name(
+            f"{normalized_output.stem}_failure_cases.csv"
+        )
+        doc_quality_cfg = cfg.system.doc_quality
+        table_quality = build_table_quality_hook(
+            doc_quality_cfg,
+            table_name=final_output.with_suffix(""),
+            destination=final_output.parent,
+        )
+        
+        metadata_hooks = [add_pipeline_metadata, _prepare_chunk]
+        if not normalize_at_export:
+            metadata_hooks.insert(0, normalize_targets)
+        
+        execution = _run_pipeline_with_meta(
+            fetcher=fetcher,
+            schema=TargetsSchema,
+            schema_name="TargetsSchema",
+            validators=[_validate_chunk],
+            metadata_hooks=metadata_hooks,
+            writer=writer,
+            output_path=raw_output,
+            failure_path=failure_path,
+            command=" ".join(sys.argv),
+            config_snapshot=_serialize_paths(cfg.to_dict()),
+            inputs={"input_csv": str(args.input_csv)},
+            key_columns=key_columns,
+            table_quality=table_quality,
             cfg=cfg,
-            args=args,
-            context=IsoformPostprocessContext(
-                args=args,
-                http_requests=chembl_http_requests,
+            logger=logger,
+            dictionary_resources=(
+                "target_uniprot_cache",
+                "target_iuphar_target",
+                "target_iuphar_family",
             ),
+            emit_standard_outputs=emit_standard_outputs,
+            emit_legacy_artifacts=emit_legacy_artifacts,
         )
-        metadata_summary = _build_metadata_summary(final_df)
-        return final_path
-
-    failure_path = normalized_output.with_name(
-        f"{normalized_output.stem}_failure_cases.csv"
-    )
-    doc_quality_cfg = cfg.system.doc_quality
-    table_quality = build_table_quality_hook(
-        doc_quality_cfg,
-        table_name=final_output.with_suffix(""),
-        destination=final_output.parent,
-    )
-
-    metadata_hooks = [add_pipeline_metadata, _prepare_chunk]
-    if not normalize_at_export:
-        metadata_hooks.insert(0, normalize_targets)
-
-    execution = _run_pipeline_with_meta(
-        fetcher=fetcher,
-        schema=TargetsSchema,
-        schema_name="TargetsSchema",
-        validators=[_validate_chunk],
-        metadata_hooks=metadata_hooks,
-        writer=writer,
-        output_path=raw_output,
-        failure_path=failure_path,
-        command=" ".join(sys.argv),
-        config_snapshot=_serialize_paths(cfg.to_dict()),
-        inputs={"input_csv": str(args.input_csv)},
-        key_columns=key_columns,
-        table_quality=table_quality,
-        cfg=cfg,
-        logger=logger,
-        dictionary_resources=(
-            "target_uniprot_cache",
-            "target_iuphar_target",
-            "target_iuphar_family",
-        ),
-        emit_standard_outputs=emit_standard_outputs,
-        emit_legacy_artifacts=emit_legacy_artifacts,
-    )
-    exit_code_attr = getattr(execution, "exit_code", None)
-    exit_code = int(exit_code_attr if exit_code_attr is not None else execution)
-    dataset_path_value = getattr(execution, "dataset_path", None)
-    if dataset_path_value is not None:
-        dataset_path = Path(dataset_path_value)
-    else:
-        dataset_path = Path(raw_output)
-    raw_output = dataset_path
-
-    if exit_code == 0:
-        _restore_legacy_output(final_output, dataset_path, cfg=cfg)
-
-    if not _finalize_raw_dump_writer(
-        raw_dump_writer,
-        logger=logger,
-        destination=raw_destination,
-    ):
-        return 1
-
-    if limit is not None:
-        logger.info("process_limit", limit=processed_ids)
-
-    if missing_optional_columns:
-        logger.debug(
-            "schema_optional_columns_missing",
-            columns=sorted(missing_optional_columns),
-        )
-
-    logger.info("chembl_stage_rows", stage="fetch", rows=fetched_rows_total)
-    logger.info("chembl_stage_rows", stage="raw_dump", rows=raw_dump_rows_total)
-    logger.info(
-        "chembl_stage_rows",
-        stage="post_cleanup",
-        rows=post_cleanup_rows_total,
-    )
-    logger.info(
-        "chembl_placeholder_replacements",
-        total=placeholder_replacements,
-    )
-
-    if exit_code == 0:
-        dataset_for_metadata = dataset_path
-        if not dataset_for_metadata.exists():
-            dataset_for_metadata = final_output
-
-        date_hint = getattr(args, "date", None)
-        resolved_date_hint = date_hint.strip() if isinstance(date_hint, str) else None
-        table_hint = getattr(args, "_auto_output_stem", None) or DEFAULT_OUTPUT_STEM
-        table_name_value, date_tag = _resolve_output_metadata(
-            dataset_for_metadata,
-            date_hint=resolved_date_hint,
-            table_hint=table_hint,
-        )
-
-        metadata_summary_payload = metadata_summary
-        if not metadata_summary_payload:
-            frame = _load_metadata_frame(dataset_for_metadata, cfg=cfg)
-            metadata_summary_payload = _build_metadata_summary(frame)
-
-        artifacts_obj = getattr(execution, "artifacts", None)
-        artifact_paths: list[Path] = [dataset_for_metadata]
-        if artifacts_obj is not None:
-            artifact_paths.extend(
-                [
-                    Path(artifacts_obj.dataset),
-                    Path(artifacts_obj.quality_report),
-                    Path(artifacts_obj.correlation_report),
-                ]
-            )
-        unique_artifacts = list(dict.fromkeys(artifact_paths))
-
-        io.save_metadata(
-            table_name=table_name_value,
-            date_tag=date_tag,
-            args=args,
-            qc_summary=metadata_summary_payload,
-            output_dir=dataset_for_metadata.parent,
-            artifacts=unique_artifacts,
-            run_context=get_run_context(),
-        )
-
-    if exit_code == 0 and not final_output.exists():
-        if dataset_path.exists():
-            if dataset_path != final_output:
-                try:
-                    _ensure_parent_directory(final_output, cfg=cfg)
-                    shutil.copy2(dataset_path, final_output)
-                except OSError as exc:
-                    logger.error(
-                        "chembl_final_output_restore_failed",
-                        error=str(exc),
-                        exc_info=exc,
-                        source=str(dataset_path),
-                        destination=str(final_output),
-                    )
-                    return 1
-                else:
-                    logger.info(
-                        "chembl_final_output_restored",
-                        source=str(dataset_path),
-                        destination=str(final_output),
-                    )
+        exit_code_attr = getattr(execution, "exit_code", None)
+        exit_code = int(exit_code_attr if exit_code_attr is not None else execution)
+        dataset_path_value = getattr(execution, "dataset_path", None)
+        if dataset_path_value is not None:
+            dataset_path = Path(dataset_path_value)
         else:
-            logger.error(
-                "chembl_final_output_missing_dataset",
-                expected=str(final_output),
-                dataset=str(dataset_path),
-            )
+            dataset_path = Path(raw_output)
+        raw_output = dataset_path
+        
+        if exit_code == 0:
+            _restore_legacy_output(final_output, dataset_path, cfg=cfg)
+        
+        if not _finalize_raw_dump_writer(
+            raw_dump_writer,
+            logger=logger,
+            destination=raw_destination,
+        ):
             return 1
-
-    return exit_code
+        
+        if limit is not None:
+            logger.info("process_limit", limit=processed_ids)
+        
+        if missing_optional_columns:
+            logger.debug(
+                "schema_optional_columns_missing",
+                columns=sorted(missing_optional_columns),
+            )
+        
+        logger.info("chembl_stage_rows", stage="fetch", rows=fetched_rows_total)
+        logger.info("chembl_stage_rows", stage="raw_dump", rows=raw_dump_rows_total)
+        logger.info(
+            "chembl_stage_rows",
+            stage="post_cleanup",
+            rows=post_cleanup_rows_total,
+        )
+        logger.info(
+            "chembl_placeholder_replacements",
+            total=placeholder_replacements,
+        )
+        
+        if exit_code == 0:
+            dataset_for_metadata = dataset_path
+            if not dataset_for_metadata.exists():
+                dataset_for_metadata = final_output
+        
+            date_hint = getattr(args, "date", None)
+            resolved_date_hint = date_hint.strip() if isinstance(date_hint, str) else None
+            table_hint = getattr(args, "_auto_output_stem", None) or DEFAULT_OUTPUT_STEM
+            table_name_value, date_tag = _resolve_output_metadata(
+                dataset_for_metadata,
+                date_hint=resolved_date_hint,
+                table_hint=table_hint,
+            )
+        
+            metadata_summary_payload = metadata_summary
+            if not metadata_summary_payload:
+                frame = _load_metadata_frame(dataset_for_metadata, cfg=cfg)
+                metadata_summary_payload = _build_metadata_summary(frame)
+        
+            artifacts_obj = getattr(execution, "artifacts", None)
+            artifact_paths: list[Path] = [dataset_for_metadata]
+            if artifacts_obj is not None:
+                artifact_paths.extend(
+                    [
+                        Path(artifacts_obj.dataset),
+                        Path(artifacts_obj.quality_report),
+                        Path(artifacts_obj.correlation_report),
+                    ]
+                )
+            unique_artifacts = list(dict.fromkeys(artifact_paths))
+        
+            io.save_metadata(
+                table_name=table_name_value,
+                date_tag=date_tag,
+                args=args,
+                qc_summary=metadata_summary_payload,
+                output_dir=dataset_for_metadata.parent,
+                artifacts=unique_artifacts,
+                run_context=get_run_context(),
+            )
+        
+        if exit_code == 0 and not final_output.exists():
+            if dataset_path.exists():
+                if dataset_path != final_output:
+                    try:
+                        _ensure_parent_directory(final_output, cfg=cfg)
+                        shutil.copy2(dataset_path, final_output)
+                    except OSError as exc:
+                        logger.error(
+                            "chembl_final_output_restore_failed",
+                            error=str(exc),
+                            exc_info=exc,
+                            source=str(dataset_path),
+                            destination=str(final_output),
+                        )
+                        return 1
+                    else:
+                        logger.info(
+                            "chembl_final_output_restored",
+                            source=str(dataset_path),
+                            destination=str(final_output),
+                        )
+            else:
+                logger.error(
+                    "chembl_final_output_missing_dataset",
+                    expected=str(final_output),
+                    dataset=str(dataset_path),
+                )
+                return 1
+        
+        return exit_code
+    if fixtures is None:
+        return _execute()
+    with offline.patch_target(fixtures):
+        return _execute()
 
 
 def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:

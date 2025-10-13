@@ -91,6 +91,10 @@
 - Статический анализ и линтеры.
 - `pytest --json-report` с выгрузкой `reports/test_report.json` и `reports/test_summary.md`.
 - При необходимости — smoke-запуск конвейеров на примерах + `check-determinism`.
+- Smoke-проверки CLI запускают `scripts/get_activity_data.py`,
+  `scripts/get_assay_data.py` и `scripts/get_target_data.py` с
+  `CHEMBL_DA_OFFLINE=1` на фикстурах `tests/resources/pipeline_inputs`, чтобы
+  кешированные ответы оставались совместимыми с парсерами.
 - Контроль: доля успешных тестов ≥ 95%.
 
 Рекомендуется загружать QC-отчёты как артефакты. При деградациях создавайте

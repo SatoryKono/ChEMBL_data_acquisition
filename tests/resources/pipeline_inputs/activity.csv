@@ -1,4 +1,4 @@
-activity_id,assay_chembl_id,molecule_chembl_id,standard_value,standard_units
-A1,CHEMBLA1,CHEMBLM1,10,nM
-A1,CHEMBLA1,CHEMBLM1,10,nM
-A3,CHEMBLA2,CHEMBLM2,,nM
+activity_id,activity_chembl_id,assay_chembl_id,molecule_chembl_id,standard_value,standard_units
+A1,ACTIVITY1,CHEMBLA1,CHEMBLM1,10,nM
+A1,ACTIVITY1,CHEMBLA1,CHEMBLM1,10,nM
+A3,ACTIVITY3,CHEMBLA2,CHEMBLM2,,nM
