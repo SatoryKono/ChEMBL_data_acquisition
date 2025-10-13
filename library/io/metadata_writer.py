@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from dataclasses import asdict, is_dataclass
+
 import yaml
 
 
@@ -18,6 +20,8 @@ logger = logging.getLogger(__name__)
 def _serialise_value(value: Any) -> Any:
     """Return a YAML-safe representation of ``value``."""
 
+    if is_dataclass(value):
+        return _serialise_value(asdict(value))
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, argparse.Namespace):
