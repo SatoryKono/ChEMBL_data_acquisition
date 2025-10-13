@@ -28,11 +28,16 @@ flowchart LR
 ```
 
 Each pipeline is idempotent and can be executed independently. The
-[`get-data`](./scripts/get_data.py) orchestrator reuses the same configuration
-and logging options to run the Document → Target → Assay → Test item → Activity
-sequence automatically while producing consistent outputs. When tissue lookups
-are needed, operators run `get_tissue_data` separately to refresh the reference
-tables before executing the activity pipeline.
+`get-data` console script (exposed via
+`library.cli.entrypoints:get_data_main`) reuses the same configuration and
+logging options to run the Document → Target → Assay → Test item → Activity
+sequence automatically while producing consistent outputs. The compatibility
+wrapper `python scripts/get_data.py` remains available for automation that
+expects the historical path, but it only forwards the shared stage flags (for
+example `--limit`, `--force`, `--skip-existing`, `--dry-run`) and does not
+understand the orchestrator-only overrides. When tissue lookups are needed,
+operators run `get_tissue_data` separately to refresh the reference tables
+before executing the activity pipeline.
 
 ## Repository layout
 
@@ -121,7 +126,8 @@ guarantee consistent formatting and linting outcomes.
 Inspect the orchestrator and pipeline-specific flags:
 
 ```bash
-python scripts/get_data.py --help
+get-data --help
+python scripts/get_data.py --help  # compatibility wrapper (shared flags only)
 python scripts/get_document_data.py --help
 ```
 
@@ -129,7 +135,7 @@ Run the complete workflow against the sample identifiers and write outputs to
 `./output`:
 
 ```bash
-python scripts/get_data.py \
+get-data \
   --base-path . \
   --input-dir data/input \
   --output-dir output \
@@ -212,7 +218,7 @@ events while investigating discrepancies.
 
 | Command | Example invocation | Highlights |
 |---------|--------------------|------------|
-| Orchestrator | `python scripts/get_data.py --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --dry-run` | Runs the full pipeline chain once, forwarding `--limit`, `--force`, `--skip-existing` and `--dry-run` to individual stages. Advanced flags include `--pipeline-registry` to load alternative step definitions and `--override-{input,output-stem,subcommand}` for ad hoc tweaks. |
+| Orchestrator | `get-data --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --dry-run` | Runs the full pipeline chain once, writes run manifests, and accepts orchestrator-only options such as `--pipeline-registry` and `--override-{input,output-stem,subcommand}`. The legacy `python scripts/get_data.py` wrapper only forwards the shared stage flags (`--limit`, `--force`, `--skip-existing`, `--dry-run`). |
 | Document | `python scripts/get_document_data.py --mode all --input data/input/document.csv --final-out output/documents.csv --fallback-doi-enabled --fallback-doi-path data/input/fallback.csv --openalex-rps 2` | Supports `--mode chembl|pubmed|all`, per-source batch sizing and fallback DOI overrides. |
 | Target | `python scripts/get_target_data.py all --input data/input/target.csv --final-out output/targets.csv --chembl-chunk-size 10 --uniprot-data-dir cache/uniprot --raw-out output/targets_raw.parquet --raw-format parquet` | Sub-commands (`uniprot`, `chembl`, `iuphar`, `all`) accept prefixed overrides and optional raw exports. |
 | Assay | `python scripts/get_assay_data.py --input data/input/assay.csv --final-out output/assay.csv --chunk-size 25 --timeout 45` | Requires the assay, taxonomy and target dictionaries under `config/dictionary` to enrich `assay_group`, `assay_strain`, `year` and `accession` before normalisation; shares global options plus per-request chunk size and timeout tuning. |
