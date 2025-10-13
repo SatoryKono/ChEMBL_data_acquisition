@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import shutil
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -8,6 +10,86 @@ import pytest
 
 from library.config import MoleculeCatalogCfg
 from library.pipelines.testitem import catalog
+
+
+@pytest.fixture()
+def hierarchy_lookup_parity(
+    cfg,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+):
+    """Run CLI and pipeline lookup loaders and ensure parity."""
+
+    from scripts import get_testitem_data
+
+    from library.pipelines.testitem import catalog as pipeline_catalog
+
+    default_source = Path(__file__).resolve().parents[1] / "resources" / "molecule_hierarchy.csv"
+
+    def _run(
+        *,
+        source_path: Path | None = None,
+        encoding: str | None = None,
+        delimiter: str | None = None,
+    ) -> dict[str, object]:
+        csv_source = Path(source_path or default_source)
+        resolved_path = tmp_path / csv_source.name
+        shutil.copy(csv_source, resolved_path)
+
+        caplog.set_level(logging.INFO, logger="chembl")
+
+        caplog.clear()
+        cli_mapping = get_testitem_data.load_molecule_hierarchy_lookup(
+            resolved_path,
+            io_cfg=cfg.io,
+            encoding=encoding,
+            delimiter=delimiter,
+        )
+        cli_messages = [
+            record.getMessage()
+            for record in caplog.records
+            if "molecule_hierarchy_lookup_loaded" in record.getMessage()
+        ]
+
+        caplog.clear()
+        pipeline_mapping = pipeline_catalog.load_molecule_hierarchy_lookup(
+            resolved_path,
+            io_cfg=cfg.io,
+            encoding=encoding,
+            delimiter=delimiter,
+        )
+        pipeline_messages = [
+            record.getMessage()
+            for record in caplog.records
+            if "molecule_hierarchy_lookup_loaded" in record.getMessage()
+        ]
+
+        assert cli_mapping == pipeline_mapping
+        assert cli_messages == pipeline_messages
+
+        return {
+            "mapping": cli_mapping,
+            "messages": cli_messages,
+            "path": str(resolved_path),
+        }
+
+    return _run
+
+
+@pytest.mark.integration
+def test_load_molecule_hierarchy_lookup__cli_pipeline_parity(
+    hierarchy_lookup_parity,
+):
+    """CLI compatibility wrapper should mirror pipeline behaviour."""
+
+    result = hierarchy_lookup_parity()
+
+    expected_message = (
+        "molecule_hierarchy_lookup_loaded "
+        f"path='{result['path']}' rows=2 rps=None status=None"
+    )
+
+    assert result["messages"] == [expected_message]
 
 
 def _stub_parent_catalog_calls(monkeypatch: pytest.MonkeyPatch) -> None:
