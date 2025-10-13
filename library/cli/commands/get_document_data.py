@@ -66,6 +66,7 @@ from library.cli.logging import setup_cli_logging
 from library.cli.metadata import prepare_option
 from library.cli.utils import run_cli_command
 from library.common.csv_utils import write_csv_chunks_deterministic
+from library.common.run_context import get_current as get_run_context
 from library.common.log import logger
 from library.common.sidecar import SidecarErrors, resolve_failure_chunk_size
 from library.config import (
@@ -763,6 +764,7 @@ def _finalise_export(
             artifacts.correlation_report,
         ],
         sources=metadata_sources,
+        run_context=get_run_context(),
     )
 
     logger.info(

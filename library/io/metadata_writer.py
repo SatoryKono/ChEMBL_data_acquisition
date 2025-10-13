@@ -13,6 +13,8 @@ from dataclasses import asdict, is_dataclass
 
 import yaml
 
+from library.common.run_context import RunContext, get_current
+
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +77,22 @@ def _resolve_outputs(
     ]
 
 
+def _resolve_generated_at(run_context: RunContext | None) -> str:
+    """Return the timestamp to be stored in metadata."""
+
+    if run_context is not None:
+        generated_at = getattr(run_context, "generated_at", None)
+        if generated_at:
+            return str(generated_at)
+
+    return (
+        datetime.utcnow()
+        .replace(tzinfo=timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z")
+    )
+
+
 def save_metadata(
     table_name: str,
     date_tag: str,
@@ -84,6 +102,7 @@ def save_metadata(
     output_dir: Path | str | None = None,
     artifacts: Sequence[Path] | None = None,
     sources: Sequence[str] | None = None,
+    run_context: RunContext | None = None,
 ) -> Path:
     """Persist pipeline metadata for ``table_name`` outputs."""
 
@@ -95,9 +114,13 @@ def save_metadata(
     parameters = _serialise_parameters(args)
     outputs = _resolve_outputs(table_name, date_tag, artifacts=artifacts)
 
+    resolved_context = run_context
+    if resolved_context is None:
+        resolved_context = get_current()
+
     meta: dict[str, Any] = {
         "table": table_name,
-        "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "generated_at": _resolve_generated_at(resolved_context),
         "pipeline_version": "2.1",
         "parameters": parameters,
         "sources": list(sources or []),
