@@ -197,3 +197,33 @@ def test_iter_additional_checksums__merges_manifest_allowlist(tmp_path: Path) ->
         "3d2b7a7da5380896972b4ccac5ceaad1ccdaf19e2e2f7da995e70770ab75579a" in variants
     )
     assert custom_checksum in variants
+
+
+@pytest.mark.unit
+def test_parse_manifest__raises_on_checksum_mismatch(
+    dictionary_bundle: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Checksum mismatches should raise an explicit manifest error."""
+
+    monkeypatch.delenv("CHEMBL_DA_ALLOW_DICT_RELAX", raising=False)
+
+    manifest_path = dictionary_bundle / "manifest.yaml"
+    manifest_data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    resources = manifest_data.setdefault("resources", {})
+    entry = resources.get("dictionary_root")
+    assert isinstance(entry, dict)
+    entry["sha256"] = ["deadbeef" * 8]
+    manifest_path.write_text(
+        yaml.safe_dump(manifest_data, sort_keys=False), encoding="utf-8"
+    )
+
+    monkeypatch.setattr(
+        dictionaries, "_iter_additional_checksums", lambda name, base_dir=None: ()
+    )
+
+    dictionaries._load_manifest.cache_clear()
+    try:
+        with pytest.raises(dictionaries.DictionaryManifestError):
+            dictionaries._parse_manifest(base_dir=dictionary_bundle)
+    finally:
+        dictionaries._load_manifest.cache_clear()
