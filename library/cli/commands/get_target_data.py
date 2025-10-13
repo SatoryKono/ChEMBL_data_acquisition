@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from itertools import islice
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Mapping
 
 import pandas as pd
 import requests
@@ -3867,6 +3867,7 @@ def validate_and_write(
     output: Path,
     cfg: Config,
     *,
+    args: argparse.Namespace | Mapping[str, Any] | None = None,
     raw_out: Path | None = None,
     id_cols: Sequence[str] | None = None,
     raw_format: str = "csv",
@@ -4403,6 +4404,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             merged,
             final_output,
             cfg,
+            args=args,
             raw_out=raw_output,
             id_cols=key_columns,
             raw_format=raw_format,

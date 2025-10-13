@@ -1749,6 +1749,7 @@ def test_validate_and_write__removes_postprocess_sidecars(
     produced = sorted(path.name for path in tmp_path.iterdir())
     assert produced == [
         "output.targets_20230101.csv",
+        "output.targets_20230101.meta.yaml",
         "output.targets_20230101_data_correlation_report_table.csv",
         "output.targets_20230101_quality_report_table.csv",
     ]
