@@ -49,23 +49,43 @@ def _run_activity(
     *,
     dry_run: bool,
     timeout: float | None = None,
+    offline: bool = False,
+    fixtures_dir: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.setdefault("PYTHONHASHSEED", "0")
     repo_root = Path(__file__).resolve().parents[1]
-    cmd = [
-        sys.executable,
-        "-m",
-        "scripts.get_activity_data",
-        "--limit",
-        str(limit),
-        "--final-out",
-        str(destination),
-        "--input",
-        str(input_csv),
-    ]
-    if dry_run:
-        cmd.append("--dry-run")
+    if offline:
+        if fixtures_dir is None:
+            raise ValueError("fixtures_dir must be provided when offline is enabled")
+        env["CHEMBL_DA_OFFLINE"] = "1"
+        cmd = [
+            sys.executable,
+            "-m",
+            "tests.helpers.activity_offline_cli",
+            "--fixtures-dir",
+            str(fixtures_dir),
+            "--destination",
+            str(destination),
+            "--input",
+            str(input_csv),
+            "--limit",
+            str(limit),
+        ]
+    else:
+        cmd = [
+            sys.executable,
+            "-m",
+            "scripts.get_activity_data",
+            "--limit",
+            str(limit),
+            "--final-out",
+            str(destination),
+            "--input",
+            str(input_csv),
+        ]
+        if dry_run:
+            cmd.append("--dry-run")
     return subprocess.run(
         cmd,
         text=True,
@@ -161,6 +181,24 @@ def main(argv: list[str] | None = None) -> int:
         default=600.0,
         help="Timeout in seconds for each pipeline run (default: 600).",
     )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help=(
+            "Run the determinism check in offline mode using prepared fixtures. "
+            "This replaces the get_activity_data CLI with a lightweight stub and "
+            "avoids network calls."
+        ),
+    )
+    parser.add_argument(
+        "--fixtures-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Path to a directory with offline fixtures. When --offline is set and "
+            "no path is provided, defaults to tests/resources/expected_get_data."
+        ),
+    )
     parser.set_defaults(dry_run=False)
 
     args = parser.parse_args(argv)
@@ -171,6 +209,23 @@ def main(argv: list[str] | None = None) -> int:
     try:
         first = tmp_dir / "first.csv"
         second = tmp_dir / "second.csv"
+
+        if args.offline and args.dry_run:
+            sys.stderr.write(
+                "Offline mode does not support --dry-run; rerun without --dry-run.\n"
+            )
+            return 2
+
+        repo_root = Path(__file__).resolve().parents[1]
+        fixtures_dir = args.fixtures_dir
+        if args.offline and fixtures_dir is None:
+            fixtures_dir = repo_root / "tests" / "resources" / "expected_get_data"
+        if args.offline:
+            if fixtures_dir is None or not fixtures_dir.exists():
+                sys.stderr.write(
+                    "Offline mode requested but fixtures directory is missing.\n"
+                )
+                return 2
 
         if args.input_csv is not None:
             input_csv = args.input_csv
@@ -189,6 +244,8 @@ def main(argv: list[str] | None = None) -> int:
                 input_csv,
                 dry_run=args.dry_run,
                 timeout=args.timeout,
+                offline=args.offline,
+                fixtures_dir=fixtures_dir,
             )
         except subprocess.TimeoutExpired as exc:
             _report_process_timeout("first run", exc)
@@ -204,6 +261,8 @@ def main(argv: list[str] | None = None) -> int:
                 input_csv,
                 dry_run=args.dry_run,
                 timeout=args.timeout,
+                offline=args.offline,
+                fixtures_dir=fixtures_dir,
             )
         except subprocess.TimeoutExpired as exc:
             _report_process_timeout("second run", exc)
