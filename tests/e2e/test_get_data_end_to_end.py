@@ -4,6 +4,7 @@ import argparse
 import io
 import json
 import shutil
+import textwrap
 from collections import deque
 from collections.abc import Callable
 from functools import lru_cache
@@ -823,6 +824,102 @@ def test_get_data_end_to_end__blocked_steps_after_failure(
         / f"output.{get_data.DEFAULT_OUTPUT_STEMS['target']}_{date_prefix}.csv.failed"
     )
     assert target_sentinel.exists()
+
+
+@pytest.mark.e2e
+@pytest.mark.pipeline_scenario("enrichment")
+def test_get_data_end_to_end__pubchem_disable_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stub_script = tmp_path / "stub_testitem_script.py"
+    stub_script.write_text(
+        textwrap.dedent(
+            """
+            from __future__ import annotations
+
+            import argparse
+            import json
+            import os
+            import sys
+            from pathlib import Path
+
+
+            def _pc_init_session(*_args: object, **_kwargs: object) -> None:
+                raise SystemExit("pc.init_session should not be called when disabled")
+
+
+            def main(argv: list[str] | None = None) -> int:
+                parser = argparse.ArgumentParser()
+                parser.add_argument(
+                    "--pubchem-enable",
+                    dest="pubchem_enable",
+                    action=argparse.BooleanOptionalAction,
+                    default=None,
+                )
+                args, _ = parser.parse_known_args(argv)
+
+                for token in sys.argv[1:]:
+                    if token == "--pubchem-enable" or token.startswith("--pubchem-enable="):
+                        raise SystemExit("unexpected --pubchem-enable flag present")
+
+                if args.pubchem_enable is not False:
+                    raise SystemExit(
+                        f"expected pubchem_enable to be False, got {args.pubchem_enable!r}"
+                    )
+
+                result_path = os.environ.get("PUBCHEM_TEST_RESULT_PATH")
+                if result_path:
+                    Path(result_path).write_text(
+                        json.dumps(
+                            {
+                                "pubchem_enable": args.pubchem_enable,
+                                "env": os.environ.get("CHEMBL_DA_PUBCHEM_ENABLE"),
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+
+                if args.pubchem_enable:
+                    _pc_init_session()
+
+                return 0
+
+
+            if __name__ == "__main__":
+                raise SystemExit(main())
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    result_path = tmp_path / "pubchem_result.json"
+    monkeypatch.setenv("PUBCHEM_TEST_RESULT_PATH", str(result_path))
+    monkeypatch.setenv("CHEMBL_DA_PUBCHEM_ENABLE", "0")
+
+    custom_stages = tuple(
+        get_data.Stage(stage.name, str(stub_script) if stage.name == "testitem" else stage.script)
+        for stage in get_data.STAGES
+    )
+    monkeypatch.setattr(get_data, "STAGES", custom_stages)
+    monkeypatch.setattr(get_data, "LOGS_DIR", tmp_path / "logs")
+    monkeypatch.setattr(get_data, "OUTPUT_DIR", tmp_path / "output")
+
+    argv = [
+        "--skip",
+        "document",
+        "target",
+        "assay",
+        "activity",
+        "--no-pubchem-enable",
+    ]
+
+    exit_code = get_data.main(argv)
+    assert exit_code == 0
+    assert result_path.exists()
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    assert payload["pubchem_enable"] is False
+    assert payload["env"] == "0"
 
 
 _ASSAY_DICTIONARY_PATH = (
