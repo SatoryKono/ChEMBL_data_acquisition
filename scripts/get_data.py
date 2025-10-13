@@ -419,7 +419,11 @@ def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> Forwar
     extra_len = len(forwarded_extras)
 
     def _has_option(option: str) -> bool:
-        return option in forward
+        prefixed = f"{option}="
+        return any(
+            token == option or token.startswith(prefixed)
+            for token in forward
+        )
 
     # if not _has_option("--base-path"):
     #    base_path = _resolve_forward_base_path(args, forwarded_extras)

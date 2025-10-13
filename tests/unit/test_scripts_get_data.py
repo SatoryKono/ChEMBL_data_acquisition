@@ -83,3 +83,20 @@ def test_run_stage__inserts_default_document_subcommand(monkeypatch):
     command = captured["command"]
     assert "all" in command[2:], "expected default 'all' subcommand to be forwarded"
     assert command.index("all") < command.index("--limit")
+
+
+@pytest.mark.unit
+def test_build_forward_args__respects_equals_style_output_dir(tmp_path):
+    """Explicit ``--output-dir=...`` values should not be overridden by defaults."""
+
+    from scripts import get_data as cli
+
+    custom_output = tmp_path / "out"
+    args, extras = cli.parse_args([f"--output-dir={custom_output}"])
+
+    forward = cli.build_forward_args(args, extras)
+
+    tokens = forward.tokens
+    assert f"--output-dir={custom_output}" in tokens
+    assert "--output-dir" not in tokens, "default output-dir flag must not be duplicated"
+    assert str(cli.DEFAULT_OUTPUT_DIR) not in tokens
