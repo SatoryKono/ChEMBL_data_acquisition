@@ -71,10 +71,13 @@ Important flags:
 | `--dry-run` | Resolve and log the plan without touching the filesystem. | Validate configuration in CI or notebooks. |
 | `--debug`, `--keep-intermediate` | Retain intermediate artefacts; `--debug` also emits verbose diagnostics. | Inspect pipeline internals when diagnosing failures. |
 | `--disable-pubchem` | Skip PubChem enrichment during the test item stage. | Isolate enrichment issues or reproduce legacy datasets. |
+| `--force-pubchem` | Force-enable PubChem enrichment even if the YAML disables it. | Override temporary experiment toggles. |
 | `--print-config` | Emit the resolved configuration and exit. | Capture canonical settings for reviews. |
 | `--run-id` | Provide a deterministic identifier for logs and manifests. | Correlate orchestrator runs with external schedulers. |
 
 These toggles are handled by `_parse_args` and `PipelineRunConfig`, so they maintain the canonical registry while adjusting runtime behaviour.【F:library/cli/commands/get_data.py†L949-L1108】
+
+PubChem controls follow a strict priority chain: the orchestrator honours `--disable-pubchem` first, applies `--force-pubchem` next when present, and otherwise relies on `sources.pubchem.enable` from the configuration file.【F:library/cli/commands/get_data.py†L1060-L1108】【F:library/cli/commands/get_data.py†L1427-L1471】
 
 ### Advanced overrides
 

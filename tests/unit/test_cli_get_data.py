@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from library.cli.commands import get_data
+from library.config import Config, PubChemCfg, SourcesCfg
 
 
 def _make_run_config(tmp_path: Path) -> get_data.PipelineRunConfig:
@@ -52,3 +54,69 @@ def test_output_path__rejects_parent_escape(tmp_path: Path) -> None:
     message = str(excinfo.value)
     assert "escape" in message
     assert "output directory" in message
+
+
+@pytest.mark.unit
+def test_ensure_pubchem_enabled__respects_disabled_flag(caplog: pytest.LogCaptureFixture) -> None:
+    cfg = Config(sources=SourcesCfg(pubchem=PubChemCfg(enable=False)))
+
+    with caplog.at_level(logging.WARNING):
+        get_data._ensure_pubchem_enabled(cfg, force=False)
+
+    assert cfg.sources.pubchem.enable is False
+    assert any(
+        record.message.startswith("testitem_pubchem_disabled")
+        and "reason='config_explicit_disable'" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.unit
+def test_ensure_pubchem_enabled__force_overrides_disabled_flag(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    cfg = Config(sources=SourcesCfg(pubchem=PubChemCfg(enable=False)))
+
+    with caplog.at_level(logging.INFO):
+        get_data._ensure_pubchem_enabled(cfg, force=True)
+
+    assert cfg.sources.pubchem.enable is True
+    assert any(
+        record.message.startswith("testitem_pubchem_enable_override")
+        and "reason='cli_force_pubchem'" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.unit
+def test_ensure_testitem_pubchem_enabled__respects_disabled_flag(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    cfg = Config(sources=SourcesCfg(pubchem=PubChemCfg(enable=False)))
+
+    with caplog.at_level(logging.WARNING):
+        get_data._ensure_testitem_pubchem_enabled(cfg, force=False)
+
+    assert cfg.pubchem.enable is False
+    assert any(
+        record.message.startswith("testitem_pubchem_disabled")
+        and "reason='config_explicit_disable'" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.unit
+def test_ensure_testitem_pubchem_enabled__force_overrides_disabled_flag(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    cfg = Config(sources=SourcesCfg(pubchem=PubChemCfg(enable=False)))
+
+    with caplog.at_level(logging.INFO):
+        get_data._ensure_testitem_pubchem_enabled(cfg, force=True)
+
+    assert cfg.pubchem.enable is True
+    assert any(
+        record.message.startswith("testitem_pubchem_enable_override")
+        and "reason='cli_force_pubchem'" in record.message
+        for record in caplog.records
+    )

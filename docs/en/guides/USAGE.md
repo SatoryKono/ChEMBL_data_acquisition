@@ -79,8 +79,11 @@ Helpful switches while iterating:
 | `--keep-intermediate` | Preserve intermediary folders without forcing debug logging. | Capture diagnostic files for later review. |
 | `--dry-run` | Resolve the plan and log intended actions without touching the filesystem. | Validate configuration in CI or notebooks. |
 | `--disable-pubchem` | Skip PubChem enrichment within the test item step. | Compare legacy exports or isolate enrichment drift. |
+| `--force-pubchem` | Force-enable PubChem enrichment even when the YAML disables it. | Bypass temporary configuration overrides during investigations. |
 | `--print-config` | Output the resolved configuration and exit. | Archive the exact settings used for a run. |
 | `--run-id` | Override the computed identifier stamped in logs and manifests. | Correlate runs with external schedulers or incident tickets. |
+
+PubChem toggles honour the following priority order: `--disable-pubchem` takes precedence over everything, `--force-pubchem` overrides any explicit `sources.pubchem.enable: false`, and the YAML configuration controls the default when neither flag is supplied.【F:library/cli/commands/get_data.py†L1060-L1108】【F:library/cli/commands/get_data.py†L1427-L1471】
 
 The full set of baseline and advanced flags is summarised in [USAGE.md](../USAGE.md); the table above highlights the ones most frequently toggled during day-to-day debugging.【F:library/cli/commands/get_data.py†L949-L1108】
 

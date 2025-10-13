@@ -372,7 +372,7 @@ def _assign_pubchem_config(config: Config, pubchem_cfg: PubChemCfg) -> None:
         config.sources.pubchem = pubchem_cfg
 
 
-def _ensure_testitem_pubchem_enabled(config: Config) -> None:
+def _ensure_testitem_pubchem_enabled(config: Config, *, force: bool = False) -> None:
     """Force-enable PubChem enrichment for the aggregated ``get_data`` run."""
 
     pubchem_cfg = getattr(config, "pubchem", None)
@@ -390,8 +390,23 @@ def _ensure_testitem_pubchem_enabled(config: Config) -> None:
         # Already enabled – nothing to do.
         return
 
+    if enabled_value is False and not force:
+        _LOGGER.warning(
+            "testitem_pubchem_disabled",
+            reason="config_explicit_disable",
+            detail=(
+                "cfg.pubchem.enable is false; respecting configuration for the "
+                "get_data orchestrator"
+            ),
+        )
+        _assign_pubchem_config(config, pubchem_cfg)
+        return
+
     if enabled_value is False:
-        _LOGGER.info("testitem_pubchem_enable_override")
+        _LOGGER.info(
+            "testitem_pubchem_enable_override",
+            reason="cli_force_pubchem",
+        )
     else:
         _LOGGER.warning(
             "testitem_pubchem_enable_missing",
@@ -556,6 +571,7 @@ class PipelineRunConfig:
     debug: bool = False
     keep_intermediate: bool = False
     disable_pubchem: bool = False
+    force_pubchem: bool = False
 
     def input_path(self, name: str) -> Path:
         """Return the fully resolved path for ``name`` in the input directory."""
@@ -1069,6 +1085,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Disable PubChem enrichment for the testitem stage",
     )
     parser.add_argument(
+        "--force-pubchem",
+        action="store_true",
+        help="Force-enable PubChem enrichment for the testitem stage",
+    )
+    parser.add_argument(
         "--print-config",
         action="store_true",
         help="Print the resolved configuration and exit without running pipelines",
@@ -1158,6 +1179,7 @@ def _prepare_config(
         debug=bool(getattr(args, "debug", False)),
         keep_intermediate=bool(getattr(args, "keep_intermediate", False)),
         disable_pubchem=_flag_to_bool(getattr(args, "disable_pubchem", False)),
+        force_pubchem=_flag_to_bool(getattr(args, "force_pubchem", False)),
     )
 
 
@@ -1424,7 +1446,7 @@ def _cleanup_empty_directories(path: Path, *, root: Path) -> None:
         current = parent
 
 
-def _ensure_pubchem_enabled(config: Config) -> None:
+def _ensure_pubchem_enabled(config: Config, *, force: bool = False) -> None:
     """Force-enable PubChem enrichment on ``config`` for the test item step."""
 
     sources = getattr(config, "sources", None)
@@ -1437,14 +1459,32 @@ def _ensure_pubchem_enabled(config: Config) -> None:
             sources.pubchem = PubChemCfg(enable=True)
         except AttributeError:
             return
-        _LOGGER.info("testitem_pubchem_enable_override")
+        _LOGGER.info(
+            "testitem_pubchem_enable_override",
+            reason="cfg_sources_pubchem_missing",
+        )
         return
 
     was_enabled = getattr(pubchem_cfg, "enable", None)
     if was_enabled is True:
         return
 
-    _LOGGER.info("testitem_pubchem_enable_override")
+    if was_enabled is False and not force:
+        _LOGGER.warning(
+            "testitem_pubchem_disabled",
+            reason="config_explicit_disable",
+            detail=(
+                "sources.pubchem.enable is false; respecting configuration for the "
+                "testitem step"
+            ),
+        )
+        return
+
+    override_reason = "cli_force_pubchem" if was_enabled is False else "cfg_enable_missing"
+    _LOGGER.info(
+        "testitem_pubchem_enable_override",
+        reason=override_reason,
+    )
     if hasattr(pubchem_cfg, "model_copy"):
         updated_pubchem_cfg = pubchem_cfg.model_copy(update={"enable": True})
         try:
@@ -1650,7 +1690,7 @@ def _run_step(
                 cfg, step_config, input_path, working_output
             )
         if api is None or api is _TESTITEM_PIPELINE_API:
-            _ensure_pubchem_enabled(base_config)
+            _ensure_pubchem_enabled(base_config, force=cfg.force_pubchem)
             return _run_testitem_subprocess(
                 step,
                 cfg,
@@ -2494,7 +2534,7 @@ def run_pipeline(
         _LOGGER.info("pipeline_done", stage="pipeline", exit_code=1)
         return 1
     if not cfg.disable_pubchem:
-        _ensure_testitem_pubchem_enabled(base_config)
+        _ensure_testitem_pubchem_enabled(base_config, force=cfg.force_pubchem)
     diagnostics_enabled = _diagnostic_outputs_enabled(cfg)
     if not diagnostics_enabled:
         system_cfg = getattr(base_config, "system", None)
