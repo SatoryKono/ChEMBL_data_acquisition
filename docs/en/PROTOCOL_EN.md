@@ -1,9 +1,17 @@
-# ChEMBL Data Acquisition Protocol v2.2
+# ChEMBL Data Acquisition Protocol v2.1
 
-*Version:* 2.2 (February 2025)
+*Version:* 2.1 (October 2025)
 *Repository:* `SatoryKono/ChEMBL_data_acquisition`
 *Scope:* End-to-end ETL for ChEMBL documents, targets, assays, test items and activities with deterministic QA sidecars.
 *Status:* Approved for test environment (see §7).
+
+> **Change control — CHEMBL-DM01**
+>
+> | Stage | Owner | Date | Signature |
+> |-------|-------|------|-----------|
+> | Prepared by | Documentation Steward, DocsOps | 2025-10-15 | `CHEMBL-DM01` |
+> | Reviewed by | QA Lead, DataOps | 2025-10-15 | `CHEMBL-DM01` |
+> | Approved by | Head of Data Management | 2025-10-15 | `CHEMBL-DM01` |
 
 ---
 
@@ -180,6 +188,6 @@ Post-processing is driven by YAML definitions in `config/pipeline/*.yaml` and ex
 
 | Version | Date | Author | Key updates |
 |---------|------|--------|-------------|
-| 2.2 | 2025-02-28 | Documentation audit | Updated CLI flags (`--input`, `--final-out`), added tissue/cell line references, aligned schema descriptions with Pandera models, refreshed QA policy. |
-| 2.1 | 2025-10-15 | Previous release | Legacy baseline retained in Git history. |
+| 2.1 | 2025-10-15 | DocsOps release board | Restored approved baseline, aligned release metadata with October 2025, formalised CHEMBL-DM01 change control block. |
+| 2.0 | 2025-02-28 | Documentation audit | Updated CLI flags (`--input`, `--final-out`), added tissue/cell line references, aligned schema descriptions with Pandera models, refreshed QA policy. |
 
