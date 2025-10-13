@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import logging
 import os
 import re
 import sys
@@ -701,6 +702,14 @@ def _finalise_export(
     )
 
     try:
+        # Добавляем индексную колонку raw.index в основную таблицу
+        if "raw.index" not in export_frame.columns:
+            export_frame.insert(0, "raw.index", export_frame.index)
+            logging.info(
+                "Добавлена индексная колонка 'raw.index' (%s строк).",
+                len(export_frame),
+            )
+
         quality_report = generate_qc_report(
             export_frame,
             table_name=table_name,

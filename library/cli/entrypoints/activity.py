@@ -8,6 +8,7 @@ applications or tests.
 from __future__ import annotations
 
 import argparse
+import logging
 import math
 import numbers
 import os
@@ -1681,6 +1682,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             encoding=cfg.io.csv_encoding,
         )
         dataset_frame = _drop_empty_activity_columns(dataset_frame)
+        if "raw.index" not in dataset_frame.columns:
+            dataset_frame.insert(0, "raw.index", dataset_frame.index)
+            logging.info(
+                "Добавлена индексная колонка 'raw.index' (%s строк).",
+                len(dataset_frame),
+            )
         quality_report = pd.DataFrame()
         correlation_report = pd.DataFrame()
         table_name_value, date_tag = _derive_standard_output_labels(dataset_csv)

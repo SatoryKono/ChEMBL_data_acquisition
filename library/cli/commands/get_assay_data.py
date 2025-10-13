@@ -8,6 +8,7 @@ instead of terminating the interpreter to make orchestration easier.
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
@@ -427,6 +428,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 path=str(dataset_csv),
             )
             quality_report = pd.DataFrame()
+
+        if "raw.index" not in dataset_frame.columns:
+            dataset_frame.insert(0, "raw.index", dataset_frame.index)
+            logging.info(
+                "Добавлена индексная колонка 'raw.index' (%s строк).",
+                len(dataset_frame),
+            )
 
         empty_columns = [
             column
