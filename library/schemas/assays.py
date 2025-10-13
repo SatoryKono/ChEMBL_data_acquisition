@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from typing import Any, Final, cast
 
-import pandera.pandas as pa
+from library._compat.pandera import pa
 
 # ``None`` disables dtype enforcement while still allowing schema validation.
 FLEXIBLE_DTYPE: Final[Any] = cast(Any, None)
