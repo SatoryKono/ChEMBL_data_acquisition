@@ -89,7 +89,6 @@ StatsExtraMapping = Mapping[str, object]
 class _ParquetChunkStore:
     """Persist prepared chunks to temporary files for later reuse.
 
-    """
     The store prefers parquet output but gracefully falls back to pickle when
     the optional parquet engines are unavailable in the runtime environment.
     """
