@@ -828,6 +828,32 @@
           "default": false,
           "title": "Fatal On Error",
           "type": "boolean"
+        },
+        "auto_sample_row_limit": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Auto Sample Row Limit"
+        },
+        "correlation_max_columns": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Max Columns"
         }
       },
       "title": "DocQualityCfg",
