@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import contextlib
 import os
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Callable, Iterable, Iterator, Mapping, Sequence
 
 import pandas as pd
 

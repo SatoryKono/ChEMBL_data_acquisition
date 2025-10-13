@@ -10,18 +10,17 @@ import time
 import traceback
 import weakref
 from collections import OrderedDict, deque
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from itertools import islice, tee
 from pathlib import Path
-from typing import IO, Any, Mapping
 from types import MappingProxyType
+from typing import IO, Any
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
-from library.common.run_context import get_current
 
 from library import io
 from library.clients import pubchem as pc
@@ -32,6 +31,7 @@ from library.common.metadata import (
     record_quality_failure,
     write_meta_yaml,
 )
+from library.common.run_context import get_current
 from library.common.sidecar import SidecarErrors, resolve_failure_chunk_size
 from library.config import (
     ApiCfg,
@@ -111,13 +111,13 @@ class RequestedIdsSnapshot(Sequence[str]):
         self._log_sample: deque[str] = deque()
         self._duplicate_sample: list[str] = []
         self._duplicate_count = 0
-        self._seen: "OrderedDict[str, None]" = OrderedDict()
+        self._seen: OrderedDict[str, None] = OrderedDict()
         self._count = 0
         self._writer: IO[str] | None = None
         self._path: Path | None = None
         self._finalizer: weakref.finalize | None = None
         self._finished = False
-        self._unique_original: "OrderedDict[str, str]" = OrderedDict()
+        self._unique_original: OrderedDict[str, str] = OrderedDict()
 
     def __len__(self) -> int:
         return self._count

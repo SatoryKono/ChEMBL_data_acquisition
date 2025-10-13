@@ -1,0 +1,8 @@
+pandas-stubs
+types-PyYAML
+types-cachetools
+types-geopandas
+types-openpyxl
+types-requests
+types-shapely
+types-tabulate

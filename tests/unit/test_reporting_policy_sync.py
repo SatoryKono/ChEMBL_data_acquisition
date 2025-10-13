@@ -9,7 +9,6 @@ import pytest
 
 from tests.helpers.reporting_policy import PIPELINE_SCENARIOS
 
-
 TESTS_ROOT = Path(__file__).resolve().parents[1]
 
 

@@ -21,14 +21,14 @@ import shutil
 import stat
 import sys
 import time
-from collections.abc import Collection, Iterator, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from itertools import islice
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 import requests
@@ -55,8 +55,8 @@ from library.cli_utils import (
     run_pipeline,
 )
 from library.common.csv_utils import write_csv_deterministic
-from library.common.run_context import get_current as get_run_context
 from library.common.log import logger
+from library.common.run_context import get_current as get_run_context
 from library.config import (
     Config,
     _serialize_paths,
