@@ -507,14 +507,14 @@ def _is_cleanup_directory(path: Path) -> bool:
     return name in _CLEANUP_DIRECTORY_NAMES
 
 
-def _relative_to_output(path: Path) -> str:
+def _relative_to_base(path: Path, base_dir: Path) -> str:
     try:
-        return os.fspath(path.relative_to(OUTPUT_DIR))
+        return os.fspath(path.relative_to(base_dir))
     except ValueError:
         return os.fspath(path)
 
 
-def _remove_file(path: Path) -> bool:
+def _remove_file(path: Path, *, base_dir: Path) -> bool:
     try:
         path.unlink()
     except FileNotFoundError:
@@ -522,11 +522,11 @@ def _remove_file(path: Path) -> bool:
     except OSError as exc:  # pragma: no cover - filesystem variance
         logging.warning("[CLEANUP] Не удалось удалить %s: %s", path, exc)
         return False
-    logging.info("[CLEANUP] Удалён файл %s", _relative_to_output(path))
+    logging.info("[CLEANUP] Удалён файл %s", _relative_to_base(path, base_dir))
     return True
 
 
-def _remove_directory(path: Path) -> bool:
+def _remove_directory(path: Path, *, base_dir: Path) -> bool:
     try:
         shutil.rmtree(path)
     except FileNotFoundError:
@@ -534,7 +534,7 @@ def _remove_directory(path: Path) -> bool:
     except OSError as exc:  # pragma: no cover - filesystem variance
         logging.warning("[CLEANUP] Не удалось удалить каталог %s: %s", path, exc)
         return False
-    logging.info("[CLEANUP] Удалён каталог %s", _relative_to_output(path))
+    logging.info("[CLEANUP] Удалён каталог %s", _relative_to_base(path, base_dir))
     return True
 
 
@@ -556,7 +556,7 @@ def cleanup_intermediate_files(output_dir: Path) -> int:
             candidate = candidate.resolve()
             if candidate in seen_files or not candidate.is_file():
                 continue
-            if _remove_file(candidate):
+            if _remove_file(candidate, base_dir=resolved):
                 removed += 1
             seen_files.add(candidate)
 
@@ -567,10 +567,34 @@ def cleanup_intermediate_files(output_dir: Path) -> int:
 
     # Remove deepest directories first to avoid orphaned parents lingering.
     for directory in sorted(directories, key=lambda item: len(item.parts), reverse=True):
-        if _remove_directory(directory):
+        if _remove_directory(directory, base_dir=resolved):
             removed += 1
 
     return removed
+
+
+def _resolve_cleanup_output_dir(forward_args: ForwardArgs) -> Path:
+    """Return the output directory used by the current orchestration run."""
+
+    output_value = _extract_option_value(forward_args.tokens, "--output-dir")
+    if not output_value:
+        return OUTPUT_DIR
+
+    output_path = Path(output_value).expanduser()
+    base_value = _extract_option_value(forward_args.tokens, "--base-path")
+    if base_value:
+        base_path = Path(base_value).expanduser()
+        if not base_path.is_absolute():
+            base_path = (Path.cwd() / base_path).resolve()
+        else:
+            base_path = base_path.resolve()
+        if not output_path.is_absolute():
+            return (base_path / output_path).resolve()
+
+    if output_path.is_absolute():
+        return output_path.resolve()
+
+    return (Path.cwd() / output_path).resolve()
 
 
 def _should_run_cleanup(forward_args: ForwardArgs) -> bool:
@@ -614,7 +638,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     if _should_run_cleanup(forward_args):
-        removed = cleanup_intermediate_files(OUTPUT_DIR)
+        cleanup_dir = _resolve_cleanup_output_dir(forward_args)
+        removed = cleanup_intermediate_files(cleanup_dir)
         logging.info("[CLEANUP] Завершено: удалено %d артефакт(ов)", removed)
     else:
         logging.info(
