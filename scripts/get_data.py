@@ -114,6 +114,8 @@ _PUBCHEM_ENV_VAR = "CHEMBL_DA_PUBCHEM_ENABLE"
 _BASE_PATH_ENV_VAR = "CHEMBL_DA_BASE_PATH"
 
 _CLEANUP_FILE_PATTERNS: tuple[str, ...] = (
+    "*.lock",
+    "*.pkl.lock",
     "*.tmp",
     "*.tmp.*",
     "*_intermediate.*",

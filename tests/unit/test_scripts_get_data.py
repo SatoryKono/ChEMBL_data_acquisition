@@ -157,6 +157,7 @@ def test_cleanup_intermediate_files__removes_known_patterns(tmp_path: Path) -> N
         output_dir / "output.targets_20240101_intermediate.csv",
         output_dir / "activity_debug.log",
         output_dir / "cache_chunk.pkl",
+        output_dir / "pubchem_request.json.lock",
     ]
     for path in removable_files:
         path.write_text("dummy", encoding="utf-8")
