@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import yaml
 
 from library.common.csv_utils import sha256_file, write_csv_deterministic
 from library.pipelines.testitem import cli, enrichment
@@ -102,12 +103,15 @@ def test_testitem_pipeline_e2e__finalize_stage_idempotent(
 
     output_path = tmp_path / "finalized.csv"
 
+    missing_ids = [f"CHEMBL_MISSING_{index}" for index in range(120)]
+
     first_result = cli.finalize_output(
         [chunk],
         cfg=cfg,
         output=output_path,
         parent_stats_supplier=supplier,
         input_csv=sample_input_csv,
+        missing_ids=missing_ids,
     )
     if isinstance(first_result, tuple):
         first_exit, artifacts = first_result
@@ -116,6 +120,19 @@ def test_testitem_pipeline_e2e__finalize_stage_idempotent(
         first_exit = first_result
         dataset_path = output_path
     assert first_exit == 0
+    meta_path = dataset_path.with_suffix(".meta.yaml")
+    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    stats_payload = metadata.get("pipeline_stats", {})
+    assert stats_payload.get("missing_molecule_ids_total") == len(missing_ids)
+    assert stats_payload.get("missing_molecule_ids_truncated") is True
+    assert (
+        len(stats_payload.get("missing_molecule_ids", []))
+        == cli._MISSING_IDENTIFIER_STATS_LIMIT
+    )
+    assert stats_payload.get("missing_ids_sample") == missing_ids[
+        : cli._MISSING_IDENTIFIER_LOG_SAMPLE_SIZE
+    ]
+
     first_hash = sha256_file(dataset_path)
 
     second_result = cli.finalize_output(
@@ -124,6 +141,7 @@ def test_testitem_pipeline_e2e__finalize_stage_idempotent(
         output=output_path,
         parent_stats_supplier=supplier,
         input_csv=sample_input_csv,
+        missing_ids=missing_ids,
     )
     if isinstance(second_result, tuple):
         second_exit, second_artifacts = second_result
