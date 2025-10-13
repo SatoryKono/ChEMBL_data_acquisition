@@ -609,12 +609,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         OUTPUT_DIR,
     )
 
-    if csv_count != 15:
-        logging.warning(
-            "Ожидалось получить 15 CSV-файлов, фактически найдено %d.",
-            csv_count,
-        )
-
     if _should_run_cleanup(forward_args):
         removed = cleanup_intermediate_files(OUTPUT_DIR)
         logging.info("[CLEANUP] Завершено: удалено %d артефакт(ов)", removed)

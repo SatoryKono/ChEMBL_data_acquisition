@@ -2,11 +2,26 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import logging
 import sys
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
 import pytest
+
+
+@pytest.fixture()
+def cli(monkeypatch: pytest.MonkeyPatch):
+    """Import ``scripts.get_data`` with the heavy CLI module stubbed out."""
+
+    import types
+
+    module_name = "library.cli.commands.get_data"
+    if module_name not in sys.modules:
+        stub = types.ModuleType(module_name)
+        monkeypatch.setitem(sys.modules, module_name, stub)
+    module = importlib.import_module("scripts.get_data")
+    return module
 
 
 @pytest.mark.unit
@@ -49,10 +64,10 @@ def test_load_module__merge_conflict_hint(monkeypatch):
 
 
 @pytest.mark.unit
-def test_run_stage__inserts_default_document_subcommand(monkeypatch):
+def test_run_stage__inserts_default_document_subcommand(
+    monkeypatch: pytest.MonkeyPatch, cli
+):
     """Document stage should default to the ``all`` subcommand when omitted."""
-
-    from scripts import get_data as cli
 
     stage = cli.Stage("document", "get_document_data.py")
     tokens = (
@@ -86,10 +101,10 @@ def test_run_stage__inserts_default_document_subcommand(monkeypatch):
 
 
 @pytest.mark.unit
-def test_build_forward_args__respects_equals_style_output_dir(tmp_path):
+def test_build_forward_args__respects_equals_style_output_dir(
+    tmp_path: Path, cli
+):
     """Explicit ``--output-dir=...`` values should not be overridden by defaults."""
-
-    from scripts import get_data as cli
 
     custom_output = tmp_path / "out"
     args, extras = cli.parse_args([f"--output-dir={custom_output}"])
@@ -103,10 +118,8 @@ def test_build_forward_args__respects_equals_style_output_dir(tmp_path):
 
 
 @pytest.mark.unit
-def test_ensure_base_path_env__injects_default_when_missing():
+def test_ensure_base_path_env__injects_default_when_missing(cli) -> None:
     """The orchestrator should provide a stable base path to subprocesses."""
-
-    from scripts import get_data as cli
 
     env: dict[str, str] = {}
     cli._ensure_base_path_env([], env)
@@ -115,10 +128,10 @@ def test_ensure_base_path_env__injects_default_when_missing():
 
 
 @pytest.mark.unit
-def test_ensure_base_path_env__resolves_relative_cli_value(tmp_path, monkeypatch):
+def test_ensure_base_path_env__resolves_relative_cli_value(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cli
+):
     """CLI ``--base-path`` arguments must propagate as absolute paths."""
-
-    from scripts import get_data as cli
 
     monkeypatch.chdir(tmp_path)
     provided = Path("custom-base")
@@ -130,10 +143,8 @@ def test_ensure_base_path_env__resolves_relative_cli_value(tmp_path, monkeypatch
 
 
 @pytest.mark.unit
-def test_ensure_base_path_env__keeps_preexisting_value():
+def test_ensure_base_path_env__keeps_preexisting_value(cli) -> None:
     """Existing ``CHEMBL_DA_BASE_PATH`` values must remain untouched."""
-
-    from scripts import get_data as cli
 
     existing = "/tmp/chembl"
     env = {cli._BASE_PATH_ENV_VAR: existing}
@@ -144,10 +155,10 @@ def test_ensure_base_path_env__keeps_preexisting_value():
 
 
 @pytest.mark.unit
-def test_cleanup_intermediate_files__removes_known_patterns(tmp_path: Path) -> None:
+def test_cleanup_intermediate_files__removes_known_patterns(
+    tmp_path: Path, cli
+) -> None:
     """Temporary artefacts should be deleted while canonical files remain."""
-
-    from scripts import get_data as cli
 
     output_dir = tmp_path / "output"
     output_dir.mkdir()
@@ -178,10 +189,10 @@ def test_cleanup_intermediate_files__removes_known_patterns(tmp_path: Path) -> N
 
 
 @pytest.mark.unit
-def test_cleanup_intermediate_files__skips_missing_directory(tmp_path: Path) -> None:
+def test_cleanup_intermediate_files__skips_missing_directory(
+    tmp_path: Path, cli
+) -> None:
     """Cleanup should be a no-op when the output directory is absent."""
-
-    from scripts import get_data as cli
 
     missing_dir = tmp_path / "missing"
     removed = cli.cleanup_intermediate_files(missing_dir)
@@ -190,10 +201,8 @@ def test_cleanup_intermediate_files__skips_missing_directory(tmp_path: Path) -> 
 
 
 @pytest.mark.unit
-def test_should_run_cleanup__respects_user_flags() -> None:
+def test_should_run_cleanup__respects_user_flags(cli) -> None:
     """Diagnostic flags should disable the orchestrator cleanup."""
-
-    from scripts import get_data as cli
 
     base = ("--config", "cfg.yaml", "--output-dir", "data/output")
     forward = cli.ForwardArgs(tokens=base + ("--debug",), extras_start=0, extra_len=len(base) + 1)
@@ -201,3 +210,68 @@ def test_should_run_cleanup__respects_user_flags() -> None:
 
     forward = cli.ForwardArgs(tokens=base, extras_start=0, extra_len=len(base))
     assert cli._should_run_cleanup(forward) is True
+
+
+@pytest.mark.unit
+def test_main_skip_stage__does_not_emit_output_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    cli,
+) -> None:
+    """Skipping a stage should not trigger output count warnings."""
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    logs_dir = tmp_path / "logs"
+
+    monkeypatch.setattr(cli, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(cli, "LOGS_DIR", logs_dir)
+
+    executed: list[str] = []
+
+    def _fake_run_stage(stage: cli.Stage, forward_args: cli.ForwardArgs) -> float:
+        executed.append(stage.name)
+        artefact = output_dir / f"{stage.name}_{len(executed)}.csv"
+        artefact.write_text("id\n1\n", encoding="utf-8")
+        return 1.0
+
+    monkeypatch.setattr(cli, "run_stage", _fake_run_stage)
+
+    cleanup_calls: list[Path] = []
+
+    def _fake_cleanup(path: Path) -> int:
+        cleanup_calls.append(path)
+        return 0
+
+    monkeypatch.setattr(cli, "cleanup_intermediate_files", _fake_cleanup)
+
+    def _fake_configure_logging(level_name: str | None) -> Path:
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        log_path = logs_dir / "get_data.log"
+        log_path.write_text("", encoding="utf-8")
+        level = (
+            logging.INFO
+            if level_name is None
+            else logging._nameToLevel.get(level_name, logging.INFO)
+        )
+        logging.getLogger().setLevel(level)
+        return log_path
+
+    monkeypatch.setattr(cli, "configure_logging", _fake_configure_logging)
+
+    caplog.set_level(logging.INFO)
+
+    exit_code = cli.main(["--skip", "activity"])
+
+    assert exit_code == 0
+    assert executed == ["testitem", "target", "document", "assay"]
+    assert cleanup_calls == [output_dir]
+    csv_files = sorted(path.name for path in output_dir.glob("*.csv"))
+    assert len(csv_files) == len(executed)
+
+    warning_messages = [
+        record.message for record in caplog.records if record.levelno >= logging.WARNING
+    ]
+    assert not warning_messages
+    assert any("Найдено" in record.message for record in caplog.records)
