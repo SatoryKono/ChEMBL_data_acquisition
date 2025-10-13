@@ -399,7 +399,20 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
         # Ensure PubChem enrichment mirrors direct CLI invocation of the
         # get_testitem_data.py script.
         if not _has_explicit_pubchem_flag(stage_args):
-            stage_args.append("--pubchem-enable")
+            env_state = _normalize_env_bool(os.environ.get(_PUBCHEM_ENV_VAR))
+            config_enabled = _pubchem_enabled_from_config(stage_args)
+
+            if env_state is False:
+                logging.info(
+                    "[PUBCHEM] Skipping default --pubchem-enable due to %s=0",
+                    _PUBCHEM_ENV_VAR,
+                )
+            elif config_enabled is False:
+                logging.info(
+                    "[PUBCHEM] Skipping default --pubchem-enable: config disables enrichment",
+                )
+            else:
+                stage_args.append("--pubchem-enable")
 
     env = os.environ.copy()
     _ensure_base_path_env(stage_args, env)
