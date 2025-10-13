@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -12,6 +13,7 @@ import pandas.testing as tm
 import pytest
 
 from library import cli_utils
+from library.cli.pipeline_definition import PipelineDefinition
 from library.cli import LoggerConfig
 
 
@@ -204,4 +206,69 @@ def test_parquet_chunk_store__fallback_to_pickle_when_engine_missing(
     tm.assert_frame_equal(restored, frame.reset_index(drop=True))
 
     fallback_messages = [rec.message for rec in caplog.records]
-    assert any("chunk_store_backend_fallback" in message for message in fallback_messages)
+    assert any(
+        "chunk_store_backend_fallback" in message for message in fallback_messages
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("strict_mode", [False, True])
+def test_run_pipeline__metadata_hook_must_return_dataframe(
+    strict_mode: bool, tmp_path: Path
+) -> None:
+    output_path = tmp_path / "output.csv"
+    failure_path = tmp_path / "failures.csv"
+
+    frame = pd.DataFrame({"value": [1]})
+
+    writer_calls: list[list[pd.DataFrame]] = []
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        column_order: Sequence[str] | None,
+        resolved_keys: Sequence[str],
+    ) -> Path:
+        writer_calls.append(list(chunks))
+        destination.write_text("should not be written", encoding="utf-8")
+        return destination
+
+    def broken_hook(df: pd.DataFrame) -> pd.DataFrame | None:
+        return None
+
+    definition = PipelineDefinition(
+        schema=None,
+        schema_name="test",
+        writer=writer,
+        metadata_hooks=[broken_hook],
+        table_quality=lambda _path: None,
+        strict_mode=strict_mode,
+        command="unit-test",
+    )
+
+    logger = Mock()
+
+    result = cli_utils.run_pipeline(
+        definition=definition,
+        fetcher=lambda: [frame],
+        output_path=output_path,
+        failure_path=failure_path,
+        emit_standard_outputs=False,
+        emit_legacy_artifacts=False,
+        logger=logger,
+    )
+
+    assert result.exit_code == 1
+    assert not writer_calls, "writer must not be invoked when hook output is invalid"
+
+    invalid_calls = [
+        call
+        for call in logger.error.call_args_list
+        if call.args and call.args[0] == "metadata_hook_invalid_return"
+    ]
+    assert invalid_calls, "metadata_hook_invalid_return should be logged"
+
+    invalid_kwargs = invalid_calls[0].kwargs
+    assert invalid_kwargs["hook"].endswith("broken_hook")
+    assert "broken_hook" in invalid_kwargs["error"]
+    assert invalid_kwargs["strict_mode"] is strict_mode
