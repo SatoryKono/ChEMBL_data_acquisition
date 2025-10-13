@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tracemalloc
 
 import pandas as pd
 import pytest
@@ -137,3 +138,41 @@ def test_testitem_pipeline_e2e__finalize_stage_idempotent(
 
     final_frame = pd.read_csv(dataset_path)
     assert list(final_frame["molecule_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
+
+
+@pytest.mark.e2e
+@pytest.mark.pipeline_scenario("missing_identifiers_streaming")
+def test_testitem_pipeline_e2e__placeholder_generation_streaming_memory() -> None:
+    missing_total = 6500
+    missing_ids = [f"CHEMBL{idx:06d}" for idx in range(10_000, 10_000 + missing_total)]
+
+    chunk_size = cli.MISSING_IDENTIFIER_PLACEHOLDER_CHUNK_SIZE
+    tracemalloc.start()
+    chunk_lengths: list[int] = []
+    max_chunk_memory = 0
+    peak = 0
+    try:
+        for chunk in cli.generate_missing_identifier_placeholders(
+            missing_ids, columns=("molecule_chembl_id",)
+        ):
+            chunk_lengths.append(len(chunk))
+            max_chunk_memory = max(
+                max_chunk_memory, int(chunk.memory_usage(deep=True).sum())
+            )
+        _current, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    expected_full_chunks, remainder = divmod(missing_total, chunk_size)
+    expected_lengths = [chunk_size] * expected_full_chunks
+    if remainder:
+        expected_lengths.append(remainder)
+
+    assert chunk_lengths == expected_lengths
+    # Individual placeholder chunks should remain well below 2 MB even for
+    # identifier-heavy datasets.
+    assert max_chunk_memory <= 2_000_000
+    # ``tracemalloc`` peak memory reflects the largest allocation during the
+    # streaming loop.  The chunk-based generator should keep it within a few
+    # megabytes for the tested payload size.
+    assert peak <= 5_000_000

@@ -77,6 +77,10 @@ def _chembl_library() -> Any:
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
 _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
+# ``finalize_output`` may consume placeholder rows from streaming sources, so
+# keep the chunk size moderate to avoid large peak allocations when many IDs are
+# missing from the source dataset.
+MISSING_IDENTIFIER_PLACEHOLDER_CHUNK_SIZE = 1000
 _DUPLICATE_IDENTIFIER_LOG_SAMPLE_SIZE = 10
 _PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
 _DEFAULT_TABLE_NAME = "testitem"
@@ -559,6 +563,41 @@ def _emit_missing_identifier_logs(identifiers: Sequence[str]) -> None:
     )
 
 
+def generate_missing_identifier_placeholders(
+    missing_ids: Sequence[str],
+    *,
+    columns: Sequence[str] | None = None,
+    chunk_size: int = MISSING_IDENTIFIER_PLACEHOLDER_CHUNK_SIZE,
+) -> Iterator[pd.DataFrame]:
+    """Yield placeholder DataFrames for ``missing_ids`` in ``chunk_size`` batches."""
+
+    if not missing_ids:
+        return
+
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+
+    if columns is None:
+        columns = ("molecule_chembl_id",)
+
+    ordered_columns = list(columns)
+    if "molecule_chembl_id" not in ordered_columns:
+        ordered_columns.append("molecule_chembl_id")
+
+    total = len(missing_ids)
+    for start in range(0, total, chunk_size):
+        chunk = missing_ids[start : start + chunk_size]
+        if not chunk:
+            continue
+        placeholder = pd.DataFrame(
+            pd.NA,
+            index=range(len(chunk)),
+            columns=ordered_columns,
+        )
+        placeholder["molecule_chembl_id"] = chunk
+        yield placeholder
+
+
 def integrate_missing_identifiers(
     df: pd.DataFrame,
     *,
@@ -569,15 +608,16 @@ def integrate_missing_identifiers(
 
     if missing_ids:
         columns = list(df.columns)
-        if "molecule_chembl_id" not in columns:
-            columns.append("molecule_chembl_id")
-        missing_frame = pd.DataFrame(
-            pd.NA,
-            index=range(len(missing_ids)),
-            columns=columns,
+        df = pd.concat(
+            chain(
+                [df],
+                generate_missing_identifier_placeholders(
+                    missing_ids, columns=columns
+                ),
+            ),
+            ignore_index=True,
+            sort=False,
         )
-        missing_frame["molecule_chembl_id"] = list(missing_ids)
-        df = pd.concat([df, missing_frame], ignore_index=True, sort=False)
     else:
         df = df.reset_index(drop=True)
 
@@ -1281,9 +1321,11 @@ def run_testitem_pipeline(
             missing_ids.extend(requested_unique[key] for key in missing_keys)
             if missing_ids:
                 _emit_missing_identifier_logs(missing_ids)
-                placeholder = pd.DataFrame({"molecule_chembl_id": list(missing_ids)})
-                rows_counter += len(placeholder)
-                yield placeholder
+                for placeholder in generate_missing_identifier_placeholders(
+                    missing_ids, columns=("molecule_chembl_id",)
+                ):
+                    rows_counter += len(placeholder)
+                    yield placeholder
 
         output_path = (
             output_csv
