@@ -318,7 +318,7 @@ TESTITEM_FIELD_DEFAULTS: tuple[str, ...] = (
 class ApiCfg(_BaseModel):
     """Settings for ChEMBL API access."""
 
-    chembl_base: str = "https://www.ebi.ac.uk/chembl/api/data"
+    chembl_base: str = "https://www.ebi.ac.uk/chembl/api/data/v2"
     timeout_connect: float = Field(5.0, ge=1)
     timeout_read: float = Field(60.0, ge=1)
     retries: int = Field(3, ge=0)
@@ -381,8 +381,8 @@ class MoleculeCatalogCfg(_BaseModel):
     filters: dict[str, str] = Field(
         default_factory=lambda: {"parent_molecule_chembl_id__isnull": "false"}
     )
-    page_size: int = Field(500, ge=1)
-    fallback_single_limit: int | None = Field(default=None, ge=1)
+    page_size: int = Field(500, ge=1, le=1000)
+    fallback_single_limit: int | None = Field(default=None, ge=1, le=1000)
 
     @field_validator("hierarchy_lookup_path", mode="before")
     @classmethod
@@ -603,6 +603,7 @@ class PubChemCfg(_BaseModel):
     batch_size: int = Field(
         50,
         ge=1,
+        le=200,
         description="Maximum PubChem property lookups submitted per batch; concurrency is capped by pubchem.rps",
     )
     prefer_local_smiles: bool = Field(

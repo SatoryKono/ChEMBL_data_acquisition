@@ -335,7 +335,7 @@
       "description": "Settings for ChEMBL API access.",
       "properties": {
         "chembl_base": {
-          "default": "https://www.ebi.ac.uk/chembl/api/data",
+          "default": "https://www.ebi.ac.uk/chembl/api/data/v2",
           "title": "Chembl Base",
           "type": "string"
         },
@@ -611,6 +611,7 @@
         "page_size": {
           "default": 500,
           "minimum": 1,
+          "maximum": 1000,
           "title": "Page Size",
           "type": "integer"
         },
@@ -618,6 +619,7 @@
           "anyOf": [
             {
               "minimum": 1,
+              "maximum": 1000,
               "type": "integer"
             },
             {
@@ -1460,6 +1462,7 @@
           "default": 50,
           "description": "Maximum PubChem property lookups submitted per batch; concurrency is capped by pubchem.rps",
           "minimum": 1,
+          "maximum": 200,
           "title": "Batch Size",
           "type": "integer"
         },

@@ -8,6 +8,7 @@ import re
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from time import monotonic
 from typing import Any
+from urllib.parse import urlencode
 
 import pandas as pd
 import requests
@@ -548,6 +549,13 @@ def iter_target_batches_with_retry(
         yield from _drain_buffer(buffer)
 
 
+def _build_target_detail_url(base: str, chembl_target_id: str) -> str:
+    """Return the detail endpoint URL for ``chembl_target_id``."""
+
+    params = {"format": "json", "include": TARGET_INCLUDE_PARAMS}
+    return f"{base}/target/{chembl_target_id}.json?{urlencode(params)}"
+
+
 def get_target(
     chembl_target_id: str,
     *,
@@ -574,7 +582,7 @@ def get_target(
     if chembl_target_id in {"", "#N/A"}:
         return dict(EMPTY_TARGET)
     base = cfg.chembl_base.rstrip("/")
-    url = f"{base}/target/{chembl_target_id}.json?include={TARGET_INCLUDE_PARAMS}"
+    url = _build_target_detail_url(base, chembl_target_id)
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
     payload = _extract_target_payload(data)
@@ -595,7 +603,7 @@ def get_target_payload(
     if chembl_target_id in {"", "#N/A"}:
         return {}
     base = cfg.chembl_base.rstrip("/")
-    url = f"{base}/target/{chembl_target_id}.json?include={TARGET_INCLUDE_PARAMS}"
+    url = _build_target_detail_url(base, chembl_target_id)
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
     return _extract_target_payload(data)
