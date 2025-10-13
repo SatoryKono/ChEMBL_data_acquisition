@@ -854,6 +854,12 @@
           ],
           "default": null,
           "title": "Correlation Max Columns"
+        },
+        "failure_chunk_size": {
+          "default": 1000,
+          "minimum": 1,
+          "title": "Failure Chunk Size",
+          "type": "integer"
         }
       },
       "title": "DocQualityCfg",

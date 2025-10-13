@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from .common.sidecar import SidecarErrors
+from .common.sidecar import SidecarErrors, resolve_failure_chunk_size
 
-__all__ = ["SidecarErrors"]
+__all__ = ["SidecarErrors", "resolve_failure_chunk_size"]

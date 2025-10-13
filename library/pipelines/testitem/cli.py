@@ -32,7 +32,7 @@ from library.common.metadata import (
     record_quality_failure,
     write_meta_yaml,
 )
-from library.common.sidecar import SidecarErrors
+from library.common.sidecar import SidecarErrors, resolve_failure_chunk_size
 from library.config import (
     ApiCfg,
     Config,
@@ -1353,6 +1353,7 @@ def finalize_output(
     col_order = schema_cols
     key_cols = ["molecule_chembl_id"]
 
+    failure_chunk_size = resolve_failure_chunk_size(cfg)
     rows_total = 0
     rows_written = 0
     exit_code = 0
@@ -1362,7 +1363,7 @@ def finalize_output(
     columns_to_fill: set[str] = set()
     expected_columns: set[str] = set()
     column_dtypes: dict[str, pd.api.extensions.ExtensionDtype | str | type | None] = {}
-    failure_cases = SidecarErrors()
+    failure_cases = SidecarErrors(chunk_size=failure_chunk_size)
     failure_count = 0
 
     chunk_iter = iter(chunks)
