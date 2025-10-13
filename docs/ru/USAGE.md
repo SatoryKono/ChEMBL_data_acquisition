@@ -356,6 +356,10 @@ python scripts/get_activity_data.py \
 
 Параметры ретраев, бэкоффа и поведения PubChem централизованы в YAML (блок
 `testitem`), поэтому CLI и оркестратор работают с единым набором значений.【F:config/config.yaml†L35-L69】
+При запуске через агрегатор `scripts/get_data.py` вызывается
+`_ensure_testitem_pubchem_enabled`, который принудительно оставляет обогащение
+PubChem включённым даже при выключенном YAML-флаге, чтобы стадия обогащения не
+пропускалась в оркестрации.【F:library/cli/commands/get_data.py†L360-L443】【F:library/cli/commands/get_data.py†L1630-L1668】
 
 ## Конвейер тканей `get_tissue_data`
 

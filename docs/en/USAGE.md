@@ -429,6 +429,10 @@ flags are:
 Retry, back-off and enrichment settings stay centralised in the YAML
 configuration (`testitem` block) so batch size, timeout and PubChem behaviour
 remain consistent between CLI runs and orchestrated workflows.【F:config/config.yaml†L35-L69】
+When test item extraction is triggered via the aggregated `scripts/get_data.py`
+orchestrator, `_ensure_testitem_pubchem_enabled` overrides configuration to keep
+PubChem enrichment active, preventing orchestration runs from skipping the
+augmentation stage.【F:library/cli/commands/get_data.py†L360-L443】【F:library/cli/commands/get_data.py†L1630-L1668】
 
 ## Tissue pipeline `get_tissue_data`
 
