@@ -911,7 +911,14 @@ def fetch_testitems(
     requested_iter = requested_ids_snapshot.iter_for_fetch()
 
     seen_ids: set[str] = set()
-    duplicate_ids: set[str] = set()
+    duplicate_ids: list[str] = []
+    duplicate_ids_seen: set[str] = set()
+
+    def _record_duplicates(values: Iterable[str]) -> None:
+        for value in values:
+            if value not in duplicate_ids_seen:
+                duplicate_ids_seen.add(value)
+                duplicate_ids.append(value)
 
     min_retry_size = max(1, retry_cfg.min_size) if retry_cfg.enable else 1
 
@@ -1000,7 +1007,7 @@ def fetch_testitems(
 
         duplicated_mask = frame["molecule_chembl_id"].duplicated(keep=False)
         if duplicated_mask.any():
-            duplicate_ids.update(
+            _record_duplicates(
                 frame.loc[duplicated_mask, "molecule_chembl_id"]
                 .dropna()
                 .astype(str)
@@ -1020,7 +1027,7 @@ def fetch_testitems(
                 .unique()
                 .tolist()
             )
-            duplicate_ids.update(dropped)
+            _record_duplicates(dropped)
             cleaned = cleaned.loc[keep_mask]
 
         if not cleaned.empty:
@@ -1038,14 +1045,13 @@ def fetch_testitems(
         logger.info("chembl_fetch_done", rows=0)
         logger.info("identifiers_retrieved", count=0)
         if duplicate_ids:
-            sorted_duplicates = sorted(duplicate_ids)
             duplicates_truncated = (
-                len(sorted_duplicates) > _DUPLICATE_IDENTIFIER_LOG_SAMPLE_SIZE
+                len(duplicate_ids) > _DUPLICATE_IDENTIFIER_LOG_SAMPLE_SIZE
             )
             logger.warning(
                 "chembl_duplicate_identifiers",
                 duplicate_count=len(duplicate_ids),
-                duplicate_ids=sorted_duplicates[:_DUPLICATE_IDENTIFIER_LOG_SAMPLE_SIZE],
+                duplicate_ids=duplicate_ids[:_DUPLICATE_IDENTIFIER_LOG_SAMPLE_SIZE],
                 duplicates_truncated=duplicates_truncated,
             )
         return 0, iter(()), requested_ids_snapshot
@@ -1075,14 +1081,13 @@ def fetch_testitems(
             logger.info("chembl_fetch_done", rows=rows_counter)
             logger.info("identifiers_retrieved", count=rows_counter)
             if duplicate_ids:
-                sorted_duplicates = sorted(duplicate_ids)
                 duplicates_truncated = (
-                    len(sorted_duplicates) > _DUPLICATE_IDENTIFIER_LOG_SAMPLE_SIZE
+                    len(duplicate_ids) > _DUPLICATE_IDENTIFIER_LOG_SAMPLE_SIZE
                 )
                 logger.warning(
                     "chembl_duplicate_identifiers",
                     duplicate_count=len(duplicate_ids),
-                    duplicate_ids=sorted_duplicates[
+                    duplicate_ids=duplicate_ids[
                         : _DUPLICATE_IDENTIFIER_LOG_SAMPLE_SIZE
                     ],
                     duplicates_truncated=duplicates_truncated,
