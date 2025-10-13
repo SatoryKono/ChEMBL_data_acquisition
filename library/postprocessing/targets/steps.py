@@ -161,6 +161,217 @@ def enrich_target_synonyms(
     return enriched
 
 
+@lru_cache(maxsize=1)
+def _load_target_types_frame() -> pd.DataFrame:
+    """Return cached target classification dictionary."""
+
+    try:
+        resource = get_resource("target_types")
+    except DictionaryManifestError as exc:
+        LOGGER.warning(
+            "Target metadata enrichment skipped; resource 'target_types' missing: %s",
+            exc,
+        )
+        return pd.DataFrame()
+
+    try:
+        frame = pd.read_csv(resource.path, dtype="string")
+    except FileNotFoundError as exc:
+        LOGGER.warning(
+            "Target metadata enrichment skipped; dictionary file not found: %s",
+            exc,
+        )
+        return pd.DataFrame()
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        LOGGER.warning(
+            "Target metadata enrichment skipped; failed to parse %s: %s",
+            resource.path,
+            exc,
+        )
+        return pd.DataFrame()
+
+    required = {"target_chembl_id", "synonyms", "IUPHAR_type", "target_id"}
+    missing = required - set(frame.columns)
+    if missing:
+        LOGGER.warning(
+            "Target metadata enrichment skipped; dictionary %s missing columns %s",
+            resource.path,
+            ", ".join(sorted(missing)),
+        )
+        return pd.DataFrame()
+
+    normalized = frame.loc[:, ["target_chembl_id", "synonyms", "IUPHAR_type", "target_id"]].copy()
+    normalized = normalized.fillna("")
+    normalized["target_chembl_id"] = (
+        normalized["target_chembl_id"].astype("string").str.strip().str.upper()
+    )
+    normalized["synonyms"] = normalized["synonyms"].astype("string").str.strip()
+    normalized["IUPHAR_type"] = normalized["IUPHAR_type"].astype("string").str.strip()
+    normalized["target_id"] = normalized["target_id"].astype("string").str.strip()
+
+    normalized = normalized.rename(
+        columns={
+            "synonyms": "chembl_synonyms_lookup",
+            "IUPHAR_type": "target_class_lookup",
+            "target_id": "iuphar_target_id_lookup",
+        }
+    )
+    normalized = normalized.drop_duplicates("target_chembl_id", keep="first")
+    return normalized
+
+
+@lru_cache(maxsize=1)
+def _load_iuphar_targets_frame() -> pd.DataFrame:
+    """Return cached IUPHAR target dictionary."""
+
+    try:
+        resource = get_resource("target_iuphar_target")
+    except DictionaryManifestError as exc:
+        LOGGER.warning(
+            "Target metadata enrichment skipped; resource 'target_iuphar_target' missing: %s",
+            exc,
+        )
+        return pd.DataFrame()
+
+    try:
+        frame = pd.read_csv(resource.path, dtype="string")
+    except FileNotFoundError as exc:
+        LOGGER.warning(
+            "Target metadata enrichment skipped; IUPHAR file not found: %s",
+            exc,
+        )
+        return pd.DataFrame()
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        LOGGER.warning(
+            "Target metadata enrichment skipped; failed to parse %s: %s",
+            resource.path,
+            exc,
+        )
+        return pd.DataFrame()
+
+    required = {"target_id", "synonyms", "family_name"}
+    missing = required - set(frame.columns)
+    if missing:
+        LOGGER.warning(
+            "Target metadata enrichment skipped; IUPHAR dictionary %s missing columns %s",
+            resource.path,
+            ", ".join(sorted(missing)),
+        )
+        return pd.DataFrame()
+
+    normalized = frame.loc[:, ["target_id", "synonyms", "family_name"]].copy()
+    normalized = normalized.fillna("")
+    normalized["target_id"] = normalized["target_id"].astype("string").str.strip()
+    normalized["synonyms"] = normalized["synonyms"].astype("string").str.strip()
+    normalized["family_name"] = normalized["family_name"].astype("string").str.strip()
+
+    normalized = normalized.rename(
+        columns={
+            "target_id": "iuphar_target_id_lookup",
+            "synonyms": "gtopdb_synonyms_lookup",
+            "family_name": "protein_family_lookup",
+        }
+    )
+    normalized = normalized.drop_duplicates("iuphar_target_id_lookup", keep="first")
+    return normalized
+
+
+def _get_target_types_frame() -> pd.DataFrame:
+    try:
+        return _load_target_types_frame()
+    except DictionaryManifestError as exc:  # pragma: no cover - safeguard
+        LOGGER.warning("Failed to load target type dictionary: %s", exc)
+        return pd.DataFrame()
+
+
+def _get_iuphar_targets_frame() -> pd.DataFrame:
+    try:
+        return _load_iuphar_targets_frame()
+    except DictionaryManifestError as exc:  # pragma: no cover - safeguard
+        LOGGER.warning("Failed to load IUPHAR target dictionary: %s", exc)
+        return pd.DataFrame()
+
+
+def _coalesce_column(frame: pd.DataFrame, target: str, source: str) -> None:
+    """Merge ``source`` column into ``target`` preferring existing values."""
+
+    if source not in frame.columns:
+        return
+
+    source_series = (
+        frame[source]
+        .astype("string")
+        .str.strip()
+        .replace({"": pd.NA})
+    )
+    if target not in frame.columns:
+        frame[target] = source_series
+    else:
+        frame[target] = (
+            frame[target]
+            .astype("string")
+            .replace({"": pd.NA})
+            .combine_first(source_series)
+        )
+    frame.drop(columns=[source], inplace=True)
+
+
+def enrich_target_metadata(df: pd.DataFrame, **_: object) -> pd.DataFrame:
+    """Enrich targets with classification and synonym metadata."""
+
+    if df.empty:
+        return df.copy(deep=True)
+
+    if "target_chembl_id" not in df.columns:
+        return df.copy(deep=True)
+
+    types_lookup = _get_target_types_frame()
+    if types_lookup.empty:
+        return df.copy(deep=True)
+
+    enriched = df.copy(deep=True)
+    normalized_ids = (
+        enriched["target_chembl_id"].astype("string").str.strip().str.upper()
+    )
+    enriched["_normalized_target_chembl_id"] = normalized_ids
+
+    joined = enriched.merge(
+        types_lookup.rename(columns={"target_chembl_id": "_lookup_target_chembl_id"}),
+        left_on="_normalized_target_chembl_id",
+        right_on="_lookup_target_chembl_id",
+        how="left",
+        sort=False,
+    )
+
+    iuphar_lookup = _get_iuphar_targets_frame()
+    if not iuphar_lookup.empty:
+        joined = joined.merge(
+            iuphar_lookup,
+            on="iuphar_target_id_lookup",
+            how="left",
+            sort=False,
+        )
+
+    _coalesce_column(joined, "chembl_synonyms", "chembl_synonyms_lookup")
+    _coalesce_column(joined, "target_class", "target_class_lookup")
+    _coalesce_column(joined, "protein_family", "protein_family_lookup")
+    _coalesce_column(joined, "gtopdb_synonyms", "gtopdb_synonyms_lookup")
+
+    helper_columns = [
+        column
+        for column in (
+            "_normalized_target_chembl_id",
+            "_lookup_target_chembl_id",
+            "iuphar_target_id_lookup",
+        )
+        if column in joined.columns
+    ]
+    if helper_columns:
+        joined = joined.drop(columns=helper_columns)
+
+    return joined
+
+
 def finalize_target_records(
     df: pd.DataFrame,
     *,
@@ -353,6 +564,7 @@ def _resolve_pipeline_version(override: str | None) -> str:
 __all__ = [
     "PIPELINE_CONFIG",
     "PIPELINE_STEPS",
+    "enrich_target_metadata",
     "finalize_target_records",
     "normalize_target_fields",
     "run_target_pipeline",

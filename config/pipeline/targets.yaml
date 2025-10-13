@@ -7,6 +7,9 @@ enabled_steps:
     params:
       normalize_taxonomy: true
       fill_missing_identifiers: true
+  - name: enrich_target_metadata
+    callable: "library.postprocessing.targets.steps:enrich_target_metadata"
+    description: "Populate target class, protein family, and synonyms from reference dictionaries."
   - name: enrich_target_synonyms
     callable: "library.postprocessing.targets.steps:enrich_target_synonyms"
     description: "Aggregate synonym sets across configured source dictionaries."
