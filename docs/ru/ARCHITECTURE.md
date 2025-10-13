@@ -137,7 +137,7 @@ graph TD
 | Нормализация и схемы | `library/schemas/*`, `library/normalization/*` | Приводят типы данных к стандарту, выравнивают операторы и применяют Pandera-схемы. |
 | Пост-обработка | `library/postprocessing/*`, `library/processing/*` | Вычисляют производные поля, объединяют словари, готовят порядок колонок. |
 | Экспорт и метаданные | `library/io/*`, `library/metadata.py`, `library/table_quality.py` | Записывают CSV/Parquet, создают YAML с контрольными суммами, формируют отчёты качества. |
-| QA и наблюдаемость | `logs/` (или `<base>/logs`), `library/common/log.py`, `library/utils/cli_tools/table_quality_main.py` | Структурированное логирование, профилирование таблиц, диагностика ошибок. |
+| QA и наблюдаемость | `data/logs/` (или `<base>/logs`), `library/common/log.py`, `library/utils/cli_tools/table_quality_main.py` | Структурированное логирование, профилирование таблиц, диагностика ошибок. |
 
 Диаграммы помогают быстро определить, в каком слое вносить изменения при
 добавлении новой сущности или адаптации правил очистки данных.

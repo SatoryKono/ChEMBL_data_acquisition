@@ -201,13 +201,18 @@ from the CI job summary whenever you need to inspect the type-check log.
 ### Logging contract
 
 All CLI entry points initialise structured logging via the shared bootstrap
-helpers. By default every command writes to `logs/<program>_<YYYYMMDD>.log`,
+helpers. By default every command writes to `data/logs/<program>_<YYYYMMDD>.log`,
 where `<program>` matches the script name (for example,
-`get_data` → `logs/get_data_20250228.log`). Setting `--base-path` or the
-`CHEMBL_DA_BASE_PATH` environment variable relocates the directory to
-`<base>/logs` while keeping the `<program>_<YYYYMMDD>.log` naming scheme.
-Tests and operational runbooks rely on this pattern to locate artefacts, so the
-file stem must not be renamed or rotated differently.
+`get_data` → `data/logs/get_data_20250228.log`). When a command exposes
+`--base-path`, the value is expanded, resolved to an absolute directory and
+`logs/` is appended (so `--base-path ../exports` produces
+`<absolute-exports>/logs/get_data_<YYYYMMDD>.log`). Commands that rely on the
+default directory honour the `CHEMBL_DA_BASE_PATH` environment variable, using
+the same normalisation rules but anchoring relative values at the repository
+root before adding `logs/`. In both cases the `<program>_<YYYYMMDD>.log` naming
+scheme is preserved, and explicit CLI directories take precedence over the
+environment. Tests and operational runbooks rely on this pattern to locate
+artefacts, so the file stem must not be renamed or rotated differently.
 
 ### Determinism verification order
 

@@ -82,7 +82,7 @@ Shared interface:
 - `--config`: optional override YAML (defaults to `config/pipeline/<table>.yaml`, e.g. `config/pipeline/testitems.yaml`).
 - `--log-level`: overrides the YAML/default log verbosity.
 
-By default logs are written to `logs/make_<table>_postprocessing_<YYYYMMDD>.log`. Override the directory by exporting
+By default logs are written to `data/logs/make_<table>_postprocessing_<YYYYMMDD>.log`. Override the directory by exporting
 `CHEMBL_POSTPROCESS_LOG_DIR`. Each run also emits `<table>.postprocess.report.json` alongside the output CSV with the pipeline
 metrics collected via `collect_postprocess_metrics`.
 
@@ -159,7 +159,7 @@ Consult `tests/conftest.py` for shared fixtures that enforce deterministic envir
 
 ## Generating reports
 
-Run the wrapper to execute the suite, produce the JSON protocol and Markdown summary, and mirror logs under `logs/`:
+Run the wrapper to execute the suite, produce the JSON protocol and Markdown summary, and mirror logs under `data/logs/`:
 
 ```bash
 python -m scripts.run_tests

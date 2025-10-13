@@ -81,7 +81,7 @@ YAML-файлы доменов поставляются с репрезента�
 - `--config` — опциональный YAML-override (по умолчанию `config/pipeline/<table>.yaml`, например `config/pipeline/testitems.yaml`).
 - `--log-level` — переопределение уровня логирования из YAML/значения по умолчанию.
 
-По умолчанию логи пишутся в `logs/make_<table>_postprocessing_<YYYYMMDD>.log`. Каталог можно изменить через переменную `CHEMBL_POSTPROCESS_LOG_DIR`. Каждый запуск также формирует рядом с CSV файл `<table>.postprocess.report.json` с метриками из `collect_postprocess_metrics`.
+По умолчанию логи пишутся в `data/logs/make_<table>_postprocessing_<YYYYMMDD>.log`. Каталог можно изменить через переменную `CHEMBL_POSTPROCESS_LOG_DIR`. Каждый запуск также формирует рядом с CSV файл `<table>.postprocess.report.json` с метриками из `collect_postprocess_metrics`.
 
 Пример запуска:
 
@@ -136,7 +136,7 @@ Pytest-сьют разбит на `tests/unit/`, `tests/integration/`, `tests/in
 
 ## Формирование отчётов
 
-Запустите обёртку, чтобы прогнать тесты, сформировать JSON-протокол и Markdown-сводку и продублировать логи в `logs/`:
+Запустите обёртку, чтобы прогнать тесты, сформировать JSON-протокол и Markdown-сводку и продублировать логи в `data/logs/`:
 
 ```bash
 python -m scripts.run_tests
