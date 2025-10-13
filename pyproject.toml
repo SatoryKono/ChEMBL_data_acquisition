@@ -85,8 +85,10 @@ include = [
   "config",
   "config.dictionary",
   "config.dictionary.*",
-  "scripts", 
-  "scripts.*", 
+  "config.schema",
+  "config.schema.*",
+  "scripts",
+  "scripts.*",
   "tools",
 ]
 
@@ -95,6 +97,9 @@ include = [
   "config.yaml",
   "schema/document.yaml",
   "dictionary/_testitem/molecule_hierarchy.csv",
+]
+"config.schema" = [
+  "document.yaml",
 ]
 "config.dictionary" = ["**/*"]
 "library" = ["py.typed"]
