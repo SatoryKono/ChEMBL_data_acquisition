@@ -15,7 +15,21 @@ import threading
 from collections.abc import Mapping, MutableMapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+# ruff: noqa: E402  # bootstrap alters import order for script compatibility
+if TYPE_CHECKING:
+    from . import _bootstrap as _bootstrap_module
+elif __package__ in {None, ""}:
+    import _bootstrap as _bootstrap_module  # pragma: no cover - CLI fallback
+else:  # pragma: no cover - executed when imported as a module
+    from . import _bootstrap as _bootstrap_module
+
+bootstrap_cli = _bootstrap_module.bootstrap_cli
+
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+del _bootstrap_module
 from uuid import NAMESPACE_URL, uuid5
 from xml.etree import ElementTree
 

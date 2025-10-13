@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
 import sys
@@ -124,6 +125,31 @@ def test_run_tests__verbose_creates_debug_log(
         run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False
     )
     monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
+    monkeypatch.setattr(
+        run_tests,
+        "build_structured_report",
+        lambda raw, exit_code: {
+            "summary": {"success_rate": 1.0},
+            "meta": {"duration_sec": 0.0},
+        },
+    )
+    monkeypatch.setattr(run_tests, "validate_structured_report", lambda structured: None)
+    monkeypatch.setattr(run_tests, "validate_report_file", lambda path: None)
+    monkeypatch.setattr(
+        run_tests,
+        "_parse_line_coverage",
+        lambda coverage_xml: 100.0,
+    )
+    monkeypatch.setattr(
+        run_tests,
+        "write_summary",
+        lambda structured, path: path.write_text("summary", encoding="utf-8"),
+    )
+    monkeypatch.setattr(
+        run_tests,
+        "write_json_report",
+        lambda structured, path: path.write_text("{}", encoding="utf-8"),
+    )
 
     captured_log_path: Path | None = None
 
@@ -149,8 +175,9 @@ def test_run_tests__verbose_creates_debug_log(
 
     captured_commands: list[list[str]] = []
 
-    def _fake_run_pytest(command: Sequence[str]) -> int:
+    def _fake_run_pytest(command: Sequence[str], *, timeout: float | None = None) -> int:
         captured_commands.append(list(command))
+        assert timeout is None
         return 0
 
     captured_configs: list[LoggerConfig] = []
@@ -341,8 +368,9 @@ def test_main__returns_exit_code_one_when_quality_gate_fails(
 
     captured_commands: list[list[str]] = []
 
-    def _fake_run_pytest(command: Sequence[str]) -> int:
+    def _fake_run_pytest(command: Sequence[str], *, timeout: float | None = None) -> int:
         captured_commands.append(list(command))
+        assert timeout is None
         return 0
 
     monkeypatch.setattr(run_tests, "run_pytest", _fake_run_pytest)
@@ -462,8 +490,9 @@ def test_main__zero_tests_trigger_quality_gate_error(
 
     captured_commands: list[list[str]] = []
 
-    def _fake_run_pytest(command: Sequence[str]) -> int:
+    def _fake_run_pytest(command: Sequence[str], *, timeout: float | None = None) -> int:
         captured_commands.append(list(command))
+        assert timeout is None
         return 0
 
     monkeypatch.setattr(run_tests, "run_pytest", _fake_run_pytest)
@@ -553,8 +582,9 @@ def test_main__writes_reports_when_pytest_fails(
 
     captured_commands: list[list[str]] = []
 
-    def _fake_run_pytest(command: Sequence[str]) -> int:
+    def _fake_run_pytest(command: Sequence[str], *, timeout: float | None = None) -> int:
         captured_commands.append(list(command))
+        assert timeout is None
         return 2
 
     monkeypatch.setattr(run_tests, "run_pytest", _fake_run_pytest)
@@ -631,7 +661,11 @@ def test_main__fails_fast_on_summary_filesystem_error(
     )
     monkeypatch.setattr(run_tests, "_git_output", lambda *args, **kwargs: "stub")
 
-    monkeypatch.setattr(run_tests, "run_pytest", lambda command, timeout=None: 0)
+    monkeypatch.setattr(
+        run_tests,
+        "run_pytest",
+        lambda command, *, timeout=None: 0,
+    )
     monkeypatch.setattr(
         run_tests, "_load_raw_report", lambda: {"tests": [], "duration": 0.0}
     )
@@ -665,8 +699,6 @@ def test_main__fails_fast_on_summary_filesystem_error(
     assert summary_attempts == 1
     assert not summary_file.exists()
     assert report_file.exists(), "JSON report should still be produced"
-
-
 @pytest.mark.unit
 def test_main__handles_json_report_write_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
