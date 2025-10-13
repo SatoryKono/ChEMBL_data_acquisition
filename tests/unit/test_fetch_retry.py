@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import csv
+import tracemalloc
+from itertools import cycle, islice
 
 import pytest
+from hypothesis import HealthCheck, given, seed, settings, strategies as st
 
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 from library.config import RetryCfg
@@ -159,6 +162,56 @@ def test_chunk_failure_tracker_stats__preserves_first_hundred_ids_and_total() ->
     assert stats["chunk_fetch_failure_ids"] == all_identifiers[:100]
     assert stats["chunk_fetch_failure_ids_total"] == len(all_identifiers)
     assert stats["chunk_fetch_failure_ids_truncated"] is True
+
+
+@seed(42)
+@settings(
+    deadline=None,
+    max_examples=3,
+    suppress_health_check=[HealthCheck.too_slow],
+)
+@given(
+    sample_size=st.integers(min_value=10_000, max_value=12_000),
+    seed_values=st.lists(
+        st.integers(min_value=0, max_value=50_000),
+        min_size=256,
+        max_size=512,
+    ),
+    chunk_size=st.integers(min_value=5, max_value=31),
+)
+def test_chunk_failure_tracker_stats__streaming_unique_ids_memory_bound(
+    sample_size: int,
+    seed_values: list[int],
+    chunk_size: int,
+) -> None:
+    tracker = ChunkFailureTracker()
+
+    prefix_length = sample_size // 2
+    cycled = list(islice(cycle(seed_values), prefix_length))
+    tail_start = 1_000_000
+    tail = list(range(tail_start, tail_start + sample_size - prefix_length))
+    formatted = [f"ID{value:05d}" for value in (cycled + tail)]
+    for start in range(0, len(formatted), chunk_size):
+        chunk = formatted[start : start + chunk_size]
+        tracker.add_failure(chunk, "boom")
+
+    tracemalloc.start()
+    stats = tracker.stats()
+    _current, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    seen: set[str] = set()
+    ordered_unique: list[str] = []
+    for identifier in formatted:
+        if identifier in seen:
+            continue
+        seen.add(identifier)
+        ordered_unique.append(identifier)
+
+    assert stats["chunk_fetch_failure_ids"] == ordered_unique[:100]
+    assert stats["chunk_fetch_failure_ids_total"] == len(ordered_unique)
+    assert stats["chunk_fetch_failure_ids_truncated"] is (len(ordered_unique) > 100)
+    assert peak <= 5_000_000
 
 
 def test_chunk_failure_tracker_save__sidecar_includes_truncation_metadata(
