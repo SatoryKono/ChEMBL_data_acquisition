@@ -164,6 +164,10 @@ The quickest way to reproduce them locally is to run the bundled test harness:
 python scripts/run_tests.py
 ```
 
+Ensure the development dependency set is installed beforehand — run `make init`
+or `pip install -r requirements-dev.txt` so the required pytest plugins (for
+example, `pytest-json-report`) are available.
+
 The command executes the full pytest matrix with coverage, writes the structured
 log to `reports/test_report.json` and the Markdown summary to
 `reports/test_summary.md`, and exits with a non-zero status when the

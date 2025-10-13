@@ -162,6 +162,10 @@ get-data \
 python scripts/run_tests.py
 ```
 
+Перед запуском убедитесь, что установлены dev-зависимости: выполните `make init`
+или `pip install -r requirements-dev.txt`, чтобы нужные плагины pytest (например,
+`pytest-json-report`) были доступны.
+
 Команда запускает полный набор pytest с покрытием, формирует структурированный
 отчёт `reports/test_report.json` и Markdown-выжимку `reports/test_summary.md`, а
 при падении показателя `summary.success_rate` ниже **95 %** завершает выполнение
