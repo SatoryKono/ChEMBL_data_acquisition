@@ -96,6 +96,7 @@ numpy==2.1.3 ; python_version >= "3.13"
     # via
     #   chembl-data-acquisition (pyproject.toml)
     #   pandas
+    #   pandas-stubs
     #   pandera
 numpy==1.26.4 ; python_version < "3.13"
     # via
