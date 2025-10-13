@@ -51,7 +51,6 @@ def test_fetch_testitems__does_not_reintroduce_nested_columns(
         batch_size=5,
         timeout=1.0,
         client=_SentinelClient(),
-        sample_ids=("CHEMBL1",),
         fields=(
             "molecule_structures.standard_inchi",
             "pubchem.cid",
@@ -61,7 +60,7 @@ def test_fetch_testitems__does_not_reintroduce_nested_columns(
     )
 
     assert status == 0
-    assert requested == ("CHEMBL1",)
+    assert list(requested.values()) == ["CHEMBL1"]
     assert chunk_iter is not None
 
     chunks = _collect(chunk_iter)
@@ -130,13 +129,12 @@ def test_fetch_testitems__renames_pubchem_and_structure_columns(
         "pubchem.molecular_formula",
     )
 
-    status, chunk_iter, _ = cli.fetch_testitems(
+    status, chunk_iter, requested = cli.fetch_testitems(
         ["CHEMBL1"],
         api_cfg=ApiCfg(),
         batch_size=5,
         timeout=1.0,
         client=_SentinelClient(),
-        sample_ids=("CHEMBL1",),
         fields=fields,
         page_limit=10,
         retry_cfg=TestitemBatchRetryCfg(),
@@ -144,6 +142,7 @@ def test_fetch_testitems__renames_pubchem_and_structure_columns(
 
     assert status == 0
     assert chunk_iter is not None
+    assert list(requested.values()) == ["CHEMBL1"]
 
     chunks = _collect(chunk_iter)
     assert len(chunks) == 1

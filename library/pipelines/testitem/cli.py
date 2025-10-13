@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
-from itertools import chain, islice
+from itertools import chain, islice, tee
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -683,22 +683,28 @@ def fetch_testitems(
     batch_size: int,
     timeout: float,
     client: ChemblClient,
-    sample_ids: Sequence[str],
     fields: Sequence[str] | None,
     page_limit: int,
     retry_cfg: TestitemBatchRetryCfg,
-) -> tuple[int, Iterator[pd.DataFrame] | None, tuple[str, ...]]:
+) -> tuple[int, Iterator[pd.DataFrame] | None, OrderedDict[str, str]]:
     """Retrieve ChEMBL test item records for ``ids_iter`` in chunks."""
 
     logger.info("chembl_fetch_start", batch_size=batch_size)
     chembl_lib = _load_chembl_library()
-    requested_ids_original: list[str] = []
 
-    for identifier in ids_iter:
-        text_identifier = str(identifier)
-        requested_ids_original.append(text_identifier)
+    normalized_iter = (str(identifier) for identifier in ids_iter)
+    fetch_iter, sample_iter = tee(normalized_iter)
+    sample_ids: deque[str] = deque(islice(sample_iter, _FETCH_ERROR_SAMPLE_SIZE))
+    sample_snapshot = tuple(sample_ids)
 
-    requested_iter = iter(requested_ids_original)
+    requested_unique: OrderedDict[str, str] = OrderedDict()
+
+    def _tracking_iter() -> Iterator[str]:
+        for identifier in fetch_iter:
+            trimmed = identifier.strip()
+            if trimmed:
+                requested_unique.setdefault(trimmed.upper(), identifier)
+            yield identifier
 
     seen_ids: set[str] = set()
     duplicate_ids: set[str] = set()
@@ -739,7 +745,7 @@ def fetch_testitems(
                     error=str(exc),
                     batch_size=chunk_size,
                     timeout=timeout,
-                    sample_ids=list(sample_ids),
+                    sample_ids=sample_snapshot,
                 )
                 raise TestitemFetchError(str(exc)) from exc
             next_chunk_size = _next_chunk_size(chunk_size)
@@ -749,7 +755,7 @@ def fetch_testitems(
                     error=str(exc),
                     batch_size=chunk_size,
                     timeout=timeout,
-                    sample_ids=list(sample_ids),
+                    sample_ids=sample_snapshot,
                 )
                 raise TestitemFetchError(str(exc)) from exc
             logger.warning(
@@ -820,7 +826,7 @@ def fetch_testitems(
 
         return cleaned.reset_index(drop=True)
 
-    batched_iter = _batched(requested_iter, max(1, batch_size))
+    batched_iter = _batched(_tracking_iter(), max(1, batch_size))
 
     try:
         first_batch = next(batched_iter)
@@ -833,14 +839,14 @@ def fetch_testitems(
                 duplicate_count=len(duplicate_ids),
                 duplicate_ids=sorted(duplicate_ids),
             )
-        return 0, iter(()), tuple(requested_ids_original)
+        return 0, iter(()), requested_unique
 
     prefetched: list[pd.DataFrame] = []
 
     try:
         prefetched.append(_load_chunk(first_batch, batch_size))
     except TestitemFetchError:
-        return 1, None, tuple()
+        return 1, None, requested_unique
 
     rows_counter = 0
 
@@ -866,7 +872,7 @@ def fetch_testitems(
                     duplicate_ids=sorted(duplicate_ids),
                 )
 
-    return 0, _chunk_stream(), tuple(requested_ids_original)
+    return 0, _chunk_stream(), requested_unique
 
 
 def apply_testitem_enrichment(
@@ -940,7 +946,6 @@ def run_testitem_pipeline(
         pubchem_api_cfg = _prepare_pubchem_api_cfg(cfg, api_cfg)
         pc.init_session(pubchem_api_cfg, cfg.retry)
 
-    requested_ids: tuple[str, ...] = ()
     missing_ids: list[str] = []
     input_csv = Path(options.input_csv)
     output_csv = Path(options.output_csv) if options.output_csv is not None else None
@@ -966,27 +971,18 @@ def run_testitem_pipeline(
         if read_status != 0 or read_result is None:
             return read_status, None
 
-        fetch_status, chunk_iter, requested_ids = fetch_testitems(
+        fetch_status, chunk_iter, requested_unique = fetch_testitems(
             read_result.ids_iter,
             api_cfg=api_cfg,
             batch_size=cfg.testitem.batch_size,
             timeout=cfg.testitem.timeout,
             client=client,
-            sample_ids=read_result.sample_ids,
             fields=cfg.testitem.fields,
             page_limit=cfg.testitem.request_limit,
             retry_cfg=cfg.testitem.batch_retry,
         )
         if fetch_status != 0 or chunk_iter is None:
             return fetch_status, None
-
-        requested_unique: OrderedDict[str, str] = OrderedDict()
-        for identifier in requested_ids:
-            key = identifier.strip()
-            if not key:
-                continue
-            upper_key = key.upper()
-            requested_unique.setdefault(upper_key, identifier)
 
         fetched_ids: set[str] = set()
 
@@ -1095,14 +1091,12 @@ def run_testitem_pipeline(
             ) as exc:  # pragma: no cover - propagated network error
                 raise TestitemPipelineStageError(1, str(exc)) from exc
 
-            missing_keys = [key for key in requested_unique if key not in fetched_ids]
-            missing_ids.extend(requested_unique[key] for key in missing_keys)
+            if not missing_ids:
+                for key, original in requested_unique.items():
+                    if key not in fetched_ids:
+                        missing_ids.append(original)
             if missing_ids:
-                logger.warning(
-                    "chembl_missing_identifiers",
-                    count=len(missing_ids),
-                    identifiers=missing_ids,
-                )
+                _log_missing_identifier_summary(missing_ids)
                 placeholder = pd.DataFrame({"molecule_chembl_id": list(missing_ids)})
                 rows_counter += len(placeholder)
                 yield placeholder
