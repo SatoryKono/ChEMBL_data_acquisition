@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from io import TextIOWrapper
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -139,9 +140,13 @@ def load_document_declaration(path: str | Path | None = None) -> DocumentDeclara
 
 def _load_schema_mapping(path: str | Path | None) -> Mapping[str, Any]:
     schema_path = _resolve_schema_path(path)
+    if hasattr(schema_path, "read_text"):
+        text = schema_path.read_text(encoding="utf-8")
+        return yaml.safe_load(text) or {}
     if hasattr(schema_path, "open") and not isinstance(schema_path, Path):
-        with schema_path.open("r", encoding="utf-8") as handle:
-            return yaml.safe_load(handle) or {}
+        with schema_path.open("rb") as raw:
+            with TextIOWrapper(raw, encoding="utf-8") as handle:
+                return yaml.safe_load(handle) or {}
     with Path(schema_path).open(encoding="utf-8") as handle:
         return yaml.safe_load(handle) or {}
 
