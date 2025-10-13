@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
-PYTHON ?= python3
+PYTHON ?= python3.11
 VENV := .venv
 PYTHON_BIN := $(VENV)/bin/python
 PIP := $(VENV)/bin/pip
@@ -21,9 +21,10 @@ endif
 init: $(PYTHON_BIN)
 
 $(PYTHON_BIN): requirements.txt pyproject.toml
-	@if [ -f .python-version ]; then \
-		$(PYTHON) -c "import pathlib, sys; expected = pathlib.Path('.python-version').read_text().strip(); actual = '.'.join(map(str, sys.version_info[:3])); assert actual == expected, f'Python {expected} required, but {actual} found'"; \
-	fi
+        @if [ -f .python-version ]; then \
+                $(PYTHON) -c "import pathlib, sys; version = pathlib.Path('.python-version').read_text().strip(); expected = tuple(int(part) for part in version.split('.')); actual = sys.version_info[:len(expected)]; actual_str = '.'.join(map(str, sys.version_info[:len(expected)]));\
+                assert actual == expected, f\"Python {version} required, but {actual_str} found\""; \
+        fi
 	$(PYTHON) -m venv $(VENV)
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements-lock.txt
