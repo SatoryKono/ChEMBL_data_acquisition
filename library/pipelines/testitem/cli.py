@@ -1432,6 +1432,7 @@ def finalize_output(
                 fields=pubchem_context.fields,
                 request_limit=pubchem_context.request_limit,
             )
+            augmented_subset.index = to_augment.index
             dataset_frame.loc[missing_mask, augmented_subset.columns] = augmented_subset
             logger.info("pubchem_fallback_augment_done")
             pubchem_fallback_used = True
