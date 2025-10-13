@@ -753,6 +753,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     _relative_to_root(report_path),
                     exc,
                 )
+                validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
             else:
                 try:
                     validate_report_file(report_path)
