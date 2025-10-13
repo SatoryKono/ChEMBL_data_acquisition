@@ -129,7 +129,7 @@ def test_fetch_testitems_logging__duplicate_sample_not_truncated(
 
     event = _find_duplicate_event(logger)
     assert event["duplicate_count"] == len(sample_identifiers)
-    assert event["duplicate_ids"] == sorted(sample_identifiers)
+    assert event["duplicate_ids"] == sample_identifiers
     assert event["duplicates_truncated"] is False
 
 
@@ -154,5 +154,5 @@ def test_fetch_testitems_logging__duplicate_sample_truncated(
     event = _find_duplicate_event(logger)
     assert event["duplicate_count"] == len(identifiers)
     assert len(event["duplicate_ids"]) == sample_size
-    assert event["duplicate_ids"] == sorted(identifiers)[:sample_size]
+    assert event["duplicate_ids"] == identifiers[:sample_size]
     assert event["duplicates_truncated"] is True
