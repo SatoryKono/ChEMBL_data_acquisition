@@ -141,13 +141,20 @@ def test_finalize_output__optional_column_present_in_later_chunk(
         no_parent=0,
     )
 
-    exit_code = cli.finalize_output(
+    exit_result = cli.finalize_output(
         [first_chunk, second_chunk],
         cfg=cfg,
         output=output_path,
         parent_stats_supplier=lambda: stats,
         input_csv=sample_input_csv,
     )
+
+    if isinstance(exit_result, tuple):
+        exit_code, artifacts = exit_result
+        dataset_path = Path(artifacts.dataset)
+    else:
+        exit_code = exit_result
+        dataset_path = output_path
 
     assert exit_code == 0
 
@@ -158,6 +165,54 @@ def test_finalize_output__optional_column_present_in_later_chunk(
         columns = payload.get("columns", [])
         assert "pref_name" not in columns
 
-    final = pd.read_csv(output_path)
+    final = pd.read_csv(dataset_path)
     assert "pref_name" in final.columns
     assert final.loc[1, "pref_name"] == "Example"
+
+
+@pytest.mark.unit
+def test_emit_missing_identifier_logs__warns_with_sample_and_info(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cli = _cli()
+    warnings: list[tuple[str, dict[str, object]]] = []
+    infos: list[tuple[str, dict[str, object]]] = []
+
+    def capture_warning(event: str, **fields: object) -> None:
+        warnings.append((event, fields))
+
+    def capture_info(event: str, **fields: object) -> None:
+        infos.append((event, fields))
+
+    monkeypatch.setattr(cli.logger, "warning", capture_warning)
+    monkeypatch.setattr(cli.logger, "info", capture_info)
+
+    identifiers = [f"CHEMBL{i}" for i in range(1, 15)]
+
+    cli._emit_missing_identifier_logs(identifiers)
+
+    assert warnings == [
+        (
+            "chembl_missing_identifiers",
+            {
+                "total": len(identifiers),
+                "sample": identifiers[: cli._MISSING_IDENTIFIER_LOG_SAMPLE_SIZE],
+            },
+        )
+    ]
+    assert infos == [
+        ("chembl_missing_identifiers_total", {"count": len(identifiers)})
+    ]
+
+
+@pytest.mark.unit
+def test_emit_missing_identifier_logs__skips_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    cli = _cli()
+
+    def unexpected(*args: object, **kwargs: object) -> None:
+        pytest.fail("unexpected log call")
+
+    monkeypatch.setattr(cli.logger, "warning", unexpected)
+    monkeypatch.setattr(cli.logger, "info", unexpected)
+
+    cli._emit_missing_identifier_logs([])

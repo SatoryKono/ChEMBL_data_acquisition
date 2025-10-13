@@ -33,6 +33,7 @@ from . import enrichment as testitem_enrichment  # noqa: F401
 from .cli import (
     RAW_INDEX_COLUMN,
     TestitemPipelineOptions,
+    _emit_missing_identifier_logs,
     _normalise_output_labels,
     _extract_metadata_parameters,
     _write_primary_metadata,
@@ -50,6 +51,7 @@ __all__ = list(
             "TESTITEM_PUBCHEM_COLUMNS",
             "TestitemPipelineOptions",
             "analyze_table_quality",
+            "_emit_missing_identifier_logs",
             "enrich",
             "ensure_raw_index_column",
             "file_sha256",
