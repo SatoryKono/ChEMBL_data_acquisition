@@ -12,8 +12,11 @@ import pytest
 import requests
 
 from library import cli_utils
+from library.cli import LoggerConfig
+from library.cli import utils as cli_runtime_utils
 from library.cli.base import PipelineCLIBase
 from library.config import Config
+from library.maintenance.legacy_outputs import SENTINEL_FILENAME
 from library.pipelines.common import PipelineRunResult
 from library.reporting.run_manifest import PipelineOutputReport
 from library.utils.cli_tools import get_document_type
@@ -314,6 +317,106 @@ def _patch_activity_cli(monkeypatch: pytest.MonkeyPatch, cfg: Config) -> None:
         cli_utils, "apply_config_overrides", fake_apply_config_overrides
     )
     monkeypatch.setattr(cli_utils, "ensure_dirs", lambda _cfg: None)
+
+
+@pytest.mark.e2e
+def test_run_cli_command__legacy_cleanup_removes_extra_files(
+    tmp_path: Path,
+    cfg: Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure CLI boilerplate removes legacy artefacts before running pipelines."""
+
+    cfg.io.output_dir = tmp_path / "output"
+    cfg.io.cache_dir = tmp_path / "cache"
+    cfg.io.exist_ok = True
+    cfg.io.output_dir.mkdir(parents=True, exist_ok=True)
+    cfg.io.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    legacy_meta = cfg.io.output_dir / "documents.meta.yaml"
+    legacy_failures = cfg.io.output_dir / "documents_failure_cases.csv"
+    legacy_meta.write_text("meta", encoding="utf-8")
+    legacy_failures.write_text("id\n1\n", encoding="utf-8")
+
+    sentinel_path = cfg.io.output_dir / SENTINEL_FILENAME
+    assert not sentinel_path.exists()
+
+    logger_stub = _MemoryLogger()
+    monkeypatch.setattr(
+        cli_runtime_utils,
+        "configure_logger",
+        lambda _cfg: logger_stub,
+    )
+
+    def _fake_apply_config_overrides(
+        args: argparse.Namespace,
+        parser: argparse.ArgumentParser,
+        config_path: Path | str,
+        mapping: dict[str, str],
+        *,
+        base_parser: argparse.ArgumentParser | None = None,
+    ) -> Config:
+        args._config_metadata = None
+        return cfg
+
+    monkeypatch.setattr(
+        cli_runtime_utils,
+        "apply_config_overrides",
+        _fake_apply_config_overrides,
+    )
+    monkeypatch.setattr(cli_runtime_utils, "prepare_io_paths", lambda _args: None)
+
+    output_csv = cfg.io.output_dir / "documents.csv"
+
+    run_calls: list[tuple[Config, argparse.Namespace]] = []
+
+    def _run(cfg_obj: Config, args_ns: argparse.Namespace) -> int:
+        run_calls.append((cfg_obj, args_ns))
+        output_csv.write_text("document_id\nDOC1\n", encoding="utf-8")
+        return 0
+
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("{}", encoding="utf-8")
+
+    parser = argparse.ArgumentParser(prog="get-document-data")
+    parser.add_argument("--config", default=str(config_path))
+
+    args = argparse.Namespace(
+        config=str(config_path),
+        log_level="INFO",
+        verbose=False,
+        run_id=None,
+        print_config=False,
+        postprocess=False,
+        base_path=None,
+        input_dir=None,
+        output_dir=cfg.io.output_dir,
+        cache_dir=cfg.io.cache_dir,
+        input_csv=None,
+        output_csv=output_csv,
+        final_out=output_csv,
+        invocation=("get-document-data",),
+    )
+
+    log_cfg = LoggerConfig(level="INFO", run_id="test-run")
+
+    exit_code = cli_runtime_utils.run_cli_command(
+        args=args,
+        parser=parser,
+        log_cfg=log_cfg,
+        mapping={},
+        run=_run,
+    )
+
+    assert exit_code == 0
+    assert run_calls, "expected pipeline run to be invoked"
+    assert output_csv.exists()
+    assert not legacy_meta.exists()
+    assert not legacy_failures.exists()
+    assert sentinel_path.exists()
+
+    events = [(level, event) for level, event, _ in logger_stub.events]
+    assert ("warning", "legacy_outputs_retention_notice") in events
 
 
 @pytest.mark.e2e
