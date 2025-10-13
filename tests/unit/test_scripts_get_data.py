@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import os
 import sys
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
@@ -186,6 +187,50 @@ def test_cleanup_intermediate_files__skips_missing_directory(tmp_path: Path) -> 
     removed = cli.cleanup_intermediate_files(missing_dir)
 
     assert removed == 0
+
+
+@pytest.mark.unit
+def test_resolve_cleanup_output_dir__uses_forwarded_value(tmp_path: Path) -> None:
+    """Cleanup resolution should follow user-provided ``--output-dir`` values."""
+
+    from scripts import get_data as cli
+
+    tokens = ("--output-dir", "custom/output")
+    forward = cli.ForwardArgs(tokens=tokens, extras_start=0, extra_len=len(tokens))
+
+    cwd = tmp_path / "workspace"
+    cwd.mkdir()
+
+    expected = (cwd / "custom/output").resolve()
+
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(cwd)
+        resolved = cli._resolve_cleanup_output_dir(forward)
+    finally:
+        os.chdir(original_cwd)
+
+    assert resolved == expected
+
+
+@pytest.mark.unit
+def test_resolve_cleanup_output_dir__honours_base_path_override(tmp_path: Path) -> None:
+    """Relative output directories should resolve against ``--base-path``."""
+
+    from scripts import get_data as cli
+
+    base_dir = tmp_path / "data"
+    tokens = (
+        "--base-path",
+        str(base_dir),
+        "--output-dir",
+        "exports",
+    )
+    forward = cli.ForwardArgs(tokens=tokens, extras_start=0, extra_len=len(tokens))
+
+    resolved = cli._resolve_cleanup_output_dir(forward)
+
+    assert resolved == (base_dir / "exports").resolve()
 
 
 @pytest.mark.unit
