@@ -113,6 +113,17 @@ _PUBCHEM_ENV_VAR = "CHEMBL_DA_PUBCHEM_ENABLE"
 _BASE_PATH_ENV_VAR = "CHEMBL_DA_BASE_PATH"
 
 
+def _has_explicit_pubchem_flag(tokens: Sequence[str]) -> bool:
+    """Return ``True`` when PubChem CLI overrides are already present."""
+
+    for token in tokens:
+        if token in {"--pubchem-enable", "--no-pubchem-enable"}:
+            return True
+        if token.startswith("--pubchem-enable="):
+            return True
+    return False
+
+
 def _extract_option_value(args: Sequence[str], option: str) -> str | None:
     """Return the value for ``option`` (supports ``--opt value`` and ``--opt=value``)."""
 
@@ -174,7 +185,18 @@ def _ensure_pubchem_env(args: Sequence[str], env: dict[str, str]) -> None:
     env_state = _normalize_env_bool(env.get(_PUBCHEM_ENV_VAR))
     config_enabled = _pubchem_enabled_from_config(args)
 
-    if env_state is True or (config_enabled is True and env_state is not False):
+    if env_state is False:
+        return
+
+    if config_enabled is False:
+        return
+
+    if env_state is True:
+        logging.info("[PUBCHEM] Enrichment enabled for testitem table")
+        return
+
+    if config_enabled is True:
+        env[_PUBCHEM_ENV_VAR] = "true"
         logging.info("[PUBCHEM] Enrichment enabled for testitem table")
         return
 
@@ -376,7 +398,7 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
     if stage.name == "testitem":
         # Ensure PubChem enrichment mirrors direct CLI invocation of the
         # get_testitem_data.py script.
-        if "--pubchem-enable" not in stage_args:
+        if not _has_explicit_pubchem_flag(stage_args):
             stage_args.append("--pubchem-enable")
 
     env = os.environ.copy()
