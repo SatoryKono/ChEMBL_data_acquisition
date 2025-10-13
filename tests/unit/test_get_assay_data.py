@@ -223,9 +223,7 @@ def test_run_chembl__successful_execution(
         del dataset, correlation, quality
         return StandardOutputArtifacts(
             dataset=minimal_args.final_out,
-            correlation_report=minimal_args.final_out.with_name(
-                "correlation.csv"
-            ),
+            correlation_report=minimal_args.final_out.with_name("correlation.csv"),
             quality_report=minimal_args.final_out.with_name("quality.csv"),
         )
 
@@ -253,9 +251,7 @@ def test_run_chembl__successful_execution(
     exit_code = get_assay_data.run_chembl(cfg, minimal_args)
 
     assert exit_code == 0
-    assert any(
-        event == "assay_standard_outputs" for _, event, _ in logger_stub.events
-    )
+    assert any(event == "assay_standard_outputs" for _, event, _ in logger_stub.events)
     assert any(event == "postprocess_skipped" for _, event, _ in logger_stub.events)
     if offset:
         assert any(event == "process_offset" for _, event, _ in logger_stub.events)
@@ -363,9 +359,7 @@ def test_run_chembl__splits_chunk_on_timeout(
     ) -> StandardOutputArtifacts:
         return StandardOutputArtifacts(
             dataset=minimal_args.final_out,
-            correlation_report=minimal_args.final_out.with_name(
-                "correlation.csv"
-            ),
+            correlation_report=minimal_args.final_out.with_name("correlation.csv"),
             quality_report=minimal_args.final_out.with_name("quality.csv"),
         )
 
@@ -445,7 +439,9 @@ def test_run_chembl__standard_outputs_created_without_legacy(
 
     def fake_run_pipeline(**kwargs: object) -> PipelineExecutionResult:
         if (definition := kwargs.get("definition")) and definition.stats_callback:
-            definition.stats_callback({"rows_total": 1, "rows_kept": 1, "rows_dropped": 0})
+            definition.stats_callback(
+                {"rows_total": 1, "rows_kept": 1, "rows_dropped": 0}
+            )
         return PipelineExecutionResult(
             exit_code=0,
             dataset_path=minimal_args.final_out,
@@ -464,6 +460,7 @@ def test_run_chembl__standard_outputs_created_without_legacy(
         lambda *_args, **_kwargs: iter(["CHEMBL1"]),
     )
     monkeypatch.setattr(get_assay_data.cl, "get_assays", lambda *_, **__: df)
+
     class _DummyClient:
         def __enter__(self) -> _DummyClient:
             return self
@@ -478,6 +475,7 @@ def test_run_chembl__standard_outputs_created_without_legacy(
         "library.orchestration.context.ChemblClient",
         lambda *_, **__: _DummyClient(),
     )
+
     def fake_prepare_chunked_pipeline(**kwargs: object):
         del kwargs
 
@@ -554,7 +552,9 @@ def test_run_chembl__standard_outputs_normalize_hidden_tmp_path(
     def fake_run_pipeline(**kwargs: object) -> PipelineExecutionResult:
         definition = kwargs.get("definition")
         if definition and definition.stats_callback:
-            definition.stats_callback({"rows_total": 1, "rows_kept": 1, "rows_dropped": 0})
+            definition.stats_callback(
+                {"rows_total": 1, "rows_kept": 1, "rows_dropped": 0}
+            )
         return PipelineExecutionResult(exit_code=0, dataset_path=hidden_tmp)
 
     def fake_prepare_chunked_pipeline(**kwargs: object):

@@ -140,8 +140,7 @@ class ReportingPolicyState:
             )
         if self.missing_scenarios:
             reasons.append(
-                "Missing pipeline scenarios: "
-                + ", ".join(self.missing_scenarios)
+                "Missing pipeline scenarios: " + ", ".join(self.missing_scenarios)
             )
         self.failure_reasons = reasons
 
@@ -288,7 +287,9 @@ class ReportingPolicyPlugin:
             terminalreporter.write_line("Policy gate satisfied.")
 
     @pytest.hookimpl(optionalhook=True)
-    def pytest_json_modifyreport(self, json_report: dict[str, Any]) -> None:  # noqa: D401
+    def pytest_json_modifyreport(
+        self, json_report: dict[str, Any]
+    ) -> None:  # noqa: D401
         repo = git_output("config", "--get", "remote.origin.url") or DEFAULT_REPO_SLUG
         commit = git_output("rev-parse", "HEAD")
         branch = git_output("rev-parse", "--abbrev-ref", "HEAD")
@@ -310,4 +311,3 @@ def _determine_status(report: pytest.TestReport) -> str | None:
     if report.when == "call":
         return "xpassed" if getattr(report, "wasxfail", False) else "passed"
     return None
-

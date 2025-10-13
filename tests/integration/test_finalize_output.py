@@ -41,7 +41,7 @@ def _base_stats() -> ParentLookupStats:
 
 
 def _unwrap_finalize_result(
-    result: int | tuple[int, io.StandardOutputArtifacts | None]
+    result: int | tuple[int, io.StandardOutputArtifacts | None],
 ) -> tuple[int, io.StandardOutputArtifacts | None]:
     if isinstance(result, tuple):
         return result
@@ -281,7 +281,9 @@ def test_finalize_output__records_pubchem_disabled_metric(
 
     assert exit_code == 0
 
-    stats_events = [fields for event, fields in info_events if event == "testitem_stats"]
+    stats_events = [
+        fields for event, fields in info_events if event == "testitem_stats"
+    ]
     assert stats_events, "expected testitem_stats event to be emitted"
     latest_stats = stats_events[-1]
     assert latest_stats["pubchem_augmentation_enabled"] is False

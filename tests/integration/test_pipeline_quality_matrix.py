@@ -46,7 +46,9 @@ def _normalise_booleans(frame: pd.DataFrame, columns: Iterable[str]) -> pd.DataF
     return normalised
 
 
-def run_pipeline(input_path: Path, dictionary_path: Path, destination: Path) -> PipelineResult:
+def run_pipeline(
+    input_path: Path, dictionary_path: Path, destination: Path
+) -> PipelineResult:
     logger = logging.getLogger(LOGGER_NAME)
     logger.info(
         "pipeline_start input=%s dictionary=%s",
@@ -68,7 +70,9 @@ def run_pipeline(input_path: Path, dictionary_path: Path, destination: Path) -> 
         raise ValueError("Input payload does not contain any rows")
 
     frame = frame.copy()
-    frame["molecule_chembl_id"] = frame["molecule_chembl_id"].astype("string").str.strip()
+    frame["molecule_chembl_id"] = (
+        frame["molecule_chembl_id"].astype("string").str.strip()
+    )
     frame["name"] = frame["name"].astype("string").str.strip()
     frame["smiles"] = frame["smiles"].astype("string").str.strip()
     frame["category"] = frame["category"].astype("string").str.strip()
@@ -85,19 +89,27 @@ def run_pipeline(input_path: Path, dictionary_path: Path, destination: Path) -> 
             ",".join(dup_ids),
             int(duplicates.sum()),
         )
-        frame = frame.sort_values(["molecule_chembl_id", "score"], ascending=[True, False])
+        frame = frame.sort_values(
+            ["molecule_chembl_id", "score"], ascending=[True, False]
+        )
         frame = frame.drop_duplicates("molecule_chembl_id", keep="first")
 
     dictionary = pd.read_csv(dictionary_path, keep_default_na=False)
-    dictionary["molecule_chembl_id"] = dictionary["molecule_chembl_id"].astype("string").str.strip()
-    dictionary["preferred_name"] = dictionary["preferred_name"].astype("string").str.strip()
+    dictionary["molecule_chembl_id"] = (
+        dictionary["molecule_chembl_id"].astype("string").str.strip()
+    )
+    dictionary["preferred_name"] = (
+        dictionary["preferred_name"].astype("string").str.strip()
+    )
     dictionary["category_override"] = (
         dictionary["category_override"].astype("string").str.strip().str.lower()
     )
 
     merged = frame.merge(dictionary, on="molecule_chembl_id", how="left")
 
-    merged["preferred_name"] = merged["preferred_name"].astype("string").fillna("").str.strip()
+    merged["preferred_name"] = (
+        merged["preferred_name"].astype("string").fillna("").str.strip()
+    )
     merged["category_override"] = (
         merged["category_override"].astype("string").fillna("").str.strip().str.lower()
     )
@@ -113,12 +125,18 @@ def run_pipeline(input_path: Path, dictionary_path: Path, destination: Path) -> 
             len(missing_ids),
         )
 
-    merged.loc[merged["name"].eq(""), "name"] = merged.loc[merged["name"].eq(""), "preferred_name"]
+    merged.loc[merged["name"].eq(""), "name"] = merged.loc[
+        merged["name"].eq(""), "preferred_name"
+    ]
     merged.loc[merged["name"].eq(""), "name"] = "Undefined"
     merged.loc[merged["preferred_name"].eq(""), "preferred_name"] = pd.NA
 
-    category_override = merged["category_override"].where(~merged["category_override"].eq(""))
-    merged["category_normalized"] = category_override.fillna(merged["category"].where(~merged["category"].eq(""), "unknown"))
+    category_override = merged["category_override"].where(
+        ~merged["category_override"].eq("")
+    )
+    merged["category_normalized"] = category_override.fillna(
+        merged["category"].where(~merged["category"].eq(""), "unknown")
+    )
 
     merged["has_smiles"] = merged["smiles"].ne("")
     merged.loc[merged["smiles"].eq(""), "smiles"] = pd.NA

@@ -374,6 +374,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             destination=output_path.parent,
         )
     else:
+
         def _noop_table_quality(_: Path) -> None:
             return None
 
@@ -663,9 +664,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         assert SchemaValidationError is not None
         assert StepError is not None
 
-        output_postprocessed = output_path.with_name(
-            "output_postprocessed.assays.csv"
-        )
+        output_postprocessed = output_path.with_name("output_postprocessed.assays.csv")
 
         try:
             postprocess_result = run_postprocessing_pipeline(

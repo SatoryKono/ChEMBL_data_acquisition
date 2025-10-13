@@ -9,9 +9,11 @@ if TYPE_CHECKING:
     from . import _bootstrap as _bootstrap_module
 elif __package__ in {None, ""}:
     import _bootstrap as _bootstrap_module  # pragma: no cover - CLI fallback
+
     package_name = "scripts"
 else:  # pragma: no cover - executed when imported as a package module
     from . import _bootstrap as _bootstrap_module
+
     package_name = __package__
 
 bootstrap_cli = _bootstrap_module.bootstrap_cli

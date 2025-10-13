@@ -281,9 +281,7 @@ def test_pipeline_registry__document_mode_branch(
             written=True,
         )
 
-    def _run_activity_pipeline(
-        _config: Config, options: object
-    ) -> PipelineRunResult:
+    def _run_activity_pipeline(_config: Config, options: object) -> PipelineRunResult:
         output_destination = Path(options.output_csv)
         consumed_path = cfg.output_dir / (
             f"output.documents_{mode}_{cfg.date_prefix}.csv"
@@ -647,7 +645,9 @@ def test_run_pipeline__document_override_invokes_selected_mode(
 
     modes: list[str] = []
 
-    def _fake_run_document_pipeline(config: Config, options: object) -> PipelineRunResult:
+    def _fake_run_document_pipeline(
+        config: Config, options: object
+    ) -> PipelineRunResult:
         mode = options.mode
         modes.append(mode)
         assert mode == "chembl"
@@ -810,7 +810,9 @@ def test_testitem_pipeline_receives_pubchem_toggle(
     monkeypatch.setattr(
         get_data, "_PIPELINE_APIS", {"testitem": pipeline_api}, raising=False
     )
-    monkeypatch.setattr(get_data, "_warm_parent_catalog", lambda *_: None, raising=False)
+    monkeypatch.setattr(
+        get_data, "_warm_parent_catalog", lambda *_: None, raising=False
+    )
     monkeypatch.setattr(get_data, "ensure_dirs", lambda *_: None, raising=False)
 
     base_config = Config()
@@ -855,7 +857,10 @@ def test_pipeline_subset__retry_after_failure(
 
     attempts = {"count": 0}
     dictionary_path = (
-        Path(__file__).resolve().parents[1] / "resources" / "pipeline_inputs" / "assay_dictionary.csv"
+        Path(__file__).resolve().parents[1]
+        / "resources"
+        / "pipeline_inputs"
+        / "assay_dictionary.csv"
     )
 
     def _on_execute(rows: pd.DataFrame, destination: Path) -> int:
@@ -1064,7 +1069,9 @@ def test_pipeline_subset__target_postprocess_sidecars(
     assert report_candidates, "postprocess report missing"
     postprocess_meta = step_entry.get("postprocess")
     assert postprocess_meta is not None
-    assert postprocess_meta["output"] in {str(path) for path in postprocessed_candidates}
+    assert postprocess_meta["output"] in {
+        str(path) for path in postprocessed_candidates
+    }
     assert postprocess_meta["report"] in {str(path) for path in report_candidates}
 
 
@@ -1108,9 +1115,7 @@ def test_run_pipeline__diagnostic_sidecars_toggled(
     ) -> SimpleNamespace:
         return SimpleNamespace(input_csv=input_path, output_csv=output_path)
 
-    def _runner(
-        _config: Config, options: SimpleNamespace
-    ) -> PipelineRunResult:
+    def _runner(_config: Config, options: SimpleNamespace) -> PipelineRunResult:
         working_path = Path(options.output_csv)
         working_path.parent.mkdir(parents=True, exist_ok=True)
         final_name = working_path.name.lstrip(".")
@@ -1120,9 +1125,7 @@ def test_run_pipeline__diagnostic_sidecars_toggled(
         dataset.write_text("dummy_id\n1\n", encoding="utf-8")
         stem = dataset.stem
         quality = dataset.with_name(f"{stem}_quality_report_table.csv")
-        correlation = dataset.with_name(
-            f"{stem}_data_correlation_report_table.csv"
-        )
+        correlation = dataset.with_name(f"{stem}_data_correlation_report_table.csv")
         failure = dataset.with_name(f"{stem}_failure_cases.csv")
         postprocessed = dataset.with_name("output_postprocessed.dummy.csv")
         report = dataset.with_name("dummy.postprocess.report.json")

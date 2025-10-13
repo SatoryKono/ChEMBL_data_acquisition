@@ -85,7 +85,9 @@ def test_compute_backoff_delay__adds_jitter_before_cap() -> None:
         (4, 8.0 + 2.0),
     ],
 )
-def test_compute_backoff_delay__growth_with_fixed_jitter(attempt: int, expected: float) -> None:
+def test_compute_backoff_delay__growth_with_fixed_jitter(
+    attempt: int, expected: float
+) -> None:
     retry_cfg = RetryCfg(backoff_factor=1.0, backoff_cap=None)
 
     def _jitter(base_delay: float) -> float:
@@ -159,7 +161,9 @@ def test_chunk_failure_tracker_stats__preserves_first_hundred_ids_and_total() ->
     assert stats["chunk_fetch_failure_ids_truncated"] is True
 
 
-def test_chunk_failure_tracker_save__sidecar_includes_truncation_metadata(tmp_path) -> None:
+def test_chunk_failure_tracker_save__sidecar_includes_truncation_metadata(
+    tmp_path,
+) -> None:
     tracker = ChunkFailureTracker()
 
     for index in range(120):

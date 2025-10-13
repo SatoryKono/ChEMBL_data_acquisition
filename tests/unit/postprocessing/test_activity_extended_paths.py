@@ -59,7 +59,9 @@ def test_current_default_search_dir__prefers_runtime_override(tmp_path: Path) ->
 
 
 @pytest.mark.unit
-def test_configure_runtime_paths_from_config__uses_config_output(tmp_path: Path) -> None:
+def test_configure_runtime_paths_from_config__uses_config_output(
+    tmp_path: Path,
+) -> None:
     """Configuration objects should populate the runtime export root."""
 
     export_dir = tmp_path / "configured"

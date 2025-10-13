@@ -185,5 +185,3 @@ def test_targets_module_proxy__updates_isoform_default(
     monkeypatch.addfinalizer(lambda: targets_pipeline.set_default_search_dir(None))
 
     assert isoform._current_default_search_dir() == tmp_path
-
-

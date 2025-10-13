@@ -63,12 +63,16 @@ def test_save_standard_outputs__writes_expected_csvs(
         assert (tmp_path / path).exists(), f"missing {path}"
 
     pd.testing.assert_frame_equal(pd.read_csv(artifacts.dataset), dataset)
-    pd.testing.assert_frame_equal(pd.read_csv(artifacts.correlation_report), correlation)
+    pd.testing.assert_frame_equal(
+        pd.read_csv(artifacts.correlation_report), correlation
+    )
     pd.testing.assert_frame_equal(pd.read_csv(artifacts.quality_report), quality)
 
 
 @pytest.mark.unit
-def test_save_standard_outputs__creates_output_directory(tmp_path: Path, sample_frames) -> None:
+def test_save_standard_outputs__creates_output_directory(
+    tmp_path: Path, sample_frames
+) -> None:
     dataset, correlation, quality = sample_frames
 
     destination = tmp_path / "nested" / "dir"
@@ -86,7 +90,9 @@ def test_save_standard_outputs__creates_output_directory(tmp_path: Path, sample_
 
 
 @pytest.mark.unit
-def test_save_standard_outputs__supports_string_output_dir(tmp_path: Path, sample_frames) -> None:
+def test_save_standard_outputs__supports_string_output_dir(
+    tmp_path: Path, sample_frames
+) -> None:
     dataset, correlation, quality = sample_frames
     destination = tmp_path / "string-dir"
 
@@ -157,9 +163,7 @@ def test_save_standard_outputs__idempotent_and_without_extraneous_files(
         "correlation": artifacts_first.correlation_report,
         "quality": artifacts_first.quality_report,
     }
-    first_snapshots = {
-        name: path.read_bytes() for name, path in first_paths.items()
-    }
+    first_snapshots = {name: path.read_bytes() for name, path in first_paths.items()}
 
     artifacts_second = output_writer.save_standard_outputs(
         dataset.copy(),

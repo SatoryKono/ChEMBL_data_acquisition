@@ -3,7 +3,7 @@ import argparse
 import pytest
 
 from library.cli import apply_config_overrides
-from library.config import Config, DEFAULT_CONFIG_PATH, load_config
+from library.config import DEFAULT_CONFIG_PATH, Config, load_config
 
 
 @pytest.mark.unit

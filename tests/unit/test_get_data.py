@@ -203,7 +203,9 @@ def test_load_pipeline_config__applies_testitem_limit_override(tmp_path: Path) -
     cfg = _make_config(tmp_path)
     config_source = Path("config/config.yaml")
     copied_config = tmp_path / "config_full.yaml"
-    copied_config.write_text(config_source.read_text(encoding="utf-8"), encoding="utf-8")
+    copied_config.write_text(
+        config_source.read_text(encoding="utf-8"), encoding="utf-8"
+    )
     cfg = replace(cfg, config_path=copied_config, limit=10)
 
     loaded = get_data._load_pipeline_config(cfg, cfg.config_path)
@@ -244,9 +246,7 @@ def test_write_run_manifest__fallback_on_unlink_failure(
     )
 
     manifest_files = sorted(
-        p
-        for p in reports_dir.glob("run_*.json")
-        if p.name != "run_manifest.json"
+        p for p in reports_dir.glob("run_*.json") if p.name != "run_manifest.json"
     )
     assert len(manifest_files) == 1
     manifest_content = manifest_files[0].read_text(encoding="utf-8")
@@ -749,9 +749,7 @@ def test_override_subcommand__document_pipeline_uses_selected_mode(
     document_only = tuple(step for step in resolved_steps if step.name == "document")
     cfg = cli_get_data._prepare_config(args, document_only)
     document_input = cfg.input_path("document")
-    document_input.write_text(
-        "document_chembl_id\nCHEMBLDOC1\n", encoding="utf-8"
-    )
+    document_input.write_text("document_chembl_id\nCHEMBLDOC1\n", encoding="utf-8")
     assert cfg.subcommand_for("document") == "chembl"
 
     captured: list[str] = []
@@ -791,9 +789,7 @@ def test_override_subcommand__document_pipeline_uses_selected_mode(
         lambda *args, **kwargs: SimpleNamespace(),
         raising=False,
     )
-    monkeypatch.setattr(
-        cli_get_data, "ensure_dirs", lambda _cfg: None, raising=False
-    )
+    monkeypatch.setattr(cli_get_data, "ensure_dirs", lambda _cfg: None, raising=False)
 
     status = cli_get_data.run_pipeline(cfg, steps=document_only)
     assert status == 0
@@ -1233,7 +1229,9 @@ def test_run_testitem_subprocess__invokes_script_with_pubchem_enable(
     working_output = final_output.with_name(f"{final_output.name}.tmp")
 
     class _StubStep:
-        def build_arguments(self, cfg_arg: get_data.PipelineRunConfig, output_path: Path) -> list[str]:
+        def build_arguments(
+            self, cfg_arg: get_data.PipelineRunConfig, output_path: Path
+        ) -> list[str]:
             return [
                 "--config",
                 str(cfg_arg.config_path),
@@ -1329,7 +1327,9 @@ def test_run_pipeline__dry_run_manifest(
 def test_run_postprocess_hook__missing_input(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    step = next(step for step in get_data.DEFAULT_PIPELINE_STEPS if step.name == "document")
+    step = next(
+        step for step in get_data.DEFAULT_PIPELINE_STEPS if step.name == "document"
+    )
     final_output = tmp_path / "output.documents_20240101.csv"
     assert not final_output.exists()
 

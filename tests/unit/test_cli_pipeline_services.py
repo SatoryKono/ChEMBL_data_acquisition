@@ -73,10 +73,7 @@ def test_run_document_service__invokes_mode_handler(
     cfg_copy = captured["cfg"]
     assert isinstance(cfg_copy, Config)
     assert cfg_copy is not cfg
-    assert (
-        cfg_copy.sources.chembl.pipelines.document.chembl.offset
-        == options.offset
-    )
+    assert cfg_copy.sources.chembl.pipelines.document.chembl.offset == options.offset
 
     args = captured["args"]
     assert Path(args.input_csv) == sample_csv
@@ -233,7 +230,9 @@ def test_document_pipeline_run__delegates_to_service(
 
     sentinel = PipelineRunResult(exit_code=0, output_path=output_csv, written=True)
 
-    def _fake_service(config: Config, opts: DocumentPipelineOptions) -> PipelineRunResult:
+    def _fake_service(
+        config: Config, opts: DocumentPipelineOptions
+    ) -> PipelineRunResult:
         assert config is cfg
         assert opts is options
         return sentinel
@@ -278,14 +277,8 @@ def test_run_target_service__invokes_command_handler(
     cfg_copy = captured["cfg"]
     assert isinstance(cfg_copy, Config)
     assert cfg_copy is not cfg
-    assert (
-        cfg_copy.sources.chembl.pipelines.target.chembl.limit
-        == options.limit
-    )
-    assert (
-        cfg_copy.sources.chembl.pipelines.target.chembl.offset
-        == options.offset
-    )
+    assert cfg_copy.sources.chembl.pipelines.target.chembl.limit == options.limit
+    assert cfg_copy.sources.chembl.pipelines.target.chembl.offset == options.offset
 
     args = captured["args"]
     assert Path(args.input_csv) == sample_csv

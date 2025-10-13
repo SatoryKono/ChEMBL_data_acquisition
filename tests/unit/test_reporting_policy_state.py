@@ -28,9 +28,7 @@ def test_reporting_policy_state__computes_summary_and_success_rate() -> None:
     assert summary["skipped"] == 1
     assert summary["success_rate"] == pytest.approx(1.0)
     assert state.missing_scenarios == [
-        scenario
-        for scenario in sorted(PIPELINE_SCENARIOS)
-        if scenario != "csv_loading"
+        scenario for scenario in sorted(PIPELINE_SCENARIOS) if scenario != "csv_loading"
     ]
 
 
@@ -45,7 +43,9 @@ def test_reporting_policy_state__flags_missing_scenario_and_threshold_failure() 
     assert "csv_loading" in state.missing_scenarios
     assert state.failure_reasons
     assert any("Success rate" in reason for reason in state.failure_reasons)
-    assert any("Missing pipeline scenarios" in reason for reason in state.failure_reasons)
+    assert any(
+        "Missing pipeline scenarios" in reason for reason in state.failure_reasons
+    )
 
 
 @pytest.mark.unit

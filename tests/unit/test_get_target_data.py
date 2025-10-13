@@ -323,9 +323,7 @@ def test_fetch_chembl__cleans_up_standard_outputs_when_requested(
     cleanup_calls: list[Path] = []
 
     def _fake_run_chembl(cfg_obj: Config, args: argparse.Namespace) -> int:
-        Path(args.final_out).write_text(
-            "target_chembl_id\nCHEMBL1\n", encoding="utf-8"
-        )
+        Path(args.final_out).write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
         return 0
 
     def _record_cleanup(path: Path) -> None:
@@ -418,9 +416,7 @@ def test_restore_legacy_output__restores_missing_file(
     get_target_data._restore_legacy_output(destination, source, cfg=cfg)
 
     assert destination.exists()
-    assert destination.read_text(encoding="utf-8") == source.read_text(
-        encoding="utf-8"
-    )
+    assert destination.read_text(encoding="utf-8") == source.read_text(encoding="utf-8")
     restored_events = [
         payload
         for level, event, payload in logger_stub.events
@@ -768,9 +764,7 @@ def test_run_chembl__forces_standard_outputs_when_outputs_disabled(
     dataset_dir = tmp_path / "standard"
     dataset_dir.mkdir()
     dataset_path = dataset_dir / "output.targets_chembl.csv"
-    dataset_path.write_text(
-        "target_chembl_id\nCHEMBL1\n", encoding=cfg.io.csv_encoding
-    )
+    dataset_path.write_text("target_chembl_id\nCHEMBL1\n", encoding=cfg.io.csv_encoding)
 
     def _fake_read_ids(path: Path, *, column: str, **_: object) -> Iterable[str]:
         assert column == cfg.target.chembl.column
@@ -1170,7 +1164,9 @@ def test_run_chembl__coerces_none_emit_flag(
     )
 
     class _StubWriter:
-        def __init__(self, destination: Path, *, cfg: Config, reindex_columns: bool) -> None:
+        def __init__(
+            self, destination: Path, *, cfg: Config, reindex_columns: bool
+        ) -> None:
             self.destination = destination
 
         def write(self, chunk: pd.DataFrame) -> None:  # pragma: no cover - stub
@@ -1327,6 +1323,7 @@ def test_run_all__cleans_up_default_intermediate_outputs(
     assert not uniprot_path.exists()
     assert not iuphar_path.exists()
 
+
 def test_run_target_postprocess_if_requested__disabled_flag_logs_skip(
     cfg: Config,
     tmp_path: Path,
@@ -1438,7 +1435,9 @@ def test_run_target_postprocess_if_requested__invokes_pipeline(
         _fake_run_postprocessing_pipeline,
     )
 
-    def _dummy_runner(df: object, *, pipeline_version: object | None = None, logger=None):
+    def _dummy_runner(
+        df: object, *, pipeline_version: object | None = None, logger=None
+    ):
         return df, SimpleNamespace(
             summary=lambda: {
                 "rows": 1,
@@ -1464,7 +1463,9 @@ def test_run_target_postprocess_if_requested__invokes_pipeline(
     assert pipeline_calls[0][0][1] == source
     assert pipeline_calls[0][0][2] == destination
 
-    events = [event for event in logger_stub.events if event[1] == "target_postprocess_done"]
+    events = [
+        event for event in logger_stub.events if event[1] == "target_postprocess_done"
+    ]
     assert events
     _, _, payload = events[0]
     assert payload["path"] == str(destination)
@@ -1597,9 +1598,7 @@ def test_raw_dump_stream_writer_write__permission_error_retries(
         get_target_data._RawDumpStreamWriter._CSV_WRITE_RETRY_BASE_SLEEP_S
     ]
     assert (
-        destination.read_text(encoding="utf-8")
-        .lstrip("\ufeff")
-        .replace("\r", "")
+        destination.read_text(encoding="utf-8").lstrip("\ufeff").replace("\r", "")
         == "col\n1\n"
     )
     warning_events = _events_of_level(logger_stub, "warning")
@@ -1613,6 +1612,7 @@ def test_raw_dump_stream_writer_write__permission_error_retries(
             "error": "file is locked",
         },
     ) in warning_events
+
 
 def test_validate_and_write__omits_failure_artifacts_when_legacy_disabled(
     tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
@@ -1707,7 +1707,9 @@ def test_validate_and_write__removes_postprocess_sidecars(
     postprocess_output = tmp_path / "output_postprocessed.targets.csv"
     postprocess_report = tmp_path / "targets.postprocess.report.json"
 
-    def _fake_postprocess(*args: object, **kwargs: object) -> PostprocessingPipelineResult:
+    def _fake_postprocess(
+        *args: object, **kwargs: object
+    ) -> PostprocessingPipelineResult:
         postprocess_output.write_text("postprocessed", encoding="utf-8")
         postprocess_report.write_text("{}", encoding="utf-8")
         return PostprocessingPipelineResult(

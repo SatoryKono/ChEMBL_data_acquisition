@@ -22,7 +22,9 @@ def test_cleanup_removes_known_patterns(tmp_path: Path) -> None:
     legacy_json = output_dir / "output.dataset.quality.json"
     legacy_failures = output_dir / "output.dataset_failure_cases.csv"
 
-    _create_files([keep_dataset, keep_quality, legacy_meta, legacy_json, legacy_failures])
+    _create_files(
+        [keep_dataset, keep_quality, legacy_meta, legacy_json, legacy_failures]
+    )
 
     result = cleanup_legacy_outputs(output_dir)
 

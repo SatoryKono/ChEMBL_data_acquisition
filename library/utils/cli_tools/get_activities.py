@@ -182,9 +182,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         and getattr(args, "skip_existing", False)
         and not getattr(args, "force", False)
     ):
-        logger.info(
-            "pipeline_skip_existing", output_postprocessed=str(output_path)
-        )
+        logger.info("pipeline_skip_existing", output_postprocessed=str(output_path))
         return 0
 
     try:

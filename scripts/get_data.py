@@ -1,3 +1,5 @@
+# ruff: noqa: E402, I001
+
 from __future__ import annotations
 
 import argparse
@@ -6,11 +8,11 @@ import os
 import shlex
 import subprocess
 import sys
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import import_module
 from pathlib import Path
-from typing import Collection, Sequence
 
 # NOTE:
 #   ``python scripts/get_data.py`` executed from Windows adds ``scripts``
@@ -30,6 +32,11 @@ except ModuleNotFoundError as exc:  # pragma: no cover - import guard
     sys.modules.pop("scripts", None)
     from scripts._bootstrap import ensure_project_root
 
+from library.config import DEFAULT_CONFIG_PATH, load_config  # noqa: E402
+from library.config.env import (
+    _default_base_path as _config_default_base_path,
+)  # noqa: E402
+
 
 def _guard_cli_module() -> None:
     """Ensure the core ``library.cli.commands.get_data`` module imports cleanly."""
@@ -47,10 +54,6 @@ def _guard_cli_module() -> None:
 
 
 _guard_cli_module()
-
-
-from library.config import DEFAULT_CONFIG_PATH, load_config
-from library.config.env import _default_base_path as _config_default_base_path
 
 
 @dataclass(frozen=True)
@@ -150,7 +153,9 @@ def _pubchem_enabled_from_config(args: Sequence[str]) -> bool | None:
         config = load_config(config_path, base_path=base_path)
     except Exception as exc:  # pragma: no cover - defensive logging
         logging.debug(
-            "Не удалось загрузить конфигурацию %s: %s", config_path, exc,
+            "Не удалось загрузить конфигурацию %s: %s",
+            config_path,
+            exc,
         )
         return None
 
@@ -214,9 +219,7 @@ def _resolve_forward_base_path(
     try:
         config = load_config(config_path, base_path=None)
     except Exception as exc:  # pragma: no cover - defensive logging
-        logging.debug(
-            "Не удалось вычислить базовый путь из %s: %s", config_path, exc
-        )
+        logging.debug("Не удалось вычислить базовый путь из %s: %s", config_path, exc)
     else:
         local_cfg = getattr(config, "local", None)
         io_cfg = getattr(local_cfg, "io", None) if local_cfg is not None else None
@@ -229,7 +232,9 @@ def _resolve_forward_base_path(
     return _config_default_base_path()
 
 
-def parse_args(argv: Sequence[str] | None = None) -> tuple[argparse.Namespace, list[str]]:
+def parse_args(
+    argv: Sequence[str] | None = None,
+) -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(
         description="Оркестратор последовательного запуска скриптов сбора данных ChEMBL.",
     )
@@ -358,13 +363,11 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
 
     if stage.name == "target":
         stage_args = forward.with_default_subcommand(
-
             _DEFAULT_TARGET_SUBCOMMAND, choices=TARGET_SUBCOMMANDS
         )
     elif stage.name == "document":
         stage_args = forward.with_default_subcommand(
             _DEFAULT_DOCUMENT_SUBCOMMAND, choices=DOCUMENT_SUBCOMMANDS
-
         )
     else:
         stage_args = forward.as_list()
@@ -418,7 +421,7 @@ def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> Forwar
     def _has_option(option: str) -> bool:
         return option in forward
 
-    #if not _has_option("--base-path"):
+    # if not _has_option("--base-path"):
     #    base_path = _resolve_forward_base_path(args, forwarded_extras)
     #    forward.extend(["--base-path", str(base_path)])
     if not _has_option("--input-dir"):

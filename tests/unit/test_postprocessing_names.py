@@ -78,7 +78,9 @@ def test_process_target_names__writes_to_custom_output_dir(tmp_path: Path) -> No
     ).to_csv(input_path, index=False)
 
     output_dir = tmp_path / "names"
-    result = names.process_target_names(input_path, output_dir=output_dir, verbose=False)
+    result = names.process_target_names(
+        input_path, output_dir=output_dir, verbose=False
+    )
 
     output_path = Path(result["path"])
     assert output_path.parent == output_dir

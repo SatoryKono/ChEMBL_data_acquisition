@@ -96,7 +96,9 @@ def _patch_logger(monkeypatch: pytest.MonkeyPatch, module: object) -> _MemoryLog
         get_testitem_data,
     ],
 )
-def test_cli_wrappers__monkeypatch_parent_catalog(monkeypatch: pytest.MonkeyPatch, module: object) -> None:
+def test_cli_wrappers__monkeypatch_parent_catalog(
+    monkeypatch: pytest.MonkeyPatch, module: object
+) -> None:
     """Ensure monkeypatching private helpers affects both wrapper and underlying module."""
 
     sentinel = object()
@@ -214,9 +216,7 @@ def _install_activity_writer(
             f"{destination_path.stem}_data_correlation_report_table.csv"
         )
         quality_df.to_csv(quality_path, index=False, sep=sep, encoding=encoding)
-        correlation_df.to_csv(
-            correlation_path, index=False, sep=sep, encoding=encoding
-        )
+        correlation_df.to_csv(correlation_path, index=False, sep=sep, encoding=encoding)
 
         written.append(
             {
@@ -338,7 +338,9 @@ def test_get_activity_cli__default_date_prefix_applied(
     original_write_meta = get_activity_data.write_meta_yaml
     captured_meta: dict[str, object] = {}
 
-    def _record_meta(path: Path | str, *, cfg: Config | None = None, **kwargs: object) -> Path:
+    def _record_meta(
+        path: Path | str, *, cfg: Config | None = None, **kwargs: object
+    ) -> Path:
         meta_path = original_write_meta(path, cfg=cfg, **kwargs)
         captured_meta["path"] = meta_path
         captured_meta["cfg"] = cfg
@@ -378,9 +380,7 @@ def test_get_activity_cli__default_date_prefix_applied(
     assert len(written) == 1
 
     output_path = written[0][0]
-    expected_name = (
-        f"output.{get_activity_data.DEFAULT_OUTPUT_STEM}_{cfg.io.default_date_prefix}.csv"
-    )
+    expected_name = f"output.{get_activity_data.DEFAULT_OUTPUT_STEM}_{cfg.io.default_date_prefix}.csv"
     assert output_path.name == expected_name
     assert output_path.parent == cfg.io.output_dir
 
@@ -544,9 +544,7 @@ def test_get_document_type_main__writes_meta(
     assert quality_path.exists()
     assert correlation_path.exists()
 
-    produced_csvs = {
-        path.name for path in output_csv.parent.glob("*.csv")
-    }
+    produced_csvs = {path.name for path in output_csv.parent.glob("*.csv")}
     assert produced_csvs == {
         output_csv.name,
         quality_path.name,
@@ -560,6 +558,7 @@ def test_get_document_type_main__writes_meta(
     assert finalise_kwargs.get("rows_kept") == len(frame)
     assert finalise_kwargs.get("command")
     assert finalise_kwargs.get("invocation") == tuple(invocation)
+
 
 @pytest.mark.e2e
 def test_get_testitem_run_success(

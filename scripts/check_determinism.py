@@ -107,9 +107,7 @@ def _report_process_failure(
             sys.stderr.write("\n")
 
 
-def _report_process_timeout(
-    label: str, exc: subprocess.TimeoutExpired
-) -> None:
+def _report_process_timeout(label: str, exc: subprocess.TimeoutExpired) -> None:
     timeout_value = exc.timeout
     sys.stderr.write(f"{label} timed out after {timeout_value} seconds\n")
 

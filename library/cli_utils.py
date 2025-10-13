@@ -421,7 +421,9 @@ def run_cli_command(
         ensure_dirs(cfg)
         cleanup_result = ensure_legacy_cleanup(cfg, logger=use_logger)
         if cleanup_result.performed and not cleanup_result.dry_run:
-            log_method = use_logger.warning if cleanup_result.removed_count else use_logger.info
+            log_method = (
+                use_logger.warning if cleanup_result.removed_count else use_logger.info
+            )
             log_method(
                 "legacy_outputs_retention_notice",
                 directory=str(cleanup_result.output_dir),
@@ -484,7 +486,7 @@ def _resolve_standard_output_naming(
 
     name = output_path.name
     if name.startswith(".") and name.endswith(".tmp"):
-        name = name[1:-len(".tmp")]
+        name = name[1 : -len(".tmp")]
     stem = Path(name).stem if name else output_path.stem
     remainder = stem
 
@@ -614,7 +616,9 @@ def run_pipeline(
     profiler: TableQualityProfiler | None = (
         TableQualityProfiler() if standard_outputs_enabled else None
     )
-    collected_chunks: list[pd.DataFrame] | None = [] if standard_outputs_enabled else None
+    collected_chunks: list[pd.DataFrame] | None = (
+        [] if standard_outputs_enabled else None
+    )
     standard_artifacts: StandardOutputArtifacts | None = None
     dataset_path: Path | None = None
 
@@ -662,7 +666,9 @@ def run_pipeline(
             failure_path.unlink(missing_ok=True)
             Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
 
-    def _build_result(code: int, *, dataset: Path | None = None) -> PipelineExecutionResult:
+    def _build_result(
+        code: int, *, dataset: Path | None = None
+    ) -> PipelineExecutionResult:
         failure_artifact = failure_path if emit_legacy_artifacts else None
         metadata_artifact = meta_path if emit_legacy_artifacts else None
         return PipelineExecutionResult(
@@ -1036,7 +1042,9 @@ def run_pipeline(
             getattr(io_cfg, "output_dir", None) if io_cfg is not None else None
         )
         if output_dir_value is None:
-            raise ValueError("cfg.io.output_dir must be configured for standard outputs")
+            raise ValueError(
+                "cfg.io.output_dir must be configured for standard outputs"
+            )
 
         cleanup_canonical_source = (
             bool(cleanup_standard_source)

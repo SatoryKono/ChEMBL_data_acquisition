@@ -21,11 +21,7 @@ _FALLBACK_SEARCH_DIR = Path(_DEFAULT_SEARCH_DIR)
 def set_default_search_dir(search_dir: Path | str | None) -> None:
     """Override the default directory used to locate target exports."""
 
-    resolved = (
-        _FALLBACK_SEARCH_DIR
-        if search_dir is None
-        else Path(search_dir)
-    )
+    resolved = _FALLBACK_SEARCH_DIR if search_dir is None else Path(search_dir)
     _isoform_module._DEFAULT_SEARCH_DIR = resolved
     globals()["_DEFAULT_SEARCH_DIR"] = resolved
 

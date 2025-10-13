@@ -20,17 +20,25 @@ class _LoggerStub:
     def info(self, message: str, **kwargs: object) -> None:  # pragma: no cover - helper
         self.messages.append((message, kwargs))
 
-    def warning(self, message: str, **kwargs: object) -> None:  # pragma: no cover - helper
+    def warning(
+        self, message: str, **kwargs: object
+    ) -> None:  # pragma: no cover - helper
         self.messages.append((message, kwargs))
 
-    def error(self, message: str, **kwargs: object) -> None:  # pragma: no cover - helper
+    def error(
+        self, message: str, **kwargs: object
+    ) -> None:  # pragma: no cover - helper
         self.messages.append((message, kwargs))
 
-    def exception(self, message: str, **kwargs: object) -> None:  # pragma: no cover - helper
+    def exception(
+        self, message: str, **kwargs: object
+    ) -> None:  # pragma: no cover - helper
         self.messages.append((message, kwargs))
 
 
-def _writer_stub(chunks, destination: Path, col_order, key_cols):  # pragma: no cover - helper
+def _writer_stub(
+    chunks, destination: Path, col_order, key_cols
+):  # pragma: no cover - helper
     collected = [frame.copy() for frame in chunks]
     if collected:
         result = pd.concat(collected, ignore_index=True)

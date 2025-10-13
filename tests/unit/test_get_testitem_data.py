@@ -248,14 +248,18 @@ def test_run_chembl__builds_standard_outputs_when_missing_artifacts(
             self.exit_code = 0
             self.dataset_path = path
 
-    def fake_run_pipeline(config: Config, options: get_testitem_data.TestitemPipelineOptions):
+    def fake_run_pipeline(
+        config: Config, options: get_testitem_data.TestitemPipelineOptions
+    ):
         assert config is cfg
         assert options.output_csv == dataset_path
         return FakeResult(dataset_path)
 
     captured: dict[str, object] = {}
 
-    def fake_generate_qc_report(df: pd.DataFrame, *, table_name: str, **_: object) -> pd.DataFrame:
+    def fake_generate_qc_report(
+        df: pd.DataFrame, *, table_name: str, **_: object
+    ) -> pd.DataFrame:
         captured["qc_frame"] = df.copy()
         captured["qc_table"] = table_name
         return pd.DataFrame({"metric": [1]})
@@ -520,8 +524,12 @@ def test_run__postprocess_enabled_runs_pipeline(
     import library.postprocess as postprocess_mod
     import library.postprocessing.testitem as postprocess_testitem
 
-    monkeypatch.setattr(postprocess_mod, "get_pipeline_config", fake_get_pipeline_config)
-    monkeypatch.setattr(postprocess_mod, "get_csv_runtime_config", fake_get_csv_runtime_config)
+    monkeypatch.setattr(
+        postprocess_mod, "get_pipeline_config", fake_get_pipeline_config
+    )
+    monkeypatch.setattr(
+        postprocess_mod, "get_csv_runtime_config", fake_get_csv_runtime_config
+    )
     monkeypatch.setattr(
         postprocess_mod,
         "run_postprocessing_pipeline",

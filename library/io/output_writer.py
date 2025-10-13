@@ -131,9 +131,7 @@ def save_standard_outputs(
         key_cols = [str(df_main.columns[0])]
 
     effective_column_order = (
-        list(column_order)
-        if column_order is not None
-        else list(df_main.columns)
+        list(column_order) if column_order is not None else list(df_main.columns)
     )
     write_csv_deterministic(
         df_main,
@@ -161,11 +159,7 @@ def save_standard_outputs(
         quality_report=quality_path,
     )
 
-    if (
-        cleanup_source
-        and output_path is not None
-        and Path(output_path) != dataset_path
-    ):
+    if cleanup_source and output_path is not None and Path(output_path) != dataset_path:
         Path(output_path).unlink(missing_ok=True)
         Path(f"{output_path}.meta.yaml").unlink(missing_ok=True)
 

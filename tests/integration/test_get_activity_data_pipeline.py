@@ -545,12 +545,14 @@ def test_activity_pipeline__happy_path(
 
     root_resource = get_resource("dictionary_root")
     target_resource = get_resource("target_types")
-    assert report_payload.get("dictionaries", {}).get("dictionary_root", {}).get(
-        "version"
-    ) == root_resource.version
-    assert report_payload.get("dictionaries", {}).get("target_types", {}).get(
-        "version"
-    ) == target_resource.version
+    assert (
+        report_payload.get("dictionaries", {}).get("dictionary_root", {}).get("version")
+        == root_resource.version
+    )
+    assert (
+        report_payload.get("dictionaries", {}).get("target_types", {}).get("version")
+        == target_resource.version
+    )
 
 
 @pytest.mark.integration

@@ -49,9 +49,7 @@ class ChunkFailureTracker:
         if not self._failures:
             return {}
         unique_ids = dict.fromkeys(
-            identifier
-            for failure in self._failures
-            for identifier in failure.chunk_ids
+            identifier for failure in self._failures for identifier in failure.chunk_ids
         )
         total_unique_ids = len(unique_ids)
         truncated = total_unique_ids > _CHUNK_FAILURE_IDS_LIMIT

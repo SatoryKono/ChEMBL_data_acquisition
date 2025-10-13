@@ -340,9 +340,7 @@ def test_main__activity_timeout_reports_error(
 
     monkeypatch.setattr(check_determinism.subprocess, "run", _fake_run)
 
-    exit_code = check_determinism.main(
-        ["--input", str(input_csv), "--timeout", "123"]
-    )
+    exit_code = check_determinism.main(["--input", str(input_csv), "--timeout", "123"])
 
     assert exit_code == 1
 

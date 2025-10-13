@@ -41,7 +41,9 @@ def test_load_output_document__coerces_invalid_numeric_ranges(tmp_path):
 @pytest.mark.integration
 def test_postprocess_file__forwards_custom_reference(tmp_path, monkeypatch):
     input_path = tmp_path / "documents_raw.csv"
-    pd.DataFrame({"ChEMBL.document_chembl_id": ["DOC0001"]}).to_csv(input_path, index=False)
+    pd.DataFrame({"ChEMBL.document_chembl_id": ["DOC0001"]}).to_csv(
+        input_path, index=False
+    )
 
     captured: dict[str, object] = {}
 
@@ -54,7 +56,9 @@ def test_postprocess_file__forwards_custom_reference(tmp_path, monkeypatch):
             }
         )
 
-    monkeypatch.setattr(stage_postprocessing, "postprocess_documents", _stub_postprocess_documents)
+    monkeypatch.setattr(
+        stage_postprocessing, "postprocess_documents", _stub_postprocess_documents
+    )
 
     output_path = tmp_path / "processed.csv"
     reference_override = tmp_path / "reference.csv"

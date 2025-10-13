@@ -264,7 +264,6 @@ def _maybe_run_postprocessing(
         return result
 
 
-
 def _callable_name(func: Callable[..., object]) -> str:
     """Return a human readable name for ``func``."""
 
@@ -914,9 +913,7 @@ def run_pipeline(
             postprocess_metadata["postprocess_metrics"] = summary
             pipeline_version = getattr(metrics, "pipeline_version", None)
             if pipeline_version is not None:
-                postprocess_metadata["postprocess_pipeline_version"] = (
-                    pipeline_version
-                )
+                postprocess_metadata["postprocess_pipeline_version"] = pipeline_version
                 stats_payload.setdefault(
                     "postprocess_pipeline_version", pipeline_version
                 )

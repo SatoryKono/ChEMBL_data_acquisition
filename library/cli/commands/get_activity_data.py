@@ -39,6 +39,7 @@ def _bootstrap_entrypoint_exports() -> None:
         # Import side effects should never break command module import.
         pass
 
+
 _bootstrap_entrypoint_exports()
 
 

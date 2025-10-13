@@ -144,6 +144,7 @@ def _drop_empty_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
     )
     return pruned
 
+
 # ---------------------------------------------------------------------------
 # Compatibility hooks
 # ---------------------------------------------------------------------------
@@ -390,22 +391,22 @@ def prepare_activity_context(
 
 _EXTENDED_ACTIVITY_DTYPES: dict[str, str] = {
     "activity_chembl_id": "string",
-  #  "salt_chembl_id": "string",
+    #  "salt_chembl_id": "string",
     "target_chembl_id": "string",
     "bao_endpoint": "string",
-  #  "compound_key": "string",
+    #  "compound_key": "string",
     "compound_name": "string",
- #   "multmol_assay": "boolean",
- #   "approx_cited_activity": "boolean",
- #   "shuffled_cit": "boolean",
- #   "exact_cited_activity": "boolean",
- #   "higly_correlated_cit": "boolean",
- #   "review_doc": "boolean",
- #   "rounded_data_citation": "boolean",
- #   "original_activity_approx": "string",
- #   "original_activity_exact": "string",
- #   "nstereo": "Int64",
- #   "log_value": "Float64",
+    #   "multmol_assay": "boolean",
+    #   "approx_cited_activity": "boolean",
+    #   "shuffled_cit": "boolean",
+    #   "exact_cited_activity": "boolean",
+    #   "higly_correlated_cit": "boolean",
+    #   "review_doc": "boolean",
+    #   "rounded_data_citation": "boolean",
+    #   "original_activity_approx": "string",
+    #   "original_activity_exact": "string",
+    #   "nstereo": "Int64",
+    #   "log_value": "Float64",
 }
 
 
@@ -667,9 +668,7 @@ def _emit_completion_message(
                 metrics_payload[key] = str(value)
 
     if mode == "skip_existing" and output_path is not None:
-        logger.info(
-            "pipeline_skip_existing", output_postprocessed=str(output_path)
-        )
+        logger.info("pipeline_skip_existing", output_postprocessed=str(output_path))
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
             events_attr.append(
@@ -682,9 +681,7 @@ def _emit_completion_message(
         return
 
     payload: dict[str, object] = {
-        "output_postprocessed": str(output_path)
-        if output_path is not None
-        else None,
+        "output_postprocessed": str(output_path) if output_path is not None else None,
         "rows": int(resolved_rows),
         "duration_s": float(duration_s),
         "mode": mode,
@@ -1293,7 +1290,9 @@ def _derive_postprocess_output_path(output_path: Path) -> Path:
     name = output_path.name
     if name.startswith("output."):
         return output_path.with_name(f"output_postprocessed.{name[len('output.'):]}")
-    return output_path.with_name(f"{output_path.stem}.postprocessed{output_path.suffix}")
+    return output_path.with_name(
+        f"{output_path.stem}.postprocessed{output_path.suffix}"
+    )
 
 
 def _derive_standard_output_labels(dataset_csv: Path) -> tuple[str, str]:
@@ -1653,6 +1652,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             destination=Path(output_path).parent,
         )
     else:
+
         def _noop_table_quality(_: Path) -> None:
             return None
 
@@ -2201,9 +2201,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     preexisting_output = output_path.exists() if output_path is not None else False
 
     if skip_existing and not force and preexisting_output and output_path is not None:
-        logger.info(
-            "pipeline_skip_existing", output_postprocessed=str(output_path)
-        )
+        logger.info("pipeline_skip_existing", output_postprocessed=str(output_path))
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
             events_attr.append(
@@ -2244,9 +2242,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     )
 
     if skip_existing and not force and preexisting_output and output_path is not None:
-        logger.info(
-            "pipeline_skip_existing", output_postprocessed=str(output_path)
-        )
+        logger.info("pipeline_skip_existing", output_postprocessed=str(output_path))
         events_attr = getattr(logger, "events", None)
         if isinstance(events_attr, list):
             events_attr.append(
@@ -2355,9 +2351,7 @@ class ActivityPipelineCLI(PipelineCLIBase):
             output_stem=DEFAULT_OUTPUT_STEM,
         )
         if not hasattr(args, "_initial_output_stamp_mode"):
-            args._initial_output_stamp_mode = getattr(
-                args, "output_stamp_mode", None
-            )
+            args._initial_output_stamp_mode = getattr(args, "output_stamp_mode", None)
         if not hasattr(args, "_initial_auto_output_generated"):
             args._initial_auto_output_generated = bool(
                 getattr(args, "_auto_output_generated", False)

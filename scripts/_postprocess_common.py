@@ -234,9 +234,7 @@ def export_postprocess_frame(
         chunksize=csv_cfg.chunksize,
     )
 
-    logger.info(
-        f"{prefix}_export_done", output_postprocessed=str(output_path)
-    )
+    logger.info(f"{prefix}_export_done", output_postprocessed=str(output_path))
     return output_path
 
 
@@ -292,9 +290,7 @@ def generate_metrics_report(
             output_postprocessed=str(output_path),
         )
     else:
-        logger.info(
-            f"{prefix}_report_skipped", output_postprocessed=str(output_path)
-        )
+        logger.info(f"{prefix}_report_skipped", output_postprocessed=str(output_path))
     return metrics, report_path
 
 

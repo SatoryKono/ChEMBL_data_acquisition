@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 import logging
 import sys
@@ -133,7 +132,9 @@ def test_run_tests__verbose_creates_debug_log(
             "meta": {"duration_sec": 0.0},
         },
     )
-    monkeypatch.setattr(run_tests, "validate_structured_report", lambda structured: None)
+    monkeypatch.setattr(
+        run_tests, "validate_structured_report", lambda structured: None
+    )
     monkeypatch.setattr(run_tests, "validate_report_file", lambda path: None)
     monkeypatch.setattr(
         run_tests,
@@ -175,7 +176,9 @@ def test_run_tests__verbose_creates_debug_log(
 
     captured_commands: list[list[str]] = []
 
-    def _fake_run_pytest(command: Sequence[str], *, timeout: float | None = None) -> int:
+    def _fake_run_pytest(
+        command: Sequence[str], *, timeout: float | None = None
+    ) -> int:
         captured_commands.append(list(command))
         assert timeout is None
         return 0
@@ -292,6 +295,8 @@ def test_build_structured_report__injects_placeholder_on_startup_failure() -> No
     placeholder = structured["tests"][0]
     assert placeholder["status"] == "error"
     assert "code 2" in placeholder["error"]
+
+
 @pytest.mark.unit
 def test_calculate_success_rate__counts_passed_and_xfailed() -> None:
     summary = {
@@ -368,7 +373,9 @@ def test_main__returns_exit_code_one_when_quality_gate_fails(
 
     captured_commands: list[list[str]] = []
 
-    def _fake_run_pytest(command: Sequence[str], *, timeout: float | None = None) -> int:
+    def _fake_run_pytest(
+        command: Sequence[str], *, timeout: float | None = None
+    ) -> int:
         captured_commands.append(list(command))
         assert timeout is None
         return 0
@@ -490,7 +497,9 @@ def test_main__zero_tests_trigger_quality_gate_error(
 
     captured_commands: list[list[str]] = []
 
-    def _fake_run_pytest(command: Sequence[str], *, timeout: float | None = None) -> int:
+    def _fake_run_pytest(
+        command: Sequence[str], *, timeout: float | None = None
+    ) -> int:
         captured_commands.append(list(command))
         assert timeout is None
         return 0
@@ -582,7 +591,9 @@ def test_main__writes_reports_when_pytest_fails(
 
     captured_commands: list[list[str]] = []
 
-    def _fake_run_pytest(command: Sequence[str], *, timeout: float | None = None) -> int:
+    def _fake_run_pytest(
+        command: Sequence[str], *, timeout: float | None = None
+    ) -> int:
         captured_commands.append(list(command))
         assert timeout is None
         return 2
@@ -699,6 +710,8 @@ def test_main__fails_fast_on_summary_filesystem_error(
     assert summary_attempts == 1
     assert not summary_file.exists()
     assert report_file.exists(), "JSON report should still be produced"
+
+
 @pytest.mark.unit
 def test_main__handles_json_report_write_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

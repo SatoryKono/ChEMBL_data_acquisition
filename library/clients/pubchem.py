@@ -171,7 +171,8 @@ def _compute_retry_sleep(delay: float, cfg: PubChemCfg) -> tuple[float, float | 
 
 
 def _service_outage_remaining(
-    *, now: float | None = None,
+    *,
+    now: float | None = None,
 ) -> tuple[float | None, str | None, dict[str, Any] | None]:
     """Return remaining global cooldown seconds, outcome and details if active."""
 
@@ -327,7 +328,14 @@ def _clear_service_unavailable() -> None:
 
 
 SERVICE_UNAVAILABLE_OUTCOMES: frozenset[str] = frozenset(
-    {"network_error", "rate_limited", "response_error", "server_error", "timeout", "unexpected_status"}
+    {
+        "network_error",
+        "rate_limited",
+        "response_error",
+        "server_error",
+        "timeout",
+        "unexpected_status",
+    }
 )
 
 
@@ -772,7 +780,9 @@ def make_request(
                             timeout_details = dict(last_failure_details)
                             timeout_details.setdefault("retry_after", retry_after)
                             timeout_details.setdefault("retry_after_source", "header")
-                            timeout_details["timeout_reason"] = "retry_after_exceeds_deadline"
+                            timeout_details["timeout_reason"] = (
+                                "retry_after_exceeds_deadline"
+                            )
                             logger.warning(
                                 "request_timeout",
                                 url=url,
@@ -833,11 +843,10 @@ def make_request(
                         _set_last_outcome(reason, last_failure_details)
                         return None
                     if attempt >= total_attempts:
-                        delay_for_cache = backoff_delay if backoff_delay > 0 else cfg.delay
-                        if (
-                            delay_for_cache
-                            and reason in SERVICE_UNAVAILABLE_OUTCOMES
-                        ):
+                        delay_for_cache = (
+                            backoff_delay if backoff_delay > 0 else cfg.delay
+                        )
+                        if delay_for_cache and reason in SERVICE_UNAVAILABLE_OUTCOMES:
                             last_failure_details.setdefault(
                                 "retry_after", delay_for_cache
                             )
@@ -918,7 +927,9 @@ def make_request(
                             and deadline_limit is not None
                             and deadline < deadline_limit
                         ):
-                            extension_target = max(deadline, now + delay + cfg.timeout_read)
+                            extension_target = max(
+                                deadline, now + delay + cfg.timeout_read
+                            )
                             capped_extension = min(extension_target, deadline_limit)
                             if capped_extension > deadline:
                                 logger.debug(
@@ -933,9 +944,7 @@ def make_request(
                                 deadline = capped_extension
                         if deadline is not None and now + delay >= deadline:
                             timeout_details = dict(last_failure_details or {})
-                            timeout_details.setdefault(
-                                "retry_after", delay
-                            )
+                            timeout_details.setdefault("retry_after", delay)
                             timeout_details.setdefault(
                                 "retry_after_source",
                                 "header" if retry_after is not None else "backoff",
@@ -1022,7 +1031,11 @@ def make_request(
                         status=status,
                         **details_excluding("status"),
                     )
-                    outcome_name = last_failure_details.get("reason") if last_failure_details else None
+                    outcome_name = (
+                        last_failure_details.get("reason")
+                        if last_failure_details
+                        else None
+                    )
                     _start_service_outage(outcome_name, last_failure_details, cfg)
                     _set_last_outcome(outcome_name, last_failure_details)
                     return None
@@ -1055,7 +1068,9 @@ def make_request(
                             status=status,
                             **details_excluding("status"),
                         )
-                        _start_service_outage("response_error", last_failure_details, cfg)
+                        _start_service_outage(
+                            "response_error", last_failure_details, cfg
+                        )
                         _set_last_outcome("response_error", last_failure_details)
                         return None
                     if cfg.delay > 0:

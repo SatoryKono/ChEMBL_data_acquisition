@@ -173,7 +173,9 @@ def add_common_arguments(
         """Add an optional argument unless it is already registered."""
 
         optional_strings = [
-            opt for opt in option_strings if isinstance(opt, str) and opt.startswith("-")
+            opt
+            for opt in option_strings
+            if isinstance(opt, str) and opt.startswith("-")
         ]
         option_actions = getattr(parser, "_option_string_actions", {})
         if optional_strings and any(opt in option_actions for opt in optional_strings):
@@ -284,9 +286,7 @@ def add_common_arguments(
     return parser
 
 
-def _set_emit_legacy_help(
-    parser: argparse.ArgumentParser, help_text: str
-) -> None:
+def _set_emit_legacy_help(parser: argparse.ArgumentParser, help_text: str) -> None:
     """Update the help text for ``--emit-legacy-artifacts`` if present."""
 
     for action in parser._actions:
@@ -294,14 +294,10 @@ def _set_emit_legacy_help(
         if "--emit-legacy-artifacts" in option_strings:
             action.help = help_text
             return
-    raise ValueError(
-        "parser does not define the --emit-legacy-artifacts option"
-    )
+    raise ValueError("parser does not define the --emit-legacy-artifacts option")
 
 
-def set_emit_legacy_help(
-    parser: argparse.ArgumentParser, help_text: str
-) -> None:
+def set_emit_legacy_help(parser: argparse.ArgumentParser, help_text: str) -> None:
     """Public helper for tweaking the legacy artefact flag description."""
 
     _set_emit_legacy_help(parser, help_text)
@@ -929,7 +925,9 @@ def prepare_io_paths(
                     stripped = stripped.lstrip(".")
                     if not stripped:
                         break
-                normalized_stem = stripped or normalized_stem.lstrip(".") or normalized_stem
+                normalized_stem = (
+                    stripped or normalized_stem.lstrip(".") or normalized_stem
+                )
             else:
                 normalized_stem = normalized_stem.lstrip(".") or normalized_stem
 
@@ -964,7 +962,7 @@ def prepare_io_paths(
             try:
                 previous_path = (
                     Path(previous_final_out)
-                    if isinstance(previous_final_out, (str, Path))
+                    if isinstance(previous_final_out, str | Path)
                     else None
                 )
             except TypeError:

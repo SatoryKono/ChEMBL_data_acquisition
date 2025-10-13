@@ -37,7 +37,7 @@ def _strip_date_suffix(value: str) -> tuple[str, str | None]:
 
     match = re.search(r"\.csv_(\d{8})$", value, flags=re.IGNORECASE)
     if match and _DATE_TOKEN_RE.match(match.group(1)):
-        stripped = value[: match.start()].rstrip("_" )
+        stripped = value[: match.start()].rstrip("_")
         return stripped, match.group(1)
     return value, None
 
@@ -46,8 +46,10 @@ def _normalise_table_name(raw: str, default: str) -> str:
     """Return a canonical table label derived from ``raw``."""
 
     candidate = _strip_output_prefix(_strip_csv_suffix(raw.strip()))
-    if len(candidate) >= 9 and candidate[-9] == "_" and _DATE_TOKEN_RE.match(
-        candidate[-8:]
+    if (
+        len(candidate) >= 9
+        and candidate[-9] == "_"
+        and _DATE_TOKEN_RE.match(candidate[-8:])
     ):
         candidate = candidate[:-9]
     candidate = candidate.strip("._")

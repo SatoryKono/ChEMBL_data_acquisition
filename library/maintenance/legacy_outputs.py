@@ -78,15 +78,14 @@ def list_legacy_artifacts(
     return sorted(seen)
 
 
-def _write_sentinel(path: Path, *, removed: Iterable[Path], errors: Iterable[tuple[Path, str]]) -> None:
+def _write_sentinel(
+    path: Path, *, removed: Iterable[Path], errors: Iterable[tuple[Path, str]]
+) -> None:
     data = {
         "version": get_pipeline_version(),
         "timestamp_utc": datetime.now(UTC).isoformat(),
         "removed": [str(item) for item in removed],
-        "errors": [
-            {"path": str(path), "error": message}
-            for path, message in errors
-        ],
+        "errors": [{"path": str(path), "error": message} for path, message in errors],
     }
     path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
 

@@ -22,7 +22,9 @@ def multi_numeric_frame() -> pd.DataFrame:
     )
 
 
-def test_build_correlation_matrix__returns_expected_labels_and_shape(multi_numeric_frame):
+def test_build_correlation_matrix__returns_expected_labels_and_shape(
+    multi_numeric_frame,
+):
     correlation = build_correlation_matrix(
         multi_numeric_frame, table_name="example_table"
     )
@@ -84,7 +86,9 @@ def test_build_correlation_matrix__accepts_duck_typed_profiler():
     pd.testing.assert_frame_equal(direct, reuse)
 
 
-def test_build_correlation_matrix__reprofiles_when_profiler_invalid(multi_numeric_frame):
+def test_build_correlation_matrix__reprofiles_when_profiler_invalid(
+    multi_numeric_frame,
+):
     expected = build_correlation_matrix(multi_numeric_frame, table_name="fallback")
 
     fallback = build_correlation_matrix(
@@ -94,6 +98,8 @@ def test_build_correlation_matrix__reprofiles_when_profiler_invalid(multi_numeri
     )
 
     pd.testing.assert_frame_equal(expected, fallback)
+
+
 def test_build_correlation_matrix__falls_back_when_profiler_invalid(
     multi_numeric_frame,
 ):

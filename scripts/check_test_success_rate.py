@@ -70,9 +70,7 @@ def _extract_success_rate(summary: dict[str, Any]) -> float:
                 f"Summary field '{name}' must be an integer to compute success rate"
             )
         if value < 0:
-            raise ReportValidationError(
-                f"Summary field '{name}' must be non-negative"
-            )
+            raise ReportValidationError(f"Summary field '{name}' must be non-negative")
         validated[name] = value
 
     total = validated["total"]

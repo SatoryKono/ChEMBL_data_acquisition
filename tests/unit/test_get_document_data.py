@@ -707,8 +707,10 @@ def test_finalise_export__reuses_postprocess_when_rerun_disabled(
     )
     monkeypatch.setattr(get_document_data, "finalise_csv_output", lambda **_: None)
 
-    expected_post = get_document_data.document_export_postprocessing.resolve_default_destination(
-        output_csv
+    expected_post = (
+        get_document_data.document_export_postprocessing.resolve_default_destination(
+            output_csv
+        )
     )
     expected_post.parent.mkdir(parents=True, exist_ok=True)
     expected_post.write_text("header\n", encoding="utf-8")

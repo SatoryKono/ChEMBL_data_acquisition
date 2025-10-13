@@ -118,8 +118,9 @@ def test_add_pubchem_data__makes_pubchem_requests_when_enabled(
         *,
         cid_cache: MutableMapping[str, str | None] | None = None,
         cache_key: str | None = None,
-        resolution_cache: MutableMapping[Hashable, pubchem_library.PubChemResolution]
-        | None = None,
+        resolution_cache: (
+            MutableMapping[Hashable, pubchem_library.PubChemResolution] | None
+        ) = None,
         resolution_key: Hashable | None = None,
     ) -> pubchem_library.PubChemResolution:
         resolve_calls.append({"identifiers": dict(identifiers), "cache_key": cache_key})
@@ -131,7 +132,9 @@ def test_add_pubchem_data__makes_pubchem_requests_when_enabled(
 
     properties_calls: list[str] = []
 
-    def fake_get_properties(cid: str, cfg_arg: PubChemCfg) -> pubchem_library.Properties:
+    def fake_get_properties(
+        cid: str, cfg_arg: PubChemCfg
+    ) -> pubchem_library.Properties:
         properties_calls.append(cid)
         assert cid == "CID321"
         return pubchem_library.Properties(
@@ -272,7 +275,9 @@ def test_add_pubchem_data__uses_dictionary_mapping(
 
     property_calls: list[str] = []
 
-    def fake_get_properties(cid: str, cfg_arg: PubChemCfg) -> pubchem_library.Properties:
+    def fake_get_properties(
+        cid: str, cfg_arg: PubChemCfg
+    ) -> pubchem_library.Properties:
         property_calls.append(cid)
         return pubchem_library.Properties(
             f"Name-{cid}",
@@ -298,7 +303,9 @@ def test_add_pubchem_data__uses_dictionary_mapping(
 
     expected_cids = mapping_frame["pubchem_cid"].tolist()
     assert result["pubchem_cid"].tolist() == expected_cids
-    assert result["pubchem_iupac_name"].tolist() == [f"Name-{cid}" for cid in expected_cids]
+    assert result["pubchem_iupac_name"].tolist() == [
+        f"Name-{cid}" for cid in expected_cids
+    ]
     assert result["pubchem_molecular_formula"].tolist() == [
         f"Formula-{cid}" for cid in expected_cids
     ]
@@ -386,7 +393,9 @@ def test_add_pubchem_data__keeps_existing_when_lookup_empty(
     monkeypatch.setattr(pubchem, "_prefetch_parents", fake_prefetch)
     monkeypatch.setattr(pubchem, "_resolve_pubchem_cids", fake_resolve)
     monkeypatch.setattr(pubchem, "_merge_pubchem_properties", fake_merge)
-    monkeypatch.setattr(pubchem, "_write_pubchem_cid_cache", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        pubchem, "_write_pubchem_cid_cache", lambda *args, **kwargs: None
+    )
 
     result = pubchem.add_pubchem_data(frame, pubchem_cfg)
 
@@ -418,7 +427,9 @@ def test_merge_pubchem_properties__retains_partial_values_on_failed_lookup(
     class _DummyPubChemLib:
         Properties = pubchem_library.Properties
 
-        def get_properties(self, cid: str, cfg_arg: PubChemCfg) -> pubchem_library.Properties:
+        def get_properties(
+            self, cid: str, cfg_arg: PubChemCfg
+        ) -> pubchem_library.Properties:
             assert cid == "CID_NEW"
             return pubchem_library.Properties(None, None, None, None, None, None)
 
@@ -459,7 +470,9 @@ def test_merge_pubchem_properties__stops_after_service_unavailable(
     lookup_cids = set(cid_series.tolist())
 
     skip_mask = pd.Series([False, False, False], index=frame.index, dtype="bool")
-    prefer_local_mask = pd.Series([False, False, False], index=frame.index, dtype="bool")
+    prefer_local_mask = pd.Series(
+        [False, False, False], index=frame.index, dtype="bool"
+    )
 
     from library.integration import pubchem_library
 
@@ -469,7 +482,9 @@ def test_merge_pubchem_properties__stops_after_service_unavailable(
         Properties = pubchem_library.Properties
         PubChemServiceUnavailable = pubchem_library.PubChemServiceUnavailable
 
-        def get_properties(self, cid: str, cfg_arg: PubChemCfg) -> pubchem_library.Properties:
+        def get_properties(
+            self, cid: str, cfg_arg: PubChemCfg
+        ) -> pubchem_library.Properties:
             nonlocal call_count
             call_count += 1
             raise pubchem_library.PubChemServiceUnavailable(
@@ -503,7 +518,9 @@ def test_merge_pubchem_properties__stops_after_service_unavailable(
     assert any("retry_after=30.0" in msg for msg in failed_messages)
     assert any("status=503" in msg for msg in failed_messages)
     unavailable_messages = [
-        msg for msg in warning_messages if msg.startswith("pubchem_properties_unavailable")
+        msg
+        for msg in warning_messages
+        if msg.startswith("pubchem_properties_unavailable")
     ]
     assert unavailable_messages
     assert any("pending=3" in msg for msg in unavailable_messages)
@@ -540,7 +557,9 @@ def test_merge_pubchem_properties__limits_outstanding_requests_on_service_unavai
         Properties = pubchem_library.Properties
         PubChemServiceUnavailable = pubchem_library.PubChemServiceUnavailable
 
-        def get_properties(self, cid: str, cfg_arg: PubChemCfg) -> pubchem_library.Properties:
+        def get_properties(
+            self, cid: str, cfg_arg: PubChemCfg
+        ) -> pubchem_library.Properties:
             nonlocal call_count
             call_count += 1
             raise pubchem_library.PubChemServiceUnavailable(
@@ -567,9 +586,14 @@ def test_merge_pubchem_properties__limits_outstanding_requests_on_service_unavai
     warning_messages = [
         record.message for record in caplog.records if record.levelno >= logging.WARNING
     ]
-    assert sum(msg.startswith("pubchem_properties_failed") for msg in warning_messages) == 1
+    assert (
+        sum(msg.startswith("pubchem_properties_failed") for msg in warning_messages)
+        == 1
+    )
     unavailable_messages = [
-        msg for msg in warning_messages if msg.startswith("pubchem_properties_unavailable")
+        msg
+        for msg in warning_messages
+        if msg.startswith("pubchem_properties_unavailable")
     ]
     assert unavailable_messages
     assert any("pending=7" in msg for msg in unavailable_messages)
@@ -581,6 +605,7 @@ def test_resolve_pubchem_cid__temporary_failure_does_not_cache(
 ) -> None:
     pubchem_cfg = cfg.pubchem
     from library.integration import pubchem_library
+
     row = pd.Series({"molecule_chembl_id": "CHEMBL1"})
     cid_cache: dict[str, str | None] = {}
     resolution_cache: dict[str, object] = {}

@@ -6,7 +6,6 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-import textwrap
 
 import pytest
 
@@ -60,18 +59,18 @@ def _create_fake_pytest_module(base_dir: Path) -> Path:
                 "    i = 0",
                 "    while i < len(argv):",
                 "        arg = argv[i]",
-                "        if arg == \"--json-report-file\" and i + 1 < len(argv):",
+                '        if arg == "--json-report-file" and i + 1 < len(argv):',
                 "            json_report = Path(argv[i + 1])",
                 "            i += 1",
-                "        elif arg.startswith(\"--cov-report=\"):",
-                "            value = arg.split(\"=\", 1)[1]",
-                "            if value.startswith(\"xml:\"):",
-                "                coverage_xml = Path(value.split(\":\", 1)[1])",
-                "            elif value.startswith(\"html:\"):",
-                "                html_dir = Path(value.split(\":\", 1)[1])",
+                '        elif arg.startswith("--cov-report="):',
+                '            value = arg.split("=", 1)[1]',
+                '            if value.startswith("xml:"):',
+                '                coverage_xml = Path(value.split(":", 1)[1])',
+                '            elif value.startswith("html:"):',
+                '                html_dir = Path(value.split(":", 1)[1])',
                 "                html_dir.mkdir(parents=True, exist_ok=True)",
-                "                (html_dir / \"index.html\").write_text(\"<html>fake</html>\", encoding=\"utf-8\")",
-                "        elif arg == \"--log-file\" and i + 1 < len(argv):",
+                '                (html_dir / "index.html").write_text("<html>fake</html>", encoding="utf-8")',
+                '        elif arg == "--log-file" and i + 1 < len(argv):',
                 "            log_file = Path(argv[i + 1])",
                 "            i += 1",
                 "        i += 1",
@@ -82,7 +81,7 @@ def _create_fake_pytest_module(base_dir: Path) -> Path:
                 "",
                 "    if log_file is not None:",
                 "        log_file.parent.mkdir(parents=True, exist_ok=True)",
-                "        log_file.write_text(\"fake pytest log\\n\", encoding=\"utf-8\")",
+                '        log_file.write_text("fake pytest log\\n", encoding="utf-8")',
                 "",
                 "    if json_report is not None:",
                 "        json_report.parent.mkdir(parents=True, exist_ok=True)",
@@ -93,11 +92,11 @@ def _create_fake_pytest_module(base_dir: Path) -> Path:
                 '            "tests": [_DEFAULT_TEST],',
                 '            "summary": {"total": 1, "passed": 1, "failed": 0, "skipped": 0},',
                 "        }",
-                "        json_report.write_text(json.dumps(payload), encoding=\"utf-8\")",
+                '        json_report.write_text(json.dumps(payload), encoding="utf-8")',
                 "",
                 "    if coverage_xml is not None:",
                 "        coverage_xml.parent.mkdir(parents=True, exist_ok=True)",
-                "        coverage_xml.write_text('<coverage line-rate=\"1.0\"></coverage>', encoding=\"utf-8\")",
+                '        coverage_xml.write_text(\'<coverage line-rate="1.0"></coverage>\', encoding="utf-8")',
                 "",
                 "    return 0",
                 "",
@@ -186,4 +185,3 @@ def test_run_tests_script__generates_reports(tmp_path: Path) -> None:
     assert "# Test Summary" in summary_text
     assert "Success rate: 100.00%" in summary_text
     assert "| total | passed | failed |" in summary_text
-

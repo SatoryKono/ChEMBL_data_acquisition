@@ -100,7 +100,11 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if result.skipped:
-        reason = "sentinel present" if (result.sentinel_path.exists()) else "output directory missing"
+        reason = (
+            "sentinel present"
+            if (result.sentinel_path.exists())
+            else "output directory missing"
+        )
         print(f"Cleanup skipped: {reason} ({result.output_dir})")
         return 0
 
@@ -124,7 +128,6 @@ def main(argv: list[str] | None = None) -> int:
         f"Removed {result.removed_count} legacy artefact(s) from {result.output_dir}. "
         "Future runs keep only the dataset and QA CSVs; re-enable diagnostics "
         "with --emit-legacy-artifacts/--debug/--keep-intermediate when needed."
-        
     )
     return 0
 

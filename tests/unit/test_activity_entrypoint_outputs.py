@@ -8,7 +8,9 @@ from library.cli.entrypoints import activity
 
 
 @pytest.mark.unit
-def test_derive_standard_output_labels__handles_hidden_temp_file(tmp_path: Path) -> None:
+def test_derive_standard_output_labels__handles_hidden_temp_file(
+    tmp_path: Path,
+) -> None:
     dataset_path = tmp_path / ".output.activities_20240101.csv.tmp"
 
     table_name, date_tag = activity._derive_standard_output_labels(dataset_path)
@@ -18,7 +20,9 @@ def test_derive_standard_output_labels__handles_hidden_temp_file(tmp_path: Path)
 
 
 @pytest.mark.unit
-def test_derive_standard_output_labels__deduplicates_output_prefix(tmp_path: Path) -> None:
+def test_derive_standard_output_labels__deduplicates_output_prefix(
+    tmp_path: Path,
+) -> None:
     dataset_path = tmp_path / "output..output.targets_20240101.csv"
 
     table_name, date_tag = activity._derive_standard_output_labels(dataset_path)

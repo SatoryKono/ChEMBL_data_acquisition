@@ -53,16 +53,12 @@ class IUPHARData:
         """Initialise lookup tables used for fast record access."""
 
         if "target_id" in self.target_df.columns:
-            self._target_df_by_id = self.target_df.set_index(
-                "target_id", drop=False
-            )
+            self._target_df_by_id = self.target_df.set_index("target_id", drop=False)
         else:
             self._target_df_by_id = self.target_df
 
         if "family_id" in self.family_df.columns:
-            self._family_df_by_id = self.family_df.set_index(
-                "family_id", drop=False
-            )
+            self._family_df_by_id = self.family_df.set_index("family_id", drop=False)
         else:
             self._family_df_by_id = self.family_df
 
