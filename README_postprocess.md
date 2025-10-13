@@ -147,6 +147,13 @@ Quality gates:
 - 100 % coverage of the pipeline scenarios listed above before merging into `main`.
 - Deterministic tests: fix seeds/time, avoid network I/O, rely on `tests/resources/` snapshots and tmp paths.
 - Explicit slow/network markers when deviations are unavoidable.
+- `scripts/run_tests.py` returns `0` for green runs, `1` when the success-rate or
+  coverage thresholds fail, and `11` whenever JSON/Markdown artefacts cannot be
+  produced or validated; surface the exit codes in CI dashboards to triage
+  regressions quickly. The raw pytest payload is stored separately as
+  `reports/pytest_raw_report.json`, and the wrapper clears destination folders
+  before honouring custom `--json`/`--markdown` paths, so point overrides at
+  dedicated directories.
 
 Consult `tests/conftest.py` for shared fixtures that enforce deterministic environments and stub external dependencies.
 

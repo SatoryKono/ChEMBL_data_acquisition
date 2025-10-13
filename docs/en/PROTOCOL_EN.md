@@ -181,6 +181,12 @@ Post-processing is driven by YAML definitions in `config/pipeline/*.yaml` and ex
 2. Determinism checks: `python scripts/check_determinism.py --no-dry-run` compares pipeline outputs. 【F:scripts/check_determinism.py†L34-L114】
 3. CI enforces `ruff check` and `mypy --strict library`. 【F:pyproject.toml†L67-L118】
 4. Failing or flaky tests must be quarantined via `xfail(strict=True)` and issue tracking. 【F:tests/README.md†L45-L120】
+5. `python scripts/run_tests.py` returns `0` on success, `1` when the success-rate
+   or coverage thresholds are violated, and `11` when JSON/Markdown reports
+   cannot be generated or validated; consume the codes in CI dashboards. The
+   wrapper also saves the raw pytest payload as `reports/pytest_raw_report.json`
+   and clears destination directories before writing `--json`/`--markdown`
+   outputs, so use dedicated folders when overriding the defaults.
 
 ---
 
