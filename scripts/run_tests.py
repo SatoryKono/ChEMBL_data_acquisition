@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import platform
+import re
 import shlex
 import shutil
 import subprocess
@@ -48,12 +49,13 @@ from library.reporting.test_summary import (
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_REPORTS_DIR = ROOT_DIR / "reports"
-RAW_REPORT_FILE = DEFAULT_REPORTS_DIR / "pytest_raw_report.json"
 DEFAULT_REPORT_FILE = DEFAULT_REPORTS_DIR / "test_report.json"
 DEFAULT_SUMMARY_FILE = DEFAULT_REPORTS_DIR / "test_summary.md"
 COVERAGE_DIR = DEFAULT_REPORTS_DIR / "coverage"
 COVERAGE_XML = COVERAGE_DIR / "coverage.xml"
 COVERAGE_HTML = COVERAGE_DIR / "html"
+# Backwards-compatible placeholder for tests and external callers.
+RAW_REPORT_FILE = DEFAULT_REPORTS_DIR / "pytest_raw_report.json"
 # Backwards-compatible aliases for tests and external callers.
 REPORTS_DIR = DEFAULT_REPORTS_DIR
 REPORT_FILE = DEFAULT_REPORT_FILE
@@ -81,8 +83,6 @@ _BASE_PYTEST_COMMAND: list[str] = [
     "-m",
     "pytest",
     "--json-report",
-    "--json-report-file",
-    str(RAW_REPORT_FILE),
     "--durations=0",
     "--cov=library",
     "--cov=scripts",
@@ -113,6 +113,19 @@ def _relative_to_root(path: Path) -> str:
         return str(path)
 
 
+def _sanitise_run_id_for_filename(value: str) -> str:
+    safe_value = re.sub(r"[^A-Za-z0-9._-]", "-", value)
+    safe_value = safe_value.strip("-_.")
+    return safe_value or "run"
+
+
+def _derive_raw_report_path(report_path: Path, run_id: str) -> Path:
+    run_token = _sanitise_run_id_for_filename(run_id)
+    if not report_path.name:
+        return report_path / f".pytest_raw_{run_token}.json"
+    return report_path.with_name(f".pytest_raw_{run_token}.json")
+
+
 def _clear_directory(directory: Path) -> None:
     """Remove all files and subdirectories inside ``directory``."""
 
@@ -129,7 +142,11 @@ def _clear_directory(directory: Path) -> None:
             continue
 
 
-def ensure_output_directories(report_file: Path, summary_file: Path) -> None:
+def ensure_output_directories(
+    report_file: Path,
+    summary_file: Path,
+    raw_report_file: Path | None = None,
+) -> None:
     """Ensure directories for structured outputs exist."""
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -142,7 +159,9 @@ def ensure_output_directories(report_file: Path, summary_file: Path) -> None:
         _clear_directory(COVERAGE_HTML)
     COVERAGE_HTML.mkdir(parents=True, exist_ok=True)
 
-    for path in (report_file, summary_file, RAW_REPORT_FILE):
+    raw_path = raw_report_file or RAW_REPORT_FILE
+
+    for path in (report_file, summary_file, raw_path):
         parent = path.parent
         if parent not in {REPORTS_DIR, COVERAGE_DIR, COVERAGE_HTML} and parent.exists():
             _clear_directory(parent)
@@ -257,11 +276,12 @@ def _parse_line_coverage(path: Path) -> float:
     return max(0.0, min(100.0, line_rate * 100.0))
 
 
-def _load_raw_report() -> dict[str, Any]:
-    if not RAW_REPORT_FILE.exists():
+def _load_raw_report(raw_report_file: Path | None = None) -> dict[str, Any]:
+    path = raw_report_file or RAW_REPORT_FILE
+    if not path.exists():
         return {}
     try:
-        return json.loads(RAW_REPORT_FILE.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return {}
 def _extract_section_message(section: dict[str, Any]) -> str:
@@ -570,7 +590,11 @@ def write_summary(report: dict[str, Any], destination: Path) -> None:
 
 
 def _log_run_artifacts(
-    logging_ctx: Any, exit_code: int, report_path: Path, summary_path: Path
+    logging_ctx: Any,
+    exit_code: int,
+    report_path: Path,
+    summary_path: Path,
+    raw_report_file: Path | None = None,
 ) -> None:
     """Emit log lines describing where artefacts were written."""
 
@@ -582,8 +606,9 @@ def _log_run_artifacts(
     elif isinstance(log_path, str):
         logger.info("Log saved to %s", log_path)
 
-    if RAW_REPORT_FILE.exists():
-        logger.info("Raw report available at %s", _relative_to_root(RAW_REPORT_FILE))
+    raw_path = raw_report_file or RAW_REPORT_FILE
+    if raw_path.exists():
+        logger.info("Raw report available at %s", _relative_to_root(raw_path))
     if report_path.exists():
         logger.info(
             "Structured report written to %s",
@@ -593,6 +618,19 @@ def _log_run_artifacts(
         logger.info(
             "Summary written to %s",
             _relative_to_root(summary_path),
+        )
+
+
+def _cleanup_raw_report(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
+    except OSError as exc:  # pragma: no cover - defensive guard
+        logger.warning(
+            "Failed to remove temporary raw report %s: %s",
+            _relative_to_root(path),
+            exc,
         )
 
 
@@ -691,12 +729,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         run_id_value = uuid5(NAMESPACE_URL, descriptor).hex
 
+    run_id_str = str(run_id_value)
+    raw_report_path = _derive_raw_report_path(report_path, run_id_str)
+
+    global RAW_REPORT_FILE
+    RAW_REPORT_FILE = raw_report_path
+
     log_cfg = create_logger_config(level, run_id=run_id_value)
 
     with setup_cli_logging("run_tests", log_cfg, args.date) as logging_ctx:
         configure_logger(logging_ctx.log_cfg)
 
-        ensure_output_directories(report_path, summary_path)
+        ensure_output_directories(report_path, summary_path, raw_report_path)
 
         timeout_value = args.pytest_timeout
         if timeout_value is None:
@@ -720,6 +764,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             logger.info("Pytest timeout configured to %.2f seconds", timeout_value)
 
         pytest_command = list(_BASE_PYTEST_COMMAND)
+        pytest_command.extend(["--json-report-file", str(raw_report_path)])
         pytest_command.extend(
             [
                 "--log-file",
@@ -738,7 +783,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         generation_error: str | None = None
 
         try:
-            raw_report = _load_raw_report()
+            raw_report = _load_raw_report(raw_report_path)
             structured = build_structured_report(raw_report, exit_code)
             validate_structured_report(structured)
         except ValueError as exc:  # pragma: no cover - defensive guard
@@ -774,6 +819,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 except ValueError as exc:  # pragma: no cover - defensive guard
                     logger.error("Written report failed validation: %s", exc)
                     validation_exit_code = VALIDATION_FAILURE_EXIT_CODE
+        summary_write_failed = False
         try:
             write_summary(structured, summary_path)
         except Exception as exc:  # pragma: no cover - defensive guard
@@ -782,10 +828,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _relative_to_root(summary_path),
                 exc,
             )
-            _log_run_artifacts(logging_ctx, exit_code, report_path, summary_path)
-            return VALIDATION_FAILURE_EXIT_CODE
+            summary_write_failed = True
 
-        _log_run_artifacts(logging_ctx, exit_code, report_path, summary_path)
+        _log_run_artifacts(
+            logging_ctx, exit_code, report_path, summary_path, raw_report_path
+        )
+
+        _cleanup_raw_report(raw_report_path)
+
+        if summary_write_failed:
+            return VALIDATION_FAILURE_EXIT_CODE
 
         final_exit_code = exit_code
         success_rate_raw = structured.get("summary", {}).get("success_rate", 0.0) or 0.0
