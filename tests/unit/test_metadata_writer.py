@@ -89,3 +89,31 @@ def test_write_meta_yaml__deterministic_generated_at(tmp_path):
     second_meta = yaml.safe_load(second_meta_path.read_text(encoding="utf-8"))
 
     assert first_meta["generated_at"] == second_meta["generated_at"]
+
+
+def test_write_meta_yaml__normalises_command_paths(tmp_path):
+    csv_path = tmp_path / "stable.csv"
+    csv_path.write_text("id\n1\n", encoding="utf-8")
+
+    first_final_out = tmp_path / "one" / "output.csv"
+    second_final_out = tmp_path / "two" / "output.csv"
+
+    first_command = f"pipeline run --final-out {first_final_out} --tmp-dir /tmp/tmp12345"
+    second_command = f"pipeline run --final-out {second_final_out} --tmp-dir /tmp/tmp67890"
+
+    first_meta_path = write_meta_yaml(csv_path=csv_path, command=first_command)
+    first_meta = yaml.safe_load(first_meta_path.read_text(encoding="utf-8"))
+    first_meta_path.unlink()
+
+    second_meta_path = write_meta_yaml(csv_path=csv_path, command=second_command)
+    second_meta = yaml.safe_load(second_meta_path.read_text(encoding="utf-8"))
+
+    assert first_meta["command"] == second_meta["command"]
+    assert first_meta["command_args"] == second_meta["command_args"]
+    assert first_meta["output_path"] == second_meta["output_path"] == str(csv_path)
+    assert "<OUTPUT_PATH>" in first_meta["command_args"]
+    assert "<ABS_PATH>" in first_meta["command_args"]
+    assert str(first_final_out) not in first_meta["command"]
+    assert str(second_final_out) not in second_meta["command"]
+    assert first_meta["generated_at"] == second_meta["generated_at"]
+    assert first_meta == second_meta
