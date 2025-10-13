@@ -252,6 +252,12 @@ bootstrap-хелперы. По умолчанию каждая команда п
 
 Все руководства доступны на двух языках. Структура зеркальна:
 
+- Протокол (DOCX, источник в Markdown): формируется по требованию скриптом
+  `scripts/convert_md_to_docx.py` в файл
+  `docs/ChEMBL_Data_Acquisition_Protocol_v2.1.docx` (артефакт поставки,
+  не хранится в git). Исходники: [`docs/ru/PROTOCOL_RU.md`](./docs/ru/PROTOCOL_RU.md)
+  и синхронизированная английская версия
+  [`docs/en/PROTOCOL_EN.md`](./docs/en/PROTOCOL_EN.md).
 - Обзор и оглавление: [`docs/ru/README.md`](./docs/ru/README.md),
   [`docs/en/README.md`](./docs/en/README.md)
 - Использование и CLI: [`docs/ru/USAGE.md`](./docs/ru/USAGE.md),
