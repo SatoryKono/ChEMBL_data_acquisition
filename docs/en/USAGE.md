@@ -202,14 +202,16 @@ Common options:
 
 | Option | Default | Notes |
 |--------|---------|-------|
-| `--mode` | `all` (when omitted) | Selects the processing flow. |
+| `--mode` | Required (`all` is the combined run) | Selects the processing flow; the CLI errors unless a mode is provided via `--mode` or the backwards-compatible positional command (`chembl`, `pubmed`, `all`). |
 | `--column` | Mode specific (`PMID` for `pubmed`, `document_chembl_id` otherwise) | Input column holding identifiers. |
 | `--limit`, `--offset` | `None`, `0` | Control record ranges. |
 | `--timeout` | `90.0` for `chembl`/`all`, `10.0` for `pubmed` | Applied to HTTP calls. |
 | `--openalex-rps`, `--crossref-rps` | `None` | Optional overrides for partner APIs when running `pubmed` or `all`. |
 
-When no `--mode` flag is provided the pipeline automatically falls back to the
-combined `all` workflow, mirroring the historical default behaviour.
+The CLI now requires an explicit mode. Pass `--mode <chembl|pubmed|all>` or use
+the legacy positional command (`chembl`, `pubmed`, `all`) when scripting. Use
+`--mode all` (or the `all` positional command) to run the historical combined
+workflow.
 
 PubMed specific flags (`--mode pubmed` or `all`):
 
@@ -235,8 +237,8 @@ Fallback DOI handling (`--mode all` or `pubmed`):
 | `--fallback-doi-overwrite` | Allow replacement of DOIs already present in the enrichment payload. |
 
 Example: fetch PubMed enrichments with fallback DOIs and partner rate limits.
-Explicit mode selection is optional—the default run without `--mode` already
-invokes the combined `all` workflow.
+Explicit mode selection is mandatory; choose either the `--mode` flag or the
+positional command form.
 
 ```bash
 python scripts/get_document_data.py --mode pubmed \

@@ -112,7 +112,8 @@ flowchart LR
 
 ### 4.2 Пайплайн документов `scripts/get_document_data.py`
 
-- Режимы: `chembl`, `pubmed`, `all`; по умолчанию `--mode all`.【F:library/cli/commands/get_document_data.py†L1737-L1975】
+- Режимы: `chembl`, `pubmed`, `all`; режим нужно передавать явно через `--mode`
+  (или позиционную команду) — `--mode all` запускает объединённый прогон.【F:library/cli/commands/get_document_data.py†L1737-L1975】
 - Общие флаги: `--input`, `--final-out`, `--column`, `--limit`, `--offset`, `--config`.【F:library/cli/parser.py†L126-L204】
 - Специфические параметры: `--batch-size`, `--sleep`, `--workers` для PubMed; `--chunk-size`, `--chembl-timeout` для ChEMBL; блок резервного DOI (`--fallback-doi-*`).【F:library/cli/commands/get_document_data.py†L1216-L1718】
 - Постобработка: `library/postprocessing/documents/steps`.【F:library/postprocessing/documents/steps.py†L1-L82】
