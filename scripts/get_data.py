@@ -114,6 +114,8 @@ LOGS_DIR = DATA_DIR / "logs"
 _PUBCHEM_ENV_VAR = "CHEMBL_DA_PUBCHEM_ENABLE"
 _BASE_PATH_ENV_VAR = "CHEMBL_DA_BASE_PATH"
 
+_EXPECTED_CSV_COUNT = 15
+
 _CLEANUP_FILE_PATTERNS: tuple[str, ...] = (
     "*.lock",
     "*.pkl.lock",
@@ -644,8 +646,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     forward_args = build_forward_args(args, unknown)
 
     durations: list[tuple[str, float]] = []
+    skipped_stages = set(args.skip)
+
     for stage in STAGES:
-        if stage.name in args.skip:
+        if stage.name in skipped_stages:
             logging.info("⏭ Пропуск этапа %s по флагу --skip", stage.name)
             continue
         duration = run_stage(stage, forward_args)
@@ -660,6 +664,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         csv_count,
         output_dir,
     )
+
+    if not skipped_stages and csv_count != _EXPECTED_CSV_COUNT:
+        logging.warning(
+            "Ожидалось получить %d CSV-файлов, фактически найдено %d.",
+            _EXPECTED_CSV_COUNT,
+            csv_count,
+        )
 
     if _should_run_cleanup(forward_args):
         removed = cleanup_intermediate_files(output_dir)

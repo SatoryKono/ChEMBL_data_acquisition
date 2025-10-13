@@ -260,3 +260,39 @@ def test_main__skip_stage_has_no_warning(
     assert executed
     assert "testitem" not in executed
     assert not any(record.levelno >= logging.WARNING for record in caplog.records)
+
+
+@pytest.mark.unit
+def test_main__missing_outputs_emit_warning(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Full runs with missing CSV files should surface a warning."""
+
+    from scripts import get_data as cli
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    logs_dir = tmp_path / "logs"
+    monkeypatch.setattr(cli, "LOGS_DIR", logs_dir)
+
+    executed: list[str] = []
+
+    def _fake_run_stage(stage: cli.Stage, forward_args: cli.ForwardArgs) -> float:
+        executed.append(stage.name)
+        assert forward_args.output_dir == output_dir.resolve()
+        return 0.1
+
+    monkeypatch.setattr(cli, "run_stage", _fake_run_stage)
+    monkeypatch.setattr(cli, "cleanup_intermediate_files", lambda _path: 0)
+    monkeypatch.setattr(cli, "count_output_files", lambda _path: 12)
+
+    with caplog.at_level(logging.INFO):
+        exit_code = cli.main(["--output-dir", str(output_dir)])
+
+    assert exit_code == 0
+    assert executed, "expected at least one stage to execute"
+    warnings = [record for record in caplog.records if record.levelno >= logging.WARNING]
+    assert warnings, "expected warning about missing CSV files"
+    assert any("Ожидалось получить" in record.getMessage() for record in warnings)
