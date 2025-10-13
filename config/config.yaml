@@ -376,6 +376,7 @@ system:
     exclude_columns: null  # Optional deny list of column names to skip
     fatal_on_error: false  # Fail the pipeline when table profiling raises
     correlation_max_columns: null  # Limit correlation analysis to the first N numeric columns
+    failure_chunk_size: 1000  # Error rows buffered in memory before spilling to disk
   doc_type:
     weights:
       pubmed: 4
