@@ -77,6 +77,7 @@ def _chembl_library() -> Any:
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
 _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
+_DUPLICATE_IDENTIFIER_LOG_SAMPLE_SIZE = 10
 _PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
 _DEFAULT_TABLE_NAME = "testitem"
 RAW_INDEX_COLUMN = "raw.index"
@@ -997,10 +998,15 @@ def fetch_testitems(
         logger.info("chembl_fetch_done", rows=0)
         logger.info("identifiers_retrieved", count=0)
         if duplicate_ids:
+            sorted_duplicates = sorted(duplicate_ids)
+            duplicates_truncated = (
+                len(sorted_duplicates) > _DUPLICATE_IDENTIFIER_LOG_SAMPLE_SIZE
+            )
             logger.warning(
                 "chembl_duplicate_identifiers",
                 duplicate_count=len(duplicate_ids),
-                duplicate_ids=sorted(duplicate_ids),
+                duplicate_ids=sorted_duplicates[:_DUPLICATE_IDENTIFIER_LOG_SAMPLE_SIZE],
+                duplicates_truncated=duplicates_truncated,
             )
         return 0, iter(()), requested_ids_snapshot
 
@@ -1029,10 +1035,17 @@ def fetch_testitems(
             logger.info("chembl_fetch_done", rows=rows_counter)
             logger.info("identifiers_retrieved", count=rows_counter)
             if duplicate_ids:
+                sorted_duplicates = sorted(duplicate_ids)
+                duplicates_truncated = (
+                    len(sorted_duplicates) > _DUPLICATE_IDENTIFIER_LOG_SAMPLE_SIZE
+                )
                 logger.warning(
                     "chembl_duplicate_identifiers",
                     duplicate_count=len(duplicate_ids),
-                    duplicate_ids=sorted(duplicate_ids),
+                    duplicate_ids=sorted_duplicates[
+                        : _DUPLICATE_IDENTIFIER_LOG_SAMPLE_SIZE
+                    ],
+                    duplicates_truncated=duplicates_truncated,
                 )
 
     return 0, _chunk_stream(), requested_ids_snapshot
