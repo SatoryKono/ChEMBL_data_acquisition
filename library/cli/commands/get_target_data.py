@@ -36,6 +36,7 @@ from pandera.errors import SchemaErrors
 
 import library.cli_utils as cli_utils_module
 from library import SidecarErrors, cli, io
+from library.common.sidecar import doc_quality_failure_chunk_size
 from library.cli import (
     Logger,
     LoggerConfig,
@@ -4012,7 +4013,9 @@ def validate_and_write(
             validation = validate_targets(final_df, return_result=True)
         except SchemaErrors as exc:
             if emit_legacy_artifacts:
-                errors = SidecarErrors()
+                errors = SidecarErrors(
+                    chunk_size=doc_quality_failure_chunk_size(cfg)
+                )
                 for row in exc.failure_cases.to_dict("records"):
                     errors.add_error(row)
                 errors.save(failure_path, cfg=cfg)
@@ -4046,7 +4049,9 @@ def validate_and_write(
             failure_cases = validation.failure_cases.copy()
             if not failure_cases.empty:
                 if emit_legacy_artifacts:
-                    errors = SidecarErrors()
+                    errors = SidecarErrors(
+                        chunk_size=doc_quality_failure_chunk_size(cfg)
+                    )
                     for row in failure_cases.to_dict("records"):
                         errors.add_error(row)
                     errors.save(failure_path, cfg=cfg)

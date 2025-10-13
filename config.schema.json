@@ -828,6 +828,13 @@
           "default": false,
           "title": "Fatal On Error",
           "type": "boolean"
+        },
+        "failure_chunk_size": {
+          "default": 1000,
+          "description": "Maximum number of failure rows buffered in memory before spilling to disk.",
+          "minimum": 1,
+          "title": "Failure Chunk Size",
+          "type": "integer"
         }
       },
       "title": "DocQualityCfg",

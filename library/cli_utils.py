@@ -49,7 +49,7 @@ from .config.loader import DEFAULT_CONFIG_PATH
 from .io import StandardOutputArtifacts, save_standard_outputs
 from .maintenance import ensure_legacy_cleanup
 from .metadata import Stats, file_sha256, record_quality_failure, write_meta_yaml
-from .sidecar import SidecarErrors
+from .common.sidecar import SidecarErrors, doc_quality_failure_chunk_size
 from .table_quality import TableQualityProfiler
 from .utils.qc_report import build_reports_from_profiler
 
@@ -648,7 +648,7 @@ def run_pipeline(
     optional_cols = set(schema_snapshot.optional_columns)
     schema_column_dtypes = dict(schema_snapshot.column_dtypes)
 
-    errors = SidecarErrors()
+    errors = SidecarErrors(chunk_size=doc_quality_failure_chunk_size(cfg))
     meta_path: Path | None = None
     metrics = PipelineMetrics()
     total_failures = 0

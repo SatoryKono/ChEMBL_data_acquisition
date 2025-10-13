@@ -67,7 +67,7 @@ from library.cli.metadata import prepare_option
 from library.cli.utils import run_cli_command
 from library.common.csv_utils import write_csv_chunks_deterministic
 from library.common.log import logger
-from library.common.sidecar import SidecarErrors
+from library.common.sidecar import SidecarErrors, doc_quality_failure_chunk_size
 from library.config import (
     Config,
     _serialize_paths,
@@ -602,7 +602,7 @@ def _finalise_export(
 
     stream_chunk = _resolve_stream_chunk_size(chunk_size)
     failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
-    errors = SidecarErrors()
+    errors = SidecarErrors(chunk_size=doc_quality_failure_chunk_size(cfg))
     rows_total = 0
     rows_kept = 0
     exit_code = 0

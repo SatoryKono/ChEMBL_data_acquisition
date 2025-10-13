@@ -41,6 +41,7 @@ class SidecarErrors:
         self._headers_written = False
         self._needs_rewrite = False
 
+
     def add_error(self, row: dict[str, Any]) -> None:
         """Add a validation error description.
 
@@ -146,3 +147,29 @@ class SidecarErrors:
         self._overflow_path.unlink()
         tmp_path.rename(self._overflow_path)
         self._needs_rewrite = False
+
+
+def doc_quality_failure_chunk_size(cfg: Config | None) -> int | None:
+    """Return the configured chunk size for failure sidecars.
+
+    Parameters
+    ----------
+    cfg:
+        Optional application configuration. When unavailable or when the
+        expected configuration branch is missing the function returns ``None``.
+
+    Returns
+    -------
+    int | None
+        Configured chunk size or ``None`` when chunking should be disabled.
+    """
+
+    if cfg is None:
+        return None
+    system_cfg = getattr(cfg, "system", None)
+    if system_cfg is None:
+        return None
+    doc_quality_cfg = getattr(system_cfg, "doc_quality", None)
+    if doc_quality_cfg is None:
+        return None
+    return getattr(doc_quality_cfg, "failure_chunk_size", None)

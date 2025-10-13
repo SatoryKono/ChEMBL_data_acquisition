@@ -744,6 +744,14 @@ class DocQualityCfg(_BaseModel):
     include_columns: tuple[str, ...] | None = None
     exclude_columns: tuple[str, ...] | None = None
     fatal_on_error: bool = False
+    failure_chunk_size: int = Field(
+        1000,
+        ge=1,
+        description=(
+            "Maximum number of validation failures kept in memory before spilling "
+            "them to disk."
+        ),
+    )
 
 
 class ResourcesCfg(_BaseModel):
