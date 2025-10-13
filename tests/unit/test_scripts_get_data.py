@@ -263,68 +263,36 @@ def test_main__skip_stage_has_no_warning(
 
 
 @pytest.mark.unit
-def test_guard_cli_module__prefers_repository(monkeypatch, tmp_path) -> None:
-    """Ensure the CLI guard loads the repository ``library`` package."""
+def test_main__missing_outputs_emit_warning(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Full runs with missing CSV files should surface a warning."""
 
-    fake_site = tmp_path / "site"
-    project_root = Path(__file__).resolve().parents[2]
+    from scripts import get_data as cli
 
-    package_dir = fake_site / "library"
-    package_dir.mkdir(parents=True)
-    marker_file = package_dir / "library_stub_imported.txt"
-    (package_dir / "__init__.py").write_text(
-        "from pathlib import Path\n"
-        "marker = Path(__file__).with_name('library_stub_imported.txt')\n"
-        "marker.write_text('stub-package')\n",
-        encoding="utf-8",
-    )
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    logs_dir = tmp_path / "logs"
+    monkeypatch.setattr(cli, "LOGS_DIR", logs_dir)
 
-    bootstrap_dir = package_dir / "bootstrap"
-    bootstrap_dir.mkdir()
-    (bootstrap_dir / "__init__.py").write_text(
-        "from pathlib import Path\n"
-        "marker = Path(__file__).resolve().parent.parent / 'library_stub_imported.txt'\n"
-        "if not marker.exists():\n"
-        "    marker.write_text('stub-bootstrap')\n"
-        "def ensure_project_root(origin=None):\n"
-        "    return Path(__file__).resolve().parent.parent\n",
-        encoding="utf-8",
-    )
+    executed: list[str] = []
 
-    original_import_module = importlib.import_module
-    import_calls: list[tuple[str, list[str]]] = []
+    def _fake_run_stage(stage: cli.Stage, forward_args: cli.ForwardArgs) -> float:
+        executed.append(stage.name)
+        assert forward_args.output_dir == output_dir.resolve()
+        return 0.1
 
-    def spying_import(name: str, package: str | None = None):
-        if name.startswith("library"):
-            import_calls.append((name, list(sys.path)))
-            if name == "library.cli.commands.get_data":
-                module = types.ModuleType(name)
-                sys.modules[name] = module
-                return module
-        return original_import_module(name, package)
+    monkeypatch.setattr(cli, "run_stage", _fake_run_stage)
+    monkeypatch.setattr(cli, "cleanup_intermediate_files", lambda _path: 0)
+    monkeypatch.setattr(cli, "count_output_files", lambda _path: 12)
 
-    monkeypatch.setattr(importlib, "import_module", spying_import)
+    with caplog.at_level(logging.INFO):
+        exit_code = cli.main(["--output-dir", str(output_dir)])
 
-    remaining_paths = [
-        entry
-        for entry in sys.path
-        if Path(entry).resolve() not in {project_root, fake_site.resolve()}
-    ]
-    monkeypatch.setattr(
-        sys,
-        "path",
-        [str(fake_site), str(project_root)] + remaining_paths,
-        raising=False,
-    )
-
-    for name in list(sys.modules):
-        if name == "library" or name.startswith("library."):
-            del sys.modules[name]
-    sys.modules.pop("scripts.get_data", None)
-
-    import scripts.get_data  # noqa: F401  - imported for side effects
-
-    assert import_calls, "expected library imports to occur"
-    first_call = import_calls[0]
-    assert Path(first_call[1][0]).resolve() == project_root
-    assert not marker_file.exists()
+    assert exit_code == 0
+    assert executed, "expected at least one stage to execute"
+    warnings = [record for record in caplog.records if record.levelno >= logging.WARNING]
+    assert warnings, "expected warning about missing CSV files"
+    assert any("Ожидалось получить" in record.getMessage() for record in warnings)
