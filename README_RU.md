@@ -58,14 +58,14 @@ pre-commit install
 Изучите флаги оркестратора и отдельных пайплайнов:
 
 ```bash
-python scripts/get_data.py --help
+poetry run get-data --help
 python scripts/get_document_data.py --help
 ```
 
 Полный прогон на образцах идентификаторов с выводом в `./output`:
 
 ```bash
-python scripts/get_data.py \
+poetry run get-data \
   --base-path . \
   --input-dir data/input \
   --output-dir output \
@@ -126,7 +126,7 @@ bootstrap-хелперы. По умолчанию каждая команда п
 
 | Команда | Пример запуска | Особенности |
 |---------|----------------|-------------|
-| Оркестратор | `python scripts/get_data.py --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --dry-run` | Запускает всю цепочку один раз, прокидывая `--limit`, `--force`, `--skip-existing` и `--dry-run` на отдельные этапы. Дополнительно поддерживает `--pipeline-registry` для загрузки альтернативных определений шагов и `--override-{input,output-stem,subcommand}` для точечных переопределений. |
+| Оркестратор | `poetry run get-data --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --dry-run` | Консольный оркестратор, который пишет манифесты, поддерживает `--run-id` и кастомизацию через `--pipeline-registry`/`--override-*`. Скрипт `python scripts/get_data.py` оставлен для совместимости и понимает только `--skip`, `--limit`, `--log-level` и `--config`. |
 | Document | `python scripts/get_document_data.py --mode all --input data/input/document.csv --final-out output/documents.csv --fallback-doi-enabled --fallback-doi-path data/input/fallback.csv --openalex-rps 2` | Поддерживает режимы `chembl`, `pubmed`, `all`, настройку размера батчей и CSV с резервными DOI. |
 | Target | `python scripts/get_target_data.py all --input data/input/target.csv --final-out output/targets.csv --chembl-chunk-size 10 --uniprot-data-dir cache/uniprot --raw-out output/targets_raw.parquet --raw-format parquet` | Подкоманды (`uniprot`, `chembl`, `iuphar`, `all`) принимают префиксные оверрайды и позволяют сохранять «сырые» выгрузки. |
 | Assay | `python scripts/get_assay_data.py --input data/input/assay.csv --final-out output/assay.csv --chunk-size 25 --timeout 45` | Требует словари assay, taxonomy и target в `config/dictionary` для обогащения полей `assay_group`, `assay_strain`, `year` и `accession` перед нормализацией; общие флаги плюс настройка размера пачки и таймаута запросов. |

@@ -84,7 +84,7 @@ get-data --base-path /data/chembl \
 всему плану.
 
 ```bash
-python scripts/get_data.py \
+poetry run get-data \
   --base-path /data/chembl \
   --input-dir input --output-dir exports \
   --config /data/chembl/config.yaml \
@@ -97,7 +97,7 @@ python scripts/get_data.py \
 данные PubMed, сохранив настройки лимитов и директорий:
 
 ```bash
-python scripts/get_data.py \
+poetry run get-data \
   --base-path /data/chembl \
   --input-dir input --output-dir exports \
   --config /data/chembl/config.yaml \
