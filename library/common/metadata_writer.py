@@ -141,7 +141,7 @@ def write_meta_yaml(
     command_tokens = _split_command(command)
     if command_tokens is not None:
         normalised_tokens = _normalise_command_tokens(command_tokens, output_path=path)
-        command_str = " ".join(normalised_tokens)
+        command_str = shlex.join(normalised_tokens)
     else:
         command_str = command if command is not None else " ".join(sys.argv)
         normalised_tokens = None
