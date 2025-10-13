@@ -20,6 +20,7 @@ import pandas as pd
 import requests
 
 from library.clients import _chunked
+from library.clients.semantic_scholar import is_access_denied_error
 from library.common.log import logger
 from library.common.rate_limiter import RateLimiter, get_global_limiter, get_limiter
 from library.config import (
@@ -690,6 +691,7 @@ class DocumentPipeline:
                     }
 
                     fallback_pmids: list[str] = []
+                    access_denied_pmids: list[str] = []
                     seen: set[str] = set()
                     for pmid in semantic_pmids:
                         if pmid in seen:
@@ -697,7 +699,20 @@ class DocumentPipeline:
                         seen.add(pmid)
                         record = semsch_map.get(pmid)
                         if record is None or record.get("scholar.Error"):
+                            if record and is_access_denied_error(
+                                record.get("scholar.Error")
+                            ):
+                                access_denied_pmids.append(pmid)
+                                continue
                             fallback_pmids.append(pmid)
+                    if access_denied_pmids:
+                        logger.info(
+                            "semantic_scholar_access_denied",
+                            extra={
+                                "pmids": access_denied_pmids,
+                                "count": len(access_denied_pmids),
+                            },
+                        )
                     for pmid in fallback_pmids:
                         _acquire_documents(None)
                         fallback_record = ssl.fetch_semantic_scholar(

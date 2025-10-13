@@ -18,12 +18,38 @@ from ..common.rate_limiter import RateLimiter, get_limiter
 from ..config.models import RetryCfg, SemanticScholarCfg
 from .pubmed import _do_request
 
-__all__ = ["fetch_semantic_scholar", "fetch_semantic_scholar_batch"]
+__all__ = [
+    "fetch_semantic_scholar",
+    "fetch_semantic_scholar_batch",
+    "is_access_denied_error",
+]
 
 logger = logging.getLogger(__name__)
 
 _SEMANTIC_SCHOLAR_FIELDS = "publicationTypes,externalIds,paperId,venue"
 _SEMANTIC_SCHOLAR_HEADERS = {"Accept": "application/json"}
+
+_ACCESS_DENIED_HINT = (
+    "Semantic Scholar API access denied. Provide a valid API key via "
+    "`sources.semantic_scholar.api_key` or disable the Semantic Scholar enrichment."
+)
+
+
+def is_access_denied_error(error: str | None) -> bool:
+    """Return ``True`` when ``error`` represents an access denial response."""
+
+    if not error:
+        return False
+    lowered = error.lower()
+    return "http 401" in lowered or "http 403" in lowered or "forbidden" in lowered
+
+
+def _format_error_message(error: str) -> str:
+    """Attach actionable hints for well-known Semantic Scholar failures."""
+
+    if is_access_denied_error(error):
+        return f"{_ACCESS_DENIED_HINT} Original error: {error}"
+    return error
 
 
 def _build_headers(cfg: SemanticScholarCfg) -> dict[str, str]:
@@ -76,12 +102,20 @@ def fetch_semantic_scholar(
         timeout=timeout,
         retry_cfg=retry_cfg,
     )
+    formatted_error = _format_error_message(error) if error else ""
     if error:
-        logger.warning(
-            "Semantic Scholar request failed for PMID %s with status: %s",
-            pmid,
-            error,
-        )
+        if is_access_denied_error(error):
+            logger.warning(
+                "Semantic Scholar request failed for PMID %s due to access denial: %s",
+                pmid,
+                error,
+            )
+        else:
+            logger.warning(
+                "Semantic Scholar request failed for PMID %s with status: %s",
+                pmid,
+                error,
+            )
     if error or not isinstance(data, dict):
         if not error:
             logger.warning(
@@ -95,7 +129,7 @@ def fetch_semantic_scholar(
             "scholar.SemanticScholarId": "",
             "scholar.ExternalIds": "",
             "scholar.DOI": "",
-            "scholar.Error": error or "Invalid response",
+            "scholar.Error": formatted_error or error or "Invalid response",
         }
 
     external_ids = data.get("externalIds") or {}
@@ -151,12 +185,20 @@ def fetch_semantic_scholar_batch(
         retry_cfg=retry_cfg,
     )
     if error:
-        for pmid in pmids:
+        if is_access_denied_error(error):
             logger.warning(
-                "Semantic Scholar batch request failed for PMID %s with status: %s",
-                pmid,
+                "Semantic Scholar batch request failed for %d PMIDs due to access denial: %s",
+                len(pmids),
                 error,
             )
+        else:
+            for pmid in pmids:
+                logger.warning(
+                    "Semantic Scholar batch request failed for PMID %s with status: %s",
+                    pmid,
+                    error,
+                )
+        formatted_error = _format_error_message(error)
         return [
             {
                 "scholar.PMID": pmid,
@@ -165,7 +207,7 @@ def fetch_semantic_scholar_batch(
                 "scholar.SemanticScholarId": "",
                 "scholar.ExternalIds": "",
                 "scholar.DOI": "",
-                "scholar.Error": error,
+                "scholar.Error": formatted_error,
             }
             for pmid in pmids
         ]
