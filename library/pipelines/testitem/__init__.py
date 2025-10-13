@@ -37,7 +37,9 @@ from .cli import (
     _normalise_output_labels,
     _extract_metadata_parameters,
     _write_primary_metadata,
+    generate_missing_identifier_placeholders,
     ensure_raw_index_column,
+    MISSING_IDENTIFIER_PLACEHOLDER_CHUNK_SIZE,
     run_testitem_pipeline,
 )
 from .core import *  # noqa: F401,F403
@@ -62,8 +64,10 @@ __all__ = list(
             "_normalise_output_labels",
             "_extract_metadata_parameters",
             "_write_primary_metadata",
+            "generate_missing_identifier_placeholders",
             "run_pipeline",
             "run_testitem_pipeline",
+            "MISSING_IDENTIFIER_PLACEHOLDER_CHUNK_SIZE",
             "testitem_enrichment",
             "validate_testitems",
             "write_csv_deterministic",
