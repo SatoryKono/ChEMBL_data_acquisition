@@ -121,7 +121,7 @@ guarantee consistent formatting and linting outcomes.
 Inspect the orchestrator and pipeline-specific flags:
 
 ```bash
-python scripts/get_data.py --help
+poetry run get-data --help
 python scripts/get_document_data.py --help
 ```
 
@@ -129,7 +129,7 @@ Run the complete workflow against the sample identifiers and write outputs to
 `./output`:
 
 ```bash
-python scripts/get_data.py \
+poetry run get-data \
   --base-path . \
   --input-dir data/input \
   --output-dir output \
@@ -203,7 +203,7 @@ events while investigating discrepancies.
 
 | Command | Example invocation | Highlights |
 |---------|--------------------|------------|
-| Orchestrator | `python scripts/get_data.py --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --dry-run` | Runs the full pipeline chain once, forwarding `--limit`, `--force`, `--skip-existing` and `--dry-run` to individual stages. Advanced flags include `--pipeline-registry` to load alternative step definitions and `--override-{input,output-stem,subcommand}` for ad hoc tweaks. |
+| Orchestrator | `poetry run get-data --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --dry-run` | Console-script orchestrator that emits run manifests, honours `--run-id` and supports `--pipeline-registry`/`--override-*` customisation. `python scripts/get_data.py` remains as a compatibility wrapper limited to `--skip`, `--limit`, `--log-level` and `--config`. |
 | Document | `python scripts/get_document_data.py --mode all --input data/input/document.csv --final-out output/documents.csv --fallback-doi-enabled --fallback-doi-path data/input/fallback.csv --openalex-rps 2` | Supports `--mode chembl|pubmed|all`, per-source batch sizing and fallback DOI overrides. |
 | Target | `python scripts/get_target_data.py all --input data/input/target.csv --final-out output/targets.csv --chembl-chunk-size 10 --uniprot-data-dir cache/uniprot --raw-out output/targets_raw.parquet --raw-format parquet` | Sub-commands (`uniprot`, `chembl`, `iuphar`, `all`) accept prefixed overrides and optional raw exports. |
 | Assay | `python scripts/get_assay_data.py --input data/input/assay.csv --final-out output/assay.csv --chunk-size 25 --timeout 45` | Requires the assay, taxonomy and target dictionaries under `config/dictionary` to enrich `assay_group`, `assay_strain`, `year` and `accession` before normalisation; shares global options plus per-request chunk size and timeout tuning. |
@@ -230,8 +230,10 @@ the canonical `output.target_<stamp>.csv` pattern.
 
 ### Run manifest and metadata artefacts
 
-Every CLI command writes rich metadata alongside the exported CSV and updates a
-JSON manifest under `<base-path>/reports/`. The orchestrator stores
+Console-script entry points (`get-data`, `get-document-data`, etc.) write rich
+metadata alongside the exported CSV and update a JSON manifest under
+`<base-path>/reports/`. The legacy wrappers in `scripts/` bypass this
+instrumentation and therefore do not emit manifests. The orchestrator stores
 time-stamped snapshots named `run_<timestamp>.json` and keeps
 `run_manifest.json` as a lightweight alias to the latest execution. Each
 manifest exposes two top-level sections:

@@ -1,8 +1,10 @@
 # Usage and CLI reference
 
-All command line entry points are available through `python scripts/<name>.py`
-or via the console scripts installed from `pyproject.toml` (`get-data`,
-`get-document-data`, `get-target-data`, etc.).
+All command line entry points ship as console scripts installed from
+`pyproject.toml` (`get-data`, `get-document-data`, `get-target-data`, etc.).
+The legacy `python scripts/<name>.py` wrappers remain for backwards
+compatibility but they expose only a minimal argument surface and bypass the
+metadata instrumentation described below.
 
 ## Common conventions
 
@@ -46,7 +48,7 @@ repeat the sweep or perform a dry run.
 Run the full sequence of pipelines with shared configuration:
 
 ```bash
-python scripts/get_data.py \
+poetry run get-data \
   --base-path /data/chembl \
   --input-dir inbound \
   --output-dir outbound \
@@ -55,22 +57,40 @@ python scripts/get_data.py \
   --log-level INFO
 ```
 
-Important flags:
+The command above resolves to the console-script entry point defined in
+`library.cli.entrypoints.commands`. Any environment where the package is
+installed may invoke it directly as `get-data` or through
+`python -m library.cli.commands.get_data`.
+
+> ⚠️ **Compatibility wrapper:** `python scripts/get_data.py` still delegates to
+> the individual pipelines but accepts only `--skip`, `--limit`, `--log-level`
+> and `--config`. It does not emit run manifests, respect advanced overrides or
+> honour `--run-id`/`--disable-pubchem`. Prefer the console script for day-to-day
+> usage.
+
+Important console-script flags:
 
 - `--base-path`, `--input-dir`, `--output-dir` — resolve input/output folders.
-- `--limit` — forward a maximum record count to every pipeline (useful for smoke
-  runs). `0` skips all processing.
+- `--limit` — forward a maximum record count to every pipeline (useful for
+  smoke runs). `0` skips all processing.
 - `--force`, `--skip-existing` — pass-through execution controls.
-- `--log-level`, `--verbose` — adjust logging; `--verbose` forces the `DEBUG` level without changing configuration files.
-- `--rerun-postprocess` — rebuild stage-aligned exports even when previous runs already produced them so downstream post-processing is refreshed.
-- `--debug` — enable verbose diagnostics and retain intermediate artefacts for every delegated pipeline.
-- `--keep-intermediate` — preserve intermediate and diagnostic artefacts created by individual pipelines without forcing debug logging.
+- `--log-level`, `--verbose` — adjust logging; `--verbose` forces the `DEBUG`
+  level without changing configuration files.
+- `--run-id` — override the manifest/log identifier propagated to sidecars.
+- `--rerun-postprocess` — rebuild stage-aligned exports even when previous runs
+  already produced them so downstream post-processing is refreshed.
+- `--debug` — enable verbose diagnostics and retain intermediate artefacts for
+  every delegated pipeline.
+- `--keep-intermediate` — preserve intermediate and diagnostic artefacts created
+  by individual pipelines without forcing debug logging.
+- `--disable-pubchem` — disable PubChem enrichment for the test item stage even
+  when the configuration enables it by default.
 - `--dry-run` — validate configuration, log intended actions and exit without
   touching the filesystem.
 - `--print-config` — resolve the effective configuration and exit without
   running pipelines.
 
-### Advanced overrides
+### Advanced overrides (console script only)
 
 Customise the orchestrator without editing code by using the following options:
 
@@ -84,16 +104,16 @@ Customise the orchestrator without editing code by using the following options:
 The orchestrator stops on the first non-zero exit code and reports per-pipeline
 elapsed time in the logs.
 
-After every execution the orchestrator writes a dedicated manifest such as
-`reports/run_<timestamp>.json` relative to `--base-path` and updates the
-`reports/run_manifest.json` pointer to reference the most recent run. Each
-manifest records every step with the resolved CSV destination, discovered
-sidecars, status (`success`, `skipped`, `failed`, `blocked`, etc.), timings and
-SHA256
-checksums for all artefacts. The file is emitted even when the workflow aborts
-part way through so partial results can be inspected. When a step fails, the
-remaining ones are marked as `blocked` with `reason: dependency_failed` to make
-the dependency chain explicit in the manifest.
+After every execution the console-script orchestrator writes a dedicated
+manifest such as `reports/run_<timestamp>.json` relative to `--base-path` and
+updates the `reports/run_manifest.json` pointer to reference the most recent
+run. Each manifest records every step with the resolved CSV destination,
+discovered sidecars, status (`success`, `skipped`, `failed`, `blocked`, etc.),
+timings and SHA256 checksums for all artefacts. The file is emitted even when
+the workflow aborts part way through so partial results can be inspected. When a
+step fails, the remaining ones are marked as `blocked` with
+`reason: dependency_failed` to make the dependency chain explicit in the
+manifest. The legacy wrapper does not emit these manifests.
 
 #### Manifest structure and metadata flow
 

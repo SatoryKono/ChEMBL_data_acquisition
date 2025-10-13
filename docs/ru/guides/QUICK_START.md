@@ -46,7 +46,7 @@ python scripts/get_document_data.py --mode all \
   --final-out output/documents.csv
 
 # Полная цепочка
-python scripts/get_data.py \
+poetry run get-data \
   --base-path . \
   --input-dir data/input \
   --output-dir output \
@@ -74,8 +74,8 @@ python tools/make_md_summary.py --input reports/test_report.json --output report
 ## 5. Проверка детерминизма (опционально)
 
 ```bash
-python scripts/get_data.py --output-dir output/run1
-python scripts/get_data.py --output-dir output/run2
+poetry run get-data --output-dir output/run1
+poetry run get-data --output-dir output/run2
 check-determinism --baseline output/run1 --candidate output/run2
 ```
 
