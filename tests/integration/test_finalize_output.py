@@ -6,6 +6,7 @@ from typing import cast
 
 import pandas as pd
 import pytest
+import yaml
 
 from library import io
 from library.common.csv_utils import sha256_file
@@ -91,6 +92,16 @@ def test_finalize_output__writes_csv_and_metadata(
     assert "timestamp_utc" in final.columns
     assert sha256_file(dataset_path)
     assert stats_supplier.calls == 1
+
+    meta_path = dataset_path.with_suffix(".meta.yaml")
+    assert meta_path.exists()
+    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert metadata["table"] == "testitem"
+    assert metadata["outputs"][0] == dataset_path.name
+    parameters = metadata.get("parameters", {})
+    assert parameters.get("emit_legacy_artifacts") is False
+    qc_summary = metadata.get("qc_summary", {})
+    assert qc_summary.get("total_rows") == len(final)
 
 
 @pytest.mark.integration

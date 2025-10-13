@@ -651,7 +651,7 @@ def _build_standard_outputs_from_path(
         )
         correlation_report = pd.DataFrame()
 
-    table_name, date_tag = io.derive_output_labels(
+    table_name, date_tag = pipeline._normalise_output_labels(  # type: ignore[attr-defined]
         dataset_path, default_table=DEFAULT_OUTPUT_STEM
     )
 
@@ -678,6 +678,28 @@ def _build_standard_outputs_from_path(
         dataset=str(artifacts.dataset),
         quality_report=str(artifacts.quality_report),
         correlation_report=str(artifacts.correlation_report),
+    )
+
+    pubchem_cfg = getattr(cfg, "pubchem", None)
+    pubchem_enabled = getattr(pubchem_cfg, "enable", None) if pubchem_cfg else None
+    parameters = pipeline._extract_metadata_parameters(  # type: ignore[attr-defined]
+        cfg,
+        None,
+        emit_legacy_artifacts=False,
+        pubchem_enabled=pubchem_enabled,
+    )
+    pipeline._write_primary_metadata(  # type: ignore[attr-defined]
+        dataset_frame=dataset_frame,
+        dataset_path=artifacts.dataset,
+        quality_path=artifacts.quality_report,
+        correlation_path=artifacts.correlation_report,
+        table_name=table_name,
+        date_tag=date_tag,
+        parameters=parameters,
+        stats=None,
+        pubchem_enabled=bool(pubchem_enabled)
+        if pubchem_enabled is not None
+        else None,
     )
 
     return artifacts
