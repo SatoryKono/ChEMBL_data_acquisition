@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import cast
+import resource
+from typing import Iterator, cast
 
 import pandas as pd
 import pytest
@@ -357,6 +358,47 @@ def test_finalize_output__fallback_pubchem_augmentation(
     final = pd.read_csv(artifacts.dataset)
     for key, value in augmented_values.items():
         assert str(final.loc[0, key]) == value
+
+
+@pytest.mark.integration
+def test_finalize_output__memory_usage_stable(
+    tmp_path: Path, sample_input_csv: Path, cfg
+) -> None:
+    cfg.system.doc_quality.enable = False
+
+    total_rows = 100_000
+    chunk_size = 10_000
+    output_path = tmp_path / "memory_stability.csv"
+    stats_supplier = _StatsSupplier(_base_stats())
+
+    def _generate_chunks() -> Iterator[pd.DataFrame]:
+        for start in range(0, total_rows, chunk_size):
+            end = min(start + chunk_size, total_rows)
+            identifiers = [f"CHEMBL{idx}" for idx in range(start, end)]
+            yield pd.DataFrame(
+                {
+                    "molecule_chembl_id": pd.Series(identifiers, dtype="string"),
+                }
+            )
+
+    baseline_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    exit_code, artifacts = _unwrap_finalize_result(
+        cli.finalize_output(
+            _generate_chunks(),
+            cfg=cfg,
+            output=output_path,
+            parent_stats_supplier=stats_supplier,
+            input_csv=sample_input_csv,
+        )
+    )
+    peak_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+
+    assert exit_code == 0
+    assert artifacts is not None
+    assert stats_supplier.calls == 1
+
+    delta_mb = max(0, peak_kb - baseline_kb) / 1024
+    assert delta_mb < 256, f"Peak memory delta too high: {delta_mb:.1f} MiB"
 
 
 @pytest.mark.integration

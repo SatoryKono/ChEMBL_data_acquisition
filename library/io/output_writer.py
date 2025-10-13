@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
 
-from ..common.csv_utils import write_csv_deterministic
+from itertools import chain
+
+from ..common.csv_utils import (
+    write_csv_chunks_deterministic,
+    write_csv_deterministic,
+)
 
 OUTPUT_DIR = Path("data/output")
 
@@ -44,7 +49,7 @@ def _remove_sidecars(path: Path) -> None:
 
 
 def save_standard_outputs(
-    df_main: pd.DataFrame,
+    df_main: pd.DataFrame | Iterable[pd.DataFrame],
     df_corr: pd.DataFrame,
     df_qc: pd.DataFrame,
     table_name: str,
@@ -61,7 +66,8 @@ def save_standard_outputs(
     Parameters
     ----------
     df_main:
-        Aggregated dataset for the table.
+        Aggregated dataset for the table or an iterable yielding pre-sorted
+        chunks.
     df_corr:
         Correlation metrics generated for ``df_main``.
     df_qc:
@@ -127,6 +133,7 @@ def save_standard_outputs(
     )
     quality_path = destination_dir / f"{dataset_stem}_quality_report_table.csv"
 
+    key_cols: list[str]
     if key_columns is not None:
         key_cols = [str(column) for column in key_columns]
         if not key_cols:
@@ -134,18 +141,62 @@ def save_standard_outputs(
     else:
         key_cols = []
 
-    if not key_cols and not df_main.empty:
-        key_cols = [str(df_main.columns[0])]
+    def _ensure_key_columns(columns: Sequence[str]) -> None:
+        nonlocal key_cols
+        if not key_cols and columns:
+            key_cols = [str(columns[0])]
 
-    effective_column_order = (
-        list(column_order) if column_order is not None else list(df_main.columns)
-    )
-    write_csv_deterministic(
-        df_main,
-        dataset_path,
-        key_cols=key_cols,
-        col_order=effective_column_order,
-    )
+    dataset_written_path: Path
+    if isinstance(df_main, pd.DataFrame):
+        effective_column_order = (
+            list(column_order) if column_order is not None else list(df_main.columns)
+        )
+        _ensure_key_columns(df_main.columns)
+        dataset_written_path = write_csv_deterministic(
+            df_main,
+            dataset_path,
+            key_cols=key_cols,
+            col_order=effective_column_order if effective_column_order else None,
+        )
+    else:
+        main_iter = iter(df_main)
+        try:
+            first_chunk = next(main_iter)
+        except StopIteration:
+            first_chunk = None
+        else:
+            if not isinstance(first_chunk, pd.DataFrame):
+                raise TypeError(
+                    "save_standard_outputs expects DataFrame chunks when df_main is iterable"
+                )
+
+        if column_order is not None:
+            effective_column_order = list(column_order)
+        elif first_chunk is not None:
+            effective_column_order = list(first_chunk.columns)
+        else:
+            effective_column_order = []
+
+        _ensure_key_columns(effective_column_order)
+
+        if first_chunk is None:
+            empty_frame = pd.DataFrame(columns=effective_column_order)
+            dataset_written_path = write_csv_deterministic(
+                empty_frame,
+                dataset_path,
+                key_cols=key_cols,
+                col_order=effective_column_order if effective_column_order else None,
+            )
+        else:
+            chunk_iter: Iterator[pd.DataFrame] = chain([first_chunk], main_iter)
+            dataset_written_path = write_csv_chunks_deterministic(
+                chunk_iter,
+                dataset_path,
+                col_order=effective_column_order if effective_column_order else None,
+                key_cols=key_cols,
+            )
+
+    dataset_path = dataset_written_path
     _remove_sidecars(dataset_path)
 
     qc_key_cols: list[str] = []
