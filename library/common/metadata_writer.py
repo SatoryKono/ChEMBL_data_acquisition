@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import platform
+import shlex
 import sys
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta, timezone
@@ -136,7 +137,14 @@ def write_meta_yaml(
 
     metadata: dict[str, Any] = dict(existing)
     context = get_current()
-    command_str = command if command is not None else " ".join(sys.argv)
+
+    command_tokens = _split_command(command)
+    if command_tokens is not None:
+        normalised_tokens = _normalise_command_tokens(command_tokens, output_path=path)
+        command_str = " ".join(normalised_tokens)
+    else:
+        command_str = command if command is not None else " ".join(sys.argv)
+        normalised_tokens = None
 
     invocation_for_seed: Sequence[str] | None
     if invocation is not None:
@@ -178,8 +186,14 @@ def write_meta_yaml(
             "columns": list(columns or []),
             "dtypes": dict(dtypes or {}),
             "pipeline_version": get_pipeline_version(),
+            "output_path": str(path),
         }
     )
+
+    if normalised_tokens is not None:
+        metadata["command_args"] = list(normalised_tokens)
+    elif "command_args" in metadata:
+        metadata.pop("command_args", None)
 
     if invocation is not None:
         metadata["invocation"] = list(invocation)
@@ -294,6 +308,69 @@ def _dictionary_manifest_metadata() -> Mapping[str, Mapping[str, str]]:
     return entries
 
 
+_COMMAND_OUTPUT_PLACEHOLDER = "<OUTPUT_PATH>"
+_COMMAND_ABS_PATH_PLACEHOLDER = "<ABS_PATH>"
+
+
+def _split_command(command: str | None) -> Sequence[str] | None:
+    """Return tokens extracted from ``command`` when possible."""
+
+    if command is None:
+        return list(sys.argv)
+
+    try:
+        return shlex.split(command)
+    except ValueError:
+        logger.debug("metadata_writer_command_split_failed", command=command)
+        return None
+
+
+def _normalise_command_tokens(
+    tokens: Sequence[str],
+    *,
+    output_path: Path,
+) -> list[str]:
+    """Return ``tokens`` with absolute paths replaced by placeholders."""
+
+    normalised: list[str] = []
+    skip_next = False
+    output_str = str(output_path)
+
+    for index, token in enumerate(tokens):
+        if skip_next:
+            skip_next = False
+            continue
+
+        if token == "--final-out":
+            normalised.append(token)
+            if index + 1 < len(tokens):
+                normalised.append(_COMMAND_OUTPUT_PLACEHOLDER)
+                skip_next = True
+            continue
+
+        if token.startswith("--final-out="):
+            prefix, _, _ = token.partition("=")
+            normalised.append(f"{prefix}={_COMMAND_OUTPUT_PLACEHOLDER}")
+            continue
+
+        if token == output_str:
+            normalised.append(_COMMAND_OUTPUT_PLACEHOLDER)
+            continue
+
+        name, sep, value = token.partition("=")
+        if sep and value.startswith("/"):
+            normalised.append(f"{name}={_COMMAND_ABS_PATH_PLACEHOLDER}")
+            continue
+
+        if token.startswith("/"):
+            normalised.append(_COMMAND_ABS_PATH_PLACEHOLDER)
+            continue
+
+        normalised.append(token)
+
+    return normalised
+
+
 __all__ = [
     "Stats",
     "file_sha256",
@@ -301,3 +378,4 @@ __all__ = [
     "compute_generated_at",
     "write_meta_yaml",
 ]
+
