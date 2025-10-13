@@ -56,7 +56,7 @@ def _parse_protein_classifications(value: object) -> list[tuple[int | None, str]
                 (index + 1, token)
                 for index, token in enumerate(tokens)
             ]
-    elif isinstance(value, (list, tuple)):
+    elif isinstance(value, list | tuple):
         parsed = list(value)
     elif isinstance(value, dict):
         parsed = [value]

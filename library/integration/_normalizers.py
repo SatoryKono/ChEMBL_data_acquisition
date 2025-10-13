@@ -112,7 +112,7 @@ def _first_text(entry: Any) -> str:
 def _join_subjects(subjects: Any) -> str:
     """Join subject list with ``; `` separator."""
 
-    if not isinstance(subjects, Iterable) or isinstance(subjects, (str, bytes)):
+    if not isinstance(subjects, Iterable) or isinstance(subjects, str | bytes):
         if isinstance(subjects, str):
             return subjects
         return ""

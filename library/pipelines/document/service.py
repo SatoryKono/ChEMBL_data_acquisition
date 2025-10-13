@@ -12,14 +12,14 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from importlib import import_module
 from pathlib import Path
 from threading import Lock, local
-from typing import TYPE_CHECKING, Any, TypeVar
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import pandas as pd
 import requests
-from importlib import import_module
 
 from library.clients import _chunked
 from library.clients.semantic_scholar import is_access_denied_error
