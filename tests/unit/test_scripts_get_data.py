@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import logging
 import sys
 import types
 from importlib.machinery import SourceFileLoader
@@ -218,6 +219,7 @@ def test_should_run_cleanup__respects_user_flags() -> None:
     )
     assert cli._should_run_cleanup(forward) is False
 
+
     forward = cli.ForwardArgs(
         tokens=base,
         extras_start=0,
@@ -225,3 +227,36 @@ def test_should_run_cleanup__respects_user_flags() -> None:
         output_dir=cli._resolve_forward_output_dir(base),
     )
     assert cli._should_run_cleanup(forward) is True
+
+
+@pytest.mark.unit
+def test_main__skip_stage_has_no_warning(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Skipping a stage should not emit warnings about CSV counts."""
+
+    from scripts import get_data as cli
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    logs_dir = tmp_path / "logs"
+    monkeypatch.setattr(cli, "LOGS_DIR", logs_dir)
+
+    executed: list[str] = []
+
+    def _fake_run_stage(stage: cli.Stage, forward_args: cli.ForwardArgs) -> float:
+        executed.append(stage.name)
+        assert forward_args.output_dir == output_dir.resolve()
+        return 0.1
+
+    monkeypatch.setattr(cli, "run_stage", _fake_run_stage)
+
+    with caplog.at_level(logging.INFO):
+        exit_code = cli.main(["--skip", "testitem", "--output-dir", str(output_dir)])
+
+    assert exit_code == 0
+    assert executed
+    assert "testitem" not in executed
+    assert not any(record.levelno >= logging.WARNING for record in caplog.records)
