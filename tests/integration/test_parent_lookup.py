@@ -21,6 +21,9 @@ def hierarchy_lookup_parity(
 ):
     """Run CLI and pipeline lookup loaders and ensure parity."""
 
+    from library.pipelines.testitem import catalog as pipeline_catalog
+    from scripts import get_testitem_data
+
     default_source = Path(__file__).resolve().parents[1] / "resources" / "molecule_hierarchy.csv"
 
     def _run(
