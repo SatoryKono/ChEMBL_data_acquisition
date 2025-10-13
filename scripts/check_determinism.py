@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Best-effort determinism smoke test for data acquisition pipelines."""
+"""Best-effort determinism smoke test for data acquisition pipelines.
+
+The helper runs the activity export twice and compares the artefacts. When
+invoked with ``--dry-run`` it hashes the combined stdout/stderr logs instead of
+requiring CSV outputs, making it possible to validate deterministic planning in
+CI environments where writes are forbidden.
+"""
 
 from __future__ import annotations
 
@@ -35,6 +41,14 @@ def _hash_file(path: Path) -> str:
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1 << 20), b""):
             hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _hash_process_output(result: subprocess.CompletedProcess[str]) -> str:
+    hasher = hashlib.sha256()
+    for stream in (result.stdout or "", result.stderr or ""):
+        hasher.update(stream.encode("utf-8"))
+        hasher.update(b"\0")
     return hasher.hexdigest()
 
 
@@ -273,13 +287,27 @@ def main(argv: list[str] | None = None) -> int:
 
         if not first.exists() or not second.exists():
             if args.dry_run:
-                sys.stderr.write(
-                    "Determinism check failed: --dry-run prevents creating output files.\n"
-                )
-                sys.stderr.write(
-                    "Re-run with --no-dry-run to verify that the pipeline produces stable results.\n"
-                )
-                return 2
+                first_logs_hash = _hash_process_output(first_run)
+                second_logs_hash = _hash_process_output(second_run)
+
+                if first_logs_hash != second_logs_hash:
+                    print("Dry-run log hash check: mismatch")
+                    print(
+                        f"  first stdout/stderr SHA256:  {first_logs_hash}"
+                    )
+                    print(
+                        f"  second stdout/stderr SHA256: {second_logs_hash}"
+                    )
+                    print(
+                        "Dry-run outputs diverged; inspect the captured logs for"
+                        " non-deterministic behaviour."
+                    )
+                    return 1
+
+                print("Dry-run log hash check: matched")
+                print(f"stdout/stderr SHA256: {first_logs_hash}")
+                print("Deterministic dry-run output confirmed")
+                return 0
 
             sys.stderr.write(
                 "Determinism check failed: the pipeline exited without writing output files.\n"
