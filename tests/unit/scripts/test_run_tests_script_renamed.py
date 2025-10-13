@@ -80,6 +80,69 @@ def test_ensure_output_directories__cleans_directories(
 
 
 @pytest.mark.unit
+def test_ensure_output_directories__preserves_custom_parent_contents(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reports_dir = tmp_path / "reports"
+    coverage_dir = reports_dir / "coverage"
+    coverage_html_dir = coverage_dir / "html"
+
+    custom_parent = tmp_path / "custom_outputs"
+    custom_parent.mkdir()
+
+    sentinel_file = custom_parent / "retain.txt"
+    sentinel_file.write_text("keep", encoding="utf-8")
+    sentinel_dir = custom_parent / "nested"
+    sentinel_dir.mkdir()
+    nested_file = sentinel_dir / "data.txt"
+    nested_file.write_text("payload", encoding="utf-8")
+
+    report_file = custom_parent / "custom_report.json"
+    raw_report_file = custom_parent / "pytest_raw_report.json"
+    summary_file = reports_dir / "custom_summary.md"
+
+    report_file.write_text("stale report", encoding="utf-8")
+    raw_report_file.write_text("stale raw", encoding="utf-8")
+
+    monkeypatch.setattr(run_tests, "REPORTS_DIR", reports_dir, raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_DIR", coverage_dir, raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_HTML", coverage_html_dir, raising=False)
+
+    run_tests.ensure_output_directories(report_file, summary_file, raw_report_file)
+
+    assert sentinel_file.exists()
+    assert nested_file.exists()
+    assert not report_file.exists()
+    assert not raw_report_file.exists()
+    assert not summary_file.exists()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("bad_path", [Path("."), Path("..")])
+def test_ensure_output_directories__rejects_relative_dot_path(
+    bad_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reports_dir = tmp_path / "reports"
+    coverage_dir = reports_dir / "coverage"
+    coverage_html_dir = coverage_dir / "html"
+
+    monkeypatch.setattr(run_tests, "REPORTS_DIR", reports_dir, raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_DIR", coverage_dir, raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_HTML", coverage_html_dir, raising=False)
+
+    summary_file = reports_dir / "custom_summary.md"
+    raw_report_file = reports_dir / "pytest_raw_report.json"
+
+    with pytest.raises(ValueError):
+        run_tests.ensure_output_directories(bad_path, summary_file, raw_report_file)
+
+    assert reports_dir.exists()
+    assert not coverage_dir.exists()
+    assert not coverage_html_dir.exists()
+    assert list(reports_dir.iterdir()) == []
+
+
+@pytest.mark.unit
 def test_run_tests__verbose_creates_debug_log(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

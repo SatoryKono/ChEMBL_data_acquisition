@@ -99,7 +99,6 @@ def _memory_usage_worker(
                 }
             )
 
-    before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     exit_code, _ = worker_cli.finalize_output(
         _chunk_stream(),
         cfg=cfg,

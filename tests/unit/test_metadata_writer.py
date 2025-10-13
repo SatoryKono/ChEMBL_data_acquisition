@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from argparse import Namespace
 
-from library.common.metadata import write_meta_yaml
-
-from library.config.models import ConfigMetadata, ConfigSource
-
 import yaml
 
+from library.common.metadata import write_meta_yaml
+from library.common.run_context import RunContext, set_current
+from library.config.models import ConfigMetadata, ConfigSource
 from library.io.metadata_writer import save_metadata
 
 
@@ -117,3 +116,48 @@ def test_write_meta_yaml__normalises_command_paths(tmp_path):
     assert str(second_final_out) not in second_meta["command"]
     assert first_meta["generated_at"] == second_meta["generated_at"]
     assert first_meta == second_meta
+
+
+def test_save_metadata__respects_explicit_run_context(tmp_path):
+    # Arrange
+    output_dir = tmp_path / "meta"
+    context = RunContext(run_id="test", generated_at="2024-01-02T03:04:05Z")
+
+    # Act
+    meta_path = save_metadata(
+        table_name="assay",
+        date_tag="20240101",
+        args=None,
+        output_dir=output_dir,
+        artifacts=[],
+        sources=["chembl"],
+        run_context=context,
+    )
+
+    # Assert
+    data = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert data["generated_at"] == context.generated_at
+
+
+def test_save_metadata__uses_current_run_context(tmp_path):
+    # Arrange
+    output_dir = tmp_path / "meta"
+    context = RunContext(run_id="test", generated_at="2024-02-03T04:05:06Z")
+    set_current(context)
+
+    # Act
+    try:
+        meta_path = save_metadata(
+            table_name="assay",
+            date_tag="20240203",
+            args=None,
+            output_dir=output_dir,
+            artifacts=[],
+            sources=["chembl"],
+        )
+    finally:
+        set_current(None)
+
+    # Assert
+    data = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert data["generated_at"] == context.generated_at

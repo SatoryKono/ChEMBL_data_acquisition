@@ -31,12 +31,14 @@
 
 Каждый конвейер теперь оставляет минимальный набор рядом с итоговым CSV:
 
+- `<stem>.meta.yaml` — метаданные, сохраняемые `io.save_metadata`, с параметрами
+  запуска, схемой и контрольными суммами.
 - `<stem>_quality_report_table.csv` — профиль таблицы из
   `library.table_quality.analyze_table_quality`.
 - `<stem>_data_correlation_report_table.csv` — кросс-колоночные корреляции для
   QA-дашбордов.
 
-Наследуемые диагностические файлы (`<stem>.meta.yaml`, `<stem>.quality.json`,
+Наследуемые диагностические файлы (`<stem>.quality.json`,
 `<stem>_failure_cases.csv` и др.) подключаются по требованию через
 `--emit-legacy-artifacts`, `--debug` или `--keep-intermediate`. Первый запуск
 после обновления автоматически удалит устаревшие sidecar-файлы; при необходимости
@@ -150,6 +152,7 @@ get-data \
 | `--mode` | Обязателен (`all` — объединённый запуск) | Выбор сценария; CLI завершится с ошибкой, если режим не передан через `--mode` или позиционную команду совместимости (`chembl`, `pubmed`, `all`). |
 | `--column` | Зависит от режима (`PMID` для `pubmed`, `document_chembl_id` в остальных случаях) | Колонка с идентификаторами. |
 | `--limit`, `--offset` | `None`, `0` | Управление диапазоном. |
+| `--postprocess` / `--no-postprocess` | `False` | Запускает постобработку документов (очистка структуры, QA-отчёт). Подробнее в [руководстве по постобработке](./guides/POSTPROCESSING_RUNBOOK.md). |
 | `--timeout` | `90.0` (`chembl`/`all`), `10.0` (`pubmed`) | Таймаут HTTP-запросов. |
 | `--openalex-rps`, `--crossref-rps` | `None` | Переопределение ограничений для партнёрских API при режимах `pubmed` или `all`. |
 

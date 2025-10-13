@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Best-effort determinism smoke test for data acquisition pipelines."""
+"""Best-effort determinism smoke test for data acquisition pipelines.
+
+The helper runs the activity export twice and compares the artefacts. When
+invoked with ``--dry-run`` it hashes the combined stdout/stderr logs instead of
+requiring CSV outputs, making it possible to validate deterministic planning in
+CI environments where writes are forbidden.
+"""
 
 from __future__ import annotations
 
@@ -38,6 +44,14 @@ def _hash_file(path: Path) -> str:
     return hasher.hexdigest()
 
 
+def _hash_process_output(result: subprocess.CompletedProcess[str]) -> str:
+    hasher = hashlib.sha256()
+    for stream in (result.stdout or "", result.stderr or ""):
+        hasher.update(stream.encode("utf-8"))
+        hasher.update(b"\0")
+    return hasher.hexdigest()
+
+
 def _metadata_path(csv_path: Path) -> Path:
     return csv_path.with_suffix(csv_path.suffix + ".meta.yaml")
 
@@ -49,23 +63,43 @@ def _run_activity(
     *,
     dry_run: bool,
     timeout: float | None = None,
+    offline: bool = False,
+    fixtures_dir: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.setdefault("PYTHONHASHSEED", "0")
     repo_root = Path(__file__).resolve().parents[1]
-    cmd = [
-        sys.executable,
-        "-m",
-        "scripts.get_activity_data",
-        "--limit",
-        str(limit),
-        "--final-out",
-        str(destination),
-        "--input",
-        str(input_csv),
-    ]
-    if dry_run:
-        cmd.append("--dry-run")
+    if offline:
+        if fixtures_dir is None:
+            raise ValueError("fixtures_dir must be provided when offline is enabled")
+        env["CHEMBL_DA_OFFLINE"] = "1"
+        cmd = [
+            sys.executable,
+            "-m",
+            "tests.helpers.activity_offline_cli",
+            "--fixtures-dir",
+            str(fixtures_dir),
+            "--destination",
+            str(destination),
+            "--input",
+            str(input_csv),
+            "--limit",
+            str(limit),
+        ]
+    else:
+        cmd = [
+            sys.executable,
+            "-m",
+            "scripts.get_activity_data",
+            "--limit",
+            str(limit),
+            "--final-out",
+            str(destination),
+            "--input",
+            str(input_csv),
+        ]
+        if dry_run:
+            cmd.append("--dry-run")
     return subprocess.run(
         cmd,
         text=True,
@@ -161,6 +195,24 @@ def main(argv: list[str] | None = None) -> int:
         default=600.0,
         help="Timeout in seconds for each pipeline run (default: 600).",
     )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help=(
+            "Run the determinism check in offline mode using prepared fixtures. "
+            "This replaces the get_activity_data CLI with a lightweight stub and "
+            "avoids network calls."
+        ),
+    )
+    parser.add_argument(
+        "--fixtures-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Path to a directory with offline fixtures. When --offline is set and "
+            "no path is provided, defaults to tests/resources/expected_get_data."
+        ),
+    )
     parser.set_defaults(dry_run=False)
 
     args = parser.parse_args(argv)
@@ -171,6 +223,23 @@ def main(argv: list[str] | None = None) -> int:
     try:
         first = tmp_dir / "first.csv"
         second = tmp_dir / "second.csv"
+
+        if args.offline and args.dry_run:
+            sys.stderr.write(
+                "Offline mode does not support --dry-run; rerun without --dry-run.\n"
+            )
+            return 2
+
+        repo_root = Path(__file__).resolve().parents[1]
+        fixtures_dir = args.fixtures_dir
+        if args.offline and fixtures_dir is None:
+            fixtures_dir = repo_root / "tests" / "resources" / "expected_get_data"
+        if args.offline:
+            if fixtures_dir is None or not fixtures_dir.exists():
+                sys.stderr.write(
+                    "Offline mode requested but fixtures directory is missing.\n"
+                )
+                return 2
 
         if args.input_csv is not None:
             input_csv = args.input_csv
@@ -189,6 +258,8 @@ def main(argv: list[str] | None = None) -> int:
                 input_csv,
                 dry_run=args.dry_run,
                 timeout=args.timeout,
+                offline=args.offline,
+                fixtures_dir=fixtures_dir,
             )
         except subprocess.TimeoutExpired as exc:
             _report_process_timeout("first run", exc)
@@ -204,6 +275,8 @@ def main(argv: list[str] | None = None) -> int:
                 input_csv,
                 dry_run=args.dry_run,
                 timeout=args.timeout,
+                offline=args.offline,
+                fixtures_dir=fixtures_dir,
             )
         except subprocess.TimeoutExpired as exc:
             _report_process_timeout("second run", exc)
@@ -214,13 +287,27 @@ def main(argv: list[str] | None = None) -> int:
 
         if not first.exists() or not second.exists():
             if args.dry_run:
-                sys.stderr.write(
-                    "Determinism check failed: --dry-run prevents creating output files.\n"
-                )
-                sys.stderr.write(
-                    "Re-run with --no-dry-run to verify that the pipeline produces stable results.\n"
-                )
-                return 2
+                first_logs_hash = _hash_process_output(first_run)
+                second_logs_hash = _hash_process_output(second_run)
+
+                if first_logs_hash != second_logs_hash:
+                    print("Dry-run log hash check: mismatch")
+                    print(
+                        f"  first stdout/stderr SHA256:  {first_logs_hash}"
+                    )
+                    print(
+                        f"  second stdout/stderr SHA256: {second_logs_hash}"
+                    )
+                    print(
+                        "Dry-run outputs diverged; inspect the captured logs for"
+                        " non-deterministic behaviour."
+                    )
+                    return 1
+
+                print("Dry-run log hash check: matched")
+                print(f"stdout/stderr SHA256: {first_logs_hash}")
+                print("Deterministic dry-run output confirmed")
+                return 0
 
             sys.stderr.write(
                 "Determinism check failed: the pipeline exited without writing output files.\n"

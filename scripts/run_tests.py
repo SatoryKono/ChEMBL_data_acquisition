@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import importlib
+import importlib.util
 import json
 import logging
 import os
@@ -34,8 +36,6 @@ del _bootstrap_module
 from uuid import NAMESPACE_URL, uuid5
 from xml.etree import ElementTree
 
-import pytest
-
 from library.cli import configure_logger, create_logger_config
 from library.cli.logging import setup_cli_logging
 from library.cli_utils import resolve_invocation
@@ -46,6 +46,51 @@ from library.reporting.test_summary import (
 from library.reporting.test_summary import (
     normalise_message as _normalise_message,
 )
+
+
+def _ensure_pytest_json_report() -> None:
+    module_name = "pytest_jsonreport"
+    spec = importlib.util.find_spec(module_name)
+    if spec is not None:
+        importlib.import_module(module_name)
+        return
+
+    message_lines = [
+        "The pytest-json-report plugin is required to run scripts/run_tests.py.",
+        "Install the development dependencies (make init or pip install -r requirements-dev.txt) before rerunning the command.",
+    ]
+    print("\n".join(message_lines), file=sys.stderr)
+    print("Attempting to install pytest-json-report automatically...", file=sys.stderr)
+
+    install_result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "pytest-json-report"],
+        check=False,
+    )
+    if install_result.returncode != 0:
+        print(
+            "Automatic installation of pytest-json-report failed. Please install the development dependencies and retry.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    spec = importlib.util.find_spec(module_name)
+    if spec is None:
+        print(
+            "pytest-json-report is still unavailable after the automatic installation attempt.",
+            file=sys.stderr,
+        )
+        print(
+            "Install dev dependencies with make init or pip install -r requirements-dev.txt before running scripts/run_tests.py.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    importlib.import_module(module_name)
+
+
+_ensure_pytest_json_report()
+
+import pytest
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_REPORTS_DIR = ROOT_DIR / "reports"
@@ -77,6 +122,7 @@ TEST_DIRECTORIES = (
     ROOT_DIR / "tests" / "unit",
     ROOT_DIR / "tests" / "integration",
     ROOT_DIR / "tests" / "e2e",
+    ROOT_DIR / "tests" / "postprocess",
 )
 _BASE_PYTEST_COMMAND: list[str] = [
     sys.executable,
@@ -151,21 +197,26 @@ def ensure_output_directories(
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    if COVERAGE_DIR.exists():
-        _clear_directory(COVERAGE_DIR)
-    COVERAGE_DIR.mkdir(parents=True, exist_ok=True)
-
-    if COVERAGE_HTML.exists():
-        _clear_directory(COVERAGE_HTML)
-    COVERAGE_HTML.mkdir(parents=True, exist_ok=True)
-
     raw_path = raw_report_file or RAW_REPORT_FILE
 
+    wipe_allowed_directories = {
+        COVERAGE_DIR.resolve(),
+        COVERAGE_HTML.resolve(),
+    }
+
     for path in (report_file, summary_file, raw_path):
+        if path.name in {"", ".", ".."}:
+            msg = f"Refusing to operate on ambiguous target path: {path!s}"
+            raise ValueError(msg)
+
         parent = path.parent
-        if parent not in {REPORTS_DIR, COVERAGE_DIR, COVERAGE_HTML} and parent.exists():
+        resolved_parent = parent.resolve()
+
+        if resolved_parent in wipe_allowed_directories and parent.exists():
             _clear_directory(parent)
+
         parent.mkdir(parents=True, exist_ok=True)
+
         if path.exists():
             try:
                 path.unlink()
@@ -174,6 +225,14 @@ def ensure_output_directories(
                 # at the target path. Removing directories is out of scope for
                 # this helper, but we still make sure the call does not crash.
                 pass
+
+    if COVERAGE_DIR.exists():
+        _clear_directory(COVERAGE_DIR)
+    COVERAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+    if COVERAGE_HTML.exists():
+        _clear_directory(COVERAGE_HTML)
+    COVERAGE_HTML.mkdir(parents=True, exist_ok=True)
 
 
 def _stream_process_output(process: subprocess.Popen[str]) -> None:

@@ -29,6 +29,16 @@ tests/
 - Disable network access by default. Mock HTTP clients or use recorded fixtures.
 - Use `tmp_path`/`tmp_path_factory` for temporary files.
 
+## Metadata hook expectations
+
+- Hooks must always return a `pandas.DataFrame`. Returning `None`, iterables,
+  or any other type aborts the pipeline. The CLI resolves hook names via
+  `_callable_name`, so make sure your hook function has a descriptive name to
+  aid debugging when `metadata_hook_invalid_return` is logged.
+- Propagate the input frame unchanged if the hook has nothing to modify.
+- Prefer explicit copies when mutating columns to avoid hidden side effects
+  in downstream hooks.
+
 ## Key scenarios checklist
 
 Each new or updated test must cover at least one of the following scenarios:

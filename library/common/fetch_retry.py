@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
@@ -38,25 +38,30 @@ class ChunkFailureTracker:
             "chunk_ids": ",".join(ids),
             "chunk_size": len(ids),
             "error": error,
+            "chunk_fetch_failure_ids_total": 0,
+            "chunk_fetch_failure_ids_truncated": False,
         }
         self._sidecar.add_error(sidecar_row)
         failure = _ChunkFailure(chunk_ids=ids, error=error, sidecar_row=sidecar_row)
         self._failures.append(failure)
 
     def stats(self) -> dict[str, Any]:
-        """Return aggregated statistics for persisted metadata files."""
+        """Return aggregated statistics for persisted metadata files.
+
+        Only the first ``_CHUNK_FAILURE_IDS_LIMIT`` unique identifiers are
+        materialised to keep the memory footprint bounded. The full unique count
+        is still computed to preserve the historical statistics exported in
+        sidecars and logs.
+        """
 
         if not self._failures:
             return {}
-        unique_ids = dict.fromkeys(
-            identifier for failure in self._failures for identifier in failure.chunk_ids
-        )
-        total_unique_ids = len(unique_ids)
-        truncated = total_unique_ids > _CHUNK_FAILURE_IDS_LIMIT
-        if truncated:
-            reported_ids = list(islice(unique_ids.keys(), _CHUNK_FAILURE_IDS_LIMIT))
-        else:
-            reported_ids = list(unique_ids.keys())
+
+        unique_ids_iter = _iter_unique_ids(_iter_all_chunk_ids(self._failures))
+        reported_ids = list(islice(unique_ids_iter, _CHUNK_FAILURE_IDS_LIMIT))
+        total_unique_ids = len(reported_ids) + sum(1 for _ in unique_ids_iter)
+        truncated = total_unique_ids > len(reported_ids)
+
         self._update_sidecar_summary(total_unique_ids, truncated)
         return {
             "chunk_fetch_failure_chunks": len(self._failures),
@@ -108,3 +113,17 @@ def compute_backoff_delay(
 
 
 __all__ = ["ChunkFailureTracker", "compute_backoff_delay"]
+
+
+def _iter_all_chunk_ids(failures: Sequence[_ChunkFailure]) -> Iterator[str]:
+    for failure in failures:
+        yield from failure.chunk_ids
+
+
+def _iter_unique_ids(identifiers: Iterable[str]) -> Iterator[str]:
+    seen: set[str] = set()
+    for identifier in identifiers:
+        if identifier in seen:
+            continue
+        seen.add(identifier)
+        yield identifier

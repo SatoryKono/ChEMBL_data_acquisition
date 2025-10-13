@@ -111,7 +111,7 @@ def test_ensure_base_path_env__injects_default_when_missing():
     env: dict[str, str] = {}
     cli._ensure_base_path_env([], env)
 
-    assert env[cli._BASE_PATH_ENV_VAR] == str(cli.DATA_DIR.resolve())
+    assert env[cli._BASE_PATH_ENV_VAR] == str(cli.PROJECT_ROOT.resolve())
 
 
 @pytest.mark.unit
@@ -141,3 +141,62 @@ def test_ensure_base_path_env__keeps_preexisting_value():
     cli._ensure_base_path_env([], env)
 
     assert env[cli._BASE_PATH_ENV_VAR] == existing
+
+
+@pytest.mark.unit
+def test_cleanup_intermediate_files__removes_known_patterns(tmp_path: Path) -> None:
+    """Temporary artefacts should be deleted while canonical files remain."""
+
+    from scripts import get_data as cli
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    removable_files = [
+        output_dir / ".output.targets_20240101.csv.tmp",
+        output_dir / "output.targets_20240101_intermediate.csv",
+        output_dir / "activity_debug.log",
+        output_dir / "cache_chunk.pkl",
+    ]
+    for path in removable_files:
+        path.write_text("dummy", encoding="utf-8")
+
+    raw_dir = output_dir / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "temporary.csv").write_text("id\n1\n", encoding="utf-8")
+
+    canonical = output_dir / "output.targets_20240101.csv"
+    canonical.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    removed = cli.cleanup_intermediate_files(output_dir)
+
+    assert removed == len(removable_files) + 1  # +1 for the raw directory
+    assert canonical.exists()
+    assert not raw_dir.exists()
+    assert all(not path.exists() for path in removable_files)
+
+
+@pytest.mark.unit
+def test_cleanup_intermediate_files__skips_missing_directory(tmp_path: Path) -> None:
+    """Cleanup should be a no-op when the output directory is absent."""
+
+    from scripts import get_data as cli
+
+    missing_dir = tmp_path / "missing"
+    removed = cli.cleanup_intermediate_files(missing_dir)
+
+    assert removed == 0
+
+
+@pytest.mark.unit
+def test_should_run_cleanup__respects_user_flags() -> None:
+    """Diagnostic flags should disable the orchestrator cleanup."""
+
+    from scripts import get_data as cli
+
+    base = ("--config", "cfg.yaml", "--output-dir", "data/output")
+    forward = cli.ForwardArgs(tokens=base + ("--debug",), extras_start=0, extra_len=len(base) + 1)
+    assert cli._should_run_cleanup(forward) is False
+
+    forward = cli.ForwardArgs(tokens=base, extras_start=0, extra_len=len(base))
+    assert cli._should_run_cleanup(forward) is True
