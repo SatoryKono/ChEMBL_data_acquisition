@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from itertools import islice
 from typing import Any
 
 import pandas as pd
@@ -61,7 +62,8 @@ def test_fetch_testitems__does_not_reintroduce_nested_columns(
     )
 
     assert status == 0
-    assert requested == ("CHEMBL1",)
+    assert isinstance(requested, cli.RequestedIdsSnapshot)
+    assert tuple(requested) == ("CHEMBL1",)
     assert chunk_iter is not None
 
     chunks = _collect(chunk_iter)
@@ -173,3 +175,57 @@ def test_fetch_testitems__renames_pubchem_and_structure_columns(
     assert chunk.loc[0, "pubchem_inchikey"] == "XLYOFNOQVPJJNP-UHFFFAOYSA-N"
     assert chunk.loc[0, "pubchem_iupac_name"] == "methane"
     assert chunk.loc[0, "pubchem_molecular_formula"] == "CH4"
+
+
+@pytest.mark.unit
+def test_fetch_testitems__handles_large_identifier_stream_without_memory_growth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": pd.Series(["CHEMBL0"], dtype="string"),
+        }
+    )
+    fake_library = _FakeChemblLib(frame)
+    monkeypatch.setattr(cli, "_load_chembl_library", lambda: fake_library)
+
+    def _identifier_stream() -> Iterator[str]:
+        for index in range(5000):
+            chembl_id = f"CHEMBL{index}"
+            yield chembl_id
+            yield chembl_id
+
+    status, chunk_iter, requested = cli.fetch_testitems(
+        _identifier_stream(),
+        api_cfg=ApiCfg(),
+        batch_size=1024,
+        timeout=1.0,
+        client=_SentinelClient(),
+        sample_ids=tuple(),
+        fields=None,
+        page_limit=10,
+        retry_cfg=TestitemBatchRetryCfg(),
+    )
+
+    assert status == 0
+    assert chunk_iter is not None
+    first_chunk = next(chunk_iter)
+    assert isinstance(first_chunk, pd.DataFrame)
+    assert len(requested) == 10000
+    assert len(requested.sample) == min(
+        len(requested), cli._REQUESTED_IDENTIFIER_LOG_SAMPLE_SIZE
+    )
+    assert requested.duplicate_count == 5000
+    assert len(requested.duplicate_sample) <= cli._REQUESTED_IDENTIFIER_DUPLICATE_SAMPLE_SIZE
+    assert (
+        requested.tracked_unique_count
+        <= cli._REQUESTED_IDENTIFIER_DUPLICATE_TRACK_LIMIT
+    )
+    assert tuple(islice(iter(requested), 6)) == (
+        "CHEMBL0",
+        "CHEMBL0",
+        "CHEMBL1",
+        "CHEMBL1",
+        "CHEMBL2",
+        "CHEMBL2",
+    )

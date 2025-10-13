@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
 import threading
 import time
 import traceback
+import weakref
 from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
@@ -13,7 +16,7 @@ from datetime import datetime
 from functools import lru_cache
 from itertools import chain, islice
 from pathlib import Path
-from typing import Any, Mapping
+from typing import IO, Any, Mapping
 
 import pandas as pd
 import requests
@@ -77,6 +80,150 @@ _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
 _PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
 _DEFAULT_TABLE_NAME = "testitem"
 RAW_INDEX_COLUMN = "raw.index"
+
+_REQUESTED_IDENTIFIER_LOG_SAMPLE_SIZE = 10
+_REQUESTED_IDENTIFIER_DUPLICATE_SAMPLE_SIZE = 10
+_REQUESTED_IDENTIFIER_DUPLICATE_TRACK_LIMIT = 2048
+
+
+class RequestedIdsSnapshot(Sequence[str]):
+    """Persist requested identifiers without holding them all in memory."""
+
+    def __init__(
+        self,
+        *,
+        log_sample_size: int = _REQUESTED_IDENTIFIER_LOG_SAMPLE_SIZE,
+        duplicate_sample_size: int = _REQUESTED_IDENTIFIER_DUPLICATE_SAMPLE_SIZE,
+        duplicate_track_limit: int = _REQUESTED_IDENTIFIER_DUPLICATE_TRACK_LIMIT,
+    ) -> None:
+        self._log_sample_size = max(0, int(log_sample_size))
+        self._duplicate_sample_size = max(0, int(duplicate_sample_size))
+        self._duplicate_track_limit = max(0, int(duplicate_track_limit))
+        self._log_sample: list[str] = []
+        self._duplicate_sample: list[str] = []
+        self._duplicate_count = 0
+        self._seen: "OrderedDict[str, None]" = OrderedDict()
+        self._count = 0
+        self._writer: IO[str] | None = None
+        self._path: Path | None = None
+        self._finalizer: weakref.finalize | None = None
+        self._finished = False
+
+    def __len__(self) -> int:
+        return self._count
+
+    def __iter__(self) -> Iterator[str]:
+        return self._iterate_all()
+
+    def __getitem__(self, index: int | slice) -> str | list[str]:
+        if isinstance(index, slice):
+            start, stop, step = index.indices(self._count)
+            if step == 1 and start == 0 and stop == self._count:
+                return list(self._iterate_all())
+            return [self[i] for i in range(start, stop, step)]
+        if index < 0:
+            index += self._count
+        if index < 0 or index >= self._count:
+            raise IndexError("requested identifier index out of range")
+        for idx, value in enumerate(self._iterate_all()):
+            if idx == index:
+                return value
+        raise IndexError("requested identifier index out of range")
+
+    def append(self, identifier: str | None) -> None:
+        text_identifier = str(identifier)
+        if self._log_sample_size and len(self._log_sample) < self._log_sample_size:
+            self._log_sample.append(text_identifier)
+
+        normalized = text_identifier.strip().upper()
+        if normalized:
+            if normalized in self._seen:
+                self._duplicate_count += 1
+                if (
+                    self._duplicate_sample_size
+                    and len(self._duplicate_sample) < self._duplicate_sample_size
+                ):
+                    self._duplicate_sample.append(text_identifier)
+            else:
+                self._seen[normalized] = None
+                self._seen.move_to_end(normalized)
+                if (
+                    self._duplicate_track_limit
+                    and len(self._seen) > self._duplicate_track_limit
+                ):
+                    self._seen.popitem(last=False)
+
+        self._ensure_writer()
+        if self._writer is None:
+            return
+        self._writer.write(text_identifier + "\n")
+        self._count += 1
+
+    def finish(self) -> None:
+        if self._finished:
+            return
+        self._finished = True
+        if self._writer is not None:
+            self._writer.flush()
+            self._writer.close()
+
+    def iter_for_fetch(self) -> Iterator[str]:
+        self.finish()
+        return self._read_from_disk()
+
+    @property
+    def sample(self) -> tuple[str, ...]:
+        return tuple(self._log_sample)
+
+    @property
+    def duplicate_count(self) -> int:
+        return self._duplicate_count
+
+    @property
+    def duplicate_sample(self) -> tuple[str, ...]:
+        return tuple(self._duplicate_sample)
+
+    @property
+    def tracked_unique_count(self) -> int:
+        return len(self._seen)
+
+    def _ensure_writer(self) -> None:
+        if self._writer is not None or self._finished:
+            return
+        temp = tempfile.NamedTemporaryFile(
+            mode="w+",
+            encoding="utf-8",
+            newline="\n",
+            delete=False,
+            prefix="chembl_requested_ids_",
+        )
+        self._writer = temp
+        self._path = Path(temp.name)
+        self._finalizer = weakref.finalize(self, self._cleanup_path, self._path)
+
+    def _read_from_disk(self) -> Iterator[str]:
+        if self._path is None:
+            return iter(())
+
+        def _reader() -> Iterator[str]:
+            if self._path is None:
+                return
+            with self._path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    yield line.rstrip("\n")
+
+        return _reader()
+
+    def _iterate_all(self) -> Iterator[str]:
+        self.finish()
+        return self._read_from_disk()
+
+    @staticmethod
+    def _cleanup_path(path: Path) -> None:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
 
 
 def ensure_raw_index_column(frame: pd.DataFrame) -> bool:
@@ -687,18 +834,26 @@ def fetch_testitems(
     fields: Sequence[str] | None,
     page_limit: int,
     retry_cfg: TestitemBatchRetryCfg,
-) -> tuple[int, Iterator[pd.DataFrame] | None, tuple[str, ...]]:
+) -> tuple[int, Iterator[pd.DataFrame] | None, RequestedIdsSnapshot]:
     """Retrieve ChEMBL test item records for ``ids_iter`` in chunks."""
 
     logger.info("chembl_fetch_start", batch_size=batch_size)
     chembl_lib = _load_chembl_library()
-    requested_ids_original: list[str] = []
+    requested_ids_snapshot = RequestedIdsSnapshot()
 
     for identifier in ids_iter:
-        text_identifier = str(identifier)
-        requested_ids_original.append(text_identifier)
+        requested_ids_snapshot.append(identifier)
 
-    requested_iter = iter(requested_ids_original)
+    requested_ids_snapshot.finish()
+
+    if requested_ids_snapshot.duplicate_count:
+        logger.warning(
+            "chembl_duplicate_requested_identifiers",
+            duplicate_count=requested_ids_snapshot.duplicate_count,
+            sample=list(requested_ids_snapshot.duplicate_sample),
+        )
+
+    requested_iter = requested_ids_snapshot.iter_for_fetch()
 
     seen_ids: set[str] = set()
     duplicate_ids: set[str] = set()
@@ -833,14 +988,14 @@ def fetch_testitems(
                 duplicate_count=len(duplicate_ids),
                 duplicate_ids=sorted(duplicate_ids),
             )
-        return 0, iter(()), tuple(requested_ids_original)
+        return 0, iter(()), requested_ids_snapshot
 
     prefetched: list[pd.DataFrame] = []
 
     try:
         prefetched.append(_load_chunk(first_batch, batch_size))
     except TestitemFetchError:
-        return 1, None, tuple()
+        return 1, None, requested_ids_snapshot
 
     rows_counter = 0
 
@@ -866,7 +1021,7 @@ def fetch_testitems(
                     duplicate_ids=sorted(duplicate_ids),
                 )
 
-    return 0, _chunk_stream(), tuple(requested_ids_original)
+    return 0, _chunk_stream(), requested_ids_snapshot
 
 
 def apply_testitem_enrichment(
@@ -940,7 +1095,7 @@ def run_testitem_pipeline(
         pubchem_api_cfg = _prepare_pubchem_api_cfg(cfg, api_cfg)
         pc.init_session(pubchem_api_cfg, cfg.retry)
 
-    requested_ids: tuple[str, ...] = ()
+    requested_ids: Sequence[str] = ()
     missing_ids: list[str] = []
     input_csv = Path(options.input_csv)
     output_csv = Path(options.output_csv) if options.output_csv is not None else None
