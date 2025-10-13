@@ -72,19 +72,26 @@ the filesystem.
 
 Helpful switches while iterating:
 
-- `--rerun-postprocess` — rebuild stage-aligned exports even if they were
-  generated earlier. Use this when you tweak normalisation rules but want to
-  reuse cached staging artefacts.
-- `--debug` — enable verbose diagnostics and retain intermediate artefacts for
-  each child pipeline.
-- `--keep-intermediate` — preserve intermediate and diagnostic folders without
-  forcing debug logging.
+| Flag | Effect | Typical use |
+|------|--------|-------------|
+| `--rerun-postprocess` | Rebuild stage-aligned exports even when staging artefacts already exist. | Refresh outputs after tweaking normalisation rules. |
+| `--debug` | Elevate logging to `DEBUG` and keep intermediary artefacts. | Inspect failing stages locally. |
+| `--keep-intermediate` | Preserve intermediary folders without forcing debug logging. | Capture diagnostic files for later review. |
+| `--dry-run` | Resolve the plan and log intended actions without touching the filesystem. | Validate configuration in CI or notebooks. |
+| `--disable-pubchem` | Skip PubChem enrichment within the test item step. | Compare legacy exports or isolate enrichment drift. |
+| `--print-config` | Output the resolved configuration and exit. | Archive the exact settings used for a run. |
+| `--run-id` | Override the computed identifier stamped in logs and manifests. | Correlate runs with external schedulers or incident tickets. |
+
+The full set of baseline and advanced flags is summarised in [USAGE.md](../USAGE.md); the table above highlights the ones most frequently toggled during day-to-day debugging.【F:library/cli/commands/get_data.py†L949-L1108】
 
 ## Document pipeline (`python scripts/get_document_data.py`)
 
-Run the document workflow via the single entry point `python scripts/get_document_data.py --mode <chembl|pubmed|all>`. The `--mode`
-flag replaces the legacy positional sub-commands while keeping the common CLI
-arguments consistent with the other pipelines.
+Run the document workflow through the single entry point
+`python scripts/get_document_data.py`. When no mode is supplied the command
+defaults to the combined `all` run, but the `--mode <chembl|pubmed|all>` flag
+remains available to focus on a specific stage. The flag replaces the legacy
+positional sub-commands while keeping the common CLI arguments consistent with
+the other pipelines.
 
 ### Quick reference
 
@@ -144,6 +151,9 @@ Fallback DOI overrides:
 | `--fallback-doi-overwrite` | Disabled | Permit replacing existing DOIs with fallback values. |
 
 ### Example invocations
+
+The snippets below pin the mode explicitly for clarity. Omitting `--mode`
+executes the default `all` workflow.
 
 ```bash
 # ChEMBL-only export

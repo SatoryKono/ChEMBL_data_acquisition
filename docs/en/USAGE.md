@@ -57,29 +57,37 @@ python scripts/get_data.py \
 
 Important flags:
 
-- `--base-path`, `--input-dir`, `--output-dir` — resolve input/output folders.
-- `--limit` — forward a maximum record count to every pipeline (useful for smoke
-  runs). `0` skips all processing.
-- `--force`, `--skip-existing` — pass-through execution controls.
-- `--log-level`, `--verbose` — adjust logging; `--verbose` forces the `DEBUG` level without changing configuration files.
-- `--rerun-postprocess` — rebuild stage-aligned exports even when previous runs already produced them so downstream post-processing is refreshed.
-- `--debug` — enable verbose diagnostics and retain intermediate artefacts for every delegated pipeline.
-- `--keep-intermediate` — preserve intermediate and diagnostic artefacts created by individual pipelines without forcing debug logging.
-- `--dry-run` — validate configuration, log intended actions and exit without
-  touching the filesystem.
-- `--print-config` — resolve the effective configuration and exit without
-  running pipelines.
+**Baseline invocation flags**
+
+| Option | Purpose | When to use |
+|--------|---------|-------------|
+| `--base-path`, `--input-dir`, `--output-dir` | Resolve the shared input/output directories for all pipelines. | Standardise staging layouts across environments. |
+| `--config` | Provide an alternate YAML configuration. | Point at environment-specific credentials or dictionary bundles. |
+| `--date` | Override the output filename prefix. | Align exports with reporting cut-offs or historical replays. |
+| `--log-level`, `--verbose` | Control logging; `--verbose` forces `DEBUG`. | Raise verbosity temporarily during investigation. |
+| `--limit` | Cap identifiers processed per pipeline (`0` skips execution). | Run deterministic smoke tests and QA checks. |
+| `--force`, `--skip-existing` | Choose between overwriting outputs or skipping completed stages. | Resume interrupted runs without manual cleanup. |
+| `--rerun-postprocess` | Rebuild stage-aligned exports even if prior runs produced them. | Refresh downstream tables after editing post-processing rules. |
+| `--dry-run` | Resolve and log the plan without touching the filesystem. | Validate configuration in CI or notebooks. |
+| `--debug`, `--keep-intermediate` | Retain intermediate artefacts; `--debug` also emits verbose diagnostics. | Inspect pipeline internals when diagnosing failures. |
+| `--disable-pubchem` | Skip PubChem enrichment during the test item stage. | Isolate enrichment issues or reproduce legacy datasets. |
+| `--print-config` | Emit the resolved configuration and exit. | Capture canonical settings for reviews. |
+| `--run-id` | Provide a deterministic identifier for logs and manifests. | Correlate orchestrator runs with external schedulers. |
+
+These toggles are handled by `_parse_args` and `PipelineRunConfig`, so they maintain the canonical registry while adjusting runtime behaviour.【F:library/cli/commands/get_data.py†L949-L1108】
 
 ### Advanced overrides
 
-Customise the orchestrator without editing code by using the following options:
+Use advanced overrides when you must reshape the plan (partial reruns, bespoke integration tests) rather than for day-to-day execution:
 
-| Option | Purpose |
-|--------|---------|
-| `--pipeline-registry <path>` | Load an alternative pipeline registry YAML (see [`library/pipelines/registry.py`](../../library/pipelines/registry.py)) to change the execution order, provide custom callables or add/remove steps. |
-| `--override-input STEP=FILENAME` | Replace the input CSV filename for a single step while keeping the rest of the registry intact. Multiple overrides may be supplied. |
-| `--override-output-stem STEP=STEM` | Adjust the output stem for a step without touching the registry (affects the generated filename and metadata artefacts). |
-| `--override-subcommand STEP=SUBCOMMAND` | Switch the CLI sub-command used to invoke a step (e.g. run the target pipeline in `chembl` mode only during a partial rerun). |
+| Option | Use when… |
+|--------|-----------|
+| `--pipeline-registry <path>` | Load an alternate registry YAML to add/remove steps or change their order. |
+| `--override-input STEP=FILENAME` | Swap the input file for a specific stage without editing the registry. |
+| `--override-output-stem STEP=STEM` | Redirect the output stem (and sidecar names) for a single stage. |
+| `--override-subcommand STEP=SUBCOMMAND` | Force a different CLI sub-command such as running the target pipeline in `chembl` mode only. |
+
+Overrides cascade through `PipelineRunConfig` so customised plans behave the same as direct CLI invocations.【F:library/cli/commands/get_data.py†L1048-L1108】
 
 The orchestrator stops on the first non-zero exit code and reports per-pipeline
 elapsed time in the logs.
@@ -194,11 +202,14 @@ Common options:
 
 | Option | Default | Notes |
 |--------|---------|-------|
-| `--mode` | required | Selects the processing flow. |
+| `--mode` | `all` (when omitted) | Selects the processing flow. |
 | `--column` | Mode specific (`PMID` for `pubmed`, `document_chembl_id` otherwise) | Input column holding identifiers. |
 | `--limit`, `--offset` | `None`, `0` | Control record ranges. |
 | `--timeout` | `90.0` for `chembl`/`all`, `10.0` for `pubmed` | Applied to HTTP calls. |
 | `--openalex-rps`, `--crossref-rps` | `None` | Optional overrides for partner APIs when running `pubmed` or `all`. |
+
+When no `--mode` flag is provided the pipeline automatically falls back to the
+combined `all` workflow, mirroring the historical default behaviour.
 
 PubMed specific flags (`--mode pubmed` or `all`):
 
@@ -224,6 +235,8 @@ Fallback DOI handling (`--mode all` or `pubmed`):
 | `--fallback-doi-overwrite` | Allow replacement of DOIs already present in the enrichment payload. |
 
 Example: fetch PubMed enrichments with fallback DOIs and partner rate limits.
+Explicit mode selection is optional—the default run without `--mode` already
+invokes the combined `all` workflow.
 
 ```bash
 python scripts/get_document_data.py --mode pubmed \
