@@ -4,35 +4,34 @@
 - Блокирующие дефекты CLI устранены: `scripts/check_determinism.py` собирается без
   синтаксических ошибок и корректно обрабатывает dry-run/real-run режимы, что
   подтверждено текущей реализацией скрипта.【F:scripts/check_determinism.py†L133-L215】
-- Smoke-команды зависят от подготовки окружения: без установки пакета и dev-
-  зависимостей `python scripts/run_tests.py` и `pytest -q --disable-warnings`
-  завершаются на импорте, поэтому перед запуском проверок требуется
-  `pip install -e .[dev]`.【e8d59a†L1-L4】【438e77†L1-L5】
-- Линтер `ruff` фиксирует 132 нарушения (порядок импортов, устаревшие `noqa`,
-  ошибочные аннотации); ошибок уровня SyntaxError/RuntimeError не
-  выявлено.【27ea81†L1-L14】
+- Smoke-команды требуют полного dev-набора: без `pytest-cov` `python scripts/run_tests.py`
+  завершается с кодом 4, а `pytest -q --disable-warnings` падает на импортах
+  `freezegun`/`hypothesis`/`responses`, поэтому перед запуском нужен `pip install -e .[dev]`.【2abddb†L1-L13】【0c4395†L1-L31】
+- Линтер `ruff` фиксирует 35 нарушений (I001/F401/UP017) — в основном несортированные
+  импорты и неиспользуемые хелперы; SyntaxError/RuntimeError не наблюдаются.【82bf11†L1-L9】
 
 ## Проверки
-- `python scripts/run_tests.py` — **ошибка окружения**: модуль `library` не найден,
-  пока проект не установлен в активное окружение.【e8d59a†L1-L4】
-- `pytest -q --disable-warnings` — **ошибка окружения**: dev-зависимость `numpy`
-  отсутствует, импорт `tests/conftest.py` прерывается на фиксации детерминизма.【438e77†L1-L5】
-- `mypy library scripts` — **1 ошибка**: не установлен плагин `pydantic.mypy`, что
-  блокирует строгий анализ типизации.【c8d83b†L1-L4】
-- `ruff check .` — **132 ошибки**: преобладают `I001`, устаревшие `noqa` и неверные
-  аннотации, устраняемые автоформатированием и корректировкой API.【27ea81†L1-L14】
-- `pre-commit run --all-files` — **утилита отсутствует** в окружении; требуется
-  установка `pre-commit` вручную.【f6f525†L1-L3】
+- `python scripts/run_tests.py` — **ошибка конфигурации**: `pytest` не распознаёт
+  флаги покрытия без плагина `pytest-cov` и завершает работу с кодом 4 до старта тестов.【2abddb†L1-L13】
+- `pytest -q --disable-warnings` — **ошибка окружения**: отсутствуют `freezegun`,
+  `hypothesis`, `responses`, коллекция тестов обрывается на импорте фикстур.【0c4395†L1-L31】
+- `mypy --strict library` — **522 ошибки**: нет stubs для `pandas`/`yaml`/`requests`,
+  множество CLI-функций возвращают `Any` или неправильные типы.【2d2413†L1-L4】
+- `ruff check .` — **35 ошибок**: несортированные импорты и неиспользуемые
+  хелперы в CLI и тестах (I001/F401/UP017).【82bf11†L1-L9】
+- `pre-commit run --all-files` — **цепочка падает**: `ruff`/`black` переформатируют
+  файлы, `mypy` и `pytest` повторяют ошибки отсутствующих зависимостей, запуск
+  завершается статусом 1.【a28a08†L1-L38】【6dce54†L1-L35】【9a9fe8†L1-L120】【77ee15†L1-L33】
 
 ## Оценка категорий
 | Категория | Балл | Комментарий |
 |-----------|------|-------------|
 | Structure | 4/5 | Основные CLI и отчётные утилиты работают без патчей `sys.path`; типизированные модели `Config` покрывают alias-ENV схему. Единичный профилировщик всё ещё мутирует `sys.path`, что усложняет запуск вне репозитория.【F:library/config/models.py†L1-L140】【F:scripts/check_determinism.py†L133-L215】【F:tools/make_md_summary.py†L1-L73】【F:tools/profile_activity_pipeline.py†L1-L40】 |
 | Config    | 4/5 | `config/config.yaml` остаётся единой точкой настройки с подробными комментариями и управлением чанкингом/лимитами; отсутствует артефакт версии `.meta`, что осложняет отслеживание релизов.【F:config/config.yaml†L1-L122】 |
-| Quality   | 3/5 | Линтер указывает на 132 стилевых нарушения (`I001`, устаревшие `noqa`, `F401`, `F821`) в CLI; критические синтаксические ошибки устранены.【27ea81†L1-L14】 |
-| Errors    | 3/5 | CLI обрабатывают ошибки и завершаются предсказуемыми кодами, но smoke-запуск `scripts/run_tests.py` требует предварительной установки пакета в окружение.【F:scripts/check_determinism.py†L133-L215】【e8d59a†L1-L4】 |
+| Quality   | 3/5 | `ruff` сигнализирует о 35 проблемах (несортированные импорты, неиспользуемые `scripts`-хелперы, устаревшие `pandas`-аннотации); критических синтаксических ошибок нет.【82bf11†L1-L9】 |
+| Errors    | 3/5 | CLI по‑прежнему корректно логируют, однако `scripts/run_tests.py` без `pytest-cov` падает до старта тестов, оставляя отчётность пустой.【F:scripts/check_determinism.py†L133-L215】【2abddb†L1-L13】 |
 | Perf      | 3/5 | Пайплайны используют чанкинг и rate limiter из конфигурации, однако профилировщик по-прежнему тянет полный `pandas` и правит `sys.path`, что мешает лёгким экспериментам.【F:config/config.yaml†L10-L104】【F:tools/profile_activity_pipeline.py†L1-L40】 |
-| Testing   | 2/5 | Структура tests/unit|integration|e2e и фикстура `deterministic_env` сохранены, но без установки `numpy`/`pydantic` smoke-команды не запускаются, что снижает готовность контуров.【F:tests/conftest.py†L1-L86】【438e77†L1-L5】【c8d83b†L1-L4】 |
+| Testing   | 2/5 | Структура tests/unit|integration|e2e и фикстура `deterministic_env` сохранены, добавлен модуль `tests/unit/scripts/test_run_tests_script_renamed.py` для контроля артефактов, но без dev-зависимостей (`freezegun`, `hypothesis`, `responses`) smoke-прогон `pytest` не выполняется.【F:tests/conftest.py†L1-L86】【F:tests/unit/scripts/test_run_tests_script_renamed.py†L1-L120】【0c4395†L1-L31】 |
 | Docs      | 4/5 | README и локализованные руководства содержат QA-регламент и инструкции запуска тестов, но единый статус CI ещё не встроен в документацию.【F:README_RU.md†L1-L166】 |
 
 ## Детали по категориям
@@ -50,18 +49,17 @@
   восстановление конкретного релиза требует сверки git-истории вручную.
 
 ### Quality
-- `ruff` оставляет 132 нарушения — основными являются `I001` (порядок
-  импортов), устаревшие `noqa`, `F401`/`F821` (неиспользуемые или
-  неимпортированные типы) в CLI-модулях.【27ea81†L1-L14】
-- Типовая причина — несогласованность между CLI-адаптерами (`library/cli/activity_api.py`,
-  `library/cli/entrypoints/activity.py`) и общими утилитами постобработки.
+- `ruff` фиксирует 35 нарушений — в основном несортированные импорты (I001)
+  и неиспользуемые/устаревшие символы (`F401`, `UP017`).【82bf11†L1-L9】
+- Несогласованные импорты и строковые аннотации сохранились в CLI и тестовых
+  утилитах (`library/cli/commands/get_document_data.py`, `library/pipelines/testitem/cli.py`).【F:library/cli/commands/get_document_data.py†L30-L70】【F:library/pipelines/testitem/cli.py†L640-L660】
 
 ### Errors
 - `scripts/check_determinism.py` корректно логирует и сигнализирует ошибки сухого
   и полного прогонов, удаляя временные файлы по завершении.【F:scripts/check_determinism.py†L133-L215】
-- `python scripts/run_tests.py` при запуске без установки пакета завершается на
-  импорте `library`, поэтому инструкции к smoke-проверкам должны включать шаг
-  `pip install -e .[dev]`.【e8d59a†L1-L4】
+- `python scripts/run_tests.py` без установленного `pytest-cov` падает на этапе
+  парсинга аргументов `--cov*`, поэтому smoke-инструкции должны явно
+  предусматривать `pip install -e .[dev]`.【2abddb†L1-L13】
 
 ### Perf
 - Конфигурация по-прежнему управляет чанкингом и backoff'ом, что делает пайплайны
@@ -71,9 +69,10 @@
 
 ### Testing
 - Тестовые каталоги и фикстура `deterministic_env` поддерживают детерминированную
-  структуру запусков.【F:tests/conftest.py†L1-L86】
-- Без установки `numpy` и `pydantic` `pytest` и `mypy` не стартуют, поэтому чек-
-  лист CI должен включать подготовку dev-зависимостей перед smoke-прогоном.【438e77†L1-L5】【c8d83b†L1-L4】
+  структуру запусков; для контроля артефактов добавлен модуль
+  `tests/unit/scripts/test_run_tests_script_renamed.py`.【F:tests/conftest.py†L1-L86】【F:tests/unit/scripts/test_run_tests_script_renamed.py†L1-L120】
+- Без `freezegun`, `hypothesis`, `responses` smoke-запуск `pytest -q --disable-warnings`
+  обрывается на импортах, поэтому dev-набор обязателен перед CI-прогоном.【0c4395†L1-L31】
 
 ### Docs
 - README описывает контроль качества, запуск `scripts/run_tests.py` и требования
@@ -83,25 +82,25 @@
 ## Findings by Category
 | № | Файл / строки | Проблема | Причина | Исправление |
 |---|---------------|----------|---------|-------------|
-| 1 | `library/cli/activity_api.py` L149-L152 | Линтер предупреждает `B010`: использование `setattr` с константами при экспорте CLI-хуков.| Совместимость с прежними API реализована через модификацию модулей во время выполнения.| Переписать экспорт на явные атрибуты/декораторы без `setattr`, покрыть unit-тестом совместимости.【F:library/cli/activity_api.py†L108-L152】 |
-| 2 | `library/cli/entrypoints/activity.py` L1125-L1145 | Тип `DataFrameSchema` указан строкой и не импортирован, что даёт `F821`/`UP037` в `ruff`.| Локальный dataclass `_ActivityPostprocessDeps` использует ленивую загрузку зависимостей без фактического импорта типа.| Добавить условный импорт `from pandera import DataFrameSchema` под `TYPE_CHECKING` и убрать строковую аннотацию.【F:library/cli/entrypoints/activity.py†L1125-L1145】 |
-| 3 | `library/cli/utils.py` L173-L213, L852-L876 | Тип `PostprocessingPipelineResult` объявлен строкой и не импортирован, вызывая `F821` и усложняя проверку типов.| Результат постобработки возвращается вспомогательными рантаймами, но тип не экспортирован в модуль CLI.| Экспортировать тип из постпроцессинга через `typing.TYPE_CHECKING` + протокол, обновить вызовы и тесты CLI.【F:library/cli/utils.py†L173-L213】【F:library/cli/utils.py†L848-L879】 |
-| 4 | `tools/profile_activity_pipeline.py` L1-L40 | Скрипт профилировщика модифицирует `sys.path` и требует тяжёлый `pandas` даже в smoke-режиме.| Профилирование строится на прямом импорте CLI и тестовых данных, нет обёртки для пакетного использования.| Вынести профилировщик в модуль `library.tools.profile`, заменить `sys.path` на установочный импорт и добавить лёгкие фикстуры без `pandas`.【F:tools/profile_activity_pipeline.py†L1-L40】 |
-| 5 | Тестовый контур (`pytest`, `mypy`) | Smoke-команды прерываются до запуска тестов из-за отсутствующих dev-зависимостей (`numpy`, `pydantic`).| Текущий README не требует обязательной установки `pip install -e .[dev]` перед проверками.| Обновить инструкции разработчика и CI-скрипты, добавив явную установку dev-зависимостей перед запуском проверок.【438e77†L1-L5】【c8d83b†L1-L4】【52ce31†L1-L24】 |
+| 1 | `scripts/run_tests.py` L125-L140 | Запуск падает с кодом 4: `pytest` не понимает флаги `--cov*` без установленного `pytest-cov`, отчёты не генерируются.| Скрипт без проверки выставляет аргументы покрытия и не подтверждает наличие плагина.| Перед запуском проверять наличие `pytest-cov` (или устанавливать его через dev-экстры) и фиксировать инструкцию `pip install -e .[dev]` в CI.【F:scripts/run_tests.py†L125-L140】【2abddb†L1-L13】 |
+| 2 | `tests/e2e/test_get_tissue_data_cli.py` L1-L40; `tests/unit/test_fetch_retry.py` L1-L20; `tests/unit/test_openalex_client.py` L1-L20 | Smoke-прогон `pytest -q --disable-warnings` падает на импортах `freezegun`/`hypothesis`/`responses`, ключевые сценарии не покрываются.| Dev-зависимости не устанавливаются перед запуском тестов.| Обновить README/CI-скрипты: обязательный шаг `pip install -e .[dev]`, либо маркировать тесты как `skip` без зависимостей.【F:tests/e2e/test_get_tissue_data_cli.py†L1-L40】【F:tests/unit/test_fetch_retry.py†L1-L20】【F:tests/unit/test_openalex_client.py†L1-L20】【0c4395†L1-L31】 |
+| 3 | `library/cli/commands/get_document_data.py` L30-L70 | `ruff` выдаёт I001/UP017: несортированные импорты и строковые аннотации `pandas`.| Миграция CLI оставила смешанный блок импортов и устаревшие типы.| Отсортировать импорты (`ruff --fix`) и заменить строковые типы на `from __future__ import annotations` + явные импорты stubs.【F:library/cli/commands/get_document_data.py†L30-L70】【82bf11†L1-L5】 |
+| 4 | `library/pipelines/testitem/cli.py` L640-L660 | `ruff` фиксирует F821: используется `chain`, но не импортирован, и реэкспортирует неиспользуемые хелперы.| Обновление CLI не синхронизировало `__all__` и набор импортов.| Добавить `from itertools import chain`, пересобрать `__all__` и удалить лишние импорты, затем покрыть тестами re-export.【F:library/pipelines/testitem/cli.py†L640-L660】【a28a08†L33-L48】 |
+| 5 | `library/schemas/activities.py` L40-L70 | `mypy --strict` сообщает о неизвестных `pa.Check`/`pa.DataFrameSchema`.| Аннотации завязаны на `pandera`, но типы не импортированы и не защищены `TYPE_CHECKING`.| Добавить явные импорты под `TYPE_CHECKING` и/или подключить `pandera` stubs в dev-зависимости.【F:library/schemas/activities.py†L1-L80】【9a9fe8†L1-L40】 |
 
 ## План исправлений и PR-пакетов
 ### Минимально-инвазивные (PR1)
-1. Установить dev-зависимости в smoke-скриптах CI/README и проверить запуск `python scripts/run_tests.py` после `pip install -e .[dev]`.
-2. Убрать `setattr` из `library/cli/activity_api.py`, добавив явные экспортные обёртки и тест совместимости.
-3. Импортировать `DataFrameSchema`/`PostprocessingPipelineResult` через `TYPE_CHECKING`, обновить аннотации и прогнать `ruff --fix`.
+1. Зафиксировать установку dev-экстры (`pytest-cov`, `freezegun`, `hypothesis`, `responses`) в smoke-скриптах и README, добавить проверку наличия `pytest-cov` в `scripts/run_tests.py` перед запуском.
+2. Привести в порядок импорты и реэкспорт `library/cli/commands/get_document_data.py` и `library/pipelines/testitem/cli.py`, устранив замечания `ruff` (I001/F821) и покрыв изменения unit-тестами.
+3. Обновить `tests/unit/scripts/test_run_tests_script_renamed.py` и сопутствующие smoke-инструкции так, чтобы отчёты удалялись даже при раннем выходе pytest.
 
 ### Среднесрочные (PR2)
-4. Вынести профилировщик активностей в модуль без модификации `sys.path`, предоставить лёгкие заглушки вместо полного `pandas`.
-5. Настроить `ruff --fix`/`mypy` в CI с публикацией отчётов и остановкой при `success_rate < 95%`.
+4. Добавить `TYPE_CHECKING`-импорты для `pandera` в схемах (`library/schemas/activities.py` и связанные модули), подключить stubs и сократить ключевые ошибки `mypy --strict`.
+5. Настроить автоматический прогон `ruff --fix`/`mypy` в CI после подготовки dev-зависимостей и публиковать отчёты в `reports/`.
 
 ### Долгосрочные (PR3)
-6. Добавить артефакт версионирования `.meta` для пайплайна и отразить статус CI в документации.
-7. Сократить остаточные линтер-замечания (включая `B039`, `UP037/UP038`) и покрыть профилировщик smoke-тестом.
+6. Пересмотреть зависимость профилировщика от ручных правок `sys.path`, вынести лёгкий модуль профилирования без тяжёлых пакетов.
+7. Внедрить артефакт версионирования `.meta` и отобразить статус CI в документации, чтобы разработчики видели актуальные результаты smoke-проверок.
 
 ## Регламент обновления отчёта
 - **Ответственный:** QA-инженер проекта.
