@@ -77,6 +77,7 @@ def _chembl_library() -> Any:
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
 _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
+_MISSING_IDENTIFIER_STATS_SAMPLE_SIZE = 100
 _DUPLICATE_IDENTIFIER_LOG_SAMPLE_SIZE = 10
 _PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
 _DEFAULT_TABLE_NAME = "testitem"
@@ -1124,6 +1125,7 @@ def run_testitem_pipeline(
 
     requested_ids: Sequence[str] = ()
     missing_ids: list[str] = []
+    missing_identifier_summary_logged = False
     input_csv = Path(options.input_csv)
     output_csv = Path(options.output_csv) if options.output_csv is not None else None
     offset = options.offset if options.offset is not None else cfg.testitem.offset
@@ -1210,6 +1212,7 @@ def run_testitem_pipeline(
 
         def _processed_chunks() -> Iterator[pd.DataFrame]:
             nonlocal rows_counter
+            nonlocal missing_identifier_summary_logged
             try:
                 for chunk in chunk_iter:
                     rows_counter += len(chunk)
@@ -1281,6 +1284,7 @@ def run_testitem_pipeline(
             missing_ids.extend(requested_unique[key] for key in missing_keys)
             if missing_ids:
                 _emit_missing_identifier_logs(missing_ids)
+                missing_identifier_summary_logged = True
                 placeholder = pd.DataFrame({"molecule_chembl_id": list(missing_ids)})
                 rows_counter += len(placeholder)
                 yield placeholder
@@ -1310,6 +1314,9 @@ def run_testitem_pipeline(
             )
         except TestitemPipelineStageError as exc:
             return exc.code, None
+
+    if missing_ids and not missing_identifier_summary_logged:
+        _log_missing_identifier_summary(missing_ids)
 
     if limit is not None:
         logger.info("process_limit", limit=min(limit, rows_counter))
@@ -1729,6 +1736,9 @@ def finalize_output(
     rows_dropped = rows_total - rows_written
     parent_stats = parent_stats_supplier()
     missing_ids_tuple = tuple(missing_ids or ())
+    missing_ids_sample = list(
+        missing_ids_tuple[: _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE]
+    ) if missing_ids_tuple else []
 
     stats: Stats = {
         "rows_total": rows_total,
@@ -1778,8 +1788,16 @@ def finalize_output(
     )
 
     if missing_ids_tuple:
-        stats["missing_molecule_ids"] = list(missing_ids_tuple)
+        stats["missing_ids_sample"] = missing_ids_sample
+        truncated_missing_ids = list(
+            missing_ids_tuple[: _MISSING_IDENTIFIER_STATS_SAMPLE_SIZE]
+        )
+        stats["missing_molecule_ids"] = truncated_missing_ids
         stats["missing_molecule_ids_count"] = len(missing_ids_tuple)
+        stats["missing_molecule_ids_total"] = len(missing_ids_tuple)
+        stats["missing_molecule_ids_truncated"] = (
+            len(truncated_missing_ids) < len(missing_ids_tuple)
+        )
     if parent_stats.failed_ids:
         stats["parent_lookup_failed_ids"] = list(parent_stats.failed_ids)
         stats["parent_lookup_failed_count"] = len(parent_stats.failed_ids)

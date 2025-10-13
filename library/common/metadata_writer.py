@@ -52,6 +52,9 @@ class Stats(_StatsRequired, total=False):
     pubchem_fallback_applied: bool
     missing_molecule_ids: list[str]
     missing_molecule_ids_count: int
+    missing_molecule_ids_total: int
+    missing_molecule_ids_truncated: bool
+    missing_ids_sample: list[str]
     chunk_fetch_failure_chunks: int
     chunk_fetch_failure_ids: list[str]
     chunk_fetch_failure_ids_total: int

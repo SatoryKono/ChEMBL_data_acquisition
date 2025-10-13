@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import yaml
 
 from library.common.csv_utils import sha256_file, write_csv_deterministic
 from library.pipelines.testitem import cli, enrichment
@@ -137,3 +138,61 @@ def test_testitem_pipeline_e2e__finalize_stage_idempotent(
 
     final_frame = pd.read_csv(dataset_path)
     assert list(final_frame["molecule_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
+
+
+@pytest.mark.e2e
+def test_testitem_pipeline_e2e__metadata_records_missing_id_summary(
+    tmp_path: Path,
+    sample_input_csv: Path,
+    cfg,
+) -> None:
+    cfg.system.doc_quality.enable = False
+
+    chunk = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    parent_stats = ParentLookupStats(
+        source="lookup",
+        missing=0,
+        unique=1,
+        attached=1,
+        uncovered=0,
+    )
+
+    missing_ids = [f"CHEMBL{i}" for i in range(1, 135)]
+
+    output_path = tmp_path / "metadata.csv"
+    result = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=lambda: parent_stats,
+        input_csv=sample_input_csv,
+        missing_ids=missing_ids,
+        emit_legacy_artifacts=True,
+    )
+
+    if isinstance(result, tuple):
+        exit_code, artifacts = result
+        dataset_path = Path(artifacts.dataset)
+    else:  # pragma: no cover - defensive guard
+        exit_code = result
+        dataset_path = output_path
+
+    assert exit_code == 0
+
+    legacy_meta = Path(f"{dataset_path}.legacy.meta.yaml")
+    assert legacy_meta.exists()
+
+    metadata = yaml.safe_load(legacy_meta.read_text(encoding="utf-8"))
+    assert isinstance(metadata, dict)
+    stats_block = metadata.get("stats", {})
+    assert isinstance(stats_block, dict)
+
+    assert stats_block["missing_molecule_ids_total"] == len(missing_ids)
+    assert stats_block["missing_molecule_ids_count"] == len(missing_ids)
+    assert stats_block["missing_molecule_ids_truncated"] is True
+    assert stats_block["missing_molecule_ids"] == missing_ids[
+        : cli._MISSING_IDENTIFIER_STATS_SAMPLE_SIZE
+    ]
+    assert stats_block["missing_ids_sample"] == missing_ids[
+        : cli._MISSING_IDENTIFIER_LOG_SAMPLE_SIZE
+    ]

@@ -216,3 +216,72 @@ def test_emit_missing_identifier_logs__skips_empty(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(cli.logger, "info", unexpected)
 
     cli._emit_missing_identifier_logs([])
+
+
+@pytest.mark.unit
+def test_finalize_output__records_missing_identifier_stats(
+    tmp_path: Path,
+    sample_input_csv: Path,
+    cfg,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from library.config import Config
+    from library.pipelines.testitem.catalog import ParentLookupStats
+
+    cli = _cli()
+
+    assert isinstance(cfg, Config)
+    cfg.system.doc_quality.enable = False
+
+    chunk = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    parent_stats = ParentLookupStats(
+        source="lookup",
+        missing=0,
+        unique=1,
+        attached=1,
+        uncovered=0,
+    )
+
+    missing_ids = [f"CHEMBL{i}" for i in range(1, 12)]
+    info_events: list[tuple[str, dict[str, object]]] = []
+
+    def capture_info(*args: object, **fields: object) -> None:
+        if not args:
+            return
+        event = str(args[0])
+        payload = dict(fields)
+        if len(args) > 1:
+            payload.setdefault("args", tuple(args[1:]))
+        info_events.append((event, payload))
+
+    monkeypatch.setattr(cli.logger, "info", capture_info)
+    monkeypatch.setattr(cli, "_MISSING_IDENTIFIER_STATS_SAMPLE_SIZE", 5)
+
+    output_path = tmp_path / "stats.csv"
+    result = cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=lambda: parent_stats,
+        input_csv=sample_input_csv,
+        missing_ids=missing_ids,
+    )
+
+    if isinstance(result, tuple):
+        exit_code, _artifacts = result
+    else:  # pragma: no cover - defensive guard
+        exit_code = result
+
+    assert exit_code == 0
+
+    stats_payload = next(
+        fields for event, fields in info_events if event == "testitem_stats"
+    )
+
+    assert stats_payload["missing_molecule_ids_total"] == len(missing_ids)
+    assert stats_payload["missing_molecule_ids_truncated"] is True
+    assert stats_payload["missing_molecule_ids"] == missing_ids[:5]
+    assert stats_payload["missing_ids_sample"] == missing_ids[
+        : cli._MISSING_IDENTIFIER_LOG_SAMPLE_SIZE
+    ]
+    assert stats_payload["missing_molecule_ids_count"] == len(missing_ids)
