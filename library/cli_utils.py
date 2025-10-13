@@ -20,7 +20,7 @@ import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import Literal, NamedTuple, TypedDict, cast
 
 import numpy as np
 import pandas as pd
@@ -93,11 +93,15 @@ class _ParquetChunkStore:
     the optional parquet engines are unavailable in the runtime environment.
     """
 
-    __slots__ = ("_tmpdir", "_paths", "_row_count", "_backend")
+    class _Chunk(NamedTuple):
+        path: Path
+        kind: Literal["parquet", "pickle"]
+
+    __slots__ = ("_tmpdir", "_chunks", "_row_count", "_backend")
 
     def __init__(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory(prefix="pipeline_chunks_")
-        self._paths: list[Path] = []
+        self._chunks: list[_ParquetChunkStore._Chunk] = []
         self._row_count = 0
         self._backend = "parquet"
 
@@ -129,13 +133,14 @@ class _ParquetChunkStore:
         if not isinstance(frame, pd.DataFrame):
             raise TypeError("chunk store expects pandas DataFrame inputs")
 
-        base_path = Path(self._tmpdir.name) / f"chunk_{len(self._paths):05d}"
+        base_path = Path(self._tmpdir.name) / f"chunk_{len(self._chunks):05d}"
 
         path: Path
 
         if self._backend == "pickle":
             path = base_path.with_suffix(".pkl")
             self._write_pickle(frame, path)
+            kind = "pickle"
         else:
             path = base_path.with_suffix(".parquet")
             try:
@@ -153,23 +158,26 @@ class _ParquetChunkStore:
                 self._backend = "pickle"
                 path = base_path.with_suffix(".pkl")
                 self._write_pickle(frame, path)
+                kind = "pickle"
+            else:
+                kind = "parquet"
 
-        self._paths.append(path)
+        self._chunks.append(self._Chunk(path=path, kind=kind))
         self._row_count += len(frame)
 
     def iter_frames(self) -> Iterator[pd.DataFrame]:
-        for path in self._paths:
-            if path.suffix == ".pkl":
-                yield pd.read_pickle(path)
+        for chunk in self._chunks:
+            if chunk.kind == "pickle":
+                yield pd.read_pickle(chunk.path)
             else:
-                yield pd.read_parquet(path)
+                yield pd.read_parquet(chunk.path)
 
     @property
     def row_count(self) -> int:
         return self._row_count
 
     def cleanup(self) -> None:
-        self._paths.clear()
+        self._chunks.clear()
         self._tmpdir.cleanup()
 
 
