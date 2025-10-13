@@ -260,3 +260,71 @@ def test_main__skip_stage_has_no_warning(
     assert executed
     assert "testitem" not in executed
     assert not any(record.levelno >= logging.WARNING for record in caplog.records)
+
+
+@pytest.mark.unit
+def test_guard_cli_module__prefers_repository(monkeypatch, tmp_path) -> None:
+    """Ensure the CLI guard loads the repository ``library`` package."""
+
+    fake_site = tmp_path / "site"
+    project_root = Path(__file__).resolve().parents[2]
+
+    package_dir = fake_site / "library"
+    package_dir.mkdir(parents=True)
+    marker_file = package_dir / "library_stub_imported.txt"
+    (package_dir / "__init__.py").write_text(
+        "from pathlib import Path\n"
+        "marker = Path(__file__).with_name('library_stub_imported.txt')\n"
+        "marker.write_text('stub-package')\n",
+        encoding="utf-8",
+    )
+
+    bootstrap_dir = package_dir / "bootstrap"
+    bootstrap_dir.mkdir()
+    (bootstrap_dir / "__init__.py").write_text(
+        "from pathlib import Path\n"
+        "marker = Path(__file__).resolve().parent.parent / 'library_stub_imported.txt'\n"
+        "if not marker.exists():\n"
+        "    marker.write_text('stub-bootstrap')\n"
+        "def ensure_project_root(origin=None):\n"
+        "    return Path(__file__).resolve().parent.parent\n",
+        encoding="utf-8",
+    )
+
+    original_import_module = importlib.import_module
+    import_calls: list[tuple[str, list[str]]] = []
+
+    def spying_import(name: str, package: str | None = None):
+        if name.startswith("library"):
+            import_calls.append((name, list(sys.path)))
+            if name == "library.cli.commands.get_data":
+                module = types.ModuleType(name)
+                sys.modules[name] = module
+                return module
+        return original_import_module(name, package)
+
+    monkeypatch.setattr(importlib, "import_module", spying_import)
+
+    remaining_paths = [
+        entry
+        for entry in sys.path
+        if Path(entry).resolve() not in {project_root, fake_site.resolve()}
+    ]
+    monkeypatch.setattr(
+        sys,
+        "path",
+        [str(fake_site), str(project_root)] + remaining_paths,
+        raising=False,
+    )
+
+    for name in list(sys.modules):
+        if name == "library" or name.startswith("library."):
+            del sys.modules[name]
+    sys.modules.pop("scripts.get_data", None)
+
+    import scripts.get_data  # noqa: F401  - imported for side effects
+
+    assert import_calls, "expected library imports to occur"
+    first_call = import_calls[0]
+    assert Path(first_call[1][0]).resolve() == project_root
+    assert not marker_file.exists()
