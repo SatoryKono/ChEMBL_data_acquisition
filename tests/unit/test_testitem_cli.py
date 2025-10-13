@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -35,6 +36,31 @@ def _stub_parent_stats() -> ParentLookupStats:
         attached=0,
         uncovered=0,
     )
+
+
+@pytest.mark.unit
+def test_requested_ids_snapshot_cleanup__defers_permission_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Cleanup should defer removal gracefully when files are locked."""
+
+    target = tmp_path / "chembl_requested_ids_locked"
+    target.write_text("data", encoding="utf-8")
+
+    registered: list[Path] = []
+
+    def _fake_remove(path: str | os.PathLike[str]) -> None:
+        raise PermissionError("locked")
+
+    def _fake_register_retry(path: Path) -> None:
+        registered.append(path)
+
+    monkeypatch.setattr(testitem_cli.os, "remove", _fake_remove)
+    monkeypatch.setattr(testitem_cli, "_register_cleanup_retry", _fake_register_retry)
+
+    testitem_cli.RequestedIdsSnapshot._cleanup_path(target)
+
+    assert registered == [target]
 
 
 @pytest.mark.unit

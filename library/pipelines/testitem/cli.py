@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import os
 import sys
 import tempfile
@@ -93,6 +94,27 @@ RAW_INDEX_COLUMN = "raw.index"
 _REQUESTED_IDENTIFIER_LOG_SAMPLE_SIZE = 10
 _REQUESTED_IDENTIFIER_DUPLICATE_SAMPLE_SIZE = 10
 _REQUESTED_IDENTIFIER_DUPLICATE_TRACK_LIMIT = 2048
+
+
+def _register_cleanup_retry(path: Path) -> None:
+    """Attempt to remove ``path`` during interpreter shutdown."""
+
+    def _retry_remove() -> None:
+        try:
+            path.unlink(missing_ok=True)
+        except FileNotFoundError:  # pragma: no cover - defensive
+            return
+        except PermissionError as exc:  # pragma: no cover - best effort on Windows
+            try:
+                logger.warning(
+                    "requested_identifier_cleanup_failed",
+                    path=str(path),
+                    error=str(exc),
+                )
+            except Exception:
+                pass
+
+    atexit.register(_retry_remove)
 
 
 class RequestedIdsSnapshot(Sequence[str]):
@@ -240,6 +262,13 @@ class RequestedIdsSnapshot(Sequence[str]):
             os.remove(path)
         except FileNotFoundError:
             pass
+        except PermissionError as exc:
+            logger.warning(
+                "requested_identifier_cleanup_deferred",
+                path=str(path),
+                error=str(exc),
+            )
+            _register_cleanup_retry(path)
 
 
 def ensure_raw_index_column(frame: pd.DataFrame) -> bool:
@@ -1669,7 +1698,14 @@ def finalize_output(
                 else:
                     missing_mask = pd.Series(True, index=chunk.index)
                 if missing_mask.any():
-                    fallback_candidates.append(chunk.loc[missing_mask].copy())
+                    candidate = chunk.loc[missing_mask].copy()
+                    if available_columns:
+                        candidate.loc[:, available_columns] = (
+                            candidate.loc[:, available_columns]
+                            .replace("", pd.NA)
+                            .astype("string")
+                        )
+                    fallback_candidates.append(candidate)
 
             chunk_path = staging_dir_path / f"chunk_{index:06d}.parquet"
             chunk.to_parquet(chunk_path, index=False)
