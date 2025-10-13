@@ -166,7 +166,10 @@ python scripts/run_tests.py
 
 Ensure the development dependency set is installed beforehand — run `make init`
 or `pip install -r requirements-dev.txt` so the required pytest plugins (for
-example, `pytest-json-report`) are available.
+example, `pytest-json-report`) are available. When the plugin is missing the
+test harness exits early with a friendly reminder that repeats the installation
+command, instead of attempting an automatic download that may fail in offline
+environments.
 
 The command executes the full pytest matrix with coverage, writes the structured
 log to `reports/test_report.json` and the Markdown summary to

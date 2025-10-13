@@ -175,7 +175,11 @@ attach the generated reports to the PR so reviewers can audit the exact pass
 rate without reproducing the run locally. Successful runs exit with status `0`,
 threshold breaches (success rate or coverage) return `1`, and report
 generation/validation issues return `11` so CI pipelines can distinguish
-environmental failures from quality regressions.
+environmental failures from quality regressions. If the mandatory
+`pytest-json-report` plugin is missing, the harness now stops immediately and
+prints a friendly reminder pointing to `pip install -r requirements-dev.txt`
+rather than attempting an on-the-fly installation that would fail without
+network access.
 
 Each invocation also keeps the raw pytest payload (`reports/pytest_raw_report.json`)
 next to the curated exports. When redirecting the aggregated outputs via
