@@ -254,7 +254,10 @@ def _ensure_base_path_env(args: Sequence[str], env: dict[str, str]) -> None:
 
 
 def _resolve_forward_base_path(
-    args: argparse.Namespace, forwarded_extras: Sequence[str]
+    args: argparse.Namespace,
+    forwarded_extras: Sequence[str],
+    *,
+    fallback: Path | str | None = None,
 ) -> Path:
     """Return the base path propagated to pipeline subprocesses."""
 
@@ -266,6 +269,15 @@ def _resolve_forward_base_path(
     config_path, cli_base_path = _resolve_config_location(tokens)
     if cli_base_path is not None:
         return cli_base_path
+
+    if fallback is None:
+        default_base_path = PROJECT_ROOT.resolve()
+    else:
+        default_base_path = Path(fallback).expanduser()
+        if not default_base_path.is_absolute():
+            default_base_path = (Path.cwd() / default_base_path).resolve()
+        else:
+            default_base_path = default_base_path.resolve()
 
     try:
         config = load_config(config_path, base_path=None)
@@ -280,7 +292,7 @@ def _resolve_forward_base_path(
             if output_path.is_absolute():
                 return output_path.resolve().parent
 
-    return _config_default_base_path()
+    return default_base_path
 
 
 def parse_args(
@@ -524,7 +536,7 @@ def _resolve_output_directory(
         extras = forward_args.tokens[
             forward_args.extras_start : forward_args.extras_end
         ]
-        base_path = _resolve_forward_base_path(args, extras)
+        base_path = _resolve_forward_base_path(args, extras, fallback=PROJECT_ROOT)
 
     return (base_path / candidate).resolve()
 
