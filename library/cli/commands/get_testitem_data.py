@@ -29,6 +29,7 @@ from library.cli.metadata import prepare_option
 from library.cli_utils import run_cli_command
 from library.clients import pubchem as pc  # noqa: F401 - patched in tests
 from library.common.log import logger
+from library.common.run_context import get_current
 from library.config import (
     ApiCfg,
     Config,
@@ -696,6 +697,13 @@ def _build_standard_outputs_from_path(
         emit_legacy_artifacts=False,
         pubchem_enabled=pubchem_enabled,
     )
+    context = get_current()
+    generated_at = None
+    if context is not None:
+        ctx_generated = getattr(context, "generated_at", None)
+        if isinstance(ctx_generated, str) and ctx_generated.strip():
+            generated_at = ctx_generated
+
     pipeline._write_primary_metadata(  # type: ignore[attr-defined]
         dataset_frame=dataset_frame,
         dataset_path=artifacts.dataset,
@@ -708,6 +716,7 @@ def _build_standard_outputs_from_path(
         pubchem_enabled=bool(pubchem_enabled)
         if pubchem_enabled is not None
         else None,
+        generated_at=generated_at,
     )
 
     return artifacts

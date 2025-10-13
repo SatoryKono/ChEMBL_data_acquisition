@@ -12,7 +12,6 @@ import weakref
 from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
-from datetime import datetime
 from functools import lru_cache
 from itertools import islice, tee
 from pathlib import Path
@@ -22,7 +21,7 @@ from types import MappingProxyType
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
-import yaml
+from library.common.run_context import get_current
 
 from library import io
 from library.clients import pubchem as pc
@@ -47,7 +46,6 @@ from library.config import (
 from library.integration.chembl_client import ChemblClient
 from library.orchestration import ETLContext
 from library.pipelines.assay.chembl_assay import TESTITEM_STRUCTURE_COLUMNS
-from library.project_version import get_pipeline_version
 from library.qa.reporting import build_table_quality_hook
 from library.qa.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
@@ -432,6 +430,24 @@ def _build_qc_summary(frame: pd.DataFrame) -> dict[str, Any]:
     return summary
 
 
+def _metadata_generated_at(candidate: str | None = None) -> str | None:
+    """Return the preferred ``generated_at`` timestamp for metadata files."""
+
+    if candidate:
+        stripped = str(candidate).strip()
+        if stripped:
+            return stripped
+
+    context = get_current()
+    if context is not None:
+        generated_at = getattr(context, "generated_at", None)
+        if isinstance(generated_at, str):
+            stripped = generated_at.strip()
+            if stripped:
+                return stripped
+    return None
+
+
 def _write_primary_metadata(
     *,
     dataset_frame: pd.DataFrame | None,
@@ -444,35 +460,40 @@ def _write_primary_metadata(
     stats: Mapping[str, object] | None,
     pubchem_enabled: bool | None,
     qc_summary: Mapping[str, object] | None = None,
+    generated_at: str | None = None,
 ) -> Path:
     """Persist the standard metadata sidecar next to ``dataset_path``."""
 
-    meta_path = dataset_path.with_suffix(".meta.yaml")
     outputs = [dataset_path.name, quality_path.name, correlation_path.name]
     canonical = table_name.lower()
     resolved_table = _TABLE_NAME_ALIASES.get(canonical, table_name)
     if resolved_table.lower() != _DEFAULT_OUTPUT_TABLE:
         resolved_table = _DEFAULT_OUTPUT_TABLE
 
-    metadata: dict[str, Any] = {
+    qc_payload = (
+        _build_qc_summary(dataset_frame)
+        if dataset_frame is not None
+        else dict(qc_summary or {"total_rows": 0})
+    )
+
+    metadata_payload: dict[str, Any] = {
         "table": resolved_table,
-        "generated_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
-        "pipeline_version": get_pipeline_version(),
         "date_tag": date_tag,
         "parameters": dict(parameters or {}),
         "sources": _resolve_metadata_sources(pubchem_enabled),
         "outputs": outputs,
-        "qc_summary": (
-            _build_qc_summary(dataset_frame)
-            if dataset_frame is not None
-            else dict(qc_summary or {"total_rows": 0})
-        ),
+        "qc_summary": qc_payload,
     }
     if stats:
-        metadata["pipeline_stats"] = dict(stats)
+        metadata_payload["pipeline_stats"] = dict(stats)
 
-    with meta_path.open("w", encoding="utf-8") as handle:
-        yaml.safe_dump(metadata, handle, sort_keys=False, allow_unicode=True)
+    meta_path = write_meta_yaml(
+        csv_path=dataset_path,
+        stats=dict(stats) if stats is not None else None,
+        extra_metadata=metadata_payload,
+        generated_at=_metadata_generated_at(generated_at),
+    )
+
     logger.info("[META] Метаданные сохранены: %s", meta_path)
     return meta_path
 
@@ -2073,6 +2094,7 @@ def finalize_output(
         stats=stats,
         pubchem_enabled=pubchem_augmentation_enabled,
         qc_summary=qc_summary,
+        generated_at=_metadata_generated_at(),
     )
 
     if not emit_legacy_artifacts:
