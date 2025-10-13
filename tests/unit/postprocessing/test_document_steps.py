@@ -4,10 +4,37 @@ import pandas as pd
 import pytest
 
 from library.postprocessing.documents.steps import (
+    derive_document_type,
     enrich_document_publication_year,
     finalize_document_records,
     normalize_document_fields,
 )
+
+
+@pytest.mark.unit
+def test_derive_document_type__uses_publication_class_when_missing_doc_type() -> None:
+    frame = pd.DataFrame({"publication_class": ["Journal Article", pd.NA]})
+
+    result = derive_document_type(frame)
+
+    assert result.loc[0, "doc_type"] == "Journal Article"
+    assert pd.isna(result.loc[1, "doc_type"])
+    assert result["doc_type"].dtype == "string"
+
+
+@pytest.mark.unit
+def test_derive_document_type__prioritises_external_provider_fields() -> None:
+    frame = pd.DataFrame(
+        {
+            "crossref.type": [pd.NA, "proceedings-article", pd.NA],
+            "openalex.typecrossref": ["dataset", pd.NA, pd.NA],
+            "pubmed.publicationtype": [pd.NA, pd.NA, ["Clinical Trial", "Review"]],
+        }
+    )
+
+    result = derive_document_type(frame)
+
+    assert result["doc_type"].tolist() == ["dataset", "proceedings-article", "Clinical Trial"]
 
 
 @pytest.mark.unit

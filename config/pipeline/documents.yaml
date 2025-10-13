@@ -7,6 +7,9 @@ enabled_steps:
     params:
       trim_whitespace: true
       normalise_unicode: true
+  - name: derive_document_type
+    callable: "library.postprocessing.documents.steps:derive_document_type"
+    description: "Populate doc_type using publication_class and provider metadata."
   - name: enrich_document_publication_year
     callable: "library.postprocessing.documents.steps:enrich_document_publication_year"
     description: "Backfill publication year using DOI lookups and heuristics."
