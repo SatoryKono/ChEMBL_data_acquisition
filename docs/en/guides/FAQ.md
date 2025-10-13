@@ -4,13 +4,13 @@ Frequently asked questions covering the most common pipeline failures and the
 corresponding remediation steps. The Russian counterpart lives at
 [`../../ru/guides/FAQ.md`](../../ru/guides/FAQ.md).
 
-## Why does `get_document_data` exit with "--mode is required"?
+## What happens if I omit `--mode` in `get_document_data`?
 
-`get_document_data` accepts a `--mode` flag (`chembl`, `pubmed`, `all`) and
-refuses to run without it. The parser eventually calls
-[`prepare_io_paths`](../../../library/cli/parser.py) which expects the mode to be set
-when building log messages. Supply `--mode` explicitly or use the positional
-alias (`python scripts/get_document_data.py all ...`).
+The command falls back to the combined `all` workflow. Explicitly pinning
+`--mode` (`chembl`, `pubmed`, or `all`) is still recommended when you want to run
+only a subset of the steps or highlight the intended behaviour in run logs. The
+positional alias (`python scripts/get_document_data.py all ...`) continues to
+work for backwards compatibility.
 
 ## I passed `--limit 0` and nothing happened. Is that expected?
 

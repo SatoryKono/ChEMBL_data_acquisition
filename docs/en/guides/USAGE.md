@@ -86,9 +86,12 @@ The full set of baseline and advanced flags is summarised in [USAGE.md](../USAGE
 
 ## Document pipeline (`python scripts/get_document_data.py`)
 
-Run the document workflow via the single entry point `python scripts/get_document_data.py --mode <chembl|pubmed|all>`. The `--mode`
-flag replaces the legacy positional sub-commands while keeping the common CLI
-arguments consistent with the other pipelines.
+Run the document workflow through the single entry point
+`python scripts/get_document_data.py`. When no mode is supplied the command
+defaults to the combined `all` run, but the `--mode <chembl|pubmed|all>` flag
+remains available to focus on a specific stage. The flag replaces the legacy
+positional sub-commands while keeping the common CLI arguments consistent with
+the other pipelines.
 
 ### Quick reference
 
@@ -148,6 +151,9 @@ Fallback DOI overrides:
 | `--fallback-doi-overwrite` | Disabled | Permit replacing existing DOIs with fallback values. |
 
 ### Example invocations
+
+The snippets below pin the mode explicitly for clarity. Omitting `--mode`
+executes the default `all` workflow.
 
 ```bash
 # ChEMBL-only export

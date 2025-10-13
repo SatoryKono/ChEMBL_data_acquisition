@@ -4,8 +4,9 @@ Common issues and remediation steps when running the pipelines.
 
 ## 1. CLI argument mistakes
 
-- Ensure `--mode` is provided for `get_document_data` and the `get_target_data`
-  subcommand is specified (`chembl`, `uniprot`, `iuphar`, `all`).
+- `get_document_data` defaults to `--mode all`; pin the flag when you intend to
+  run a single stage. `get_target_data` still requires an explicit subcommand
+  (`chembl`, `uniprot`, `iuphar`, `all`).
 - When combining orchestrator flags, remember that `--limit 0` disables a
   pipeline entirely.
 - Use absolute paths or `--base-path` with `--input-dir`/`--output-dir` to avoid
