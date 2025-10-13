@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pandas as pd
@@ -48,6 +49,54 @@ def test_normalize_target_fields__applies_taxonomy_and_identifier_normalization(
     # ensure the original dataframe was not mutated
     assert frame.loc[0, "target_chembl_id"] == "  chembl123  "
     assert frame.loc[1, "target_chembl_id"] is None
+
+
+@pytest.mark.unit
+def test_normalize_target_fields__derives_classifications_and_synonyms() -> None:
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1", "CHEMBL2"],
+            "protein_classifications": [
+                json.dumps(
+                    [
+                        {
+                            "protein_classification": {
+                                "pref_name": "Enzyme",
+                                "class_level": 1,
+                            }
+                        },
+                        {
+                            "protein_classification": {
+                                "pref_name": "Kinase family",
+                                "class_level": 2,
+                            }
+                        },
+                    ]
+                ),
+                "",
+            ],
+            "protein_class_pred_L1": [None, "Other Protein Target"],
+            "protein_class_pred_L2": [None, "Miscellaneous"],
+            "protein_synonym_list": ["Alpha|Beta", None],
+            "protein_name_canonical": ["Canonical A", "Canonical B"],
+            "protein_name_alt": ["AltA", None],
+            "pref_name": [" Alpha ", "Beta"],
+            "gene_symbol": ["GENA", None],
+            "gtop_synonyms": ["delta;epsilon", None],
+        }
+    )
+
+    result = normalize_target_fields(frame)
+
+    assert result["target_class"].tolist() == ["Enzyme", "Other Protein Target"]
+    assert result["protein_family"].tolist() == ["Kinase family", "Miscellaneous"]
+
+    chembl_tokens = result.loc[0, "chembl_synonyms"].split("|")
+    assert chembl_tokens == ["Alpha", "Beta", "Canonical A", "AltA", "GENA"]
+    assert result.loc[0, "gtopdb_synonyms"] == "delta|epsilon"
+
+    assert result.loc[1, "chembl_synonyms"] == "Canonical B|Beta"
+    assert pd.isna(result.loc[1, "gtopdb_synonyms"])
 
 
 @pytest.mark.unit
