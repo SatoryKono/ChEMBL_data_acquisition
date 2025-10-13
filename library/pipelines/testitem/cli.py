@@ -545,6 +545,19 @@ def _log_missing_identifier_summary(identifiers: Sequence[str]) -> None:
     )
 
 
+def _emit_missing_identifier_logs(identifiers: Sequence[str]) -> None:
+    """Emit warning and informational logs describing ``identifiers``."""
+
+    if not identifiers:
+        return
+
+    _log_missing_identifier_summary(identifiers)
+    logger.info(
+        "chembl_missing_identifiers_total",
+        count=len(identifiers),
+    )
+
+
 def integrate_missing_identifiers(
     df: pd.DataFrame,
     *,
@@ -1254,11 +1267,7 @@ def run_testitem_pipeline(
             missing_keys = [key for key in requested_unique if key not in fetched_ids]
             missing_ids.extend(requested_unique[key] for key in missing_keys)
             if missing_ids:
-                logger.warning(
-                    "chembl_missing_identifiers",
-                    count=len(missing_ids),
-                    identifiers=missing_ids,
-                )
+                _emit_missing_identifier_logs(missing_ids)
                 placeholder = pd.DataFrame({"molecule_chembl_id": list(missing_ids)})
                 rows_counter += len(placeholder)
                 yield placeholder

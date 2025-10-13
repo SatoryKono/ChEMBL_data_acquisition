@@ -11,6 +11,7 @@ metadata files.
 from __future__ import annotations
 
 import argparse
+import importlib
 import shlex
 import sys
 import tempfile
@@ -151,6 +152,18 @@ class _ParquetChunkStore:
     def cleanup(self) -> None:
         self._paths.clear()
         self._tmpdir.cleanup()
+
+
+def _detect_parquet_engine() -> str | None:
+    """Return the name of an available parquet engine if possible."""
+
+    for candidate in ("pyarrow", "fastparquet"):
+        try:
+            importlib.import_module(candidate)
+        except ImportError:
+            continue
+        return candidate
+    return None
 
 
 @dataclass(slots=True, frozen=True)
