@@ -11,6 +11,31 @@ env:
   PYTHONUNBUFFERED: "1"
 
 jobs:
+  install-py313:
+    name: Python 3.13 install smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install project without optional pyarrow
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+      - name: Assert optional parquet fallback
+        run: |
+          python - <<'PY'
+          import importlib.util
+          import io
+          from library.common.pandas_utils import read_csv_pyarrow
+
+          assert importlib.util.find_spec("pyarrow") is None, "pyarrow should be optional on Python 3.13"
+
+          frame = read_csv_pyarrow(io.StringIO("a,b\n1,2\n"))
+          assert list(frame.columns) == ["a", "b"], frame
+          PY
+
   make-smoke:
     name: Makefile smoke test
     runs-on: ubuntu-latest

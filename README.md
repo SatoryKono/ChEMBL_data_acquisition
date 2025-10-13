@@ -85,6 +85,18 @@ pip install --no-deps -e .
 > aborts early if the active `python` binary does not match, so you can enforce
 > the same runtime locally and in CI.
 
+### Python 3.13 compatibility
+
+`pyarrow` wheels are not yet published for Python 3.13. The dependency remains
+available for Python 3.11–3.12 via an environment marker, while installations on
+3.13 automatically skip it. `make init` therefore succeeds across supported
+interpreters without building Arrow from source. Pipelines that need the Parquet
+engine should install an alternative backend (for example,
+`pip install fastparquet`) or run under Python 3.12 until upstream wheels land.
+All CSV readers and JSON normalisers transparently fall back to the default
+NumPy-backed dtypes when neither `pyarrow` nor `fastparquet` is present, so the
+core workflows stay functional on Python 3.13.
+
 > ℹ️ Development dependencies in `pyproject.toml`, `requirements-dev.txt` and
 > `requirements-lock.txt` are updated together. This keeps local toolchains
 > reproducible: adjust the version bounds in the project metadata first, then

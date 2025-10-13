@@ -127,7 +127,7 @@ pre-commit==4.3.0
     # via chembl-data-acquisition (pyproject.toml)
 psutil==7.1.0
     # via chembl-data-acquisition (pyproject.toml)
-pyarrow==18.1.0
+pyarrow==18.1.0 ; python_version < "3.13"
     # via chembl-data-acquisition (pyproject.toml)
 pycparser==2.23
     # via cffi
