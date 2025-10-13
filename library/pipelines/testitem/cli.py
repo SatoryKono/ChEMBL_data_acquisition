@@ -1577,6 +1577,7 @@ def finalize_output(
                 ]
                 if available_columns:
                     pubchem_columns = chunk[available_columns].replace("", pd.NA)
+                    chunk.loc[:, available_columns] = pubchem_columns
                     key_columns = [
                         column
                         for column in _PUBCHEM_KEY_COLUMNS
