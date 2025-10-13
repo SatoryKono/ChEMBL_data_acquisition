@@ -374,7 +374,8 @@ languages:
 
 - Protocol (DOCX, bilingual source in Markdown): generated on demand via
   `scripts/convert_md_to_docx.py` into `docs/ChEMBL_Data_Acquisition_Protocol_v2.1.docx`
-  (distribution artefact, not tracked in git). Sources are
+  (distribution artefact, not tracked in git). Use `make protocol-docx` to
+  assemble the deliverable before publishing. Sources are
   [`docs/en/PROTOCOL_EN.md`](./docs/en/PROTOCOL_EN.md) and the synced Russian
   variant [`docs/ru/PROTOCOL_RU.md`](./docs/ru/PROTOCOL_RU.md).
 - Overview and table of contents: [`docs/en/README.md`](./docs/en/README.md),

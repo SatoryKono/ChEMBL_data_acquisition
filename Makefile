@@ -7,6 +7,9 @@ PIP := $(VENV)/bin/pip
 DEV_SENTINEL := $(VENV)/.dev-deps-installed
 ACTIVITY_LIMIT ?= 25
 
+DOC_PROTOCOL_SOURCES := docs/en/PROTOCOL_EN.md docs/ru/PROTOCOL_RU.md
+DOC_PROTOCOL_OUTPUT := docs/ChEMBL_Data_Acquisition_Protocol_v2.1.docx
+
 ENV_FILES := $(wildcard .env .env.local)
 ifneq ($(ENV_FILES),)
   include $(ENV_FILES)
@@ -62,3 +65,9 @@ clean:
 	rm -rf $(VENV) build dist .pytest_cache
 	find . -name '.mypy_cache' -prune -exec rm -rf {} +
 	find . -type d -name '__pycache__' -prune -exec rm -rf {} +
+
+.PHONY: protocol-docx
+protocol-docx: $(PYTHON_BIN)
+	$(PYTHON_BIN) scripts/convert_md_to_docx.py $(DOC_PROTOCOL_SOURCES) \
+	  -o $(DOC_PROTOCOL_OUTPUT) --number-sections --toc
+	@echo "DOCX artefact ready at $(DOC_PROTOCOL_OUTPUT) (git-ignored deliverable)."
