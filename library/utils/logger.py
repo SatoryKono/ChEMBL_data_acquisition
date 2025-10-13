@@ -11,7 +11,8 @@ __all__ = ["get_logger", "StructuredLogger"]
 
 
 _LOG_FORMAT = "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
-_LOG_DIR = Path("logs")
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_LOG_DIR = (_PROJECT_ROOT / "data" / "logs").resolve()
 
 
 def _format_value(value: Any) -> str:

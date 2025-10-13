@@ -24,7 +24,7 @@
 
 | Шаг | Функция | Назначение | Тип операции | Вход | Выход | Контрольные проверки |
 | --- | --- | --- | --- | --- | --- | --- |
-| **S01: Инициализация параметров** | `_init_request_params` | Формирование параметров REST-запросов. | Конфигурация | `config/acquisition.yaml` | Словарь, например:<br>`{"limit": 1000, "offset": 0, "fields": "activity_id,assay_chembl_id,document_chembl_id,molecule_chembl_id,standard_type,standard_value,standard_units,pchembl_value", "expand": True, "timeout": 30}` | Проверка обязательных ключей (`limit`, `fields`, `timeout`); логирование параметров в `logs/get_activity_data_{YYYYMMDD}.log`. |
+| **S01: Инициализация параметров** | `_init_request_params` | Формирование параметров REST-запросов. | Конфигурация | `config/acquisition.yaml` | Словарь, например:<br>`{"limit": 1000, "offset": 0, "fields": "activity_id,assay_chembl_id,document_chembl_id,molecule_chembl_id,standard_type,standard_value,standard_units,pchembl_value", "expand": True, "timeout": 30}` | Проверка обязательных ключей (`limit`, `fields`, `timeout`); логирование параметров в `data/logs/get_activity_data_{YYYYMMDD}.log`. |
 | **S02: Отправка запросов** | `_fetch_page` | Получение страниц данных из ChEMBL. | REST-запрос | Endpoint `/chembl/api/data/activity`; параметры limit/offset/fields/expand; заголовок `Content-Type: application/json`. | JSON-страница с блоками `page_meta` и `activities`. | Статус HTTP 200; наличие `page_meta` и `activities`; повтор при `HTTP 429`, `ReadTimeout`, `ChunkedEncodingError`. |
 | **S03: Обработка ответов** | `_validate_response` | Проверка и нормализация данных страницы. | Фильтрация и валидация | JSON-ответ | DataFrame валидных записей | Проверка обязательных полей (`activity_id`, `assay_chembl_id`, `standard_value`); устранение дубликатов по `activity_id`. |
 | **S04: Агрегация и проверка полноты** | `_collect_all_batches` | Итерация по пагинации до полного набора. | Пагинация и объединение | Параметры запроса + функция `_fetch_page` | Единый DataFrame | Сопоставление `total_count` из API с числом строк; контроль уникальности `activity_id`. |
@@ -49,7 +49,7 @@
 
 ### 7. Логирование и кэширование
 
-- Логи: `logs/get_activity_data_{YYYYMMDD}.log` с уровнями `INFO`, `WARNING`, `ERROR`.
+- Логи: `data/logs/get_activity_data_{YYYYMMDD}.log` с уровнями `INFO`, `WARNING`, `ERROR`.
 - Кэш страниц: `cache/chembl_activity_{offset}.pkl`, срок хранения 7 дней.
 
 ### 8. Возможные узкие места и рекомендации

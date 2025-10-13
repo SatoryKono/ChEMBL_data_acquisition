@@ -21,8 +21,8 @@
 
 - Upload `reports/test_report.json` and `reports/test_summary.md` from every CI run.
 - When smoke pipelines are enabled, archive output CSVs and metadata for manual QA.
-- Capture logs (`logs/*.log` by default; override with
-  `CHEMBL_DA_BASE_PATH=<base>` to use `<base>/logs`) to simplify debugging.
+- Capture logs (`data/logs/*.log` by default; override by setting
+  `CHEMBL_DA_BASE_PATH=<base>` to mirror under `<base>/logs`) to simplify debugging.
 
 ## Branching model
 

@@ -21,7 +21,7 @@
 
 - Загружайте `reports/test_report.json` и `reports/test_summary.md`.
 - При smoke-запуске архивируйте выходные CSV и метаданные.
-- Сохраняйте логи `logs/*.log` (по умолчанию) или `<base>/logs`, если задана
+- Сохраняйте логи `data/logs/*.log` (по умолчанию) или `<base>/logs`, если задана
   `CHEMBL_DA_BASE_PATH`, для диагностики.
 
 ## Ветвление

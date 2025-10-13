@@ -50,7 +50,7 @@ _DOMAIN_RESOURCES: dict[str, _DomainResources] = {
 SUPPORTED_TABLES: tuple[str, ...] = tuple(sorted(_DOMAIN_RESOURCES))
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_LOG_DIR: Path = (_PROJECT_ROOT / "logs").resolve()
+DEFAULT_LOG_DIR: Path = (_PROJECT_ROOT / "data" / "logs").resolve()
 LOG_DIR_ENV = "CHEMBL_POSTPROCESS_LOG_DIR"
 
 

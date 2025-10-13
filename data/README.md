@@ -17,7 +17,7 @@ have predictable fixtures and can understand how local artefacts are derived.
   recreate them on demand. Commit refreshed caches only when they are required
   for deterministic tests or tutorials, and include a short note in the commit
   that explains the regeneration.
-- `../logs/` – Checkpoints from sample ETL runs that illustrate the expected
+- `logs/` – Checkpoints from sample ETL runs that illustrate the expected
   console output and help troubleshoot regressions in the acquisition scripts.
   These files are updated manually when workflows or logging formats change.
 
