@@ -133,6 +133,12 @@ def save_metadata(
         },
     )
 
+    legacy_meta_path = dataset_path.with_suffix("").with_suffix(".meta.yaml")
+    if meta_path != legacy_meta_path:
+        if legacy_meta_path.exists():
+            legacy_meta_path.unlink()
+        meta_path = Path(meta_path).rename(legacy_meta_path)
+
     logger.info("[META] Метаданные сохранены: %s", meta_path)
     return meta_path
 
