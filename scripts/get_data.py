@@ -102,10 +102,10 @@ STAGES: tuple[Stage, ...] = (
 SCRIPTS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPTS_DIR.parent
 DATA_DIR = PROJECT_ROOT / "data"
-DEFAULT_INPUT_DIR = "data\\input"
-DEFAULT_OUTPUT_DIR = "data\\output"
-OUTPUT_DIR = DATA_DIR / DEFAULT_OUTPUT_DIR
-LOGS_DIR = PROJECT_ROOT / "data\\logs"
+DEFAULT_INPUT_DIR = Path("data") / "input"
+DEFAULT_OUTPUT_DIR = Path("data") / "output"
+OUTPUT_DIR = PROJECT_ROOT / DEFAULT_OUTPUT_DIR
+LOGS_DIR = DATA_DIR / "logs"
 _PUBCHEM_ENV_VAR = "CHEMBL_DA_PUBCHEM_ENABLE"
 _BASE_PATH_ENV_VAR = "CHEMBL_DA_BASE_PATH"
 
@@ -422,9 +422,9 @@ def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> Forwar
     #    base_path = _resolve_forward_base_path(args, forwarded_extras)
     #    forward.extend(["--base-path", str(base_path)])
     if not _has_option("--input-dir"):
-        forward.extend(["--input-dir", DEFAULT_INPUT_DIR])
+        forward.extend(["--input-dir", os.fspath(DEFAULT_INPUT_DIR)])
     if not _has_option("--output-dir"):
-        forward.extend(["--output-dir", DEFAULT_OUTPUT_DIR])
+        forward.extend(["--output-dir", os.fspath(DEFAULT_OUTPUT_DIR)])
     return ForwardArgs(tuple(forward), extras_start, extra_len)
 
 
