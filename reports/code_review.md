@@ -3,13 +3,13 @@
 1. **Tooling is blocked on Python 3.13.** `make lint` fails before any linter runs because the dev extra
    pulls in `types-pytest>=7.4.0.20241011`, but that stub package is not published for Python 3.13, so
    `pip install .[dev]` aborts and the virtualenv never finishes initialisation.【F:pyproject.toml†L32-L56】【2fed3f†L1-L40】
-2. **Runtime wheels are missing for `pyarrow` on Python 3.13.** A plain `pip install .` builds all other
-   dependencies successfully, then fails while compiling `pyarrow` because the project expects an
-   upstream Arrow C++ SDK. As long as wheels are unavailable, determinism tests and CLI smoke runs
-   cannot install the stack on current interpreters.【F:pyproject.toml†L19-L30】【12e39d†L1-L123】
-3. **Determinism checks remain red until the packaging issues above are fixed.** `python -m
-   scripts.check_determinism` now bootstraps correctly, but without `numpy` (because the installation
-   phase aborted) the command stops on `ModuleNotFoundError`, so CI cannot assert reproducibility.【F:scripts/check_determinism.py†L1-L28】【943311†L1-L25】
+2. **Runtime wheels were missing for `pyarrow` on Python 3.13 — mitigated.** The dependency is now
+   gated behind `python_version < "3.13"`, so `pip install .` succeeds on current interpreters without
+   compiling Arrow from source. A dedicated CI job exercises the fallback by installing the project on
+   Python 3.13 and confirming that the Pandas helpers operate without the optional backend.【F:pyproject.toml†L19-L45】【F:.github/workflows/ci.yml†L15-L46】
+3. **Determinism checks remain red until the remaining packaging issues are fixed.** `python -m
+   scripts.check_determinism` now proceeds past the Arrow install, but other missing wheels still
+   abort the run before importing `numpy`, so CI cannot assert reproducibility.【F:scripts/check_determinism.py†L1-L28】【943311†L1-L25】
 
 Previously reported blockers have been cleared: dictionary checksum drift was handled in
 PR #2304,【f9784d†L1-L10】 the activity CLI wrapper is now a thin bootstrap around the library module
@@ -36,8 +36,8 @@ we cannot measure retry latencies end-to-end.
 **Testing: 2/5.** pytest, determinism smoke checks and reports all depend on an environment that no
 longer resolves.
 
-**Docs: 2/5.** Quick start instructions still recommend `pip install .[dev]` without noting the Python
-version caveat, leading new contributors to a dead end.【F:README.md†L45-L79】
+**Docs: 2/5.** Quick start instructions now flag the Python 3.13 fallback path, but the broader dev
+environment guidance still assumes older interpreters.【F:README.md†L70-L103】
 
 # Findings by category
 
@@ -52,10 +52,10 @@ version caveat, leading new contributors to a dead end.【F:README.md†L45-L79�
   only ships wheels up to Python 3.12, so virtualenv creation fails on newer interpreters.【F:pyproject.toml†L32-L56】【2fed3f†L1-L40】
   Guard the dependency with an environment marker or replace it with a vendored stub set that supports
   3.13.
-- **`pyarrow` lacks prebuilt wheels for the advertised interpreter range.** Installing the project on
-  Python 3.13 triggers a source build that aborts because the Arrow C++ SDK is missing in the CI
-  image.【F:pyproject.toml†L19-L30】【12e39d†L1-L123】 Treat Arrow as optional on unsupported platforms or
-  publish wheels built against the required toolchain.
+- **`pyarrow` lacks prebuilt wheels for the advertised interpreter range — исправлено.** Установка на
+  Python 3.13 больше не пытается собрать Arrow из исходников: зависимость ограничена маркером
+  `python_version < "3.13"`, а smoke-тест в CI (`pip install .`) проверяет, что pandas-хелперы
+  корректно переключаются на NumPy-бэкенд при отсутствии `pyarrow`.【F:pyproject.toml†L19-L45】【F:.github/workflows/ci.yml†L15-L46】
 
 ## Quality
 
@@ -84,10 +84,10 @@ version caveat, leading new contributors to a dead end.【F:README.md†L45-L79�
 
 ## Docs
 
-- **Quick start guides new contributors into the failing install path.** README still recommends `pip
-  install .[dev]` without flagging the Python 3.13 incompatibility, so onboarding on up-to-date
-  interpreters fails silently.【F:README.md†L45-L79】【2fed3f†L1-L40】 Document the supported versions or
-  provide a workaround until wheels ship.
+- **Quick start guides new contributors into the failing install path — исправлено.** README
+  подчёркивает, что `pyarrow` доступен только для Python 3.11–3.12, а на Python 3.13 нужно полагаться
+  на fallback или установить альтернативный бэкенд (`fastparquet`). Это предотвращает бессмысленные
+  попытки собирать Arrow из исходников и описывает рабочую стратегию для новых разработчиков.【F:README.md†L60-L102】
 - **Dictionary checksum drift resolved — исправлено в PR #2304.** The manifest and allow-list now
   contain the refreshed SHA-256 variants observed on Windows runners.【f9784d†L1-L10】【F:config/dictionary/manifest.yaml†L1-L48】【F:config/dictionary/manifest.allowlist.yaml†L1-L46】
 
@@ -96,7 +96,7 @@ version caveat, leading new contributors to a dead end.【F:README.md†L45-L79�
 | Item | Effort | Impact | Owner | Proposed PR name | Acceptance criteria |
 | --- | --- | --- | --- | --- | --- |
 | Guard Python-version-specific stub packages in `pyproject.toml` | S | High | Platform | `build/fix-dev-extra-for-py313` | `make lint` completes on Python 3.13 without manual intervention |
-| Provide a Python 3.13-compatible Arrow wheel or mark `pyarrow` optional | M | High | Platform | `build/pyarrow-wheel-support` | `pip install .` succeeds on Python 3.13 and determinism smoke tests run |
+| Provide a Python 3.13-compatible Arrow wheel or mark `pyarrow` optional | M | High | Platform | `build/pyarrow-wheel-support` | ✅ Выполнено: `pip install .` проходит на Python 3.13 благодаря маркеру и smoke-тесту в CI |
 | Fail fast in determinism CLI when dependencies are missing | S | Med | Platform | `fix/determinism-install-diagnostics` | `python -m scripts.check_determinism` surfaces actionable guidance instead of `ModuleNotFoundError` |
 | Update quick start docs with supported interpreter guidance | S | Med | Docs | `docs/update-python-support-note` | README explains how to install on Python 3.13 or pins the expected version |
 
