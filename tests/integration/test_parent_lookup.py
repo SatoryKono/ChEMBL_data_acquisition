@@ -10,6 +10,7 @@ import pytest
 
 from library.config import MoleculeCatalogCfg
 from library.pipelines.testitem import catalog
+from scripts import get_testitem_data
 
 
 @pytest.fixture()
@@ -51,7 +52,7 @@ def hierarchy_lookup_parity(
         ]
 
         caplog.clear()
-        pipeline_mapping = pipeline_catalog.load_molecule_hierarchy_lookup(
+        pipeline_mapping = catalog.load_molecule_hierarchy_lookup(
             resolved_path,
             io_cfg=cfg.io,
             encoding=encoding,

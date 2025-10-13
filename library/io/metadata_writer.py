@@ -11,8 +11,7 @@ from typing import Any
 
 from dataclasses import asdict, is_dataclass
 
-import yaml
-
+from library.common.metadata_writer import write_meta_yaml
 from library.common.run_context import RunContext, get_current
 
 
@@ -107,29 +106,32 @@ def save_metadata(
     """Persist pipeline metadata for ``table_name`` outputs."""
 
     resolved_output_dir = Path(output_dir) if output_dir is not None else Path("data/output")
-    resolved_output_dir.mkdir(parents=True, exist_ok=True)
 
-    meta_path = resolved_output_dir / f"output.{table_name}_{date_tag}.meta.yaml"
+    dataset_path: Path
+    if artifacts:
+        dataset_path = Path(artifacts[0])
+    else:
+        resolved_output_dir.mkdir(parents=True, exist_ok=True)
+        dataset_path = resolved_output_dir / f"output.{table_name}_{date_tag}.csv"
 
     parameters = _serialise_parameters(args)
     outputs = _resolve_outputs(table_name, date_tag, artifacts=artifacts)
 
-    resolved_context = run_context
-    if resolved_context is None:
-        resolved_context = get_current()
+    resolved_context = run_context if run_context is not None else get_current()
+    generated_at = _resolve_generated_at(resolved_context)
 
-    meta: dict[str, Any] = {
-        "table": table_name,
-        "generated_at": _resolve_generated_at(resolved_context),
-        "pipeline_version": "2.1",
-        "parameters": parameters,
-        "sources": list(sources or []),
-        "outputs": outputs,
-        "qc_summary": dict(qc_summary or {}),
-    }
-
-    with meta_path.open("w", encoding="utf-8") as buffer:
-        yaml.safe_dump(meta, buffer, sort_keys=False, allow_unicode=True)
+    meta_path = write_meta_yaml(
+        csv_path=dataset_path,
+        generated_at=generated_at,
+        allow_nondeterministic_timestamp=True,
+        extra_metadata={
+            "table": table_name,
+            "parameters": parameters,
+            "sources": list(sources or []),
+            "outputs": outputs,
+            "qc_summary": dict(qc_summary or {}),
+        },
+    )
 
     logger.info("[META] Метаданные сохранены: %s", meta_path)
     return meta_path

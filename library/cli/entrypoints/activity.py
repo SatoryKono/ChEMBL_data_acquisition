@@ -37,7 +37,7 @@ from urllib.parse import urlsplit
 
 import pandas as pd
 import requests
-from pandera import DataFrameSchema
+from library._compat.pandera import pa
 
 import library.cli.logging as cli_logging
 from library import cli, io
@@ -1281,7 +1281,7 @@ class _ActivityPostprocessDeps:
     process_activity_extended: Callable[..., Path]
     run_activity_postprocess: Callable[..., tuple[pd.DataFrame, object]]
     validate_postprocess: Callable[..., pd.DataFrame]
-    activity_schema: DataFrameSchema
+    activity_schema: pa.DataFrameSchema
 
 
 def _load_activity_postprocess_deps() -> _ActivityPostprocessDeps:
