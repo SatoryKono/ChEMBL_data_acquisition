@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import pandera.pandas as pa
+from library._compat.pandera import pa
 
 AssayPostprocessSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {

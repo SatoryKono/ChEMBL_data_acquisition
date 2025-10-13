@@ -9,7 +9,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-import pandera.pandas as pa
+from library._compat.pandera import pa
 import yaml
 
 from config.paths import SCHEMA_DIR
