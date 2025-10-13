@@ -227,8 +227,9 @@ Pipeline promotions must follow a strict determinism check list:
 3. Immediately repeat the same command — or call
    `python scripts/check_determinism.py --no-dry-run` with the intended input —
    to produce a second export.
-4. Compare the resulting files (the helper computes SHA256 digests for CSVs and
-   `.meta.yaml` sidecars). Any mismatch indicates a determinism regression.
+4. Compare the resulting files (the helper computes SHA256 digests for CSVs and,
+   when emitted via `--emit-legacy-artifacts`, `.meta.yaml` sidecars). Any
+   mismatch indicates a determinism regression.
 5. In read-only environments rely on
    `python scripts/check_determinism.py --dry-run`. The helper hashes the
    combined stdout/stderr logs from two consecutive runs and prints
@@ -250,11 +251,15 @@ events while investigating discrepancies.
 | Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto` | Resolves tissue metadata, merges ontology cross-references and normalises synonyms for downstream joins. Run separately before `get_activity_data` when tissue lookups are required. |
 | Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --final-out output/cellline.csv --batch-size 20 --limit 100` | Retrieves ChEMBL cell line records, normalises nullable identifiers and enforces deterministic ordering. |
 | Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --column activity_id --batch-size 10 --workers 4 --dry-run` | Flags: identifier column overrides (`--column activity_id`), per-request limits (`--batch-size`, `--timeout`), range selection (`--limit`, `--offset`) and dry-run validation/workers toggles. |
-| Synthetic activities | `python scripts/get_activities.py --limit 25 --dry-run` | Generates deterministic dummy rows for smoke tests, writes `.meta.yaml` sidecars and cleans temporary files; accepts the same logging flags as other CLI tools. |
+| Synthetic activities | `python scripts/get_activities.py --limit 25 --dry-run` | Generates deterministic dummy rows for smoke tests, produces the canonical CSV + QA reports, and cleans temporary files; add `--emit-legacy-artifacts` to persist `.meta.yaml` sidecars. |
 
-Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar
-and table-quality reports under the same directory. The target pipeline also
-emits helper lookups named `organism.output.target_<stamp>.csv`,
+Each pipeline writes a deterministic dataset CSV together with
+`<name>_quality_report_table.csv` and `<name>_data_correlation_report_table.csv`
+under the same directory. Pass `--emit-legacy-artifacts` (or rely on
+`--debug`/`--keep-intermediate`, which imply it) to also persist the historical
+bundle: `<name>.meta.yaml`, `<name>.quality.json`, failure-case tables and
+post-processing manifests. The target pipeline additionally emits helper
+lookups named `organism.output.target_<stamp>.csv`,
 `isoform.output.target_<stamp>.csv`, `names.output.target_<stamp>.csv`, and
 `IUPHAR.output.target_<stamp>.csv` — all detailed in
 [`docs/en/OUTPUT_TARGETS.md`](./docs/en/OUTPUT_TARGETS.md) and
@@ -283,26 +288,29 @@ manifest exposes two top-level sections:
   disk and the per-table statistics returned by
   `finalise_csv_output`.【F:library/cli/commands/get_data.py†L1815-L1890】【F:library/reporting/run_manifest.py†L27-L117】
 
-Each successful step produces a trio of artefacts stored alongside the CSV:
+Each successful step produces three canonical CSV artefacts stored alongside
+the dataset:
 
-1. `<name>.meta.yaml` captures provenance (`command`, masked config fragment,
-   pipeline version), resolved inputs and table statistics such as
-   `rows_total`, `rows_kept`, `rows_dropped` and the SHA256 checksum of the
-   output.【F:library/common/metadata_writer.py†L69-L157】
-2. Optional `<name>.quality.json` contains structured QA findings when table
-   profilers are enabled.【F:library/reporting/run_manifest.py†L75-L117】
-3. The manifest entry merges the metadata by adding `output.meta_path`,
-   `output.meta_sha256`, `output.quality_path`, `output.quality_sha256` and a
-   `stats` block so downstream tooling can diff runs without opening the sidecar
-   files.【F:library/reporting/run_manifest.py†L117-L166】
+1. The validated dataset itself (`<name>.csv` or any custom stem passed to
+   `--final-out`) with deterministic ordering.
+2. `<name>_quality_report_table.csv` capturing row counts, missing values and
+   schema-level QA metrics.
+3. `<name>_data_correlation_report_table.csv` summarising numeric correlation
+   checks for selected fields.【F:library/io/output_writer.py†L97-L171】
+
+When `--emit-legacy-artifacts` is active (implicitly via `--debug` or
+`--keep-intermediate`), the writer also records `<name>.meta.yaml`,
+`<name>.quality.json` and failure-case tables for diagnostics. The manifest entry
+merges whichever artefacts exist by adding `output.*` paths, checksums and the
+`stats` block so downstream tooling can diff runs without opening individual
+files.【F:library/reporting/run_manifest.py†L75-L166】【F:library/cli_utils.py†L682-L705】【F:library/cli_utils.py†L1158-L1299】
 
 ```mermaid
 flowchart TD
-    A[Pipeline step\nCSV export] -->|finalise_csv_output| B[<name>.meta.yaml]
-    A -->|QA hook| C[<name>.quality.json]
-    A -->|hash + stats| D[run_<timestamp>.json]
-    B -->|merge_run_output| D
-    C -->|checksums| D
+    A[Pipeline step\nCSV export] -->|io.save_standard_outputs| B[Canonical CSVs]
+    B -->|register artefacts| D[run_<timestamp>.json]
+    A -->|--emit-legacy-artifacts| C[Legacy bundle\n(.meta.yaml, etc.)]
+    C -->|optional merge| D
     D -->|alias| E[reports/run_manifest.json]
 ```
 
@@ -342,14 +350,14 @@ the command with the same inputs produces byte-identical files.
 ### Deterministic exports and metadata policy
 
 All pipelines remain deterministic: running the same CLI twice with identical
-inputs produces byte-identical datasets, metadata, quality reports and
-correlation metrics. The standard bundle keeps the CSV, its `.meta.yaml`
-sidecar written via `io.save_metadata`, and the
+inputs produces byte-identical datasets, quality reports and correlation
+metrics. The standard bundle keeps the CSV and the
 `_quality_report_table.csv`/`_data_correlation_report_table.csv` companions.
-Historical diagnostics such as `.quality.json` summaries and failure-case CSVs
-remain opt-in via `--emit-legacy-artifacts`, `--debug` or `--keep-intermediate`.
-The metadata captures the column schema, hashes, git SHA and effective
-configuration so analysts can audit provenance on every run.
+Historical diagnostics — the `.meta.yaml` provenance snapshot, `.quality.json`
+payloads and failure-case CSVs — remain opt-in via `--emit-legacy-artifacts`,
+`--debug` or `--keep-intermediate`. When emitted, the metadata captures the
+column schema, hashes, git SHA and effective configuration so analysts can audit
+provenance on every run.【F:library/common/metadata_writer.py†L69-L204】
 
 Chunk-level fetch diagnostics written by ``ChunkFailureTracker`` keep
 ``chunk_fetch_failure_ids`` capped at the first 100 unique identifiers while
@@ -491,16 +499,17 @@ pipeline intentionally skips writing result files, so the script reports an
 inconclusive check (`Outputs not created; determinism check inconclusive`).
 Disable the flag with `--no-dry-run` when you need to compare real exports.
 
-For CLI-level sanity checks you can generate a small deterministic export and
-its metadata sidecar in a temporary directory:
+For CLI-level sanity checks you can generate a small deterministic export (add
+`--emit-legacy-artifacts` to persist metadata sidecars) in a temporary
+directory:
 
 ```bash
 python scripts/get_activities.py --limit 10 --final-out /tmp/activities.csv
 ```
 
-The resulting `/tmp/activities.csv` and `/tmp/activities.csv.meta.yaml` files
-should be byte-identical across repeated runs when using the same input and
-configuration.
+The resulting `/tmp/activities.csv` and, when requested, the
+`/tmp/activities.csv.meta.yaml` file should be byte-identical across repeated
+runs when using the same input and configuration.
 
 #### Pytest smoke marker
 

@@ -2,7 +2,7 @@
 
 *Версия:* 2.1 (октябрь 2025)
 *Репозиторий:* `SatoryKono/ChEMBL_data_acquisition`
-*Область применения:* сквозной ETL для документов, целей, биохимических анализов, тестовых объектов и активностей ChEMBL с детерминированными QA-сайдкарами.
+*Область применения:* сквозной ETL для документов, целей, биохимических анализов, тестовых объектов и активностей ChEMBL с детерминированными QA-таблицами и опциональными legacy-сайдкарами.
 *Статус:* утверждён для тестового контура (см. §7).
 
 > **Контроль изменений — CHEMBL-DM01**
@@ -143,7 +143,7 @@ flowchart LR
 
 - Делегирует в `library.cli.entrypoints.activity.ActivityPipelineCLI`.【F:library/cli/entrypoints/activity.py†L1879-L1966】
 - Флаги: `--input`, `--final-out`, `--batch-size`, `--timeout`, `--limit`, `--offset`, `--workers`, `--dry-run`.【F:library/cli/entrypoints/activity.py†L1888-L1934】
-- Применяет обогащение (`apply_activity_annotations`), расчёт границ (`compute_activity_bounds`), Pandera-валидацию (`validate_activities`) и создаёт QA-сайдкары.【F:library/cli/entrypoints/activity.py†L1216-L1448】
+- Применяет обогащение (`apply_activity_annotations`), расчёт границ (`compute_activity_bounds`), Pandera-валидацию (`validate_activities`) и формирует QA-таблицы; при `--emit-legacy-artifacts` добавляет sidecar-диагностику.【F:library/cli/entrypoints/activity.py†L1216-L1448】【F:library/cli_utils.py†L682-L705】【F:library/cli_utils.py†L1158-L1299】
 
 ### 4.7 Дополнительные справочники
 
@@ -157,7 +157,7 @@ flowchart LR
 | Компонент | Артефакты | Реализация |
 |-----------|-----------|------------|
 | Pandera-валидация | Проверка обязательных колонок, приведение типов, nullability. | `library/schemas/*.py`, `library/pipelines/*/validation.py`. |
-| Профилировщик таблиц | `<stem>_quality_report_table.csv`, `<stem>.quality.json`. | `library/qa/table_quality.py`, вызывается из CLI-хуков.【F:library/cli/entrypoints/activity.py†L1450-L1539】 |
+| Профилировщик таблиц | `<stem>_quality_report_table.csv`; `<stem>.quality.json` формируется при `--emit-legacy-artifacts`. | `library/qa/table_quality.py`, вызывается из CLI-хуков.【F:library/cli/entrypoints/activity.py†L1450-L1539】【F:library/cli_utils.py†L1158-L1299】 |
 | Метрики постобработки | `<stem>.postprocess.report.json` с числом строк, длительностью, статусом валидации. | `library/postprocessing/common/utils.py`.【F:library/postprocessing/common/utils.py†L180-L258】 |
 | Логирование | Структурированные JSON-события (`*_pipeline_done`, `quality_report_generated`). | `library/common/logging_setup.py`.【F:library/common/logging_setup.py†L1-L160】 |
 | Тестовый стенд | `reports/test_report.json`, `reports/test_summary.md`; успешность ≥95 %. | `scripts/run_tests.py`.【F:scripts/run_tests.py†L40-L160】 |
