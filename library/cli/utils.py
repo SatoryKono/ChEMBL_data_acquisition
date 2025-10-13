@@ -360,6 +360,16 @@ def run_cli_command(
 ) -> int:
     """Execute CLI boilerplate shared by data acquisition commands."""
 
+    debug_flag = bool(getattr(args, "debug", False))
+    keep_flag = bool(getattr(args, "keep_intermediate", False))
+    legacy_flag_raw = getattr(args, "emit_legacy_artifacts", False)
+    legacy_flag = bool(legacy_flag_raw)
+    if legacy_flag_raw is not legacy_flag:
+        args.emit_legacy_artifacts = legacy_flag
+    diagnostics_enabled = legacy_flag or debug_flag or keep_flag
+    if diagnostics_enabled != legacy_flag:
+        args.emit_legacy_artifacts = diagnostics_enabled
+
     level_candidate = getattr(args, "log_level", log_cfg.level)
     level = str(level_candidate).upper()
     if getattr(args, "verbose", False):

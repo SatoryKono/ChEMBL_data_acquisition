@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
+from library.cli import LoggerConfig
 from library.cli.pipeline_definition import PipelineDefinition
-from library.cli.utils import _PostprocessHandlers, run_pipeline
+from library.cli.utils import _PostprocessHandlers, run_cli_command, run_pipeline
 from library.postprocess.common import PostprocessingPipelineResult
 from library.reporting.run_manifest import PipelineOutputReport
 
@@ -51,6 +54,57 @@ def _writer_stub(
 
 def _fetcher_stub():  # pragma: no cover - helper
     yield pd.DataFrame({"id": [1]})
+
+
+@pytest.mark.unit
+def test_run_cli_command__debug_enables_legacy_outputs(tmp_path, monkeypatch):
+    parser = argparse.ArgumentParser(prog="activity")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("{}", encoding="utf-8")
+
+    logger = _LoggerStub()
+
+    monkeypatch.setattr("library.cli.utils.configure_logger", lambda cfg: logger)
+    monkeypatch.setattr("library.cli.utils.prepare_io_paths", lambda args: None)
+    monkeypatch.setattr(
+        "library.cli.utils.apply_config_overrides",
+        lambda *args, **kwargs: SimpleNamespace(),
+    )
+    monkeypatch.setattr("library.cli.utils.ensure_dirs", lambda cfg: None)
+
+    args = argparse.Namespace(
+        config=str(config_path),
+        log_level="info",
+        verbose=False,
+        run_id=None,
+        debug=True,
+        keep_intermediate=False,
+        emit_legacy_artifacts=0,
+        invocation=(parser.prog,),
+        base_path=None,
+        input_dir=None,
+        output_dir=None,
+        cache_dir=None,
+        input_csv=tmp_path / "input.csv",
+        output_csv=tmp_path / "output.csv",
+        final_out=tmp_path / "output.csv",
+        raw_out=None,
+        print_config=False,
+        date=None,
+    )
+
+    exit_code = run_cli_command(
+        args=args,
+        parser=parser,
+        log_cfg=LoggerConfig(level="INFO", run_id="run"),
+        mapping={},
+        run=lambda *_: 0,
+        logger=logger,
+    )
+
+    assert exit_code == 0
+    assert isinstance(args.emit_legacy_artifacts, bool)
+    assert args.emit_legacy_artifacts is True
 
 
 def test_run_pipeline__triggers_postprocessing_on_known_table(monkeypatch, tmp_path):
