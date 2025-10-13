@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import yaml
 
 
 def _cli():
@@ -141,15 +142,32 @@ def test_finalize_output__optional_column_present_in_later_chunk(
         no_parent=0,
     )
 
-    exit_code = cli.finalize_output(
+    missing_ids = [f"CHEMBL{i}" for i in range(1000, 1012)]
+
+    result = cli.finalize_output(
         [first_chunk, second_chunk],
         cfg=cfg,
         output=output_path,
         parent_stats_supplier=lambda: stats,
         input_csv=sample_input_csv,
+        missing_ids=missing_ids,
     )
 
+    if isinstance(result, tuple):
+        exit_code, artifacts = result
+    else:  # pragma: no cover - compatibility guard
+        exit_code, artifacts = result, None
+
     assert exit_code == 0
+
+    dataset_path = Path(artifacts.dataset) if artifacts is not None else output_path
+    meta_path = dataset_path.with_suffix(".meta.yaml")
+    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    stats_payload = metadata.get("pipeline_stats", {})
+    assert stats_payload.get("missing_ids_sample") == missing_ids[:10]
+    assert stats_payload.get("missing_molecule_ids") == missing_ids
+    assert stats_payload.get("missing_molecule_ids_truncated") is False
+    assert stats_payload.get("missing_molecule_ids_total") == len(missing_ids)
 
     optional_warnings = [
         fields for event, fields in warnings if event == "optional_columns_missing"
@@ -158,6 +176,6 @@ def test_finalize_output__optional_column_present_in_later_chunk(
         columns = payload.get("columns", [])
         assert "pref_name" not in columns
 
-    final = pd.read_csv(output_path)
+    final = pd.read_csv(dataset_path)
     assert "pref_name" in final.columns
     assert final.loc[1, "pref_name"] == "Example"

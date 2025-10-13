@@ -77,6 +77,7 @@ def _chembl_library() -> Any:
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
 _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
+_MISSING_IDENTIFIER_STATS_LIMIT = 100
 _PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
 _DEFAULT_TABLE_NAME = "testitem"
 RAW_INDEX_COLUMN = "raw.index"
@@ -1254,11 +1255,7 @@ def run_testitem_pipeline(
             missing_keys = [key for key in requested_unique if key not in fetched_ids]
             missing_ids.extend(requested_unique[key] for key in missing_keys)
             if missing_ids:
-                logger.warning(
-                    "chembl_missing_identifiers",
-                    count=len(missing_ids),
-                    identifiers=missing_ids,
-                )
+                _log_missing_identifier_summary(missing_ids)
                 placeholder = pd.DataFrame({"molecule_chembl_id": list(missing_ids)})
                 rows_counter += len(placeholder)
                 yield placeholder
@@ -1756,8 +1753,18 @@ def finalize_output(
     )
 
     if missing_ids_tuple:
-        stats["missing_molecule_ids"] = list(missing_ids_tuple)
-        stats["missing_molecule_ids_count"] = len(missing_ids_tuple)
+        missing_sample = list(
+            missing_ids_tuple[:_MISSING_IDENTIFIER_LOG_SAMPLE_SIZE]
+        )
+        truncated_missing = list(
+            missing_ids_tuple[:_MISSING_IDENTIFIER_STATS_LIMIT]
+        )
+        missing_total = len(missing_ids_tuple)
+        stats["missing_ids_sample"] = missing_sample
+        stats["missing_molecule_ids"] = truncated_missing
+        stats["missing_molecule_ids_total"] = missing_total
+        stats["missing_molecule_ids_truncated"] = len(truncated_missing) < missing_total
+        stats["missing_molecule_ids_count"] = missing_total
     if parent_stats.failed_ids:
         stats["parent_lookup_failed_ids"] = list(parent_stats.failed_ids)
         stats["parent_lookup_failed_count"] = len(parent_stats.failed_ids)
