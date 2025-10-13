@@ -197,21 +197,26 @@ def ensure_output_directories(
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    if COVERAGE_DIR.exists():
-        _clear_directory(COVERAGE_DIR)
-    COVERAGE_DIR.mkdir(parents=True, exist_ok=True)
-
-    if COVERAGE_HTML.exists():
-        _clear_directory(COVERAGE_HTML)
-    COVERAGE_HTML.mkdir(parents=True, exist_ok=True)
-
     raw_path = raw_report_file or RAW_REPORT_FILE
 
+    wipe_allowed_directories = {
+        COVERAGE_DIR.resolve(),
+        COVERAGE_HTML.resolve(),
+    }
+
     for path in (report_file, summary_file, raw_path):
+        if path.name in {"", ".", ".."}:
+            msg = f"Refusing to operate on ambiguous target path: {path!s}"
+            raise ValueError(msg)
+
         parent = path.parent
-        if parent not in {REPORTS_DIR, COVERAGE_DIR, COVERAGE_HTML} and parent.exists():
+        resolved_parent = parent.resolve()
+
+        if resolved_parent in wipe_allowed_directories and parent.exists():
             _clear_directory(parent)
+
         parent.mkdir(parents=True, exist_ok=True)
+
         if path.exists():
             try:
                 path.unlink()
@@ -220,6 +225,14 @@ def ensure_output_directories(
                 # at the target path. Removing directories is out of scope for
                 # this helper, but we still make sure the call does not crash.
                 pass
+
+    if COVERAGE_DIR.exists():
+        _clear_directory(COVERAGE_DIR)
+    COVERAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+    if COVERAGE_HTML.exists():
+        _clear_directory(COVERAGE_HTML)
+    COVERAGE_HTML.mkdir(parents=True, exist_ok=True)
 
 
 def _stream_process_output(process: subprocess.Popen[str]) -> None:
