@@ -11,7 +11,14 @@ from typing import Any
 
 import yaml
 
+from importlib.resources import files
+
 from config.paths import SCHEMA_DIR
+
+try:  # pragma: no cover - optional import for backwards compatibility
+    from config.schema import DOCUMENT_SCHEMA_RESOURCE
+except Exception:  # pragma: no cover - fallback if package not initialised
+    DOCUMENT_SCHEMA_RESOURCE = None
 from library._compat.pandera import pa
 
 
@@ -60,9 +67,7 @@ class DocumentDeclaration:
 def load_document_declaration(path: str | Path | None = None) -> DocumentDeclaration:
     """Load the document schema declaration from ``path``."""
 
-    schema_path = _resolve_schema_path(path)
-    with schema_path.open(encoding="utf-8") as handle:
-        raw_data = yaml.safe_load(handle) or {}
+    raw_data = _load_schema_mapping(path)
 
     groups_data = raw_data.get("groups", [])
     if not isinstance(groups_data, Sequence):
@@ -132,9 +137,24 @@ def load_document_declaration(path: str | Path | None = None) -> DocumentDeclara
     )
 
 
-def _resolve_schema_path(path: str | Path | None) -> Path:
+def _load_schema_mapping(path: str | Path | None) -> Mapping[str, Any]:
+    schema_path = _resolve_schema_path(path)
+    if hasattr(schema_path, "open") and not isinstance(schema_path, Path):
+        with schema_path.open("r", encoding="utf-8") as handle:
+            return yaml.safe_load(handle) or {}
+    with Path(schema_path).open(encoding="utf-8") as handle:
+        return yaml.safe_load(handle) or {}
+
+
+def _resolve_schema_path(path: str | Path | None):
     if path is None:
-        return SCHEMA_DIR / "document.yaml"
+        default_path = SCHEMA_DIR / "document.yaml"
+        if default_path.exists():
+            return default_path
+        resource = DOCUMENT_SCHEMA_RESOURCE
+        if resource is None:
+            resource = files("config.schema").joinpath("document.yaml")
+        return resource
     resolved = Path(path)
     if resolved.is_dir():
         resolved = resolved / "document.yaml"
