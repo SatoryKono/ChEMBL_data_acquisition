@@ -30,7 +30,15 @@ from library.table_quality import analyze_table_quality  # noqa: F401
 from library.validation import validate_testitems  # noqa: F401
 
 from . import enrichment as testitem_enrichment  # noqa: F401
-from .cli import TestitemPipelineOptions, run_testitem_pipeline
+from .cli import (
+    RAW_INDEX_COLUMN,
+    TestitemPipelineOptions,
+    _normalise_output_labels,
+    _extract_metadata_parameters,
+    _write_primary_metadata,
+    ensure_raw_index_column,
+    run_testitem_pipeline,
+)
 from .core import *  # noqa: F401,F403
 from .core import __all__ as _CORE_EXPORTS
 
@@ -43,10 +51,15 @@ __all__ = list(
             "TestitemPipelineOptions",
             "analyze_table_quality",
             "enrich",
+            "ensure_raw_index_column",
             "file_sha256",
             "logger",
             "pc",
             "pl",
+            "RAW_INDEX_COLUMN",
+            "_normalise_output_labels",
+            "_extract_metadata_parameters",
+            "_write_primary_metadata",
             "run_pipeline",
             "run_testitem_pipeline",
             "testitem_enrichment",

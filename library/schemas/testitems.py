@@ -12,6 +12,7 @@ PA_ANY = cast(DataType, None)
 
 TestitemsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
+        "raw.index": pa.Column(int, required=True, nullable=False, coerce=True),
         "molecule_chembl_id": pa.Column(str, required=True, nullable=True),
         "parent_molecule_chembl_id": pa.Column(str, required=False, nullable=True),
         "salt_chembl_id": pa.Column(str, required=False, nullable=True),

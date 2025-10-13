@@ -241,6 +241,16 @@ def test_run_chembl__builds_standard_outputs_when_missing_artifacts(
 ) -> None:
     dataset_path = tmp_path / "output.csv"
     source_frame = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    expected_frame = source_frame.copy()
+    expected_frame.insert(
+        0,
+        "raw.index",
+        pd.Series(
+            source_frame.index.to_numpy(dtype="int64", copy=False),
+            index=source_frame.index,
+            dtype="int64",
+        ),
+    )
     source_frame.to_csv(dataset_path, index=False)
 
     class FakeResult:
@@ -314,12 +324,16 @@ def test_run_chembl__builds_standard_outputs_when_missing_artifacts(
 
     assert exit_code == 0
     assert isinstance(args._testitem_artifacts, StandardOutputArtifacts)
-    pdt.assert_frame_equal(captured["qc_frame"], source_frame)
-    pdt.assert_frame_equal(captured["corr_frame"], source_frame)
-    pdt.assert_frame_equal(captured["save_dataset"], source_frame)
+    pdt.assert_frame_equal(captured["qc_frame"], expected_frame)
+    pdt.assert_frame_equal(captured["corr_frame"], expected_frame)
+    pdt.assert_frame_equal(captured["save_dataset"], expected_frame)
     pdt.assert_frame_equal(captured["save_corr"], pd.DataFrame({"metric": [0.5]}))
     pdt.assert_frame_equal(captured["save_quality"], pd.DataFrame({"metric": [1]}))
     assert captured["save_kwargs"]["output_path"] == dataset_path
+    raw_index = captured["save_dataset"]["raw.index"]
+    assert raw_index.is_monotonic_increasing
+    assert raw_index.is_unique
+    assert raw_index.tolist() == list(range(len(raw_index)))
 
 
 def test_run__skip_existing_without_force(

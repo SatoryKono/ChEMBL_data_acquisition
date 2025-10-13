@@ -76,6 +76,26 @@ _FETCH_ERROR_SAMPLE_SIZE = 10
 _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
 _PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
 _DEFAULT_TABLE_NAME = "testitem"
+RAW_INDEX_COLUMN = "raw.index"
+
+
+def ensure_raw_index_column(frame: pd.DataFrame) -> bool:
+    """Ensure ``frame`` contains the raw index column as the leading int64 field."""
+
+    if RAW_INDEX_COLUMN in frame.columns:
+        frame.loc[:, RAW_INDEX_COLUMN] = frame[RAW_INDEX_COLUMN].astype(
+            "int64", copy=False
+        )
+        return False
+
+    raw_index = pd.Series(
+        frame.index.to_numpy(dtype="int64", copy=False),
+        index=frame.index,
+        name=RAW_INDEX_COLUMN,
+        dtype="int64",
+    )
+    frame.insert(0, RAW_INDEX_COLUMN, raw_index)
+    return True
 
 
 _DEFAULT_METADATA_SOURCES = (
@@ -1158,6 +1178,7 @@ def finalize_output(
     rows_total = 0
     rows_written = 0
     exit_code = 0
+    next_raw_index = 0
     columns_seen: set[str] = set()
     columns_present: set[str] = set()
     columns_to_fill: set[str] = set()
@@ -1226,12 +1247,15 @@ def finalize_output(
 
     def _process_chunk(raw: pd.DataFrame) -> pd.DataFrame:
         nonlocal rows_total, rows_written, exit_code, columns_seen, failure_count
+        nonlocal next_raw_index
 
         rows_total += len(raw)
         current = normalizer(raw)
         if "pubchem_cid" in current.columns:
             current["pubchem_cid"] = current["pubchem_cid"].astype(object)
         current = _add_pipeline_metadata(current)
+        ensure_raw_index_column(current)
+        start_index = next_raw_index
         columns_present.update(current.columns)
         _ensure_column_alignment(current)
         for column in current.columns:
@@ -1266,6 +1290,27 @@ def finalize_output(
                 for row in validation.failure_cases.to_dict("records"):
                     failure_cases.add_error(row)
                     failure_count += 1
+
+        end_index = start_index + len(validated)
+        if RAW_INDEX_COLUMN in validated.columns:
+            validated.loc[:, RAW_INDEX_COLUMN] = pd.Series(
+                pd.RangeIndex(start_index, end_index),
+                index=validated.index,
+                dtype="int64",
+                name=RAW_INDEX_COLUMN,
+            )
+        else:
+            validated.insert(
+                0,
+                RAW_INDEX_COLUMN,
+                pd.Series(
+                    pd.RangeIndex(start_index, end_index),
+                    index=validated.index,
+                    dtype="int64",
+                    name=RAW_INDEX_COLUMN,
+                ),
+            )
+        next_raw_index = end_index
 
         rows_written += len(validated)
         return validated
@@ -1389,6 +1434,13 @@ def finalize_output(
     dataset_frame = dataset_frame.reindex(
         columns=ordered_columns + extra_columns,
         copy=False,
+    )
+    raw_index_added = ensure_raw_index_column(dataset_frame)
+    logger.info(
+        "raw_index_column_added",
+        column=RAW_INDEX_COLUMN,
+        rows=int(len(dataset_frame)),
+        inserted=raw_index_added,
     )
     export_column_order = list(dataset_frame.columns)
 
