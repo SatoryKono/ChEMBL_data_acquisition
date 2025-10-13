@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -297,6 +297,40 @@ def test_run__pubmed_timeout_override_updates_config(
     assert exit_code == 0
     assert recorded["pubmed"] == pytest.approx(25.0)
     assert recorded["api"] == pytest.approx(previous_api_timeout)
+
+
+def test_main__defaults_to_all_mode(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    captured: dict[str, object | None] = {}
+
+    def fake_run_cli_command(
+        *,
+        args: argparse.Namespace,
+        parser: argparse.ArgumentParser,
+        log_cfg: Any,
+        mapping: Mapping[str, str],
+        run: Callable[[Config, argparse.Namespace], int],
+        logger: Any,
+        **kwargs: Any,
+    ) -> int:  # noqa: ARG001
+        captured["mode"] = getattr(args, "mode", None)
+        captured["command"] = getattr(args, "command", None)
+        captured["mapping"] = dict(mapping)
+        return 0
+
+    monkeypatch.setattr(get_document_data, "run_cli_command", fake_run_cli_command)
+
+    input_csv = tmp_path / "document.csv"
+    input_csv.write_text("document_chembl_id\nCHEMBL1\n", encoding="utf-8")
+    output_csv = tmp_path / "documents.csv"
+
+    exit_code = get_document_data.main(
+        ["--input", str(input_csv), "--final-out", str(output_csv)]
+    )
+
+    assert exit_code == 0
+    assert captured["mode"] == "all"
+    assert captured["command"] == "all"
+    assert captured["mapping"]["column"].endswith("document.all.column")
 
 
 def test_run__all_mode_pubmed_timeout_option_updates_config(
