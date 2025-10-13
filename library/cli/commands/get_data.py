@@ -567,14 +567,14 @@ class PipelineRunConfig:
         """Return the fully resolved path for ``name`` in the output directory."""
 
         stem = self.output_stems[name]
-        stem_path = Path(stem)
+        stem_path = Path(stem).expanduser()
+        if stem_path.is_absolute():
+            stem_path = stem_path.resolve()
 
         # Allow overrides to provide explicit filenames (e.g. ``output.targets.csv``)
         # or nested locations. When the stem includes a suffix we treat it as a
         # concrete path instead of appending the canonical prefix/suffix.
         if stem_path.suffix:
-            if stem_path.is_absolute():
-                return stem_path
             # Treat explicit filenames that already include a CSV extension as
             # concrete targets.
             name_lower = stem_path.name.lower()
@@ -586,12 +586,25 @@ class PipelineRunConfig:
                     had_output_prefix = stripped_original.startswith("output.")
                     if had_output_prefix and not normalised_name.startswith("output."):
                         normalised_name = f"output.{normalised_name}".lstrip(".")
-                    return self.output_dir / stem_path.with_name(normalised_name)
-                return self.output_dir / stem_path
+                    candidate = self.output_dir / stem_path.with_name(normalised_name)
+                else:
+                    candidate = self.output_dir / stem_path
+            else:
+                candidate = self.output_dir / stem_path
+        else:
+            normalised = _normalise_output_stem(str(stem_path))
+            filename = f"output.{normalised}_{self.date_prefix}.csv"
+            candidate = self.output_dir / filename
 
-        normalised = _normalise_output_stem(str(stem_path))
-        filename = f"output.{normalised}_{self.date_prefix}.csv"
-        return self.output_dir / filename
+        candidate = candidate.resolve()
+        output_root = self.output_dir.resolve()
+        if not candidate.is_relative_to(output_root):
+            raise ValueError(
+                "resolved output path escapes the configured output directory; "
+                f"override for step {name!r} produced {candidate}, expected under {output_root}"
+            )
+
+        return candidate
 
     def subcommand_for(self, name: str) -> str | None:
         """Return the configured subcommand for ``name`` if available."""
