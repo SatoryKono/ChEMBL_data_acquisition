@@ -40,7 +40,7 @@ import requests
 from library._compat.pandera import pa
 
 import library.cli.logging as cli_logging
-from library import cli, io
+from library import cli, io, offline
 from library.cli import Logger, LoggerConfig, positive_int
 from library.cli import build_parser as base_parser
 from library.cli.activity_api import (
@@ -1409,793 +1409,808 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         encountered. Upstream API errors are logged and converted into a
         failure code by :func:`library.cli_utils.run_pipeline`.
     """
-    offset = getattr(args, "offset", 0)
-    workers_override = getattr(args, "workers", None)
-    configured_workers = (
-        workers_override
-        if workers_override is not None
-        else getattr(cfg.activity, "workers", 1)
-    )
-    final_out_attr = getattr(args, "final_out", None)
-    if final_out_attr in (None, argparse.SUPPRESS):
-        legacy_output = getattr(args, "output_csv", None)
-        if legacy_output not in (None, argparse.SUPPRESS):
-            if isinstance(legacy_output, str | Path):
-                output_path = Path(legacy_output)
+    offline_flag = offline.is_enabled(getattr(args, "offline", None))
+    args.offline = offline_flag
+    fixtures: offline.OfflineFixtures | None = None
+    if offline_flag:
+        try:
+            fixtures = offline.OfflineFixtures()
+        except FileNotFoundError as exc:
+            logger.error("activity_offline_fixtures_missing", error=str(exc))
+            return 1
+        logger.info("activity_offline_mode", base=str(fixtures.base_dir))
+    def _execute() -> int:
+        offset = getattr(args, "offset", 0)
+        workers_override = getattr(args, "workers", None)
+        configured_workers = (
+            workers_override
+            if workers_override is not None
+            else getattr(cfg.activity, "workers", 1)
+        )
+        final_out_attr = getattr(args, "final_out", None)
+        if final_out_attr in (None, argparse.SUPPRESS):
+            legacy_output = getattr(args, "output_csv", None)
+            if legacy_output not in (None, argparse.SUPPRESS):
+                if isinstance(legacy_output, str | Path):
+                    output_path = Path(legacy_output)
+                else:
+                    output_path = Path(str(legacy_output))
+                if not isinstance(legacy_output, Path):
+                    args.final_out = output_path
+                args.output_csv = output_path
             else:
-                output_path = Path(str(legacy_output))
-            if not isinstance(legacy_output, Path):
+                output_path = Path(
+                    io.default_output_path(
+                        args.input_csv,
+                        cfg.io,
+                        date=getattr(args, "date", None),
+                    )
+                )
+                args.final_out = output_path
+                args.output_csv = output_path
+        else:
+            output_path = (
+                Path(str(final_out_attr))
+                if not isinstance(final_out_attr, str | Path)
+                else Path(final_out_attr)
+            )
+            if not isinstance(final_out_attr, Path):
                 args.final_out = output_path
             args.output_csv = output_path
-        else:
-            output_path = Path(
-                io.default_output_path(
-                    args.input_csv,
-                    cfg.io,
-                    date=getattr(args, "date", None),
-                )
-            )
-            args.final_out = output_path
-            args.output_csv = output_path
-    else:
-        output_path = (
-            Path(str(final_out_attr))
-            if not isinstance(final_out_attr, str | Path)
-            else Path(final_out_attr)
-        )
-        if not isinstance(final_out_attr, Path):
-            args.final_out = output_path
-        args.output_csv = output_path
-
-    emit_legacy = bool(getattr(args, "emit_legacy_artifacts", False))
-
-    start_time = clock()
-
-    pre_context = prepare_activity_context(cfg, args, skip_read=True)
-    if pre_context is None:
-        return 1
-
-    limit = pre_context.limit
-
-    logger.info(
-        "activity_pipeline_start",
-        input=str(args.input_csv),
-        output=str(output_path),
-        workers=configured_workers,
-        limit=limit,
-        offset=offset,
-    )
-    logger.info(
-        "activity_pipeline_verbose",
-        input=str(args.input_csv),
-        output=str(output_path),
-        limit=limit,
-        offset=offset,
-        batch_size=cfg.activity.batch_size,
-        timeout=cfg.activity.timeout,
-        dry_run=cfg.activity.dry_run,
-        workers=configured_workers,
-    )
-
-    if cfg.activity.dry_run:
-        expected = limit if limit is not None else 0
-        logger.info("dry_run", limit=limit)
-        logger.info("activity_pipeline_dry_run", expected=expected)
-        _emit_completion_message(
-            output_path=output_path,
-            processed_rows=0,
-            duration_s=clock() - start_time,
-            mode="dry_run",
-        )
-        return 0
-
-    prepared_context = prepare_activity_context(cfg, args)
-    if prepared_context is None:
-        return 1
-
-    limit = prepared_context.limit
-    limited_ids = prepared_context.limited_ids
-    extended_output_path: Path | None = None
-    postprocess_metrics = None
-    postprocess_report_path: Path | None = None
-    postprocess_output_path: Path | None = None
-    dataset_path: Path | None = None
-    exit_code = 1
-
-    enrichment_cfg = cfg.activity_enrichment
-    extra_columns: list[str] = []
-    action_cfg = enrichment_cfg.action_type
-    configure_activity_schema(action_cfg.metrics)
-    if action_cfg.enabled or action_cfg.log_missing or action_cfg.log_distribution:
-        extra_columns.append(action_cfg.column)
-    extra_kwargs = {"extra_columns": extra_columns} if extra_columns else {}
-
-    _args_invocation(args)
-
-    failure_path = output_path.with_name(f"{output_path.stem}_failure_cases.csv")
-    fetch_failure_path = output_path.with_name(f"{output_path.stem}_fetch_failures.csv")
-
-    def _compute_bounds(frame: pd.DataFrame) -> pd.DataFrame:
-        return compute_activity_bounds(frame, cfg.activity_bounds)
-
-    def _apply_annotations(frame: pd.DataFrame) -> pd.DataFrame:
-        return apply_activity_annotations(
-            frame,
-            action_cfg=enrichment_cfg.action_type,
-            properties_cfg=enrichment_cfg.activity_properties,
-        )
-
-    def _ensure_required_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
-        missing = [
-            column
-            for column in _ACTIVITY_REQUIRED_COLUMNS
-            if column not in frame.columns
-        ]
-        if not missing:
-            return frame
-        logger.warning(
-            "activity_missing_columns",
-            missing=sorted(missing),
-        )
-        fillers: dict[str, pd.Series[Any]] = {}
-        for column in missing:
-            dtype_info = _ACTIVITY_REQUIRED_DTYPES.get(column)
-            python_type = getattr(dtype_info, "python_type", None)
-            dtype_text = str(dtype_info).lower() if dtype_info is not None else ""
-            if (
-                python_type in {float, int}
-                or "float" in dtype_text
-                or "int" in dtype_text
-            ):
-                fill_dtype = "Float64"
-            elif python_type is str:
-                fill_dtype = "string"
-            else:
-                fill_dtype = "object"
-            fillers[column] = pd.Series(pd.NA, index=frame.index, dtype=fill_dtype)
-        return frame.assign(**fillers)
-
-    available_columns: set[str] = set()
-    assay_src_lookup = _load_assay_src_lookup(cfg.resources.dictionary_dir)
-
-    def _record_columns(frame: pd.DataFrame) -> pd.DataFrame:
-        available_columns.update(frame.columns)
-        return frame
-
-    metadata_hooks = [
-        _ensure_required_activity_columns,
-        partial(_ensure_src_assay_id, lookup=assay_src_lookup),
-        _ensure_extended_activity_columns,
-        normalize_activities,
-        add_pipeline_metadata,
-        _compute_bounds,
-        _apply_annotations,
-        _record_columns,
-    ]
-
-    validators = [partial(validate_activities, return_result=True)]
-
-    streaming_stats = _StreamingCSVStatistics()
-    streamed_summary: dict[str, object] | None = None
-
-    def writer(
-        chunks: Iterable[pd.DataFrame],
-        destination: Path,
-        col_order: Sequence[str],
-        key_cols: Sequence[str],
-    ) -> Path:
-        sort_columns = list(key_cols) or sorted(col_order)
-        column_order = list(col_order)
-        filtered_order = [
-            column for column in column_order if column in available_columns
-        ]
-
-        drop_candidates = [
-            column
-            for column in _OUTPUT_ACTIVITY_DROP_COLUMNS
-            if column in available_columns
-        ]
-        if drop_candidates:
-            logger.info(
-                "Dropped columns from output.activity_*: %s",
-                ", ".join(drop_candidates),
-            )
-
-        whitelist_order = [
-            column
-            for column in filtered_order
-            if column not in _OUTPUT_ACTIVITY_DROP_COLUMNS
-        ]
-
-        def _stream_filtered_chunks() -> Iterator[pd.DataFrame]:
-            for chunk in chunks:
-                filtered_chunk, _ = _filter_activity_output_columns(
-                    chunk,
-                    column_order=filtered_order,
-                )
-                head = [
-                    column
-                    for column in whitelist_order
-                    if column in filtered_chunk.columns
-                ]
-                tail = sorted(
-                    column for column in filtered_chunk.columns if column not in head
-                )
-                if head or tail:
-                    ordered_chunk = filtered_chunk.reindex(
-                        columns=head + tail, copy=False
-                    )
-                else:
-                    ordered_chunk = filtered_chunk
-                streaming_stats.update(ordered_chunk)
-                yield ordered_chunk
-
-        filtered_chunks = _stream_filtered_chunks()
-
-        output_path = write_csv_chunks_deterministic(
-            filtered_chunks,
-            destination,
-            key_cols=sort_columns,
-            col_order=whitelist_order,
-            chunksize=cfg.io.csv_chunksize,
-            sort_chunksize=cfg.io.csv_chunksize,
-            sep=cfg.io.csv_sep,
-            encoding=cfg.io.csv_encoding,
-            cfg=cfg,
-        )
-        path_obj = Path(output_path)
-        if io.write_csv is not _ORIGINAL_IO_WRITE_CSV:
-            try:
-                io.write_csv(
-                    (),
-                    destination,
-                    cfg=cfg,
-                    key_cols=sort_columns,
-                    col_order=column_order,
-                    chunksize=cfg.io.csv_chunksize,
-                    sep=cfg.io.csv_sep,
-                    encoding=cfg.io.csv_encoding,
-                )
-            except Exception:  # pragma: no cover - defensive for patched writers
-                logger.debug(
-                    "Fallback CSV writer stub raised an exception; deterministic export succeeded and execution will continue."
-                )
-        return path_obj
-
-    doc_quality_cfg = cfg.system.doc_quality
-    if emit_legacy:
-        table_quality = build_table_quality_hook(
-            doc_quality_cfg,
-            table_name=Path(output_path).with_suffix(""),
-            destination=Path(output_path).parent,
-        )
-    else:
-
-        def _noop_table_quality(_: Path) -> None:
-            return None
-
-        table_quality = _noop_table_quality
-
-    def _persist_standard_outputs(dataset_csv: Path) -> io.StandardOutputArtifacts:
-        dataset_frame = pd.read_csv(
-            dataset_csv,
-            sep=cfg.io.csv_sep,
-            encoding=cfg.io.csv_encoding,
-        )
-        dataset_frame = _drop_empty_activity_columns(dataset_frame)
-        if "raw.index" not in dataset_frame.columns:
-            dataset_frame.insert(0, "raw.index", dataset_frame.index)
-            logging.info(
-                "Добавлена индексная колонка 'raw.index' (%s строк).",
-                len(dataset_frame),
-            )
-        quality_report = pd.DataFrame()
-        correlation_report = pd.DataFrame()
-        table_name_value, date_tag = _derive_standard_output_labels(dataset_csv)
-        table_label = Path(cfg.io.output_dir) / f"output.{table_name_value}_{date_tag}"
-        try:
-            correlation_report = generate_correlation_report(
-                dataset_frame,
-                table_name=str(table_label),
-            )
-        except Exception as exc:  # pragma: no cover - defensive guard
-            logger.warning(
-                "activity_correlation_generation_failed",
-                error=str(exc),
-                path=str(dataset_csv),
-            )
-            correlation_report = pd.DataFrame()
-        try:
-            quality_report = generate_qc_report(
-                dataset_frame,
-                table_name=str(table_label),
-            )
-        except Exception as exc:  # pragma: no cover - defensive guard
-            logger.warning(
-                "activity_quality_generation_failed",
-                error=str(exc),
-                path=str(dataset_csv),
-            )
-            quality_report = pd.DataFrame()
-        table_name_value, date_tag = _derive_standard_output_labels(dataset_csv)
-        output_directory = Path(cfg.io.output_dir)
-        artifacts = io.save_standard_outputs(
-            dataset_frame,
-            correlation_report,
-            quality_report,
-            table_name=table_name_value,
-            date_tag=date_tag,
-            output_dir=output_directory,
-            output_path=dataset_csv,
-        )
-        qc_summary = _build_metadata_summary(dataset_frame)
-        io.save_metadata(
-            table_name=table_name_value,
-            date_tag=date_tag,
-            args=args,
-            qc_summary=qc_summary,
-            output_dir=artifacts.dataset.parent,
-            artifacts=[
-                artifacts.dataset,
-                artifacts.quality_report,
-                artifacts.correlation_report,
-            ],
-            sources=_ACTIVITY_METADATA_SOURCES,
-            run_context=get_run_context(),
+        
+        emit_legacy = bool(getattr(args, "emit_legacy_artifacts", False))
+        
+        start_time = clock()
+        
+        pre_context = prepare_activity_context(cfg, args, skip_read=True)
+        if pre_context is None:
+            return 1
+        
+        limit = pre_context.limit
+        
+        logger.info(
+            "activity_pipeline_start",
+            input=str(args.input_csv),
+            output=str(output_path),
+            workers=configured_workers,
+            limit=limit,
+            offset=offset,
         )
         logger.info(
-            "activity_standard_outputs",
-            dataset=str(artifacts.dataset),
-            quality_report=str(artifacts.quality_report),
-            correlation_report=str(artifacts.correlation_report),
+            "activity_pipeline_verbose",
+            input=str(args.input_csv),
+            output=str(output_path),
+            limit=limit,
+            offset=offset,
+            batch_size=cfg.activity.batch_size,
+            timeout=cfg.activity.timeout,
+            dry_run=cfg.activity.dry_run,
+            workers=configured_workers,
         )
-        return artifacts
-
-    last_error_extra: dict[str, object] | None = None
-    last_error_context: dict[str, object] = {}
-
-    pref_name_cache: dict[str, CacheValue] = {}
-    pref_name_cache_lock = Lock()
-    pref_name_cache_condition = Condition(pref_name_cache_lock)
-
-    with ETLContext(cfg) as context:
-        client = context.chembl_client
-
-        retry_cfg = cfg.retry
-        jitter = retry_cfg.build_jitter()
-        chunk_failures = ChunkFailureTracker()
-        http_diagnostics = _gather_http_diagnostics(cfg, client)
-        if http_diagnostics:
-            logger.info("activity_http_config", **http_diagnostics)
-
-        def fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
-            nonlocal last_error_extra, last_error_context
-
-            timeout_error_types = (
-                requests.Timeout,
-                requests.ReadTimeout,
-                requests.ConnectTimeout,
-                requests.exceptions.RetryError,
+        
+        if cfg.activity.dry_run:
+            expected = limit if limit is not None else 0
+            logger.info("dry_run", limit=limit)
+            logger.info("activity_pipeline_dry_run", expected=expected)
+            _emit_completion_message(
+                output_path=output_path,
+                processed_rows=0,
+                duration_s=clock() - start_time,
+                mode="dry_run",
             )
-
-            def _is_timeout_error(exc: Exception) -> bool:
-                if isinstance(exc, timeout_error_types):
-                    return True
-                message = str(exc).strip().lower()
-                if not message:
-                    return False
-                return "timed out" in message or "timeout" in message
-
-            def _fetch(ids: Sequence[str], *, depth: int = 0) -> pd.DataFrame:
-                nonlocal last_error_extra, last_error_context
-
-                attempts = max(1, retry_cfg.max_attempts)
-                id_list = [str(identifier) for identifier in ids]
-
-                for attempt in range(1, attempts + 1):
-                    try:
-                        result = cl.get_activities(
-                            id_list,
-                            cfg=cfg.api,
-                            client=client,
-                            chunk_size=cfg.activity.batch_size,
-                            timeout=cfg.activity.timeout,
-                            **extra_kwargs,
+            return 0
+        
+        prepared_context = prepare_activity_context(cfg, args)
+        if prepared_context is None:
+            return 1
+        
+        limit = prepared_context.limit
+        limited_ids = prepared_context.limited_ids
+        extended_output_path: Path | None = None
+        postprocess_metrics = None
+        postprocess_report_path: Path | None = None
+        postprocess_output_path: Path | None = None
+        dataset_path: Path | None = None
+        exit_code = 1
+        
+        enrichment_cfg = cfg.activity_enrichment
+        extra_columns: list[str] = []
+        action_cfg = enrichment_cfg.action_type
+        configure_activity_schema(action_cfg.metrics)
+        if action_cfg.enabled or action_cfg.log_missing or action_cfg.log_distribution:
+            extra_columns.append(action_cfg.column)
+        extra_kwargs = {"extra_columns": extra_columns} if extra_columns else {}
+        
+        _args_invocation(args)
+        
+        failure_path = output_path.with_name(f"{output_path.stem}_failure_cases.csv")
+        fetch_failure_path = output_path.with_name(f"{output_path.stem}_fetch_failures.csv")
+        
+        def _compute_bounds(frame: pd.DataFrame) -> pd.DataFrame:
+            return compute_activity_bounds(frame, cfg.activity_bounds)
+        
+        def _apply_annotations(frame: pd.DataFrame) -> pd.DataFrame:
+            return apply_activity_annotations(
+                frame,
+                action_cfg=enrichment_cfg.action_type,
+                properties_cfg=enrichment_cfg.activity_properties,
+            )
+        
+        def _ensure_required_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
+            missing = [
+                column
+                for column in _ACTIVITY_REQUIRED_COLUMNS
+                if column not in frame.columns
+            ]
+            if not missing:
+                return frame
+            logger.warning(
+                "activity_missing_columns",
+                missing=sorted(missing),
+            )
+            fillers: dict[str, pd.Series[Any]] = {}
+            for column in missing:
+                dtype_info = _ACTIVITY_REQUIRED_DTYPES.get(column)
+                python_type = getattr(dtype_info, "python_type", None)
+                dtype_text = str(dtype_info).lower() if dtype_info is not None else ""
+                if (
+                    python_type in {float, int}
+                    or "float" in dtype_text
+                    or "int" in dtype_text
+                ):
+                    fill_dtype = "Float64"
+                elif python_type is str:
+                    fill_dtype = "string"
+                else:
+                    fill_dtype = "object"
+                fillers[column] = pd.Series(pd.NA, index=frame.index, dtype=fill_dtype)
+            return frame.assign(**fillers)
+        
+        available_columns: set[str] = set()
+        assay_src_lookup = _load_assay_src_lookup(cfg.resources.dictionary_dir)
+        
+        def _record_columns(frame: pd.DataFrame) -> pd.DataFrame:
+            available_columns.update(frame.columns)
+            return frame
+        
+        metadata_hooks = [
+            _ensure_required_activity_columns,
+            partial(_ensure_src_assay_id, lookup=assay_src_lookup),
+            _ensure_extended_activity_columns,
+            normalize_activities,
+            add_pipeline_metadata,
+            _compute_bounds,
+            _apply_annotations,
+            _record_columns,
+        ]
+        
+        validators = [partial(validate_activities, return_result=True)]
+        
+        streaming_stats = _StreamingCSVStatistics()
+        streamed_summary: dict[str, object] | None = None
+        
+        def writer(
+            chunks: Iterable[pd.DataFrame],
+            destination: Path,
+            col_order: Sequence[str],
+            key_cols: Sequence[str],
+        ) -> Path:
+            sort_columns = list(key_cols) or sorted(col_order)
+            column_order = list(col_order)
+            filtered_order = [
+                column for column in column_order if column in available_columns
+            ]
+        
+            drop_candidates = [
+                column
+                for column in _OUTPUT_ACTIVITY_DROP_COLUMNS
+                if column in available_columns
+            ]
+            if drop_candidates:
+                logger.info(
+                    "Dropped columns from output.activity_*: %s",
+                    ", ".join(drop_candidates),
+                )
+        
+            whitelist_order = [
+                column
+                for column in filtered_order
+                if column not in _OUTPUT_ACTIVITY_DROP_COLUMNS
+            ]
+        
+            def _stream_filtered_chunks() -> Iterator[pd.DataFrame]:
+                for chunk in chunks:
+                    filtered_chunk, _ = _filter_activity_output_columns(
+                        chunk,
+                        column_order=filtered_order,
+                    )
+                    head = [
+                        column
+                        for column in whitelist_order
+                        if column in filtered_chunk.columns
+                    ]
+                    tail = sorted(
+                        column for column in filtered_chunk.columns if column not in head
+                    )
+                    if head or tail:
+                        ordered_chunk = filtered_chunk.reindex(
+                            columns=head + tail, copy=False
                         )
-                    except (requests.RequestException, ValueError) as exc:
-                        error_message = str(exc)
-                        network_hint, network_host = _describe_network_failure(cfg, exc)
-                        context = {
-                            "chunk_ids": list(id_list),
-                            "chunk_size": len(id_list),
-                            "attempt": attempt,
-                            "max_attempts": attempts,
-                            "batch_size": cfg.activity.batch_size,
-                            "timeout": cfg.activity.timeout,
-                        }
-                        if network_host:
-                            context["api_host"] = network_host
-                        for key in (
-                            "adapter_total",
-                            "api_retries",
-                            "retry_max_attempts",
-                            "activity_timeout",
-                            "api_timeout_read",
-                        ):
-                            if key in http_diagnostics:
-                                context[key] = http_diagnostics[key]
-                        log_context = {
-                            key: value
-                            for key, value in context.items()
-                            if key != "chunk_ids"
-                        }
-                        last_error_extra = {
-                            "msg": error_message,
-                            "chunk_ids": context["chunk_ids"],
-                        }
-                        if network_hint:
-                            last_error_extra["hint"] = network_hint
-                        last_error_context = dict(log_context)
-                        if network_host:
-                            last_error_context.setdefault("api_host", network_host)
-                        if network_hint:
-                            last_error_context["network_hint"] = network_hint
-                        if attempt >= attempts:
+                    else:
+                        ordered_chunk = filtered_chunk
+                    streaming_stats.update(ordered_chunk)
+                    yield ordered_chunk
+        
+            filtered_chunks = _stream_filtered_chunks()
+        
+            output_path = write_csv_chunks_deterministic(
+                filtered_chunks,
+                destination,
+                key_cols=sort_columns,
+                col_order=whitelist_order,
+                chunksize=cfg.io.csv_chunksize,
+                sort_chunksize=cfg.io.csv_chunksize,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+                cfg=cfg,
+            )
+            path_obj = Path(output_path)
+            if io.write_csv is not _ORIGINAL_IO_WRITE_CSV:
+                try:
+                    io.write_csv(
+                        (),
+                        destination,
+                        cfg=cfg,
+                        key_cols=sort_columns,
+                        col_order=column_order,
+                        chunksize=cfg.io.csv_chunksize,
+                        sep=cfg.io.csv_sep,
+                        encoding=cfg.io.csv_encoding,
+                    )
+                except Exception:  # pragma: no cover - defensive for patched writers
+                    logger.debug(
+                        "Fallback CSV writer stub raised an exception; deterministic export succeeded and execution will continue."
+                    )
+            return path_obj
+        
+        doc_quality_cfg = cfg.system.doc_quality
+        if emit_legacy:
+            table_quality = build_table_quality_hook(
+                doc_quality_cfg,
+                table_name=Path(output_path).with_suffix(""),
+                destination=Path(output_path).parent,
+            )
+        else:
+        
+            def _noop_table_quality(_: Path) -> None:
+                return None
+        
+            table_quality = _noop_table_quality
+        
+        def _persist_standard_outputs(dataset_csv: Path) -> io.StandardOutputArtifacts:
+            dataset_frame = pd.read_csv(
+                dataset_csv,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+            )
+            dataset_frame = _drop_empty_activity_columns(dataset_frame)
+            if "raw.index" not in dataset_frame.columns:
+                dataset_frame.insert(0, "raw.index", dataset_frame.index)
+                logging.info(
+                    "Добавлена индексная колонка 'raw.index' (%s строк).",
+                    len(dataset_frame),
+                )
+            quality_report = pd.DataFrame()
+            correlation_report = pd.DataFrame()
+            table_name_value, date_tag = _derive_standard_output_labels(dataset_csv)
+            table_label = Path(cfg.io.output_dir) / f"output.{table_name_value}_{date_tag}"
+            try:
+                correlation_report = generate_correlation_report(
+                    dataset_frame,
+                    table_name=str(table_label),
+                )
+            except Exception as exc:  # pragma: no cover - defensive guard
+                logger.warning(
+                    "activity_correlation_generation_failed",
+                    error=str(exc),
+                    path=str(dataset_csv),
+                )
+                correlation_report = pd.DataFrame()
+            try:
+                quality_report = generate_qc_report(
+                    dataset_frame,
+                    table_name=str(table_label),
+                )
+            except Exception as exc:  # pragma: no cover - defensive guard
+                logger.warning(
+                    "activity_quality_generation_failed",
+                    error=str(exc),
+                    path=str(dataset_csv),
+                )
+                quality_report = pd.DataFrame()
+            table_name_value, date_tag = _derive_standard_output_labels(dataset_csv)
+            output_directory = Path(cfg.io.output_dir)
+            artifacts = io.save_standard_outputs(
+                dataset_frame,
+                correlation_report,
+                quality_report,
+                table_name=table_name_value,
+                date_tag=date_tag,
+                output_dir=output_directory,
+                output_path=dataset_csv,
+            )
+            qc_summary = _build_metadata_summary(dataset_frame)
+            io.save_metadata(
+                table_name=table_name_value,
+                date_tag=date_tag,
+                args=args,
+                qc_summary=qc_summary,
+                output_dir=artifacts.dataset.parent,
+                artifacts=[
+                    artifacts.dataset,
+                    artifacts.quality_report,
+                    artifacts.correlation_report,
+                ],
+                sources=_ACTIVITY_METADATA_SOURCES,
+                run_context=get_run_context(),
+            )
+            logger.info(
+                "activity_standard_outputs",
+                dataset=str(artifacts.dataset),
+                quality_report=str(artifacts.quality_report),
+                correlation_report=str(artifacts.correlation_report),
+            )
+            return artifacts
+        
+        last_error_extra: dict[str, object] | None = None
+        last_error_context: dict[str, object] = {}
+        
+        pref_name_cache: dict[str, CacheValue] = {}
+        pref_name_cache_lock = Lock()
+        pref_name_cache_condition = Condition(pref_name_cache_lock)
+        
+        with ETLContext(cfg) as context:
+            client = context.chembl_client
+        
+            retry_cfg = cfg.retry
+            jitter = retry_cfg.build_jitter()
+            chunk_failures = ChunkFailureTracker()
+            http_diagnostics = _gather_http_diagnostics(cfg, client)
+            if http_diagnostics:
+                logger.info("activity_http_config", **http_diagnostics)
+        
+            def fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
+                nonlocal last_error_extra, last_error_context
+        
+                timeout_error_types = (
+                    requests.Timeout,
+                    requests.ReadTimeout,
+                    requests.ConnectTimeout,
+                    requests.exceptions.RetryError,
+                )
+        
+                def _is_timeout_error(exc: Exception) -> bool:
+                    if isinstance(exc, timeout_error_types):
+                        return True
+                    message = str(exc).strip().lower()
+                    if not message:
+                        return False
+                    return "timed out" in message or "timeout" in message
+        
+                def _fetch(ids: Sequence[str], *, depth: int = 0) -> pd.DataFrame:
+                    nonlocal last_error_extra, last_error_context
+        
+                    attempts = max(1, retry_cfg.max_attempts)
+                    id_list = [str(identifier) for identifier in ids]
+        
+                    for attempt in range(1, attempts + 1):
+                        try:
+                            result = cl.get_activities(
+                                id_list,
+                                cfg=cfg.api,
+                                client=client,
+                                chunk_size=cfg.activity.batch_size,
+                                timeout=cfg.activity.timeout,
+                                **extra_kwargs,
+                            )
+                        except (requests.RequestException, ValueError) as exc:
+                            error_message = str(exc)
+                            network_hint, network_host = _describe_network_failure(cfg, exc)
+                            context = {
+                                "chunk_ids": list(id_list),
+                                "chunk_size": len(id_list),
+                                "attempt": attempt,
+                                "max_attempts": attempts,
+                                "batch_size": cfg.activity.batch_size,
+                                "timeout": cfg.activity.timeout,
+                            }
+                            if network_host:
+                                context["api_host"] = network_host
+                            for key in (
+                                "adapter_total",
+                                "api_retries",
+                                "retry_max_attempts",
+                                "activity_timeout",
+                                "api_timeout_read",
+                            ):
+                                if key in http_diagnostics:
+                                    context[key] = http_diagnostics[key]
+                            log_context = {
+                                key: value
+                                for key, value in context.items()
+                                if key != "chunk_ids"
+                            }
+                            last_error_extra = {
+                                "msg": error_message,
+                                "chunk_ids": context["chunk_ids"],
+                            }
                             if network_hint:
+                                last_error_extra["hint"] = network_hint
+                            last_error_context = dict(log_context)
+                            if network_host:
+                                last_error_context.setdefault("api_host", network_host)
+                            if network_hint:
+                                last_error_context["network_hint"] = network_hint
+                            if attempt >= attempts:
+                                if network_hint:
+                                    logger.error(
+                                        "activity_fetch_network_error",
+                                        extra=last_error_extra,
+                                        hint=network_hint,
+                                        **log_context,
+                                    )
+                                if len(id_list) > 1 and _is_timeout_error(exc):
+                                    split_context = dict(log_context)
+                                    split_context["depth"] = depth
+                                    logger.warning(
+                                        "activity_fetch_split",
+                                        extra=last_error_extra,
+                                        **split_context,
+                                    )
+                                    midpoint = max(1, len(id_list) // 2)
+                                    left_ids = tuple(id_list[:midpoint])
+                                    right_ids = tuple(id_list[midpoint:])
+                                    frames: list[pd.DataFrame] = []
+                                    if left_ids:
+                                        frames.append(_fetch(left_ids, depth=depth + 1))
+                                    if right_ids:
+                                        frames.append(_fetch(right_ids, depth=depth + 1))
+                                    if frames:
+                                        combined = pd.concat(
+                                            frames, ignore_index=True, sort=False
+                                        )
+                                    else:
+                                        combined = pd.DataFrame(columns=ACTIVITY_COLUMNS)
+                                    last_error_extra = None
+                                    last_error_context = {}
+                                    return combined
                                 logger.error(
-                                    "activity_fetch_network_error",
+                                    "activity_fetch_failed",
                                     extra=last_error_extra,
-                                    hint=network_hint,
+                                    error=error_message,
                                     **log_context,
                                 )
-                            if len(id_list) > 1 and _is_timeout_error(exc):
-                                split_context = dict(log_context)
-                                split_context["depth"] = depth
-                                logger.warning(
-                                    "activity_fetch_split",
-                                    extra=last_error_extra,
-                                    **split_context,
-                                )
-                                midpoint = max(1, len(id_list) // 2)
-                                left_ids = tuple(id_list[:midpoint])
-                                right_ids = tuple(id_list[midpoint:])
-                                frames: list[pd.DataFrame] = []
-                                if left_ids:
-                                    frames.append(_fetch(left_ids, depth=depth + 1))
-                                if right_ids:
-                                    frames.append(_fetch(right_ids, depth=depth + 1))
-                                if frames:
-                                    combined = pd.concat(
-                                        frames, ignore_index=True, sort=False
-                                    )
-                                else:
-                                    combined = pd.DataFrame(columns=ACTIVITY_COLUMNS)
-                                last_error_extra = None
-                                last_error_context = {}
-                                return combined
-                            logger.error(
-                                "activity_fetch_failed",
+                                chunk_failures.add_failure(id_list, error_message)
+                                raise PipelineError("chunk_fetch_failed")  # noqa: B904
+                            delay = compute_backoff_delay(attempt, retry_cfg, jitter=jitter)
+                            logger.warning(
+                                "activity_fetch_retry",
                                 extra=last_error_extra,
-                                error=error_message,
+                                delay=delay,
                                 **log_context,
                             )
-                            chunk_failures.add_failure(id_list, error_message)
-                            raise PipelineError("chunk_fetch_failed")  # noqa: B904
-                        delay = compute_backoff_delay(attempt, retry_cfg, jitter=jitter)
-                        logger.warning(
-                            "activity_fetch_retry",
-                            extra=last_error_extra,
-                            delay=delay,
-                            **log_context,
-                        )
-                        if delay > 0:
-                            sleep(delay)
-                    else:
-                        last_error_extra = None
-                        last_error_context = {}
-                        return _ensure_molecule_pref_name(
-                            result,
-                            cfg=cfg,
-                            client=client,
-                            cache=pref_name_cache,
-                            cache_condition=pref_name_cache_condition,
-                            chunk_failures=chunk_failures,
-                        )
-                return pd.DataFrame(columns=ACTIVITY_COLUMNS)
-
-            return _fetch(chunk_ids, depth=0)
-
-        worker_count = getattr(cfg.activity, "workers", 1) or 1
-        fetch_config = ChunkedFetchConfig(
-            ids=limited_ids,
-            chunk_size=cfg.activity.batch_size,
-            workers=max(1, worker_count),
-        )
-
-        writer_config = CsvWriterConfig(
-            writer=writer,
-            kwargs={},
-            ensure_destination=True,
-        )
-
-        pipeline_stats: dict[str, object] | None = None
-
-        def _capture_stats(stats: Mapping[str, object]) -> None:
-            nonlocal pipeline_stats, streamed_summary
-            pipeline_stats = dict(stats)
-            snapshot = streaming_stats.snapshot()
-            streamed_summary = snapshot
-            pipeline_stats.setdefault("rows_streamed", snapshot["rows"])
-            pipeline_stats.setdefault("cells_streamed", snapshot["cells"])
-            pipeline_stats.setdefault("null_cells", snapshot["nulls"])
-            pipeline_stats.setdefault("null_fraction", snapshot["null_fraction"])
-
-        definition_kwargs: dict[str, object] = {
-            "schema": ActivitiesSchema,
-            "schema_name": "ActivitiesSchema",
-            "validators": validators,
-            "command": " ".join(_args_invocation(args)),
-            "config_snapshot": _serialize_paths(cfg.to_dict()),
-            "inputs": {"input_csv": str(args.input_csv)},
-            "key_columns": ["activity_id"],
-            "table_quality": table_quality,
-            "stats_extra": chunk_failures.stats,
-            "stats_callback": _capture_stats,
-            "dictionary_resources": (
-                "dictionary_root",
-                "target_types",
-            ),
-        }
-
-        result = activity_run.run_activity_pipeline(
-            fetch_config=fetch_config,
-            metadata_hooks=metadata_hooks,
-            fetch_chunk=fetch_chunk,
-            writer_config=writer_config,
-            definition_kwargs=definition_kwargs,
-            cfg=cfg,
-            logger=logger,
-            output_path=output_path,
-            failure_path=failure_path,
-            fetch_failure_path=fetch_failure_path,
-            chunk_failures=chunk_failures,
-            emit_legacy_artifacts=emit_legacy,
-        )
-        exit_code = int(result.exit_code)
-        dataset_path = result.output_path
-        if dataset_path is not None:
-            output_path = Path(dataset_path)
-            args.final_out = output_path
-            args.output_csv = output_path
-
-    if not emit_legacy:
-        Path(fetch_failure_path).unlink(missing_ok=True)
-        Path(f"{fetch_failure_path}.meta.yaml").unlink(missing_ok=True)
-
-    if exit_code == 0:
-        if dataset_path is not None:
-            standard_artifacts = _persist_standard_outputs(Path(dataset_path))
-            standard_dataset = standard_artifacts.dataset
-            auto_generated = bool(getattr(args, "_auto_output_generated", False))
-            if (
-                not emit_legacy
-                and auto_generated
-                and standard_dataset != Path(dataset_path)
-            ):
-                Path(dataset_path).unlink(missing_ok=True)
-            dataset_path = standard_dataset
-            output_path = dataset_path
-            args.final_out = output_path
-            args.output_csv = output_path
-        logger.info(
-            f"Merged data checkpoint: wrote merged activity records to '{output_path}'."
-        )
-        postprocess_enabled = bool(getattr(args, "postprocess", False))
-        if not postprocess_enabled:
-            logger.info("[INFO] Postprocessing skipped (flag --postprocess not set)")
-        else:
-            deps = _load_activity_postprocess_deps()
-            try:
-                extended_output_path = deps.process_activity_extended(
-                    input_path=output_path,
-                    search_dir=output_path.parent,
-                    dictionary_dir=cfg.resources.dictionary_dir,
-                    targets_csv=cfg.resources.targets_type_csv,
-                )
-            except Exception:
-                logger.exception(
-                    "Activity extended post-processing failed while enriching merged activity data."
-                )
-                raise
-
-            try:
-                pipeline_config = get_postprocess_pipeline_config(
-                    "activities", getattr(args, "config", None)
-                )
-                csv_cfg = get_postprocess_csv_config(pipeline_config)
-                runtime_cfg = PostprocessingPipelineConfig(
-                    pipeline_config=pipeline_config,
-                    csv_runtime_config=csv_cfg,
-                    runner=deps.run_activity_postprocess,
-                    validator=deps.validate_postprocess,
-                    schema=deps.activity_schema,
-                    logger=logger,
-                )
-                postprocess_output_path = _derive_postprocess_output_path(output_path)
+                            if delay > 0:
+                                sleep(delay)
+                        else:
+                            last_error_extra = None
+                            last_error_context = {}
+                            return _ensure_molecule_pref_name(
+                                result,
+                                cfg=cfg,
+                                client=client,
+                                cache=pref_name_cache,
+                                cache_condition=pref_name_cache_condition,
+                                chunk_failures=chunk_failures,
+                            )
+                    return pd.DataFrame(columns=ACTIVITY_COLUMNS)
+        
+                return _fetch(chunk_ids, depth=0)
+        
+            worker_count = getattr(cfg.activity, "workers", 1) or 1
+            fetch_config = ChunkedFetchConfig(
+                ids=limited_ids,
+                chunk_size=cfg.activity.batch_size,
+                workers=max(1, worker_count),
+            )
+        
+            writer_config = CsvWriterConfig(
+                writer=writer,
+                kwargs={},
+                ensure_destination=True,
+            )
+        
+            pipeline_stats: dict[str, object] | None = None
+        
+            def _capture_stats(stats: Mapping[str, object]) -> None:
+                nonlocal pipeline_stats, streamed_summary
+                pipeline_stats = dict(stats)
+                snapshot = streaming_stats.snapshot()
+                streamed_summary = snapshot
+                pipeline_stats.setdefault("rows_streamed", snapshot["rows"])
+                pipeline_stats.setdefault("cells_streamed", snapshot["cells"])
+                pipeline_stats.setdefault("null_cells", snapshot["nulls"])
+                pipeline_stats.setdefault("null_fraction", snapshot["null_fraction"])
+        
+            definition_kwargs: dict[str, object] = {
+                "schema": ActivitiesSchema,
+                "schema_name": "ActivitiesSchema",
+                "validators": validators,
+                "command": " ".join(_args_invocation(args)),
+                "config_snapshot": _serialize_paths(cfg.to_dict()),
+                "inputs": {"input_csv": str(args.input_csv)},
+                "key_columns": ["activity_id"],
+                "table_quality": table_quality,
+                "stats_extra": chunk_failures.stats,
+                "stats_callback": _capture_stats,
+                "dictionary_resources": (
+                    "dictionary_root",
+                    "target_types",
+                ),
+            }
+        
+            result = activity_run.run_activity_pipeline(
+                fetch_config=fetch_config,
+                metadata_hooks=metadata_hooks,
+                fetch_chunk=fetch_chunk,
+                writer_config=writer_config,
+                definition_kwargs=definition_kwargs,
+                cfg=cfg,
+                logger=logger,
+                output_path=output_path,
+                failure_path=failure_path,
+                fetch_failure_path=fetch_failure_path,
+                chunk_failures=chunk_failures,
+                emit_legacy_artifacts=emit_legacy,
+            )
+            exit_code = int(result.exit_code)
+            dataset_path = result.output_path
+            if dataset_path is not None:
+                output_path = Path(dataset_path)
+                args.final_out = output_path
+                args.output_csv = output_path
+        
+        if not emit_legacy:
+            Path(fetch_failure_path).unlink(missing_ok=True)
+            Path(f"{fetch_failure_path}.meta.yaml").unlink(missing_ok=True)
+        
+        if exit_code == 0:
+            if dataset_path is not None:
+                standard_artifacts = _persist_standard_outputs(Path(dataset_path))
+                standard_dataset = standard_artifacts.dataset
+                auto_generated = bool(getattr(args, "_auto_output_generated", False))
+                if (
+                    not emit_legacy
+                    and auto_generated
+                    and standard_dataset != Path(dataset_path)
+                ):
+                    Path(dataset_path).unlink(missing_ok=True)
+                dataset_path = standard_dataset
+                output_path = dataset_path
+                args.final_out = output_path
+                args.output_csv = output_path
+            logger.info(
+                f"Merged data checkpoint: wrote merged activity records to '{output_path}'."
+            )
+            postprocess_enabled = bool(getattr(args, "postprocess", False))
+            if not postprocess_enabled:
+                logger.info("[INFO] Postprocessing skipped (flag --postprocess not set)")
+            else:
+                deps = _load_activity_postprocess_deps()
+                try:
+                    extended_output_path = deps.process_activity_extended(
+                        input_path=output_path,
+                        search_dir=output_path.parent,
+                        dictionary_dir=cfg.resources.dictionary_dir,
+                        targets_csv=cfg.resources.targets_type_csv,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Activity extended post-processing failed while enriching merged activity data."
+                    )
+                    raise
+        
+                try:
+                    pipeline_config = get_postprocess_pipeline_config(
+                        "activities", getattr(args, "config", None)
+                    )
+                    csv_cfg = get_postprocess_csv_config(pipeline_config)
+                    runtime_cfg = PostprocessingPipelineConfig(
+                        pipeline_config=pipeline_config,
+                        csv_runtime_config=csv_cfg,
+                        runner=deps.run_activity_postprocess,
+                        validator=deps.validate_postprocess,
+                        schema=deps.activity_schema,
+                        logger=logger,
+                    )
+                    postprocess_output_path = _derive_postprocess_output_path(output_path)
+                    logger.info(
+                        "activity_postprocess_start",
+                        input=str(output_path),
+                        output=str(postprocess_output_path),
+                    )
+                    pipeline_result = run_postprocessing_pipeline(
+                        "activities",
+                        output_path,
+                        postprocess_output_path,
+                        runtime_cfg,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Activity postprocessing pipeline failed while processing merged activity data."
+                    )
+                    raise
+        
+                postprocess_metrics = pipeline_result.metrics
+                postprocess_report_path = pipeline_result.report_path
+                if postprocess_metrics is None:
+                    raise RuntimeError("activity postprocess metrics missing")
+                if postprocess_report_path is None:
+                    raise RuntimeError("activity postprocess report missing")
                 logger.info(
-                    "activity_postprocess_start",
-                    input=str(output_path),
-                    output=str(postprocess_output_path),
+                    "activity_postprocess_done",
+                    output=str(pipeline_result.output_path),
+                    report=str(postprocess_report_path),
+                    rows=_safe_int(postprocess_metrics.output_rows, 0),
+                    columns=_safe_int(postprocess_metrics.output_columns, 0),
                 )
-                pipeline_result = run_postprocessing_pipeline(
-                    "activities",
-                    output_path,
-                    postprocess_output_path,
-                    runtime_cfg,
-                )
-            except Exception:
-                logger.exception(
-                    "Activity postprocessing pipeline failed while processing merged activity data."
-                )
-                raise
-
-            postprocess_metrics = pipeline_result.metrics
-            postprocess_report_path = pipeline_result.report_path
-            if postprocess_metrics is None:
-                raise RuntimeError("activity postprocess metrics missing")
-            if postprocess_report_path is None:
-                raise RuntimeError("activity postprocess report missing")
+        
+        summary_snapshot: Mapping[str, object] | None = None
+        processed_ids = prepared_context.processed_ids
+        processed_count = _safe_int(processed_ids, 0)
+        if processed_count == 0 and processed_ids not in (None, 0, "0", 0.0):
+            logger.info("processed_count_conversion_failed", value=processed_ids)
+        
+        if limit is not None:
             logger.info(
-                "activity_postprocess_done",
-                output=str(pipeline_result.output_path),
-                report=str(postprocess_report_path),
-                rows=_safe_int(postprocess_metrics.output_rows, 0),
-                columns=_safe_int(postprocess_metrics.output_columns, 0),
+                "process_limit",
+                processed=processed_ids,
+                limit=limit,
             )
-
-    summary_snapshot: Mapping[str, object] | None = None
-    processed_ids = prepared_context.processed_ids
-    processed_count = _safe_int(processed_ids, 0)
-    if processed_count == 0 and processed_ids not in (None, 0, "0", 0.0):
-        logger.info("processed_count_conversion_failed", value=processed_ids)
-
-    if limit is not None:
-        logger.info(
-            "process_limit",
-            processed=processed_ids,
-            limit=limit,
-        )
-        summary_snapshot = streamed_summary or streaming_stats.snapshot()
-    else:
-        summary_snapshot = streamed_summary or streaming_stats.snapshot()
-        logger.info("processed_count", count=processed_count)
-
-    if pipeline_stats is not None:
-        rows_total = _safe_int(pipeline_stats.get("rows_total"), processed_count)
-        rows_kept = _safe_int(pipeline_stats.get("rows_kept"), 0)
-        rows_dropped = _safe_int(pipeline_stats.get("rows_dropped"), 0)
-        logger.info(
-            "records_dropped",
-            rows_total=rows_total,
-            rows_kept=rows_kept,
-            rows_dropped=rows_dropped,
-        )
-
-    if exit_code == 0:
-        completion_rows = processed_ids
-        summary_rows = summary_snapshot.get("rows") if summary_snapshot else None
-        if isinstance(summary_rows, int | float):
-            try:
-                completion_rows = int(summary_rows)
-            except Exception:
-                # Fallback in case of any unexpected type or value
-                completion_rows = processed_ids
-        elif pipeline_stats is not None:
-            try:
-                # Try to get from pipeline_stats if available
-                rows_kept = pipeline_stats.get("rows_kept")
-                if rows_kept is not None and isinstance(rows_kept, int | float):
-                    completion_rows = int(rows_kept)
-                else:
-                    rows_total = pipeline_stats.get("rows_total", processed_ids)
-                    if isinstance(rows_total, int | float):
-                        completion_rows = int(rows_total)
-                    else:
-                        completion_rows = processed_ids
-            except Exception:
-                # Fallback in case of any unexpected type or value
-                completion_rows = processed_ids
+            summary_snapshot = streamed_summary or streaming_stats.snapshot()
         else:
+            summary_snapshot = streamed_summary or streaming_stats.snapshot()
+            logger.info("processed_count", count=processed_count)
+        
+        if pipeline_stats is not None:
+            rows_total = _safe_int(pipeline_stats.get("rows_total"), processed_count)
+            rows_kept = _safe_int(pipeline_stats.get("rows_kept"), 0)
+            rows_dropped = _safe_int(pipeline_stats.get("rows_dropped"), 0)
+            logger.info(
+                "records_dropped",
+                rows_total=rows_total,
+                rows_kept=rows_kept,
+                rows_dropped=rows_dropped,
+            )
+        
+        if exit_code == 0:
             completion_rows = processed_ids
-
-        pipeline_version_value = (
-            getattr(postprocess_metrics, "pipeline_version", None)
-            if postprocess_metrics and postprocess_metrics.pipeline_version is not None
-            else get_pipeline_version()
-        )
-
-        pipeline_done_payload: dict[str, object] = {
-            "output": str(output_path),
-            "rows": completion_rows,
-            "pipeline_version": pipeline_version_value,
-        }
-        if summary_snapshot is not None:
-            null_fraction = summary_snapshot.get("null_fraction")
-            if null_fraction is not None:
-                pipeline_done_payload["null_fraction"] = null_fraction
-        if extended_output_path is not None:
-            pipeline_done_payload["extended_output"] = str(extended_output_path)
-        if postprocess_metrics is not None:
-            if postprocess_output_path is not None:
-                pipeline_done_payload["postprocess_output"] = str(
-                    postprocess_output_path
+            summary_rows = summary_snapshot.get("rows") if summary_snapshot else None
+            if isinstance(summary_rows, int | float):
+                try:
+                    completion_rows = int(summary_rows)
+                except Exception:
+                    # Fallback in case of any unexpected type or value
+                    completion_rows = processed_ids
+            elif pipeline_stats is not None:
+                try:
+                    # Try to get from pipeline_stats if available
+                    rows_kept = pipeline_stats.get("rows_kept")
+                    if rows_kept is not None and isinstance(rows_kept, int | float):
+                        completion_rows = int(rows_kept)
+                    else:
+                        rows_total = pipeline_stats.get("rows_total", processed_ids)
+                        if isinstance(rows_total, int | float):
+                            completion_rows = int(rows_total)
+                        else:
+                            completion_rows = processed_ids
+                except Exception:
+                    # Fallback in case of any unexpected type or value
+                    completion_rows = processed_ids
+            else:
+                completion_rows = processed_ids
+        
+            pipeline_version_value = (
+                getattr(postprocess_metrics, "pipeline_version", None)
+                if postprocess_metrics and postprocess_metrics.pipeline_version is not None
+                else get_pipeline_version()
+            )
+        
+            pipeline_done_payload: dict[str, object] = {
+                "output": str(output_path),
+                "rows": completion_rows,
+                "pipeline_version": pipeline_version_value,
+            }
+            if summary_snapshot is not None:
+                null_fraction = summary_snapshot.get("null_fraction")
+                if null_fraction is not None:
+                    pipeline_done_payload["null_fraction"] = null_fraction
+            if extended_output_path is not None:
+                pipeline_done_payload["extended_output"] = str(extended_output_path)
+            if postprocess_metrics is not None:
+                if postprocess_output_path is not None:
+                    pipeline_done_payload["postprocess_output"] = str(
+                        postprocess_output_path
+                    )
+                summary = postprocess_metrics.summary()
+                if summary.get("rows") is not None:
+                    pipeline_done_payload["postprocess_rows"] = summary["rows"]
+                if summary.get("columns") is not None:
+                    pipeline_done_payload["postprocess_columns"] = summary["columns"]
+                if summary.get("duration_s") is not None:
+                    pipeline_done_payload["postprocess_duration_s"] = summary["duration_s"]
+                if summary.get("steps") is not None:
+                    pipeline_done_payload["postprocess_steps"] = summary["steps"]
+                validation = getattr(postprocess_metrics, "validation", None)
+                if validation is not None:
+                    pipeline_done_payload["postprocess_schema"] = getattr(
+                        validation, "schema", None
+                    )
+                if postprocess_report_path is not None:
+                    pipeline_done_payload["postprocess_report"] = str(
+                        postprocess_report_path
+                    )
+        
+            logger.info("activity_pipeline_done", extra=pipeline_done_payload)
+            if extended_output_path is not None:
+                logger.info(
+                    f"Successful export checkpoint: primary data at '{output_path}', extended data at '{extended_output_path}'."
                 )
-            summary = postprocess_metrics.summary()
-            if summary.get("rows") is not None:
-                pipeline_done_payload["postprocess_rows"] = summary["rows"]
-            if summary.get("columns") is not None:
-                pipeline_done_payload["postprocess_columns"] = summary["columns"]
-            if summary.get("duration_s") is not None:
-                pipeline_done_payload["postprocess_duration_s"] = summary["duration_s"]
-            if summary.get("steps") is not None:
-                pipeline_done_payload["postprocess_steps"] = summary["steps"]
-            validation = getattr(postprocess_metrics, "validation", None)
-            if validation is not None:
-                pipeline_done_payload["postprocess_schema"] = getattr(
-                    validation, "schema", None
+            else:
+                logger.info(
+                    f"Successful export checkpoint: activity data written to '{output_path}'."
                 )
-            if postprocess_report_path is not None:
-                pipeline_done_payload["postprocess_report"] = str(
-                    postprocess_report_path
-                )
-
-        logger.info("activity_pipeline_done", extra=pipeline_done_payload)
-        if extended_output_path is not None:
-            logger.info(
-                f"Successful export checkpoint: primary data at '{output_path}', extended data at '{extended_output_path}'."
+            _emit_completion_message(
+                output_path=output_path,
+                processed_rows=completion_rows,
+                duration_s=clock() - start_time,
+                mode="run",
+                streamed_metrics=summary_snapshot,
             )
         else:
-            logger.info(
-                f"Successful export checkpoint: activity data written to '{output_path}'."
+            extra_payload = last_error_extra
+            context_payload = dict(last_error_context) if last_error_context else {}
+            error_message = None
+            chunk_ids: Sequence[str] | None = None
+            if extra_payload:
+                error_message = extra_payload.get("msg")
+                chunk_ids = extra_payload.get("chunk_ids")  # type: ignore[assignment]
+            details = []
+            if error_message:
+                details.append(f"last error: {error_message}")
+            if chunk_ids:
+                details.append(f"chunk_ids={list(chunk_ids)}")
+            if context_payload:
+                attempt_info = ", ".join(
+                    f"{key}={value}" for key, value in context_payload.items()
+                )
+                details.append(attempt_info)
+            detail_text = "; ".join(details)
+            logger.error(
+                "activity_pipeline_failed",
+                output=str(output_path),
+                processed=processed_ids,
+                exit_code=exit_code,
+                details=detail_text or None,
             )
-        _emit_completion_message(
-            output_path=output_path,
-            processed_rows=completion_rows,
-            duration_s=clock() - start_time,
-            mode="run",
-            streamed_metrics=summary_snapshot,
-        )
-    else:
-        extra_payload = last_error_extra
-        context_payload = dict(last_error_context) if last_error_context else {}
-        error_message = None
-        chunk_ids: Sequence[str] | None = None
-        if extra_payload:
-            error_message = extra_payload.get("msg")
-            chunk_ids = extra_payload.get("chunk_ids")  # type: ignore[assignment]
-        details = []
-        if error_message:
-            details.append(f"last error: {error_message}")
-        if chunk_ids:
-            details.append(f"chunk_ids={list(chunk_ids)}")
-        if context_payload:
-            attempt_info = ", ".join(
-                f"{key}={value}" for key, value in context_payload.items()
+            logger.error(
+                f"Activity pipeline failed with exit code {exit_code} after processing {processed_ids} identifiers destined for '{output_path}'. {detail_text}"
             )
-            details.append(attempt_info)
-        detail_text = "; ".join(details)
-        logger.error(
-            "activity_pipeline_failed",
-            output=str(output_path),
-            processed=processed_ids,
-            exit_code=exit_code,
-            details=detail_text or None,
-        )
-        logger.error(
-            f"Activity pipeline failed with exit code {exit_code} after processing {processed_ids} identifiers destined for '{output_path}'. {detail_text}"
-        )
-
-    return exit_code
+        
+        return exit_code
+    if fixtures is None:
+        return _execute()
+    with offline.patch_activity(fixtures):
+        return _execute()
 
 
 def _coerce_cli_path(value: object) -> Path | str | None:
@@ -2356,6 +2371,11 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Enable activity postprocessing after the main pipeline",
+    )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Use cached fixtures instead of contacting the ChEMBL API",
     )
     legacy_option = parser._option_string_actions.get("--emit-legacy-artifacts")
     if legacy_option is not None:

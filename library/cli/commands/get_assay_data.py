@@ -21,7 +21,7 @@ from typing import Any
 import pandas as pd
 import requests
 
-from library import cli, io
+from library import cli, io, offline
 from library.cli import (
     ConfigMetadata,
     Logger,
@@ -196,626 +196,641 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         Upstream API errors are logged and converted into a failure code by
         :func:`library.cli_utils.run_pipeline`.
     """
-    limit = cfg.assay.limit
-    if limit is not None and limit < 0:
-        logger.error("invalid_limit", section="assay.limit", limit=limit)
-        return 1
-
-    try:
-        ids_iter = io.read_ids(args.input_csv, column=cfg.assay.column, cfg=cfg.io)
-    except (FileNotFoundError, ValueError) as exc:
-        logger.error(
-            "read_fail",
-            error=str(exc),
-            exc_info=exc,
-            path=str(args.input_csv),
-        )
-        return 1
-
-    offset = getattr(args, "offset", 0)
-    final_out_attr = getattr(args, "final_out", None)
-    if final_out_attr in (None, argparse.SUPPRESS):
-        legacy_output = getattr(args, "output_csv", None)
-        if legacy_output not in (None, argparse.SUPPRESS):
-            output_path = Path(legacy_output)
-            if not isinstance(legacy_output, Path):
+    offline_flag = offline.is_enabled(getattr(args, "offline", None))
+    args.offline = offline_flag
+    fixtures: offline.OfflineFixtures | None = None
+    if offline_flag:
+        try:
+            fixtures = offline.OfflineFixtures()
+        except FileNotFoundError as exc:
+            logger.error("assay_offline_fixtures_missing", error=str(exc))
+            return 1
+        logger.info("assay_offline_mode", base=str(fixtures.base_dir))
+    def _execute() -> int:
+        limit = cfg.assay.limit
+        if limit is not None and limit < 0:
+            logger.error("invalid_limit", section="assay.limit", limit=limit)
+            return 1
+        
+        try:
+            ids_iter = io.read_ids(args.input_csv, column=cfg.assay.column, cfg=cfg.io)
+        except (FileNotFoundError, ValueError) as exc:
+            logger.error(
+                "read_fail",
+                error=str(exc),
+                exc_info=exc,
+                path=str(args.input_csv),
+            )
+            return 1
+        
+        offset = getattr(args, "offset", 0)
+        final_out_attr = getattr(args, "final_out", None)
+        if final_out_attr in (None, argparse.SUPPRESS):
+            legacy_output = getattr(args, "output_csv", None)
+            if legacy_output not in (None, argparse.SUPPRESS):
+                output_path = Path(legacy_output)
+                if not isinstance(legacy_output, Path):
+                    args.final_out = output_path
+                args.output_csv = output_path
+            else:
+                output_path = Path(
+                    io.default_output_path(
+                        args.input_csv,
+                        cfg.io,
+                        date=getattr(args, "date", None),
+                    )
+                )
+                args.final_out = output_path
+                args.output_csv = output_path
+        else:
+            output_path = Path(final_out_attr)
+            if not isinstance(final_out_attr, Path):
                 args.final_out = output_path
             args.output_csv = output_path
-        else:
-            output_path = Path(
-                io.default_output_path(
-                    args.input_csv,
-                    cfg.io,
-                    date=getattr(args, "date", None),
-                )
-            )
-            args.final_out = output_path
-            args.output_csv = output_path
-    else:
-        output_path = Path(final_out_attr)
-        if not isinstance(final_out_attr, Path):
-            args.final_out = output_path
-        args.output_csv = output_path
-    metadata_obj = getattr(args, "_config_metadata", None)
-    if not isinstance(metadata_obj, ConfigMetadata):
-        metadata_obj = None
-    output_source = "cli" if getattr(args, "final_out", None) else "derived"
-    logger.info(
-        "assay_pipeline_start",
-        input=prepare_option(
-            metadata_obj, value=str(args.input_csv), default_source="cli"
-        ),
-        output=prepare_option(
-            metadata_obj,
-            value=str(output_path),
-            default_source=output_source,
-        ),
-        limit=prepare_option(
-            metadata_obj,
-            argument="limit",
-            path="sources.chembl.pipelines.assay.limit",
-            value=limit,
-        ),
-        offset=prepare_option(
-            metadata_obj,
-            argument="offset",
-            path="sources.chembl.pipelines.assay.offset",
-            value=offset,
-        ),
-        batch_size=prepare_option(
-            metadata_obj,
-            argument="batch_size",
-            path="sources.chembl.pipelines.assay.batch_size",
-            value=cfg.assay.batch_size,
-        ),
-        timeout=prepare_option(
-            metadata_obj,
-            argument="timeout",
-            path="sources.chembl.pipelines.assay.timeout",
-            value=cfg.assay.timeout,
-        ),
-    )
-    if offset:
-        ids_iter = islice(ids_iter, offset, None)
-        logger.info("process_offset", offset=offset)
-
-    processed_ids = 0
-
-    def _iter_ids() -> Iterator[str]:
-        nonlocal processed_ids
-        for identifier in ids_iter:
-            processed_ids += 1
-            yield identifier
-
-    if limit is not None:
-        ids_source: Iterable[str] = islice(_iter_ids(), limit)
-    else:
-        ids_source = _iter_ids()
-
-    failure_path = output_path.with_name(f"{output_path.stem}_failure_cases.csv")
-    fetch_failure_path = output_path.with_name(f"{output_path.stem}_fetch_failures.csv")
-
-    dropped_columns_seen: set[str] = set()
-
-    def _drop_output_columns(frame: pd.DataFrame) -> pd.DataFrame:
-        removed = [
-            column for column in ASSAY_OUTPUT_DROP_COLUMNS if column in frame.columns
-        ]
-        if removed:
-            dropped_columns_seen.update(removed)
-        return remove_assay_output_columns(frame)
-
-    postprocess_enabled = bool(getattr(args, "postprocess", False))
-    emit_legacy = bool(getattr(args, "emit_legacy_artifacts", False))
-    dictionary_resources: tuple[str, ...] | None = None
-
-    metadata_hooks = [
-        normalize_assays,
-        add_pipeline_metadata,
-        _drop_output_columns,
-        _drop_assay_output_columns,
-    ]
-
-    validators: list[Any] = []
-
-    postprocess_runtime = None
-    postprocess_runner = None
-    postprocess_csv_cfg = None
-    postprocess_generate_metrics = None
-    postprocess_pipeline_config = None
-    SchemaValidationError = None
-    StepError = None
-
-    if postprocess_enabled:
-        from library.pipelines.assay import postprocessing as ap
-        from library.postprocess import (
-            PostprocessingPipelineConfig,
-            generate_metrics_report,
-            get_csv_runtime_config,
-            get_pipeline_config,
-            run_postprocessing_pipeline,
-        )
-        from library.postprocessing import enrich_assay_metadata
-        from library.postprocessing.assays import (
-            ASSAY_SCHEMA as POSTPROCESS_ASSAY_SCHEMA,
-        )
-        from library.postprocessing.assays import (
-            run_assay_pipeline as run_assay_postprocess,
-        )
-        from library.postprocessing.assays import (
-            validate_assays as validate_postprocess_assays,
-        )
-        from library.postprocessing.common.types import (
-            SchemaValidationError as PostprocessSchemaError,
-        )
-        from library.postprocessing.common.types import (
-            StepError as PostprocessStepError,
-        )
-
-        dictionary_resources = ("dictionary_root",)
-
-        def _enrich_with_dictionaries(frame: pd.DataFrame) -> pd.DataFrame:
-            return enrich_assay_metadata(
-                frame, dictionary_dir=cfg.resources.dictionary_dir
-            )
-
-        metadata_hooks = [
-            _enrich_with_dictionaries,
-            ap.postprocess_assays,
-            *metadata_hooks,
-        ]
-
-        validators.append(partial(validate_assays_schema, return_result=True))
-
-        postprocess_pipeline_config = get_pipeline_config(
-            "assays", getattr(args, "config", None)
-        )
-        postprocess_csv_cfg = get_csv_runtime_config(postprocess_pipeline_config)
-        postprocess_runtime = PostprocessingPipelineConfig(
-            pipeline_config=postprocess_pipeline_config,
-            csv_runtime_config=postprocess_csv_cfg,
-            runner=run_assay_postprocess,
-            validator=validate_postprocess_assays,
-            schema=POSTPROCESS_ASSAY_SCHEMA,
-            logger=logger,
-        )
-        postprocess_runner = run_assay_postprocess
-        postprocess_generate_metrics = generate_metrics_report
-        SchemaValidationError = PostprocessSchemaError
-        StepError = PostprocessStepError
-
-    doc_quality_cfg = cfg.system.doc_quality
-    if emit_legacy:
-        table_quality = build_table_quality_hook(
-            doc_quality_cfg,
-            table_name=output_path.with_suffix(""),
-            destination=output_path.parent,
-        )
-    else:
-
-        def _noop_table_quality(_: Path) -> None:
-            return None
-
-        table_quality = _noop_table_quality
-
-    def _persist_standard_outputs(dataset_csv: Path) -> io.StandardOutputArtifacts:
-        dataset_frame = pd.read_csv(
-            dataset_csv,
-            sep=cfg.io.csv_sep,
-            encoding=cfg.io.csv_encoding,
-        )
-        table_label = dataset_csv.with_suffix("")
-        try:
-            correlation_report = generate_correlation_report(
-                dataset_frame,
-                table_name=str(table_label),
-            )
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warning(
-                "assay_correlation_generation_failed",
-                error=str(exc),
-                path=str(dataset_csv),
-            )
-            correlation_report = pd.DataFrame()
-        try:
-            quality_report = generate_qc_report(
-                dataset_frame,
-                table_name=str(table_label),
-            )
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warning(
-                "assay_quality_generation_failed",
-                error=str(exc),
-                path=str(dataset_csv),
-            )
-            quality_report = pd.DataFrame()
-
-        if "raw.index" not in dataset_frame.columns:
-            dataset_frame.insert(0, "raw.index", dataset_frame.index)
-            logging.info(
-                "Добавлена индексная колонка 'raw.index' (%s строк).",
-                len(dataset_frame),
-            )
-
-        empty_columns = [
-            column
-            for column in ASSAY_EMPTY_OUTPUT_COLUMNS
-            if column in dataset_frame.columns and dataset_frame[column].isna().all()
-        ]
-        if empty_columns:
-            dataset_frame = dataset_frame.drop(columns=empty_columns)
-            logger.info(
-                "Removed empty columns from output.assay_*: %s",
-                ", ".join(empty_columns),
-            )
-
-        table_name_value, date_tag = io.derive_output_labels(
-            dataset_csv,
-            default_table=DEFAULT_OUTPUT_STEM,
-        )
-        artifacts = io.save_standard_outputs(
-            dataset_frame,
-            correlation_report,
-            quality_report,
-            table_name=table_name_value,
-            date_tag=date_tag,
-            output_path=dataset_csv,
-            cleanup_source=not emit_legacy,
-        )
-        qc_summary = _build_metadata_summary(dataset_frame)
-        io.save_metadata(
-            table_name=table_name_value,
-            date_tag=date_tag,
-            args=args,
-            qc_summary=qc_summary,
-            output_dir=artifacts.dataset.parent,
-            artifacts=[
-                artifacts.dataset,
-                artifacts.quality_report,
-                artifacts.correlation_report,
-            ],
-            sources=_ASSAY_METADATA_SOURCES,
-            run_context=get_run_context(),
-        )
+        metadata_obj = getattr(args, "_config_metadata", None)
+        if not isinstance(metadata_obj, ConfigMetadata):
+            metadata_obj = None
+        output_source = "cli" if getattr(args, "final_out", None) else "derived"
         logger.info(
-            "assay_standard_outputs",
-            dataset=str(artifacts.dataset),
-            quality_report=str(artifacts.quality_report),
-            correlation_report=str(artifacts.correlation_report),
+            "assay_pipeline_start",
+            input=prepare_option(
+                metadata_obj, value=str(args.input_csv), default_source="cli"
+            ),
+            output=prepare_option(
+                metadata_obj,
+                value=str(output_path),
+                default_source=output_source,
+            ),
+            limit=prepare_option(
+                metadata_obj,
+                argument="limit",
+                path="sources.chembl.pipelines.assay.limit",
+                value=limit,
+            ),
+            offset=prepare_option(
+                metadata_obj,
+                argument="offset",
+                path="sources.chembl.pipelines.assay.offset",
+                value=offset,
+            ),
+            batch_size=prepare_option(
+                metadata_obj,
+                argument="batch_size",
+                path="sources.chembl.pipelines.assay.batch_size",
+                value=cfg.assay.batch_size,
+            ),
+            timeout=prepare_option(
+                metadata_obj,
+                argument="timeout",
+                path="sources.chembl.pipelines.assay.timeout",
+                value=cfg.assay.timeout,
+            ),
         )
-        return artifacts
-
-    with ETLContext(cfg) as context:
-        client = context.chembl_client
-
-        retry_cfg = cfg.retry
-        jitter = retry_cfg.build_jitter()
-        chunk_failures = ChunkFailureTracker()
-
-        def fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
-            attempts = max(1, retry_cfg.max_attempts)
-            pending: deque[list[str]] = deque([list(chunk_ids)])
-            frames: list[pd.DataFrame] = []
-
-            while pending:
-                current = pending.popleft()
-                if not current:
-                    continue
-
-                for attempt in range(1, attempts + 1):
-                    try:
-                        frame = cl.get_assays(
-                            current,
-                            cfg=cfg.api,
-                            client=client,
-                            chunk_size=min(cfg.assay.batch_size, len(current)),
-                            timeout=cfg.assay.timeout,
-                        )
-                    except (requests.RequestException, ValueError) as exc:
-                        error_message = str(exc)
-                        context = {
-                            "chunk_ids": list(current),
-                            "chunk_size": len(current),
-                            "attempt": attempt,
-                            "max_attempts": attempts,
-                            "batch_size": cfg.assay.batch_size,
-                            "timeout": cfg.assay.timeout,
-                        }
-                        log_context = {
-                            k: v for k, v in context.items() if k != "chunk_ids"
-                        }
-
-                        if attempt >= attempts:
-                            if len(current) > 1:
-                                split_index = max(1, len(current) // 2)
-                                left = current[:split_index]
-                                right = current[split_index:]
-                                logger.warning(
-                                    "assay_fetch_split",
+        if offset:
+            ids_iter = islice(ids_iter, offset, None)
+            logger.info("process_offset", offset=offset)
+        
+        processed_ids = 0
+        
+        def _iter_ids() -> Iterator[str]:
+            nonlocal processed_ids
+            for identifier in ids_iter:
+                processed_ids += 1
+                yield identifier
+        
+        if limit is not None:
+            ids_source: Iterable[str] = islice(_iter_ids(), limit)
+        else:
+            ids_source = _iter_ids()
+        
+        failure_path = output_path.with_name(f"{output_path.stem}_failure_cases.csv")
+        fetch_failure_path = output_path.with_name(f"{output_path.stem}_fetch_failures.csv")
+        
+        dropped_columns_seen: set[str] = set()
+        
+        def _drop_output_columns(frame: pd.DataFrame) -> pd.DataFrame:
+            removed = [
+                column for column in ASSAY_OUTPUT_DROP_COLUMNS if column in frame.columns
+            ]
+            if removed:
+                dropped_columns_seen.update(removed)
+            return remove_assay_output_columns(frame)
+        
+        postprocess_enabled = bool(getattr(args, "postprocess", False))
+        emit_legacy = bool(getattr(args, "emit_legacy_artifacts", False))
+        dictionary_resources: tuple[str, ...] | None = None
+        
+        metadata_hooks = [
+            normalize_assays,
+            add_pipeline_metadata,
+            _drop_output_columns,
+            _drop_assay_output_columns,
+        ]
+        
+        validators: list[Any] = []
+        
+        postprocess_runtime = None
+        postprocess_runner = None
+        postprocess_csv_cfg = None
+        postprocess_generate_metrics = None
+        postprocess_pipeline_config = None
+        SchemaValidationError = None
+        StepError = None
+        
+        if postprocess_enabled:
+            from library.pipelines.assay import postprocessing as ap
+            from library.postprocess import (
+                PostprocessingPipelineConfig,
+                generate_metrics_report,
+                get_csv_runtime_config,
+                get_pipeline_config,
+                run_postprocessing_pipeline,
+            )
+            from library.postprocessing import enrich_assay_metadata
+            from library.postprocessing.assays import (
+                ASSAY_SCHEMA as POSTPROCESS_ASSAY_SCHEMA,
+            )
+            from library.postprocessing.assays import (
+                run_assay_pipeline as run_assay_postprocess,
+            )
+            from library.postprocessing.assays import (
+                validate_assays as validate_postprocess_assays,
+            )
+            from library.postprocessing.common.types import (
+                SchemaValidationError as PostprocessSchemaError,
+            )
+            from library.postprocessing.common.types import (
+                StepError as PostprocessStepError,
+            )
+        
+            dictionary_resources = ("dictionary_root",)
+        
+            def _enrich_with_dictionaries(frame: pd.DataFrame) -> pd.DataFrame:
+                return enrich_assay_metadata(
+                    frame, dictionary_dir=cfg.resources.dictionary_dir
+                )
+        
+            metadata_hooks = [
+                _enrich_with_dictionaries,
+                ap.postprocess_assays,
+                *metadata_hooks,
+            ]
+        
+            validators.append(partial(validate_assays_schema, return_result=True))
+        
+            postprocess_pipeline_config = get_pipeline_config(
+                "assays", getattr(args, "config", None)
+            )
+            postprocess_csv_cfg = get_csv_runtime_config(postprocess_pipeline_config)
+            postprocess_runtime = PostprocessingPipelineConfig(
+                pipeline_config=postprocess_pipeline_config,
+                csv_runtime_config=postprocess_csv_cfg,
+                runner=run_assay_postprocess,
+                validator=validate_postprocess_assays,
+                schema=POSTPROCESS_ASSAY_SCHEMA,
+                logger=logger,
+            )
+            postprocess_runner = run_assay_postprocess
+            postprocess_generate_metrics = generate_metrics_report
+            SchemaValidationError = PostprocessSchemaError
+            StepError = PostprocessStepError
+        
+        doc_quality_cfg = cfg.system.doc_quality
+        if emit_legacy:
+            table_quality = build_table_quality_hook(
+                doc_quality_cfg,
+                table_name=output_path.with_suffix(""),
+                destination=output_path.parent,
+            )
+        else:
+        
+            def _noop_table_quality(_: Path) -> None:
+                return None
+        
+            table_quality = _noop_table_quality
+        
+        def _persist_standard_outputs(dataset_csv: Path) -> io.StandardOutputArtifacts:
+            dataset_frame = pd.read_csv(
+                dataset_csv,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+            )
+            table_label = dataset_csv.with_suffix("")
+            try:
+                correlation_report = generate_correlation_report(
+                    dataset_frame,
+                    table_name=str(table_label),
+                )
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning(
+                    "assay_correlation_generation_failed",
+                    error=str(exc),
+                    path=str(dataset_csv),
+                )
+                correlation_report = pd.DataFrame()
+            try:
+                quality_report = generate_qc_report(
+                    dataset_frame,
+                    table_name=str(table_label),
+                )
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning(
+                    "assay_quality_generation_failed",
+                    error=str(exc),
+                    path=str(dataset_csv),
+                )
+                quality_report = pd.DataFrame()
+        
+            if "raw.index" not in dataset_frame.columns:
+                dataset_frame.insert(0, "raw.index", dataset_frame.index)
+                logging.info(
+                    "Добавлена индексная колонка 'raw.index' (%s строк).",
+                    len(dataset_frame),
+                )
+        
+            empty_columns = [
+                column
+                for column in ASSAY_EMPTY_OUTPUT_COLUMNS
+                if column in dataset_frame.columns and dataset_frame[column].isna().all()
+            ]
+            if empty_columns:
+                dataset_frame = dataset_frame.drop(columns=empty_columns)
+                logger.info(
+                    "Removed empty columns from output.assay_*: %s",
+                    ", ".join(empty_columns),
+                )
+        
+            table_name_value, date_tag = io.derive_output_labels(
+                dataset_csv,
+                default_table=DEFAULT_OUTPUT_STEM,
+            )
+            artifacts = io.save_standard_outputs(
+                dataset_frame,
+                correlation_report,
+                quality_report,
+                table_name=table_name_value,
+                date_tag=date_tag,
+                output_path=dataset_csv,
+                cleanup_source=not emit_legacy,
+            )
+            qc_summary = _build_metadata_summary(dataset_frame)
+            io.save_metadata(
+                table_name=table_name_value,
+                date_tag=date_tag,
+                args=args,
+                qc_summary=qc_summary,
+                output_dir=artifacts.dataset.parent,
+                artifacts=[
+                    artifacts.dataset,
+                    artifacts.quality_report,
+                    artifacts.correlation_report,
+                ],
+                sources=_ASSAY_METADATA_SOURCES,
+                run_context=get_run_context(),
+            )
+            logger.info(
+                "assay_standard_outputs",
+                dataset=str(artifacts.dataset),
+                quality_report=str(artifacts.quality_report),
+                correlation_report=str(artifacts.correlation_report),
+            )
+            return artifacts
+        
+        with ETLContext(cfg) as context:
+            client = context.chembl_client
+        
+            retry_cfg = cfg.retry
+            jitter = retry_cfg.build_jitter()
+            chunk_failures = ChunkFailureTracker()
+        
+            def fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
+                attempts = max(1, retry_cfg.max_attempts)
+                pending: deque[list[str]] = deque([list(chunk_ids)])
+                frames: list[pd.DataFrame] = []
+        
+                while pending:
+                    current = pending.popleft()
+                    if not current:
+                        continue
+        
+                    for attempt in range(1, attempts + 1):
+                        try:
+                            frame = cl.get_assays(
+                                current,
+                                cfg=cfg.api,
+                                client=client,
+                                chunk_size=min(cfg.assay.batch_size, len(current)),
+                                timeout=cfg.assay.timeout,
+                            )
+                        except (requests.RequestException, ValueError) as exc:
+                            error_message = str(exc)
+                            context = {
+                                "chunk_ids": list(current),
+                                "chunk_size": len(current),
+                                "attempt": attempt,
+                                "max_attempts": attempts,
+                                "batch_size": cfg.assay.batch_size,
+                                "timeout": cfg.assay.timeout,
+                            }
+                            log_context = {
+                                k: v for k, v in context.items() if k != "chunk_ids"
+                            }
+        
+                            if attempt >= attempts:
+                                if len(current) > 1:
+                                    split_index = max(1, len(current) // 2)
+                                    left = current[:split_index]
+                                    right = current[split_index:]
+                                    logger.warning(
+                                        "assay_fetch_split",
+                                        extra={
+                                            "msg": error_message,
+                                            "chunk_ids": context["chunk_ids"],
+                                        },
+                                        **log_context,
+                                    )
+                                    if right:
+                                        pending.appendleft(right)
+                                    if left:
+                                        pending.appendleft(left)
+                                    break
+        
+                                logger.error(
+                                    "assay_fetch_failed",
                                     extra={
                                         "msg": error_message,
                                         "chunk_ids": context["chunk_ids"],
                                     },
+                                    error=error_message,
                                     **log_context,
                                 )
-                                if right:
-                                    pending.appendleft(right)
-                                if left:
-                                    pending.appendleft(left)
+                                chunk_failures.add_failure(current, error_message)
                                 break
-
-                            logger.error(
-                                "assay_fetch_failed",
+        
+                            delay = compute_backoff_delay(attempt, retry_cfg, jitter=jitter)
+                            logger.warning(
+                                "assay_fetch_retry",
                                 extra={
                                     "msg": error_message,
                                     "chunk_ids": context["chunk_ids"],
                                 },
-                                error=error_message,
+                                delay=delay,
                                 **log_context,
                             )
-                            chunk_failures.add_failure(current, error_message)
+                            if delay > 0:
+                                sleep(delay)
+                        else:
+                            frames.append(frame)
                             break
-
-                        delay = compute_backoff_delay(attempt, retry_cfg, jitter=jitter)
-                        logger.warning(
-                            "assay_fetch_retry",
-                            extra={
-                                "msg": error_message,
-                                "chunk_ids": context["chunk_ids"],
-                            },
-                            delay=delay,
-                            **log_context,
-                        )
-                        if delay > 0:
-                            sleep(delay)
-                    else:
-                        frames.append(frame)
-                        break
-
-            if frames:
-                return pd.concat(frames, ignore_index=True)
-
-            return pd.DataFrame(columns=ASSAY_COLUMNS)
-
-        fetch_config = ChunkedFetchConfig(
-            ids=ids_source,
-            chunk_size=cfg.assay.batch_size,
-            workers=1,
-        )
-
-        writer_config = CsvWriterConfig(
-            writer=write_csv_chunks_deterministic,
-            kwargs={
-                "chunksize": cfg.io.csv_chunksize,
-                "sort_chunksize": cfg.io.csv_chunksize,
-                "sep": cfg.io.csv_sep,
-                "encoding": cfg.io.csv_encoding,
-                "cfg": cfg,
-            },
-        )
-
-        fetcher, writer = prepare_chunked_pipeline(
-            fetch_config=fetch_config,
-            fetch_chunk=fetch_chunk,
-            csv_writer=writer_config,
-        )
-
-        pipeline_stats: dict[str, object] | None = None
-
-        def _capture_stats(stats: Mapping[str, object]) -> None:
-            nonlocal pipeline_stats
-            pipeline_stats = dict(stats)
-
-        execution = None
-        try:
-            definition = PipelineDefinition(
-                schema=AssaysSchema,
-                schema_name="AssaysSchema",
-                validators=validators,
-                metadata_hooks=metadata_hooks,
-                writer=writer,
-                command=" ".join(sys.argv),
-                config_snapshot=_serialize_paths(cfg.to_dict()),
-                inputs={"input_csv": str(args.input_csv)},
-                key_columns=["assay_chembl_id"],
-                table_quality=table_quality,
-                stats_extra=chunk_failures.stats,
-                stats_callback=_capture_stats,
-                dictionary_resources=dictionary_resources,
+        
+                if frames:
+                    return pd.concat(frames, ignore_index=True)
+        
+                return pd.DataFrame(columns=ASSAY_COLUMNS)
+        
+            fetch_config = ChunkedFetchConfig(
+                ids=ids_source,
+                chunk_size=cfg.assay.batch_size,
+                workers=1,
             )
-            execution = run_pipeline(
-                definition=definition,
-                fetcher=fetcher,
-                output_path=output_path,
-                failure_path=failure_path,
-                cfg=cfg,
-                logger=logger,
-                emit_legacy_artifacts=emit_legacy,
-                cleanup_standard_source=not emit_legacy,
+        
+            writer_config = CsvWriterConfig(
+                writer=write_csv_chunks_deterministic,
+                kwargs={
+                    "chunksize": cfg.io.csv_chunksize,
+                    "sort_chunksize": cfg.io.csv_chunksize,
+                    "sep": cfg.io.csv_sep,
+                    "encoding": cfg.io.csv_encoding,
+                    "cfg": cfg,
+                },
             )
-        finally:
-            if emit_legacy:
-                chunk_failures.save(fetch_failure_path, cfg=cfg)
-            else:
-                Path(fetch_failure_path).unlink(missing_ok=True)
-                Path(f"{fetch_failure_path}.meta.yaml").unlink(missing_ok=True)
-
-    if execution is None:
-        exit_code_int = 1
-        dataset_path: Path | None = None
-    else:
-        exit_code_attr = getattr(execution, "exit_code", None)
-        exit_code_int = int(exit_code_attr if exit_code_attr is not None else execution)
-        dataset_path = getattr(execution, "dataset_path", None)
-
-    if exit_code_int == 0 and dataset_path is not None:
-        standard_artifacts = _persist_standard_outputs(dataset_path)
-        standard_dataset = standard_artifacts.dataset
-        if not emit_legacy and standard_dataset != dataset_path:
-            Path(dataset_path).unlink(missing_ok=True)
-        dataset_path = standard_dataset
-
-    if dataset_path is not None:
-        output_path = Path(dataset_path)
-        args.final_out = output_path
-        args.output_csv = output_path
-
-    exit_status = exit_code_int
-
-    dropped_columns_report = [
-        column for column in ASSAY_OUTPUT_DROP_COLUMNS if column in dropped_columns_seen
-    ]
-    if dropped_columns_report:
-        logger.info(
-            "Dropped columns from output.assay_*: %s",
-            ", ".join(dropped_columns_report),
-        )
-    else:
-        logger.info("Dropped columns from output.assay_*: <none>")
-
-    if limit is not None:
-        logger.info("process_limit", limit=processed_ids)
-    else:
-        logger.info("processed_count", count=processed_ids)
-
-    if pipeline_stats is not None:
-        logger.info(
-            "records_dropped",
-            rows_total=int(pipeline_stats.get("rows_total", processed_ids)),
-            rows_kept=int(pipeline_stats.get("rows_kept", 0)),
-            rows_dropped=int(pipeline_stats.get("rows_dropped", 0)),
-        )
-
-    if exit_status == 0:
-        if not postprocess_enabled:
+        
+            fetcher, writer = prepare_chunked_pipeline(
+                fetch_config=fetch_config,
+                fetch_chunk=fetch_chunk,
+                csv_writer=writer_config,
+            )
+        
+            pipeline_stats: dict[str, object] | None = None
+        
+            def _capture_stats(stats: Mapping[str, object]) -> None:
+                nonlocal pipeline_stats
+                pipeline_stats = dict(stats)
+        
+            execution = None
+            try:
+                definition = PipelineDefinition(
+                    schema=AssaysSchema,
+                    schema_name="AssaysSchema",
+                    validators=validators,
+                    metadata_hooks=metadata_hooks,
+                    writer=writer,
+                    command=" ".join(sys.argv),
+                    config_snapshot=_serialize_paths(cfg.to_dict()),
+                    inputs={"input_csv": str(args.input_csv)},
+                    key_columns=["assay_chembl_id"],
+                    table_quality=table_quality,
+                    stats_extra=chunk_failures.stats,
+                    stats_callback=_capture_stats,
+                    dictionary_resources=dictionary_resources,
+                )
+                execution = run_pipeline(
+                    definition=definition,
+                    fetcher=fetcher,
+                    output_path=output_path,
+                    failure_path=failure_path,
+                    cfg=cfg,
+                    logger=logger,
+                    emit_legacy_artifacts=emit_legacy,
+                    cleanup_standard_source=not emit_legacy,
+                )
+            finally:
+                if emit_legacy:
+                    chunk_failures.save(fetch_failure_path, cfg=cfg)
+                else:
+                    Path(fetch_failure_path).unlink(missing_ok=True)
+                    Path(f"{fetch_failure_path}.meta.yaml").unlink(missing_ok=True)
+        
+        if execution is None:
+            exit_code_int = 1
+            dataset_path: Path | None = None
+        else:
+            exit_code_attr = getattr(execution, "exit_code", None)
+            exit_code_int = int(exit_code_attr if exit_code_attr is not None else execution)
+            dataset_path = getattr(execution, "dataset_path", None)
+        
+        if exit_code_int == 0 and dataset_path is not None:
+            standard_artifacts = _persist_standard_outputs(dataset_path)
+            standard_dataset = standard_artifacts.dataset
+            if not emit_legacy and standard_dataset != dataset_path:
+                Path(dataset_path).unlink(missing_ok=True)
+            dataset_path = standard_dataset
+        
+        if dataset_path is not None:
+            output_path = Path(dataset_path)
+            args.final_out = output_path
+            args.output_csv = output_path
+        
+        exit_status = exit_code_int
+        
+        dropped_columns_report = [
+            column for column in ASSAY_OUTPUT_DROP_COLUMNS if column in dropped_columns_seen
+        ]
+        if dropped_columns_report:
             logger.info(
-                "postprocess_skipped",
-                output=str(output_path),
-                processed=processed_ids,
-                message="Postprocessing skipped (--postprocess flag disabled).",
+                "Dropped columns from output.assay_*: %s",
+                ", ".join(dropped_columns_report),
             )
-            return exit_status
-
-        assert postprocess_runtime is not None
-        assert postprocess_runner is not None
-        assert postprocess_generate_metrics is not None
-        assert postprocess_pipeline_config is not None
-        assert postprocess_csv_cfg is not None
-        assert SchemaValidationError is not None
-        assert StepError is not None
-
-        output_postprocessed = output_path.with_name("output_postprocessed.assays.csv")
-
-        try:
-            postprocess_result = run_postprocessing_pipeline(
+        else:
+            logger.info("Dropped columns from output.assay_*: <none>")
+        
+        if limit is not None:
+            logger.info("process_limit", limit=processed_ids)
+        else:
+            logger.info("processed_count", count=processed_ids)
+        
+        if pipeline_stats is not None:
+            logger.info(
+                "records_dropped",
+                rows_total=int(pipeline_stats.get("rows_total", processed_ids)),
+                rows_kept=int(pipeline_stats.get("rows_kept", 0)),
+                rows_dropped=int(pipeline_stats.get("rows_dropped", 0)),
+            )
+        
+        if exit_status == 0:
+            if not postprocess_enabled:
+                logger.info(
+                    "postprocess_skipped",
+                    output=str(output_path),
+                    processed=processed_ids,
+                    message="Postprocessing skipped (--postprocess flag disabled).",
+                )
+                return exit_status
+        
+            assert postprocess_runtime is not None
+            assert postprocess_runner is not None
+            assert postprocess_generate_metrics is not None
+            assert postprocess_pipeline_config is not None
+            assert postprocess_csv_cfg is not None
+            assert SchemaValidationError is not None
+            assert StepError is not None
+        
+            output_postprocessed = output_path.with_name("output_postprocessed.assays.csv")
+        
+            try:
+                postprocess_result = run_postprocessing_pipeline(
+                    "assays",
+                    output_path,
+                    output_postprocessed,
+                    postprocess_runtime,
+                )
+            except io.CsvReadError as exc:
+                logger.error(
+                    "assays_postprocess_input_read_failed",
+                    input=str(output_path),
+                    error=str(exc.original_error),
+                )
+                logger.error(
+                    "assay_pipeline_failed",
+                    output_postprocessed=str(output_postprocessed),
+                    processed=processed_ids,
+                    exit_code=1,
+                )
+                return 1
+            except (SchemaValidationError, StepError) as exc:  # type: ignore[misc]
+                logger.exception("assays_postprocess_failed", exc=exc)
+                logger.error(
+                    "assay_pipeline_failed",
+                    output_postprocessed=str(output_postprocessed),
+                    processed=processed_ids,
+                    exit_code=1,
+                )
+                return 1
+            except FileNotFoundError:
+                logger.error(
+                    "assays_postprocess_input_missing",
+                    input=str(output_path),
+                )
+                logger.error(
+                    "assay_pipeline_failed",
+                    output_postprocessed=str(output_postprocessed),
+                    processed=processed_ids,
+                    exit_code=1,
+                )
+                return 1
+            except Exception as exc:  # pragma: no cover - defensive guard
+                logger.exception("assays_postprocess_unexpected_error", exc=exc)
+                logger.error(
+                    "assay_pipeline_failed",
+                    output_postprocessed=str(output_postprocessed),
+                    processed=processed_ids,
+                    exit_code=1,
+                )
+                return 1
+        
+            metrics = postprocess_result.metrics
+            if metrics is not None:
+                summary = metrics.summary()
+                summary["output_postprocessed"] = str(postprocess_result.output_path)
+                logger.info("assays_postprocess_summary", **summary)
+        
+            extras = {
+                "input": str(output_path),
+                "output_postprocessed": str(postprocess_result.output_path),
+                "processed": processed_ids,
+            }
+            pipeline_version = (
+                metrics.pipeline_version
+                if metrics and metrics.pipeline_version is not None
+                else postprocess_runtime.pipeline_version
+                or postprocess_pipeline_config.pipeline_version
+                or get_pipeline_version()
+            )
+        
+            pipeline_metrics, report_path = postprocess_generate_metrics(
                 "assays",
-                output_path,
-                output_postprocessed,
-                postprocess_runtime,
+                postprocess_result.output_path,
+                postprocess_csv_cfg,
+                postprocess_runner,
+                pipeline_version=pipeline_version,
+                extras=extras,
+                logger=logger,
+                pipeline_metrics=metrics,
             )
-        except io.CsvReadError as exc:
-            logger.error(
-                "assays_postprocess_input_read_failed",
-                input=str(output_path),
-                error=str(exc.original_error),
-            )
-            logger.error(
-                "assay_pipeline_failed",
-                output_postprocessed=str(output_postprocessed),
-                processed=processed_ids,
-                exit_code=1,
-            )
-            return 1
-        except (SchemaValidationError, StepError) as exc:  # type: ignore[misc]
-            logger.exception("assays_postprocess_failed", exc=exc)
-            logger.error(
-                "assay_pipeline_failed",
-                output_postprocessed=str(output_postprocessed),
-                processed=processed_ids,
-                exit_code=1,
-            )
-            return 1
-        except FileNotFoundError:
-            logger.error(
-                "assays_postprocess_input_missing",
-                input=str(output_path),
-            )
-            logger.error(
-                "assay_pipeline_failed",
-                output_postprocessed=str(output_postprocessed),
-                processed=processed_ids,
-                exit_code=1,
-            )
-            return 1
-        except Exception as exc:  # pragma: no cover - defensive guard
-            logger.exception("assays_postprocess_unexpected_error", exc=exc)
+        
+            payload: dict[str, Any] = {
+                "output_postprocessed": str(postprocess_result.output_path),
+                "processed": processed_ids,
+                "pipeline_version": pipeline_version,
+            }
+            if pipeline_metrics is not None:
+                summary = pipeline_metrics.summary()
+                if summary.get("rows") is not None:
+                    payload["postprocess_rows"] = summary["rows"]
+                if summary.get("columns") is not None:
+                    payload["postprocess_columns"] = summary["columns"]
+                if summary.get("duration_s") is not None:
+                    payload["postprocess_duration_s"] = summary["duration_s"]
+                if summary.get("steps") is not None:
+                    payload["postprocess_steps"] = summary["steps"]
+                if pipeline_metrics.validation is not None:
+                    payload["postprocess_schema"] = pipeline_metrics.validation.schema
+            if report_path is not None:
+                payload["postprocess_report"] = str(report_path)
+            logger.info("assay_pipeline_done", **payload)
+        else:
             logger.error(
                 "assay_pipeline_failed",
-                output_postprocessed=str(output_postprocessed),
+                output_postprocessed=str(output_path),
                 processed=processed_ids,
-                exit_code=1,
+                exit_code=exit_status,
             )
-            return 1
-
-        metrics = postprocess_result.metrics
-        if metrics is not None:
-            summary = metrics.summary()
-            summary["output_postprocessed"] = str(postprocess_result.output_path)
-            logger.info("assays_postprocess_summary", **summary)
-
-        extras = {
-            "input": str(output_path),
-            "output_postprocessed": str(postprocess_result.output_path),
-            "processed": processed_ids,
-        }
-        pipeline_version = (
-            metrics.pipeline_version
-            if metrics and metrics.pipeline_version is not None
-            else postprocess_runtime.pipeline_version
-            or postprocess_pipeline_config.pipeline_version
-            or get_pipeline_version()
-        )
-
-        pipeline_metrics, report_path = postprocess_generate_metrics(
-            "assays",
-            postprocess_result.output_path,
-            postprocess_csv_cfg,
-            postprocess_runner,
-            pipeline_version=pipeline_version,
-            extras=extras,
-            logger=logger,
-            pipeline_metrics=metrics,
-        )
-
-        payload: dict[str, Any] = {
-            "output_postprocessed": str(postprocess_result.output_path),
-            "processed": processed_ids,
-            "pipeline_version": pipeline_version,
-        }
-        if pipeline_metrics is not None:
-            summary = pipeline_metrics.summary()
-            if summary.get("rows") is not None:
-                payload["postprocess_rows"] = summary["rows"]
-            if summary.get("columns") is not None:
-                payload["postprocess_columns"] = summary["columns"]
-            if summary.get("duration_s") is not None:
-                payload["postprocess_duration_s"] = summary["duration_s"]
-            if summary.get("steps") is not None:
-                payload["postprocess_steps"] = summary["steps"]
-            if pipeline_metrics.validation is not None:
-                payload["postprocess_schema"] = pipeline_metrics.validation.schema
-        if report_path is not None:
-            payload["postprocess_report"] = str(report_path)
-        logger.info("assay_pipeline_done", **payload)
-    else:
-        logger.error(
-            "assay_pipeline_failed",
-            output_postprocessed=str(output_path),
-            processed=processed_ids,
-            exit_code=exit_status,
-        )
-
-    return exit_status
+        
+        return exit_status
+    if fixtures is None:
+        return _execute()
+    with offline.patch_assay(fixtures):
+        return _execute()
 
 
 def _update_assay_config_from_options(
@@ -957,6 +972,11 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Enable assay postprocessing after the main pipeline",
+    )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Use cached fixtures instead of contacting the ChEMBL API",
     )
     legacy_option = parser._option_string_actions.get("--emit-legacy-artifacts")
     if legacy_option is not None:

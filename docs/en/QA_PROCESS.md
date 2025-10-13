@@ -99,6 +99,10 @@ performs:
   summaries.
 - Optional smoke execution of the pipelines using the sample data followed by
   `check-determinism`.
+- Offline CLI smoke checks execute `scripts/get_activity_data.py`,
+  `scripts/get_assay_data.py` and `scripts/get_target_data.py` with
+  `CHEMBL_DA_OFFLINE=1` against `tests/resources/pipeline_inputs` to ensure the
+  cached fixtures remain compatible with the parsers.
 - Threshold enforcement: success rate ≥ 95% (configurable via pipeline policy).
 
 Quality reports should be uploaded as CI artefacts to aid manual review. For

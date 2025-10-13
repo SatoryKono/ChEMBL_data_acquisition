@@ -146,22 +146,40 @@ jobs:
       - name: Smoke test get_data orchestrator
         run: pytest -k "get_data_main_smoke"
       - name: Smoke CLI entry points
+        env:
+          CHEMBL_DA_OFFLINE: "1"
+          CHEMBL_DA_BASE_PATH: "${{ github.workspace }}/tests/resources"
         run: |
           set -euxo pipefail
           python -m scripts.get_data --help
           tmp_output="$(mktemp -d)"
           python -m library.utils.cli_tools.pipeline_targets_main \
             --input tests/data/chembl_targets_min.csv \
-            --final-out "${tmp_output}/targets.csv" \
+            --final-out "${tmp_output}/pipeline_targets.csv" \
             --log-level INFO \
             --limit 2
-          python scripts/get_activities.py --limit 5 --final-out "${tmp_output}/activities.csv"
-          test -f "${tmp_output}/activities.csv"
-          test -f "${tmp_output}/activities.csv.meta.yaml"
-          if compgen -G "${tmp_output}/.activities.csv.*.tmp" > /dev/null; then
-            echo "Temporary files from get_activities smoke test were not cleaned up" >&2
-            exit 1
-          fi
+          python scripts/get_activity_data.py \
+            --offline \
+            --input tests/resources/pipeline_inputs/activity.csv \
+            --final-out "${tmp_output}/activities.csv" \
+            --limit 5
+          python scripts/get_assay_data.py \
+            --offline \
+            --input tests/resources/pipeline_inputs/assay.csv \
+            --final-out "${tmp_output}/assays.csv" \
+            --limit 5
+          python scripts/get_target_data.py --offline chembl \
+            --input tests/resources/pipeline_inputs/target.csv \
+            --final-out "${tmp_output}/targets.csv" \
+            --limit 2
+          for name in activities assays targets; do
+            test -f "${tmp_output}/${name}.csv"
+            test -f "${tmp_output}/${name}.csv.meta.yaml"
+            if compgen -G "${tmp_output}/.${name}.csv.*.tmp" > /dev/null; then
+              echo "Temporary files from ${name} smoke test were not cleaned up" >&2
+              exit 1
+            fi
+          done
       - name: Upload output data
         if: always()
         uses: actions/upload-artifact@v4
