@@ -13,7 +13,7 @@ import hashlib
 import platform
 import sys
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, TypedDict
@@ -84,6 +84,33 @@ def file_sha256(path: Path | str) -> str:
     return h.hexdigest()
 
 
+_DETERMINISTIC_TIMESTAMP_BASE = datetime(2000, 1, 1, tzinfo=UTC)
+_DETERMINISTIC_TIMESTAMP_WINDOW_SECONDS = 100 * 365 * 24 * 60 * 60
+
+
+def compute_generated_at(
+    path: Path | str,
+    *,
+    command: str,
+    invocation: Sequence[str] | None = None,
+) -> str:
+    """Return a deterministic timestamp derived from the invocation context."""
+
+    key_parts = [str(Path(path)), command]
+    if invocation:
+        key_parts.extend(invocation)
+    key = "\u241f".join(key_parts).encode("utf-8")
+
+    digest = hashlib.sha256(key).digest()
+    seconds = int.from_bytes(digest[:6], "big") % _DETERMINISTIC_TIMESTAMP_WINDOW_SECONDS
+    microseconds = int.from_bytes(digest[6:9], "big") % 1_000_000
+    timestamp = _DETERMINISTIC_TIMESTAMP_BASE + timedelta(
+        seconds=seconds,
+        microseconds=microseconds,
+    )
+    return timestamp.isoformat()
+
+
 def write_meta_yaml(
     csv_path: Path | str,
     *,
@@ -96,6 +123,7 @@ def write_meta_yaml(
     extra_metadata: Mapping[str, Any] | None = None,
     dictionary_resources: Sequence[str] | None = None,
     generated_at: str | None = None,
+    allow_nondeterministic_timestamp: bool = False,
     columns: Sequence[str] | None = None,
     dtypes: Mapping[str, str] | None = None,
 ) -> Path:
@@ -108,11 +136,33 @@ def write_meta_yaml(
 
     metadata: dict[str, Any] = dict(existing)
     context = get_current()
+    command_str = command if command is not None else " ".join(sys.argv)
+
+    invocation_for_seed: Sequence[str] | None
+    if invocation is not None:
+        invocation_for_seed = list(invocation)
+    else:
+        existing_invocation = existing.get("invocation")
+        if isinstance(existing_invocation, Sequence) and not isinstance(
+            existing_invocation,
+            (str, bytes),
+        ):
+            invocation_for_seed = list(existing_invocation)
+        else:
+            invocation_for_seed = None
+
     timestamp = generated_at
     if timestamp is None and context is not None and context.generated_at:
         timestamp = context.generated_at
     if timestamp is None:
-        timestamp = datetime.now(UTC).isoformat()
+        if allow_nondeterministic_timestamp:
+            timestamp = datetime.now(UTC).isoformat()
+        else:
+            timestamp = compute_generated_at(
+                path,
+                command=command_str,
+                invocation=invocation_for_seed,
+            )
 
     metadata.update(
         {
@@ -120,7 +170,7 @@ def write_meta_yaml(
             "git_sha": _git_sha(),
             "python_version": platform.python_version(),
             "platform": platform.platform(),
-            "command": command if command is not None else " ".join(sys.argv),
+            "command": command_str,
             "config": _mask_secrets(dict(config or {})),
             "inputs": dict(inputs or {}),
             "stats": dict(stats or {}),
@@ -131,7 +181,7 @@ def write_meta_yaml(
         }
     )
 
-    if invocation:
+    if invocation is not None:
         metadata["invocation"] = list(invocation)
     elif "invocation" in metadata and not metadata["invocation"]:
         # Normalise empty invocation lists that may be persisted in pre-existing
@@ -248,5 +298,6 @@ __all__ = [
     "Stats",
     "file_sha256",
     "record_quality_failure",
+    "compute_generated_at",
     "write_meta_yaml",
 ]

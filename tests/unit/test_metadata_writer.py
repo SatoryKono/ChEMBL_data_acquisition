@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from argparse import Namespace
 
+from library.common.metadata import write_meta_yaml
+
 from library.config.models import ConfigMetadata, ConfigSource
 
 import yaml
@@ -64,3 +66,26 @@ def test_save_metadata__dataclass_argument(tmp_path):
     assert serialized["snapshot"]["section"]["option"]["value"] == 5
     assert serialized["sources"]["('section', 'option')"]["source"] == "cli"
     assert serialized["env_warnings"] == ["deprecated"]
+
+
+def test_write_meta_yaml__deterministic_generated_at(tmp_path):
+    csv_path = tmp_path / "stable.csv"
+    csv_path.write_text("id\n1\n", encoding="utf-8")
+
+    first_meta_path = write_meta_yaml(
+        csv_path=csv_path,
+        command="pytest --fake-command",
+        invocation=("pipeline",),
+    )
+    first_meta = yaml.safe_load(first_meta_path.read_text(encoding="utf-8"))
+
+    first_meta_path.unlink()
+
+    second_meta_path = write_meta_yaml(
+        csv_path=csv_path,
+        command="pytest --fake-command",
+        invocation=("pipeline",),
+    )
+    second_meta = yaml.safe_load(second_meta_path.read_text(encoding="utf-8"))
+
+    assert first_meta["generated_at"] == second_meta["generated_at"]

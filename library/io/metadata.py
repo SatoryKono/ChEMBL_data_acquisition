@@ -31,6 +31,7 @@ def write_meta_yaml(
     columns: Sequence[str] | None = None,
     dtypes: Mapping[str, str] | None = None,
     generated_at: str | None = None,
+    allow_nondeterministic_timestamp: bool = False,
 ) -> Path:
     """Write metadata for ``path`` to ``<path>.meta.yaml``."""
 
@@ -46,8 +47,6 @@ def write_meta_yaml(
         context = get_current()
         if context is not None and context.generated_at:
             timestamp = context.generated_at
-    if timestamp is None:
-        timestamp = datetime.now(UTC).isoformat()
 
     return _write_meta_yaml_impl(
         path,
@@ -57,6 +56,7 @@ def write_meta_yaml(
         stats={},
         schema=None,
         generated_at=timestamp,
+        allow_nondeterministic_timestamp=allow_nondeterministic_timestamp,
         columns=columns,
         dtypes=dtypes,
     )

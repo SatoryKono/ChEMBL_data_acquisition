@@ -100,3 +100,44 @@ def test_build_forward_args__respects_equals_style_output_dir(tmp_path):
     assert f"--output-dir={custom_output}" in tokens
     assert "--output-dir" not in tokens, "default output-dir flag must not be duplicated"
     assert str(cli.DEFAULT_OUTPUT_DIR) not in tokens
+
+
+@pytest.mark.unit
+def test_ensure_base_path_env__injects_default_when_missing():
+    """The orchestrator should provide a stable base path to subprocesses."""
+
+    from scripts import get_data as cli
+
+    env: dict[str, str] = {}
+    cli._ensure_base_path_env([], env)
+
+    assert env[cli._BASE_PATH_ENV_VAR] == str(cli.DATA_DIR.resolve())
+
+
+@pytest.mark.unit
+def test_ensure_base_path_env__resolves_relative_cli_value(tmp_path, monkeypatch):
+    """CLI ``--base-path`` arguments must propagate as absolute paths."""
+
+    from scripts import get_data as cli
+
+    monkeypatch.chdir(tmp_path)
+    provided = Path("custom-base")
+    env: dict[str, str] = {}
+
+    cli._ensure_base_path_env(["--base-path", str(provided)], env)
+
+    assert env[cli._BASE_PATH_ENV_VAR] == str((tmp_path / provided).resolve())
+
+
+@pytest.mark.unit
+def test_ensure_base_path_env__keeps_preexisting_value():
+    """Existing ``CHEMBL_DA_BASE_PATH`` values must remain untouched."""
+
+    from scripts import get_data as cli
+
+    existing = "/tmp/chembl"
+    env = {cli._BASE_PATH_ENV_VAR: existing}
+
+    cli._ensure_base_path_env([], env)
+
+    assert env[cli._BASE_PATH_ENV_VAR] == existing
