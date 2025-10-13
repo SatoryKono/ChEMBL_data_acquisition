@@ -6,8 +6,9 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from library.config import MoleculeCatalogCfg
+from library.config import Config, IoCfg, MoleculeCatalogCfg
 from library.pipelines.testitem import catalog
+from scripts import get_testitem_data
 
 
 def _stub_parent_catalog_calls(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -189,3 +190,65 @@ def test_attach_parent_molecule_ids__summarises_identifier_payload(
         ]
     else:
         assert not warning_events
+
+
+def _legacy_cli_lookup(
+    path: Path | None,
+    *,
+    io_cfg: IoCfg,
+    encoding: str | None = None,
+    delimiter: str | None = None,
+    catalog_cfg: MoleculeCatalogCfg | None = None,
+) -> dict[str, str | None]:
+    cfg_source = catalog_cfg or catalog._DEFAULT_CATALOG_CFG
+    resolved_path_value = path or cfg_source.hierarchy_lookup_path
+    if resolved_path_value is None:
+        return {}
+
+    resolved_path = Path(resolved_path_value)
+    resolved_encoding = (
+        encoding
+        or getattr(cfg_source, "hierarchy_lookup_encoding", None)
+        or io_cfg.csv_encoding
+    )
+    resolved_delimiter = (
+        delimiter
+        or getattr(cfg_source, "hierarchy_lookup_delimiter", None)
+        or io_cfg.csv_sep
+    )
+
+    try:
+        raw_lookup = catalog._load_molecule_hierarchy_mapping(
+            str(resolved_path),
+            resolved_encoding,
+            resolved_delimiter,
+        )
+    except FileNotFoundError:
+        return {}
+    except ValueError as exc:  # pragma: no cover - parity with CLI behaviour
+        raise ValueError(f"invalid hierarchy lookup: {exc}") from exc
+
+    lookup = {
+        child_id: catalog._normalise_parent_identifier(
+            parent_id,
+            child_id=child_id,
+        )
+        for child_id, parent_id in raw_lookup.items()
+    }
+    if not lookup:
+        return {}
+    return lookup
+
+
+@pytest.mark.integration
+def test_parent_lookup__cli_matches_legacy(cfg: Config, snapshot_resource: Path) -> None:
+    hierarchy_path = snapshot_resource / "testitem_molecule_hierarchy.csv"
+    assert hierarchy_path.exists(), "expected hierarchy fixture to be present"
+
+    legacy_lookup = _legacy_cli_lookup(hierarchy_path, io_cfg=cfg.io)
+    modern_lookup = get_testitem_data.load_molecule_hierarchy_lookup(
+        hierarchy_path, io_cfg=cfg.io
+    )
+
+    assert legacy_lookup
+    assert modern_lookup == legacy_lookup
