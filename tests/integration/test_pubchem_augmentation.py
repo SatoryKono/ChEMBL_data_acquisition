@@ -9,7 +9,9 @@ import pandas as pd
 import pytest
 
 from library.config import PubChemCfg
+from library.pipelines.testitem import cli as testitem_cli
 from library.pipelines.testitem import pubchem
+from library.pipelines.testitem.catalog import ParentLookupStats
 
 
 @pytest.mark.integration
@@ -740,6 +742,121 @@ def test_augment_pubchem__initialises_session_and_reuses_cache(
     assert len(init_calls) == 1
     cache_payload = json.loads(pubchem_cfg.cid_cache_path.read_text(encoding="utf-8"))
     assert cache_payload["values"] == {"CHEMBL1": "CID1", "CHEMBL2": "CID2"}
+
+
+@pytest.mark.integration
+@pytest.mark.pipeline_scenario("enrichment", "missing_data")
+def test_finalize_output__pubchem_fallback_partial_rows(
+    tmp_path: Path, cfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg.system.doc_quality.enable = False
+
+    chunk = pd.DataFrame(
+        {
+            "molecule_chembl_id": pd.Series(
+                ["CHEMBL_OK", "CHEMBL_MISSING"], dtype="string"
+            ),
+            "natural_product": pd.Series([True, False], dtype="boolean"),
+            "pubchem_cid": pd.Series(["CID_OK", pd.NA], dtype="object"),
+            "pubchem_iupac_name": pd.Series(
+                ["Existing", pd.NA], dtype="string"
+            ),
+        }
+    )
+
+    def _empty_report(*_: object, **__: object) -> pd.DataFrame:
+        return pd.DataFrame({"column": pd.Series(dtype="string")})
+
+    monkeypatch.setattr(
+        testitem_cli.qc_report,
+        "generate_qc_report",
+        _empty_report,
+    )
+    monkeypatch.setattr(
+        testitem_cli.data_correlation,
+        "generate_correlation_report",
+        _empty_report,
+    )
+
+    augment_calls: list[pd.DataFrame] = []
+
+    def _fake_pubchem_augment(frame: pd.DataFrame, **_: object) -> pd.DataFrame:
+        augment_calls.append(frame.copy())
+        augmented = frame.copy()
+        augmented.loc[:, "pubchem_cid"] = pd.Series(
+            ["CID_FALLBACK"], index=frame.index, dtype="string"
+        )
+        augmented.loc[:, "pubchem_iupac_name"] = pd.Series(
+            ["Recovered"], index=frame.index, dtype="string"
+        )
+        return augmented
+
+    monkeypatch.setattr(
+        testitem_cli,
+        "_load_pubchem_augmenter",
+        lambda: _fake_pubchem_augment,
+    )
+
+    class _StubChemblClient:
+        pass
+
+    pubchem_context = testitem_cli.PubChemAugmentationContext(
+        pubchem_cfg=cfg.pubchem,
+        api_cfg=cfg.api,
+        retry_cfg=cfg.retry,
+        client=_StubChemblClient(),
+        timeout=5.0,
+        fields=("pubchem_cid", "pubchem_iupac_name"),
+        request_limit=10,
+    )
+
+    stats = ParentLookupStats(
+        source="lookup",
+        missing=0,
+        unique=2,
+        attached=2,
+        uncovered=0,
+        hierarchy_attached=0,
+        fallback_attached=0,
+        no_parent=0,
+    )
+
+    def _stats_supplier() -> ParentLookupStats:
+        return stats
+
+    output_path = tmp_path / "partial_fallback.csv"
+
+    exit_code, artifacts = testitem_cli.finalize_output(
+        [chunk],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=_stats_supplier,
+        input_csv=output_path,
+        pubchem_context=pubchem_context,
+    )
+
+    assert exit_code == 0
+    assert artifacts is not None
+    assert len(augment_calls) == 1
+
+    augmented_frame = augment_calls[0]
+    assert list(augmented_frame["molecule_chembl_id"]) == ["CHEMBL_MISSING"]
+    assert augmented_frame.index.tolist() == [1]
+
+    dataset = pd.read_csv(
+        artifacts.dataset,
+        dtype={
+            "molecule_chembl_id": "string",
+            "pubchem_cid": "string",
+            "pubchem_iupac_name": "string",
+        },
+    )
+    dataset = dataset.set_index("molecule_chembl_id", drop=True)
+
+    assert dataset.loc["CHEMBL_OK", "pubchem_cid"] == "CID_OK"
+    assert dataset.loc["CHEMBL_OK", "pubchem_iupac_name"] == "Existing"
+    assert dataset.loc["CHEMBL_MISSING", "pubchem_cid"] == "CID_FALLBACK"
+    assert dataset.loc["CHEMBL_MISSING", "pubchem_iupac_name"] == "Recovered"
 
 
 @pytest.mark.integration

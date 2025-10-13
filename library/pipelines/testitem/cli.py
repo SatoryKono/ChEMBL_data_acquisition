@@ -310,6 +310,7 @@ _PUBCHEM_OPTIONAL_COLUMNS = frozenset(
         "pubchem_molecular_formula",
     }
 )
+_PUBCHEM_KEY_COLUMNS = frozenset({"pubchem_cid"})
 _SALT_OPTIONAL_COLUMN = "salt_chembl_id"
 _DEFAULT_TABLE_NAME = "testitem"
 
@@ -1551,6 +1552,7 @@ def finalize_output(
     pubchem_fallback_applied = False
 
     if pubchem_context is not None and not dataset_frame.empty:
+        missing_mask = pd.Series(False, index=dataset_frame.index)
         available_columns = [
             column
             for column in _PUBCHEM_OPTIONAL_COLUMNS
@@ -1560,14 +1562,23 @@ def finalize_output(
             pubchem_columns = dataset_frame[available_columns].replace("", pd.NA)
             if not pubchem_columns.equals(dataset_frame[available_columns]):
                 dataset_frame.loc[:, available_columns] = pubchem_columns
-            pubchem_columns_missing = pubchem_columns.isna().all().all()
+            key_columns = [
+                column
+                for column in _PUBCHEM_KEY_COLUMNS
+                if column in pubchem_columns.columns
+            ]
+            if key_columns:
+                missing_mask = pubchem_columns[key_columns].isna().any(axis=1)
+            else:
+                missing_mask = pd.Series(True, index=dataset_frame.index)
         else:
-            pubchem_columns_missing = True
+            missing_mask = pd.Series(True, index=dataset_frame.index)
 
-        if pubchem_columns_missing:
+        if missing_mask.any():
             logger.info("pubchem_fallback_augment_start")
-            dataset_frame = _load_pubchem_augmenter()(
-                dataset_frame,
+            to_augment = dataset_frame.loc[missing_mask].copy()
+            augmented_subset = _load_pubchem_augmenter()(
+                to_augment,
                 pubchem_cfg=pubchem_context.pubchem_cfg,
                 api_cfg=pubchem_context.api_cfg,
                 retry_cfg=pubchem_context.retry_cfg,
@@ -1576,6 +1587,7 @@ def finalize_output(
                 fields=pubchem_context.fields,
                 request_limit=pubchem_context.request_limit,
             )
+            dataset_frame.loc[missing_mask, augmented_subset.columns] = augmented_subset
             logger.info("pubchem_fallback_augment_done")
             pubchem_fallback_used = True
             pubchem_fallback_applied = True
