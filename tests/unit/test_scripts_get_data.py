@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import logging
 import sys
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
@@ -100,3 +101,72 @@ def test_build_forward_args__respects_equals_style_output_dir(tmp_path):
     assert f"--output-dir={custom_output}" in tokens
     assert "--output-dir" not in tokens, "default output-dir flag must not be duplicated"
     assert str(cli.DEFAULT_OUTPUT_DIR) not in tokens
+
+
+@pytest.mark.unit
+def test_main__skip_stage_and_dry_run(monkeypatch, tmp_path):
+    """Dry-run skips outputs and does not emit warnings for skipped stages."""
+
+    from scripts import get_data as cli
+
+    base_path = tmp_path / "workspace"
+    input_dir = base_path / "data" / "input"
+    output_dir = base_path / "data" / "output"
+    input_dir.mkdir(parents=True)
+    output_dir.mkdir(parents=True)
+
+    log_target = tmp_path / "logs" / "orchestrator.log"
+    log_target.parent.mkdir(parents=True, exist_ok=True)
+
+    root_logger = logging.getLogger()
+    original_level = root_logger.level
+
+    records: list[logging.LogRecord] = []
+
+    class _CaptureHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover - simple sink
+            records.append(record)
+
+    capture_handler = _CaptureHandler(level=logging.INFO)
+    root_logger.addHandler(capture_handler)
+
+    def _fake_configure_logging(level_name: str | None) -> Path:
+        root_logger.setLevel(getattr(logging, level_name or "INFO"))
+        return log_target
+
+    monkeypatch.setattr(cli, "configure_logging", _fake_configure_logging)
+
+    invoked: list[str] = []
+
+    def _fake_run_stage(stage, forward_args):  # type: ignore[override]
+        invoked.append(stage.name)
+        return 0.0
+
+    monkeypatch.setattr(cli, "run_stage", _fake_run_stage)
+
+    config_path = Path(__file__).resolve().parents[2] / "config" / "config.yaml"
+    argv = [
+        "--skip",
+        "activity",
+        "--config",
+        str(config_path),
+        "--dry-run",
+        "--base-path",
+        str(base_path),
+    ]
+
+    try:
+        status = cli.main(argv)
+    finally:
+        root_logger.setLevel(original_level)
+        root_logger.removeHandler(capture_handler)
+
+    assert status == 0
+    assert "activity" not in invoked
+    assert any("Активные этапы (dry-run)" in record.getMessage() for record in records)
+    assert any("Dry-run: ожидаемые файлы" in record.getMessage() for record in records)
+    assert any(
+        "Dry-run: проверка выходных файлов пропущена." in record.getMessage()
+        for record in records
+    )
+    assert not any(record.levelno >= logging.WARNING for record in records)
