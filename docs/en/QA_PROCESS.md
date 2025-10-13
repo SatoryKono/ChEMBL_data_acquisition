@@ -120,3 +120,23 @@ following items:
       consecutive runs.
 - [ ] Post the summary (logs, report links, command outputs) to the `#qa-updates`
       channel so the QA team can audit the run.
+
+## CLI smoke harness
+
+The CLI harness powering the new smoke tests delegates to `python scripts/run_tests.py -- --maxfail=1 -m smoke`. The wrapper invokes `pytest` with the `pytest-json-report` plugin enabled so that the raw protocol can be post-processed into the canonical summary files.【F:scripts/run_tests.py†L35-L83】 Install the dev extras (`pip install -e .[dev]`) to pull in `pytest-json-report` alongside the rest of the tooling.
+
+Successful runs produce the following artefacts:
+
+- Raw JSON report from the plugin, the structured report and the Markdown summary in `reports/pytest_raw_report.json`, `reports/test_report.json` and `reports/test_summary.md` respectively, together with refreshed coverage outputs under `reports/coverage/`.【F:scripts/run_tests.py†L35-L139】【F:scripts/run_tests.py†L708-L834】
+- Structured logs mirrored to `<base>/logs/run_tests_<YYYYMMDD>.log`, where `<base>` resolves to `CHEMBL_DA_BASE_PATH` when set or the repository default otherwise.【F:library/cli/logging.py†L25-L149】
+
+The harness enforces deterministic exit codes so CI can short-circuit on degraded smoke runs:
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | Smoke suite succeeded, success-rate and coverage thresholds met. |
+| `1` | Pytest reported failures or the success-rate/coverage checks fell below the 95 % / 80 % thresholds (`QUALITY_FAILURE_EXIT_CODE`). |
+| `11` | Generation or validation of the structured reports failed (`VALIDATION_FAILURE_EXIT_CODE`). |
+| `2`, `3`, `4`, `5` | Native `pytest` exit codes are propagated when the interpreter aborts early (keyboard interrupt, internal error, usage error or no tests collected). |
+
+The wrapper always starts from the raw pytest status (`final_exit_code = exit_code`) and only overrides it with the validation or quality-specific codes listed above, so downstream jobs can continue relying on well-known pytest semantics.【F:scripts/run_tests.py†L56-L59】【F:scripts/run_tests.py†L708-L834】
