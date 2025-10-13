@@ -112,7 +112,8 @@ Key schema definitions are enforced by Pandera models:
 
 ### 4.2 Document pipeline `scripts/get_document_data.py`
 
-- Modes: `chembl`, `pubmed`, `all`; default invocation `--mode all`. 【F:library/cli/commands/get_document_data.py†L1737-L1975】
+- Modes: `chembl`, `pubmed`, `all`; pass `--mode <...>` (or the positional
+  command) explicitly—`--mode all` runs the combined workflow. 【F:library/cli/commands/get_document_data.py†L1737-L1975】
 - Common options: `--input`, `--final-out`, `--column`, `--limit`, `--offset`, `--config`. 【F:library/cli/parser.py†L126-L204】
 - Mode-specific flags: `--batch-size`, `--sleep`, `--workers` for PubMed; `--chunk-size`, `--chembl-timeout` for ChEMBL; fallback DOI block (`--fallback-doi-*`). 【F:library/cli/commands/get_document_data.py†L1216-L1718】
 - Post-processing: `library/postprocessing/documents/steps`. 【F:library/postprocessing/documents/steps.py†L1-L82】
