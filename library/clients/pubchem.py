@@ -1435,11 +1435,27 @@ def get_properties(cid: str, cfg: PubChemCfg) -> Properties:
     if not props:
         return Properties(None, None, None, None, None, None)
     item = props[0]
+
+    def _first_available(*keys: str) -> str | None:
+        for key in keys:
+            value = item.get(key)
+            if isinstance(value, str) and value:
+                return cast(str, value)
+        return None
+
+    isomeric_smiles = _first_available("IsomericSMILES", "IsomericSmiles", "SMILES")
+    canonical_smiles = _first_available(
+        "CanonicalSMILES",
+        "CanonicalSmiles",
+        "SMILES",
+        "ConnectivitySMILES",
+    )
+
     return Properties(
         cast(str | None, item.get("IUPACName")),
         cast(str | None, item.get("MolecularFormula")),
-        cast(str | None, item.get("IsomericSMILES")),
-        cast(str | None, item.get("CanonicalSMILES")),
+        isomeric_smiles,
+        canonical_smiles,
         cast(str | None, item.get("InChI")),
         cast(str | None, item.get("InChIKey")),
     )
