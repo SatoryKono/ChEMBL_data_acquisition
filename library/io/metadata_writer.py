@@ -27,7 +27,7 @@ def _serialise_value(value: Any) -> Any:
         return {key: _serialise_value(val) for key, val in vars(value).items()}
     if isinstance(value, Mapping):
         return {str(key): _serialise_value(val) for key, val in value.items()}
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, list | tuple | set):
         return [_serialise_value(item) for item in value]
     if isinstance(value, datetime):
         if value.tzinfo is None:

@@ -156,7 +156,7 @@ def write_meta_yaml(
         existing_invocation = existing.get("invocation")
         if isinstance(existing_invocation, Sequence) and not isinstance(
             existing_invocation,
-            (str, bytes),
+            str | bytes,
         ):
             invocation_for_seed = list(existing_invocation)
         else:
