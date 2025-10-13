@@ -10,6 +10,7 @@ from library.schemas.testitems import TestitemsSchema
 def test_testitems_schema__valid_frame() -> None:
     frame = pd.DataFrame(
         {
+            "raw.index": [0],
             "molecule_chembl_id": ["CHEMBL1"],
             "parent_molecule_chembl_id": ["CHEMBL10"],
             "natural_product": pd.Series([pd.NA], dtype="boolean"),
