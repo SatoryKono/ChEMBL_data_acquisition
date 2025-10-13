@@ -90,13 +90,20 @@ def test_finalize_output__optional_column_present_in_later_chunk(
     output_path = tmp_path / "optional.csv"
 
     warnings: list[tuple[str, dict[str, object]]] = []
+    infos: list[tuple[str, dict[str, object]]] = []
 
     def capture_warning(event: str, **fields: object) -> None:
         warnings.append((event, fields))
 
+    def capture_info(event: str, *args: object, **fields: object) -> None:
+        if args:
+            return
+        infos.append((event, fields))
+
     cli = _cli()
 
     monkeypatch.setattr(cli.logger, "warning", capture_warning)
+    monkeypatch.setattr(cli.logger, "info", capture_info)
 
     from library.config import Config
     from library.pipelines.testitem.catalog import ParentLookupStats
@@ -141,12 +148,16 @@ def test_finalize_output__optional_column_present_in_later_chunk(
         no_parent=0,
     )
 
+    missing_ids = [f"CHEMBL{i:05d}" for i in range(150)]
+
     exit_result = cli.finalize_output(
         [first_chunk, second_chunk],
         cfg=cfg,
         output=output_path,
         parent_stats_supplier=lambda: stats,
         input_csv=sample_input_csv,
+        missing_ids=missing_ids,
+        emit_legacy_artifacts=False,
     )
 
     if isinstance(exit_result, tuple):
@@ -168,6 +179,18 @@ def test_finalize_output__optional_column_present_in_later_chunk(
     final = pd.read_csv(dataset_path)
     assert "pref_name" in final.columns
     assert final.loc[1, "pref_name"] == "Example"
+
+    stats_events = [fields for event, fields in infos if event == "testitem_stats"]
+    assert stats_events, "expected testitem_stats event to be emitted"
+    latest_stats = stats_events[-1]
+    sample_limit = cli._MISSING_IDENTIFIER_STATS_SAMPLE_SIZE
+    expected_sample = missing_ids[:sample_limit]
+
+    assert latest_stats["missing_molecule_ids"] == expected_sample
+    assert latest_stats["missing_ids_sample"] == expected_sample
+    assert latest_stats["missing_molecule_ids_total"] == len(missing_ids)
+    assert latest_stats["missing_molecule_ids_count"] == len(missing_ids)
+    assert latest_stats["missing_molecule_ids_truncated"] is True
 
 
 @pytest.mark.unit
