@@ -89,6 +89,7 @@ StatsExtraMapping = Mapping[str, object]
 class _ParquetChunkStore:
     """Persist prepared chunks to temporary files for later reuse.
 
+    """
     The store prefers parquet output but gracefully falls back to pickle when
     the optional parquet engines are unavailable in the runtime environment.
     """
@@ -99,51 +100,73 @@ class _ParquetChunkStore:
         self._tmpdir = tempfile.TemporaryDirectory(prefix="pipeline_chunks_")
         self._paths: list[Path] = []
         self._row_count = 0
-        self._backend, reason = self._detect_backend()
-        if self._backend != "parquet":
+        # Detect if we can use parquet or must fall back to pickle
+        self._use_pickle = False
+        try:
+            from pandas.io import parquet as pd_parquet  # type: ignore
+            try:
+                pd_parquet.get_engine("auto")
+            except Exception as exc:
+                self._use_pickle = True
+                default_logger.warning(
+                    "chunk_store_backend_fallback",
+                    backend="pickle",
+                    reason=str(exc) or "parquet engine unavailable",
+                )
+        except Exception as exc:
+            self._use_pickle = True
             default_logger.warning(
                 "chunk_store_backend_fallback",
-                backend=self._backend,
-                reason=reason or "parquet engine unavailable",
+                backend="pickle",
+                reason=str(exc) or "parquet engine unavailable",
             )
 
     @staticmethod
-    def _detect_backend() -> tuple[str, str | None]:
-        """Determine the storage backend to use for chunk persistence."""
-
-        try:  # pandas ensures the module exists even without pyarrow installed
-            from pandas.io import parquet as pd_parquet  # type: ignore
-        except Exception as exc:  # pragma: no cover - defensive
-            return "pickle", str(exc)
-
-        try:
-            pd_parquet.get_engine("auto")
-        except Exception as exc:  # pragma: no cover - fallback path is tested
-            return "pickle", str(exc)
-        return "parquet", None
+    def _write_pickle(frame: pd.DataFrame, path: Path) -> None:
+        frame.to_pickle(path, protocol=5)
 
     def append(self, frame: pd.DataFrame) -> None:
         if not isinstance(frame, pd.DataFrame):
             raise TypeError("chunk store expects pandas DataFrame inputs")
 
-        suffix = ".parquet" if self._backend == "parquet" else ".pkl"
-        path = Path(self._tmpdir.name) / f"chunk_{len(self._paths):05d}{suffix}"
-        sanitised = frame.reset_index(drop=True)
+        base_path = Path(self._tmpdir.name) / f"chunk_{len(self._paths):05d}"
 
-        if self._backend == "parquet":
-            sanitised.to_parquet(path, index=False)
+        if self._use_pickle:
+            path = base_path.with_suffix(".pkl")
+            self._write_pickle(frame, path)
         else:
-            sanitised.to_pickle(path)
+            path = base_path.with_suffix(".parquet")
+            try:
+                frame.to_parquet(path, index=False)
+            except ImportError as exc:
+                # Optional parquet engines are not installed in the execution
+                # environment.  Fall back to using pickle serialisation to keep
+                # the pipeline functional while maintaining deterministic
+                # behaviour.
+                default_logger.warning(
+                    "pyarrow/fastparquet unavailable, falling back to pickle for chunk storage: %s",
+                    exc,
+                )
+                self._use_pickle = True
+                path = base_path.with_suffix(".pkl")
+                self._write_pickle(frame, path)
+            else:
+                self._paths.append(path)
+                self._row_count += len(frame)
+                return
+
+        self._paths.append(path)
+        self._row_count += len(frame)
 
         self._paths.append(path)
         self._row_count += len(frame)
 
     def iter_frames(self) -> Iterator[pd.DataFrame]:
         for path in self._paths:
-            if self._backend == "parquet":
-                yield pd.read_parquet(path)
-            else:
+            if self._use_pickle or path.suffix == ".pkl":
                 yield pd.read_pickle(path)
+            else:
+                yield pd.read_parquet(path)
 
     @property
     def row_count(self) -> int:
