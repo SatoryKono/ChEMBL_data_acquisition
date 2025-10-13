@@ -135,7 +135,10 @@ def test_fetch_semantic_scholar_batch__delay_resolution(
 
     assert captured["delay"] == pytest.approx(expected)
 
-    monkeypatch.setattr(semantic_scholar, "_do_request", _fake_do_request)
+    def _error_do_request(session, url, delay, **kwargs):  # type: ignore[override]
+        return None, "HTTP 500 Internal Server Error"
+
+    monkeypatch.setattr(semantic_scholar, "_do_request", _error_do_request)
 
     session = requests.Session()
 
@@ -180,3 +183,73 @@ def test_fetch_semantic_scholar_batch__logs_warning_on_invalid_response(
 def test_semantic_scholar_cfg__rejects_blank_api_key() -> None:
     with pytest.raises(ValueError):
         SemanticScholarCfg(api_key="   ")
+
+
+@pytest.mark.unit
+def test_fetch_semantic_scholar_batch__access_denied_logs_once(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def _fake_do_request(session, url, delay, **kwargs):  # type: ignore[override]
+        return None, 'HTTP 403: {"message":"Forbidden"}'
+
+    monkeypatch.setattr(semantic_scholar, "_do_request", _fake_do_request)
+
+    session = requests.Session()
+    pmids = ["1319495", "15317460", "16078848"]
+
+    with caplog.at_level("WARNING"):
+        results = semantic_scholar.fetch_semantic_scholar_batch(session, pmids, 0.0)
+
+    assert [entry["scholar.PMID"] for entry in results] == pmids
+    for entry in results:
+        assert "Semantic Scholar API access denied" in entry["scholar.Error"]
+        assert "HTTP 403" in entry["scholar.Error"]
+
+    access_logs = [
+        record for record in caplog.records if "access denial" in record.getMessage()
+    ]
+    assert len(access_logs) == 1
+    assert str(len(pmids)) in access_logs[0].getMessage()
+
+
+@pytest.mark.unit
+def test_fetch_semantic_scholar__access_denied_hint(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def _fake_do_request(session, url, delay, **kwargs):  # type: ignore[override]
+        return None, 'HTTP 403: {"message":"Forbidden"}'
+
+    monkeypatch.setattr(semantic_scholar, "_do_request", _fake_do_request)
+
+    session = requests.Session()
+
+    with caplog.at_level("WARNING"):
+        result = semantic_scholar.fetch_semantic_scholar(session, "17827018", 0.0)
+
+    assert result["scholar.PMID"] == "17827018"
+    assert "Semantic Scholar API access denied" in result["scholar.Error"]
+    assert "HTTP 403" in result["scholar.Error"]
+    assert any(
+        "access denial" in record.getMessage() for record in caplog.records
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "message,expected",
+    [
+        ("HTTP 403: Forbidden", True),
+        ("http 401: unauthorized", True),
+        ("Request failed: Forbidden", True),
+        ("HTTP 500: Internal Server Error", False),
+        ("", False),
+        (None, False),
+    ],
+)
+def test_is_access_denied_error__cases(
+    message: str | None,
+    expected: bool,
+) -> None:
+    assert semantic_scholar.is_access_denied_error(message) is expected
