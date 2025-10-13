@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
+
 import pandas as pd
 import pytest
 
 from library.postprocessing.targets.steps import (
+    enrich_target_metadata,
     enrich_target_synonyms,
     finalize_target_records,
     normalize_target_fields,
@@ -45,6 +49,54 @@ def test_normalize_target_fields__applies_taxonomy_and_identifier_normalization(
     # ensure the original dataframe was not mutated
     assert frame.loc[0, "target_chembl_id"] == "  chembl123  "
     assert frame.loc[1, "target_chembl_id"] is None
+
+
+@pytest.mark.unit
+def test_normalize_target_fields__derives_classifications_and_synonyms() -> None:
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1", "CHEMBL2"],
+            "protein_classifications": [
+                json.dumps(
+                    [
+                        {
+                            "protein_classification": {
+                                "pref_name": "Enzyme",
+                                "class_level": 1,
+                            }
+                        },
+                        {
+                            "protein_classification": {
+                                "pref_name": "Kinase family",
+                                "class_level": 2,
+                            }
+                        },
+                    ]
+                ),
+                "",
+            ],
+            "protein_class_pred_L1": [None, "Other Protein Target"],
+            "protein_class_pred_L2": [None, "Miscellaneous"],
+            "protein_synonym_list": ["Alpha|Beta", None],
+            "protein_name_canonical": ["Canonical A", "Canonical B"],
+            "protein_name_alt": ["AltA", None],
+            "pref_name": [" Alpha ", "Beta"],
+            "gene_symbol": ["GENA", None],
+            "gtop_synonyms": ["delta;epsilon", None],
+        }
+    )
+
+    result = normalize_target_fields(frame)
+
+    assert result["target_class"].tolist() == ["Enzyme", "Other Protein Target"]
+    assert result["protein_family"].tolist() == ["Kinase family", "Miscellaneous"]
+
+    chembl_tokens = result.loc[0, "chembl_synonyms"].split("|")
+    assert chembl_tokens == ["Alpha", "Beta", "Canonical A", "AltA", "GENA"]
+    assert result.loc[0, "gtopdb_synonyms"] == "delta|epsilon"
+
+    assert result.loc[1, "chembl_synonyms"] == "Canonical B|Beta"
+    assert pd.isna(result.loc[1, "gtopdb_synonyms"])
 
 
 @pytest.mark.unit
@@ -151,6 +203,64 @@ def test_enrich_target_synonyms__ignores_unrecognised_parameters() -> None:
     )
 
     assert result["synonyms"].tolist() == ["alpha; beta"]
+
+
+@pytest.mark.unit
+def test_enrich_target_metadata__fills_fields_from_dictionaries(tmp_path, monkeypatch) -> None:
+    target_types_path = tmp_path / "target_types.csv"
+    target_types_path.write_text(
+        "target_chembl_id,synonyms,IUPHAR_type,target_id\n"
+        "CHEMBL1827,alpha|beta,Enzyme.Hydrolase,123\n"
+        "CHEMBL0000,,,\n",
+        encoding="utf-8",
+    )
+
+    iuphar_path = tmp_path / "iuphar_target.csv"
+    iuphar_path.write_text(
+        "target_id,synonyms,family_name\n"
+        "123,delta|epsilon,Adenosine turnover\n"
+        "999,zeta,Other family\n",
+        encoding="utf-8",
+    )
+
+    def _fake_get_resource(name: str) -> SimpleNamespace:
+        if name == "target_types":
+            return SimpleNamespace(path=target_types_path)
+        if name == "target_iuphar_target":
+            return SimpleNamespace(path=iuphar_path)
+        raise AssertionError(f"Unexpected resource name: {name}")
+
+    monkeypatch.setattr(
+        "library.postprocessing.targets.steps.get_resource",
+        _fake_get_resource,
+    )
+
+    from library.postprocessing.targets import steps as target_steps
+
+    target_steps._load_target_types_frame.cache_clear()
+    target_steps._load_iuphar_targets_frame.cache_clear()
+
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1827", "CHEMBL999"],
+            "chembl_synonyms": [pd.NA, "custom"],
+            "target_class": [pd.NA, "Preset"],
+            "protein_family": [pd.NA, pd.NA],
+            "gtopdb_synonyms": [pd.NA, pd.NA],
+        }
+    )
+
+    result = enrich_target_metadata(frame)
+
+    assert result.loc[0, "chembl_synonyms"] == "alpha|beta"
+    assert result.loc[0, "target_class"] == "Enzyme.Hydrolase"
+    assert result.loc[0, "protein_family"] == "Adenosine turnover"
+    assert result.loc[0, "gtopdb_synonyms"] == "delta|epsilon"
+
+    assert result.loc[1, "chembl_synonyms"] == "custom"
+    assert result.loc[1, "target_class"] == "Preset"
+    assert pd.isna(result.loc[1, "protein_family"])
+    assert pd.isna(result.loc[1, "gtopdb_synonyms"])
 
 
 @pytest.mark.unit
