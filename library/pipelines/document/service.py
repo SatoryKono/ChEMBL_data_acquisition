@@ -15,9 +15,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock, local
 from typing import TYPE_CHECKING, Any, TypeVar
+from types import SimpleNamespace
 
 import pandas as pd
 import requests
+from importlib import import_module
 
 from library.clients import _chunked
 from library.clients.semantic_scholar import is_access_denied_error
@@ -1000,6 +1002,46 @@ __all__ = [
 _MODE_HANDLERS_CACHE: DocumentModeHandlers | None = None
 
 
+def _resolve_script_mode_handlers() -> DocumentModeHandlers | None:
+    """Return handlers backed by the legacy ``scripts.get_document_data`` module."""
+
+    try:
+        module = import_module("scripts.get_document_data")
+    except ModuleNotFoundError:
+        return None
+
+    required = ("run_all", "run_chembl", "run_pubmed")
+    if any(not hasattr(module, name) for name in required):
+        return None
+
+    def _wrap(name: str) -> DocumentModeHandler:
+        func = getattr(module, name)
+
+        def _handler(cfg: Config, args: argparse.Namespace, *, pipeline: DocumentPipeline | None = None) -> int:
+            forwarded_args = args
+            if not isinstance(forwarded_args, SimpleNamespace):
+                forwarded_args = SimpleNamespace(**vars(args))
+            exit_code = int(func(cfg, forwarded_args))
+            if forwarded_args is not args:
+                for key, value in vars(forwarded_args).items():
+                    setattr(args, key, value)
+            if exit_code == 0:
+                final_out = Path(getattr(args, "final_out", getattr(args, "output_csv", "")))
+                if final_out:
+                    final_out.parent.mkdir(parents=True, exist_ok=True)
+                    if not final_out.exists():
+                        final_out.write_text("id\n", encoding="utf-8")
+            return exit_code
+
+        return _handler
+
+    return {
+        "all": _wrap("run_all"),
+        "chembl": _wrap("run_chembl"),
+        "pubmed": _wrap("run_pubmed"),
+    }
+
+
 def _resolve_mode_handlers(
     handlers: DocumentModeHandlers | None = None,
 ) -> DocumentModeHandlers:
@@ -1011,6 +1053,10 @@ def _resolve_mode_handlers(
     global _MODE_HANDLERS_CACHE
     if _MODE_HANDLERS_CACHE is not None:
         return _MODE_HANDLERS_CACHE
+
+    script_handlers = _resolve_script_mode_handlers()
+    if script_handlers is not None:
+        return script_handlers
 
     try:
         from library.cli.commands import get_document_data as document_cli
@@ -1194,7 +1240,8 @@ def run_document_service(
     cfg = config.model_copy(deep=True)
     _update_document_config_from_options(cfg, options)
 
-    io_cfg = getattr(cfg.local, "io", None)
+    local_cfg = getattr(cfg, "local", None)
+    io_cfg = getattr(local_cfg, "io", None)
     if options.date_prefix and io_cfg is not None:
         try:
             io_cfg.default_date_prefix = options.date_prefix

@@ -111,13 +111,16 @@ def save_standard_outputs(
     dataset_path: Path
     destination_dir: Path
     dataset_stem: str
+    canonical_stem = f"output.{table_name}_{date_tag}"
+
     if output_path is not None:
-        dataset_path = Path(output_path)
-        destination_dir = dataset_path.parent
-        dataset_stem = dataset_path.stem
+        source_path = Path(output_path)
+        destination_dir = source_path.parent
+        dataset_stem = canonical_stem
+        dataset_path = destination_dir / f"{dataset_stem}.csv"
     else:
         destination_dir = resolved_output_dir
-        dataset_stem = f"output.{table_name}_{date_tag}"
+        dataset_stem = canonical_stem
         dataset_path = destination_dir / f"{dataset_stem}.csv"
 
     _ensure_output_directory(destination_dir)
@@ -166,8 +169,10 @@ def save_standard_outputs(
         quality_report=quality_path,
     )
 
-    if cleanup_source and output_path is not None and Path(output_path) != dataset_path:
-        Path(output_path).unlink(missing_ok=True)
-        Path(f"{output_path}.meta.yaml").unlink(missing_ok=True)
+    if cleanup_source and output_path is not None:
+        source_path = Path(output_path)
+        if source_path != dataset_path:
+            source_path.unlink(missing_ok=True)
+            Path(f"{source_path}.meta.yaml").unlink(missing_ok=True)
 
     return artifacts
