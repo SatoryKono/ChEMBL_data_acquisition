@@ -83,7 +83,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p reports
-          mypy --strict library | tee reports/mypy-report.txt
+          mypy --strict library scripts config | tee reports/mypy-report.txt
       - name: Run pytest suite
         id: run-tests
         continue-on-error: true
