@@ -95,6 +95,29 @@ pip install --no-deps -e .
 > диапазоны версий в метаданных проекта, затем пересоздайте lock-файл, чтобы все
 > три источника оставались синхронизированными.
 
+### Пересборка lock-файлов зависимостей
+
+Запускайте `pip-compile` и `poetry lock` только под интерпретатором, указанным в
+[`.python-version`](.python-version). В CI добавлена проверка, запрещающая
+случайно зафиксировать lock-файлы, собранные на Python 3.13+, поскольку они
+приведут к несовместимости со старыми средами.
+
+```bash
+python "$(cat .python-version)" -m venv .venv-lock
+source .venv-lock/bin/activate
+python -m pip install --upgrade pip
+pip install pip-tools "poetry==2.1.4"
+pip-compile --extra=dev --output-file=requirements-lock.txt pyproject.toml
+poetry lock
+deactivate
+rm -rf .venv-lock
+```
+
+Скрипт [`tools/check_pip_compile_python_version.py`](tools/check_pip_compile_python_version.py)
+проверяет, что заголовок `requirements-lock.txt` по-прежнему ссылается на
+поддерживаемый интерпретатор. Запускайте его после обновления зависимостей, чтобы
+убедиться в соответствии с содержимым `.python-version`.
+
 ### Pre-commit хуки
 
 Репозиторий поставляется с настроенным

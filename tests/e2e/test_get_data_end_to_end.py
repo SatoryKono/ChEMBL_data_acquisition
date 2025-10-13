@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import re
 import shutil
 import textwrap
 from collections import deque
@@ -213,6 +214,13 @@ def test_get_data_end_to_end__miniature_pipeline(
     output_dir = base_path / "output"
     input_dir.mkdir()
     output_dir.mkdir()
+
+    cleanup_artifact = output_dir / "sentinel__cleanup.tmp"
+    cleanup_artifact.write_text("cleanup", encoding="utf-8")
+    external_dir = base_path / "external"
+    external_dir.mkdir()
+    external_artifact = external_dir / "sentinel__external.tmp"
+    external_artifact.write_text("outside", encoding="utf-8")
 
     fixture_dir = Path(__file__).resolve().parents[1] / "resources" / "pipeline_inputs"
     for stem in ("document", "target", "assay", "testitem", "activity"):
@@ -447,6 +455,34 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert "pipeline_start" in orchestrator_events
     assert "workflow_succeeded" in orchestrator_events
 
+    orchestrator_text = orchestrator_log.read_text(encoding="utf-8")
+    csv_summary_lines = [
+        line
+        for line in orchestrator_text.splitlines()
+        if "Найдено" in line and "CSV-файлов" in line
+    ]
+    assert csv_summary_lines, "expected orchestrator log to summarise CSV outputs"
+    csv_summary_message = csv_summary_lines[-1].split("|", maxsplit=2)[-1].strip()
+    csv_summary_match = re.search(
+        r"Найдено\s+(?P<count>\d+)\s+CSV-файлов\s+в\s+(?P<path>.+?)(?:\.\s*|\s*)$",
+        csv_summary_message,
+    )
+    assert csv_summary_match is not None, "unable to parse CSV summary message"
+    reported_csv_count = int(csv_summary_match.group("count"))
+    reported_output_dir = Path(csv_summary_match.group("path")).expanduser().resolve()
+    assert reported_output_dir == output_dir.resolve()
+
+    cleanup_lines = [
+        line for line in orchestrator_text.splitlines() if "[CLEANUP]" in line
+    ]
+    assert any(
+        cleanup_artifact.name in line and "Удалён файл" in line
+        for line in cleanup_lines
+    ), "cleanup did not report removing artefacts from the requested output dir"
+    assert not cleanup_artifact.exists()
+    assert external_artifact.exists()
+    assert external_artifact.name not in orchestrator_text
+
     events = {record.get("event"): record for record in logs if "event" in record}
     assert "document_duplicates_dropped" in events
     assert events["document_duplicates_dropped"].get("level") == "WARNING"
@@ -477,6 +513,9 @@ def test_get_data_end_to_end__miniature_pipeline(
             quality_columns = ["assay_strain", "assay_group", "year", "accession"]
             completeness = 1.0 - actual[quality_columns].isna().mean()
             assert (completeness >= ASSAY_ENRICHMENT_MIN_RATIO).all(), completeness
+
+    actual_csv_files = sorted(output_dir.glob("*.csv"))
+    assert reported_csv_count == len(actual_csv_files)
 
     hashes_before = {name: sha256_file(path) for name, path in output_paths.items()}
 

@@ -548,7 +548,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             if not isinstance(legacy_output, Path):
                 args.final_out = output_path
         else:
-            output_path = None
+            output_path = io.default_output_path(
+                args.input_csv,
+                cfg.io,
+                date=getattr(args, "date", None),
+                stamp_mode="require",
+            )
+            args.final_out = output_path
     else:
         output_path = Path(final_out_attr)
         if not isinstance(final_out_attr, Path):
@@ -562,6 +568,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         offset=getattr(args, "offset", None),
         emit_legacy_artifacts=getattr(args, "emit_legacy_artifacts", False),
         pubchem_enabled=getattr(args, "pubchem_enable", None),
+        date=getattr(args, "date", None),
     )
     pipeline_result = run_testitem_pipeline(cfg, options)
 

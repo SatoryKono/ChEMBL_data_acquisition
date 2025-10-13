@@ -34,8 +34,9 @@ def _load_bootstrap(script_file: str | None) -> _BootstrapModule:
     project_root = _project_root_from(script_file)
     if project_root is not None:
         project_root_str = str(project_root)
-        if project_root_str not in sys.path:
-            sys.path.insert(0, project_root_str)
+        if project_root_str in sys.path:
+            sys.path.remove(project_root_str)
+        sys.path.insert(0, project_root_str)
 
     try:
         imported = import_module(module_name)

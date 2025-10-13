@@ -33,6 +33,8 @@ except ModuleNotFoundError as exc:  # pragma: no cover - import guard
     sys.modules.pop("scripts", None)
     from scripts._bootstrap import ensure_project_root
 
+ensure_project_root(__file__)
+
 from library.config import DEFAULT_CONFIG_PATH, load_config  # noqa: E402
 from library.config.env import (
     _default_base_path as _config_default_base_path,
@@ -41,6 +43,8 @@ from library.config.env import (
 
 def _guard_cli_module() -> None:
     """Ensure the core ``library.cli.commands.get_data`` module imports cleanly."""
+
+    ensure_project_root(__file__)
 
     try:
         import_module("library.cli.commands.get_data")

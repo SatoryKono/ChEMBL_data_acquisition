@@ -1,3 +1,4 @@
 include LICENSE
 include library/py.typed
 include library/qa/document_schema_crosswalk.yaml
+include config/schema/document.yaml

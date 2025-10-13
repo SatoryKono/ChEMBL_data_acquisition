@@ -13,6 +13,7 @@ data/output/ChEMBL/processed/pairs_same_document.csv
 .cache/
 data/output/
 data/output-smoke/
+cache/
 data/cache/pubchem_cid_cache.json
 data/cache/*.lock
 uniprot/

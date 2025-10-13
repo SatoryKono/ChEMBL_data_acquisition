@@ -4213,13 +4213,51 @@ def validate_and_write(
         if pipeline_result.report_path is not None:
             postprocess_report_path = Path(pipeline_result.report_path)
     final_df = export_df
+    doc_quality_cfg = cfg.system.doc_quality
+    include_columns = getattr(doc_quality_cfg, "include_columns", None)
+    exclude_columns = getattr(doc_quality_cfg, "exclude_columns", None)
+    sample_rows_cfg = getattr(doc_quality_cfg, "sample_rows", None)
+    correlation_max_columns = getattr(
+        doc_quality_cfg, "correlation_max_columns", None
+    )
+
+    correlation_include_columns = include_columns
+    if (
+        correlation_include_columns is None
+        and correlation_max_columns is not None
+        and correlation_max_columns >= 1
+    ):
+        exclude_set = set(exclude_columns or ())
+        numeric_columns = [
+            column
+            for column, dtype in final_df.dtypes.items()
+            if column not in exclude_set
+            and column != "raw.index"
+            and pd.api.types.is_numeric_dtype(dtype)
+        ]
+        if len(numeric_columns) > int(correlation_max_columns):
+            limited_columns = list(numeric_columns[: int(correlation_max_columns)])
+            correlation_include_columns = tuple(limited_columns)
+            logger.warning(
+                "correlation_columns_sampled",
+                total=len(numeric_columns),
+                limit=int(correlation_max_columns),
+                columns=limited_columns,
+            )
+
     quality_summary = generate_qc_report(
         final_df,
         table_name=inferred_table_name,
+        include_columns=include_columns,
+        exclude_columns=exclude_columns,
+        sample_rows=sample_rows_cfg,
     )
     correlation_matrix = generate_correlation_report(
         final_df,
         table_name=inferred_table_name,
+        include_columns=correlation_include_columns,
+        exclude_columns=exclude_columns,
+        sample_rows=sample_rows_cfg,
     )
     artifacts = io.save_standard_outputs(
         final_df,
@@ -4265,7 +4303,6 @@ def validate_and_write(
             table=str(final_csv_path.with_suffix("")),
         )
     else:
-        doc_quality_cfg = cfg.system.doc_quality
         table_quality = build_table_quality_hook(
             doc_quality_cfg,
             table_name=final_csv_path.with_suffix(""),

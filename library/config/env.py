@@ -67,6 +67,9 @@ def _default_base_path() -> Path:
 def _default_cache_home() -> Path:
     """Return the default cache directory for local artefacts."""
 
+    env_override = os.environ.get("CHEMBL_DA_CACHE_HOME")
+    if env_override:
+        return _normalize_base_path(env_override)
     return (Path.home() / ".cache" / "chembl-da").resolve()
 
 
@@ -83,7 +86,11 @@ def _expand_config_placeholders(data: Any, *, base_path: Path) -> Any:
 
     # Normalise to platform-specific path string
     base_str = str(Path(base_path))
-    replacements = {"$CHEMBL_DA_BASE_PATH": base_str}
+    cache_home_str = str(_default_cache_home())
+    replacements = {
+        "$CHEMBL_DA_BASE_PATH": base_str,
+        "$CHEMBL_DA_CACHE_HOME": cache_home_str,
+    }
 
     def _expand(value: Any) -> Any:
         if isinstance(value, dict):

@@ -474,6 +474,7 @@ def _build_testitem_options(
         offset=None,
         emit_legacy_artifacts=_diagnostic_outputs_enabled(cfg),
         pubchem_enabled=True,
+        date=cfg.date_prefix,
     )
 
 
