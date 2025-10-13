@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unicodedata
+from collections.abc import Iterable
 
 import pandas as pd
 
@@ -15,6 +16,65 @@ from library.postprocessing.common.config import (
 from library.postprocessing.common.logging import PipelineRunMetrics
 
 from .schema import DOCUMENT_SCHEMA, validate_documents
+
+
+_TITLE_SOURCE_COLUMNS: tuple[str, ...] = (
+    "title",
+    "chembl.title",
+    "chembl.document_title",
+    "chembl.documenttitle",
+    "pubmed.title",
+    "pubmed.articletitle",
+    "pubmed.booktitle",
+    "crossref.title",
+    "openalex.title",
+)
+
+
+def harmonize_document_titles(
+    df: pd.DataFrame,
+    *,
+    candidate_columns: Iterable[str] | None = None,
+    **_: object,
+) -> pd.DataFrame:
+    """Populate the canonical ``title`` column from known source fields."""
+
+    harmonized = df.copy(deep=True)
+    lower_map = {column.lower(): column for column in harmonized.columns}
+
+    canonical_key = "title"
+    canonical_column = lower_map.get(canonical_key, canonical_key)
+
+    if canonical_column in harmonized.columns:
+        canonical_series = (
+            harmonized[canonical_column].astype("string").replace({"": pd.NA})
+        )
+    else:
+        canonical_series = pd.Series(pd.NA, index=harmonized.index, dtype="string")
+
+    columns_to_consider = []
+    seen: set[str] = set()
+    for candidate in candidate_columns or _TITLE_SOURCE_COLUMNS:
+        resolved = lower_map.get(candidate.lower())
+        if resolved is None or resolved in seen:
+            continue
+        seen.add(resolved)
+        if resolved == canonical_column:
+            continue
+        columns_to_consider.append(resolved)
+
+    for column in columns_to_consider:
+        candidate_series = (
+            harmonized[column].astype("string").replace({"": pd.NA})
+        )
+        canonical_series = canonical_series.fillna(candidate_series)
+        if not canonical_series.isna().any():
+            break
+
+    harmonized[canonical_key] = canonical_series
+    if canonical_column in harmonized.columns and canonical_column != canonical_key:
+        harmonized = harmonized.drop(columns=[canonical_column])
+    return harmonized
 
 
 def normalize_document_fields(
@@ -257,6 +317,7 @@ __all__ = [
     "PIPELINE_CONFIG",
     "PIPELINE_STEPS",
     "finalize_document_records",
+    "harmonize_document_titles",
     "normalize_document_fields",
     "run_document_pipeline",
     "enrich_document_publication_year",
