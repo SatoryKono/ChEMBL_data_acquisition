@@ -72,7 +72,8 @@ def save_standard_outputs(
         UTC date token formatted as ``YYYYMMDD``.
     key_columns:
         Optional sequence of columns used to deterministically order
-        ``df_main`` before writing.
+        ``df_main`` before writing. When provided, at least one column name
+        must be supplied.
     column_order:
         Optional preferred column ordering for ``df_main``.
     output_dir:
@@ -126,7 +127,13 @@ def save_standard_outputs(
     )
     quality_path = destination_dir / f"{dataset_stem}_quality_report_table.csv"
 
-    key_cols = list(key_columns or [])
+    if key_columns is not None:
+        key_cols = [str(column) for column in key_columns]
+        if not key_cols:
+            raise ValueError("key_columns must not be empty")
+    else:
+        key_cols = []
+
     if not key_cols and not df_main.empty:
         key_cols = [str(df_main.columns[0])]
 
