@@ -30,7 +30,9 @@ def test_cli_tools_determinism__hashes_match(
 
 
 @pytest.mark.unit
-def test_cli_tools_determinism__detects_mismatch(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_cli_tools_determinism__detects_mismatch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """A single mismatching CSV hash must fail the determinism check."""
 
     original_write_csv = csv_utils.write_csv_deterministic
@@ -75,8 +77,12 @@ def test_cli_tools_determinism__detects_mismatch(monkeypatch: pytest.MonkeyPatch
             handle.write("\n# tampered chunk\n")
         return output
 
-    monkeypatch.setattr(check_determinism, "write_csv_deterministic", _tampered_write_csv)
-    monkeypatch.setattr(check_determinism, "write_csv_chunks_deterministic", _tampered_write_chunks)
+    monkeypatch.setattr(
+        check_determinism, "write_csv_deterministic", _tampered_write_csv
+    )
+    monkeypatch.setattr(
+        check_determinism, "write_csv_chunks_deterministic", _tampered_write_chunks
+    )
 
     result = check_determinism.run_check(tmp_path)
 

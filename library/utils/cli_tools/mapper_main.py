@@ -221,6 +221,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     -----
     Relative paths honour ``--base-path``, ``--input-dir`` and ``--output-dir``.
     """
+
     def _prepare(
         parser: argparse.ArgumentParser,
         args: argparse.Namespace,

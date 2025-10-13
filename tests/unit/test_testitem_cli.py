@@ -41,18 +41,24 @@ def _stub_parent_stats() -> ParentLookupStats:
 @pytest.mark.parametrize(
     "output, fallback_date, expected",
     [
-        (Path(".output.testitem_20240101.csv.tmp"), "19991231", ("testitem", "20240101")),
+        (
+            Path(".output.testitem_20240101.csv.tmp"),
+            "19991231",
+            ("testitem", "20240101"),
+        ),
         ("output.testitems_20240101.csv", "19991231", ("testitem", "20240101")),
         ("output.testitem.csv", "19991231", ("testitem", "19991231")),
     ],
-    )
+)
 def test_normalise_output_labels__derives_table_and_date(
     output: Path | str, fallback_date: str, expected: tuple[str, str]
 ) -> None:
     """Intermediate filenames should map to canonical artefact labels."""
 
     assert (
-        testitem_cli._normalise_output_labels(output, fallback_date=fallback_date)  # noqa: SLF001
+        testitem_cli._normalise_output_labels(
+            output, fallback_date=fallback_date
+        )  # noqa: SLF001
         == expected
     )
 
@@ -60,7 +66,7 @@ def test_normalise_output_labels__derives_table_and_date(
 @pytest.mark.unit
 @pytest.mark.pipeline_scenario("assembly")
 def test_finalize_output__preserves_existing_optional_columns(
-    tmp_path: Path, cfg: "Config", monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Existing optional column values must survive column alignment."""
 
@@ -108,9 +114,9 @@ def test_finalize_output__preserves_existing_optional_columns(
         artifacts.dataset,
         dtype={"molecule_chembl_id": "string", "pubchem_cid": "string"},
     )
-    cid_by_id = (
-        result_df.set_index("molecule_chembl_id", drop=True)["pubchem_cid"].to_dict()
-    )
+    cid_by_id = result_df.set_index("molecule_chembl_id", drop=True)[
+        "pubchem_cid"
+    ].to_dict()
 
     assert cid_by_id["CHEMBL1"] == "123"
     assert pd.isna(cid_by_id["CHEMBL2"])
@@ -119,7 +125,7 @@ def test_finalize_output__preserves_existing_optional_columns(
 @pytest.mark.unit
 @pytest.mark.pipeline_scenario("export")
 def test_finalize_output__applies_pubchem_fallback_after_postprocessing(
-    tmp_path: Path, cfg: "Config", monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Fallback PubChem enrichment should persist in the final export."""
 
@@ -197,7 +203,7 @@ def test_finalize_output__applies_pubchem_fallback_after_postprocessing(
 @pytest.mark.unit
 @pytest.mark.pipeline_scenario("export")
 def test_finalize_output__triggers_pubchem_fallback_when_empty_strings(
-    tmp_path: Path, cfg: "Config", monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Fallback PubChem enrichment must treat empty strings as missing values."""
 

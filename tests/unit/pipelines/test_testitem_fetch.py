@@ -97,7 +97,9 @@ def test_fetch_testitems__renames_pubchem_and_structure_columns(
         {
             "molecule_chembl_id": pd.Series(["CHEMBL1"], dtype="string"),
             "molecule_structures.canonical_smiles": pd.Series(["C"], dtype="string"),
-            "molecule_structures.standard_inchi": pd.Series(["InChI=1S/C"], dtype="string"),
+            "molecule_structures.standard_inchi": pd.Series(
+                ["InChI=1S/C"], dtype="string"
+            ),
             "molecule_structures.standard_inchi_key": pd.Series(
                 ["XLYOFNOQVPJJNP-UHFFFAOYSA-N"], dtype="string"
             ),

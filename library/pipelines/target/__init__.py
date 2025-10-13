@@ -43,6 +43,7 @@ class TargetPipelineOptions:
     date: str | None = None
     output_stem: str | None = None
 
+
 def run_pipeline(config: Config, options: TargetPipelineOptions) -> PipelineRunResult:
     """Execute the target pipeline for the selected command."""
 

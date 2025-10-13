@@ -273,7 +273,11 @@ def _resolve_search_directory(
     elif cfg is not None:
         io_cfg = getattr(cfg, "io", None)
         output_dir = getattr(io_cfg, "output_dir", None)
-        candidate = Path(output_dir) if output_dir is not None else _current_default_search_dir()
+        candidate = (
+            Path(output_dir)
+            if output_dir is not None
+            else _current_default_search_dir()
+        )
     else:
         candidate = _current_default_search_dir()
 

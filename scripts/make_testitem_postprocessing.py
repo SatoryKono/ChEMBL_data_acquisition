@@ -175,7 +175,9 @@ def run(args: argparse.Namespace) -> int:
         "input": str(input_path),
         "output_postprocessed": str(output_path),
     }
-    pipeline_version = metrics.pipeline_version if metrics else pipeline_config.pipeline_version
+    pipeline_version = (
+        metrics.pipeline_version if metrics else pipeline_config.pipeline_version
+    )
     generate_metrics_report(
         TABLE_NAME,
         result.output_path,

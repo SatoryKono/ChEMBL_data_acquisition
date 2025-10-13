@@ -38,6 +38,7 @@ class AssayPipelineOptions:
     skip_existing: bool = False
     force: bool = False
 
+
 def run_pipeline(config: Config, options: AssayPipelineOptions) -> PipelineRunResult:
     """Execute the assay pipeline with programmatic options."""
 

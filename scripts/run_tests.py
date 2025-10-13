@@ -252,7 +252,9 @@ def _parse_line_coverage(path: Path) -> float:
 
     try:
         tree = ElementTree.parse(path)
-    except ElementTree.ParseError as exc:  # pragma: no cover - depends on coverage output
+    except (
+        ElementTree.ParseError
+    ) as exc:  # pragma: no cover - depends on coverage output
         raise CoverageReportError(
             f"Coverage report {_relative_to_root(path)} is not valid XML: {exc}"
         ) from exc
@@ -284,6 +286,8 @@ def _load_raw_report(raw_report_file: Path | None = None) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return {}
+
+
 def _extract_section_message(section: dict[str, Any]) -> str:
     for key in ("longrepr", "message"):
         if key in section:
@@ -585,6 +589,8 @@ def validate_report_file(path: Path) -> None:
     except json.JSONDecodeError as exc:
         raise ValueError(f"Report file {path} contains invalid JSON") from exc
     validate_structured_report(payload)
+
+
 def write_summary(report: dict[str, Any], destination: Path) -> None:
     destination.write_text(build_summary_markdown(report), encoding="utf-8")
 

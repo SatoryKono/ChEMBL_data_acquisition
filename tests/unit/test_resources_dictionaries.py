@@ -329,7 +329,9 @@ def test_repository_allowlist_includes_sparse_index_checksum(
 
 
 @pytest.mark.unit
-def test_manifest_allows_latest_target_uniprot_checksum(dictionary_bundle: Path) -> None:
+def test_manifest_allows_latest_target_uniprot_checksum(
+    dictionary_bundle: Path,
+) -> None:
     """The manifest lists the newly observed UniProt cache checksum variant."""
 
     manifest_path = dictionary_bundle / "manifest.yaml"

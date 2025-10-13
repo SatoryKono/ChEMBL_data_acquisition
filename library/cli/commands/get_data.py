@@ -369,7 +369,7 @@ def _assign_pubchem_config(config: Config, pubchem_cfg: PubChemCfg) -> None:
     try:
         config.sources.pubchem = pubchem_cfg
     except AttributeError:
-        setattr(config.sources, "pubchem", pubchem_cfg)
+        config.sources.pubchem = pubchem_cfg
 
 
 def _ensure_testitem_pubchem_enabled(config: Config) -> None:
@@ -403,7 +403,7 @@ def _ensure_testitem_pubchem_enabled(config: Config) -> None:
         )
 
     try:
-        setattr(pubchem_cfg, "enable", True)
+        pubchem_cfg.enable = True
     except (AttributeError, TypeError, ValueError):
         updated_pubchem_cfg: PubChemCfg
         if hasattr(pubchem_cfg, "model_copy"):
@@ -426,14 +426,24 @@ def _apply_testitem_option_overrides(
     updated_options = options
 
     testitem_cfg = getattr(base_config, "testitem", None)
-    offset_value = getattr(testitem_cfg, "offset", None) if testitem_cfg is not None else None
-    if offset_value is not None and getattr(updated_options, "offset", None) != offset_value:
+    offset_value = (
+        getattr(testitem_cfg, "offset", None) if testitem_cfg is not None else None
+    )
+    if (
+        offset_value is not None
+        and getattr(updated_options, "offset", None) != offset_value
+    ):
         updated_options = replace(updated_options, offset=offset_value)
 
     if allow_pubchem_override:
         pubchem_cfg = getattr(base_config, "pubchem", None)
-        pubchem_enabled = getattr(pubchem_cfg, "enable", None) if pubchem_cfg is not None else None
-        if pubchem_enabled is False and getattr(updated_options, "pubchem_enabled", None) is not True:
+        pubchem_enabled = (
+            getattr(pubchem_cfg, "enable", None) if pubchem_cfg is not None else None
+        )
+        if (
+            pubchem_enabled is False
+            and getattr(updated_options, "pubchem_enabled", None) is not True
+        ):
             updated_options = replace(updated_options, pubchem_enabled=True)
 
     return updated_options
@@ -1427,9 +1437,9 @@ def _ensure_pubchem_enabled(config: Config) -> None:
         try:
             sources.pubchem = updated_pubchem_cfg
         except AttributeError:
-            setattr(pubchem_cfg, "enable", True)
+            pubchem_cfg.enable = True
     else:
-        setattr(pubchem_cfg, "enable", True)
+        pubchem_cfg.enable = True
 
 
 def _run_testitem_subprocess(
@@ -1663,7 +1673,10 @@ def _run_step(
     step_config = _clone_config(base_config)
     options = api.build_options(cfg, input_path, working_output)
 
-    if step.name == "testitem" and getattr(options, "pubchem_enabled", None) is not True:
+    if (
+        step.name == "testitem"
+        and getattr(options, "pubchem_enabled", None) is not True
+    ):
         options = replace(options, pubchem_enabled=True)
     result = api.runner(step_config, options)
     executed = bool(result.executed)
@@ -2114,7 +2127,9 @@ def _describe_file(path: Path) -> dict[str, Any]:
     return info
 
 
-def _sidecar_include_patterns(final_output: Path, working_output: Path) -> tuple[str, ...]:
+def _sidecar_include_patterns(
+    final_output: Path, working_output: Path
+) -> tuple[str, ...]:
     """Return glob patterns capturing relevant sidecar artefacts."""
 
     include_patterns = [
@@ -2794,11 +2809,7 @@ def run_pipeline(
             postprocess_result: PostprocessResult | None = None
             postprocess_table = _resolve_postprocess_table(step, final_output)
             allow_postprocess = _diagnostic_outputs_enabled(cfg)
-            if (
-                result.executed
-                and postprocess_table is not None
-                and allow_postprocess
-            ):
+            if result.executed and postprocess_table is not None and allow_postprocess:
                 try:
                     postprocess_result = _run_postprocess_hook(
                         step,

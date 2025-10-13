@@ -19,12 +19,8 @@ from library.config import Config
 def test_activity_runner_registration__commands_module(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    commands_module = importlib.import_module(
-        "library.cli.commands.get_activity_data"
-    )
-    runner_module = importlib.import_module(
-        "library.pipelines.activity.runner"
-    )
+    commands_module = importlib.import_module("library.cli.commands.get_activity_data")
+    runner_module = importlib.import_module("library.pipelines.activity.runner")
 
     def _stub_runner(cfg, args):  # pragma: no cover - exercised via resolve
         return 0
@@ -33,9 +29,7 @@ def test_activity_runner_registration__commands_module(
         return None
 
     monkeypatch.setattr(commands_module, "run_chembl", _stub_runner)
-    monkeypatch.setattr(
-        commands_module, "_emit_completion_message", _stub_emit
-    )
+    monkeypatch.setattr(commands_module, "_emit_completion_message", _stub_emit)
 
     reloaded_runner = importlib.reload(runner_module)
 
@@ -167,7 +161,8 @@ def test_emit_completion_message__skip_existing(
         {"output_postprocessed": "existing.csv"},
     ) in logger.events
     assert any(
-        event == "activity_pipeline_completion" and payload.get("mode") == "skip_existing"
+        event == "activity_pipeline_completion"
+        and payload.get("mode") == "skip_existing"
         for _, event, payload in logger.events
     )
 
@@ -305,7 +300,9 @@ def test_derive_standard_output_labels__deduplicates_output_prefix_chain() -> No
 
 
 @pytest.mark.unit
-def test_derive_standard_output_labels__fallbacks_to_current_date(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_derive_standard_output_labels__fallbacks_to_current_date(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(activity, "_current_date_token", lambda: "19990101")
 
     table, date = activity._derive_standard_output_labels(Path("custom_export.csv"))

@@ -16,6 +16,8 @@ from library.reporting.test_summary import (
 
 DEFAULT_INPUT = Path("reports/test_report.json")
 DEFAULT_OUTPUT = Path("reports/test_summary.md")
+
+
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=("Render a Markdown summary from a structured pytest JSON report.")

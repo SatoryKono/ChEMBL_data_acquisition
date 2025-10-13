@@ -46,7 +46,9 @@ def _log_request_event(
 
 
 @pytest.fixture
-def limiter_stub(monkeypatch: pytest.MonkeyPatch) -> tuple[_LimiterStub, list[tuple[str, int, int]]]:
+def limiter_stub(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[_LimiterStub, list[tuple[str, int, int]]]:
     limiter = _LimiterStub()
     calls: list[tuple[str, int, int]] = []
 

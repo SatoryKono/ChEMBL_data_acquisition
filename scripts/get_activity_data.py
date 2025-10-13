@@ -23,7 +23,9 @@ del bootstrap_cli
 del _bootstrap_module
 
 
-def _export_module_api(module: ModuleType, *, extra: Iterable[str] = ()) -> tuple[str, ...]:
+def _export_module_api(
+    module: ModuleType, *, extra: Iterable[str] = ()
+) -> tuple[str, ...]:
     """Expose ``module`` attributes in the wrapper namespace."""
 
     exported: dict[str, object] = {}
@@ -48,6 +50,7 @@ def _export_module_api(module: ModuleType, *, extra: Iterable[str] = ()) -> tupl
         ordered = list(exported)
     return tuple(ordered)
 
+
 def _augment_activity_module(module: ModuleType) -> tuple[str, ...]:
     """Install backwards compatible exports on the activity CLI module."""
 
@@ -67,7 +70,9 @@ def _augment_activity_module(module: ModuleType) -> tuple[str, ...]:
 
     try:  # pragma: no cover - defensive guard for optional dependencies
         from library.cli.entrypoints import activity as activity_entrypoint
-    except Exception:  # pragma: no cover - the entrypoint may not be importable during tests
+    except (
+        Exception
+    ):  # pragma: no cover - the entrypoint may not be importable during tests
         activity_entrypoint = None
     else:
         emit_completion = getattr(activity_entrypoint, "_emit_completion_message", None)
@@ -114,7 +119,9 @@ class _Adapter(ModuleType):
     def __getattr__(self, name: str) -> object:  # pragma: no cover - passthrough helper
         return __getattr__(name)
 
-    def __setattr__(self, name: str, value: object) -> None:  # pragma: no cover - passthrough helper
+    def __setattr__(
+        self, name: str, value: object
+    ) -> None:  # pragma: no cover - passthrough helper
         setattr(_MODULE, name, value)
         super().__setattr__(name, value)
 

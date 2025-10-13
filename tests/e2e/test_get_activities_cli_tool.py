@@ -104,9 +104,7 @@ def test_get_activities_cli_wrapper__script_entrypoint(
     def fake_run(_cfg, args) -> int:
         destination = Path(args.final_out)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        dataset = pd.DataFrame(
-            [{"activity_id": f"ACT{i:03d}"} for i in range(limit)]
-        )
+        dataset = pd.DataFrame([{"activity_id": f"ACT{i:03d}"} for i in range(limit)])
         dataset.to_csv(destination, index=False, encoding="utf-8")
         quality_df = pd.DataFrame(
             [{"metric": "rows_total", "value": int(dataset.shape[0])}]
@@ -127,9 +125,7 @@ def test_get_activities_cli_wrapper__script_entrypoint(
             f"{destination.stem}_data_correlation_report_table.csv"
         )
         quality_df.to_csv(quality_path, index=False, encoding="utf-8")
-        correlation_df.to_csv(
-            correlation_path, index=False, encoding="utf-8"
-        )
+        correlation_df.to_csv(correlation_path, index=False, encoding="utf-8")
         recorded.update(
             {
                 "dataset": dataset,
@@ -151,9 +147,7 @@ def test_get_activities_cli_wrapper__script_entrypoint(
     monkeypatch.setattr(
         "library.utils.cli_tools.get_activities.ensure_dirs", fake_ensure_dirs
     )
-    monkeypatch.setattr(
-        "library.utils.cli_tools.get_activities.run", fake_run
-    )
+    monkeypatch.setattr("library.utils.cli_tools.get_activities.run", fake_run)
     monkeypatch.setattr(
         "library.utils.cli_tools.get_activities.cli.configure_logger",
         lambda cfg: None,
@@ -212,9 +206,7 @@ def test_get_activities_cli_wrapper__script_entrypoint(
     correlation_path = recorded_paths["correlation"]
     assert quality_path.exists()
     assert correlation_path.exists()
-    assert {
-        path.name for path in output_csv.parent.glob("*.csv")
-    } == {
+    assert {path.name for path in output_csv.parent.glob("*.csv")} == {
         output_csv.name,
         quality_path.name,
         correlation_path.name,

@@ -20,16 +20,24 @@ class _StubLogger:
         self.debug_events: list[tuple[str, dict[str, object]]] = []
         self.error_events: list[tuple[str, dict[str, object]]] = []
 
-    def info(self, event: str, **fields: object) -> None:  # pragma: no cover - simple recorder
+    def info(
+        self, event: str, **fields: object
+    ) -> None:  # pragma: no cover - simple recorder
         self.info_events.append((event, fields))
 
-    def warning(self, event: str, **fields: object) -> None:  # pragma: no cover - simple recorder
+    def warning(
+        self, event: str, **fields: object
+    ) -> None:  # pragma: no cover - simple recorder
         self.warning_events.append((event, fields))
 
-    def debug(self, event: str, **fields: object) -> None:  # pragma: no cover - simple recorder
+    def debug(
+        self, event: str, **fields: object
+    ) -> None:  # pragma: no cover - simple recorder
         self.debug_events.append((event, fields))
 
-    def error(self, event: str, **fields: object) -> None:  # pragma: no cover - simple recorder
+    def error(
+        self, event: str, **fields: object
+    ) -> None:  # pragma: no cover - simple recorder
         self.error_events.append((event, fields))
 
 

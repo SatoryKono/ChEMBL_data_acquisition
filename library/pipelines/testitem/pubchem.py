@@ -69,7 +69,9 @@ ResolutionCache: TypeAlias = MutableMapping[Hashable, "PubChemResolution"]
 _PUBCHEM_SESSION_LOCK = threading.Lock()
 
 
-def _service_unavailable_log_context(details: Mapping[str, Any] | None) -> dict[str, Any]:
+def _service_unavailable_log_context(
+    details: Mapping[str, Any] | None,
+) -> dict[str, Any]:
     """Return structured logging context extracted from PubChem failure details."""
 
     context: dict[str, Any] = {}

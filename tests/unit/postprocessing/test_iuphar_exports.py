@@ -32,7 +32,9 @@ def _write_export(path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_process_iuphar_targets__uses_cfg_output_dir(tmp_path: Path, cfg: Config) -> None:
+def test_process_iuphar_targets__uses_cfg_output_dir(
+    tmp_path: Path, cfg: Config
+) -> None:
     cfg.io.output_dir = tmp_path
     older = tmp_path / "output.target_20230101.csv"
     newer = tmp_path / "output.target_20240101.csv"
@@ -46,7 +48,9 @@ def test_process_iuphar_targets__uses_cfg_output_dir(tmp_path: Path, cfg: Config
 
 
 @pytest.mark.unit
-def test_process_iuphar_targets__search_dir_overrides_cfg(tmp_path: Path, cfg: Config) -> None:
+def test_process_iuphar_targets__search_dir_overrides_cfg(
+    tmp_path: Path, cfg: Config
+) -> None:
     cfg.io.output_dir = tmp_path / "unused"
     cfg.io.output_dir.mkdir()
     search_dir = tmp_path / "exports"

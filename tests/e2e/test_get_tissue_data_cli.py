@@ -237,9 +237,7 @@ def test_get_tissue_data_cli__end_to_end(
         if target == output_csv:
             dataset = frame.copy()
             quality_df = pd.DataFrame(
-                [
-                    {"metric": "rows_total", "value": int(dataset.shape[0])}
-                ]
+                [{"metric": "rows_total", "value": int(dataset.shape[0])}]
             )
             correlation_df = pd.DataFrame(
                 [
@@ -250,9 +248,7 @@ def test_get_tissue_data_cli__end_to_end(
                     }
                 ]
             )
-            quality_path = target.with_name(
-                f"{target.stem}_quality_report_table.csv"
-            )
+            quality_path = target.with_name(f"{target.stem}_quality_report_table.csv")
             correlation_path = target.with_name(
                 f"{target.stem}_data_correlation_report_table.csv"
             )
@@ -401,7 +397,10 @@ def test_get_tissue_data_cli__end_to_end(
     assert Path(updated_paths["correlation"]) == correlation_path
     assert hashlib.sha256(output_csv.read_bytes()).hexdigest() == csv_hash_first
     assert hashlib.sha256(quality_path.read_bytes()).hexdigest() == quality_hash_first
-    assert hashlib.sha256(correlation_path.read_bytes()).hexdigest() == correlation_hash_first
+    assert (
+        hashlib.sha256(correlation_path.read_bytes()).hexdigest()
+        == correlation_hash_first
+    )
 
     assert not failure_path.exists()
     assert not Path(f"{failure_path}.meta.yaml").exists()

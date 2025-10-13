@@ -23,7 +23,9 @@ del bootstrap_cli
 del _bootstrap_module
 
 
-def _export_module_api(module: ModuleType, *, extra: Iterable[str] = ()) -> tuple[str, ...]:
+def _export_module_api(
+    module: ModuleType, *, extra: Iterable[str] = ()
+) -> tuple[str, ...]:
     """Expose ``module`` attributes in the wrapper namespace."""
 
     exported: dict[str, object] = {}
@@ -78,7 +80,9 @@ class _Adapter(ModuleType):
     def __getattr__(self, name: str) -> object:  # pragma: no cover - passthrough helper
         return __getattr__(name)
 
-    def __setattr__(self, name: str, value: object) -> None:  # pragma: no cover - passthrough helper
+    def __setattr__(
+        self, name: str, value: object
+    ) -> None:  # pragma: no cover - passthrough helper
         setattr(_MODULE, name, value)
         super().__setattr__(name, value)
 

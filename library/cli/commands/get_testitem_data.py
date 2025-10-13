@@ -831,9 +831,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                     )
                     postprocess_error = True
                 else:
-                    payload["postprocess_output"] = str(
-                        postprocess_result.output_path
-                    )
+                    payload["postprocess_output"] = str(postprocess_result.output_path)
 
                     metrics = postprocess_result.metrics
                     if metrics is not None:
@@ -854,7 +852,9 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                         if steps_value is not None:
                             payload["postprocess_steps"] = int(steps_value)
                         validation = getattr(metrics, "validation", None)
-                        if validation is not None and getattr(validation, "schema", None):
+                        if validation is not None and getattr(
+                            validation, "schema", None
+                        ):
                             payload["postprocess_schema"] = validation.schema
 
                     if postprocess_result.report_path is not None:

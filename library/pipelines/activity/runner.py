@@ -250,9 +250,7 @@ def run_activity_pipeline(
         )
 
     if args.skip_existing and output_path.exists() and not args.force:
-        logger.info(
-            "pipeline_skip_existing", output_postprocessed=str(output_path)
-        )
+        logger.info("pipeline_skip_existing", output_postprocessed=str(output_path))
         logger.info(
             "pipeline_skip_existing_reason",
             output_postprocessed=str(output_path),

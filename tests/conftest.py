@@ -24,7 +24,6 @@ import yaml
 try:  # pragma: no cover - optional dependency shim
     import pandera.pandas as pa  # type: ignore  # noqa: F401
 except ModuleNotFoundError:  # pragma: no cover - fallback for Pandera >=0.20
-    import pandera  # type: ignore
     import types
 
     pandas_model = import_module("pandera.api.pandas.model")

@@ -826,7 +826,10 @@ def test_get_data_end_to_end__blocked_steps_after_failure(
 
 
 _ASSAY_DICTIONARY_PATH = (
-    Path(__file__).resolve().parents[1] / "resources" / "pipeline_inputs" / "assay_dictionary.csv"
+    Path(__file__).resolve().parents[1]
+    / "resources"
+    / "pipeline_inputs"
+    / "assay_dictionary.csv"
 )
 
 

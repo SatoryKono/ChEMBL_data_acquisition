@@ -116,6 +116,7 @@ def test_fetch_semantic_scholar_batch__omits_api_key_header_when_missing(
 )
 def test_fetch_semantic_scholar_batch__delay_resolution(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
     cfg_kwargs: dict[str, object],
     expected: float,
 ) -> None:
@@ -142,7 +143,9 @@ def test_fetch_semantic_scholar_batch__delay_resolution(
     with caplog.at_level("WARNING"):
         results = semantic_scholar.fetch_semantic_scholar_batch(session, pmids, 0.0)
 
-    assert all(entry["scholar.Error"] == "HTTP 500 Internal Server Error" for entry in results)
+    assert all(
+        entry["scholar.Error"] == "HTTP 500 Internal Server Error" for entry in results
+    )
     for pmid in pmids:
         assert any(
             pmid in record.getMessage() and "500" in record.getMessage()

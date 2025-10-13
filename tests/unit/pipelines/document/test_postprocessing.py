@@ -20,7 +20,9 @@ def _write_reference_csv(path: str, *, doc_id: str, classification: int) -> None
             "is_experimental_doc": ["false"],
         }
     )
-    frame.to_csv(path, index=False, encoding=module.CP1252_ENCODING, sep=module.CSV_DELIMITER)
+    frame.to_csv(
+        path, index=False, encoding=module.CP1252_ENCODING, sep=module.CSV_DELIMITER
+    )
 
 
 @pytest.mark.unit

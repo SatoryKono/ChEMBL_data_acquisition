@@ -669,7 +669,9 @@ def _finalise_export(
             export_frame = validated_chunks[0].copy()
         else:
             export_frame = pd.concat(validated_chunks, ignore_index=True)
-            export_frame = export_frame.reindex(columns=list(_EXPORT_COLUMNS), fill_value="")
+            export_frame = export_frame.reindex(
+                columns=list(_EXPORT_COLUMNS), fill_value=""
+            )
     else:  # pragma: no cover - defensive guard
         export_frame = build_dataframe(
             add_pipeline_metadata(pd.DataFrame()),
@@ -681,9 +683,7 @@ def _finalise_export(
 
     table_name, inferred_date = _resolve_table_name_and_date(output)
     resolved_date_tag = (
-        date_tag
-        or inferred_date
-        or datetime.now(UTC).strftime("%Y%m%d")
+        date_tag or inferred_date or datetime.now(UTC).strftime("%Y%m%d")
     )
 
     try:
@@ -1219,9 +1219,7 @@ def run_pubmed(
             rerun_postprocess=bool(getattr(args, "rerun_postprocess", False)),
             postprocess_enabled=bool(getattr(args, "postprocess", False)),
             postprocess_config_path=getattr(args, "config", None),
-            emit_legacy_artifacts=bool(
-                getattr(args, "emit_legacy_artifacts", False)
-            ),
+            emit_legacy_artifacts=bool(getattr(args, "emit_legacy_artifacts", False)),
             date_tag=getattr(args, "_standard_date_tag", None),
         )
         exit_code = finalise_result.exit_code
@@ -1428,9 +1426,7 @@ def run_chembl(
             rerun_postprocess=bool(getattr(args, "rerun_postprocess", False)),
             postprocess_enabled=bool(getattr(args, "postprocess", False)),
             postprocess_config_path=getattr(args, "config", None),
-            emit_legacy_artifacts=bool(
-                getattr(args, "emit_legacy_artifacts", False)
-            ),
+            emit_legacy_artifacts=bool(getattr(args, "emit_legacy_artifacts", False)),
             date_tag=getattr(args, "_standard_date_tag", None),
         )
         exit_code = finalise_result.exit_code
@@ -1697,9 +1693,7 @@ def run_all(
             rerun_postprocess=bool(getattr(args, "rerun_postprocess", False)),
             postprocess_enabled=bool(getattr(args, "postprocess", False)),
             postprocess_config_path=getattr(args, "config", None),
-            emit_legacy_artifacts=bool(
-                getattr(args, "emit_legacy_artifacts", False)
-            ),
+            emit_legacy_artifacts=bool(getattr(args, "emit_legacy_artifacts", False)),
             date_tag=getattr(args, "_standard_date_tag", None),
         )
         exit_code = finalise_result.exit_code

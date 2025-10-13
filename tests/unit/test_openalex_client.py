@@ -48,7 +48,9 @@ def test_fetch_openalex__success(cfg: OpenAlexCfg, limiter: _DummyLimiter) -> No
 
     with requests.Session() as session:
         with responses.RequestsMock(assert_all_requests_are_fired=True) as rs:
-            rs.add(rs.GET, url, json={"id": "https://openalex.org/W20143779"}, status=200)
+            rs.add(
+                rs.GET, url, json={"id": "https://openalex.org/W20143779"}, status=200
+            )
 
             data, error = fetch_openalex(session, pmid, cfg=cfg, limiter=limiter)
 
@@ -79,7 +81,13 @@ def test_fetch_openalex__errors_return_none(
     with requests.Session() as session:
         with responses.RequestsMock(assert_all_requests_are_fired=True) as rs:
             if isinstance(body, str):
-                rs.add(rs.GET, url, body=body, status=status, content_type="application/json")
+                rs.add(
+                    rs.GET,
+                    url,
+                    body=body,
+                    status=status,
+                    content_type="application/json",
+                )
             else:
                 rs.add(rs.GET, url, json=body, status=status)
 

@@ -82,6 +82,7 @@ from library.validation import ValidationResult, validate_targets
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
     from library.postprocess import PostprocessingPipelineResult
 
+
 @contextmanager
 def _override_cli_meta_writer() -> Iterator[None]:
     """Temporarily patch CLI metadata writer used by ``run_pipeline``."""
@@ -566,7 +567,9 @@ def run_target_postprocess_if_requested(
     params = dict(pipeline_config.params or {})
     runtime_params = dict(params.get("runtime", {}))
 
-    rerun_postprocess = bool(getattr(args, "rerun_postprocess", False)) if args else False
+    rerun_postprocess = (
+        bool(getattr(args, "rerun_postprocess", False)) if args else False
+    )
     partial_run = bool(getattr(args, "partial_run", False)) if args else False
     if rerun_postprocess:
         runtime_params["rerun_postprocess"] = True
@@ -4093,7 +4096,10 @@ def validate_and_write(
         correlation=str(artifacts.correlation_report),
     )
     final_csv_path = artifacts.dataset
-    if postprocess_output_path is not None and postprocess_output_path != final_csv_path:
+    if (
+        postprocess_output_path is not None
+        and postprocess_output_path != final_csv_path
+    ):
         postprocess_output_path.unlink(missing_ok=True)
     if postprocess_report_path is not None:
         postprocess_report_path.unlink(missing_ok=True)

@@ -186,7 +186,7 @@ def fetch_semantic_scholar(
     pmid: str,
     cfg: SemanticScholarCfg | None = None,
     *,
-    limiter: "RateLimiter" | None = None,
+    limiter: RateLimiter | None = None,
     retry_cfg: RetryCfg | None = None,
 ) -> dict[str, str]:
     """Retrieve Semantic Scholar metadata for ``pmid``."""
@@ -204,7 +204,7 @@ def fetch_semantic_scholar_batch(
     pmids: list[str],
     cfg: SemanticScholarCfg | None = None,
     *,
-    limiter: "RateLimiter" | None = None,
+    limiter: RateLimiter | None = None,
     retry_cfg: RetryCfg | None = None,
 ) -> list[dict[str, str]]:
     """Retrieve Semantic Scholar metadata for multiple PMIDs."""

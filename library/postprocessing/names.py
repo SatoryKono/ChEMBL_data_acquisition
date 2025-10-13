@@ -556,16 +556,12 @@ def _build_names_table(frame: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=TARGET_NAMES_COLUMNS, dtype="string")
 
     column_set = set(frame.columns)
-    target_ids = _normalise_series(
-        frame.get("target_chembl_id"), index=frame.index
-    )
+    target_ids = _normalise_series(frame.get("target_chembl_id"), index=frame.index)
     valid_mask = target_ids != ""
     if not bool(valid_mask.any()):
         return pd.DataFrame(columns=TARGET_NAMES_COLUMNS, dtype="string")
 
-    uniprot_ids = _normalise_series(
-        frame.get("uniprot_id_primary"), index=frame.index
-    )
+    uniprot_ids = _normalise_series(frame.get("uniprot_id_primary"), index=frame.index)
     base = pd.DataFrame(
         {
             "target_chembl_id": target_ids[valid_mask],
@@ -580,12 +576,7 @@ def _build_names_table(frame: pd.DataFrame) -> pd.DataFrame:
 
         column_values = frame.loc[valid_mask, column]
         if column in PIPE_SPLIT_COLUMNS:
-            tokens = (
-                column_values.astype("string")
-                .fillna("")
-                .str.split("|")
-                .explode()
-            )
+            tokens = column_values.astype("string").fillna("").str.split("|").explode()
             tokens = _normalise_series(tokens)
             if tokens.empty:
                 continue
@@ -674,7 +665,11 @@ def process_target_names(
     """
 
     if input_path is None:
-        search_dir = Path(output_dir) if output_dir is not None else _current_default_search_dir()
+        search_dir = (
+            Path(output_dir)
+            if output_dir is not None
+            else _current_default_search_dir()
+        )
         source_path = _latest_target_file(search_dir)
     else:
         source_path = Path(input_path)

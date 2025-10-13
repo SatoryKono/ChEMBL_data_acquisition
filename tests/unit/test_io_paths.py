@@ -61,8 +61,11 @@ def test_derive_output_labels__normalises_source_names(
 ) -> None:
     """The helper must normalise hidden stems and redundant prefixes."""
 
-    assert derive_output_labels(
-        source,
-        default_table=default_table,
-        fallback_date=fallback_date,
-    ) == expected
+    assert (
+        derive_output_labels(
+            source,
+            default_table=default_table,
+            fallback_date=fallback_date,
+        )
+        == expected
+    )

@@ -330,6 +330,7 @@ def test_make_request__short_circuits_during_retry_after(
     assert outcome == "hit"
     assert details == {"status": 200}
 
+
 def test_make_request__invalid_identifier_cached(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -536,7 +537,9 @@ def test_make_request__applies_jitter_without_retry_after(
     monkeypatch.setattr(pubchem, "_JITTER_GENERATORS", {})
 
     sleep_calls: list[float] = []
-    monkeypatch.setattr(pubchem, "sleep", lambda seconds: sleep_calls.append(float(seconds)))
+    monkeypatch.setattr(
+        pubchem, "sleep", lambda seconds: sleep_calls.append(float(seconds))
+    )
 
     session = _DummySession(lambda: _DummyResponse(503, {}))
     monkeypatch.setattr(pubchem, "get_session", lambda *_args, **_kwargs: session)
@@ -608,7 +611,6 @@ def test_make_request__timeout_cache_uses_config_backoff(
         "retry_after_source": "backoff",
         "timeout_reason": "retry_after_exceeds_deadline",
     }
-
 
     cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
     entry = cache.get(pubchem._build_cache_key("GET", url))
@@ -684,13 +686,13 @@ def test_get_cid__falls_back_to_pug_when_rdf_fails(
     cfg = PubChemCfg()
     calls: list[str] = []
 
-    def _fake_make_request(url: str, _cfg: PubChemCfg, **_kwargs: object) -> dict[str, Any] | None:
+    def _fake_make_request(
+        url: str, _cfg: PubChemCfg, **_kwargs: object
+    ) -> dict[str, Any] | None:
         calls.append(url)
         if "/rdf/query" in url:
             return None
-        assert url.endswith(
-            f"/compound/name/{pubchem.url_encode('Example')}/cids/JSON"
-        )
+        assert url.endswith(f"/compound/name/{pubchem.url_encode('Example')}/cids/JSON")
         return {"IdentifierList": {"CID": ["10", "2", "10"]}}
 
     monkeypatch.setattr(pubchem, "make_request", _fake_make_request)
@@ -708,7 +710,9 @@ def test_get_all_cid__falls_back_to_pug_when_rdf_fails(
     cfg = PubChemCfg()
     calls: list[str] = []
 
-    def _fake_make_request(url: str, _cfg: PubChemCfg, **_kwargs: object) -> dict[str, Any] | None:
+    def _fake_make_request(
+        url: str, _cfg: PubChemCfg, **_kwargs: object
+    ) -> dict[str, Any] | None:
         calls.append(url)
         if "/rdf/query" in url:
             return None

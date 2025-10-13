@@ -89,6 +89,8 @@ def _run_parent_lookup(
     )
 
     return events
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "child_ids, truncated, catalog_filters, expected_level, expected_severity",

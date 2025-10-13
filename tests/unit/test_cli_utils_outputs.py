@@ -101,7 +101,9 @@ def test_run_pipeline__persists_standard_outputs(tmp_path: Path) -> None:
     assert isinstance(result, RunPipelineResult)
     assert int(result) == 0
     assert not writer_called, "legacy writer must not be invoked"
-    assert not table_quality_called, "quality hook should be skipped without legacy artefacts"
+    assert (
+        not table_quality_called
+    ), "quality hook should be skipped without legacy artefacts"
     artifacts = result.artifacts
     assert artifacts is not None
     assert artifacts.dataset.exists()
@@ -228,6 +230,7 @@ def test_run_pipeline__quality_hook_uses_canonical_dataset(
     assert table_quality_paths == [artifacts.dataset]
     assert not output_path.exists(), "legacy file should be cleaned after promotion"
 
+
 @pytest.mark.unit
 def test_run_pipeline__passes_resolved_key_columns_to_standard_outputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -277,7 +280,9 @@ def test_run_pipeline__passes_resolved_key_columns_to_standard_outputs(
         col_order: list[str] | None,
         key_cols: list[str],
     ) -> Path:
-        raise AssertionError("legacy writer must not be invoked when standard outputs are enabled")
+        raise AssertionError(
+            "legacy writer must not be invoked when standard outputs are enabled"
+        )
 
     definition = PipelineDefinition(
         schema=None,
@@ -343,9 +348,13 @@ def test_run_pipeline__legacy_mode_streams_and_writes_sidecars(
         table_quality_paths.append(path)
 
     def forbid_standard_outputs(*_: object, **__: object) -> None:
-        raise AssertionError("save_standard_outputs must not be called in legacy-only mode")
+        raise AssertionError(
+            "save_standard_outputs must not be called in legacy-only mode"
+        )
 
-    monkeypatch.setattr("library.cli_utils.save_standard_outputs", forbid_standard_outputs)
+    monkeypatch.setattr(
+        "library.cli_utils.save_standard_outputs", forbid_standard_outputs
+    )
 
     definition = PipelineDefinition(
         schema=None,

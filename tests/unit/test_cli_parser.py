@@ -200,7 +200,9 @@ def test_default_output_path__uses_config_prefix(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_default_output_path__prefers_cli_date_over_config_prefix(tmp_path: Path) -> None:
+def test_default_output_path__prefers_cli_date_over_config_prefix(
+    tmp_path: Path,
+) -> None:
     cfg = SimpleNamespace(
         output_dir=tmp_path,
         default_date_prefix="19991231",
@@ -351,7 +353,9 @@ def test_prepare_io_paths__strips_csv_suffix_from_output_stem(tmp_path: Path) ->
 
 
 @pytest.mark.unit
-def test_prepare_io_paths__normalises_prefixed_stem_without_date(tmp_path: Path) -> None:
+def test_prepare_io_paths__normalises_prefixed_stem_without_date(
+    tmp_path: Path,
+) -> None:
     args = SimpleNamespace(
         base_path=tmp_path,
         input_dir=None,

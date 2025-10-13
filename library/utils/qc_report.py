@@ -23,7 +23,10 @@ except ImportError:  # pragma: no cover - qa table quality module absent
 
 _TABLE_PROFILER_TYPES: tuple[type, ...]
 
-if _QaTableQualityProfiler is not None and _QaTableQualityProfiler is not _LegacyTableQualityProfiler:
+if (
+    _QaTableQualityProfiler is not None
+    and _QaTableQualityProfiler is not _LegacyTableQualityProfiler
+):
     _TABLE_PROFILER_TYPES = (_LegacyTableQualityProfiler, _QaTableQualityProfiler)
 else:
     _TABLE_PROFILER_TYPES = (_LegacyTableQualityProfiler,)
@@ -109,7 +112,9 @@ def _build_reports_from_profiler(
         row = accumulator.finalize()
         rows.append(row)
         if accumulator.numeric_cov >= 0.8:
-            numeric_candidates[column] = pd.Series(accumulator.numeric_full, dtype=float)
+            numeric_candidates[column] = pd.Series(
+                accumulator.numeric_full, dtype=float
+            )
 
     column_order = [
         "column",

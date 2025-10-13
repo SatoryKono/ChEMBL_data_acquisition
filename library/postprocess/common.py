@@ -84,7 +84,9 @@ def _resolve_domain(table: str) -> _DomainResources:
         raise ValueError(f"unsupported postprocess table: {table!r}") from exc
 
 
-def _load_input_frame(table: str, path: Path, csv_cfg: CsvRuntimeConfig, logger: Logger) -> pd.DataFrame:
+def _load_input_frame(
+    table: str, path: Path, csv_cfg: CsvRuntimeConfig, logger: Logger
+) -> pd.DataFrame:
     prefix = _event_prefix(table)
     logger.info(
         f"{prefix}_load_start",
@@ -92,7 +94,9 @@ def _load_input_frame(table: str, path: Path, csv_cfg: CsvRuntimeConfig, logger:
         encoding=csv_cfg.encoding,
         separator=csv_cfg.separator,
     )
-    namespace = SimpleNamespace(csv_sep=csv_cfg.separator, csv_encoding=csv_cfg.encoding)
+    namespace = SimpleNamespace(
+        csv_sep=csv_cfg.separator, csv_encoding=csv_cfg.encoding
+    )
     try:
         frame = io.read_csv(path, cfg=namespace)
     except io.CsvReadError as exc:
@@ -227,6 +231,7 @@ class PostprocessingPipelineConfig:
     logger: Logger
     pipeline_version: str | None = None
 
+
 @dataclass(slots=True)
 class PostprocessingPipelineResult:
     """Result payload returned by :func:`run_postprocessing_pipeline`."""
@@ -235,6 +240,7 @@ class PostprocessingPipelineResult:
     metrics: PipelineRunMetrics | None
     output_path: Path
     report_path: Path | None
+
 
 def _write_metrics_report(
     table: str,
@@ -251,6 +257,7 @@ def _write_metrics_report(
     dump_report(report_path, payload)
     logger.info(f"{_event_prefix(table)}_report_written", report=str(report_path))
     return report_path
+
 
 def run_postprocessing_pipeline(
     table_name: str,
@@ -317,6 +324,7 @@ def run_postprocessing_pipeline(
         report_path=report_path,
     )
 
+
 def generate_metrics_report(
     table: str,
     output_path: Path,
@@ -369,6 +377,7 @@ def generate_metrics_report(
     else:
         logger.info(f"{prefix}_report_skipped", output=str(output_path))
     return metrics, report_path
+
 
 __all__ = [
     "CsvRuntimeConfig",
@@ -442,7 +451,9 @@ def export_postprocess_frame(
     return _write_output_frame(table, df, Path(output_path), csv_cfg, schema, logger)
 
 
-def get_pipeline_config(table: str, override: Path | str | None = None) -> PipelineConfig:
+def get_pipeline_config(
+    table: str, override: Path | str | None = None
+) -> PipelineConfig:
     """Return the declarative pipeline configuration for ``table``."""
 
     resolved_override = None if override is None else Path(override)

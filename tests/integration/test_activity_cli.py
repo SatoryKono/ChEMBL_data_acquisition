@@ -10,10 +10,10 @@ import pytest
 
 import library.cli.base as cli_base
 import library.cli.entrypoints.activity as activity_entrypoint
+import library.cli.utils as cli_utils
 from library.cli import parser as parser_module
 from library.cli.entrypoints.activity import ActivityPipelineCLI
 from library.cli.logging import CLILoggingContext
-import library.cli.utils as cli_utils
 from library.config.loader import DEFAULT_CONFIG_PATH
 
 
@@ -34,15 +34,17 @@ def test_activity_cli__require_stamp_mode_without_date(
         cfg, metadata = original_load_config(path, **kwargs)
         io_cfg = getattr(cfg, "io", None)
         if io_cfg is not None:
-            setattr(io_cfg, "output_stamp_mode", "require")
-            setattr(io_cfg, "default_date_prefix", "20240101")
+            io_cfg.output_stamp_mode = "require"
+            io_cfg.default_date_prefix = "20240101"
         local_cfg = getattr(cfg, "local", None)
         if local_cfg is not None:
             local_io = getattr(local_cfg, "io", None)
             if local_io is not None:
-                setattr(local_io, "output_stamp_mode", "require")
-                setattr(local_io, "default_date_prefix", "20240101")
-        metadata.snapshot.setdefault("local", {}).setdefault("io", {})["output_stamp_mode"] = "require"
+                local_io.output_stamp_mode = "require"
+                local_io.default_date_prefix = "20240101"
+        metadata.snapshot.setdefault("local", {}).setdefault("io", {})[
+            "output_stamp_mode"
+        ] = "require"
         metadata.snapshot["local"]["io"]["default_date_prefix"] = "20240101"
         return cfg, metadata
 

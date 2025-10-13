@@ -112,6 +112,7 @@ def _normalise_output_labels(
         table_name = default_table
     return table_name, date_tag
 
+
 # Canonical dataset stem used for standard outputs.
 _DEFAULT_OUTPUT_TABLE = "testitem"
 
@@ -506,7 +507,9 @@ def _disabled_optional_columns(cfg: Config) -> frozenset[str]:
     disabled: set[str] = set()
 
     pubchem_cfg = getattr(cfg, "pubchem", None)
-    pubchem_enabled = True if pubchem_cfg is None else getattr(pubchem_cfg, "enable", True)
+    pubchem_enabled = (
+        True if pubchem_cfg is None else getattr(pubchem_cfg, "enable", True)
+    )
     if not pubchem_enabled:
         disabled.update(_PUBCHEM_OPTIONAL_COLUMNS)
 
@@ -617,7 +620,9 @@ def fetch_testitems(
                 frame = frame.rename(columns=resolved_targets)
 
             missing_targets = [
-                target for target in resolved_targets.values() if target not in frame.columns
+                target
+                for target in resolved_targets.values()
+                if target not in frame.columns
             ]
             if missing_targets:
                 na_series = pd.Series(pd.NA, index=frame.index, dtype="object")
@@ -1240,7 +1245,9 @@ def finalize_output(
             pubchem_fallback_used = True
             pubchem_fallback_applied = True
 
-    ordered_columns = [column for column in col_order if column in dataset_frame.columns]
+    ordered_columns = [
+        column for column in col_order if column in dataset_frame.columns
+    ]
     extra_columns = [
         column for column in dataset_frame.columns if column not in ordered_columns
     ]
@@ -1330,7 +1337,12 @@ def finalize_output(
         if not dataset_frame[column].isna().all()
     ]
     pubchem_columns_with_values.sort()
-    if pubchem_enabled and dataset_frame.size and pubchem_columns_present and not pubchem_columns_with_values:
+    if (
+        pubchem_enabled
+        and dataset_frame.size
+        and pubchem_columns_present
+        and not pubchem_columns_with_values
+    ):
         logger.warning(
             "pubchem_augmentation_missing_values",
             columns=pubchem_columns_present,

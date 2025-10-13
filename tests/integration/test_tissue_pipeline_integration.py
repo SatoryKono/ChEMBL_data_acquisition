@@ -260,6 +260,8 @@ def test_run_tissue_pipeline__deterministic_output_from_fixtures(
         expected_df.drop(columns=["timestamp_utc"]),
     )
     assert set(rerun_df["timestamp_utc"].unique()) == {SECOND_RUN_GENERATED_AT}
-    rerun_meta = yaml.safe_load(Path(f"{rerun_output}.meta.yaml").read_text(encoding="utf-8"))
+    rerun_meta = yaml.safe_load(
+        Path(f"{rerun_output}.meta.yaml").read_text(encoding="utf-8")
+    )
     assert rerun_meta["generated_at"] == SECOND_RUN_GENERATED_AT
     assert metadata["command"]
