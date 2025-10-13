@@ -9,14 +9,16 @@ import traceback
 from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from functools import lru_cache
 from itertools import chain, islice
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
+import yaml
 
 from library import io
 from library.clients import pubchem as pc
@@ -41,6 +43,7 @@ from library.config import (
 from library.integration.chembl_client import ChemblClient
 from library.orchestration import ETLContext
 from library.pipelines.assay.chembl_assay import TESTITEM_STRUCTURE_COLUMNS
+from library.project_version import get_pipeline_version
 from library.qa.reporting import build_table_quality_hook
 from library.qa.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
@@ -73,6 +76,17 @@ _FETCH_ERROR_SAMPLE_SIZE = 10
 _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
 _PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
 _DEFAULT_TABLE_NAME = "testitem"
+
+
+_DEFAULT_METADATA_SOURCES = (
+    "ChEMBL Molecule API",
+    "PubChem Compound API",
+)
+
+_QC_RATIO_COLUMNS = (
+    "pubchem_cid",
+    "pubchem_canonical_smiles",
+)
 
 
 @dataclass(frozen=True)
@@ -151,6 +165,125 @@ class TestitemPipelineOptions:
     offset: int | None = None
     emit_legacy_artifacts: bool = False
     pubchem_enabled: bool | None = None
+
+
+def _resolve_metadata_sources(pubchem_enabled: bool | None) -> list[str]:
+    """Return data provenance sources for the metadata payload."""
+
+    sources = [str(_DEFAULT_METADATA_SOURCES[0])]
+    if pubchem_enabled:
+        sources.append(str(_DEFAULT_METADATA_SOURCES[1]))
+    return sources
+
+
+def _extract_metadata_parameters(
+    cfg: Config,
+    options: TestitemPipelineOptions | None,
+    *,
+    emit_legacy_artifacts: bool,
+    pubchem_enabled: bool | None,
+) -> dict[str, object]:
+    """Collect pipeline parameters for metadata emission."""
+
+    parameters: dict[str, object] = {
+        "emit_legacy_artifacts": bool(emit_legacy_artifacts),
+    }
+
+    def _coerce_optional(value: object | None) -> object | None:
+        return value if value is not None else None
+
+    limit = _coerce_optional(getattr(options, "limit", None))
+    if limit is None:
+        limit = _coerce_optional(getattr(getattr(cfg, "testitem", None), "limit", None))
+    if limit is not None:
+        parameters["limit"] = int(limit)
+
+    offset = _coerce_optional(getattr(options, "offset", None))
+    if offset is None:
+        offset = _coerce_optional(getattr(getattr(cfg, "testitem", None), "offset", None))
+    if offset is not None:
+        parameters["offset"] = int(offset)
+
+    retry_cfg = getattr(cfg, "retry", None)
+    retries = getattr(retry_cfg, "max_attempts", None) if retry_cfg is not None else None
+    if retries is None:
+        batch_retry = getattr(getattr(cfg, "testitem", None), "batch_retry", None)
+        if batch_retry is not None:
+            retries = getattr(batch_retry, "max_attempts", None)
+    if retries is not None:
+        parameters["retries"] = int(retries)
+
+    pubchem_toggle = getattr(options, "pubchem_enabled", None)
+    if pubchem_toggle is not None:
+        parameters["pubchem_enabled"] = bool(pubchem_toggle)
+    else:
+        cfg_pubchem = getattr(cfg, "pubchem", None)
+        enabled = getattr(cfg_pubchem, "enable", None) if cfg_pubchem is not None else None
+        if enabled is not None:
+            parameters["pubchem_enabled"] = bool(enabled)
+        elif pubchem_enabled is not None:
+            parameters["pubchem_enabled"] = bool(pubchem_enabled)
+
+    return parameters
+
+
+def _build_qc_summary(frame: pd.DataFrame) -> dict[str, Any]:
+    """Return a compact QC summary for the metadata payload."""
+
+    total_rows = int(frame.shape[0])
+    summary: dict[str, Any] = {"total_rows": total_rows}
+    if total_rows <= 0:
+        return summary
+
+    ratios: dict[str, float] = {}
+    for column in _QC_RATIO_COLUMNS:
+        if column not in frame.columns:
+            continue
+        non_null = frame[column].notna().sum()
+        ratios[column] = round(float(non_null) / float(total_rows), 4)
+    if ratios:
+        summary["non_null_ratio"] = ratios
+    return summary
+
+
+def _write_primary_metadata(
+    *,
+    dataset_frame: pd.DataFrame,
+    dataset_path: Path,
+    quality_path: Path,
+    correlation_path: Path,
+    table_name: str,
+    date_tag: str,
+    parameters: Mapping[str, object] | None,
+    stats: Mapping[str, object] | None,
+    pubchem_enabled: bool | None,
+) -> Path:
+    """Persist the standard metadata sidecar next to ``dataset_path``."""
+
+    meta_path = dataset_path.with_suffix(".meta.yaml")
+    outputs = [dataset_path.name, quality_path.name, correlation_path.name]
+    canonical = table_name.lower()
+    resolved_table = _TABLE_NAME_ALIASES.get(canonical, table_name)
+    if resolved_table.lower() != _DEFAULT_OUTPUT_TABLE:
+        resolved_table = _DEFAULT_OUTPUT_TABLE
+
+    metadata: dict[str, Any] = {
+        "table": resolved_table,
+        "generated_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        "pipeline_version": get_pipeline_version(),
+        "date_tag": date_tag,
+        "parameters": dict(parameters or {}),
+        "sources": _resolve_metadata_sources(pubchem_enabled),
+        "outputs": outputs,
+        "qc_summary": _build_qc_summary(dataset_frame),
+    }
+    if stats:
+        metadata["pipeline_stats"] = dict(stats)
+
+    with meta_path.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(metadata, handle, sort_keys=False, allow_unicode=True)
+    logger.info("[META] Метаданные сохранены: %s", meta_path)
+    return meta_path
 
 
 def _is_placeholder_user_agent(user_agent: str | None) -> bool:
@@ -975,6 +1108,7 @@ def run_testitem_pipeline(
                 missing_ids=missing_ids,
                 emit_legacy_artifacts=options.emit_legacy_artifacts,
                 pubchem_context=pubchem_fallback_context,
+                options=options,
             )
         except TestitemPipelineStageError as exc:
             return exc.code, None
@@ -995,6 +1129,7 @@ def finalize_output(
     missing_ids: Sequence[str] | None = None,
     emit_legacy_artifacts: bool = False,
     pubchem_context: PubChemAugmentationContext | None = None,
+    options: TestitemPipelineOptions | None = None,
 ) -> tuple[int, io.StandardOutputArtifacts | None]:
     """Normalise, validate, and persist the final dataset from ``chunks``."""
 
@@ -1373,17 +1508,56 @@ def finalize_output(
 
     logger.info("testitem_stats", **stats)
 
+    parameters = _extract_metadata_parameters(
+        cfg,
+        options,
+        emit_legacy_artifacts=emit_legacy_artifacts,
+        pubchem_enabled=pubchem_augmentation_enabled,
+    )
+
+    legacy_meta_path: Path | None = None
+    if emit_legacy_artifacts:
+        legacy_meta_temp = write_meta_yaml(
+            csv_path=artifacts.dataset,
+            command=" ".join(sys.argv),
+            config=_serialize_paths(cfg.to_dict()),
+            inputs={"input_csv": str(input_csv)},
+            stats=stats,
+            schema="TestitemsSchema",
+        )
+        desired_legacy_path = legacy_meta_temp.with_name(
+            legacy_meta_temp.name.replace(".meta.yaml", ".legacy.meta.yaml")
+        )
+        try:
+            legacy_content = legacy_meta_temp.read_text(encoding="utf-8")
+            with desired_legacy_path.open("w", encoding="utf-8") as handle:
+                handle.write(legacy_content)
+        except OSError as exc:  # pragma: no cover - defensive guard
+            logger.warning(
+                "testitem_legacy_metadata_copy_failed",
+                error=str(exc),
+                source=str(legacy_meta_temp),
+                destination=str(desired_legacy_path),
+            )
+            legacy_meta_path = legacy_meta_temp
+        else:
+            legacy_meta_path = desired_legacy_path
+        # ``_write_primary_metadata`` overwrites the canonical path next.
+
+    primary_meta_path = _write_primary_metadata(
+        dataset_frame=dataset_frame,
+        dataset_path=artifacts.dataset,
+        quality_path=artifacts.quality_report,
+        correlation_path=artifacts.correlation_report,
+        table_name=table_name,
+        date_tag=date_tag,
+        parameters=parameters,
+        stats=stats,
+        pubchem_enabled=pubchem_augmentation_enabled,
+    )
+
     if not emit_legacy_artifacts:
         return exit_code, artifacts
-
-    meta_path = write_meta_yaml(
-        csv_path=artifacts.dataset,
-        command=" ".join(sys.argv),
-        config=_serialize_paths(cfg.to_dict()),
-        inputs={"input_csv": str(input_csv)},
-        stats=stats,
-        schema="TestitemsSchema",
-    )
 
     fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
     table_quality = build_table_quality_hook(
@@ -1396,12 +1570,20 @@ def finalize_output(
     except Exception as exc:
         tb = traceback.format_exc()
         record_quality_failure(
-            meta_path,
+            primary_meta_path,
             error=str(exc),
             error_type=exc.__class__.__name__,
             traceback=tb,
             fatal=fatal_quality_error,
         )
+        if legacy_meta_path and legacy_meta_path != primary_meta_path:
+            record_quality_failure(
+                legacy_meta_path,
+                error=str(exc),
+                error_type=exc.__class__.__name__,
+                traceback=tb,
+                fatal=fatal_quality_error,
+            )
         log_kwargs = {
             "error": str(exc),
             "error_type": exc.__class__.__name__,
