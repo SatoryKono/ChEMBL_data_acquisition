@@ -30,7 +30,7 @@ from library.table_quality import analyze_table_quality  # noqa: F401
 from library.validation import validate_testitems  # noqa: F401
 
 from . import enrichment as testitem_enrichment  # noqa: F401
-from .cli import (
+from .cli import (  # noqa: F401
     RAW_INDEX_COLUMN,
     TestitemPipelineOptions,
     _emit_missing_identifier_logs,

@@ -1,29 +1,47 @@
 # Output specification
 
-Each pipeline writes a deterministic CSV together with metadata (`.meta.yaml`),
-table-quality profiles (`_quality_report_table.csv` and `.quality.json`) and log
-records. This document describes the CSV schemas, column meanings, data types
-and validation rules enforced by Pandera (`library/schemas/*.py`).
+Each pipeline writes a deterministic dataset CSV together with the canonical QA
+tables described below. This document summarises those CSV schemas, column
+meanings, data types and the optional legacy artefacts that can be emitted for
+deeper diagnostics.
 
-## Metadata sidecars
+## Canonical CSV bundle
 
-For an output named `output.targets_20250228.csv` the sidecars are:
+For an output named `output.targets_20250228.csv` the default artefacts are:
+
+- `output.targets_20250228.csv` — the validated dataset with deterministic row
+  and column ordering.
+- `output.targets_20250228_quality_report_table.csv` — tabular QA profile that
+  covers counts, missing values, numeric statistics and pattern coverage for
+  selected columns.
+- `output.targets_20250228_data_correlation_report_table.csv` — correlation
+  summary for numeric metrics that power the smoke checks and regression
+  dashboards.【F:library/io/output_writer.py†L97-L171】
+
+The QA tables are stored next to the dataset and follow the same deterministic
+ordering policy, allowing downstream tools to diff consecutive runs without
+additional normalisation.
+
+## Optional legacy artefacts
+
+Enable `--emit-legacy-artifacts` (or the `--debug`/`--keep-intermediate` flags
+that imply it) to persist additional files for provenance and failure analysis:
 
 - `output.targets_20250228.meta.yaml` — pipeline name, CLI parameters, effective
-  configuration, schema version and SHA-256 hash of the CSV.
-- `output.targets_20250228_quality_report_table.csv` — tabular profile covering
-  counts, missing values, numeric statistics and pattern coverage for selected
-  columns.
+  configuration, schema version and the SHA-256 hash of the CSV.
 - `output.targets_20250228.quality.json` — JSON summary with the same metrics
-  plus warnings raised during profiling.
+  as the QA table plus warnings raised during profiling.
+- `output.targets_20250228_failure_cases.csv` and other historical diagnostics
+  preserved for troubleshooting scenarios.【F:library/cli_utils.py†L682-L705】【F:library/cli_utils.py†L1158-L1299】
 
-These artefacts support reproducibility and downstream QA pipelines.
+The optional artefacts mirror the layout used in earlier releases so existing
+diff tooling can continue to operate when the flag is enabled.
 
-### Metadata payload keys
+### Metadata payload keys (legacy `.meta.yaml`)
 
-The metadata writer records a stable set of attributes so downstream tools can
-reconstruct the execution context without reopening logs. The table below lists
-the canonical keys together with the source of each value.
+When the metadata sidecar is emitted it records a stable set of attributes so
+downstream tools can reconstruct the execution context without reopening logs.
+The table below lists the canonical keys together with the source of each value.
 
 | Key | Description | Source |
 |-----|-------------|--------|
@@ -45,7 +63,7 @@ the canonical keys together with the source of each value.
 Because `extra_metadata` is merged verbatim, pipelines can persist additional
 keys (such as `run_id`, staging identifiers or bespoke audit markers) without
 changing the writer implementation.【F:library/common/metadata_writer.py†L139-L140】 The
-examples below illustrate the most common layouts.
+examples below illustrate the most common layouts when the sidecar is enabled.
 
 #### Example without dictionary resources
 
@@ -107,15 +125,12 @@ dictionaries:
     sha256: 842895e301f9214ba3d2073ca5fde821efefaf68f9686088e91ce1a6e0be0461
 ```
 
-### Controlling legacy sidecars
+### Emitting legacy artefacts
 
-The canonical CSV, metadata sidecar and quality reports are always produced via
-`finalise_csv_output`. Additional legacy artefacts (historical deterministic
-writer CSVs, failure-case dumps and duplicate metadata YAML files) are gated by
-the `--emit-legacy-artifacts/--no-emit-legacy-artifacts` flag exposed on every
-CLI parser.【F:library/cli/parser.py†L228-L260】 The helper logic automatically enables
-the legacy bundle when `--debug` or `--keep-intermediate` is active so that
-diagnostics are preserved during investigations.【F:library/cli_utils.py†L303-L312】
+The legacy bundle is gated by the `--emit-legacy-artifacts/--no-emit-legacy-artifacts`
+flag exposed on every CLI parser.【F:library/cli/parser.py†L228-L260】 The helper logic
+automatically enables it when `--debug` or `--keep-intermediate` is active so
+that diagnostics are preserved during investigations.【F:library/cli_utils.py†L414-L419】
 
 ## Document export (`documents`)
 
