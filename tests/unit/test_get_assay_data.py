@@ -405,7 +405,15 @@ def test_run_chembl__standard_outputs_created_without_legacy(
 ) -> None:
     cfg.assay.limit = 1
 
-    df = pd.DataFrame({"assay_chembl_id": ["CHEMBL1"]})
+    df = pd.DataFrame(
+        {
+            "assay_chembl_id": ["CHEMBL1"],
+            "assay_group": [pd.NA],
+            "assay_strain": [pd.NA],
+            "year": [pd.NA],
+            "accession": [pd.NA],
+        }
+    )
     df.to_csv(minimal_args.final_out, index=False, encoding="utf-8")
 
     save_calls: list[tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]] = []
@@ -491,6 +499,9 @@ def test_run_chembl__standard_outputs_created_without_legacy(
 
     assert exit_code == 0
     assert save_calls, "expected save_standard_outputs to be invoked"
+    saved_dataset, *_ = save_calls[-1]
+    for column in ("assay_group", "assay_strain", "year", "accession"):
+        assert column not in saved_dataset.columns
     assert not tracker.saved
     fetch_failure = minimal_args.final_out.with_name(
         f"{minimal_args.final_out.stem}_fetch_failures.csv"
