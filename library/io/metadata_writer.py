@@ -107,23 +107,20 @@ def save_metadata(
 
     resolved_output_dir = Path(output_dir) if output_dir is not None else Path("data/output")
 
-    dataset_path: Path
-    if artifacts:
-        dataset_path = Path(artifacts[0])
-    else:
-        resolved_output_dir.mkdir(parents=True, exist_ok=True)
-        dataset_path = resolved_output_dir / f"output.{table_name}_{date_tag}.csv"
-
     parameters = _serialise_parameters(args)
     outputs = _resolve_outputs(table_name, date_tag, artifacts=artifacts)
 
-    resolved_context = run_context if run_context is not None else get_current()
-    generated_at = _resolve_generated_at(resolved_context)
+    generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+        "+00:00",
+        "Z",
+    )
+
+    csv_stub_path = resolved_output_dir / f"output.{table_name}_{date_tag}"
 
     meta_path = write_meta_yaml(
-        csv_path=dataset_path,
+        csv_path=csv_stub_path,
+        command="",
         generated_at=generated_at,
-        allow_nondeterministic_timestamp=True,
         extra_metadata={
             "table": table_name,
             "parameters": parameters,
