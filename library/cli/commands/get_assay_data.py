@@ -136,6 +136,14 @@ ASSAY_OUTPUT_DROP_COLUMNS: list[str] = [
 ]
 
 
+ASSAY_EMPTY_OUTPUT_COLUMNS: list[str] = [
+    "accession",
+    "assay_group",
+    "assay_strain",
+    "year",
+]
+
+
 def remove_assay_output_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Return ``df`` without columns disallowed in ``output.assay_*`` exports."""
 
@@ -402,6 +410,19 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 path=str(dataset_csv),
             )
             quality_report = pd.DataFrame()
+
+        empty_columns = [
+            column
+            for column in ASSAY_EMPTY_OUTPUT_COLUMNS
+            if column in dataset_frame.columns and dataset_frame[column].isna().all()
+        ]
+        if empty_columns:
+            dataset_frame = dataset_frame.drop(columns=empty_columns)
+            logger.info(
+                "Removed empty columns from output.assay_*: %s",
+                ", ".join(empty_columns),
+            )
+
         table_name_value, date_tag = io.derive_output_labels(
             dataset_csv,
             default_table=DEFAULT_OUTPUT_STEM,
