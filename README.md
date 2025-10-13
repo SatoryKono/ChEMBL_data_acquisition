@@ -347,6 +347,12 @@ remain opt-in via `--emit-legacy-artifacts`, `--debug` or `--keep-intermediate`.
 The metadata captures the column schema, hashes, git SHA and effective
 configuration so analysts can audit provenance on every run.
 
+Chunk-level fetch diagnostics written by ``ChunkFailureTracker`` keep
+``chunk_fetch_failure_ids`` capped at the first 100 unique identifiers while
+still reporting the total unique count. The streaming aggregation avoids loading
+the entire identifier universe into memory when large retries fail, ensuring the
+sidecar statistics stay informative without inflating peak RSS.
+
 Upgrading from earlier releases triggers a one-time sweep that deletes legacy
 sidecars (`*.quality.json`, `*_failure_cases.csv` and similar artefacts) before
 the first pipeline run. Re-run `tools/cleanup_legacy_outputs.py` to repeat the
