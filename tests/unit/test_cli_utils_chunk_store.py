@@ -52,3 +52,21 @@ def test_parquet_chunk_store__falls_back_to_pickle_when_engine_missing(monkeypat
 
     store.cleanup()
 
+
+@pytest.mark.unit
+def test_parquet_chunk_store__append_tracks_single_frame_row_count():
+    """Appending a single chunk persists it once and updates counters."""
+
+    store = cli_utils._ParquetChunkStore()
+
+    frame = pd.DataFrame({"col": [1, 2, 3]})
+    store.append(frame)
+
+    frames = list(store.iter_frames())
+    assert len(frames) == 1
+    pd.testing.assert_frame_equal(frames[0], frame)
+
+    assert store.row_count == len(frame)
+
+    store.cleanup()
+

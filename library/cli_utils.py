@@ -131,6 +131,8 @@ class _ParquetChunkStore:
 
         base_path = Path(self._tmpdir.name) / f"chunk_{len(self._paths):05d}"
 
+        path: Path
+
         if self._backend == "pickle":
             path = base_path.with_suffix(".pkl")
             self._write_pickle(frame, path)
