@@ -77,6 +77,7 @@ TEST_DIRECTORIES = (
     ROOT_DIR / "tests" / "unit",
     ROOT_DIR / "tests" / "integration",
     ROOT_DIR / "tests" / "e2e",
+    ROOT_DIR / "tests" / "postprocess",
 )
 _BASE_PYTEST_COMMAND: list[str] = [
     sys.executable,

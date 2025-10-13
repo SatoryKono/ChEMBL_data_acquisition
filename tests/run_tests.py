@@ -31,6 +31,7 @@ TEST_DIRECTORIES = (
     TEST_ROOT / "unit",
     TEST_ROOT / "integration",
     TEST_ROOT / "e2e",
+    TEST_ROOT / "postprocess",
 )
 
 SUCCESS_RATE_THRESHOLD = 0.95
