@@ -235,11 +235,28 @@ class RequestedIdsSnapshot(Sequence[str]):
         return self._read_from_disk()
 
     @staticmethod
-    def _cleanup_path(path: Path) -> None:
-        try:
-            os.remove(path)
-        except FileNotFoundError:
-            pass
+    def _cleanup_path(path: Path | None) -> None:
+        if path is None:
+            return
+
+        # ``NamedTemporaryFile`` produces OS-level handles that may remain locked on
+        # Windows when generators reading from the snapshot short-circuit (for
+        # example after ``KeyboardInterrupt``).  Retry a few times before giving up
+        # so that interpreter shutdown does not surface spurious ``PermissionError``
+        # exceptions.
+        delay = 0.05
+        for attempt in range(5):
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                return
+            except PermissionError:
+                if attempt == 4:
+                    return
+                time.sleep(delay)
+                delay *= 2
+            else:
+                return
 
 
 def ensure_raw_index_column(frame: pd.DataFrame) -> bool:
