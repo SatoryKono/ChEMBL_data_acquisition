@@ -110,7 +110,7 @@ select = ["E", "F", "I", "B", "UP"]
 ignore = ["E501"]
 
 [tool.mypy]
-files = ["library", "scripts"]
+files = ["library", "scripts", "config"]
 python_version = "3.11"
 strict = true
 warn_unused_configs = true

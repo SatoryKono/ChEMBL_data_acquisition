@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Final
+
 from .paths import (
     CONFIG_DIR,
     DEFAULT_CONFIG_PATH,
@@ -10,7 +12,7 @@ from .paths import (
     SCHEMA_DIR,
 )
 
-__all__ = [
+__all__: Final[list[str]] = [
     "CONFIG_DIR",
     "DEFAULT_CONFIG_PATH",
     "DICTIONARY_DIR",
