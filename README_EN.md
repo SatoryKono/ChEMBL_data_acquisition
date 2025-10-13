@@ -102,6 +102,29 @@ core workflows stay functional on Python 3.13.
 > reproducible: adjust the version bounds in the project metadata first, then
 > regenerate the lock file so all three sources stay in sync.
 
+### Regenerating dependency locks
+
+Always use the interpreter pinned in [`.python-version`](.python-version) when
+invoking `pip-compile` or `poetry lock`. The CI pipeline enforces this to avoid
+accidentally producing Python 3.13+ lock files that would break older
+environments.
+
+```bash
+python "$(cat .python-version)" -m venv .venv-lock
+source .venv-lock/bin/activate
+python -m pip install --upgrade pip
+pip install pip-tools "poetry==2.1.4"
+pip-compile --extra=dev --output-file=requirements-lock.txt pyproject.toml
+poetry lock
+deactivate
+rm -rf .venv-lock
+```
+
+The script [`tools/check_pip_compile_python_version.py`](tools/check_pip_compile_python_version.py)
+asserts that the `requirements-lock.txt` header still references the supported
+interpreter. Run it after updating dependencies to confirm the metadata matches
+the checked-in `.python-version`.
+
 ### Pre-commit hooks
 
 The repository ships a curated [`pre-commit`](https://pre-commit.com/)\
