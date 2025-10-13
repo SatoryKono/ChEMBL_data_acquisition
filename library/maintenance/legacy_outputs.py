@@ -18,12 +18,9 @@ if TYPE_CHECKING:  # pragma: no cover - imported for typing only
 
 
 DEFAULT_PATTERNS: tuple[str, ...] = (
-    "*.meta.yaml",
-    "*.meta.yaml.lock",
     "*.quality.json",
     "*.quality.json.lock",
     "*_failure_cases.csv",
-    "*_failure_cases.csv.meta.yaml",
     "*_failure_cases.csv.lock",
 )
 
