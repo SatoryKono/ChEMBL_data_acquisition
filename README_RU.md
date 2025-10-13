@@ -209,13 +209,16 @@ bootstrap-хелперы. По умолчанию каждая команда п
 | Синтетические активности | `python scripts/get_activities.py --limit 25 --dry-run` | Генерирует детерминированные тестовые строки для смоук-тестов и поддерживает те же флаги логирования, что и остальные CLI. |
 
 Каждый пайплайн теперь оставляет детерминированный CSV вместе с
-`<имя>_quality_report_table.csv` и `<имя>_data_correlation_report_table.csv` в
-том же каталоге. Метаданные (`<имя>.meta.yaml`), JSON-отчёты качества и CSV с
-ошибками доступны по требованию через `--emit-legacy-artifacts`, `--debug` или
-`--keep-intermediate`. Поле `generated_at` остаётся детерминированным: при
-наличии `--date` используется указанная дата, иначе хэшируется нормализованный
-вызов CLI и вычисленный `run_id`. Таргет-пайплайн также создаёт вспомогательные
-таблицы `organism.output.target_<stamp>.csv`, `isoform.output.target_<stamp>.csv`,
+`<имя>.meta.yaml`, `<имя>_quality_report_table.csv` и
+`<имя>_data_correlation_report_table.csv` в том же каталоге. Метаданные пишутся
+через `io.save_metadata` и содержат параметры запуска, схему и контрольные
+суммы. Наследуемые диагностические файлы (`<имя>.quality.json`,
+`<имя>_failure_cases.csv` и др.) подключаются по требованию через
+`--emit-legacy-artifacts`, `--debug` или `--keep-intermediate`. Поле
+`generated_at` остаётся детерминированным: при наличии `--date` используется
+указанная дата, иначе хэшируется нормализованный вызов CLI и вычисленный
+`run_id`. Таргет-пайплайн также создаёт вспомогательные таблицы
+`organism.output.target_<stamp>.csv`, `isoform.output.target_<stamp>.csv`,
 `names.output.target_<stamp>.csv` и `IUPHAR.output.target_<stamp>.csv`, которые
 подробно описаны в [`docs/ru/OUTPUT_TARGETS.md`](./docs/ru/OUTPUT_TARGETS.md) и
 [`docs/en/OUTPUT_TARGETS.md`](./docs/en/OUTPUT_TARGETS.md). Полную спецификацию

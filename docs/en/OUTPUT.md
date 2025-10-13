@@ -396,7 +396,7 @@ Schema: [`library/schemas/activities.py`](../../library/schemas/activities.py).
 
 Schema: [`library/schemas/testitems.py`](../../library/schemas/testitems.py).
 
-Default runs emit three CSV artefacts: the canonical dataset, `*_quality_report_table.csv`, and `*_data_correlation_report_table.csv`. Legacy sidecars (`*_failure_cases.csv`, `.meta.yaml`, postprocess manifests) can be restored with `--emit-legacy-artifacts` when debugging a run. 【F:library/pipelines/testitem/cli.py†L864-L1186】【F:library/cli/commands/get_testitem_data.py†L564-L738】
+Default runs emit the canonical dataset together with its `.meta.yaml` metadata sidecar, `*_quality_report_table.csv`, and `*_data_correlation_report_table.csv`. Legacy sidecars (`*_failure_cases.csv`, `.quality.json`, postprocess manifests) can be restored with `--emit-legacy-artifacts` when debugging a run. 【F:library/pipelines/testitem/cli.py†L864-L1186】【F:library/cli/commands/get_testitem_data.py†L564-L738】
 
 | Column | Type | Notes |
 |--------|------|-------|

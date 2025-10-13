@@ -318,19 +318,19 @@ the command with the same inputs produces byte-identical files.
 ### Deterministic exports and metadata policy
 
 All pipelines remain deterministic: running the same CLI twice with identical
-inputs produces byte-identical datasets, quality reports and correlation
-metrics. To minimise disk usage, the default bundle now only retains the CSV and
-its `_quality_report_table.csv`/`_data_correlation_report_table.csv` companions.
-Metadata YAML files, JSON quality summaries and failure-case CSVs are still
-available on demand via `--emit-legacy-artifacts`, `--debug` or
-`--keep-intermediate`. The metadata captures the column schema, hashes, git SHA
-and effective configuration so analysts can audit provenance when diagnostics
-are enabled.
+inputs produces byte-identical datasets, metadata, quality reports and
+correlation metrics. The standard bundle keeps the CSV, its `.meta.yaml`
+sidecar written via `io.save_metadata`, and the
+`_quality_report_table.csv`/`_data_correlation_report_table.csv` companions.
+Historical diagnostics such as `.quality.json` summaries and failure-case CSVs
+remain opt-in via `--emit-legacy-artifacts`, `--debug` or `--keep-intermediate`.
+The metadata captures the column schema, hashes, git SHA and effective
+configuration so analysts can audit provenance on every run.
 
 Upgrading from earlier releases triggers a one-time sweep that deletes legacy
-sidecars (`*.meta.yaml`, `.quality.json`, `*_failure_cases.csv`) before the first
-pipeline run. Re-run `tools/cleanup_legacy_outputs.py` to repeat the cleanup or
-preview the files slated for removal with `--dry-run`.
+sidecars (`*.quality.json`, `*_failure_cases.csv` and similar artefacts) before
+the first pipeline run. Re-run `tools/cleanup_legacy_outputs.py` to repeat the
+cleanup or preview the files slated for removal with `--dry-run`.
 
 Temporary files created during atomic writes follow the `.<name>.*.tmp` pattern
 and are always removed after a successful run. If a command fails, the cleanup
