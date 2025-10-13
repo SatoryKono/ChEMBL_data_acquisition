@@ -3,10 +3,17 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import sys
+import types
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
 import pytest
+
+
+if "library.cli.commands.get_data" not in sys.modules:
+    sys.modules["library.cli.commands.get_data"] = types.ModuleType(
+        "library.cli.commands.get_data"
+    )
 
 
 @pytest.mark.unit
@@ -65,7 +72,12 @@ def test_run_stage__inserts_default_document_subcommand(monkeypatch):
         "--output-dir",
         "data\\output",
     )
-    forward = cli.ForwardArgs(tokens=tokens, extras_start=2, extra_len=6)
+    forward = cli.ForwardArgs(
+        tokens=tokens,
+        extras_start=2,
+        extra_len=6,
+        output_dir=cli._resolve_forward_output_dir(tokens),
+    )
 
     captured: dict[str, list[str]] = {}
 
@@ -100,6 +112,7 @@ def test_build_forward_args__respects_equals_style_output_dir(tmp_path):
     assert f"--output-dir={custom_output}" in tokens
     assert "--output-dir" not in tokens, "default output-dir flag must not be duplicated"
     assert str(cli.DEFAULT_OUTPUT_DIR) not in tokens
+    assert forward.output_dir == custom_output.resolve()
 
 
 @pytest.mark.unit
@@ -196,8 +209,19 @@ def test_should_run_cleanup__respects_user_flags() -> None:
     from scripts import get_data as cli
 
     base = ("--config", "cfg.yaml", "--output-dir", "data/output")
-    forward = cli.ForwardArgs(tokens=base + ("--debug",), extras_start=0, extra_len=len(base) + 1)
+    debug_tokens = base + ("--debug",)
+    forward = cli.ForwardArgs(
+        tokens=debug_tokens,
+        extras_start=0,
+        extra_len=len(debug_tokens),
+        output_dir=cli._resolve_forward_output_dir(debug_tokens),
+    )
     assert cli._should_run_cleanup(forward) is False
 
-    forward = cli.ForwardArgs(tokens=base, extras_start=0, extra_len=len(base))
+    forward = cli.ForwardArgs(
+        tokens=base,
+        extras_start=0,
+        extra_len=len(base),
+        output_dir=cli._resolve_forward_output_dir(base),
+    )
     assert cli._should_run_cleanup(forward) is True
