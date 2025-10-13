@@ -4,6 +4,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.4] - 2025-10-17
+- Regenerated the bilingual documentation set after the October audit: README pairs
+  now stay in lockstep, the protocol DOCX export is reproducible via
+  `scripts/convert_md_to_docx.py`, and the change log reflects the approved
+  CHEMBL-DM01/2.1 baseline.
+
 ## [0.1.3] - 2025-10-16
 - Refined hierarchy resolution to favour curated relationships and introduce safe fallbacks when source data is incomplete.
 - Extended structured INFO-level logging to cover fallback decisions so hierarchy handling remains auditable.

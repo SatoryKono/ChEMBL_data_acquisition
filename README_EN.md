@@ -42,7 +42,7 @@ tables before executing the activity pipeline.
 | `library/` | Reusable packages: API clients, pipelines, validation schemas, post-processing and QA utilities. |
 | `config/` | Default YAML configuration, schemas and dictionary resources used during enrichment. |
 | `data/` | Lightweight fixtures and smoke-test inputs that mirror the expected CSV structure. |
-| `docs/` | Full bilingual documentation set (`en`/`ru`) kept in sync. |
+| `docs/` | Full bilingual documentation set (`en`/`ru`) kept in sync, including [`docs/ГОСТ.md`](./docs/%D0%93%D0%9E%D0%A1%D0%A2.md) with regulatory notes. |
 | `tests/` | Deterministic pytest suite covering unit, integration and end-to-end scenarios. |
 | `reports/` | Location where JSON/Markdown test reports are emitted by CI and local runs. |
 | `Makefile` | Convenience targets for formatting, linting, tests and documentation checks. |
@@ -54,17 +54,69 @@ in [`docs/en/SUMMARY.md`](./docs/en/SUMMARY.md) and
 ## Quick start
 
 ```bash
+make init
+source .venv/bin/activate
+pre-commit install --install-hooks
+```
+
+The `init` target enforces the interpreter listed in `.python-version` (when
+available), creates the `.venv`, upgrades `pip`, installs all pinned
+dependencies from `requirements-lock.txt` and finally installs the project in
+editable mode without re-resolving dependency versions.
+
+Prefer running the target, but if you need to bootstrap manually (for example,
+inside a container image) execute the equivalent sequence:
+
+```bash
 python -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
 pip install -r requirements-lock.txt
-pip install .[dev]
-pre-commit install
+pip install --no-deps -e .
 ```
 
 > 📌 Need a specific interpreter? Create a `.python-version` file with the
 > required `major.minor.patch`. `make init` reads the file when present and
 > aborts early if the active `python` binary does not match, so you can enforce
 > the same runtime locally and in CI.
+
+> ℹ️ Development dependencies in `pyproject.toml`, `requirements-dev.txt` and
+> `requirements-lock.txt` are updated together. This keeps local toolchains
+> reproducible: adjust the version bounds in the project metadata first, then
+> regenerate the lock file so all three sources stay in sync.
+
+### Pre-commit hooks
+
+The repository ships a curated [`pre-commit`](https://pre-commit.com/)\
+configuration that formats code, lints YAML/TOML files and validates static
+metadata before every commit. Install the tool once inside your virtual
+environment and register the hooks with your local Git clone:
+
+```bash
+pip install pre-commit
+pre-commit install --install-hooks
+```
+
+If you already executed the quick start commands (`make init` followed by
+`pre-commit install --install-hooks`) the package is available and only the
+`pre-commit install --install-hooks` call is required on subsequent clones. To
+verify the checks manually without committing, execute:
+
+```bash
+pre-commit run --all-files
+```
+
+Hooks automatically cache their environments, so subsequent executions only
+re-run the steps affected by the files you touched. If you update the
+configuration (for example, bump hook revisions) refresh the cache with:
+
+```bash
+pre-commit autoupdate
+pre-commit run --all-files
+```
+
+All hooks must pass locally before pushing — CI enforces the same suite to
+guarantee consistent formatting and linting outcomes.
 
 Inspect the orchestrator and pipeline-specific flags:
 
@@ -84,12 +136,6 @@ python scripts/get_data.py \
   --config config/config.yaml \
   --date $(date -u +%Y%m%d)
 ```
-
-> 💡 When `--date` is omitted the orchestrator injects a deterministic value from
-> `local.io.default_date_prefix` (the default in `config/config.yaml` is
-> `20240101`). Temporary runs can override it via the environment variable
-> `CHEMBL_DA_DEFAULT_DATE_PREFIX` (the `CHEMBL_DA_DEFAULT_DATE` alias is also
-> supported).
 
 ## Quality gates
 
@@ -118,6 +164,21 @@ next to the curated exports. When redirecting the aggregated outputs via
 `--json` or `--markdown`, point them at dedicated directories – the harness
 empties the parent folder before writing fresh artefacts to guarantee there are
 no stale files.
+
+### Required CI commands
+
+The continuous-integration pipeline executes the following commands on every
+push and pull request. Local changes must keep them green and deterministic:
+
+1. `python scripts/run_tests.py` — orchestrates the pytest suite and emits both
+   JSON/Markdown reports, failing if the success rate drops below **95 %**.
+2. `ruff check` — validates code style, import order and static analysis rules.
+3. `mypy --strict library` — runs strict type checking across the production
+   modules inside `library/`.
+
+The mypy step uploads its textual output to the `test-reports` artifact as
+`reports/mypy-report.txt` instead of committing the file. Download the artifact
+from the CI job summary whenever you need to inspect the type-check log.
 
 ### Logging contract
 
@@ -159,21 +220,18 @@ events while investigating discrepancies.
 | Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto` | Resolves tissue metadata, merges ontology cross-references and normalises synonyms for downstream joins. Run separately before `get_activity_data` when tissue lookups are required. |
 | Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --final-out output/cellline.csv --batch-size 20 --limit 100` | Retrieves ChEMBL cell line records, normalises nullable identifiers and enforces deterministic ordering. |
 | Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --column activity_id --batch-size 10 --workers 4 --dry-run` | Flags: identifier column overrides (`--column activity_id`), per-request limits (`--batch-size`, `--timeout`), range selection (`--limit`, `--offset`) and dry-run validation/workers toggles. |
-| Synthetic activities | `python scripts/get_activities.py --limit 25 --dry-run` | Generates deterministic dummy rows for smoke tests; accepts the same logging flags as other CLI tools. |
+| Synthetic activities | `python scripts/get_activities.py --limit 25 --dry-run` | Generates deterministic dummy rows for smoke tests, writes `.meta.yaml` sidecars and cleans temporary files; accepts the same logging flags as other CLI tools. |
 
-Each pipeline now keeps a deterministic CSV together with the
-`<name>_quality_report_table.csv` and
-`<name>_data_correlation_report_table.csv` diagnostics under the same directory.
-Metadata YAML files, JSON quality summaries and failure-case CSVs remain
-available via `--emit-legacy-artifacts`, `--debug` or `--keep-intermediate` when
-investigating issues. The target pipeline also emits helper lookups named
-`organism.output.target_<stamp>.csv`, `isoform.output.target_<stamp>.csv`,
-`names.output.target_<stamp>.csv`, and `IUPHAR.output.target_<stamp>.csv` — all
-detailed in [`docs/en/OUTPUT_TARGETS.md`](./docs/en/OUTPUT_TARGETS.md) and
-[`docs/ru/OUTPUT_TARGETS.md`](./docs/ru/OUTPUT_TARGETS.md). The isoform helper is
-produced by `library.postprocessing.target.process_targets`, a direct port of the
-original Power Query workbook that keeps every row byte-identical. Refer to the
-[output reference](./docs/en/OUTPUT.md) for the complete specification.
+Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar
+and table-quality reports under the same directory. The target pipeline also
+emits helper lookups named `organism.output.target_<stamp>.csv`,
+`isoform.output.target_<stamp>.csv`, `names.output.target_<stamp>.csv`, and
+`IUPHAR.output.target_<stamp>.csv` — all detailed in
+[`docs/en/OUTPUT_TARGETS.md`](./docs/en/OUTPUT_TARGETS.md) and
+[`docs/ru/OUTPUT_TARGETS.md`](./docs/ru/OUTPUT_TARGETS.md). The isoform helper
+is produced by `library.postprocessing.target.process_targets`, a direct port of
+the original Power Query workbook that keeps every row byte-identical. Refer to
+the [output reference](./docs/en/OUTPUT.md) for the complete specification.
 
 Custom file names such as `targets.csv` still trigger this post-processing
 chain, so downstream helpers are generated even when the export deviates from
@@ -244,12 +302,34 @@ recreate the same structure locally:
 
 3. Inspect the contents of `output/targets.csv` together with the
    `_quality_report_table.csv`/`_data_correlation_report_table.csv` QA reports.
-   Pass `--emit-legacy-artifacts` (or `--debug`/`--keep-intermediate`) to also
+   Add `--emit-legacy-artifacts` (or `--debug`/`--keep-intermediate`) to also
    regenerate the historical metadata YAML, failure cases and auxiliary CSVs for
    troubleshooting.
 
 All artefacts share the deterministic guarantees described above, so repeating
 the command with the same inputs produces byte-identical files.
+
+### Deterministic exports and metadata policy
+
+All pipelines remain deterministic: running the same CLI twice with identical
+inputs produces byte-identical datasets, quality reports and correlation
+metrics. To minimise disk usage, the default bundle now only retains the CSV and
+its `_quality_report_table.csv`/`_data_correlation_report_table.csv` companions.
+Metadata YAML files, JSON quality summaries and failure-case CSVs are still
+available on demand via `--emit-legacy-artifacts`, `--debug` or
+`--keep-intermediate`. The metadata captures the column schema, hashes, git SHA
+and effective configuration so analysts can audit provenance when diagnostics
+are enabled.
+
+Upgrading from earlier releases triggers a one-time sweep that deletes legacy
+sidecars (`*.meta.yaml`, `.quality.json`, `*_failure_cases.csv`) before the first
+pipeline run. Re-run `tools/cleanup_legacy_outputs.py` to repeat the cleanup or
+preview the files slated for removal with `--dry-run`.
+
+Temporary files created during atomic writes follow the `.<name>.*.tmp` pattern
+and are always removed after a successful run. If a command fails, the cleanup
+logic also deletes partially written CSVs and orphaned metadata to keep output
+directories tidy.
 
 ## Documentation
 
@@ -280,8 +360,15 @@ languages:
 
 ## Testing policy
 
-Tests are organised under `tests/` and executed with `pytest`. Local and CI runs
-must produce (the files are git-ignored to avoid spurious diffs):
+Tests are organised under `tests/` and executed via the canonical wrapper
+`python scripts/run_tests.py` (the module form `python -m scripts.run_tests`
+remains available). The command always writes deterministic artefacts to
+`reports/` and enforces the ≥95 % success-rate gate used by CI.
+
+### Test artefacts
+
+Local and CI runs must produce (the files are git-ignored to avoid spurious
+diffs):
 
 - `reports/test_report.json` — machine readable execution log
 - `reports/test_summary.md` — condensed Markdown summary
@@ -291,6 +378,13 @@ GitHub Actions uploads both files (plus the coverage directory) as the
 the latest workflow run, download the archive and inspect the JSON/Markdown to
 review the most recent pipeline health snapshot without regenerating the
 reports locally.
+
+Use the canonical wrapper to collect both artefacts and validate the quality
+threshold:
+
+```bash
+python scripts/run_tests.py
+```
 
 `test_report.json` always exposes three top-level keys:
 
@@ -334,10 +428,55 @@ reports locally.
 exact `error` message from the JSON report in a fenced code block. This makes it
 possible to triage failures using only the Markdown artefact.
 
-Smoke runs can use `pytest -q -k "not slow and not e2e"`, while full validation
-uses `pytest -q`. See [`docs/en/development/TESTING.md`](./docs/en/development/TESTING.md)
-for fixtures, determinism requirements and coverage targets.
+To focus on a subset during local development, forward arguments to pytest
+using the `--` separator, for example:
 
-## License
+```bash
+python -m scripts.run_tests -- -k "not slow and not e2e"
+```
 
-The project is distributed under the [MIT License](./LICENSE).
+### Smoke tests and determinism checks
+
+Run the lightweight determinism smoke test before publishing results or opening
+a pull request:
+
+```bash
+python scripts/check_determinism.py --limit 5
+```
+
+The command defaults to forwarding `--dry-run` to the underlying
+`get_activity_data.py` invocations. This exercises the full control flow but the
+pipeline intentionally skips writing result files, so the script reports an
+inconclusive check (`Outputs not created; determinism check inconclusive`).
+Disable the flag with `--no-dry-run` when you need to compare real exports.
+
+For CLI-level sanity checks you can generate a small deterministic export and
+its metadata sidecar in a temporary directory:
+
+```bash
+python scripts/get_activities.py --limit 10 --final-out /tmp/activities.csv
+```
+
+The resulting `/tmp/activities.csv` and `/tmp/activities.csv.meta.yaml` files
+should be byte-identical across repeated runs when using the same input and
+configuration.
+
+#### Pytest smoke marker
+
+The pytest marker `smoke` groups the high-value regression scenarios that gate
+the CI pipeline. Run them locally via `make smoke` or `pytest -m "smoke"` to
+verify the core data acquisition flow before a full test run. The suite
+currently includes:
+
+- `tests/integration/test_dictionary_manifest.py::test_dictionary_manifest__bundled_resources_validate`
+  – verifies that the bundled dictionary resources match the tracked manifest
+  checksums and ensures the inputs required for enrichment are available.
+- `tests/e2e/test_get_data_end_to_end.py::test_get_data_end_to_end__miniature_pipeline`
+  – drives the orchestrator against the miniature fixtures, covering the full
+  happy path, degraded inputs, partial failures and idempotent reruns.
+- `tests/e2e/test_get_data_scheduler.py::test_scheduler__selective_run_respects_dependencies`
+  – confirms that the scheduler honours dependency graphs, writes manifests and
+  exits successfully when downstream steps need rebuilding.
+
+See [`docs/en/development/TESTING.md`](./docs/en/development/TESTING.md) for
+fixtures, determinism requirements and coverage targets.
