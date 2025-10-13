@@ -6,6 +6,7 @@ import argparse
 import logging
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from collections.abc import Collection, Sequence
@@ -112,6 +113,21 @@ LOGS_DIR = DATA_DIR / "logs"
 _PUBCHEM_ENV_VAR = "CHEMBL_DA_PUBCHEM_ENABLE"
 _BASE_PATH_ENV_VAR = "CHEMBL_DA_BASE_PATH"
 
+_CLEANUP_FILE_PATTERNS: tuple[str, ...] = (
+    "*.tmp",
+    "*.tmp.*",
+    "*_intermediate.*",
+    "*_debug.log",
+    "cache_*.pkl",
+)
+
+_CLEANUP_DIRECTORY_NAMES: frozenset[str] = frozenset({
+    "raw",
+    "tmp",
+    "interim",
+    "cache",
+})
+
 
 def _has_explicit_pubchem_flag(tokens: Sequence[str]) -> bool:
     """Return ``True`` when PubChem CLI overrides are already present."""
@@ -134,6 +150,16 @@ def _extract_option_value(args: Sequence[str], option: str) -> str | None:
         if token.startswith(prefixed):
             return token[len(prefixed) :]
     return None
+
+
+def _has_flag(tokens: Sequence[str], option: str) -> bool:
+    """Return ``True`` when *option* is present in *tokens*."""
+
+    prefix = f"{option}="
+    for token in tokens:
+        if token == option or token.startswith(prefix):
+            return True
+    return False
 
 
 def _normalize_env_bool(value: str | None) -> bool | None:
@@ -474,6 +500,89 @@ def count_output_files() -> int:
     return sum(1 for path in OUTPUT_DIR.glob("*.csv"))
 
 
+def _is_cleanup_directory(path: Path) -> bool:
+    """Return ``True`` when ``path`` should be removed during cleanup."""
+
+    name = path.name.lower()
+    return name in _CLEANUP_DIRECTORY_NAMES
+
+
+def _relative_to_output(path: Path) -> str:
+    try:
+        return os.fspath(path.relative_to(OUTPUT_DIR))
+    except ValueError:
+        return os.fspath(path)
+
+
+def _remove_file(path: Path) -> bool:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return False
+    except OSError as exc:  # pragma: no cover - filesystem variance
+        logging.warning("[CLEANUP] Не удалось удалить %s: %s", path, exc)
+        return False
+    logging.info("[CLEANUP] Удалён файл %s", _relative_to_output(path))
+    return True
+
+
+def _remove_directory(path: Path) -> bool:
+    try:
+        shutil.rmtree(path)
+    except FileNotFoundError:
+        return False
+    except OSError as exc:  # pragma: no cover - filesystem variance
+        logging.warning("[CLEANUP] Не удалось удалить каталог %s: %s", path, exc)
+        return False
+    logging.info("[CLEANUP] Удалён каталог %s", _relative_to_output(path))
+    return True
+
+
+def cleanup_intermediate_files(output_dir: Path) -> int:
+    """Remove temporary and diagnostic artefacts from ``output_dir``."""
+
+    resolved = output_dir.expanduser().resolve()
+    if not resolved.exists():
+        logging.debug(
+            "[CLEANUP] Пропуск очистки: каталог %s не найден",
+            resolved,
+        )
+        return 0
+
+    removed = 0
+    seen_files: set[Path] = set()
+    for pattern in _CLEANUP_FILE_PATTERNS:
+        for candidate in sorted(resolved.rglob(pattern)):
+            candidate = candidate.resolve()
+            if candidate in seen_files or not candidate.is_file():
+                continue
+            if _remove_file(candidate):
+                removed += 1
+            seen_files.add(candidate)
+
+    directories: set[Path] = set()
+    for candidate in resolved.rglob("*"):
+        if candidate.is_dir() and _is_cleanup_directory(candidate):
+            directories.add(candidate.resolve())
+
+    # Remove deepest directories first to avoid orphaned parents lingering.
+    for directory in sorted(directories, key=lambda item: len(item.parts), reverse=True):
+        if _remove_directory(directory):
+            removed += 1
+
+    return removed
+
+
+def _should_run_cleanup(forward_args: ForwardArgs) -> bool:
+    """Return ``True`` when the orchestrator should prune intermediate artefacts."""
+
+    tokens = forward_args.tokens
+    debug_requested = _has_flag(tokens, "--debug")
+    keep_requested = _has_flag(tokens, "--keep-intermediate")
+    legacy_requested = _has_flag(tokens, "--emit-legacy-artifacts")
+    return not (debug_requested or keep_requested or legacy_requested)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args, unknown = parse_args(argv)
     log_file = configure_logging(args.log_level)
@@ -502,6 +611,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         logging.warning(
             "Ожидалось получить 15 CSV-файлов, фактически найдено %d.",
             csv_count,
+        )
+
+    if _should_run_cleanup(forward_args):
+        removed = cleanup_intermediate_files(OUTPUT_DIR)
+        logging.info("[CLEANUP] Завершено: удалено %d артефакт(ов)", removed)
+    else:
+        logging.info(
+            "[CLEANUP] Пропущено: сохранение промежуточных файлов запрошено пользователем"
         )
 
     return 0
