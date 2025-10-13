@@ -54,4 +54,6 @@ release: build
 	$(PYTHON_BIN) -m twine check dist/*
 
 clean:
-	rm -rf $(VENV) build dist .mypy_cache .pytest_cache
+	rm -rf $(VENV) build dist .pytest_cache
+	find . -name '.mypy_cache' -prune -exec rm -rf {} +
+	find . -type d -name '__pycache__' -prune -exec rm -rf {} +
