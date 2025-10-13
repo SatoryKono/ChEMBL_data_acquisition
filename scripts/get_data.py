@@ -191,7 +191,7 @@ def _ensure_base_path_env(args: Sequence[str], env: dict[str, str]) -> None:
 
     base_path_value = _extract_option_value(args, "--base-path")
     if not base_path_value:
-        env[_BASE_PATH_ENV_VAR] = os.fspath(DATA_DIR.resolve())
+        env[_BASE_PATH_ENV_VAR] = os.fspath(PROJECT_ROOT.resolve())
         return
 
     candidate = Path(base_path_value).expanduser()
