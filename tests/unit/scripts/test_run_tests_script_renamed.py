@@ -950,3 +950,98 @@ def test_main__handles_json_report_write_failure(
     assert summary_attempts == 1
     assert not report_file.exists()
     assert summary_file.exists()
+
+
+@pytest.mark.unit
+def test_main__smoke_executes_without_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reports_dir = tmp_path / "reports"
+    coverage_dir = reports_dir / "coverage"
+    coverage_html_dir = coverage_dir / "html"
+    report_file = reports_dir / "structured.json"
+    summary_file = reports_dir / "summary.md"
+
+    monkeypatch.setattr(run_tests, "ROOT_DIR", tmp_path, raising=False)
+    monkeypatch.setattr(run_tests, "REPORTS_DIR", reports_dir, raising=False)
+    monkeypatch.setattr(run_tests, "REPORT_FILE", report_file, raising=False)
+    monkeypatch.setattr(run_tests, "SUMMARY_FILE", summary_file, raising=False)
+    monkeypatch.setattr(run_tests, "DEFAULT_REPORTS_DIR", reports_dir, raising=False)
+    monkeypatch.setattr(run_tests, "DEFAULT_REPORT_FILE", report_file, raising=False)
+    monkeypatch.setattr(run_tests, "DEFAULT_SUMMARY_FILE", summary_file, raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_DIR", coverage_dir, raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_XML", coverage_dir / "coverage.xml", raising=False)
+    monkeypatch.setattr(run_tests, "COVERAGE_HTML", coverage_html_dir, raising=False)
+    monkeypatch.setattr(run_tests, "DEFAULT_JSON_ARG", str(report_file), raising=False)
+    monkeypatch.setattr(run_tests, "DEFAULT_MARKDOWN_ARG", str(summary_file), raising=False)
+
+    base_command = [sys.executable, "-m", "pytest"]
+    monkeypatch.setattr(run_tests, "_BASE_PYTEST_COMMAND", base_command, raising=False)
+    monkeypatch.setattr(run_tests, "_DEFAULT_TEST_TARGETS", ("tests/unit",), raising=False)
+
+    captured: dict[str, Any] = {}
+
+    def _fake_run_pytest(command: Sequence[str], *, timeout: float | None = None) -> int:
+        captured["command"] = list(command)
+        captured["timeout"] = timeout
+        return 0
+
+    monkeypatch.setattr(run_tests, "run_pytest", _fake_run_pytest)
+    monkeypatch.setattr(run_tests, "_parse_line_coverage", lambda path: 100.0)
+    monkeypatch.setattr(run_tests, "_load_raw_report", lambda raw_path: {})
+    monkeypatch.setattr(run_tests, "_cleanup_raw_report", lambda raw_path: None)
+    monkeypatch.setattr(run_tests, "validate_structured_report", lambda structured: None)
+    monkeypatch.setattr(run_tests, "validate_report_file", lambda path: None)
+    monkeypatch.setattr(run_tests, "write_summary", lambda structured, path: path.write_text("# summary", encoding="utf-8"))
+    monkeypatch.setattr(
+        run_tests,
+        "write_json_report",
+        lambda structured, path: path.write_text(json.dumps(structured), encoding="utf-8"),
+    )
+
+    def _fake_build_structured_report(
+        raw: dict[str, Any], exit_code: int
+    ) -> dict[str, Any]:
+        assert exit_code == 0
+        return {
+            "summary": {
+                "total": 0,
+                "passed": 0,
+                "failed": 0,
+                "skipped": 0,
+                "xfailed": 0,
+                "xpassed": 0,
+                "error": 0,
+                "success_rate": 1.0,
+            },
+            "meta": {"exit_code": exit_code},
+            "tests": [],
+        }
+
+    monkeypatch.setattr(run_tests, "build_structured_report", _fake_build_structured_report)
+
+    log_path = tmp_path / "logs" / "run_tests.log"
+
+    def _fake_create_logger_config(level: str, run_id: str | None = None) -> SimpleNamespace:
+        return SimpleNamespace(level=level, run_id=run_id)
+
+    monkeypatch.setattr(run_tests, "create_logger_config", _fake_create_logger_config)
+    monkeypatch.setattr(run_tests, "configure_logger", lambda cfg: None)
+
+    @contextmanager
+    def _fake_setup_cli_logging(script_name: str, log_cfg: Any, date: str | None = None):
+        assert script_name == "run_tests"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        yield SimpleNamespace(log_cfg=log_cfg, log_path=log_path)
+
+    monkeypatch.setattr(run_tests, "setup_cli_logging", _fake_setup_cli_logging)
+
+    exit_code = run_tests.main(["--json", str(report_file), "--markdown", str(summary_file)])
+
+    assert exit_code == 0
+    assert report_file.is_file()
+    assert summary_file.is_file()
+    assert captured["command"][:3] == base_command
+    assert "--json-report-file" in captured["command"]
+    assert "--log-file" in captured["command"]
+    assert captured["timeout"] is None
