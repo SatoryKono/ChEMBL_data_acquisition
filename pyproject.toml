@@ -120,6 +120,10 @@ exclude = ["tests"]
 plugins = ["pydantic.mypy"]
 mypy_path = "typings"
 
+[[tool.mypy.overrides]]
+module = ["pandas", "pandas.*", "yaml", "yaml.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 addopts = "-ra -q"
 testpaths = ["tests"]
