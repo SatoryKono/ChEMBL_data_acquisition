@@ -19,6 +19,27 @@ def test_make_target_postprocessing__end_to_end(tmp_path, monkeypatch):
             "target_chembl_id": ["t2", " t1"],
             "pref_name": [" Kinase ", "Receptor"],
             "target_type": ["protein", "PROTEIN FAMILY"],
+            "protein_classifications": [
+                json.dumps(
+                    [
+                        {
+                            "protein_classification": {
+                                "pref_name": "Enzyme",
+                                "class_level": 1,
+                            }
+                        },
+                        {
+                            "protein_classification": {
+                                "pref_name": "Kinase family",
+                                "class_level": 2,
+                            }
+                        },
+                    ]
+                ),
+                "",
+            ],
+            "protein_class_pred_L1": [None, "Other Protein Target"],
+            "protein_class_pred_L2": [None, "Miscellaneous"],
             "synonyms": ["alpha;beta", None],
             "chembl_synonyms": [None, "gamma"],
             "gtopdb_synonyms": ["delta", None],
@@ -38,16 +59,18 @@ def test_make_target_postprocessing__end_to_end(tmp_path, monkeypatch):
     assert {"chembl_synonyms", "gtopdb_synonyms"}.issubset(result.columns)
     assert result["target_chembl_id"].tolist() == ["T1", "T2"]
     assert result["pref_name"].tolist() == ["Receptor", "Kinase"]
-    assert result["synonyms"].tolist() == ["gamma", "alpha; beta; delta"]
+    synonyms = result["synonyms"].tolist()
+    assert {token.strip() for token in synonyms[0].split(";")} == {"Receptor", "gamma"}
+    assert {token.strip() for token in synonyms[1].split(";")} == {"Kinase", "alpha", "beta", "delta"}
     chembl_synonyms = result["chembl_synonyms"].tolist()
     gtopdb_synonyms = result["gtopdb_synonyms"].tolist()
     assert chembl_synonyms[0] == "gamma"
-    assert pd.isna(chembl_synonyms[1])
+    assert chembl_synonyms[1] == "Kinase"
     assert pd.isna(gtopdb_synonyms[0])
     assert gtopdb_synonyms[1] == "delta"
     assert result["organism"].isna().all()
-    assert result["target_class"].isna().all()
-    assert result["protein_family"].isna().all()
+    assert result["target_class"].tolist() == ["Other Protein Target", "Enzyme"]
+    assert result["protein_family"].tolist() == ["Miscellaneous", "Kinase family"]
     assert result["pipeline_version"].notna().all()
 
     report_path = output_path.parent / "targets.postprocess.report.json"

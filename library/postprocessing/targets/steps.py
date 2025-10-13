@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from collections.abc import Sequence
@@ -21,6 +22,196 @@ from library.resources.dictionaries import DictionaryManifestError, get_resource
 from .schema import TARGET_SCHEMA, validate_targets
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _normalise_scalar(value: object) -> str:
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except TypeError:
+        pass
+    text = str(value).strip()
+    if not text:
+        return ""
+    lowered = text.casefold()
+    if lowered in {"nan", "none", "null", "-"}:
+        return ""
+    return text
+
+
+def _parse_protein_classifications(value: object) -> list[tuple[int | None, str]]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        if not text or text.casefold() in {"nan", "none", "null", "-"}:
+            return []
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            tokens = [token.strip() for token in re.split(r"[|>;]", text) if token.strip()]
+            return [
+                (index + 1, token)
+                for index, token in enumerate(tokens)
+            ]
+    elif isinstance(value, (list, tuple)):
+        parsed = list(value)
+    elif isinstance(value, dict):
+        parsed = [value]
+    else:
+        return []
+
+    records: list[tuple[int | None, str]] = []
+
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+
+        candidate = item.get("protein_classification")
+        level: int | None = None
+
+        if isinstance(candidate, dict):
+            name = (
+                candidate.get("pref_name")
+                or candidate.get("protein_classification")
+                or candidate.get("short_name")
+                or candidate.get("name")
+            )
+            level_value = (
+                candidate.get("class_level")
+                or candidate.get("protein_classification_level")
+                or candidate.get("level")
+            )
+        else:
+            name = candidate
+            level_value = None
+
+        if not name:
+            name = (
+                item.get("pref_name")
+                or item.get("protein_classification")
+                or item.get("classification")
+                or item.get("name")
+            )
+        if level_value is None:
+            level_value = (
+                item.get("class_level")
+                or item.get("protein_classification_level")
+                or item.get("level")
+            )
+
+        if name is None:
+            continue
+
+        try:
+            level = int(level_value) if level_value is not None else None
+        except (TypeError, ValueError):
+            level = None
+
+        normalised_name = _normalise_scalar(name)
+        if not normalised_name:
+            continue
+
+        records.append((level, normalised_name))
+
+    return records
+
+
+def _select_classification(
+    entries: list[tuple[int | None, str]],
+    preferred_levels: Sequence[int],
+) -> str:
+    by_level: dict[int | None, list[str]] = {}
+    by_level_seen: dict[int | None, set[str]] = {}
+    for level, name in entries:
+        if not name:
+            continue
+        key = level if level in preferred_levels else level
+        values = by_level.setdefault(key, [])
+        seen = by_level_seen.setdefault(key, set())
+        marker = name.casefold()
+        if marker in seen:
+            continue
+        seen.add(marker)
+        values.append(name)
+
+    for level in preferred_levels:
+        values = by_level.get(level)
+        if values:
+            return "; ".join(values)
+
+    # fall back to any available level preserving discovery order
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for _, name in entries:
+        marker = name.casefold()
+        if marker in seen:
+            continue
+        seen.add(marker)
+        ordered.append(name)
+    return "; ".join(ordered)
+
+
+def _derive_classification_labels(row: pd.Series) -> tuple[str, str]:
+    entries = _parse_protein_classifications(row.get("protein_classifications"))
+
+    target_class = _select_classification(entries, preferred_levels=(1,)) if entries else ""
+    protein_family = _select_classification(entries, preferred_levels=(2, 3)) if entries else ""
+
+    if not target_class:
+        for column in ("protein_class_pred_L1", "IUPHAR_class", "target_type"):
+            candidate = _normalise_scalar(row.get(column))
+            if candidate:
+                target_class = candidate
+                break
+
+    if not protein_family:
+        for column in ("protein_class_pred_L2", "IUPHAR_subclass", "IUPHAR_type"):
+            candidate = _normalise_scalar(row.get(column))
+            if candidate:
+                protein_family = candidate
+                break
+
+    return target_class, protein_family
+
+
+def _merge_synonym_tokens(row: pd.Series, columns: Sequence[str]) -> str:
+    seen: set[str] = set()
+    tokens: list[str] = []
+    for column in columns:
+        value = row.get(column)
+        for token in _tokenise_synonyms(value):
+            marker = token.casefold()
+            if marker in seen:
+                continue
+            seen.add(marker)
+            tokens.append(token)
+    return "|".join(tokens)
+
+
+def _fill_synonym_column(
+    df: pd.DataFrame, column: str, sources: Sequence[str]
+) -> None:
+    available = [source for source in sources if source in df.columns]
+    if not available:
+        if column not in df.columns:
+            df[column] = pd.Series(pd.NA, index=df.index, dtype="string")
+        return
+
+    derived = (
+        df.apply(lambda row: _merge_synonym_tokens(row, available), axis=1)
+        .astype("string")
+        .replace({"": pd.NA})
+    )
+
+    if column in df.columns:
+        current = df[column].astype("string").replace({"": pd.NA})
+    else:
+        current = pd.Series(pd.NA, index=df.index, dtype="string")
+
+    df[column] = current.fillna(derived)
 
 
 def normalize_target_fields(
@@ -71,6 +262,78 @@ def normalize_target_fields(
             normalized[column] = (
                 normalized[column].astype("string").str.strip().replace({"": pd.NA})
             )
+
+    classification_sources = {
+        "protein_classifications",
+        "protein_class_pred_L1",
+        "protein_class_pred_L2",
+        "IUPHAR_class",
+        "IUPHAR_subclass",
+        "IUPHAR_type",
+        "target_type",
+    }
+    if classification_sources.intersection(normalized.columns):
+        derived = normalized.apply(
+            lambda row: _derive_classification_labels(row), axis=1, result_type="expand"
+        )
+        derived.columns = ["_derived_target_class", "_derived_protein_family"]
+
+        if "target_class" in normalized.columns:
+            current_class = (
+                normalized["target_class"].astype("string").replace({"": pd.NA})
+            )
+        else:
+            current_class = pd.Series(pd.NA, index=normalized.index, dtype="string")
+
+        if "protein_family" in normalized.columns:
+            current_family = (
+                normalized["protein_family"].astype("string").replace({"": pd.NA})
+            )
+        else:
+            current_family = pd.Series(pd.NA, index=normalized.index, dtype="string")
+
+        normalized["target_class"] = current_class.fillna(
+            derived["_derived_target_class"].astype("string").replace({"": pd.NA})
+        )
+        normalized["protein_family"] = current_family.fillna(
+            derived["_derived_protein_family"].astype("string").replace({"": pd.NA})
+        )
+
+        normalized = normalized.drop(
+            columns=["_derived_target_class", "_derived_protein_family"], errors="ignore"
+        )
+
+    _fill_synonym_column(
+        normalized,
+        "chembl_synonyms",
+        [
+            "chembl_synonyms",
+            "protein_synonym_list",
+            "protein_name_canonical",
+            "protein_name_alt",
+            "pref_name",
+            "gene_symbol",
+            "gene_symbol_list",
+        ],
+    )
+    _fill_synonym_column(
+        normalized,
+        "gtopdb_synonyms",
+        ["gtopdb_synonyms", "gtop_synonyms"],
+    )
+    _fill_synonym_column(
+        normalized,
+        "synonyms",
+        [
+            "synonyms",
+            "protein_synonym_list",
+            "protein_name_canonical",
+            "protein_name_alt",
+            "pref_name",
+            "gene_symbol",
+            "gene_symbol_list",
+        ],
+    )
 
     if normalize_taxonomy:
         taxonomy_columns = [
@@ -159,6 +422,217 @@ def enrich_target_synonyms(
     )
 
     return enriched
+
+
+@lru_cache(maxsize=1)
+def _load_target_types_frame() -> pd.DataFrame:
+    """Return cached target classification dictionary."""
+
+    try:
+        resource = get_resource("target_types")
+    except DictionaryManifestError as exc:
+        LOGGER.warning(
+            "Target metadata enrichment skipped; resource 'target_types' missing: %s",
+            exc,
+        )
+        return pd.DataFrame()
+
+    try:
+        frame = pd.read_csv(resource.path, dtype="string")
+    except FileNotFoundError as exc:
+        LOGGER.warning(
+            "Target metadata enrichment skipped; dictionary file not found: %s",
+            exc,
+        )
+        return pd.DataFrame()
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        LOGGER.warning(
+            "Target metadata enrichment skipped; failed to parse %s: %s",
+            resource.path,
+            exc,
+        )
+        return pd.DataFrame()
+
+    required = {"target_chembl_id", "synonyms", "IUPHAR_type", "target_id"}
+    missing = required - set(frame.columns)
+    if missing:
+        LOGGER.warning(
+            "Target metadata enrichment skipped; dictionary %s missing columns %s",
+            resource.path,
+            ", ".join(sorted(missing)),
+        )
+        return pd.DataFrame()
+
+    normalized = frame.loc[:, ["target_chembl_id", "synonyms", "IUPHAR_type", "target_id"]].copy()
+    normalized = normalized.fillna("")
+    normalized["target_chembl_id"] = (
+        normalized["target_chembl_id"].astype("string").str.strip().str.upper()
+    )
+    normalized["synonyms"] = normalized["synonyms"].astype("string").str.strip()
+    normalized["IUPHAR_type"] = normalized["IUPHAR_type"].astype("string").str.strip()
+    normalized["target_id"] = normalized["target_id"].astype("string").str.strip()
+
+    normalized = normalized.rename(
+        columns={
+            "synonyms": "chembl_synonyms_lookup",
+            "IUPHAR_type": "target_class_lookup",
+            "target_id": "iuphar_target_id_lookup",
+        }
+    )
+    normalized = normalized.drop_duplicates("target_chembl_id", keep="first")
+    return normalized
+
+
+@lru_cache(maxsize=1)
+def _load_iuphar_targets_frame() -> pd.DataFrame:
+    """Return cached IUPHAR target dictionary."""
+
+    try:
+        resource = get_resource("target_iuphar_target")
+    except DictionaryManifestError as exc:
+        LOGGER.warning(
+            "Target metadata enrichment skipped; resource 'target_iuphar_target' missing: %s",
+            exc,
+        )
+        return pd.DataFrame()
+
+    try:
+        frame = pd.read_csv(resource.path, dtype="string")
+    except FileNotFoundError as exc:
+        LOGGER.warning(
+            "Target metadata enrichment skipped; IUPHAR file not found: %s",
+            exc,
+        )
+        return pd.DataFrame()
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        LOGGER.warning(
+            "Target metadata enrichment skipped; failed to parse %s: %s",
+            resource.path,
+            exc,
+        )
+        return pd.DataFrame()
+
+    required = {"target_id", "synonyms", "family_name"}
+    missing = required - set(frame.columns)
+    if missing:
+        LOGGER.warning(
+            "Target metadata enrichment skipped; IUPHAR dictionary %s missing columns %s",
+            resource.path,
+            ", ".join(sorted(missing)),
+        )
+        return pd.DataFrame()
+
+    normalized = frame.loc[:, ["target_id", "synonyms", "family_name"]].copy()
+    normalized = normalized.fillna("")
+    normalized["target_id"] = normalized["target_id"].astype("string").str.strip()
+    normalized["synonyms"] = normalized["synonyms"].astype("string").str.strip()
+    normalized["family_name"] = normalized["family_name"].astype("string").str.strip()
+
+    normalized = normalized.rename(
+        columns={
+            "target_id": "iuphar_target_id_lookup",
+            "synonyms": "gtopdb_synonyms_lookup",
+            "family_name": "protein_family_lookup",
+        }
+    )
+    normalized = normalized.drop_duplicates("iuphar_target_id_lookup", keep="first")
+    return normalized
+
+
+def _get_target_types_frame() -> pd.DataFrame:
+    try:
+        return _load_target_types_frame()
+    except DictionaryManifestError as exc:  # pragma: no cover - safeguard
+        LOGGER.warning("Failed to load target type dictionary: %s", exc)
+        return pd.DataFrame()
+
+
+def _get_iuphar_targets_frame() -> pd.DataFrame:
+    try:
+        return _load_iuphar_targets_frame()
+    except DictionaryManifestError as exc:  # pragma: no cover - safeguard
+        LOGGER.warning("Failed to load IUPHAR target dictionary: %s", exc)
+        return pd.DataFrame()
+
+
+def _coalesce_column(frame: pd.DataFrame, target: str, source: str) -> None:
+    """Merge ``source`` column into ``target`` preferring existing values."""
+
+    if source not in frame.columns:
+        return
+
+    source_series = (
+        frame[source]
+        .astype("string")
+        .str.strip()
+        .replace({"": pd.NA})
+    )
+    if target not in frame.columns:
+        frame[target] = source_series
+    else:
+        frame[target] = (
+            frame[target]
+            .astype("string")
+            .replace({"": pd.NA})
+            .combine_first(source_series)
+        )
+    frame.drop(columns=[source], inplace=True)
+
+
+def enrich_target_metadata(df: pd.DataFrame, **_: object) -> pd.DataFrame:
+    """Enrich targets with classification and synonym metadata."""
+
+    if df.empty:
+        return df.copy(deep=True)
+
+    if "target_chembl_id" not in df.columns:
+        return df.copy(deep=True)
+
+    types_lookup = _get_target_types_frame()
+    if types_lookup.empty:
+        return df.copy(deep=True)
+
+    enriched = df.copy(deep=True)
+    normalized_ids = (
+        enriched["target_chembl_id"].astype("string").str.strip().str.upper()
+    )
+    enriched["_normalized_target_chembl_id"] = normalized_ids
+
+    joined = enriched.merge(
+        types_lookup.rename(columns={"target_chembl_id": "_lookup_target_chembl_id"}),
+        left_on="_normalized_target_chembl_id",
+        right_on="_lookup_target_chembl_id",
+        how="left",
+        sort=False,
+    )
+
+    iuphar_lookup = _get_iuphar_targets_frame()
+    if not iuphar_lookup.empty:
+        joined = joined.merge(
+            iuphar_lookup,
+            on="iuphar_target_id_lookup",
+            how="left",
+            sort=False,
+        )
+
+    _coalesce_column(joined, "chembl_synonyms", "chembl_synonyms_lookup")
+    _coalesce_column(joined, "target_class", "target_class_lookup")
+    _coalesce_column(joined, "protein_family", "protein_family_lookup")
+    _coalesce_column(joined, "gtopdb_synonyms", "gtopdb_synonyms_lookup")
+
+    helper_columns = [
+        column
+        for column in (
+            "_normalized_target_chembl_id",
+            "_lookup_target_chembl_id",
+            "iuphar_target_id_lookup",
+        )
+        if column in joined.columns
+    ]
+    if helper_columns:
+        joined = joined.drop(columns=helper_columns)
+
+    return joined
 
 
 def finalize_target_records(
@@ -353,6 +827,7 @@ def _resolve_pipeline_version(override: str | None) -> str:
 __all__ = [
     "PIPELINE_CONFIG",
     "PIPELINE_STEPS",
+    "enrich_target_metadata",
     "finalize_target_records",
     "normalize_target_fields",
     "run_target_pipeline",
