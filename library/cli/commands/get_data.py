@@ -31,7 +31,6 @@ import shutil
 import subprocess
 import sys
 import time
-from functools import lru_cache
 from collections import deque
 from collections.abc import (
     Callable,
@@ -238,83 +237,6 @@ DEFAULT_OUTPUT_STEMS: PipelineOutputStems = PipelineOutputStems.from_mapping(
 DEFAULT_SUBCOMMANDS: PipelineSubcommands = PipelineSubcommands.from_mapping(
     {step.name: step.subcommand for step in DEFAULT_PIPELINE_STEPS}
 )
-
-
-_TARGET_SUBCOMMAND_FALLBACK_CHOICES: frozenset[str] = frozenset(
-    {"chembl", "uniprot", "iuphar", "all"}
-)
-_TARGET_SUBCOMMAND_FALLBACK_ALIASES: dict[str, str] = {
-    "гтшзкще": "uniprot",
-    "Гтшзкще": "uniprot",
-    "ГТШЗКЩЕ": "uniprot",
-    "сруьид": "chembl",
-    "Сруьид": "chembl",
-    "СРУЬИД": "chembl",
-    "шгзрфк": "iuphar",
-    "Шгзрфк": "iuphar",
-    "ШГЗРФК": "iuphar",
-    "фдд": "all",
-    "Фдд": "all",
-    "ФДД": "all",
-}
-
-
-@lru_cache(maxsize=1)
-def _load_target_subcommand_registry() -> tuple[set[str], dict[str, str]]:
-    """Return canonical target subcommands and alias mappings."""
-
-    canonical = set(_TARGET_SUBCOMMAND_FALLBACK_CHOICES)
-    aliases = dict(_TARGET_SUBCOMMAND_FALLBACK_ALIASES)
-    try:
-        from library.cli.commands import get_target_data as target_cli
-    except Exception:  # pragma: no cover - defensive import guard
-        return canonical, aliases
-
-    cli_choices = getattr(target_cli, "COMMAND_CHOICES", None)
-    if cli_choices:
-        canonical = set(cli_choices)
-    cli_aliases = getattr(target_cli, "COMMAND_ALIAS_TO_CANONICAL", None)
-    if isinstance(cli_aliases, dict):
-        aliases = dict(cli_aliases)
-    return canonical, aliases
-
-
-def _normalise_target_subcommand(value: str | None) -> str | None:
-    """Return canonical target subcommand respecting keyboard aliases."""
-
-    if value is None:
-        return None
-    candidate = value.strip()
-    if not candidate:
-        return None
-    canonical_choices, alias_map = _load_target_subcommand_registry()
-    resolved = alias_map.get(candidate)
-    if resolved is None:
-        lowered = candidate.lower()
-        resolved = alias_map.get(lowered)
-        if resolved is None:
-            if candidate in canonical_choices:
-                resolved = candidate
-            elif lowered in canonical_choices:
-                resolved = lowered
-    if resolved is None:
-        allowed = ", ".join(sorted(canonical_choices))
-        raise ValueError(
-            "invalid target subcommand override: "
-            f"{candidate!r} (expected one of: {allowed})"
-        )
-    return resolved
-
-
-def _normalise_subcommand(step_name: str, value: str | None) -> str | None:
-    """Return canonical subcommand for ``step_name`` when overridden."""
-
-    if value is None:
-        return None
-    if step_name == "target":
-        return _normalise_target_subcommand(value)
-    candidate = value.strip()
-    return candidate or None
 
 # Backwards compatibility for existing callers/tests that patch the legacy names.
 _PIPELINE_STEPS = DEFAULT_PIPELINE_STEPS
@@ -722,7 +644,6 @@ def _resolve_path(base: Path, candidate: Path) -> Path:
 
 
 _TRUE_FLAG_VALUES = frozenset({"1", "true", "yes", "on"})
-_FALSE_FLAG_VALUES = frozenset({"0", "false", "no", "off"})
 
 
 def _flag_to_bool(value: object) -> bool:
@@ -806,7 +727,7 @@ def _resolve_pipeline_steps(
             updated = replace(updated, output_stem=output_overrides[step.name])
         if step.name in subcommand_overrides:
             raw_value = subcommand_overrides[step.name]
-            new_subcommand = _normalise_subcommand(step.name, raw_value)
+            new_subcommand = raw_value if raw_value else None
             updated = replace(updated, subcommand=new_subcommand)
         mutated.append(updated)
     return tuple(mutated)
@@ -1511,44 +1432,6 @@ def _ensure_pubchem_enabled(config: Config) -> None:
         setattr(pubchem_cfg, "enable", True)
 
 
-def _parse_cli_bool(value: str) -> bool | None:
-    """Parse CLI boolean tokens, returning ``None`` when *value* is unknown."""
-
-    normalised = value.strip().lower()
-    if not normalised:
-        return None
-    if normalised in _TRUE_FLAG_VALUES:
-        return True
-    if normalised in _FALSE_FLAG_VALUES:
-        return False
-    return None
-
-
-def _resolve_pubchem_cli_flag(arguments: Sequence[str]) -> bool | None:
-    """Return the last explicit PubChem flag state encoded in *arguments*."""
-
-    explicit: bool | None = None
-    index = 0
-    total = len(arguments)
-    while index < total:
-        token = arguments[index]
-        if token == "--pubchem-enable":
-            explicit = True
-            if index + 1 < total:
-                parsed = _parse_cli_bool(arguments[index + 1])
-                if parsed is not None:
-                    explicit = parsed
-                    index += 1
-        elif token == "--no-pubchem-enable":
-            explicit = False
-        elif token.startswith("--pubchem-enable="):
-            parsed = _parse_cli_bool(token.split("=", 1)[1])
-            if parsed is not None:
-                explicit = parsed
-        index += 1
-    return explicit
-
-
 def _run_testitem_subprocess(
     step: PipelineStep,
     cfg: PipelineRunConfig,
@@ -1572,10 +1455,12 @@ def _run_testitem_subprocess(
     if diagnostics_enabled and "--emit-legacy-artifacts" not in arguments:
         arguments.append("--emit-legacy-artifacts")
 
-    explicit_pubchem_flag = _resolve_pubchem_cli_flag(arguments)
-    if explicit_pubchem_flag is not True:
-        if explicit_pubchem_flag is False:
-            _LOGGER.info("testitem_pubchem_enable_override")
+    has_pubchem_flag = any(
+        option in {"--pubchem-enable", "--no-pubchem-enable"}
+        or option.startswith("--pubchem-enable=")
+        for option in arguments
+    )
+    if not has_pubchem_flag:
         arguments.append("--pubchem-enable")
 
     command = [sys.executable, str(_TESTITEM_SCRIPT), *arguments]

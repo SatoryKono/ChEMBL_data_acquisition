@@ -38,7 +38,7 @@ import re
 import sys
 import tempfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import MISSING, dataclass
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from itertools import chain, islice
 from numbers import Integral, Real
@@ -86,7 +86,6 @@ from library.pipelines.document.pipeline import (
     merge_with_chembl,
     normalise_doi,
 )
-from library.pipelines.document import DocumentPipelineOptions
 from library.pipelines.document.service import (
     DocumentPipeline,
     FallbackDoiMetrics,
@@ -2256,18 +2255,6 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     return parser, log_cfg
 
 
-def _default_mode() -> str:
-    """Return the CLI fallback mode when none is provided explicitly."""
-
-    field = DocumentPipelineOptions.__dataclass_fields__.get("mode")  # type: ignore[attr-defined]
-    if field is None:
-        return "all"
-    default = getattr(field, "default", None)
-    if default is MISSING or default is None:
-        return "all"
-    return str(default)
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults.
 
@@ -2304,17 +2291,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     if limit_value == 0:
         logger.info("pipeline_skip_limit", limit=limit_value)
         return 0
-    mode_value = getattr(args, "mode", None)
+    mode = getattr(args, "mode", None)
     command_value = getattr(args, "command", None)
-    if mode_value and command_value and str(mode_value) != str(command_value):
-        parser.error("--mode and the positional command must match when both are provided")
-
-    mode = mode_value or command_value
+    if not mode and command_value:
+        mode = command_value
+        args.mode = mode
     if not mode:
-        mode = _default_mode()
-        args.mode = mode
-    else:
-        args.mode = mode
+        parser.error("--mode is required")
     if command_value is None and mode is not None:
         args.command = mode
     mode = str(mode)

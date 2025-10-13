@@ -239,11 +239,13 @@ Cached replay of the production pipeline is available through
 ```
 get-assay-data --input data/input/assay.csv \
     --final-out output/assay_$(date +%Y%m%d).csv \
-    --batch-size 100 --timeout 60 --limit 200
+    --batch-size 50 --timeout 60 --limit 200 --postprocess
 ```
 
 The script downloads assay metadata, computes per-target counters, normalises and
 validates the table, then emits the standard CSV + sidecar + quality reports.
+`--postprocess` triggers the clean-up stage that trims legacy columns and
+regenerates QA artefacts using the same helper as the orchestrator.【F:library/cli/commands/get_assay_data.py†L864-L908】
 
 ## Activity pipeline (`get-activity-data`)
 
@@ -263,13 +265,17 @@ post-processing derives `lower_value`/`upper_value` using the rules described in
 ```
 get-testitem-data --input data/input/testitem.csv \
     --final-out output/testitems_$(date +%Y%m%d).csv \
-    --batch-size 250 --timeout 90 --limit 400
+    --batch-size 250 --timeout 90 --limit 400 --pubchem-enable --postprocess
 ```
 
 After downloading molecules from ChEMBL, the pipeline enriches unique SMILES with
 PubChem properties, merges the results, and exports the combined dataset. By default
-only the dataset plus QA/correlation CSVs are written; pass `--emit-legacy-artifacts`
-to restore failure-case dumps and metadata sidecars when debugging a run. 【F:library/pipelines/testitem/cli.py†L864-L1186】【F:library/cli/commands/get_testitem_data.py†L564-L738】
+only the dataset plus QA/correlation CSVs are written; use `--pubchem-enable` to
+force enrichment when configuration turns it off (and `--no-pubchem-enable` for dry
+runs) and `--postprocess` to execute the deterministic clean-up that applies
+hierarchy lookups and QA generation. Combine the toggle with
+`--emit-legacy-artifacts` to restore historical diagnostics (failure cases,
+`.meta.yaml`, post-processing reports).【F:library/cli/commands/get_testitem_data.py†L896-L934】【F:library/pipelines/testitem/cli.py†L812-L902】
 
 ## Helper utilities
 

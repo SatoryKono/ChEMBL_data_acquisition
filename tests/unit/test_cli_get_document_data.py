@@ -159,57 +159,6 @@ def test_main__config_overrides_defaults(
 
 
 @pytest.mark.unit
-def test_main__defaults_to_all_when_mode_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    config_path = _prepare_config(tmp_path, lambda _cfg: None)
-    input_csv = tmp_path / "document.csv"
-    input_csv.write_text("document_chembl_id\nCHEMBL1\n", encoding="utf-8")
-    recorder = _RunRecorder()
-    monkeypatch.setattr(get_document_data, "run", recorder)
-
-    with _stub_logging(tmp_path):
-        exit_code = get_document_data.main(
-            [
-                "--config",
-                str(config_path),
-                "--input",
-                str(input_csv),
-                "--final-out",
-                str(tmp_path / "documents.csv"),
-            ]
-        )
-
-    assert exit_code == 0
-    assert recorder.called is True
-    assert recorder.args is not None
-    assert recorder.args.mode == "all"
-    assert recorder.args.command == "all"
-
-
-@pytest.mark.unit
-def test_main__mode_positional_conflict(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    called = False
-
-    def _fail(*_args: object, **_kwargs: object) -> int:
-        nonlocal called
-        called = True
-        return 0
-
-    monkeypatch.setattr(get_document_data, "run_cli_command", _fail)
-
-    with pytest.raises(SystemExit) as excinfo:
-        get_document_data.main(["--mode", "chembl", "pubmed"])
-
-    assert excinfo.value.code == 2
-    assert called is False
-    captured = capsys.readouterr()
-    assert "--mode and the positional command must match" in captured.err
-
-
-@pytest.mark.unit
 @pytest.mark.parametrize(
     "option, value, message",
     [

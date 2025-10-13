@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-import requests
 
 from library.clients import pubchem
 from library.config import ApiCfg, PubChemCfg, RetryCfg
@@ -90,21 +89,6 @@ class _DummySession:
         return self._response_factory()
 
 
-class _SslErrorSession:
-    def __init__(self, response_factory: Callable[[], _DummyResponse]) -> None:
-        self._response_factory = response_factory
-        self.calls: list[tuple[str, str, dict[str, Any]]] = []
-        self.verify: bool | str = True
-        self._raised = False
-
-    def request(self, method: str, url: str, **kwargs: Any) -> _DummyResponse:
-        self.calls.append((method, url, kwargs))
-        if not self._raised:
-            self._raised = True
-            raise requests.exceptions.SSLError("certificate verify failed")
-        return self._response_factory()
-
-
 class _DummyLimiter:
     def __init__(self) -> None:
         self.acquires: int = 0
@@ -138,57 +122,10 @@ def test_make_request__applies_verify_setting(monkeypatch: pytest.MonkeyPatch) -
         (
             "GET",
             url,
-            {
-                "timeout": (cfg.timeout_connect, cfg.timeout_read),
-                "verify": cfg.verify,
-            },
+            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
         )
     ]
     assert limiter.acquires == 1
-
-
-def test_make_request__falls_back_to_insecure_ssl(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    cfg = PubChemCfg(verify="auto")
-    cfg.retries = 0
-
-    payload = {"status": "ok"}
-    url = f"{cfg.base.rstrip('/')}/compound/cid/42/property/Foo/JSON"
-
-    limiter = _DummyLimiter()
-    monkeypatch.setattr(pubchem, "get_limiter", lambda *_args, **_kwargs: limiter)
-
-    session = _SslErrorSession(lambda: _DummyResponse(200, {}, payload))
-    monkeypatch.setattr(pubchem, "get_session", lambda *_args, **_kwargs: session)
-    monkeypatch.setattr(pubchem, "_CACHE", None)
-    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_UNTIL", None)
-    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_DETAILS", None)
-    monkeypatch.setattr(pubchem, "_SERVICE_OUTAGE_UNTIL", None)
-    monkeypatch.setattr(pubchem, "_SERVICE_OUTAGE_REASON", None)
-    monkeypatch.setattr(pubchem, "_SERVICE_OUTAGE_DETAILS", None)
-
-    caplog.set_level("WARNING")
-
-    result = pubchem.make_request(url, cfg)
-
-    assert result == payload
-    assert len(session.calls) == 2
-    assert session.calls[0][2] == {
-        "timeout": (cfg.timeout_connect, cfg.timeout_read),
-        "verify": True,
-    }
-    assert session.calls[1][2] == {
-        "timeout": (cfg.timeout_connect, cfg.timeout_read),
-        "verify": False,
-    }
-    assert session.verify is False
-    assert limiter.acquires == 2
-    assert any("request_ssl_verify_failed" in record.message for record in caplog.records)
-
-    outcome, details = pubchem.last_request_outcome()
-    assert outcome == "hit"
-    assert details == {"status": 200}
 
 
 class _TimeController:
