@@ -1482,7 +1482,7 @@
           ]
         },
         "cid_cache_path": {
-          "default": "$CHEMBL_DA_BASE_PATH/cache/pubchem_cid_cache.json",
+          "default": "$CHEMBL_DA_CACHE_HOME/pubchem_cid_cache.json",
           "description": "Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
           "title": "Cid Cache Path",
           "type": [
