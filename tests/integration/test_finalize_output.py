@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+import multiprocessing
+import typing
 from pathlib import Path
 from typing import cast
 
@@ -47,6 +49,67 @@ def _unwrap_finalize_result(
     if isinstance(result, tuple):
         return result
     return result, None
+
+
+def _memory_usage_worker(
+    cfg_data: dict[str, object],
+    output_path: str,
+    input_csv: str,
+    queue: multiprocessing.Queue,
+    total_rows: int,
+    chunk_size: int,
+) -> None:
+    import os
+    import random
+    import resource
+    from pathlib import Path
+
+    import numpy as np
+    import pandas as pd
+
+    from library.config import Config
+    from library.pipelines.testitem import cli as worker_cli
+    from library.pipelines.testitem.catalog import ParentLookupStats as _WorkerStats
+
+    os.environ.setdefault("TZ", "UTC")
+    random.seed(42)
+    np.random.seed(42)
+
+    cfg = Config.model_validate(cfg_data)
+
+    stats_value = _WorkerStats(
+        source="lookup",
+        missing=0,
+        unique=total_rows,
+        attached=total_rows,
+        uncovered=0,
+        failed_ids=(),
+        hierarchy_attached=total_rows,
+        fallback_attached=0,
+        no_parent=0,
+    )
+
+    def _chunk_stream() -> typing.Iterator[pd.DataFrame]:
+        for start in range(0, total_rows, chunk_size):
+            end = min(total_rows, start + chunk_size)
+            ids = [f"CHEMBL{index}" for index in range(start, end)]
+            yield pd.DataFrame(
+                {
+                    "molecule_chembl_id": pd.Series(ids, dtype="string"),
+                }
+            )
+
+    before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    exit_code, _ = worker_cli.finalize_output(
+        _chunk_stream(),
+        cfg=cfg,
+        output=Path(output_path),
+        parent_stats_supplier=lambda: stats_value,
+        input_csv=Path(input_csv),
+        missing_ids=[],
+    )
+    after = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    queue.put({"exit_code": exit_code, "peak_mb": after / 1024.0})
 
 
 @pytest.mark.integration
@@ -735,3 +798,44 @@ def test_finalize_output__correlation_column_sampling(
     assert any(
         "correlation_columns_sampled" in record.message for record in caplog.records
     )
+
+
+@pytest.mark.integration
+def test_finalize_output__memory_usage_stable(
+    tmp_path: Path, sample_input_csv: Path, cfg
+) -> None:
+    cfg.system.doc_quality.enable = True
+    cfg.system.doc_quality.auto_sample_row_limit = None
+
+    cfg_dict = cfg.model_dump()
+    total_rows = 100_000
+    chunk_size = 10_000
+    output_path = tmp_path / "memory_final.csv"
+
+    ctx = multiprocessing.get_context("spawn")
+    queue: multiprocessing.Queue = ctx.Queue()
+    process = ctx.Process(
+        target=_memory_usage_worker,
+        args=(
+            cfg_dict,
+            str(output_path),
+            str(sample_input_csv),
+            queue,
+            total_rows,
+            chunk_size,
+        ),
+    )
+
+    process.start()
+    process.join(timeout=120)
+    if process.is_alive():
+        process.terminate()
+        process.join()
+    assert process.exitcode == 0, "memory measurement process did not exit cleanly"
+
+    result = queue.get(timeout=5)
+    queue.close()
+    queue.join_thread()
+
+    assert result["exit_code"] == 0
+    assert result["peak_mb"] < 400

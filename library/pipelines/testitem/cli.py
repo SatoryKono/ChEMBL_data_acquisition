@@ -51,6 +51,7 @@ from library.project_version import get_pipeline_version
 from library.qa.reporting import build_table_quality_hook
 from library.qa.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
+from library.table_quality import _apply_sampling_and_filters
 from library.utils import data_correlation, qc_report
 
 from .catalog import (
@@ -433,7 +434,7 @@ def _build_qc_summary(frame: pd.DataFrame) -> dict[str, Any]:
 
 def _write_primary_metadata(
     *,
-    dataset_frame: pd.DataFrame,
+    dataset_frame: pd.DataFrame | None,
     dataset_path: Path,
     quality_path: Path,
     correlation_path: Path,
@@ -442,6 +443,7 @@ def _write_primary_metadata(
     parameters: Mapping[str, object] | None,
     stats: Mapping[str, object] | None,
     pubchem_enabled: bool | None,
+    qc_summary: Mapping[str, object] | None = None,
 ) -> Path:
     """Persist the standard metadata sidecar next to ``dataset_path``."""
 
@@ -460,7 +462,11 @@ def _write_primary_metadata(
         "parameters": dict(parameters or {}),
         "sources": _resolve_metadata_sources(pubchem_enabled),
         "outputs": outputs,
-        "qc_summary": _build_qc_summary(dataset_frame),
+        "qc_summary": (
+            _build_qc_summary(dataset_frame)
+            if dataset_frame is not None
+            else dict(qc_summary or {"total_rows": 0})
+        ),
     }
     if stats:
         metadata["pipeline_stats"] = dict(stats)
@@ -1417,7 +1423,7 @@ def finalize_output(
     next_raw_index = 0
     columns_seen: set[str] = set()
     columns_present: set[str] = set()
-    columns_to_fill: set[str] = set()
+    columns_to_fill: set[str] = set(optional_cols)
     expected_columns: set[str] = set()
     column_dtypes: dict[str, pd.api.extensions.ExtensionDtype | str | type | None] = {}
     failure_cases = SidecarErrors(chunk_size=failure_chunk_size)
@@ -1585,22 +1591,6 @@ def finalize_output(
         )
         return 1, None
 
-    validated_chunks_list = list(_validated_chunks())
-
-    missing_optional = optional_cols - columns_present
-    if missing_optional:
-        columns_to_fill.update(missing_optional)
-        expected_columns.update(columns_to_fill)
-        for column in missing_optional:
-            column_dtypes.setdefault(column, _column_dtype(column))
-        for chunk in validated_chunks_list:
-            _ensure_column_alignment(chunk)
-        columns_seen.update(columns_to_fill)
-        logger.warning(
-            "optional_columns_missing",
-            columns=sorted(missing_optional),
-        )
-
     if failure_count:
         failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
         if emit_legacy_artifacts:
@@ -1616,47 +1606,74 @@ def finalize_output(
     if exit_code != 0:
         return exit_code, None
 
-    table_name, date_tag = io.derive_output_labels(
-        output,
-        default_table=_DEFAULT_TABLE_NAME,
-        fallback_date=getattr(getattr(cfg, "io", None), "default_date_prefix", None),
-    )
-
-    dataset_frame: pd.DataFrame
-    if validated_chunks_list:
-        dataset_frame = pd.concat(validated_chunks_list, ignore_index=True)
-    else:
-        dataset_frame = pd.DataFrame(columns=list(expected_columns) or col_order)
-
     pubchem_fallback_used = False
     pubchem_fallback_applied = False
 
-    if pubchem_context is not None and not dataset_frame.empty:
-        missing_mask = pd.Series(False, index=dataset_frame.index)
-        available_columns = [
-            column
-            for column in _PUBCHEM_OPTIONAL_COLUMNS
-            if column in dataset_frame.columns
-        ]
-        if available_columns:
-            pubchem_columns = dataset_frame[available_columns].replace("", pd.NA)
-            if not pubchem_columns.equals(dataset_frame[available_columns]):
-                dataset_frame.loc[:, available_columns] = pubchem_columns
-            key_columns = [
-                column
-                for column in _PUBCHEM_KEY_COLUMNS
-                if column in pubchem_columns.columns
-            ]
-            if key_columns:
-                missing_mask = pubchem_columns[key_columns].isna().any(axis=1)
-            else:
-                missing_mask = pd.Series(True, index=dataset_frame.index)
-        else:
-            missing_mask = pd.Series(True, index=dataset_frame.index)
+    qc_ratio_counts: dict[str, int] = {column: 0 for column in _QC_RATIO_COLUMNS}
+    pubchem_value_columns: set[str] = set()
 
-        if missing_mask.any():
+    artifacts: io.StandardOutputArtifacts | None = None
+    qc_summary: dict[str, Any] = {"total_rows": 0}
+
+    with tempfile.TemporaryDirectory() as staging_dir:
+        staging_dir_path = Path(staging_dir)
+        chunk_paths: list[Path] = []
+        fallback_candidates: list[pd.DataFrame] = []
+        extra_columns_order: list[str] = []
+
+        for index, chunk in enumerate(_validated_chunks()):
+            if chunk.empty and not columns_seen:
+                _ensure_column_alignment(chunk)
+            for column in chunk.columns:
+                if column not in col_order and column not in extra_columns_order:
+                    extra_columns_order.append(column)
+            if pubchem_context is not None and not chunk.empty:
+                available_columns = [
+                    column
+                    for column in _PUBCHEM_OPTIONAL_COLUMNS
+                    if column in chunk.columns
+                ]
+                if available_columns:
+                    pubchem_columns = chunk[available_columns].replace("", pd.NA)
+                    key_columns = [
+                        column
+                        for column in _PUBCHEM_KEY_COLUMNS
+                        if column in pubchem_columns.columns
+                    ]
+                    if key_columns:
+                        missing_mask = pubchem_columns[key_columns].isna().any(axis=1)
+                    else:
+                        missing_mask = pd.Series(True, index=chunk.index)
+                else:
+                    missing_mask = pd.Series(True, index=chunk.index)
+                if missing_mask.any():
+                    fallback_candidates.append(chunk.loc[missing_mask].copy())
+
+            chunk_path = staging_dir_path / f"chunk_{index:06d}.parquet"
+            chunk.to_parquet(chunk_path, index=False)
+            chunk_paths.append(chunk_path)
+
+        missing_optional = optional_cols - columns_present
+        if missing_optional:
+            logger.warning(
+                "optional_columns_missing",
+                columns=sorted(missing_optional),
+            )
+
+        raw_index_added = RAW_INDEX_COLUMN not in columns_present
+
+        table_name, date_tag = io.derive_output_labels(
+            output,
+            default_table=_DEFAULT_TABLE_NAME,
+            fallback_date=getattr(
+                getattr(cfg, "io", None), "default_date_prefix", None
+            ),
+        )
+
+        fallback_updates_frame: pd.DataFrame | None = None
+        if pubchem_context is not None and fallback_candidates:
             logger.info("pubchem_fallback_augment_start")
-            to_augment = dataset_frame.loc[missing_mask].copy()
+            to_augment = pd.concat(fallback_candidates, ignore_index=False)
             augmented_subset = _load_pubchem_augmenter()(
                 to_augment,
                 pubchem_cfg=pubchem_context.pubchem_cfg,
@@ -1667,113 +1684,270 @@ def finalize_output(
                 fields=pubchem_context.fields,
                 request_limit=pubchem_context.request_limit,
             )
-            dataset_frame.loc[missing_mask, augmented_subset.columns] = augmented_subset
-            logger.info("pubchem_fallback_augment_done")
+            if RAW_INDEX_COLUMN not in augmented_subset.columns:
+                augmented_subset.insert(
+                    0,
+                    RAW_INDEX_COLUMN,
+                    to_augment[RAW_INDEX_COLUMN].to_numpy(),
+                )
+            fallback_updates_frame = augmented_subset.set_index(RAW_INDEX_COLUMN)
+            fallback_updates_frame.index = fallback_updates_frame.index.astype(
+                "int64"
+            )
             pubchem_fallback_used = True
             pubchem_fallback_applied = True
+            logger.info("pubchem_fallback_augment_done")
 
-    ordered_columns = [
-        column for column in col_order if column in dataset_frame.columns
-    ]
-    extra_columns = [
-        column for column in dataset_frame.columns if column not in ordered_columns
-    ]
-    dataset_frame = dataset_frame.reindex(
-        columns=ordered_columns + extra_columns,
-        copy=False,
-    )
-    raw_index_added = ensure_raw_index_column(dataset_frame)
-    logger.info(
-        "raw_index_column_added",
-        column=RAW_INDEX_COLUMN,
-        rows=int(len(dataset_frame)),
-        inserted=raw_index_added,
-    )
-    export_column_order = list(dataset_frame.columns)
-
-    doc_quality_cfg = cfg.system.doc_quality
-    include_columns = getattr(doc_quality_cfg, "include_columns", None)
-    exclude_columns = getattr(doc_quality_cfg, "exclude_columns", None)
-    sample_rows_cfg = getattr(doc_quality_cfg, "sample_rows", None)
-    auto_sample_limit = getattr(doc_quality_cfg, "auto_sample_row_limit", None)
-    correlation_max_columns = getattr(doc_quality_cfg, "correlation_max_columns", None)
-
-    row_count = int(len(dataset_frame))
-    effective_sample_rows = sample_rows_cfg
-    if (
-        auto_sample_limit is not None
-        and row_count > auto_sample_limit
-        and (
-            effective_sample_rows is None
-            or effective_sample_rows > int(auto_sample_limit)
-        )
-    ):
-        effective_sample_rows = int(auto_sample_limit)
-        logger.warning(
-            "doc_quality_sampling_applied",
-            rows=row_count,
-            sample_rows=effective_sample_rows,
-            limit=int(auto_sample_limit),
-        )
-
-    correlation_include_columns = include_columns
-    if (
-        correlation_max_columns is not None
-        and correlation_max_columns >= 1
-        and include_columns is None
-    ):
-        exclude_set = set(exclude_columns or ())
-        numeric_columns = [
-            column
-            for column in dataset_frame.select_dtypes(include=["number"]).columns
-            if column not in exclude_set and column != RAW_INDEX_COLUMN
+        ordered_columns = [
+            column for column in col_order if column in columns_seen
         ]
-        if len(numeric_columns) > int(correlation_max_columns):
-            limited_columns = list(numeric_columns[: int(correlation_max_columns)])
-            correlation_include_columns = tuple(limited_columns)
+        extra_columns = [
+            column for column in extra_columns_order if column not in ordered_columns
+        ]
+        export_column_order = ordered_columns + extra_columns
+
+        logger.info(
+            "raw_index_column_added",
+            column=RAW_INDEX_COLUMN,
+            rows=int(rows_written),
+            inserted=raw_index_added,
+        )
+
+        doc_quality_cfg = cfg.system.doc_quality
+        include_columns = getattr(doc_quality_cfg, "include_columns", None)
+        exclude_columns = getattr(doc_quality_cfg, "exclude_columns", None)
+        sample_rows_cfg = getattr(doc_quality_cfg, "sample_rows", None)
+        auto_sample_limit = getattr(doc_quality_cfg, "auto_sample_row_limit", None)
+        correlation_max_columns = getattr(
+            doc_quality_cfg, "correlation_max_columns", None
+        )
+
+        row_count = int(rows_written)
+        effective_sample_rows = sample_rows_cfg
+        if (
+            auto_sample_limit is not None
+            and row_count > auto_sample_limit
+            and (
+                effective_sample_rows is None
+                or effective_sample_rows > int(auto_sample_limit)
+            )
+        ):
+            effective_sample_rows = int(auto_sample_limit)
             logger.warning(
-                "correlation_columns_sampled",
-                total=len(numeric_columns),
-                limit=int(correlation_max_columns),
-                columns=limited_columns,
+                "doc_quality_sampling_applied",
+                rows=row_count,
+                sample_rows=effective_sample_rows,
+                limit=int(auto_sample_limit),
             )
 
-    quality_report = qc_report.generate_qc_report(
-        dataset_frame,
-        table_name=table_name,
-        include_columns=include_columns,
-        exclude_columns=exclude_columns,
-        sample_rows=effective_sample_rows,
-    )
-    correlation_report = data_correlation.generate_correlation_report(
-        dataset_frame,
-        table_name=table_name,
-        include_columns=correlation_include_columns,
-        exclude_columns=exclude_columns,
-        sample_rows=effective_sample_rows,
-    )
+        correlation_include_columns = include_columns
+        if (
+            correlation_max_columns is not None
+            and correlation_max_columns >= 1
+            and include_columns is None
+        ):
+            exclude_set = set(exclude_columns or ())
+            numeric_columns = [
+                column
+                for column in export_column_order
+                if column not in exclude_set
+                and column != RAW_INDEX_COLUMN
+                and pd.api.types.is_numeric_dtype(column_dtypes.get(column))
+            ]
+            if len(numeric_columns) > int(correlation_max_columns):
+                limited_columns = list(numeric_columns[: int(correlation_max_columns)])
+                correlation_include_columns = tuple(limited_columns)
+                logger.warning(
+                    "correlation_columns_sampled",
+                    total=len(numeric_columns),
+                    limit=int(correlation_max_columns),
+                    columns=limited_columns,
+                )
 
-    try:
-        artifacts = io.save_standard_outputs(
-            dataset_frame,
-            correlation_report,
-            quality_report,
-            table_name=table_name,
-            date_tag=date_tag,
-            key_columns=key_cols,
-            output_path=output,
-            column_order=export_column_order,
+        dataset_path = Path(output)
+        dataset_path.parent.mkdir(parents=True, exist_ok=True)
+
+        qc_profiler = qc_report.TableQualityProfiler()
+        corr_profiler = qc_report.TableQualityProfiler()
+
+        qc_include_tuple = (
+            tuple(include_columns) if include_columns is not None else None
         )
-    except (OSError, ValueError) as exc:
-        logger.error("write_fail", error=str(exc), path=str(output))
-        return 1, None
+        qc_exclude_tuple = (
+            tuple(exclude_columns) if exclude_columns is not None else None
+        )
+        corr_include_tuple = (
+            tuple(correlation_include_columns)
+            if correlation_include_columns is not None
+            else None
+        )
+        corr_exclude_tuple = qc_exclude_tuple
+
+        qc_include_warning = [False]
+        qc_exclude_warning = [False]
+        qc_no_columns_warning = [False]
+        corr_include_warning = [False]
+        corr_exclude_warning = [False]
+        corr_no_columns_warning = [False]
+
+        remaining_qc_rows = effective_sample_rows
+        remaining_corr_rows = effective_sample_rows
+
+        def _apply_fallback(chunk: pd.DataFrame) -> pd.DataFrame:
+            if fallback_updates_frame is None or fallback_updates_frame.empty:
+                return chunk
+            raw_indices = chunk[RAW_INDEX_COLUMN].astype("int64", copy=False)
+            mask = raw_indices.isin(fallback_updates_frame.index)
+            if not mask.any():
+                return chunk
+            replacements = fallback_updates_frame.reindex(raw_indices[mask])
+            replacements.index = chunk.index[mask]
+            updated = chunk.copy()
+            for column in replacements.columns:
+                updated.loc[mask, column] = replacements[column].to_numpy()
+            return updated
+
+        def _iter_final_chunks() -> Iterator[pd.DataFrame]:
+            nonlocal remaining_qc_rows, remaining_corr_rows
+            for path in chunk_paths:
+                chunk = pd.read_parquet(path)
+                chunk = _apply_fallback(chunk)
+                chunk = chunk.reindex(columns=export_column_order, copy=False)
+
+                for column in _QC_RATIO_COLUMNS:
+                    if column in chunk.columns:
+                        qc_ratio_counts[column] += int(chunk[column].notna().sum())
+
+                for column in _PUBCHEM_OPTIONAL_COLUMNS:
+                    if column in chunk.columns and column not in pubchem_value_columns:
+                        series = chunk[column]
+                        if not series.replace("", pd.NA).isna().all():
+                            pubchem_value_columns.add(column)
+
+                filtered_qc, remaining_qc_rows = _apply_sampling_and_filters(
+                    chunk,
+                    table_name=table_name,
+                    sample_rows=remaining_qc_rows,
+                    include_columns=qc_include_tuple,
+                    exclude_columns=qc_exclude_tuple,
+                    include_warning_logged=qc_include_warning,
+                    exclude_warning_logged=qc_exclude_warning,
+                    no_columns_logged=qc_no_columns_warning,
+                )
+                qc_profiler.consume(filtered_qc)
+
+                filtered_corr, remaining_corr_rows = _apply_sampling_and_filters(
+                    chunk,
+                    table_name=table_name,
+                    sample_rows=remaining_corr_rows,
+                    include_columns=corr_include_tuple,
+                    exclude_columns=corr_exclude_tuple,
+                    include_warning_logged=corr_include_warning,
+                    exclude_warning_logged=corr_exclude_warning,
+                    no_columns_logged=corr_no_columns_warning,
+                )
+                corr_profiler.consume(filtered_corr)
+
+                yield chunk
+
+        try:
+            dataset_path = io.write_csv(
+                _iter_final_chunks(),
+                dataset_path,
+                cfg=cfg,
+                key_cols=key_cols,
+                col_order=export_column_order,
+            )
+
+            for sidecar in (
+                dataset_path.with_suffix(dataset_path.suffix + ".meta.yaml"),
+                dataset_path.with_suffix(dataset_path.suffix + ".meta.yaml.lock"),
+            ):
+                sidecar.unlink(missing_ok=True)
+
+            quality_report = qc_report.build_qc_summary(
+                None,
+                table_name=table_name,
+                include_columns=include_columns,
+                exclude_columns=exclude_columns,
+                sample_rows=effective_sample_rows,
+                profiler=qc_profiler,
+            )
+            correlation_report = data_correlation.build_correlation_matrix(
+                None,
+                table_name=table_name,
+                include_columns=correlation_include_columns,
+                exclude_columns=exclude_columns,
+                sample_rows=effective_sample_rows,
+                profiler=corr_profiler,
+            )
+
+            correlation_path = dataset_path.parent / (
+                f"{dataset_path.stem}_data_correlation_report_table.csv"
+            )
+            quality_path = dataset_path.parent / (
+                f"{dataset_path.stem}_quality_report_table.csv"
+            )
+
+            corr_key_cols: list[str] = []
+            if not correlation_report.empty:
+                corr_key_cols = [str(correlation_report.columns[0])]
+            io.write_csv(
+                correlation_report,
+                correlation_path,
+                cfg=cfg,
+                key_cols=corr_key_cols,
+                col_order=list(correlation_report.columns),
+            )
+
+            qc_key_cols: list[str] = []
+            if not quality_report.empty:
+                qc_key_cols = [str(quality_report.columns[0])]
+            io.write_csv(
+                quality_report,
+                quality_path,
+                cfg=cfg,
+                key_cols=qc_key_cols,
+                col_order=list(quality_report.columns),
+            )
+
+            for sidecar in (
+                correlation_path.with_suffix(correlation_path.suffix + ".meta.yaml"),
+                correlation_path.with_suffix(
+                    correlation_path.suffix + ".meta.yaml.lock"
+                ),
+                quality_path.with_suffix(quality_path.suffix + ".meta.yaml"),
+                quality_path.with_suffix(quality_path.suffix + ".meta.yaml.lock"),
+            ):
+                sidecar.unlink(missing_ok=True)
+
+            artifacts = io.StandardOutputArtifacts(
+                dataset=dataset_path,
+                correlation_report=correlation_path,
+                quality_report=quality_path,
+            )
+        except (OSError, ValueError) as exc:
+            logger.error("write_fail", error=str(exc), path=str(output))
+            return 1, None
+
+        qc_summary = {"total_rows": row_count}
+        if row_count > 0:
+            ratios: dict[str, float] = {}
+            for column in _QC_RATIO_COLUMNS:
+                if column in export_column_order:
+                    ratios[column] = round(
+                        float(qc_ratio_counts.get(column, 0)) / float(row_count),
+                        4,
+                    )
+            if ratios:
+                qc_summary["non_null_ratio"] = ratios
 
     logger.info(
         "write_done",
         rows=rows_written,
-        dataset=str(artifacts.dataset),
-        quality_report=str(artifacts.quality_report),
-        correlation_report=str(artifacts.correlation_report),
+        dataset=str(artifacts.dataset) if artifacts else str(output),
+        quality_report=str(artifacts.quality_report) if artifacts else "",
+        correlation_report=str(artifacts.correlation_report) if artifacts else "",
     )
 
     if not emit_legacy_artifacts:
@@ -1804,18 +1978,13 @@ def finalize_output(
     pubchem_columns_present = [
         column
         for column in _PUBCHEM_OPTIONAL_COLUMNS
-        if column in dataset_frame.columns
+        if column in export_column_order
     ]
     pubchem_columns_present.sort()
-    pubchem_columns_with_values = [
-        column
-        for column in pubchem_columns_present
-        if not dataset_frame[column].isna().all()
-    ]
-    pubchem_columns_with_values.sort()
+    pubchem_columns_with_values = sorted(pubchem_value_columns)
     if (
         pubchem_enabled
-        and dataset_frame.size
+        and rows_written
         and pubchem_columns_present
         and not pubchem_columns_with_values
     ):
@@ -1894,7 +2063,7 @@ def finalize_output(
         # ``_write_primary_metadata`` overwrites the canonical path next.
 
     primary_meta_path = _write_primary_metadata(
-        dataset_frame=dataset_frame,
+        dataset_frame=None,
         dataset_path=artifacts.dataset,
         quality_path=artifacts.quality_report,
         correlation_path=artifacts.correlation_report,
@@ -1903,6 +2072,7 @@ def finalize_output(
         parameters=parameters,
         stats=stats,
         pubchem_enabled=pubchem_augmentation_enabled,
+        qc_summary=qc_summary,
     )
 
     if not emit_legacy_artifacts:
