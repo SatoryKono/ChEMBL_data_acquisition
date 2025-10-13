@@ -1416,6 +1416,7 @@ def preprocess_documents_csv(
                                 diff_limit=int(default_diff_limit),
                                 date_code=_infer_date_code(target_path),
                                 report_dir=report_dir,
+                                python_csv_path=target_path,
                             )
                         except Exception:
                             logger.exception(

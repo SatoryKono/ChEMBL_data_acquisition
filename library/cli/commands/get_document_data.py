@@ -583,6 +583,7 @@ def _finalise_export(
     date_tag: str | None = None,
     cli_args: argparse.Namespace | None = None,
     metadata_sources: Sequence[str] | None = None,
+    stats_extra: Mapping[str, Any] | None = None,
 ) -> FinaliseExportResult:
     """Validate input frames and persist standard pipeline artefacts."""
 
@@ -751,6 +752,7 @@ def _finalise_export(
     csv_path = artifacts.dataset
 
     qc_summary_payload = quality_summary.build()
+    stats_payload = dict(stats_extra) if stats_extra else None
 
     io.save_metadata(
         table_name=table_name,
@@ -765,6 +767,7 @@ def _finalise_export(
         ],
         sources=metadata_sources,
         run_context=get_run_context(),
+        stats_extra=stats_payload,
     )
 
     logger.info(
@@ -897,6 +900,7 @@ def _finalise_export(
                     config=_serialize_paths(cfg.to_dict()),
                     inputs={"input_csv": str(input_csv)},
                     schema="DocumentsSchema",
+                    stats_extra=stats_payload,
                     quality_summary=quality_summary,
                     quality_builder=build_quality_report,
                     quality_path=legacy_csv_path.with_suffix(".quality.json"),
@@ -1264,6 +1268,7 @@ def run_pubmed(
             date_tag=getattr(args, "_standard_date_tag", None),
             cli_args=args,
             metadata_sources=_PUBMED_METADATA_SOURCES,
+            stats_extra=service.stats_extra,
         )
         exit_code = finalise_result.exit_code
     except (FileNotFoundError, ValueError, OSError) as exc:
@@ -1878,6 +1883,7 @@ def run_all(
         date_tag=getattr(args, "_standard_date_tag", None),
         cli_args=args,
         metadata_sources=_ALL_METADATA_SOURCES,
+        stats_extra=service.stats_extra,
     )
     exit_code = finalise_result.exit_code
     if fallback_state is not None:

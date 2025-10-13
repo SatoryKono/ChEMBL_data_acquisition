@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -565,6 +565,99 @@ def test_finalise_export__normalises_table_name_and_date(
     assert captured["output_dir"] == cfg.io.output_dir
     assert result.artifacts is not None
     assert result.artifacts.dataset == output_csv
+
+
+def test_finalise_export__propagates_stats_extra(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_csv = tmp_path / "output.documents_20250101.csv"
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("document_chembl_id\n", encoding="utf-8")
+
+    frame = get_document_data.build_dataframe(
+        [],
+        columns=get_document_data.DOCUMENT_SCHEMA_COLUMNS,
+        fill_missing=False,
+    )
+
+    monkeypatch.setattr(
+        get_document_data,
+        "generate_qc_report",
+        lambda *_, **__: pd.DataFrame({"metric": [1]}),
+    )
+    monkeypatch.setattr(
+        get_document_data,
+        "generate_correlation_report",
+        lambda *_, **__: pd.DataFrame({"metric": [1]}),
+    )
+
+    monkeypatch.setattr(
+        get_document_data.io,
+        "save_standard_outputs",
+        lambda *_, **__: get_document_data.io.StandardOutputArtifacts(
+            dataset=output_csv,
+            quality_report=output_csv,
+            correlation_report=output_csv,
+        ),
+    )
+
+    def fake_write_csv_chunks(
+        chunks: Iterable[pd.DataFrame],
+        path: Path,
+        **_: Any,
+    ) -> Path:
+        Path(path).write_text("", encoding="utf-8")
+        return Path(path)
+
+    monkeypatch.setattr(
+        get_document_data,
+        "write_csv_chunks_deterministic",
+        fake_write_csv_chunks,
+    )
+
+    monkeypatch.setattr(
+        get_document_data,
+        "build_table_quality_hook",
+        lambda *_, **__: lambda __: None,
+    )
+
+    captured_metadata: dict[str, Any] = {}
+    captured_finalise: dict[str, Any] = {}
+
+    def fake_save_metadata(*_, stats_extra: Mapping[str, Any] | None = None, **__: Any) -> Path:
+        captured_metadata.update(dict(stats_extra or {}))
+        return output_csv.with_suffix(".meta.yaml")
+
+    def fake_finalise_csv_output(**kwargs: Any) -> None:
+        captured_finalise.update(dict(kwargs.get("stats_extra") or {}))
+
+    monkeypatch.setattr(get_document_data.io, "save_metadata", fake_save_metadata)
+    monkeypatch.setattr(get_document_data, "finalise_csv_output", fake_finalise_csv_output)
+
+    stats_extra = {
+        "openalex_total": 4,
+        "openalex_unique": 3,
+        "openalex_cache_hits": 1,
+        "crossref_total": 2,
+        "crossref_unique": 2,
+        "crossref_cache_hits": 0,
+    }
+
+    result = get_document_data._finalise_export(
+        frame,
+        output_csv,
+        cfg,
+        input_csv=input_csv,
+        emit_legacy_artifacts=True,
+        stats_extra=stats_extra,
+    )
+
+    assert result.exit_code == 0
+    assert captured_metadata == stats_extra
+    assert captured_finalise == stats_extra
 
 
 def test_finalise_export__partial_run_skips_qa(
