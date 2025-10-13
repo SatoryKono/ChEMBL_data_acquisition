@@ -218,6 +218,7 @@ Common options:
 | `--mode` | Required (`all` is the combined run) | Selects the processing flow; the CLI errors unless a mode is provided via `--mode` or the backwards-compatible positional command (`chembl`, `pubmed`, `all`). |
 | `--column` | Mode specific (`PMID` for `pubmed`, `document_chembl_id` otherwise) | Input column holding identifiers. |
 | `--limit`, `--offset` | `None`, `0` | Control record ranges. |
+| `--postprocess`, `--no-postprocess` | `False` | Enable deterministic document post-processing (schema validation, QA metrics). See the [post-processing runbook](./guides/POSTPROCESSING_RUNBOOK.md) for artefact details. |
 | `--timeout` | `90.0` for `chembl`/`all`, `10.0` for `pubmed` | Applied to HTTP calls. |
 | `--openalex-rps`, `--crossref-rps` | `None` | Optional overrides for partner APIs when running `pubmed` or `all`. |
 
