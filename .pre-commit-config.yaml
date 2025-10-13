@@ -42,3 +42,15 @@ repos:
         additional_dependencies: [".[dev]"]
         pass_filenames: false
         types: [python]
+      - id: forbid-ci-report-artifacts
+        name: Ensure CI test reports are not committed
+        entry: bash
+        language: system
+        pass_filenames: false
+        args:
+          - -c
+          - >-
+            if git diff --cached --name-only | grep -Eq '^reports/(test_report\.json|test_summary\.md)$'; then
+              echo 'Error: CI test reports are build artefacts and must not be committed.' >&2;
+              exit 1;
+            fi
