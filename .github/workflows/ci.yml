@@ -140,7 +140,11 @@ jobs:
             exit 1
           fi
       - name: Determinism smoke test
-        run: python scripts/check_determinism.py --limit 5
+        run: >-
+          python scripts/check_determinism.py
+          --limit 5
+          --offline
+          --fixtures-dir tests/resources/expected_get_data
       - name: Deterministic CSV writers
         run: python -m library.utils.cli_tools.check_determinism --log-level INFO
       - name: Smoke test get_data orchestrator
