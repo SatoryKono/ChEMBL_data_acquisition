@@ -88,6 +88,7 @@ nh3==0.3.1
     # via readme-renderer
 nodeenv==1.9.1
     # via pre-commit
+numpy==1.26.4 ; python_version < "3.13"
 numpy==2.1.3 ; python_version >= "3.13"
     # via
     #   chembl-data-acquisition (pyproject.toml)
@@ -102,6 +103,7 @@ packaging==25.0
     #   pandera
     #   pytest
     #   twine
+pandas==2.1.4 ; python_version < "3.13"
 pandas==2.2.3 ; python_version >= "3.13"
     # via
     #   chembl-data-acquisition (pyproject.toml)
@@ -125,6 +127,7 @@ pluggy==1.6.0
 pre-commit==4.3.0
     # via chembl-data-acquisition (pyproject.toml)
 psutil==7.1.0
+pyarrow==18.1.0 ; python_version < "3.13"
     # via chembl-data-acquisition (pyproject.toml)
 pycparser==2.23
     # via cffi
