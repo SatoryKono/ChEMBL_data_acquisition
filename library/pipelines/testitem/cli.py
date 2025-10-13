@@ -13,7 +13,7 @@ from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
-from itertools import islice, tee
+from itertools import chain, islice, tee
 from pathlib import Path
 from types import MappingProxyType
 from typing import IO, Any
