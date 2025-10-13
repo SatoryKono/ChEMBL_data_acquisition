@@ -55,6 +55,7 @@ from library.cli_utils import (
     run_pipeline,
 )
 from library.common.csv_utils import write_csv_deterministic
+from library.common.run_context import get_current as get_run_context
 from library.common.log import logger
 from library.config import (
     Config,
@@ -2151,6 +2152,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             qc_summary=qc_summary,
             output_dir=export_path.parent,
             artifacts=[export_path],
+            run_context=get_run_context(),
         )
         rows_dropped = max(rows_total - rows_kept, 0)
         stats: Stats = {
@@ -2801,6 +2803,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             qc_summary=metadata_summary_payload,
             output_dir=dataset_for_metadata.parent,
             artifacts=unique_artifacts,
+            run_context=get_run_context(),
         )
 
     if exit_code == 0 and not final_output.exists():
@@ -2986,6 +2989,7 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
         qc_summary=qc_summary,
         output_dir=output_path.parent,
         artifacts=[output_path],
+        run_context=get_run_context(),
     )
     return 0
 
@@ -4212,6 +4216,7 @@ def validate_and_write(
             artifacts.quality_report,
             artifacts.correlation_report,
         ],
+        run_context=get_run_context(),
     )
     logger.info(
         "standard_outputs_written",

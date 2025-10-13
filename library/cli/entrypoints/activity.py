@@ -58,6 +58,7 @@ from library.clients.chembl import ChemblClient
 from library.common.csv_utils import write_csv_chunks_deterministic
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 from library.common.log import logger
+from library.common.run_context import get_current as get_run_context
 from library.config import Config, _serialize_paths
 from library.integration import chembl_library as cl
 from library.metadata import (
@@ -1740,6 +1741,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 artifacts.correlation_report,
             ],
             sources=_ACTIVITY_METADATA_SOURCES,
+            run_context=get_run_context(),
         )
         logger.info(
             "activity_standard_outputs",
