@@ -46,3 +46,40 @@ def test_load_module__merge_conflict_hint(monkeypatch):
     message = str(excinfo.value)
     assert "library/cli_utils.py:201" in message
     assert "merge conflict" in message
+
+
+@pytest.mark.unit
+def test_run_stage__inserts_default_document_subcommand(monkeypatch):
+    """Document stage should default to the ``all`` subcommand when omitted."""
+
+    from scripts import get_data as cli
+
+    stage = cli.Stage("document", "get_document_data.py")
+    tokens = (
+        "--log-level",
+        "INFO",
+        "--limit",
+        "5",
+        "--input-dir",
+        "data\\input",
+        "--output-dir",
+        "data\\output",
+    )
+    forward = cli.ForwardArgs(tokens=tokens, extras_start=2, extra_len=6)
+
+    captured: dict[str, list[str]] = {}
+
+    class _Result:
+        returncode = 0
+
+    def _fake_run(command, *, check=False, env=None):  # type: ignore[override]
+        captured["command"] = command
+        return _Result()
+
+    monkeypatch.setattr(cli.subprocess, "run", _fake_run)
+
+    cli.run_stage(stage, forward)
+
+    command = captured["command"]
+    assert "all" in command[2:], "expected default 'all' subcommand to be forwarded"
+    assert command.index("all") < command.index("--limit")
