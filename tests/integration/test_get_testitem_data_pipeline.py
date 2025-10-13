@@ -4,8 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+import gc
+import sys
+import types
+
 import pandas as pd
 import pytest
+
+_cli_utils_stub = types.ModuleType("library.cli_utils")
+_cli_utils_stub.run_pipeline = lambda *args, **kwargs: None
+sys.modules.setdefault("library.cli_utils", _cli_utils_stub)
 
 from library.config import ApiCfg, TestitemBatchRetryCfg
 from library.pipelines.testitem import cli
@@ -111,6 +119,66 @@ def _find_duplicate_event(logger: _RecordingLogger) -> dict[str, object]:
         if level == "warning" and event == "chembl_duplicate_identifiers":
             return payload
     pytest.fail("chembl_duplicate_identifiers event not emitted")
+
+
+@pytest.mark.integration
+@pytest.mark.pipeline_scenario("logging")
+def test_fetch_testitems_memory__streaming_generator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Large streaming inputs do not cause significant RSS growth."""
+
+    try:
+        import psutil  # type: ignore
+    except ImportError:  # pragma: no cover - optional dependency fallback
+        import resource
+
+        class _Process:
+            def memory_info(self) -> types.SimpleNamespace:
+                usage = resource.getrusage(resource.RUSAGE_SELF)
+                rss_bytes = int(usage.ru_maxrss) * 1024
+                return types.SimpleNamespace(rss=rss_bytes)
+
+        psutil = types.SimpleNamespace(Process=lambda: _Process())
+
+    gc.collect()
+    process = psutil.Process()
+    baseline_rss = process.memory_info().rss
+
+    frame = pd.DataFrame({"molecule_chembl_id": ["CHEMBL0"]}, dtype="string")
+    monkeypatch.setattr(cli, "_load_chembl_library", lambda: _FakeChemblLib(frame))
+
+    def _identifier_stream() -> Iterable[str]:
+        for index in range(100_000):
+            yield f"CHEMBL{index:06d}"
+
+    sample_ids = tuple(f"CHEMBL{index:06d}" for index in range(cli._FETCH_ERROR_SAMPLE_SIZE))
+
+    status, chunk_iter, requested = cli.fetch_testitems(
+        _identifier_stream(),
+        api_cfg=ApiCfg(),
+        batch_size=4096,
+        timeout=1.0,
+        client=_SentinelClient(),
+        sample_ids=sample_ids,
+        fields=(),
+        page_limit=50,
+        retry_cfg=TestitemBatchRetryCfg(enable=False),
+    )
+
+    assert status == 0
+    assert chunk_iter is not None
+
+    peak_rss = baseline_rss
+    for chunk in chunk_iter:
+        assert isinstance(chunk, pd.DataFrame)
+        peak_rss = max(peak_rss, process.memory_info().rss)
+
+    final_rss = process.memory_info().rss
+    assert len(requested) == 100_000
+
+    rss_increase = max(peak_rss, final_rss) - baseline_rss
+    assert rss_increase < 128 * 1024 * 1024
 
 
 @pytest.mark.integration
