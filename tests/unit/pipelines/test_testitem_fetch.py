@@ -5,7 +5,14 @@ from itertools import islice
 from typing import Any
 
 import pandas as pd
+import sys
+import types
+
 import pytest
+
+_cli_utils_stub = types.ModuleType("library.cli_utils")
+_cli_utils_stub.run_pipeline = lambda *args, **kwargs: None
+sys.modules.setdefault("library.cli_utils", _cli_utils_stub)
 
 from library.config import ApiCfg, TestitemBatchRetryCfg
 from library.pipelines.testitem import cli
@@ -211,6 +218,8 @@ def test_fetch_testitems__handles_large_identifier_stream_without_memory_growth(
     assert chunk_iter is not None
     first_chunk = next(chunk_iter)
     assert isinstance(first_chunk, pd.DataFrame)
+    for _ in chunk_iter:
+        pass
     assert len(requested) == 10000
     assert len(requested.sample) == min(
         len(requested), cli._REQUESTED_IDENTIFIER_LOG_SAMPLE_SIZE

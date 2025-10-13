@@ -14,9 +14,10 @@ from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
-from itertools import chain, islice
+from itertools import islice, tee
 from pathlib import Path
 from typing import IO, Any, Mapping
+from types import MappingProxyType
 
 import pandas as pd
 import requests
@@ -104,7 +105,7 @@ class RequestedIdsSnapshot(Sequence[str]):
         self._log_sample_size = max(0, int(log_sample_size))
         self._duplicate_sample_size = max(0, int(duplicate_sample_size))
         self._duplicate_track_limit = max(0, int(duplicate_track_limit))
-        self._log_sample: list[str] = []
+        self._log_sample: deque[str] = deque()
         self._duplicate_sample: list[str] = []
         self._duplicate_count = 0
         self._seen: "OrderedDict[str, None]" = OrderedDict()
@@ -113,6 +114,7 @@ class RequestedIdsSnapshot(Sequence[str]):
         self._path: Path | None = None
         self._finalizer: weakref.finalize | None = None
         self._finished = False
+        self._unique_original: "OrderedDict[str, str]" = OrderedDict()
 
     def __len__(self) -> int:
         return self._count
@@ -157,6 +159,8 @@ class RequestedIdsSnapshot(Sequence[str]):
                     and len(self._seen) > self._duplicate_track_limit
                 ):
                     self._seen.popitem(last=False)
+                if normalized not in self._unique_original:
+                    self._unique_original[normalized] = text_identifier
 
         self._ensure_writer()
         if self._writer is None:
@@ -191,6 +195,10 @@ class RequestedIdsSnapshot(Sequence[str]):
     @property
     def tracked_unique_count(self) -> int:
         return len(self._seen)
+
+    @property
+    def unique_map(self) -> Mapping[str, str]:
+        return MappingProxyType(self._unique_original)
 
     def _ensure_writer(self) -> None:
         if self._writer is not None or self._finished:
@@ -498,22 +506,21 @@ def read_input_ids(
     """Load identifiers from ``input_csv`` honouring ``limit`` when provided."""
 
     try:
-        ids_iter = io.read_ids(
-            input_csv,
-            column=column,
-            cfg=io_cfg,
-            keep_na_markers=io_cfg.keep_na_markers,
+        ids_iter = iter(
+            io.read_ids(
+                input_csv,
+                column=column,
+                cfg=io_cfg,
+                keep_na_markers=io_cfg.keep_na_markers,
+            )
         )
-        ids_iter = iter(ids_iter)
         if offset:
             ids_iter = islice(ids_iter, offset, None)
-            ids_iter = iter(ids_iter)
             logger.info("process_offset", offset=offset)
         if limit is not None:
             ids_iter = islice(ids_iter, limit)
-            ids_iter = iter(ids_iter)
-        sample_ids = tuple(islice(ids_iter, _FETCH_ERROR_SAMPLE_SIZE))
-        ids_iter = chain(sample_ids, ids_iter)
+        ids_iter, sample_iter = tee(ids_iter)
+        sample_ids = tuple(islice(sample_iter, _FETCH_ERROR_SAMPLE_SIZE))
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
             "read_fail",
@@ -896,19 +903,19 @@ def fetch_testitems(
     chembl_lib = _load_chembl_library()
     requested_ids_snapshot = RequestedIdsSnapshot()
 
-    for identifier in ids_iter:
-        requested_ids_snapshot.append(identifier)
-
-    requested_ids_snapshot.finish()
-
-    if requested_ids_snapshot.duplicate_count:
-        logger.warning(
-            "chembl_duplicate_requested_identifiers",
-            duplicate_count=requested_ids_snapshot.duplicate_count,
-            sample=list(requested_ids_snapshot.duplicate_sample),
-        )
-
-    requested_iter = requested_ids_snapshot.iter_for_fetch()
+    def _requested_iter() -> Iterator[str]:
+        try:
+            for identifier in ids_iter:
+                requested_ids_snapshot.append(identifier)
+                yield str(identifier)
+        finally:
+            requested_ids_snapshot.finish()
+            if requested_ids_snapshot.duplicate_count:
+                logger.warning(
+                    "chembl_duplicate_requested_identifiers",
+                    duplicate_count=requested_ids_snapshot.duplicate_count,
+                    sample=list(requested_ids_snapshot.duplicate_sample),
+                )
 
     seen_ids: set[str] = set()
     duplicate_ids: list[str] = []
@@ -1037,11 +1044,13 @@ def fetch_testitems(
 
         return cleaned.reset_index(drop=True)
 
+    requested_iter = _requested_iter()
     batched_iter = _batched(requested_iter, max(1, batch_size))
 
     try:
         first_batch = next(batched_iter)
     except StopIteration:
+        requested_iter.close()
         logger.info("chembl_fetch_done", rows=0)
         logger.info("identifiers_retrieved", count=0)
         if duplicate_ids:
@@ -1061,6 +1070,8 @@ def fetch_testitems(
     try:
         prefetched.append(_load_chunk(first_batch, batch_size))
     except TestitemFetchError:
+        batched_iter.close()
+        requested_iter.close()
         return 1, None, requested_ids_snapshot
 
     rows_counter = 0
@@ -1207,13 +1218,7 @@ def run_testitem_pipeline(
         if fetch_status != 0 or chunk_iter is None:
             return fetch_status, None
 
-        requested_unique: OrderedDict[str, str] = OrderedDict()
-        for identifier in requested_ids:
-            key = identifier.strip()
-            if not key:
-                continue
-            upper_key = key.upper()
-            requested_unique.setdefault(upper_key, identifier)
+        requested_unique = requested_ids.unique_map
 
         fetched_ids: set[str] = set()
 
@@ -1322,8 +1327,9 @@ def run_testitem_pipeline(
             ) as exc:  # pragma: no cover - propagated network error
                 raise TestitemPipelineStageError(1, str(exc)) from exc
 
-            missing_keys = [key for key in requested_unique if key not in fetched_ids]
-            missing_ids.extend(requested_unique[key] for key in missing_keys)
+            for key, original in requested_unique.items():
+                if key not in fetched_ids:
+                    missing_ids.append(original)
             if missing_ids:
                 _emit_missing_identifier_logs(missing_ids)
                 for placeholder in generate_missing_identifier_placeholders(
