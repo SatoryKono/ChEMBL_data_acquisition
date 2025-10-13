@@ -32,10 +32,12 @@ except ModuleNotFoundError as exc:  # pragma: no cover - import guard
     sys.modules.pop("scripts", None)
     from scripts._bootstrap import ensure_project_root
 
+from library.cli.commands import get_data  # noqa: E402
 from library.config import DEFAULT_CONFIG_PATH, load_config  # noqa: E402
 from library.config.env import (
     _default_base_path as _config_default_base_path,
 )  # noqa: E402
+from library.pipelines.registry import PipelineStep  # noqa: E402
 
 
 def _guard_cli_module() -> None:
@@ -435,6 +437,177 @@ def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> Forwar
     return ForwardArgs(tuple(forward), extras_start, extra_len)
 
 
+def _extract_flag(tokens: Sequence[str], option: str) -> bool:
+    """Return ``True`` when ``option`` is present in ``tokens``."""
+
+    prefixed = f"{option}="
+    for token in tokens:
+        if token == option:
+            return True
+        if token.startswith(prefixed):
+            suffix = token[len(prefixed) :].strip().lower()
+            if suffix in {"", "1", "true", "yes", "on"}:
+                return True
+            if suffix in {"0", "false", "no", "off"}:
+                return False
+    return False
+
+
+def _collect_option_values(tokens: Sequence[str], option: str) -> list[str]:
+    """Return all values associated with ``option`` in ``tokens``."""
+
+    values: list[str] = []
+    prefixed = f"{option}="
+    idx = 0
+    while idx < len(tokens):
+        token = tokens[idx]
+        if token == option:
+            if idx + 1 < len(tokens):
+                values.append(tokens[idx + 1])
+            else:
+                values.append("")
+            idx += 2
+            continue
+        if token.startswith(prefixed):
+            values.append(token[len(prefixed) :])
+        idx += 1
+    return values
+
+
+def _coerce_optional_int(value: str | None) -> int | None:
+    """Return an ``int`` when ``value`` contains digits, otherwise ``None``."""
+
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _resolve_pipeline_context(
+    args: argparse.Namespace, forward_args: ForwardArgs
+) -> tuple[argparse.Namespace, get_data.PipelineRunConfig, tuple[PipelineStep, ...]]:
+    """Return the namespace/config/steps mirroring the orchestrator CLI."""
+
+    tokens = list(forward_args.tokens)
+    extras = tokens[forward_args.extras_start : forward_args.extras_end]
+    base_path = _resolve_forward_base_path(args, extras).resolve()
+
+    def _path_option(option: str, default: Path | None) -> Path | None:
+        candidate = _extract_option_value(tokens, option)
+        if candidate is None:
+            return default
+        return Path(candidate)
+
+    config_path = _path_option(
+        "--config",
+        args.config if args.config is not None else DEFAULT_CONFIG_PATH,
+    )
+    input_dir = _path_option("--input-dir", DEFAULT_INPUT_DIR)
+    output_dir = _path_option("--output-dir", DEFAULT_OUTPUT_DIR)
+    pipeline_registry = _path_option("--pipeline-registry", None)
+
+    namespace = argparse.Namespace(
+        base_path=base_path,
+        input_dir=Path(".") if input_dir is None else input_dir,
+        output_dir=Path(".") if output_dir is None else output_dir,
+        config=config_path if config_path is not None else DEFAULT_CONFIG_PATH,
+        date_prefix=_extract_option_value(tokens, "--date"),
+        log_level=(
+            _extract_option_value(tokens, "--log-level")
+            or args.log_level
+            or "INFO"
+        ),
+        verbose=_extract_flag(tokens, "--verbose"),
+        limit=_coerce_optional_int(_extract_option_value(tokens, "--limit")),
+        force=_extract_flag(tokens, "--force"),
+        skip_existing=_extract_flag(tokens, "--skip-existing"),
+        dry_run=_extract_flag(tokens, "--dry-run"),
+        rerun_postprocess=_extract_flag(tokens, "--rerun-postprocess"),
+        debug=_extract_flag(tokens, "--debug"),
+        keep_intermediate=_extract_flag(tokens, "--keep-intermediate"),
+        disable_pubchem=_extract_flag(tokens, "--disable-pubchem"),
+        force_pubchem=_extract_flag(tokens, "--force-pubchem"),
+        print_config=_extract_flag(tokens, "--print-config"),
+        pipeline_registry=pipeline_registry,
+        override_input=_collect_option_values(tokens, "--override-input"),
+        override_output_stem=_collect_option_values(tokens, "--override-output-stem"),
+        override_subcommand=_collect_option_values(tokens, "--override-subcommand"),
+        run_id=_extract_option_value(tokens, "--run-id"),
+        invocation=None,
+    )
+
+    get_data._ensure_date_prefix(namespace, base_path=base_path)
+    steps = get_data._resolve_pipeline_steps(namespace)
+    cfg = get_data._prepare_config(namespace, steps)
+    return namespace, cfg, steps
+
+
+def _format_relative(path: Path, root: Path) -> str:
+    """Return a human friendly representation of ``path`` relative to ``root``."""
+
+    try:
+        return os.fspath(path.relative_to(root))
+    except ValueError:
+        return os.fspath(path)
+
+
+def _collect_expected_outputs(
+    cfg: get_data.PipelineRunConfig,
+    steps: Sequence[PipelineStep],
+    active_stage_names: Collection[str],
+) -> tuple[Path, ...]:
+    """Return output paths for stages scheduled to run."""
+
+    by_name = {step.name: step for step in steps}
+    expected: list[Path] = []
+    for stage in STAGES:
+        if stage.name not in active_stage_names:
+            continue
+        step = by_name.get(stage.name)
+        if step is None:
+            continue
+        expected.append(step.expected_output(cfg).resolve())
+    return tuple(expected)
+
+
+def _list_existing_outputs(output_dir: Path) -> tuple[Path, ...]:
+    """Return all CSV files present in ``output_dir``."""
+
+    if not output_dir.exists():
+        return ()
+    return tuple(sorted(path.resolve() for path in output_dir.glob("*.csv")))
+
+
+def _log_active_stages(active: Sequence[str], *, dry_run: bool) -> None:
+    """Emit a summary describing the stages scheduled for execution."""
+
+    if not active:
+        logging.info("Активных этапов нет: все отключены флагом --skip.")
+        return
+    mode = "dry-run" if dry_run else "run"
+    logging.info("Активные этапы (%s): %s", mode, ", ".join(active))
+
+
+def _log_expected_outputs(
+    expected: Sequence[Path],
+    output_dir: Path,
+    *,
+    dry_run: bool,
+) -> None:
+    """Emit a human readable list of expected output artefacts."""
+
+    if not expected:
+        logging.info("Новые выходные файлы не требуются для выбранных этапов.")
+        return
+    formatted = ", ".join(_format_relative(path, output_dir) for path in expected)
+    if dry_run:
+        logging.info("Dry-run: ожидаемые файлы (не будут созданы): %s", formatted)
+    else:
+        logging.info("Ожидаемые файлы: %s", formatted)
+
+
 def log_summary(durations: list[tuple[str, float]]) -> None:
     if not durations:
         logging.info("Все этапы были пропущены по флагу --skip.")
@@ -445,18 +618,35 @@ def log_summary(durations: list[tuple[str, float]]) -> None:
         logging.info(" • %s: %.1f сек.", name, value)
 
 
-def count_output_files() -> int:
-    if not OUTPUT_DIR.exists():
-        return 0
-    return sum(1 for path in OUTPUT_DIR.glob("*.csv"))
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     args, unknown = parse_args(argv)
     log_file = configure_logging(args.log_level)
     logging.info("Логи сохраняются в %s", log_file)
 
     forward_args = build_forward_args(args, unknown)
+
+    active_stage_names = [stage.name for stage in STAGES if stage.name not in args.skip]
+    dry_run_enabled = _extract_flag(forward_args.tokens, "--dry-run")
+    expected_outputs: tuple[Path, ...] = ()
+    output_dir = OUTPUT_DIR
+
+    try:
+        _, pipeline_cfg, pipeline_steps = _resolve_pipeline_context(args, forward_args)
+    except Exception as exc:  # pragma: no cover - defensive guard for legacy CLI
+        logging.debug(
+            "Не удалось определить ожидаемые выходные файлы: %s", exc, exc_info=exc
+        )
+        pipeline_cfg = None
+    else:
+        dry_run_enabled = pipeline_cfg.dry_run
+        output_dir = pipeline_cfg.output_dir
+        expected_outputs = _collect_expected_outputs(
+            pipeline_cfg, pipeline_steps, active_stage_names
+        )
+
+    _log_active_stages(active_stage_names, dry_run=dry_run_enabled)
+    if pipeline_cfg is not None:
+        _log_expected_outputs(expected_outputs, output_dir, dry_run=dry_run_enabled)
 
     durations: list[tuple[str, float]] = []
     for stage in STAGES:
@@ -468,18 +658,36 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     log_summary(durations)
 
-    csv_count = count_output_files()
+    existing_outputs = _list_existing_outputs(output_dir)
     logging.info(
         "🎉 Все выбранные этапы завершены. Найдено %d CSV-файлов в %s.",
-        csv_count,
-        OUTPUT_DIR,
+        len(existing_outputs),
+        output_dir,
     )
 
-    if csv_count != 15:
-        logging.warning(
-            "Ожидалось получить 15 CSV-файлов, фактически найдено %d.",
-            csv_count,
-        )
+    if pipeline_cfg is None:
+        logging.debug("Контекст пайплайна недоступен, пропускаем проверку выходных файлов.")
+    elif dry_run_enabled:
+        logging.info("Dry-run: проверка выходных файлов пропущена.")
+    elif not active_stage_names:
+        logging.info("Проверка выходных файлов пропущена: активных этапов нет.")
+    else:
+        existing_set = set(existing_outputs)
+        expected_set = {path.resolve() for path in expected_outputs}
+        missing = sorted(expected_set - existing_set)
+        unexpected = sorted(existing_set - expected_set)
+        if missing:
+            logging.warning(
+                "Не найдены ожидаемые файлы: %s",
+                ", ".join(_format_relative(path, output_dir) for path in missing),
+            )
+        elif expected_outputs:
+            logging.info("Все ожидаемые файлы найдены.")
+        if unexpected:
+            logging.info(
+                "Дополнительные файлы в каталоге: %s",
+                ", ".join(_format_relative(path, output_dir) for path in unexpected),
+            )
 
     return 0
 
