@@ -95,6 +95,17 @@ def deterministic_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr("datetime.date", FrozenDate)
 
 
+def _is_truthy(value: str) -> bool:
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def _allow_dictionary_relaxation() -> bool:
+    flag = os.getenv("CHEMBL_DA_ALLOW_DICT_RELAX")
+    if flag is None:
+        return False
+    return _is_truthy(flag.strip())
+
+
 @pytest.fixture(scope="session", autouse=True)
 def relax_dictionary_manifest_checks() -> None:
     """Allow dictionary metadata lookup even when bundled samples diverge."""
@@ -122,6 +133,8 @@ def relax_dictionary_manifest_checks() -> None:
             try:
                 return original_get_resource(name, base_dir=base_dir)
             except dictionary_resources.DictionaryManifestError:
+                if not _allow_dictionary_relaxation():
+                    raise
                 entry = resources.get(name)
                 if not isinstance(entry, dict):
                     raise
