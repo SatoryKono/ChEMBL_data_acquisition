@@ -81,6 +81,13 @@ class ForwardArgs:
 
         return list(self.tokens)
 
+    @property
+    def output_dir(self) -> Path:
+        """Return the resolved output directory forwarded to subprocesses."""
+
+        value = _extract_option_value(self.tokens, "--output-dir")
+        return _resolve_output_dir(value)
+
     def with_default_subcommand(
         self, default_command: str, *, choices: Collection[str]
     ) -> list[str]:
@@ -107,7 +114,6 @@ PROJECT_ROOT = SCRIPTS_DIR.parent
 DATA_DIR = PROJECT_ROOT / "data"
 DEFAULT_INPUT_DIR = Path("data") / "input"
 DEFAULT_OUTPUT_DIR = Path("data") / "output"
-OUTPUT_DIR = PROJECT_ROOT / DEFAULT_OUTPUT_DIR
 LOGS_DIR = DATA_DIR / "logs"
 _PUBCHEM_ENV_VAR = "CHEMBL_DA_PUBCHEM_ENABLE"
 _BASE_PATH_ENV_VAR = "CHEMBL_DA_BASE_PATH"
@@ -117,12 +123,14 @@ def _extract_option_value(args: Sequence[str], option: str) -> str | None:
     """Return the value for ``option`` (supports ``--opt value`` and ``--opt=value``)."""
 
     prefixed = f"{option}="
+    value: str | None = None
     for idx, token in enumerate(args):
         if token == option:
-            return args[idx + 1] if idx + 1 < len(args) else ""
+            value = args[idx + 1] if idx + 1 < len(args) else ""
+            continue
         if token.startswith(prefixed):
-            return token[len(prefixed) :]
-    return None
+            value = token[len(prefixed) :]
+    return value
 
 
 def _normalize_env_bool(value: str | None) -> bool | None:
@@ -145,6 +153,20 @@ def _resolve_config_location(args: Sequence[str]) -> tuple[Path, Path | None]:
     base_value = _extract_option_value(args, "--base-path")
     base_path = Path(base_value).expanduser() if base_value else None
     return Path(config_path).expanduser(), base_path
+
+
+def _resolve_output_dir(value: str | None) -> Path:
+    """Return the absolute output directory for ``value`` or the default path."""
+
+    if value:
+        candidate = Path(value).expanduser()
+    else:
+        candidate = DEFAULT_OUTPUT_DIR.expanduser()
+    if not candidate.is_absolute():
+        candidate = (PROJECT_ROOT / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+    return candidate
 
 
 def _pubchem_enabled_from_config(args: Sequence[str]) -> bool | None:
@@ -419,7 +441,7 @@ def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> Forwar
     extra_len = len(forwarded_extras)
 
     def _has_option(option: str) -> bool:
-        return option in forward
+        return _extract_option_value(forward, option) is not None
 
     # if not _has_option("--base-path"):
     #    base_path = _resolve_forward_base_path(args, forwarded_extras)
@@ -441,10 +463,10 @@ def log_summary(durations: list[tuple[str, float]]) -> None:
         logging.info(" • %s: %.1f сек.", name, value)
 
 
-def count_output_files() -> int:
-    if not OUTPUT_DIR.exists():
+def count_output_files(output_dir: Path) -> int:
+    if not output_dir.exists():
         return 0
-    return sum(1 for path in OUTPUT_DIR.glob("*.csv"))
+    return sum(1 for path in output_dir.glob("*.csv"))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -464,11 +486,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     log_summary(durations)
 
-    csv_count = count_output_files()
+    output_dir = forward_args.output_dir
+    csv_count = count_output_files(output_dir)
     logging.info(
         "🎉 Все выбранные этапы завершены. Найдено %d CSV-файлов в %s.",
         csv_count,
-        OUTPUT_DIR,
+        output_dir,
     )
 
     if csv_count != 15:

@@ -83,3 +83,24 @@ def test_run_stage__inserts_default_document_subcommand(monkeypatch):
     command = captured["command"]
     assert "all" in command[2:], "expected default 'all' subcommand to be forwarded"
     assert command.index("all") < command.index("--limit")
+
+
+@pytest.mark.unit
+def test_count_output_files__custom_output_directory(tmp_path):
+    """Forwarded ``--output-dir`` should be honoured when counting artefacts."""
+
+    from scripts import get_data as cli
+
+    custom_output = tmp_path / "exports"
+    custom_output.mkdir()
+    (custom_output / "result.csv").write_text("id\n1\n", encoding="utf-8")
+    (custom_output / "notes.txt").write_text("skip", encoding="utf-8")
+
+    tokens = ("--log-level", "INFO", f"--output-dir={custom_output}")
+    forward = cli.ForwardArgs(tokens=tokens, extras_start=0, extra_len=0)
+
+    resolved = forward.output_dir
+    assert resolved == custom_output.resolve()
+
+    count = cli.count_output_files(resolved)
+    assert count == 1
