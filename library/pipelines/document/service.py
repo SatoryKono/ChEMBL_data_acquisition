@@ -29,6 +29,8 @@ from library.config import (
     OpenAlexCfg,
     PubMedCfg,
     SemanticScholarCfg,
+    crossref_session,
+    openalex_session,
     session_with_retry,
 )
 from library.integration import openalex_crossref_library as ocl
@@ -583,17 +585,16 @@ class DocumentPipeline:
             )
 
             def _service_factory(
-                mailto: str,
+                factory: Callable[[], requests.Session],
             ) -> Callable[[], AbstractContextManager[requests.Session]]:
                 def _factory() -> AbstractContextManager[requests.Session]:
                     @contextmanager
                     def _context() -> Iterator[requests.Session]:
-                        with session_with_retry(
-                            session_cfg.api, session_cfg.retry
-                        ) as derived_session:
-                            if mailto and hasattr(derived_session, "headers"):
-                                derived_session.headers["mailto"] = mailto
-                            yield derived_session
+                        session = factory()
+                        try:
+                            yield session
+                        finally:
+                            session.close()
 
                     return _context()
 
@@ -602,8 +603,16 @@ class DocumentPipeline:
             session_factories: dict[
                 str, Callable[[], AbstractContextManager[requests.Session]]
             ] = {
-                "openalex": _service_factory(openalex_cfg.mailto),
-                "crossref": _service_factory(crossref_cfg.mailto),
+                "openalex": _service_factory(
+                    lambda: openalex_session(
+                        session_cfg.api, session_cfg.retry, openalex_cfg
+                    )
+                ),
+                "crossref": _service_factory(
+                    lambda: crossref_session(
+                        session_cfg.api, session_cfg.retry, crossref_cfg
+                    )
+                ),
             }
 
             resources = _ThreadResources(session_stack, base_session, {})
