@@ -83,18 +83,21 @@ include = [
   "library",
   "library.*",
   "config",
+  "config.schema",
   "config.dictionary",
   "config.dictionary.*",
-  "scripts", 
-  "scripts.*", 
+  "scripts",
+  "scripts.*",
   "tools",
 ]
 
 [tool.setuptools.package-data]
 "config" = [
   "config.yaml",
+  "schema/document.yaml",
   "dictionary/_testitem/molecule_hierarchy.csv",
 ]
+"config.schema" = ["document.yaml"]
 "config.dictionary" = ["**/*"]
 "library" = ["py.typed"]
 "library.qa" = ["document_schema_crosswalk.yaml"]

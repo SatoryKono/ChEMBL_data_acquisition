@@ -11,7 +11,7 @@ from typing import Any
 
 import yaml
 
-from config.paths import SCHEMA_DIR
+from config.schema import DEFAULT_DOCUMENT_SCHEMA
 from library._compat.pandera import pa
 
 
@@ -134,7 +134,7 @@ def load_document_declaration(path: str | Path | None = None) -> DocumentDeclara
 
 def _resolve_schema_path(path: str | Path | None) -> Path:
     if path is None:
-        return SCHEMA_DIR / "document.yaml"
+        return DEFAULT_DOCUMENT_SCHEMA
     resolved = Path(path)
     if resolved.is_dir():
         resolved = resolved / "document.yaml"
