@@ -61,9 +61,9 @@ from `library/`:
 - `library/qa` & `library/table_quality.py` — Schema validation, quality
   profiling and metadata writers.
 
-For details on the recent relocation of the test item pipeline into the
-`library.pipelines.testitem` namespace, see the
-[test item pipeline module migration guide](../guides/MIGRATION_TESTITEM_PIPELINE.md).
+For details on how the test item pipeline coordinates parent-molecule lookups
+and downstream joins, see the
+[advanced scenarios guide](../guides/ADVANCED_SCENARIOS.md).
 
 ## Data extraction pipelines
 
