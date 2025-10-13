@@ -88,8 +88,9 @@ def ensure_project_root(origin: str | Path | None = None) -> Path:
 
     project_root = resolve_project_root(origin)
     project_root_str = str(project_root)
-    if project_root_str not in sys.path:
-        sys.path.insert(0, project_root_str)
+    if project_root_str in sys.path:
+        sys.path.remove(project_root_str)
+    sys.path.insert(0, project_root_str)
     _purge_conflicting_modules(project_root)
     return project_root
 
