@@ -11,6 +11,7 @@ import pandas as pd
 import yaml
 
 from library import cli, io
+from library.cli_utils import ensure_run_id
 from library.common.log import logger
 from library.config import (
     DEFAULT_CONFIG_PATH,
@@ -82,11 +83,7 @@ def parse_args(
     input_path = getattr(args, "input_csv", None)
     output_stem = Path(input_path).stem if input_path else None
     cli.prepare_io_paths(args, output_stem=output_stem)
-    run_id_value = getattr(args, "run_id", None)
-    if isinstance(run_id_value, str):
-        run_id_value = run_id_value.strip() or None
-    if run_id_value is not None:
-        log_cfg.run_id = run_id_value
+    ensure_run_id(args, parser, log_cfg)
     return parser, args, log_cfg
 
 

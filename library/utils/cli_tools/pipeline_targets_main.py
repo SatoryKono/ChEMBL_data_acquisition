@@ -34,6 +34,7 @@ from library.cli import (
     configure_logger,
     path_argument,
 )
+from library.cli_utils import ensure_run_id
 from library.cli.run_context import compute_generated_at
 from library.clients import _chunked
 from library.common.log import logger
@@ -622,14 +623,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_dir=output_dir,
     )
     args.final_out = resolved_final
-    run_id_value = getattr(args, "run_id", None)
-    if isinstance(run_id_value, str):
-        run_id_value = run_id_value.strip() or None
-    if run_id_value is not None:
-        updated_run_id = run_id_value
-    else:
-        updated_run_id = log_cfg.run_id
-    resolved_run_id = str(updated_run_id)
+    ensure_run_id(args, parser, log_cfg)
+    resolved_run_id = str(log_cfg.run_id or "")
     log_level_value = str(args.log_level)
     new_generated_at = compute_generated_at(
         date_token=None,

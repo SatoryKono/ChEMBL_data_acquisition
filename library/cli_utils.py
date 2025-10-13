@@ -66,6 +66,8 @@ __all__ = [
     "build_parser",
     "normalise_definition",
     "resolve_invocation",
+    "canonical_run_descriptor",
+    "ensure_run_id",
     "run_cli_command",
     "run_pipeline",
 ]
@@ -290,6 +292,40 @@ def _canonical_run_descriptor(
     return "\n".join(parts)
 
 
+def canonical_run_descriptor(
+    args: argparse.Namespace, parser: argparse.ArgumentParser
+) -> str:
+    """Return a normalised descriptor summarising ``args`` and resolved paths."""
+
+    return _canonical_run_descriptor(args, parser)
+
+
+def ensure_run_id(
+    args: argparse.Namespace, parser: argparse.ArgumentParser, log_cfg: LoggerConfig
+) -> str | None:
+    """Populate ``args.run_id``/``log_cfg.run_id`` when not explicitly provided."""
+
+    run_id_value = getattr(args, "run_id", None)
+    if isinstance(run_id_value, str):
+        run_id_value = run_id_value.strip() or None
+    elif run_id_value in (argparse.SUPPRESS,):
+        run_id_value = None
+
+    if not run_id_value:
+        descriptor = canonical_run_descriptor(args, parser)
+        if descriptor:
+            run_id_value = uuid.uuid5(uuid.NAMESPACE_URL, descriptor).hex
+        else:
+            candidate = getattr(log_cfg, "run_id", "")
+            run_id_value = candidate.strip() or None
+
+    if run_id_value:
+        args.run_id = run_id_value
+        log_cfg.run_id = run_id_value
+
+    return run_id_value
+
+
 def run_cli_command(
     *,
     args: argparse.Namespace,
@@ -309,6 +345,81 @@ def run_cli_command(
     if diagnostics_enabled != legacy_flag:
         args.emit_legacy_artifacts = diagnostics_enabled
 
+    desired_level = getattr(args, "log_level", log_cfg.level)
+    if getattr(args, "verbose", False):
+        desired_level = "DEBUG"
+    if not desired_level:
+        desired_level = "INFO"
+    log_cfg.level = str(desired_level).upper()
+
+    def _configure_logging() -> Logger:
+        configured_logger = cli.configure_logger(log_cfg)
+        return logger or configured_logger
+
+    try:
+        config_arg = getattr(args, "config", None)
+        if isinstance(config_arg, str | Path):
+            config_path: Path | str = config_arg
+        else:
+            default_config = parser.get_default("config")
+            if not isinstance(default_config, str | Path):
+                msg = "configuration path must be provided"
+                raise ValueError(msg)
+            config_path = default_config
+    except ValueError as exc:
+        ensure_run_id(args, parser, log_cfg)
+        if not log_cfg.generated_at:
+            seed_parts: list[str] = []
+            invocation = getattr(args, "invocation", None)
+            if isinstance(invocation, Sequence) and invocation:
+                seed_parts.extend(str(part) for part in invocation)
+            else:
+                program = getattr(parser, "prog", None)
+                if program:
+                    seed_parts.append(str(program))
+                seed_parts.extend(str(part) for part in sys.argv[1:])
+            log_cfg.generated_at = compute_generated_at(
+                date_token=getattr(args, "date", None),
+                run_id=log_cfg.run_id,
+                seed_parts=seed_parts,
+            )
+        use_logger = _configure_logging()
+        use_logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(getattr(args, "config", "")),
+            exc_info=exc,
+        )
+        use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
+        return 1
+
+    try:
+        cli.prepare_io_paths(args)
+    except (ValueError, FileNotFoundError) as exc:
+        ensure_run_id(args, parser, log_cfg)
+        if not log_cfg.generated_at:
+            seed_parts = [str(part) for part in getattr(args, "invocation", ())]
+            if not seed_parts:
+                program = getattr(parser, "prog", None)
+                if program:
+                    seed_parts.append(str(program))
+                seed_parts.extend(str(part) for part in sys.argv[1:])
+            log_cfg.generated_at = compute_generated_at(
+                date_token=getattr(args, "date", None),
+                run_id=log_cfg.run_id,
+                seed_parts=seed_parts,
+            )
+        use_logger = _configure_logging()
+        use_logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(config_path),
+            exc_info=exc,
+        )
+        use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
+        return 1
+
+    ensure_run_id(args, parser, log_cfg)
     if not log_cfg.generated_at:
         seed_parts: list[str] = []
         invocation = getattr(args, "invocation", None)
@@ -325,63 +436,7 @@ def run_cli_command(
             seed_parts=seed_parts,
         )
 
-    desired_level = getattr(args, "log_level", log_cfg.level)
-    if getattr(args, "verbose", False):
-        desired_level = "DEBUG"
-    if not desired_level:
-        desired_level = "INFO"
-    log_cfg.level = str(desired_level).upper()
-    configured_logger = cli.configure_logger(log_cfg)
-    use_logger = logger or configured_logger
-
-    try:
-        config_arg = getattr(args, "config", None)
-        if isinstance(config_arg, str | Path):
-            config_path: Path | str = config_arg
-        else:
-            default_config = parser.get_default("config")
-            if not isinstance(default_config, str | Path):
-                msg = "configuration path must be provided"
-                raise ValueError(msg)
-            config_path = default_config
-    except ValueError as exc:
-        use_logger.error(
-            "config_error",
-            error=str(exc),
-            config=str(getattr(args, "config", "")),
-            exc_info=exc,
-        )
-        use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
-        return 1
-
-    try:
-        cli.prepare_io_paths(args)
-    except (ValueError, FileNotFoundError) as exc:
-        use_logger.error(
-            "config_error",
-            error=str(exc),
-            config=str(config_path),
-            exc_info=exc,
-        )
-        use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
-        return 1
-
-    run_id_value = getattr(args, "run_id", None)
-    if isinstance(run_id_value, str):
-        run_id_value = run_id_value.strip() or None
-    if not run_id_value:
-        descriptor = _canonical_run_descriptor(args, parser)
-        if descriptor:
-            run_id_value = uuid.uuid5(uuid.NAMESPACE_URL, descriptor).hex
-        else:
-            run_id_value = log_cfg.run_id
-    if run_id_value is not None:
-        log_cfg.run_id = run_id_value
-        args.run_id = run_id_value
-    if logger is None:
-        use_logger = cli.configure_logger(log_cfg)
-    else:
-        cli.configure_logger(log_cfg)
+    use_logger = _configure_logging()
 
     use_logger.info("pipeline_start", run_id=log_cfg.run_id)
 

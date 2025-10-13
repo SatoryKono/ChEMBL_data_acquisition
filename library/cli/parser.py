@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import uuid
 from pathlib import Path, PureWindowsPath
 from typing import Any, cast
 
@@ -24,31 +23,19 @@ from ..version import require_python_version
 from .run_context import compute_generated_at
 
 require_python_version()
-
-
-def _default_run_id(level: str) -> str:
-    """Return a unique run identifier for ``level``."""
-
-    # Accept ``level`` for API compatibility but rely on randomness so that
-    # each invocation yields a distinct identifier unless callers specify a
-    # deterministic ``run_id`` explicitly (e.g. in tests).
-    _ = level  # unused: kept to avoid breaking the call signature
-    return uuid.uuid4().hex
-
-
 _RUN_ID_ENV = "CHEMBL_DA_RUN_ID"
 
 
 def create_logger_config(level: str, *, run_id: str | None = None) -> LoggerConfig:
-    """Return :class:`LoggerConfig` using a random ``run_id`` when omitted.
+    """Return :class:`LoggerConfig` with a caller-specified ``run_id``.
 
     Parameters
     ----------
     level:
         Desired logging level.
     run_id:
-        Optional run identifier. When omitted a random default is used so that
-        each CLI run is uniquely identifiable.
+        Optional run identifier. When omitted the value remains blank so the
+        caller can derive a deterministic identifier from the CLI invocation.
 
     Returns
     -------
@@ -56,7 +43,12 @@ def create_logger_config(level: str, *, run_id: str | None = None) -> LoggerConf
         Configuration containing ``run_id`` and ``level``.
     """
 
-    resolved_run_id = run_id if run_id is not None else _default_run_id(level)
+    if isinstance(run_id, str):
+        resolved_run_id = run_id.strip()
+    else:
+        resolved_run_id = ""
+    if not resolved_run_id and run_id:
+        resolved_run_id = str(run_id)
     generated_at = compute_generated_at(
         date_token=None,
         run_id=resolved_run_id,

@@ -18,6 +18,7 @@ import os
 from collections.abc import Sequence
 
 from library.cli import configure_logger, create_logger_config
+from library.cli_utils import ensure_run_id
 from library.common.dtype_inspector import inspect_dtypes
 
 
@@ -43,6 +44,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if isinstance(run_id, str) and not run_id:
         run_id = None
     log_cfg = create_logger_config(args.log_level, run_id=run_id)
+    ensure_run_id(args, parser, log_cfg)
     configure_logger(log_cfg)
     inspect_dtypes()
     return 0

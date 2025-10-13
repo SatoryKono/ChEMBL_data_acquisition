@@ -21,7 +21,7 @@ from .. import cli
 from ..cli import LoggerConfig, configure_logger, path_argument
 from ..cli import build_parser as base_parser
 from ..cli.pipeline_definition import MetadataHook, PipelineDefinition, Validator
-from ..cli_utils import run_pipeline
+from ..cli_utils import ensure_run_id, run_pipeline
 from ..clients.pubmed import PubMedClient
 from ..clients.semantic_scholar import (
     fetch_semantic_scholar,
@@ -234,6 +234,7 @@ def parse_args(
         help="Log combined metadata dumps at INFO level for troubleshooting",
     )
     args = parser.parse_args(argv)
+    ensure_run_id(args, parser, log_cfg)
     return args, parser, log_cfg
 
 
