@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import re
 import shutil
 import textwrap
 from collections import deque
@@ -206,7 +207,9 @@ def _failing_target_transform(
 @pytest.mark.e2e
 @pytest.mark.smoke
 def test_get_data_end_to_end__miniature_pipeline(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
 ) -> None:
     base_path = tmp_path
     input_dir = base_path / "input"
@@ -416,6 +419,20 @@ def test_get_data_end_to_end__miniature_pipeline(
         assert value, "manifest must include run_id"
         return str(value)
 
+    sentinel_path = get_data.OUTPUT_DIR / "cleanup_sentinel.tmp"
+    sentinel_path.parent.mkdir(parents=True, exist_ok=True)
+    sentinel_path.write_text("keep", encoding="utf-8")
+    request.addfinalizer(lambda: sentinel_path.unlink(missing_ok=True))
+
+    cleanup_file = output_dir / "temporary.tmp"
+    cleanup_file.write_text("stale", encoding="utf-8")
+    request.addfinalizer(lambda: cleanup_file.unlink(missing_ok=True))
+
+    cleanup_dir = output_dir / "raw"
+    cleanup_dir.mkdir(exist_ok=True)
+    (cleanup_dir / "scratch.csv").write_text("id\n1\n", encoding="utf-8")
+    request.addfinalizer(lambda: shutil.rmtree(cleanup_dir, ignore_errors=True))
+
     argv = [
         "--base-path",
         str(base_path),
@@ -436,6 +453,10 @@ def test_get_data_end_to_end__miniature_pipeline(
     assert exit_code == 0
     assert _collect_log_run_ids(logs) == {first_run_id}
 
+    assert not cleanup_file.exists()
+    assert not cleanup_dir.exists()
+    assert sentinel_path.exists()
+
     manifest_run_id = _read_manifest_run_id()
     assert manifest_run_id == first_run_id
 
@@ -446,6 +467,21 @@ def test_get_data_end_to_end__miniature_pipeline(
     orchestrator_events = {entry.get("event") for entry in orchestrator_records}
     assert "pipeline_start" in orchestrator_events
     assert "workflow_succeeded" in orchestrator_events
+
+    csv_summary_entries = [
+        entry
+        for entry in orchestrator_records
+        if "Найдено" in entry.get("raw", "")
+    ]
+    assert csv_summary_entries, "expected CSV summary entry in orchestrator log"
+    summary_message = csv_summary_entries[-1]["raw"].split(" | ", 2)[-1]
+    resolved_output = str(output_dir.resolve())
+    assert resolved_output in summary_message
+    count_match = re.search(r"Найдено\s+(?P<count>\d+)\s+CSV-файлов", summary_message)
+    assert count_match, f"unable to parse CSV count from '{summary_message}'"
+    reported_count = int(count_match.group("count"))
+    actual_csv_count = sum(1 for path in output_dir.glob("*.csv"))
+    assert reported_count == actual_csv_count
 
     events = {record.get("event"): record for record in logs if "event" in record}
     assert "document_duplicates_dropped" in events

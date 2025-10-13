@@ -496,10 +496,37 @@ def log_summary(durations: list[tuple[str, float]]) -> None:
         logging.info(" • %s: %.1f сек.", name, value)
 
 
-def count_output_files() -> int:
-    if not OUTPUT_DIR.exists():
+def count_output_files(output_dir: Path) -> int:
+    resolved = output_dir.expanduser().resolve()
+    if not resolved.exists():
         return 0
-    return sum(1 for path in OUTPUT_DIR.glob("*.csv"))
+    return sum(1 for path in resolved.glob("*.csv"))
+
+
+def _resolve_output_directory(
+    args: argparse.Namespace, forward_args: ForwardArgs
+) -> Path:
+    """Return the absolute output directory referenced by the orchestrator."""
+
+    raw_value = _extract_option_value(forward_args.tokens, "--output-dir")
+    candidate = Path(raw_value).expanduser() if raw_value else DEFAULT_OUTPUT_DIR
+    if candidate.is_absolute():
+        return candidate.resolve()
+
+    base_value = _extract_option_value(forward_args.tokens, "--base-path")
+    if base_value:
+        base_path = Path(base_value).expanduser()
+        if not base_path.is_absolute():
+            base_path = (Path.cwd() / base_path).resolve()
+        else:
+            base_path = base_path.resolve()
+    else:
+        extras = forward_args.tokens[
+            forward_args.extras_start : forward_args.extras_end
+        ]
+        base_path = _resolve_forward_base_path(args, extras)
+
+    return (base_path / candidate).resolve()
 
 
 def _is_cleanup_directory(path: Path) -> bool:
@@ -509,14 +536,14 @@ def _is_cleanup_directory(path: Path) -> bool:
     return name in _CLEANUP_DIRECTORY_NAMES
 
 
-def _relative_to_output(path: Path) -> str:
+def _relative_to_output(path: Path, output_dir: Path) -> str:
     try:
-        return os.fspath(path.relative_to(OUTPUT_DIR))
+        return os.fspath(path.relative_to(output_dir))
     except ValueError:
         return os.fspath(path)
 
 
-def _remove_file(path: Path) -> bool:
+def _remove_file(path: Path, *, output_dir: Path) -> bool:
     try:
         path.unlink()
     except FileNotFoundError:
@@ -524,11 +551,11 @@ def _remove_file(path: Path) -> bool:
     except OSError as exc:  # pragma: no cover - filesystem variance
         logging.warning("[CLEANUP] Не удалось удалить %s: %s", path, exc)
         return False
-    logging.info("[CLEANUP] Удалён файл %s", _relative_to_output(path))
+    logging.info("[CLEANUP] Удалён файл %s", _relative_to_output(path, output_dir))
     return True
 
 
-def _remove_directory(path: Path) -> bool:
+def _remove_directory(path: Path, *, output_dir: Path) -> bool:
     try:
         shutil.rmtree(path)
     except FileNotFoundError:
@@ -536,7 +563,7 @@ def _remove_directory(path: Path) -> bool:
     except OSError as exc:  # pragma: no cover - filesystem variance
         logging.warning("[CLEANUP] Не удалось удалить каталог %s: %s", path, exc)
         return False
-    logging.info("[CLEANUP] Удалён каталог %s", _relative_to_output(path))
+    logging.info("[CLEANUP] Удалён каталог %s", _relative_to_output(path, output_dir))
     return True
 
 
@@ -558,7 +585,7 @@ def cleanup_intermediate_files(output_dir: Path) -> int:
             candidate = candidate.resolve()
             if candidate in seen_files or not candidate.is_file():
                 continue
-            if _remove_file(candidate):
+            if _remove_file(candidate, output_dir=resolved):
                 removed += 1
             seen_files.add(candidate)
 
@@ -569,7 +596,7 @@ def cleanup_intermediate_files(output_dir: Path) -> int:
 
     # Remove deepest directories first to avoid orphaned parents lingering.
     for directory in sorted(directories, key=lambda item: len(item.parts), reverse=True):
-        if _remove_directory(directory):
+        if _remove_directory(directory, output_dir=resolved):
             removed += 1
 
     return removed
@@ -591,6 +618,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     logging.info("Логи сохраняются в %s", log_file)
 
     forward_args = build_forward_args(args, unknown)
+    resolved_output_dir = _resolve_output_directory(args, forward_args)
 
     durations: list[tuple[str, float]] = []
     for stage in STAGES:
@@ -602,11 +630,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     log_summary(durations)
 
-    csv_count = count_output_files()
+    csv_count = count_output_files(resolved_output_dir)
     logging.info(
         "🎉 Все выбранные этапы завершены. Найдено %d CSV-файлов в %s.",
         csv_count,
-        OUTPUT_DIR,
+        resolved_output_dir,
     )
 
     if csv_count != 15:
@@ -616,7 +644,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     if _should_run_cleanup(forward_args):
-        removed = cleanup_intermediate_files(OUTPUT_DIR)
+        removed = cleanup_intermediate_files(resolved_output_dir)
         logging.info("[CLEANUP] Завершено: удалено %d артефакт(ов)", removed)
     else:
         logging.info(
