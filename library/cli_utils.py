@@ -21,6 +21,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict, cast
 
+try:  # pragma: no cover - optional dependency
+    from pyarrow.lib import ArrowInvalid, ArrowNotImplementedError, ArrowTypeError
+except ModuleNotFoundError:  # pragma: no cover - optional dependency missing
+    _PYARROW_SERIALISATION_ERRORS: tuple[type[Exception], ...] = ()
+else:  # pragma: no cover - exercised indirectly via parquet engine
+    _PYARROW_SERIALISATION_ERRORS = (
+        ArrowInvalid,
+        ArrowNotImplementedError,
+        ArrowTypeError,
+    )
+
+_PARQUET_FALLBACK_ERRORS: tuple[type[Exception], ...] = (
+    ImportError,
+    TypeError,
+    ValueError,
+) + _PYARROW_SERIALISATION_ERRORS
+
 import numpy as np
 import pandas as pd
 from pandera.errors import SchemaErrors
@@ -88,31 +105,62 @@ StatsExtraMapping = Mapping[str, object]
 class _ParquetChunkStore:
     """Persist prepared chunks to temporary parquet files for later reuse."""
 
-    __slots__ = ("_tmpdir", "_paths", "_row_count")
+    __slots__ = ("_tmpdir", "_entries", "_row_count", "_parquet_supported")
 
     def __init__(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory(prefix="pipeline_chunks_")
-        self._paths: list[Path] = []
+        self._entries: list[tuple[Path, str]] = []
         self._row_count = 0
+        self._parquet_supported = True
+
+    def _store_as_parquet(self, frame: pd.DataFrame, base_path: Path) -> bool:
+        parquet_path = base_path.with_suffix(".parquet")
+        try:
+            frame.to_parquet(parquet_path, index=False)
+        except _PARQUET_FALLBACK_ERRORS:
+            try:
+                parquet_path.unlink()
+            except FileNotFoundError:
+                pass
+            self._parquet_supported = False
+            return False
+        else:
+            self._entries.append((parquet_path, "parquet"))
+            return True
+
+    def _store_as_pickle(self, frame: pd.DataFrame, base_path: Path) -> None:
+        pickle_path = base_path.with_suffix(".pkl")
+        frame.to_pickle(pickle_path, protocol=5)
+        self._entries.append((pickle_path, "pickle"))
 
     def append(self, frame: pd.DataFrame) -> None:
         if not isinstance(frame, pd.DataFrame):
             raise TypeError("chunk store expects pandas DataFrame inputs")
-        path = Path(self._tmpdir.name) / f"chunk_{len(self._paths):05d}.parquet"
-        frame.to_parquet(path, index=False)
-        self._paths.append(path)
+
+        base_path = Path(self._tmpdir.name) / f"chunk_{len(self._entries):05d}"
+
+        stored = False
+        if self._parquet_supported:
+            stored = self._store_as_parquet(frame, base_path)
+
+        if not stored:
+            self._store_as_pickle(frame, base_path)
+
         self._row_count += len(frame)
 
     def iter_frames(self) -> Iterator[pd.DataFrame]:
-        for path in self._paths:
-            yield pd.read_parquet(path)
+        for path, kind in self._entries:
+            if kind == "parquet":
+                yield pd.read_parquet(path)
+            else:
+                yield pd.read_pickle(path)
 
     @property
     def row_count(self) -> int:
         return self._row_count
 
     def cleanup(self) -> None:
-        self._paths.clear()
+        self._entries.clear()
         self._tmpdir.cleanup()
 
 
