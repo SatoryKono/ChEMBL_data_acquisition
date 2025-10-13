@@ -30,6 +30,12 @@ def _serialise_value(value: Any) -> Any:
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
         return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    if callable(value):
+        module = getattr(value, "__module__", None)
+        qualname = getattr(value, "__qualname__", None)
+        if module and qualname:
+            return f"{module}.{qualname}"
+        return repr(value)
     return value
 
 
