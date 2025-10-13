@@ -233,6 +233,48 @@ def test_run_chembl__passes_pubchem_enable_flag(
     assert options.pubchem_enabled is True
 
 
+def test_run_chembl__default_output_includes_date(
+    cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("molecule_chembl_id\nCHEMBL1\n", encoding="utf-8")
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    cfg.io.output_dir = output_dir
+
+    captured: dict[str, object] = {}
+
+    def fake_run_pipeline(
+        config: Config, options: get_testitem_data.TestitemPipelineOptions
+    ) -> int:
+        captured["options"] = options
+        return 0
+
+    monkeypatch.setattr(get_testitem_data, "run_testitem_pipeline", fake_run_pipeline)
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=None,
+        output_csv=None,
+        limit=None,
+        offset=None,
+        emit_legacy_artifacts=False,
+        pubchem_enable=None,
+        date="20240229",
+    )
+
+    exit_code = get_testitem_data.run_chembl(cfg, args)
+
+    expected_output = output_dir / "output.testitem_20240229.csv"
+    assert exit_code == 0
+    options = captured["options"]
+    assert isinstance(options, get_testitem_data.TestitemPipelineOptions)
+    assert options.output_csv == expected_output
+    assert options.date == "20240229"
+    assert args.final_out == expected_output
+    assert args.output_csv == expected_output
+
+
 @pytest.mark.unit
 def test_run_chembl__builds_standard_outputs_when_missing_artifacts(
     cfg: Config,
