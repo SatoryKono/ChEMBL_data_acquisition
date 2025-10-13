@@ -177,11 +177,12 @@ log to `reports/test_report.json` and the Markdown summary to
 `summary.success_rate` falls below **95 %**. Re-run the script after touching
 tests or pipeline code to confirm the outputs stay identical apart from the
 timestamp – any drift indicates a determinism regression that must be fixed
-before opening a pull request. When sharing results, commit the code changes and
-attach the generated reports to the PR so reviewers can audit the exact pass
-rate without reproducing the run locally. Successful runs exit with status `0`,
-threshold breaches (success rate or coverage) return `1`, and report
-generation/validation issues return `11` so CI pipelines can distinguish
+before opening a pull request. Do **not** commit the generated reports: they are
+treated as transient build artefacts, ignored by Git and uploaded automatically
+by CI. When sharing results locally, attach them to the PR or issue as
+artefacts instead of adding them to the repository history. Successful runs exit
+with status `0`, threshold breaches (success rate or coverage) return `1`, and
+report generation/validation issues return `11` so CI pipelines can distinguish
 environmental failures from quality regressions.
 
 Each invocation also keeps the raw pytest payload (`reports/pytest_raw_report.json`)

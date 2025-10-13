@@ -44,8 +44,8 @@ config/dictionary/**/*.lock
 logs/*
 !logs/.gitkeep
 reports/*
-!reports/test_report.json
-!reports/test_summary.md
+reports/*.json
+reports/*.md
 !reports/tests/
 !reports/code_review.md
 !reports/archive/
