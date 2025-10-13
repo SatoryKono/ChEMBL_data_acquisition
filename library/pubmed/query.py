@@ -33,7 +33,11 @@ from ..config import (
     RetryCfg,
     SemanticScholarCfg,
 )
-from .parsing import EMPTY_PUBMED, combine, parse_pubmed_article
+from ..integration._normalizers import (
+    normalize_crossref_response,
+    normalize_openalex_response,
+)
+from .parsing import EMPTY_PUBMED, parse_pubmed_article
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
     from ..common.rate_limiter import RateLimiter
@@ -234,38 +238,7 @@ def fetch_openalex(
         retry_cfg=retry_cfg,
     )
 
-    if error or not isinstance(raw, dict):
-        return {
-            "OpenAlex.PublicationTypes": "",
-            "OpenAlex.TypeCrossref": "",
-            "OpenAlex.Genre": "",
-            "OpenAlex.Id": "",
-            "OpenAlex.Venue": "",
-            "OpenAlex.MeshDescriptors": "",
-            "OpenAlex.MeshQualifiers": "",
-            "OpenAlex.Error": error or "Invalid response",
-        }
-    mesh_entries = raw.get("mesh") or []
-    descriptors: list[str] = []
-    qualifiers: list[str] = []
-    for entry in mesh_entries:
-        d = entry.get("descriptor_name")
-        if d:
-            descriptors.append(d)
-        for q in entry.get("qualifiers") or []:
-            qn = q.get("qualifier_name")
-            if qn:
-                qualifiers.append(qn)
-    return {
-        "OpenAlex.PublicationTypes": raw.get("type", ""),
-        "OpenAlex.TypeCrossref": raw.get("type_crossref", ""),
-        "OpenAlex.Genre": raw.get("genre", ""),
-        "OpenAlex.Id": raw.get("id", ""),
-        "OpenAlex.Venue": raw.get("host_venue", {}).get("display_name", ""),
-        "OpenAlex.MeshDescriptors": combine(descriptors),
-        "OpenAlex.MeshQualifiers": combine(qualifiers),
-        "OpenAlex.Error": "",
-    }
+    return normalize_openalex_response(raw, error)
 
 
 def fetch_crossref(
@@ -279,14 +252,7 @@ def fetch_crossref(
     """Retrieve Crossref metadata for a given DOI."""
 
     if not doi:
-        return {
-            "crossref.Type": "",
-            "crossref.Subtype": "",
-            "crossref.Title": "",
-            "crossref.Subtitle": "",
-            "crossref.Subject": "",
-            "crossref.Error": "Missing DOI",
-        }
+        return normalize_crossref_response(None, "Missing DOI")
 
     raw, error = crossref_client.fetch_crossref(
         session,
@@ -296,24 +262,4 @@ def fetch_crossref(
         retry_cfg=retry_cfg,
     )
 
-    if error or not isinstance(raw, dict):
-        return {
-            "crossref.Type": "",
-            "crossref.Subtype": "",
-            "crossref.Title": "",
-            "crossref.Subtitle": "",
-            "crossref.Subject": "",
-            "crossref.Error": error or "Invalid response",
-        }
-    message = raw.get("message", {})
-    title = message.get("title") or [""]
-    subtitle = message.get("subtitle") or [""]
-    subject = "; ".join(message.get("subject") or [])
-    return {
-        "crossref.Type": message.get("type", ""),
-        "crossref.Subtype": message.get("subtype", ""),
-        "crossref.Title": title[0] if title else "",
-        "crossref.Subtitle": subtitle[0] if subtitle else "",
-        "crossref.Subject": subject,
-        "crossref.Error": "",
-    }
+    return normalize_crossref_response(raw, error)

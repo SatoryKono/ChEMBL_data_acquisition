@@ -8,6 +8,10 @@ import responses
 
 from library.clients.openalex import fetch_openalex
 from library.config.models import OpenAlexCfg
+from library.integration._normalizers import (
+    normalize_crossref_response,
+    normalize_openalex_response,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -122,3 +126,70 @@ def test_fetch_openalex__timeout_logged(
         record.levelname == "WARNING" and "request_fail" in record.getMessage()
         for record in caplog.records
     )
+
+
+def test_normalize_openalex_response__mesh_fields() -> None:
+    raw = {
+        "type": "journal-article",
+        "type_crossref": "journal-article",
+        "genre": "article",
+        "id": "https://openalex.org/W123",
+        "host_venue": {"display_name": "Journal of Testing"},
+        "mesh": [
+            {
+                "descriptor_name": "Chemistry",
+                "qualifiers": [{"qualifier_name": "Analysis"}],
+            },
+            {"descriptor_name": "Biology", "qualifiers": []},
+        ],
+    }
+
+    result = normalize_openalex_response(raw, "")
+
+    assert result == {
+        "OpenAlex.PublicationTypes": "journal-article",
+        "OpenAlex.TypeCrossref": "journal-article",
+        "OpenAlex.Genre": "article",
+        "OpenAlex.Id": "https://openalex.org/W123",
+        "OpenAlex.Venue": "Journal of Testing",
+        "OpenAlex.MeshDescriptors": "Chemistry|Biology",
+        "OpenAlex.MeshQualifiers": "Analysis",
+        "OpenAlex.Error": "",
+    }
+
+
+def test_normalize_openalex_response__invalid_payload_returns_error() -> None:
+    result = normalize_openalex_response(None, "boom")
+
+    assert result["OpenAlex.Error"] == "boom"
+    assert result["OpenAlex.MeshDescriptors"] == ""
+    assert result["OpenAlex.MeshQualifiers"] == ""
+
+
+def test_normalize_crossref_response__extracts_text_fields() -> None:
+    raw = {
+        "message": {
+            "type": "journal-article",
+            "subtype": "full-length",
+            "title": ["Sample Title"],
+            "subtitle": ["Extended Subtitle"],
+            "subject": ["Chemistry", "Biology"],
+        }
+    }
+
+    result = normalize_crossref_response(raw, "")
+
+    assert result == {
+        "crossref.Type": "journal-article",
+        "crossref.Subtype": "full-length",
+        "crossref.Title": "Sample Title",
+        "crossref.Subtitle": "Extended Subtitle",
+        "crossref.Subject": "Chemistry; Biology",
+        "crossref.Error": "",
+    }
+
+
+def test_normalize_crossref_response__invalid_message_returns_error() -> None:
+    result = normalize_crossref_response({"message": "oops"}, None)
+
+    assert result["crossref.Error"] == "Invalid response"
