@@ -504,6 +504,34 @@ def _resolve_output_metadata(
     return normalized_table, resolved_date
 
 
+def _build_metadata_summary(frame: pd.DataFrame) -> dict[str, Any]:
+    """Return a concise QC summary for metadata sidecars."""
+
+    total_rows = int(len(frame))
+    if total_rows == 0:
+        return {"total_rows": 0, "non_null_ratio": {}}
+
+    ratios: dict[str, float] = {}
+    for column in frame.columns:
+        valid = int(frame[column].notna().sum())
+        ratios[column] = float(valid / total_rows) if total_rows else 0.0
+    return {"total_rows": total_rows, "non_null_ratio": ratios}
+
+
+def _load_metadata_frame(path: Path, *, cfg: Config) -> pd.DataFrame:
+    """Load ``path`` into a :class:`pandas.DataFrame` for metadata generation."""
+
+    try:
+        return pd.read_csv(path, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding)
+    except Exception as exc:  # pragma: no cover - defensive guard for IO issues
+        logger.warning(
+            "target_metadata_summary_load_failed",
+            path=str(path),
+            error=str(exc),
+        )
+        return pd.DataFrame()
+
+
 def run_target_postprocess_if_requested(
     source: Path,
     *,
@@ -2107,6 +2135,23 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         meta_path.unlink(missing_ok=True)
         meta_lock_path = meta_path.with_name(meta_path.name + ".lock")
         meta_lock_path.unlink(missing_ok=True)
+        date_hint = getattr(args, "date", None)
+        resolved_date_hint = date_hint.strip() if isinstance(date_hint, str) else None
+        table_hint = getattr(args, "_auto_output_stem", None) or DEFAULT_OUTPUT_STEM
+        table_name_value, date_tag = _resolve_output_metadata(
+            export_path,
+            date_hint=resolved_date_hint,
+            table_hint=table_hint,
+        )
+        qc_summary = _build_metadata_summary(out_df)
+        io.save_metadata(
+            table_name=table_name_value,
+            date_tag=date_tag,
+            args=args,
+            qc_summary=qc_summary,
+            output_dir=export_path.parent,
+            artifacts=[export_path],
+        )
         rows_dropped = max(rows_total - rows_kept, 0)
         stats: Stats = {
             "rows_total": rows_total,
@@ -2526,12 +2571,15 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
             raise PipelineError(str(exc)) from exc
 
+    metadata_summary: dict[str, Any] | None = None
+
     def writer(
         chunks: Iterator[pd.DataFrame],
         destination: Path,
         col_order: Sequence[str] | None,
         key_cols: Sequence[str],
     ) -> Path:
+        nonlocal metadata_summary
         resolved_keys = list(key_cols) if key_cols else key_columns
         column_order: Sequence[str] | None = col_order if reindex_raw else None
 
@@ -2560,6 +2608,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     http_requests=chembl_http_requests,
                 ),
             )
+            metadata_summary = {"total_rows": int(post_cleanup_rows_total)}
             return final_path
 
         frames: list[pd.DataFrame] = []
@@ -2633,6 +2682,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 http_requests=chembl_http_requests,
             ),
         )
+        metadata_summary = _build_metadata_summary(final_df)
         return final_path
 
     failure_path = normalized_output.with_name(
@@ -2712,6 +2762,46 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         "chembl_placeholder_replacements",
         total=placeholder_replacements,
     )
+
+    if exit_code == 0:
+        dataset_for_metadata = dataset_path
+        if not dataset_for_metadata.exists():
+            dataset_for_metadata = final_output
+
+        date_hint = getattr(args, "date", None)
+        resolved_date_hint = date_hint.strip() if isinstance(date_hint, str) else None
+        table_hint = getattr(args, "_auto_output_stem", None) or DEFAULT_OUTPUT_STEM
+        table_name_value, date_tag = _resolve_output_metadata(
+            dataset_for_metadata,
+            date_hint=resolved_date_hint,
+            table_hint=table_hint,
+        )
+
+        metadata_summary_payload = metadata_summary
+        if not metadata_summary_payload:
+            frame = _load_metadata_frame(dataset_for_metadata, cfg=cfg)
+            metadata_summary_payload = _build_metadata_summary(frame)
+
+        artifacts_obj = getattr(execution, "artifacts", None)
+        artifact_paths: list[Path] = [dataset_for_metadata]
+        if artifacts_obj is not None:
+            artifact_paths.extend(
+                [
+                    Path(artifacts_obj.dataset),
+                    Path(artifacts_obj.quality_report),
+                    Path(artifacts_obj.correlation_report),
+                ]
+            )
+        unique_artifacts = list(dict.fromkeys(artifact_paths))
+
+        io.save_metadata(
+            table_name=table_name_value,
+            date_tag=date_tag,
+            args=args,
+            qc_summary=metadata_summary_payload,
+            output_dir=dataset_for_metadata.parent,
+            artifacts=unique_artifacts,
+        )
 
     if exit_code == 0 and not final_output.exists():
         if dataset_path.exists():
@@ -2878,6 +2968,25 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
             exc=exc,
         )
         return 1
+
+    metadata_frame = _load_metadata_frame(output_path, cfg=cfg)
+    qc_summary = _build_metadata_summary(metadata_frame)
+    date_hint = getattr(args, "date", None)
+    resolved_date_hint = date_hint.strip() if isinstance(date_hint, str) else None
+    table_hint = getattr(args, "_auto_output_stem", None) or DEFAULT_OUTPUT_STEM
+    table_name_value, date_tag = _resolve_output_metadata(
+        output_path,
+        date_hint=resolved_date_hint,
+        table_hint=table_hint,
+    )
+    io.save_metadata(
+        table_name=table_name_value,
+        date_tag=date_tag,
+        args=args,
+        qc_summary=qc_summary,
+        output_dir=output_path.parent,
+        artifacts=[output_path],
+    )
     return 0
 
 
@@ -4088,6 +4197,19 @@ def validate_and_write(
         date_tag=inferred_date_tag,
         output_path=output_path,
         key_columns=key_columns,
+    )
+    metadata_summary = _build_metadata_summary(final_df)
+    io.save_metadata(
+        table_name=inferred_table_name,
+        date_tag=inferred_date_tag,
+        args=args,
+        qc_summary=metadata_summary,
+        output_dir=artifacts.dataset.parent,
+        artifacts=[
+            artifacts.dataset,
+            artifacts.quality_report,
+            artifacts.correlation_report,
+        ],
     )
     logger.info(
         "standard_outputs_written",
