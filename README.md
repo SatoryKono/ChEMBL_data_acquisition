@@ -158,6 +158,29 @@ pre-commit run --all-files
 All hooks must pass locally before pushing — CI enforces the same suite to
 guarantee consistent formatting and linting outcomes.
 
+### Cleaning generated artefacts
+
+Use the consolidated cleanup helper to purge build artefacts, cached pytest
+reports and transient pipeline exports:
+
+```bash
+python scripts/cleanup_project.py --dry-run
+python scripts/cleanup_project.py --all
+```
+
+The `--dry-run` flag prints the planned actions without deleting anything. The
+script groups cleanups into categories (inspect them with
+`python scripts/cleanup_project.py --list`) and skips files tracked by Git to
+avoid removing fixtures or documentation. The default `--all` sweep removes
+tool caches (`.pytest_cache`, `.mypy_cache`, `__pycache__`), stale reports under
+`reports/`, logs, temporary CSVs in `data/output*/` and any stray `*.tmp` / `*.lock`
+files.
+
+`make clean` runs the same sweep and then removes the virtual environment by
+calling `clean-venv`. Invoke `make clean-artifacts` to keep `.venv/` intact or
+execute `tox -e clean` when you prefer a tox-managed wrapper around the Python
+script.
+
 Inspect the orchestrator and pipeline-specific flags:
 
 ```bash
