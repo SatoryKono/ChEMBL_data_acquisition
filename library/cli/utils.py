@@ -736,6 +736,24 @@ def run_pipeline(
                         if strict_mode:
                             aborted = True
                             raise _AbortPipeline(1) from exc
+                    else:
+                        if not isinstance(chunk, pd.DataFrame):
+                            exit_code = 1
+                            aborted = True
+                            failed_metadata_hooks.add(hook_name)
+                            use_logger.error(
+                                "metadata_hook_invalid_return",
+                                hook=hook_name,
+                                error=(
+                                    f"metadata hook {hook_name} returned "
+                                    f"{type(chunk).__name__}; expected pandas.DataFrame"
+                                ),
+                                context="chunk",
+                                chunk_index=chunk_index,
+                                rows=chunk_rows_total,
+                                strict_mode=strict_mode,
+                            )
+                            raise _AbortPipeline(1)
 
                 _refresh_column_tracking(chunk)
 
@@ -825,6 +843,22 @@ def run_pipeline(
                         failed_metadata_hooks.add(hook_name)
                         if strict_mode:
                             raise _AbortPipeline(1) from exc
+                    else:
+                        if not isinstance(empty, pd.DataFrame):
+                            exit_code = 1
+                            aborted = True
+                            failed_metadata_hooks.add(hook_name)
+                            use_logger.error(
+                                "metadata_hook_invalid_return",
+                                hook=hook_name,
+                                error=(
+                                    f"metadata hook {hook_name} returned "
+                                    f"{type(empty).__name__}; expected pandas.DataFrame"
+                                ),
+                                context="empty_frame",
+                                strict_mode=strict_mode,
+                            )
+                            raise _AbortPipeline(1)
                 _refresh_column_tracking(empty)
                 yield empty.reindex(columns=col_order) if col_order else empty
 
