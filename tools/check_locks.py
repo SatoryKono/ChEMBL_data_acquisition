@@ -100,14 +100,15 @@ def _check_poetry_lock() -> None:
         raise CheckError(f"Expected poetry lock file at '{POETRY_LOCK.relative_to(REPO_ROOT)}'")
 
     original_content = POETRY_LOCK.read_text()
+    refreshed_content = original_content
 
     try:
         _run_command(("poetry", "lock", "--no-update"))
+        refreshed_content = POETRY_LOCK.read_text()
     finally:
         # Restore the original file to avoid leaving the repository dirty.
         POETRY_LOCK.write_text(original_content)
 
-    refreshed_content = POETRY_LOCK.read_text()
     if refreshed_content != original_content:
         expected_lines = original_content.replace("\r\n", "\n").splitlines()
         actual_lines = refreshed_content.replace("\r\n", "\n").splitlines()
