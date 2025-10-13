@@ -598,3 +598,140 @@ def test_finalize_output__idempotent_results(
     assert first_exit == 0 == second_exit
     assert first_dataset == second_dataset
     assert first_hash == second_hash
+
+
+@pytest.mark.integration
+def test_finalize_output__auto_sampling_applied(
+    tmp_path: Path,
+    sample_input_csv: Path,
+    cfg,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    cfg.system.doc_quality.enable = True
+    cfg.system.doc_quality.sample_rows = None
+    cfg.system.doc_quality.auto_sample_row_limit = 3
+
+    chunk = pd.DataFrame(
+        {
+            "molecule_chembl_id": [f"CHEMBL{i}" for i in range(6)],
+            "numeric_value": list(range(6)),
+        }
+    )
+    output_path = tmp_path / "auto_sample.csv"
+    stats_supplier = _StatsSupplier(_base_stats())
+
+    qc_calls: dict[str, object] = {}
+    corr_calls: dict[str, object] = {}
+
+    def _fake_qc(
+        frame: pd.DataFrame,
+        *,
+        table_name: str,
+        include_columns,
+        exclude_columns,
+        sample_rows,
+        profiler=None,
+    ) -> pd.DataFrame:
+        qc_calls["sample_rows"] = sample_rows
+        return pd.DataFrame()
+
+    def _fake_corr(
+        frame: pd.DataFrame,
+        *,
+        table_name: str,
+        include_columns,
+        exclude_columns,
+        sample_rows,
+        method: str = "pearson",
+        profiler=None,
+    ) -> pd.DataFrame:
+        corr_calls["sample_rows"] = sample_rows
+        corr_calls["include_columns"] = include_columns
+        return pd.DataFrame()
+
+    monkeypatch.setattr(cli.qc_report, "generate_qc_report", _fake_qc)
+    monkeypatch.setattr(
+        cli.data_correlation, "generate_correlation_report", _fake_corr
+    )
+
+    with caplog.at_level("WARNING", logger="chembl"):
+        result = cli.finalize_output(
+            [chunk],
+            cfg=cfg,
+            output=output_path,
+            parent_stats_supplier=stats_supplier,
+            input_csv=sample_input_csv,
+        )
+
+    exit_code, artifacts = _unwrap_finalize_result(result)
+    assert exit_code == 0
+    assert qc_calls.get("sample_rows") == 3
+    assert corr_calls.get("sample_rows") == 3
+    assert any(
+        "doc_quality_sampling_applied" in record.message for record in caplog.records
+    )
+
+
+@pytest.mark.integration
+def test_finalize_output__correlation_column_sampling(
+    tmp_path: Path,
+    sample_input_csv: Path,
+    cfg,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    cfg.system.doc_quality.enable = True
+    cfg.system.doc_quality.sample_rows = None
+    cfg.system.doc_quality.auto_sample_row_limit = None
+    cfg.system.doc_quality.correlation_max_columns = 2
+
+    chunk = pd.DataFrame(
+        {
+            "molecule_chembl_id": [f"CHEMBL{i}" for i in range(4)],
+            "numeric_a": [1, 2, 3, 4],
+            "numeric_b": [2, 3, 4, 5],
+            "numeric_c": [3, 4, 5, 6],
+            "text_col": ["a", "b", "c", "d"],
+        }
+    )
+    output_path = tmp_path / "corr_sample.csv"
+    stats_supplier = _StatsSupplier(_base_stats())
+
+    corr_calls: dict[str, object] = {}
+
+    def _fake_corr(
+        frame: pd.DataFrame,
+        *,
+        table_name: str,
+        include_columns,
+        exclude_columns,
+        sample_rows,
+        method: str = "pearson",
+        profiler=None,
+    ) -> pd.DataFrame:
+        corr_calls["include_columns"] = include_columns
+        corr_calls["sample_rows"] = sample_rows
+        return pd.DataFrame()
+
+    monkeypatch.setattr(
+        cli.data_correlation, "generate_correlation_report", _fake_corr
+    )
+
+    with caplog.at_level("WARNING", logger="chembl"):
+        result = cli.finalize_output(
+            [chunk],
+            cfg=cfg,
+            output=output_path,
+            parent_stats_supplier=stats_supplier,
+            input_csv=sample_input_csv,
+        )
+
+    exit_code, artifacts = _unwrap_finalize_result(result)
+    assert exit_code == 0
+    include_columns = corr_calls.get("include_columns")
+    assert include_columns == ("numeric_a", "numeric_b")
+    assert corr_calls.get("sample_rows") is None
+    assert any(
+        "correlation_columns_sampled" in record.message for record in caplog.records
+    )

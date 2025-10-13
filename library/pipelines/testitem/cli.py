@@ -1447,21 +1447,63 @@ def finalize_output(
     doc_quality_cfg = cfg.system.doc_quality
     include_columns = getattr(doc_quality_cfg, "include_columns", None)
     exclude_columns = getattr(doc_quality_cfg, "exclude_columns", None)
-    sample_rows = getattr(doc_quality_cfg, "sample_rows", None)
+    sample_rows_cfg = getattr(doc_quality_cfg, "sample_rows", None)
+    auto_sample_limit = getattr(doc_quality_cfg, "auto_sample_row_limit", None)
+    correlation_max_columns = getattr(doc_quality_cfg, "correlation_max_columns", None)
+
+    row_count = int(len(dataset_frame))
+    effective_sample_rows = sample_rows_cfg
+    if (
+        auto_sample_limit is not None
+        and row_count > auto_sample_limit
+        and (
+            effective_sample_rows is None
+            or effective_sample_rows > int(auto_sample_limit)
+        )
+    ):
+        effective_sample_rows = int(auto_sample_limit)
+        logger.warning(
+            "doc_quality_sampling_applied",
+            rows=row_count,
+            sample_rows=effective_sample_rows,
+            limit=int(auto_sample_limit),
+        )
+
+    correlation_include_columns = include_columns
+    if (
+        correlation_max_columns is not None
+        and correlation_max_columns >= 1
+        and include_columns is None
+    ):
+        exclude_set = set(exclude_columns or ())
+        numeric_columns = [
+            column
+            for column in dataset_frame.select_dtypes(include=["number"]).columns
+            if column not in exclude_set and column != RAW_INDEX_COLUMN
+        ]
+        if len(numeric_columns) > int(correlation_max_columns):
+            limited_columns = list(numeric_columns[: int(correlation_max_columns)])
+            correlation_include_columns = tuple(limited_columns)
+            logger.warning(
+                "correlation_columns_sampled",
+                total=len(numeric_columns),
+                limit=int(correlation_max_columns),
+                columns=limited_columns,
+            )
 
     quality_report = qc_report.generate_qc_report(
         dataset_frame,
         table_name=table_name,
         include_columns=include_columns,
         exclude_columns=exclude_columns,
-        sample_rows=sample_rows,
+        sample_rows=effective_sample_rows,
     )
     correlation_report = data_correlation.generate_correlation_report(
         dataset_frame,
         table_name=table_name,
-        include_columns=include_columns,
+        include_columns=correlation_include_columns,
         exclude_columns=exclude_columns,
-        sample_rows=sample_rows,
+        sample_rows=effective_sample_rows,
     )
 
     try:

@@ -744,6 +744,8 @@ class DocQualityCfg(_BaseModel):
     include_columns: tuple[str, ...] | None = None
     exclude_columns: tuple[str, ...] | None = None
     fatal_on_error: bool = False
+    auto_sample_row_limit: int | None = Field(default=None, ge=1)
+    correlation_max_columns: int | None = Field(default=None, ge=1)
 
 
 class ResourcesCfg(_BaseModel):
