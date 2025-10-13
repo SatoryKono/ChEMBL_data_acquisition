@@ -283,7 +283,8 @@ bootstrap-хелперы. По умолчанию каждая команда п
 - Протокол (DOCX, источник в Markdown): формируется по требованию скриптом
   `scripts/convert_md_to_docx.py` в файл
   `docs/ChEMBL_Data_Acquisition_Protocol_v2.1.docx` (артефакт поставки,
-  не хранится в git). Исходники: [`docs/ru/PROTOCOL_RU.md`](./docs/ru/PROTOCOL_RU.md)
+  не хранится в git). Для сборки перед публикацией используйте `make protocol-docx`.
+  Исходники: [`docs/ru/PROTOCOL_RU.md`](./docs/ru/PROTOCOL_RU.md)
   и синхронизированная английская версия
   [`docs/en/PROTOCOL_EN.md`](./docs/en/PROTOCOL_EN.md).
   Чтобы пересобрать DOCX локально:
