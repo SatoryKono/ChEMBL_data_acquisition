@@ -102,6 +102,42 @@ core workflows stay functional on Python 3.13.
 > reproducible: adjust the version bounds in the project metadata first, then
 > regenerate the lock file so all three sources stay in sync.
 
+### Updating the dependency lock
+
+The lock file is generated from the project metadata and must reflect packages
+available on the public PyPI index. To refresh it:
+
+1. Activate the project virtual environment and install
+   [`pip-tools`](https://github.com/jazzband/pip-tools) if it is not already
+   present:
+
+   ```bash
+   source .venv/bin/activate
+   python -m pip install --upgrade pip-tools
+   ```
+
+2. Recompile `requirements-lock.txt` using the metadata in `pyproject.toml` and
+   the public PyPI index (no preview mirrors):
+
+   ```bash
+   pip-compile pyproject.toml --extra dev --output-file=requirements-lock.txt
+   ```
+
+3. Verify that every pinned version can be resolved from PyPI by installing the
+   lock file into a clean environment:
+
+   ```bash
+   python -m pip install --upgrade pip
+   pip install -r requirements-lock.txt
+   ```
+
+4. Commit the updated lock file together with any related dependency changes in
+   `pyproject.toml` or `requirements-dev.txt`.
+
+These steps ensure the lock references only published packages, keep the
+development constraints synchronised and provide a deterministic installation
+path for CI.
+
 ### Pre-commit hooks
 
 The repository ships a curated [`pre-commit`](https://pre-commit.com/)\
