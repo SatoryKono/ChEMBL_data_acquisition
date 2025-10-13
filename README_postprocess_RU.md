@@ -117,7 +117,7 @@ sequenceDiagram
 
 Pytest-сьют разбит на `tests/unit/`, `tests/integration/`, `tests/integration/postprocessing/` и `tests/e2e/` в соответствии со слоями конвейера. В каждом каталоге соблюдаются детерминированные фикстуры, строгие соглашения об именовании (`test_<module>.py`, `test_<unit_of_work>__<case>`) и покрытие ключевого QA-чек-листа (валидация схем, нормализация, обогащение, логирование, инварианты экспорта, деградационные сценарии и идемпотентность). 【F:tests/README.md†L1-L88】
 
-Параметры pytest по умолчанию (`-q --disable-warnings --maxfail=1 --durations=10`) определены в `pytest.ini`; комбинируйте их с маркерами (`unit`, `integration`, `e2e`) для локальных прогонов. 【F:pytest.ini†L1-L6】
+Параметры pytest по умолчанию (`-q --disable-warnings --durations=10 -m "not slow and not network"`) определены в `pytest.ini`; комбинируйте их с маркерами (`unit`, `integration`, `e2e`) для локальных прогонов или расширяйте выборку, когда нужно задействовать сценарии со `slow`/`network`. 【F:pytest.ini†L1-L6】
 
 Контрольные показатели:
 
