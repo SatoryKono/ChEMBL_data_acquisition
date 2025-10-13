@@ -86,26 +86,63 @@ StatsExtraMapping = Mapping[str, object]
 
 
 class _ParquetChunkStore:
-    """Persist prepared chunks to temporary parquet files for later reuse."""
+    """Persist prepared chunks to temporary files for later reuse.
 
-    __slots__ = ("_tmpdir", "_paths", "_row_count")
+    The store prefers parquet output but gracefully falls back to pickle when
+    the optional parquet engines are unavailable in the runtime environment.
+    """
+
+    __slots__ = ("_tmpdir", "_paths", "_row_count", "_backend")
 
     def __init__(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory(prefix="pipeline_chunks_")
         self._paths: list[Path] = []
         self._row_count = 0
+        self._backend, reason = self._detect_backend()
+        if self._backend != "parquet":
+            default_logger.warning(
+                "chunk_store_backend_fallback",
+                backend=self._backend,
+                reason=reason or "parquet engine unavailable",
+            )
+
+    @staticmethod
+    def _detect_backend() -> tuple[str, str | None]:
+        """Determine the storage backend to use for chunk persistence."""
+
+        try:  # pandas ensures the module exists even without pyarrow installed
+            from pandas.io import parquet as pd_parquet  # type: ignore
+        except Exception as exc:  # pragma: no cover - defensive
+            return "pickle", str(exc)
+
+        try:
+            pd_parquet.get_engine("auto")
+        except Exception as exc:  # pragma: no cover - fallback path is tested
+            return "pickle", str(exc)
+        return "parquet", None
 
     def append(self, frame: pd.DataFrame) -> None:
         if not isinstance(frame, pd.DataFrame):
             raise TypeError("chunk store expects pandas DataFrame inputs")
-        path = Path(self._tmpdir.name) / f"chunk_{len(self._paths):05d}.parquet"
-        frame.to_parquet(path, index=False)
+
+        suffix = ".parquet" if self._backend == "parquet" else ".pkl"
+        path = Path(self._tmpdir.name) / f"chunk_{len(self._paths):05d}{suffix}"
+        sanitised = frame.reset_index(drop=True)
+
+        if self._backend == "parquet":
+            sanitised.to_parquet(path, index=False)
+        else:
+            sanitised.to_pickle(path)
+
         self._paths.append(path)
         self._row_count += len(frame)
 
     def iter_frames(self) -> Iterator[pd.DataFrame]:
         for path in self._paths:
-            yield pd.read_parquet(path)
+            if self._backend == "parquet":
+                yield pd.read_parquet(path)
+            else:
+                yield pd.read_pickle(path)
 
     @property
     def row_count(self) -> int:

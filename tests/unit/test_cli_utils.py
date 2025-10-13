@@ -7,6 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pandas as pd
+import pandas.testing as tm
 import pytest
 
 from library import cli_utils
@@ -162,3 +164,44 @@ def test_resolve_standard_output_naming__temporary_working_path() -> None:
 
     assert table_name == "targets"
     assert date_tag == "20240101"
+
+
+@pytest.mark.unit
+@pytest.mark.pipeline_scenario(
+    "csv_loading",
+    "normalization",
+    "enrichment",
+    "transformation_rules",
+    "missing_data",
+    "logging",
+    "assembly",
+    "export",
+    "degradation",
+    "idempotence",
+)
+def test_parquet_chunk_store__fallback_to_pickle_when_engine_missing(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The chunk store must remain usable when parquet engines are absent."""
+
+    def _raise_import_error(*_args, **_kwargs):
+        raise ImportError("no parquet engine available")
+
+    monkeypatch.setattr("pandas.io.parquet.get_engine", _raise_import_error)
+
+    caplog.set_level("WARNING", logger="chembl")
+
+    store = cli_utils._ParquetChunkStore()
+    frame = pd.DataFrame({"value": [1, 2], "label": ["a", "b"]})
+
+    store.append(frame)
+
+    assert store.row_count == len(frame)
+    assert store._backend == "pickle"
+    assert store._paths[0].suffix == ".pkl"
+
+    (restored,) = list(store.iter_frames())
+    tm.assert_frame_equal(restored, frame.reset_index(drop=True))
+
+    fallback_messages = [rec.message for rec in caplog.records]
+    assert any("chunk_store_backend_fallback" in message for message in fallback_messages)
