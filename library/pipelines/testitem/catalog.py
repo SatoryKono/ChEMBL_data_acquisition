@@ -23,6 +23,11 @@ from library.integration.molecule_catalog import (
     write_parent_catalog_cache,
 )
 
+__all__ = [
+    "load_molecule_hierarchy_lookup",
+    "_resolve_catalog_load_source",
+]
+
 _DEFAULT_CATALOG_CFG = MoleculeCatalogCfg()
 
 _TYPO_PARENT_COLUMN = "parant_molecule_id"
