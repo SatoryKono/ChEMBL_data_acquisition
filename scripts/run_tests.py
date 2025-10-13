@@ -73,6 +73,8 @@ def _ensure_pytest_json_report() -> None:
         )
         sys.exit(2)
 
+    importlib.invalidate_caches()
+
     spec = importlib.util.find_spec(module_name)
     if spec is None:
         print(
