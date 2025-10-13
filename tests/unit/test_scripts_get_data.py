@@ -1,85 +1,48 @@
 from __future__ import annotations
 
 import importlib
-import importlib.util
+import runpy
 import sys
-from importlib.machinery import SourceFileLoader
-from pathlib import Path
 
 import pytest
 
 
 @pytest.mark.unit
-def test_load_module__merge_conflict_hint(monkeypatch):
-    """The compatibility wrapper should surface unresolved merge conflicts."""
+def test_wrapper_main__aliases_library_main():
+    """Wrapper should expose the library CLI implementation transparently."""
 
-    script_path = Path("scripts/get_data.py").resolve()
-    module_name = "tests.scripts_get_data_conflict"
-    loader = SourceFileLoader(module_name, str(script_path))
-    spec = importlib.util.spec_from_loader(module_name, loader)
-    assert spec is not None
-    module = importlib.util.module_from_spec(spec)
+    sys.modules.pop("scripts.get_data", None)
 
-    original_import_module = importlib.import_module
+    wrapper = importlib.import_module("scripts.get_data")
+    library_module = importlib.import_module("library.cli.commands.get_data")
 
-    def _patched_import_module(name: str, package: str | None = None):  # type: ignore[override]
-        if name == "library.cli.commands.get_data":
-            raise SyntaxError(
-                "invalid decimal literal",
-                (
-                    "library/cli_utils.py",
-                    201,
-                    0,
-                    ">>>>>>> 9f4ae5808230279e785241afb817c7d4f744ff3a\n",
-                ),
-            )
-        return original_import_module(name, package)
-
-    monkeypatch.setattr(importlib, "import_module", _patched_import_module)
-
-    try:
-        with pytest.raises(SystemExit) as excinfo:
-            loader.exec_module(module)
-    finally:
-        sys.modules.pop(module_name, None)
-
-    message = str(excinfo.value)
-    assert "library/cli_utils.py:201" in message
-    assert "merge conflict" in message
+    assert wrapper.main is library_module.main
 
 
 @pytest.mark.unit
-def test_run_stage__inserts_default_document_subcommand(monkeypatch):
-    """Document stage should default to the ``all`` subcommand when omitted."""
+def test_main_entrypoint__delegates_to_library_main(monkeypatch):
+    """Executing the wrapper as a script should invoke the library main."""
 
-    from scripts import get_data as cli
+    library_module = importlib.import_module("library.cli.commands.get_data")
 
-    stage = cli.Stage("document", "get_document_data.py")
-    tokens = (
-        "--log-level",
-        "INFO",
-        "--limit",
-        "5",
-        "--input-dir",
-        "data\\input",
-        "--output-dir",
-        "data\\output",
-    )
-    forward = cli.ForwardArgs(tokens=tokens, extras_start=2, extra_len=6)
+    calls: dict[str, object] = {}
 
-    captured: dict[str, list[str]] = {}
+    def _fake_main(argv=None):
+        calls["argv"] = argv
+        return 17
 
-    class _Result:
-        returncode = 0
+    monkeypatch.setattr(library_module, "main", _fake_main)
+    sys.modules.pop("scripts.get_data", None)
 
-    def _fake_run(command, *, check=False, env=None):  # type: ignore[override]
-        captured["command"] = command
-        return _Result()
+    previous_main = sys.modules.get("__main__")
+    try:
+        with pytest.raises(SystemExit) as excinfo:
+            runpy.run_module("scripts.get_data", run_name="__main__")
+    finally:
+        if previous_main is not None:
+            sys.modules["__main__"] = previous_main
+        else:
+            sys.modules.pop("__main__", None)
 
-    monkeypatch.setattr(cli.subprocess, "run", _fake_run)
-
-    cli.run_stage(stage, forward)
-
-    command = captured["command"]
-    assert "all" in command[2:], "expected default 'all' subcommand to be forwarded"
-    assert command.index("all") < command.index("--limit")
+    assert excinfo.value.code == 17
+    assert calls["argv"] is None
