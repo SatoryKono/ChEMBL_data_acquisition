@@ -40,6 +40,8 @@ ensure_project_root(__file__)
 from library.cli import configure_logger, create_logger_config, setup_cli_logging  # noqa: E402
 from library.cli.logging import CLILoggingContext  # noqa: E402
 from library.config import DEFAULT_CONFIG_PATH, load_config  # noqa: E402
+from library.io.path_utils import OUTPUT_DIR as LIB_OUTPUT_DIR  # noqa: E402
+from library.io.path_utils import ROOT as LIB_ROOT  # noqa: E402
 
 
 def _guard_cli_module() -> None:
@@ -122,11 +124,11 @@ STAGE_SEQUENCE_LABEL = " → ".join(
 )
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPTS_DIR.parent
+PROJECT_ROOT = LIB_ROOT
 DATA_DIR = PROJECT_ROOT / "data"
 DEFAULT_INPUT_DIR = Path("data") / "input"
 DEFAULT_OUTPUT_DIR = Path("data") / "output"
-OUTPUT_DIR = PROJECT_ROOT / DEFAULT_OUTPUT_DIR
+OUTPUT_DIR = LIB_OUTPUT_DIR
 LOGS_DIR = DATA_DIR / "logs"
 _PUBCHEM_ENV_VAR = "CHEMBL_DA_PUBCHEM_ENABLE"
 _BASE_PATH_ENV_VAR = "CHEMBL_DA_BASE_PATH"
@@ -204,20 +206,20 @@ def _resolve_forward_output_dir(tokens: Sequence[str]) -> Path:
     raw_output = _extract_option_value(tokens, "--output-dir")
     if not raw_output:
         raw_output = os.fspath(DEFAULT_OUTPUT_DIR)
-    output_candidate = _normalise_cli_path(raw_output).expanduser()
+    output_candidate = _normalise_cli_path(raw_output)
 
     if output_candidate.is_absolute():
         return output_candidate.resolve()
 
     raw_base = _extract_option_value(tokens, "--base-path")
     if raw_base:
-        base_candidate = _normalise_cli_path(raw_base).expanduser()
+        base_candidate = _normalise_cli_path(raw_base)
         if not base_candidate.is_absolute():
-            base_candidate = (Path.cwd() / base_candidate).resolve()
+            base_candidate = (PROJECT_ROOT / base_candidate).resolve()
         else:
             base_candidate = base_candidate.resolve()
     else:
-        base_candidate = PROJECT_ROOT.resolve()
+        base_candidate = PROJECT_ROOT
 
     return (base_candidate / output_candidate).resolve()
 
@@ -246,12 +248,23 @@ def _normalize_env_bool(value: str | None) -> bool | None:
 def _resolve_config_location(args: Sequence[str]) -> tuple[Path, Path | None]:
     config_value = _extract_option_value(args, "--config")
     if config_value:
-        config_path = Path(config_value)
+        config_path = _normalise_cli_path(config_value)
+        if not config_path.is_absolute():
+            config_path = (PROJECT_ROOT / config_path).resolve()
+        else:
+            config_path = config_path.resolve()
     else:
         config_path = DEFAULT_CONFIG_PATH
     base_value = _extract_option_value(args, "--base-path")
-    base_path = Path(base_value).expanduser() if base_value else None
-    return Path(config_path).expanduser(), base_path
+    if base_value:
+        base_candidate = _normalise_cli_path(base_value)
+        if not base_candidate.is_absolute():
+            base_path = (PROJECT_ROOT / base_candidate).resolve()
+        else:
+            base_path = base_candidate.resolve()
+    else:
+        base_path = None
+    return config_path, base_path
 
 
 def _pubchem_enabled_from_config(args: Sequence[str]) -> bool | None:
@@ -309,16 +322,16 @@ def _ensure_base_path_env(args: Sequence[str], env: dict[str, str]) -> None:
 
     base_path_value = _extract_option_value(args, "--base-path")
     if not base_path_value:
-        env[_BASE_PATH_ENV_VAR] = os.fspath(PROJECT_ROOT.resolve())
+        env[_BASE_PATH_ENV_VAR] = os.fspath(PROJECT_ROOT)
         return
 
-    candidate = Path(base_path_value).expanduser()
+    candidate = _normalise_cli_path(base_path_value)
     if not candidate.is_absolute():
-        candidate = (Path.cwd() / candidate).resolve()
+        candidate = (PROJECT_ROOT / candidate).resolve()
     else:
         candidate = candidate.resolve()
 
-    env[_BASE_PATH_ENV_VAR] = str(candidate)
+    env[_BASE_PATH_ENV_VAR] = os.fspath(candidate)
 
 
 def _resolve_forward_base_path(
@@ -339,13 +352,13 @@ def _resolve_forward_base_path(
         return cli_base_path
 
     if fallback is None:
-        default_base_path = PROJECT_ROOT.resolve()
+        default_base_path = PROJECT_ROOT
     else:
-        default_base_path = Path(fallback).expanduser()
-        if not default_base_path.is_absolute():
-            default_base_path = (Path.cwd() / default_base_path).resolve()
+        fallback_path = _normalise_cli_path(os.fspath(fallback))
+        if not fallback_path.is_absolute():
+            default_base_path = (PROJECT_ROOT / fallback_path).resolve()
         else:
-            default_base_path = default_base_path.resolve()
+            default_base_path = fallback_path.resolve()
 
     try:
         config = load_config(config_path, base_path=None)
@@ -356,9 +369,12 @@ def _resolve_forward_base_path(
         io_cfg = getattr(local_cfg, "io", None) if local_cfg is not None else None
         output_dir = getattr(io_cfg, "output_dir", None) if io_cfg is not None else None
         if output_dir is not None:
-            output_path = Path(output_dir).expanduser()
-            if output_path.is_absolute():
-                return output_path.resolve().parent
+            output_path = _normalise_cli_path(os.fspath(output_dir))
+            if not output_path.is_absolute():
+                output_path = (PROJECT_ROOT / output_path).resolve()
+            else:
+                output_path = output_path.resolve()
+            return output_path.parent
 
     return default_base_path
 
@@ -566,10 +582,10 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
     quoted_command = shlex.join(command)
     logging.info("▶ Запуск %s", stage.script)
     logging.info("   Команда: %s", quoted_command)
-    logging.info("   Рабочая директория: %s", os.getcwd())
+    logging.info("   Рабочая директория: %s", os.fspath(PROJECT_ROOT))
 
     start = datetime.now()
-    result = subprocess.run(command, check=False, env=env)
+    result = subprocess.run(command, check=False, env=env, cwd=PROJECT_ROOT)
     duration = (datetime.now() - start).total_seconds()
 
     if result.returncode != 0:
@@ -627,10 +643,10 @@ def log_summary(durations: list[tuple[str, float]]) -> None:
         logging.info(" • %s: %.1f сек.", name, value)
 
 
-def list_output_files(output_dir: Path) -> list[Path]:
-    """Return a sorted list of CSV artefacts present in ``output_dir``."""
 
-    resolved = output_dir.expanduser().resolve()
+def count_output_files(output_dir: Path) -> int:
+    resolved = output_dir.resolve()
+
     if not resolved.exists():
         return []
     return sorted(
@@ -695,7 +711,7 @@ def _remove_directory(path: Path, *, output_dir: Path) -> bool:
 def cleanup_intermediate_files(output_dir: Path) -> int:
     """Remove temporary and diagnostic artefacts from ``output_dir``."""
 
-    resolved = output_dir.expanduser().resolve()
+    resolved = output_dir.resolve()
     if not resolved.exists():
         logging.debug(
             "[CLEANUP] Пропуск очистки: каталог %s не найден",
