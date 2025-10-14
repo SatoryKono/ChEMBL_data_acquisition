@@ -2,7 +2,7 @@
 freezegun==1.5.5
 # Ensure type stubs stay aligned with the optional dev extra and the lock file
 # even when extras are not expanded by the environment consuming this file.
-pandas-stubs==2.1.4.231227
+pandas-stubs==2.2.3.250527
 types-cachetools==5.3.0.0
 types-jsonschema==4.23.0.20240712
 types-openpyxl==3.1.0.20240425
