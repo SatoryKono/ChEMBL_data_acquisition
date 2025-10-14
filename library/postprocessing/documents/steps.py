@@ -17,7 +17,6 @@ from library.postprocessing.common.logging import PipelineRunMetrics
 
 from .schema import DOCUMENT_SCHEMA, validate_documents
 
-
 _TITLE_SOURCE_COLUMNS: tuple[str, ...] = (
     "title",
     "chembl.title",

@@ -105,6 +105,17 @@ def test_build_assay_options__forwards_skip_existing(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_build_testitem_options__forwards_date_prefix(tmp_path: Path) -> None:
+    cfg = _make_config(tmp_path)
+    options = get_data._build_testitem_options(
+        cfg,
+        cfg.input_path("testitem"),
+        cfg.output_path("testitem"),
+    )
+    assert options.date == cfg.date_prefix
+
+
+@pytest.mark.unit
 def test_build_activity_options__forwards_skip_and_dry_run(tmp_path: Path) -> None:
     cfg = replace(_make_config(tmp_path), skip_existing=True, dry_run=True)
     options = get_data._build_activity_options(
@@ -1205,6 +1216,7 @@ def test_run_step__testitem_forces_pubchem_enabled(
             offset=None,
             emit_legacy_artifacts=False,
             pubchem_enabled=False,
+            date=None,
         )
 
     def _runner(config: Config, options: TestitemPipelineOptions) -> PipelineRunResult:

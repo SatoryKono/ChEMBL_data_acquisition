@@ -13,7 +13,7 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import import_module
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 # NOTE:
 #   ``python scripts/get_data.py`` executed from Windows adds ``scripts``
@@ -33,6 +33,8 @@ except ModuleNotFoundError as exc:  # pragma: no cover - import guard
     sys.modules.pop("scripts", None)
     from scripts._bootstrap import ensure_project_root
 
+ensure_project_root(__file__)
+
 from library.config import DEFAULT_CONFIG_PATH, load_config  # noqa: E402
 from library.config.env import (
     _default_base_path as _config_default_base_path,
@@ -41,6 +43,8 @@ from library.config.env import (
 
 def _guard_cli_module() -> None:
     """Ensure the core ``library.cli.commands.get_data`` module imports cleanly."""
+
+    ensure_project_root(__file__)
 
     try:
         import_module("library.cli.commands.get_data")
@@ -70,6 +74,7 @@ class ForwardArgs:
     tokens: tuple[str, ...]
     extras_start: int
     extra_len: int
+    output_dir: Path
 
     @property
     def extras_end(self) -> int:
@@ -113,6 +118,8 @@ LOGS_DIR = DATA_DIR / "logs"
 _PUBCHEM_ENV_VAR = "CHEMBL_DA_PUBCHEM_ENABLE"
 _BASE_PATH_ENV_VAR = "CHEMBL_DA_BASE_PATH"
 
+_EXPECTED_CSV_COUNT = 15
+
 _CLEANUP_FILE_PATTERNS: tuple[str, ...] = (
     "*.lock",
     "*.pkl.lock",
@@ -152,6 +159,40 @@ def _extract_option_value(args: Sequence[str], option: str) -> str | None:
         if token.startswith(prefixed):
             return token[len(prefixed) :]
     return None
+
+
+def _normalise_cli_path(value: str) -> Path:
+    """Return a :class:`Path` handling Windows-style separators on POSIX hosts."""
+
+    stripped = value.strip()
+    if os.name != "nt" and "\\" in stripped:
+        windows_path = PureWindowsPath(stripped)
+        return Path(windows_path.as_posix())
+    return Path(stripped)
+
+
+def _resolve_forward_output_dir(tokens: Sequence[str]) -> Path:
+    """Return the absolute output directory encoded within ``tokens``."""
+
+    raw_output = _extract_option_value(tokens, "--output-dir")
+    if not raw_output:
+        raw_output = os.fspath(DEFAULT_OUTPUT_DIR)
+    output_candidate = _normalise_cli_path(raw_output).expanduser()
+
+    if output_candidate.is_absolute():
+        return output_candidate.resolve()
+
+    raw_base = _extract_option_value(tokens, "--base-path")
+    if raw_base:
+        base_candidate = _normalise_cli_path(raw_base).expanduser()
+        if not base_candidate.is_absolute():
+            base_candidate = (Path.cwd() / base_candidate).resolve()
+        else:
+            base_candidate = base_candidate.resolve()
+    else:
+        base_candidate = PROJECT_ROOT.resolve()
+
+    return (base_candidate / output_candidate).resolve()
 
 
 def _has_flag(tokens: Sequence[str], option: str) -> bool:
@@ -254,7 +295,10 @@ def _ensure_base_path_env(args: Sequence[str], env: dict[str, str]) -> None:
 
 
 def _resolve_forward_base_path(
-    args: argparse.Namespace, forwarded_extras: Sequence[str]
+    args: argparse.Namespace,
+    forwarded_extras: Sequence[str],
+    *,
+    fallback: Path | str | None = None,
 ) -> Path:
     """Return the base path propagated to pipeline subprocesses."""
 
@@ -266,6 +310,15 @@ def _resolve_forward_base_path(
     config_path, cli_base_path = _resolve_config_location(tokens)
     if cli_base_path is not None:
         return cli_base_path
+
+    if fallback is None:
+        default_base_path = PROJECT_ROOT.resolve()
+    else:
+        default_base_path = Path(fallback).expanduser()
+        if not default_base_path.is_absolute():
+            default_base_path = (Path.cwd() / default_base_path).resolve()
+        else:
+            default_base_path = default_base_path.resolve()
 
     try:
         config = load_config(config_path, base_path=None)
@@ -280,7 +333,7 @@ def _resolve_forward_base_path(
             if output_path.is_absolute():
                 return output_path.resolve().parent
 
-    return _config_default_base_path()
+    return default_base_path
 
 
 def parse_args(
@@ -398,7 +451,13 @@ def _coerce_forward_args(
 ) -> ForwardArgs:
     if isinstance(forward_args, ForwardArgs):
         return forward_args
-    return ForwardArgs(tuple(forward_args), extras_start=len(forward_args), extra_len=0)
+    tokens = tuple(forward_args)
+    return ForwardArgs(
+        tokens,
+        extras_start=len(tokens),
+        extra_len=0,
+        output_dir=_resolve_forward_output_dir(tokens),
+    )
 
 
 def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
@@ -410,7 +469,13 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
     forward = _coerce_forward_args(forward_args)
 
     if not isinstance(forward_args, ForwardArgs):
-        forward_args = ForwardArgs(tuple(forward_args), 0, len(forward_args))
+        tokens = tuple(forward_args)
+        forward_args = ForwardArgs(
+            tokens,
+            extras_start=0,
+            extra_len=len(tokens),
+            output_dir=_resolve_forward_output_dir(tokens),
+        )
 
     if stage.name == "target":
         stage_args = forward.with_default_subcommand(
@@ -483,7 +548,10 @@ def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> Forwar
         forward.extend(["--input-dir", os.fspath(DEFAULT_INPUT_DIR)])
     if not _has_option("--output-dir"):
         forward.extend(["--output-dir", os.fspath(DEFAULT_OUTPUT_DIR)])
-    return ForwardArgs(tuple(forward), extras_start, extra_len)
+
+    tokens = tuple(forward)
+    output_dir = _resolve_forward_output_dir(tokens)
+    return ForwardArgs(tokens, extras_start, extra_len, output_dir)
 
 
 def log_summary(durations: list[tuple[str, float]]) -> None:
@@ -496,10 +564,37 @@ def log_summary(durations: list[tuple[str, float]]) -> None:
         logging.info(" • %s: %.1f сек.", name, value)
 
 
-def count_output_files() -> int:
-    if not OUTPUT_DIR.exists():
+def count_output_files(output_dir: Path) -> int:
+    resolved = output_dir.expanduser().resolve()
+    if not resolved.exists():
         return 0
-    return sum(1 for path in OUTPUT_DIR.glob("*.csv"))
+    return sum(1 for path in resolved.glob("*.csv"))
+
+
+def _resolve_output_directory(
+    args: argparse.Namespace, forward_args: ForwardArgs
+) -> Path:
+    """Return the absolute output directory referenced by the orchestrator."""
+
+    raw_value = _extract_option_value(forward_args.tokens, "--output-dir")
+    candidate = Path(raw_value).expanduser() if raw_value else DEFAULT_OUTPUT_DIR
+    if candidate.is_absolute():
+        return candidate.resolve()
+
+    base_value = _extract_option_value(forward_args.tokens, "--base-path")
+    if base_value:
+        base_path = Path(base_value).expanduser()
+        if not base_path.is_absolute():
+            base_path = (Path.cwd() / base_path).resolve()
+        else:
+            base_path = base_path.resolve()
+    else:
+        extras = forward_args.tokens[
+            forward_args.extras_start : forward_args.extras_end
+        ]
+        base_path = _resolve_forward_base_path(args, extras, fallback=PROJECT_ROOT)
+
+    return (base_path / candidate).resolve()
 
 
 def _is_cleanup_directory(path: Path) -> bool:
@@ -509,14 +604,14 @@ def _is_cleanup_directory(path: Path) -> bool:
     return name in _CLEANUP_DIRECTORY_NAMES
 
 
-def _relative_to_output(path: Path) -> str:
+def _relative_to_output(path: Path, output_dir: Path) -> str:
     try:
-        return os.fspath(path.relative_to(OUTPUT_DIR))
+        return os.fspath(path.relative_to(output_dir))
     except ValueError:
         return os.fspath(path)
 
 
-def _remove_file(path: Path) -> bool:
+def _remove_file(path: Path, *, output_dir: Path) -> bool:
     try:
         path.unlink()
     except FileNotFoundError:
@@ -524,11 +619,11 @@ def _remove_file(path: Path) -> bool:
     except OSError as exc:  # pragma: no cover - filesystem variance
         logging.warning("[CLEANUP] Не удалось удалить %s: %s", path, exc)
         return False
-    logging.info("[CLEANUP] Удалён файл %s", _relative_to_output(path))
+    logging.info("[CLEANUP] Удалён файл %s", _relative_to_output(path, output_dir))
     return True
 
 
-def _remove_directory(path: Path) -> bool:
+def _remove_directory(path: Path, *, output_dir: Path) -> bool:
     try:
         shutil.rmtree(path)
     except FileNotFoundError:
@@ -536,7 +631,7 @@ def _remove_directory(path: Path) -> bool:
     except OSError as exc:  # pragma: no cover - filesystem variance
         logging.warning("[CLEANUP] Не удалось удалить каталог %s: %s", path, exc)
         return False
-    logging.info("[CLEANUP] Удалён каталог %s", _relative_to_output(path))
+    logging.info("[CLEANUP] Удалён каталог %s", _relative_to_output(path, output_dir))
     return True
 
 
@@ -558,7 +653,7 @@ def cleanup_intermediate_files(output_dir: Path) -> int:
             candidate = candidate.resolve()
             if candidate in seen_files or not candidate.is_file():
                 continue
-            if _remove_file(candidate):
+            if _remove_file(candidate, output_dir=resolved):
                 removed += 1
             seen_files.add(candidate)
 
@@ -569,7 +664,7 @@ def cleanup_intermediate_files(output_dir: Path) -> int:
 
     # Remove deepest directories first to avoid orphaned parents lingering.
     for directory in sorted(directories, key=lambda item: len(item.parts), reverse=True):
-        if _remove_directory(directory):
+        if _remove_directory(directory, output_dir=resolved):
             removed += 1
 
     return removed
@@ -591,10 +686,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     logging.info("Логи сохраняются в %s", log_file)
 
     forward_args = build_forward_args(args, unknown)
+    resolved_output_dir = _resolve_output_directory(args, forward_args)
 
     durations: list[tuple[str, float]] = []
+    skipped_stages = set(args.skip)
+
     for stage in STAGES:
-        if stage.name in args.skip:
+        if stage.name in skipped_stages:
             logging.info("⏭ Пропуск этапа %s по флагу --skip", stage.name)
             continue
         duration = run_stage(stage, forward_args)
@@ -602,21 +700,22 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     log_summary(durations)
 
-    csv_count = count_output_files()
+    csv_count = count_output_files(resolved_output_dir)
     logging.info(
         "🎉 Все выбранные этапы завершены. Найдено %d CSV-файлов в %s.",
         csv_count,
-        OUTPUT_DIR,
+        resolved_output_dir,
     )
 
-    if csv_count != 15:
+    if not skipped_stages and csv_count != _EXPECTED_CSV_COUNT:
         logging.warning(
-            "Ожидалось получить 15 CSV-файлов, фактически найдено %d.",
+            "Ожидалось получить %d CSV-файлов, фактически найдено %d.",
+            _EXPECTED_CSV_COUNT,
             csv_count,
         )
 
     if _should_run_cleanup(forward_args):
-        removed = cleanup_intermediate_files(OUTPUT_DIR)
+        removed = cleanup_intermediate_files(resolved_output_dir)
         logging.info("[CLEANUP] Завершено: удалено %d артефакт(ов)", removed)
     else:
         logging.info(

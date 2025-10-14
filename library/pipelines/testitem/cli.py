@@ -10,18 +10,17 @@ import time
 import traceback
 import weakref
 from collections import OrderedDict, deque
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from itertools import chain, islice, tee
 from pathlib import Path
-from typing import IO, Any, Mapping
 from types import MappingProxyType
+from typing import IO, Any
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
-from library.common.run_context import get_current
 
 from library import io
 from library.clients import pubchem as pc
@@ -32,6 +31,7 @@ from library.common.metadata import (
     record_quality_failure,
     write_meta_yaml,
 )
+from library.common.run_context import get_current
 from library.common.sidecar import SidecarErrors, resolve_failure_chunk_size
 from library.config import (
     ApiCfg,
@@ -111,13 +111,13 @@ class RequestedIdsSnapshot(Sequence[str]):
         self._log_sample: deque[str] = deque()
         self._duplicate_sample: list[str] = []
         self._duplicate_count = 0
-        self._seen: "OrderedDict[str, None]" = OrderedDict()
+        self._seen: OrderedDict[str, None] = OrderedDict()
         self._count = 0
         self._writer: IO[str] | None = None
         self._path: Path | None = None
         self._finalizer: weakref.finalize | None = None
         self._finished = False
-        self._unique_original: "OrderedDict[str, str]" = OrderedDict()
+        self._unique_original: OrderedDict[str, str] = OrderedDict()
 
     def __len__(self) -> int:
         return self._count
@@ -235,11 +235,28 @@ class RequestedIdsSnapshot(Sequence[str]):
         return self._read_from_disk()
 
     @staticmethod
-    def _cleanup_path(path: Path) -> None:
-        try:
-            os.remove(path)
-        except FileNotFoundError:
-            pass
+    def _cleanup_path(path: Path | None) -> None:
+        if path is None:
+            return
+
+        # ``NamedTemporaryFile`` produces OS-level handles that may remain locked on
+        # Windows when generators reading from the snapshot short-circuit (for
+        # example after ``KeyboardInterrupt``).  Retry a few times before giving up
+        # so that interpreter shutdown does not surface spurious ``PermissionError``
+        # exceptions.
+        delay = 0.05
+        for attempt in range(5):
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                return
+            except PermissionError:
+                if attempt == 4:
+                    return
+                time.sleep(delay)
+                delay *= 2
+            else:
+                return
 
 
 def ensure_raw_index_column(frame: pd.DataFrame) -> bool:
@@ -349,6 +366,7 @@ class TestitemPipelineOptions:
     offset: int | None = None
     emit_legacy_artifacts: bool = False
     pubchem_enabled: bool | None = None
+    date: str | None = None
 
 
 def _resolve_metadata_sources(pubchem_enabled: bool | None) -> list[str]:

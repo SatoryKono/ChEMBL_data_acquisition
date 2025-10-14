@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import cast
 
 import pandas as pd
-from library._compat.pandera import pa
 from pandera.dtypes import DataType
+
+from library._compat.pandera import pa
 
 PA_ANY = cast(DataType, None)
 

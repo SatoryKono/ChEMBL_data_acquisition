@@ -5,15 +5,13 @@ from __future__ import annotations
 import argparse
 import logging
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timezone
+from dataclasses import asdict, is_dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from dataclasses import asdict, is_dataclass
-
 from library.common.metadata_writer import write_meta_yaml
-from library.common.run_context import RunContext, get_current
-
+from library.common.run_context import RunContext
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +27,12 @@ def _serialise_value(value: Any) -> Any:
         return {key: _serialise_value(val) for key, val in vars(value).items()}
     if isinstance(value, Mapping):
         return {str(key): _serialise_value(val) for key, val in value.items()}
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, list | tuple | set):
         return [_serialise_value(item) for item in value]
     if isinstance(value, datetime):
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            return value.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z")
+        return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
     if callable(value):
         module = getattr(value, "__module__", None)
         qualname = getattr(value, "__qualname__", None)
@@ -86,7 +84,7 @@ def _resolve_generated_at(run_context: RunContext | None) -> str:
 
     return (
         datetime.utcnow()
-        .replace(tzinfo=timezone.utc)
+        .replace(tzinfo=UTC)
         .isoformat(timespec="seconds")
         .replace("+00:00", "Z")
     )
@@ -102,6 +100,7 @@ def save_metadata(
     artifacts: Sequence[Path] | None = None,
     sources: Sequence[str] | None = None,
     run_context: RunContext | None = None,
+    stats_extra: Mapping[str, Any] | None = None,
 ) -> Path:
     """Persist pipeline metadata for ``table_name`` outputs."""
 
@@ -110,7 +109,7 @@ def save_metadata(
     parameters = _serialise_parameters(args)
     outputs = _resolve_outputs(table_name, date_tag, artifacts=artifacts)
 
-    generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+    generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace(
         "+00:00",
         "Z",
     )
@@ -121,6 +120,7 @@ def save_metadata(
         csv_path=csv_stub_path,
         command="",
         generated_at=generated_at,
+        stats=dict(stats_extra) if stats_extra else None,
         extra_metadata={
             "table": table_name,
             "parameters": parameters,

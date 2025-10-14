@@ -95,6 +95,29 @@ pip install --no-deps -e .
 > диапазоны версий в метаданных проекта, затем пересоздайте lock-файл, чтобы все
 > три источника оставались синхронизированными.
 
+### Пересборка lock-файлов зависимостей
+
+Запускайте `pip-compile` и `poetry lock` только под интерпретатором, указанным в
+[`.python-version`](.python-version). В CI добавлена проверка, запрещающая
+случайно зафиксировать lock-файлы, собранные на Python 3.13+, поскольку они
+приведут к несовместимости со старыми средами.
+
+```bash
+python "$(cat .python-version)" -m venv .venv-lock
+source .venv-lock/bin/activate
+python -m pip install --upgrade pip
+pip install pip-tools "poetry==2.1.4"
+pip-compile --extra=dev --output-file=requirements-lock.txt pyproject.toml
+poetry lock
+deactivate
+rm -rf .venv-lock
+```
+
+Скрипт [`tools/check_pip_compile_python_version.py`](tools/check_pip_compile_python_version.py)
+проверяет, что заголовок `requirements-lock.txt` по-прежнему ссылается на
+поддерживаемый интерпретатор. Запускайте его после обновления зависимостей, чтобы
+убедиться в соответствии с содержимым `.python-version`.
+
 ### Pre-commit хуки
 
 Репозиторий поставляется с настроенным
@@ -128,6 +151,29 @@ pre-commit run --all-files
 
 Все проверки должны успешно проходить локально перед push — CI выполняет тот же
 набор, чтобы гарантировать единообразное форматирование и линтинг.
+
+### Очистка промежуточных артефактов
+
+Используйте унифицированный скрипт очистки, чтобы удалить артефакты сборки,
+кеши pytest и временные выгрузки пайплайнов:
+
+```bash
+python scripts/cleanup_project.py --dry-run
+python scripts/cleanup_project.py --all
+```
+
+Флаг `--dry-run` выводит план действий без фактического удаления. Скрипт
+группирует операции по категориям (список доступен через
+`python scripts/cleanup_project.py --list`) и пропускает файлы, отслеживаемые
+Git, чтобы не затронуть фикстуры и документацию. Режим `--all` удаляет служебные
+кеши (`.pytest_cache`, `.mypy_cache`, `__pycache__`), устаревшие отчёты в
+`reports/`, логи, временные CSV в `data/output*/` и любые вспомогательные файлы
+`*.tmp` / `*.lock`.
+
+`make clean` запускает ту же очистку, а затем удаляет виртуальное окружение
+через `clean-venv`. Если `.venv/` нужно сохранить, используйте `make
+clean-artifacts`, либо `tox -e clean`, когда удобнее управлять запуском через
+tox.
 
 Изучите флаги оркестратора и отдельных пайплайнов:
 

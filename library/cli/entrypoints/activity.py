@@ -37,10 +37,10 @@ from urllib.parse import urlsplit
 
 import pandas as pd
 import requests
-from library._compat.pandera import pa
 
 import library.cli.logging as cli_logging
 from library import cli, io, offline
+from library._compat.pandera import pa
 from library.cli import Logger, LoggerConfig, positive_int
 from library.cli import build_parser as base_parser
 from library.cli.activity_api import (

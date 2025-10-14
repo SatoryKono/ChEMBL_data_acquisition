@@ -204,7 +204,7 @@ sources:
     cache_ttl: 3600  # Request cache time-to-live in seconds
     cache_maxsize: 1024  # Maximum cached PubChem responses
     cache_ttl_hours: null  # Persisted CID cache TTL in hours; null disables expiry
-    cid_cache_path: "$CHEMBL_DA_BASE_PATH/cache/pubchem_cid_cache.json"
+    cid_cache_path: "$CHEMBL_DA_CACHE_HOME/pubchem_cid_cache.json"
     batch_size: 50
     prefer_local_smiles: false
     prefer_local_values: true

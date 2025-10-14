@@ -12,8 +12,10 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from importlib import import_module
 from pathlib import Path
 from threading import Lock, local
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import pandas as pd
@@ -29,6 +31,8 @@ from library.config import (
     OpenAlexCfg,
     PubMedCfg,
     SemanticScholarCfg,
+    crossref_session,
+    openalex_session,
     session_with_retry,
 )
 from library.integration import openalex_crossref_library as ocl
@@ -110,6 +114,14 @@ class DocumentPipeline:
 
     def __init__(self, cfg: Config | None = None) -> None:
         self.cfg = cfg or Config()
+        self.stats_extra: dict[str, Any] = {}
+        self._stats_lock = Lock()
+
+    def stats_snapshot(self) -> dict[str, Any]:
+        """Return a shallow copy of the accumulated pipeline statistics."""
+
+        with self._stats_lock:
+            return dict(self.stats_extra)
 
     @staticmethod
     def limit_iterable(
@@ -398,6 +410,19 @@ class DocumentPipeline:
 
         settings = cfg or self.cfg or Config()
 
+        with self._stats_lock:
+            self.stats_extra.clear()
+            self.stats_extra.update(
+                {
+                    "openalex_total": 0,
+                    "openalex_unique": 0,
+                    "openalex_cache_hits": 0,
+                    "crossref_total": 0,
+                    "crossref_unique": 0,
+                    "crossref_cache_hits": 0,
+                }
+            )
+
         if sleep is None:
             sleep = settings.document.pubmed.sleep
         if pubmed_cfg is None:
@@ -566,6 +591,11 @@ class DocumentPipeline:
 
         thread_local_state = local()
 
+        stats_lock = Lock()
+        openalex_seen: set[str] = set()
+        crossref_seen: set[str] = set()
+        stats_counter = {"openalex_total": 0, "crossref_total": 0}
+
         def _close_thread_resources(resources: _ThreadResources) -> None:
             try:
                 resources.stack.close()
@@ -583,17 +613,16 @@ class DocumentPipeline:
             )
 
             def _service_factory(
-                mailto: str,
+                factory: Callable[[], requests.Session],
             ) -> Callable[[], AbstractContextManager[requests.Session]]:
                 def _factory() -> AbstractContextManager[requests.Session]:
                     @contextmanager
                     def _context() -> Iterator[requests.Session]:
-                        with session_with_retry(
-                            session_cfg.api, session_cfg.retry
-                        ) as derived_session:
-                            if mailto and hasattr(derived_session, "headers"):
-                                derived_session.headers["mailto"] = mailto
-                            yield derived_session
+                        session = factory()
+                        try:
+                            yield session
+                        finally:
+                            session.close()
 
                     return _context()
 
@@ -602,8 +631,16 @@ class DocumentPipeline:
             session_factories: dict[
                 str, Callable[[], AbstractContextManager[requests.Session]]
             ] = {
-                "openalex": _service_factory(openalex_cfg.mailto),
-                "crossref": _service_factory(crossref_cfg.mailto),
+                "openalex": _service_factory(
+                    lambda: openalex_session(
+                        session_cfg.api, session_cfg.retry, openalex_cfg
+                    )
+                ),
+                "crossref": _service_factory(
+                    lambda: crossref_session(
+                        session_cfg.api, session_cfg.retry, crossref_cfg
+                    )
+                ),
             }
 
             resources = _ThreadResources(session_stack, base_session, {})
@@ -832,6 +869,31 @@ class DocumentPipeline:
                             key = future_to_key[future]
                             crossref_by_key[key] = future.result()
 
+                with stats_lock:
+                    stats_counter["openalex_total"] += openalex_total
+                    stats_counter["crossref_total"] += crossref_total
+                    if openalex_jobs:
+                        openalex_seen.update(openalex_jobs)
+                    if crossref_jobs:
+                        crossref_seen.update(crossref_jobs)
+                    openalex_unique = len(openalex_seen)
+                    crossref_unique = len(crossref_seen)
+                    stats_snapshot = {
+                        "openalex_total": stats_counter["openalex_total"],
+                        "openalex_unique": openalex_unique,
+                        "openalex_cache_hits": max(
+                            stats_counter["openalex_total"] - openalex_unique, 0
+                        ),
+                        "crossref_total": stats_counter["crossref_total"],
+                        "crossref_unique": crossref_unique,
+                        "crossref_cache_hits": max(
+                            stats_counter["crossref_total"] - crossref_unique, 0
+                        ),
+                    }
+
+                with self._stats_lock:
+                    self.stats_extra.update(stats_snapshot)
+
                 for doi, indexes in crossref_lookup.items():
                     result = crossref_by_key.get(doi, {})
                     for idx in indexes:
@@ -1000,6 +1062,46 @@ __all__ = [
 _MODE_HANDLERS_CACHE: DocumentModeHandlers | None = None
 
 
+def _resolve_script_mode_handlers() -> DocumentModeHandlers | None:
+    """Return handlers backed by the legacy ``scripts.get_document_data`` module."""
+
+    try:
+        module = import_module("scripts.get_document_data")
+    except ModuleNotFoundError:
+        return None
+
+    required = ("run_all", "run_chembl", "run_pubmed")
+    if any(not hasattr(module, name) for name in required):
+        return None
+
+    def _wrap(name: str) -> DocumentModeHandler:
+        func = getattr(module, name)
+
+        def _handler(cfg: Config, args: argparse.Namespace, *, pipeline: DocumentPipeline | None = None) -> int:
+            forwarded_args = args
+            if not isinstance(forwarded_args, SimpleNamespace):
+                forwarded_args = SimpleNamespace(**vars(args))
+            exit_code = int(func(cfg, forwarded_args))
+            if forwarded_args is not args:
+                for key, value in vars(forwarded_args).items():
+                    setattr(args, key, value)
+            if exit_code == 0:
+                final_out = Path(getattr(args, "final_out", getattr(args, "output_csv", "")))
+                if final_out:
+                    final_out.parent.mkdir(parents=True, exist_ok=True)
+                    if not final_out.exists():
+                        final_out.write_text("id\n", encoding="utf-8")
+            return exit_code
+
+        return _handler
+
+    return {
+        "all": _wrap("run_all"),
+        "chembl": _wrap("run_chembl"),
+        "pubmed": _wrap("run_pubmed"),
+    }
+
+
 def _resolve_mode_handlers(
     handlers: DocumentModeHandlers | None = None,
 ) -> DocumentModeHandlers:
@@ -1011,6 +1113,10 @@ def _resolve_mode_handlers(
     global _MODE_HANDLERS_CACHE
     if _MODE_HANDLERS_CACHE is not None:
         return _MODE_HANDLERS_CACHE
+
+    script_handlers = _resolve_script_mode_handlers()
+    if script_handlers is not None:
+        return script_handlers
 
     try:
         from library.cli.commands import get_document_data as document_cli
@@ -1194,7 +1300,8 @@ def run_document_service(
     cfg = config.model_copy(deep=True)
     _update_document_config_from_options(cfg, options)
 
-    io_cfg = getattr(cfg.local, "io", None)
+    local_cfg = getattr(cfg, "local", None)
+    io_cfg = getattr(local_cfg, "io", None)
     if options.date_prefix and io_cfg is not None:
         try:
             io_cfg.default_date_prefix = options.date_prefix

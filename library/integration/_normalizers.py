@@ -5,12 +5,16 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from ..pubmed.parsing import combine
-
 __all__ = [
     "normalize_openalex_response",
     "normalize_crossref_response",
 ]
+
+
+def _combine(items: Iterable[str]) -> str:
+    """Combine non-empty items into a pipe separated string."""
+
+    return "|".join(x for x in items if x)
 
 
 _OPENALEX_TEMPLATE: dict[str, str] = {
@@ -79,8 +83,8 @@ def normalize_openalex_response(
             "OpenAlex.Genre": str(raw.get("genre", "")) if raw.get("genre") is not None else "",
             "OpenAlex.Id": str(raw.get("id", "")) if raw.get("id") is not None else "",
             "OpenAlex.Venue": venue_name,
-            "OpenAlex.MeshDescriptors": combine(descriptors),
-            "OpenAlex.MeshQualifiers": combine(qualifiers),
+            "OpenAlex.MeshDescriptors": _combine(descriptors),
+            "OpenAlex.MeshQualifiers": _combine(qualifiers),
             "OpenAlex.Error": "",
         }
     )
@@ -112,7 +116,7 @@ def _first_text(entry: Any) -> str:
 def _join_subjects(subjects: Any) -> str:
     """Join subject list with ``; `` separator."""
 
-    if not isinstance(subjects, Iterable) or isinstance(subjects, (str, bytes)):
+    if not isinstance(subjects, Iterable) or isinstance(subjects, str | bytes):
         if isinstance(subjects, str):
             return subjects
         return ""

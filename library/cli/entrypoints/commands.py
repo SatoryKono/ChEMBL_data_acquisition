@@ -21,6 +21,7 @@ from collections.abc import Sequence
 from typing import Final
 
 from library.cli.commands import _run as _run_command
+from library.cli.commands import resolve_command_path
 
 # ---------------------------------------------------------------------------
 # Generic dispatch helper
@@ -36,7 +37,7 @@ def _dispatch(module: str, argv: Sequence[str] | None = None) -> int:
     parameters so that tests can provide deterministic argument vectors.
     """
 
-    return _run_command(module, argv)
+    return _run_command(resolve_command_path(module), argv)
 
 
 # ---------------------------------------------------------------------------
