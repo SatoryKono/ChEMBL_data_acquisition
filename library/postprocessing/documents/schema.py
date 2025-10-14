@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from library.postprocessing.common import DataFrameSchema, validate_schema
-from library.schemas.document import DocumentSchema
+from library.schemas.document_schema import DocumentSchema
 
 DOCUMENT_SCHEMA = DataFrameSchema(
     required_columns=(

@@ -17,7 +17,7 @@ from library.clients import crossref as crossref_client
 from library.clients import openalex as openalex_client
 from library.common.rate_limiter import RateLimiter, get_limiter
 from library.config import Config, crossref_session, openalex_session
-from library.schemas.document_schema import DocumentSchema
+from library.schemas.document_schema import validate_document_frame
 from library.utils.qc_report import TableQualityProfiler, build_reports_from_profiler
 
 _CHEMBL_DOCUMENT_COLUMNS: tuple[str, ...] = (
@@ -477,7 +477,7 @@ def fetch_normalize_document(
         openalex_df=openalex_df,
     )
 
-    validated = DocumentSchema.validate(merged)
+    validated = validate_document_frame(merged)
 
     quality_report, correlation_report = _build_quality_artifacts(validated)
 

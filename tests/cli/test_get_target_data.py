@@ -44,7 +44,19 @@ def test_get_target_data_cli(tmp_path, monkeypatch) -> None:
     )
 
     exit_code = get_target_data.main(
-        ["--limit", "10", "--date-tag", "20250101", "--output-dir", str(tmp_path)]
+        [
+            "all",
+            "--limit",
+            "10",
+            "--date-tag",
+            "20250101",
+            "--output-dir",
+            str(tmp_path),
+            "--log-level",
+            "debug",
+            "--input-dir",
+            str(tmp_path / "input"),
+        ]
     )
 
     assert exit_code == 0
