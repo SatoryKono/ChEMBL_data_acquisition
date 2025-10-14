@@ -9,6 +9,7 @@ executed.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -20,6 +21,20 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Directories that must never be traversed or removed by pattern-based sweeps.
 EXCLUDED_DIR_NAMES = {".git", ".venv"}
+
+
+def _active_tox_env_dir() -> Path | None:
+    """Return the tox environment directory currently executing, if any."""
+
+    tox_env_dir = os.environ.get("TOX_ENV_DIR")
+    if not tox_env_dir:
+        return None
+    try:
+        return Path(tox_env_dir).resolve()
+    except OSError:
+        # On Windows the path may be inaccessible if the environment vanished
+        # mid-run; in that case we simply ignore the hint and proceed.
+        return None
 
 
 def _is_under_excluded(path: Path) -> bool:
@@ -139,11 +154,24 @@ def _cleanup_python_artifacts(ctx: CleanupContext) -> None:
 
 
 def _cleanup_tool_caches(ctx: CleanupContext) -> None:
+    active_tox_env = _active_tox_env_dir()
     for name in (".pytest_cache", ".mypy_cache", ".ruff_cache", ".hypothesis", ".coverage", "coverage.xml"):
         for path in PROJECT_ROOT.glob(name):
             ctx.remove_path(path)
     for cache_dir in (".pytest_cache", ".mypy_cache", ".ruff_cache", ".hypothesis", ".tox"):
         for path in PROJECT_ROOT.rglob(cache_dir):
+            if (
+                cache_dir == ".tox"
+                and active_tox_env is not None
+                and active_tox_env.exists()
+            ):
+                try:
+                    active_tox_env.relative_to(path)
+                except ValueError:
+                    pass
+                else:
+                    ctx.skipped.append((path, "tox environment in use"))
+                    continue
             ctx.remove_path(path)
 
 
