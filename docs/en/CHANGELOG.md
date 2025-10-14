@@ -4,6 +4,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.7] - 2025-10-19
+- Replaced custom postprocessing schema checks with Pandera-backed validation,
+  adding dedicated schema modules per table and detailed error logging.
+
 ## [0.1.6] - 2025-10-18
 - Restored the `list_output_files` helper used by the orchestrator summary to
   avoid runtime failures after successful pipeline executions.

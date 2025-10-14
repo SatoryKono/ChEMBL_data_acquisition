@@ -166,9 +166,10 @@ def validate_postprocess_frame(
     """Validate ``df`` using ``validator`` aligned with ``schema``."""
 
     prefix = event_prefix(table)
+    schema_name = schema.name or schema.__class__.__name__
     logger.info(
         f"{prefix}_validate_start",
-        schema=schema.__class__.__name__,
+        schema=schema_name,
     )
     prepared = ensure_pipeline_version_column(df, pipeline_version)
     validated = validator(prepared, context=f"{table}_postprocess")
@@ -176,6 +177,7 @@ def validate_postprocess_frame(
         f"{prefix}_validate_done",
         rows=int(validated.shape[0]),
         columns=int(validated.shape[1]),
+        schema=schema_name,
     )
     return validated
 

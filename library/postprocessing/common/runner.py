@@ -203,7 +203,7 @@ def run_steps(
     )
 
     if pre_schema is not None:
-        schema_name = pre_schema.__class__.__name__
+        schema_name = pre_schema.name or pre_schema.__class__.__name__
         log.info("Validating input schema (%s)", schema_name)
         current = validate_schema(current, pre_schema, context="pre_pipeline")
         if pipeline_version is not None:
@@ -362,7 +362,7 @@ def run_steps(
         current = next_df
 
     if post_schema is not None:
-        schema_name = post_schema.__class__.__name__
+        schema_name = post_schema.name or post_schema.__class__.__name__
         validation_started_at = _now_iso()
         validation_clock = perf_counter()
         log.info("Validating final schema (%s)", schema_name)
