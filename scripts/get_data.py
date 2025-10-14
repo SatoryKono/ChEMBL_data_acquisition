@@ -573,25 +573,10 @@ def _resolve_output_directory(
 ) -> Path:
     """Return the absolute output directory referenced by the orchestrator."""
 
-    raw_value = _extract_option_value(forward_args.tokens, "--output-dir")
-    candidate = Path(raw_value).expanduser() if raw_value else DEFAULT_OUTPUT_DIR
-    if candidate.is_absolute():
-        return candidate.resolve()
-
-    base_value = _extract_option_value(forward_args.tokens, "--base-path")
-    if base_value:
-        base_path = Path(base_value).expanduser()
-        if not base_path.is_absolute():
-            base_path = (Path.cwd() / base_path).resolve()
-        else:
-            base_path = base_path.resolve()
-    else:
-        extras = forward_args.tokens[
-            forward_args.extras_start : forward_args.extras_end
-        ]
-        base_path = _resolve_forward_base_path(args, extras, fallback=PROJECT_ROOT)
-
-    return (base_path / candidate).resolve()
+    # ``ForwardArgs`` already carries a normalised output directory derived from
+    # the forwarded command line tokens.  Rely on this value directly to avoid
+    # drifting away from the paths that the pipeline stages actually use.
+    return forward_args.output_dir.resolve()
 
 
 def _is_cleanup_directory(path: Path) -> bool:

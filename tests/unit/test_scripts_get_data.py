@@ -295,3 +295,56 @@ def test_main__missing_outputs_emit_warning(
     warnings = [record for record in caplog.records if record.levelno >= logging.WARNING]
     assert warnings, "expected warning about missing CSV files"
     assert any("Ожидалось получить" in record.getMessage() for record in warnings)
+
+
+@pytest.mark.unit
+def test_main__summary_uses_forward_output_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """The summary must inspect the same directory that stages write into."""
+
+    from scripts import get_data as cli
+
+    logs_dir = tmp_path / "logs"
+    monkeypatch.setattr(cli, "LOGS_DIR", logs_dir)
+
+    expected_output = (tmp_path / "actual-output").resolve()
+    expected_output.mkdir()
+
+    fake_forward_args = cli.ForwardArgs(
+        tokens=("--output-dir", "ignored", "--base-path", "ignored-base"),
+        extras_start=0,
+        extra_len=0,
+        output_dir=expected_output,
+    )
+
+    monkeypatch.setattr(cli, "build_forward_args", lambda _args, _extra: fake_forward_args)
+    monkeypatch.setattr(cli, "cleanup_intermediate_files", lambda _path: 0)
+
+    executed: list[str] = []
+
+    def _fake_run_stage(stage: cli.Stage, forward: cli.ForwardArgs) -> float:
+        executed.append(stage.name)
+        assert forward.output_dir == expected_output
+        return 0.0
+
+    monkeypatch.setattr(cli, "run_stage", _fake_run_stage)
+
+    inspected_paths: list[Path] = []
+
+    def _fake_count(path: Path) -> int:
+        inspected_paths.append(path)
+        return 5
+
+    monkeypatch.setattr(cli, "count_output_files", _fake_count)
+
+    exit_code = cli.main([])
+
+    assert exit_code == 0
+    assert executed, "expected orchestrator to execute stages"
+    assert inspected_paths == [expected_output]
+    captured = capfd.readouterr()
+    assert "Найдено" in captured.out
+    assert str(expected_output) in captured.out
