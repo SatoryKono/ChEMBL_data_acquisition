@@ -709,7 +709,10 @@ def test_get_testitem_run_success(
     rc = get_testitem_data.run(cfg, args)
 
     assert rc == 0
-    result = pd.read_csv(output_csv)
+    artifacts = getattr(args, "_testitem_artifacts", None)
+    assert artifacts is not None, "expected standard output artifacts"
+    dataset_path = artifacts.dataset
+    result = pd.read_csv(dataset_path)
     assert list(result.columns) == [
         "molecule_chembl_id",
         "preferred_name",
@@ -719,6 +722,8 @@ def test_get_testitem_run_success(
     assert result.loc[0, "normalized_name"] == "compound 1"
     assert pd.isna(result.loc[1, "normalized_name"])
     assert not result.loc[1, "is_named"]
+    meta_path = dataset_path.with_suffix(".meta.yaml")
+    assert meta_path.exists()
     events = [event for _, event, _ in logger_stub.events]
     assert "testitem_pipeline_done" in events
     assert "testitem_missing_name" in events
