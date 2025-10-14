@@ -15,6 +15,7 @@ from typing import Any
 
 import pandas as pd
 import pytest
+import yaml
 from freezegun import freeze_time
 
 from library.common.run_context import RunContext, set_current
@@ -137,6 +138,15 @@ def test_get_tissue_data_cli__end_to_end(
     monkeypatch.setattr("library.common.log.logger", logger)
     monkeypatch.setattr("library.pipelines.tissue.pipeline.logger", logger)
     monkeypatch.setattr("library.pipelines.tissue.chembl.logger", logger)
+
+    metadata_calls: list[dict[str, object]] = []
+    original_save_metadata = get_tissue_data.io.save_metadata
+
+    def _tracking_save_metadata(*args: object, **kwargs: object):
+        metadata_calls.append({"args": args, "kwargs": kwargs})
+        return original_save_metadata(*args, **kwargs)
+
+    monkeypatch.setattr(get_tissue_data.io, "save_metadata", _tracking_save_metadata)
 
     def fake_apply_config_overrides(
         args: Any,
@@ -307,6 +317,10 @@ def test_get_tissue_data_cli__end_to_end(
     exit_code_first = _invoke(base_argv)
     assert exit_code_first == 0
 
+    assert metadata_calls, "save_metadata should be invoked"
+    first_call_kwargs = metadata_calls[0]["kwargs"]
+    assert first_call_kwargs["qc_summary"] == {"rows": 3}
+
     assert created_clients, "expected ChemblClient to be instantiated"
     assert recorded_calls, "expected stub client to be exercised"
     first_run_calls = recorded_calls[: len(base_pages)]
@@ -367,13 +381,16 @@ def test_get_tissue_data_cli__end_to_end(
     assert correlation_path.exists()
 
     produced_files = {path.name for path in output_csv.parent.glob("*.csv")}
-    assert produced_files == {
-        output_csv.name,
-        quality_path.name,
-        correlation_path.name,
+    expected_artifact_names = {
+        Path(path).name for path in first_call_kwargs["artifacts"]
     }
+    assert expected_artifact_names.issubset(produced_files)
     assert not Path(f"{failure_path}.meta.yaml").exists()
-    assert not list(output_csv.parent.glob("*.meta.yaml"))
+    meta_path = Path(f"{output_csv}.meta.yaml")
+    assert meta_path.exists()
+    meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert meta.get("qc_summary") == {"rows": 3}
+    assert sorted(meta.get("outputs", [])) == sorted(expected_artifact_names)
 
     csv_hash_first = hashlib.sha256(output_csv.read_bytes()).hexdigest()
     quality_hash_first = hashlib.sha256(quality_path.read_bytes()).hexdigest()
@@ -404,6 +421,16 @@ def test_get_tissue_data_cli__end_to_end(
 
     assert not failure_path.exists()
     assert not Path(f"{failure_path}.meta.yaml").exists()
+
+    assert len(metadata_calls) == 2
+    second_call_kwargs = metadata_calls[1]["kwargs"]
+    assert second_call_kwargs["qc_summary"] == {"rows": 3}
+    refreshed_meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert refreshed_meta.get("qc_summary") == {"rows": 3}
+    expected_second_artifact_names = sorted(
+        Path(path).name for path in second_call_kwargs["artifacts"]
+    )
+    assert sorted(refreshed_meta.get("outputs", [])) == expected_second_artifact_names
 
     new_events = logger.events[first_event_count:]
     assert any(event == "tissue_pipeline_start" for _, event, _ in new_events)

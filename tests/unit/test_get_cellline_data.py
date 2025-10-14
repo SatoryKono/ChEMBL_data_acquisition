@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from library.config import Config
@@ -130,11 +131,22 @@ def test_run__invokes_pipeline_with_expected_options(
         )
 
     monkeypatch.setattr(get_cellline_data, "run_cellline_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(
+        get_cellline_data,
+        "generate_correlation_report",
+        lambda *_, **__: pd.DataFrame(),
+    )
+    monkeypatch.setattr(
+        get_cellline_data,
+        "generate_qc_report",
+        lambda *_, **__: pd.DataFrame(),
+    )
 
     minimal_args.limit = 5
     minimal_args.offset = 1
     minimal_args.batch_size = 7
     minimal_args.timeout = 12.5
+    minimal_args.output_csv.write_text("cell_chembl_id\nCHEMBL1\n", encoding="utf-8")
 
     exit_code = get_cellline_data.run(cfg, minimal_args)
 
@@ -147,6 +159,70 @@ def test_run__invokes_pipeline_with_expected_options(
     assert options.batch_size == 7
     assert options.timeout == 12.5
     assert options.mode == "chembl"
+
+
+def test_run__persists_metadata_sidecar(
+    cfg: Config,
+    minimal_args: argparse.Namespace,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataset_path = minimal_args.output_csv
+    dataset_path.write_text("cell_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    result = CellLinePipelineResult(
+        exit_code=0,
+        records=1,
+        duration=0.1,
+        output_path=dataset_path,
+        failure_path=None,
+        failures=0,
+        missing_ids=(),
+        written=True,
+    )
+
+    monkeypatch.setattr(get_cellline_data, "run_cellline_pipeline", lambda *_: result)
+    monkeypatch.setattr(
+        get_cellline_data,
+        "generate_correlation_report",
+        lambda *_, **__: pd.DataFrame(),
+    )
+    monkeypatch.setattr(
+        get_cellline_data,
+        "generate_qc_report",
+        lambda *_, **__: pd.DataFrame(),
+    )
+
+    metadata_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    original_save_metadata = get_cellline_data.io.save_metadata
+
+    def _tracking_save_metadata(*args: object, **kwargs: object):
+        metadata_calls.append((args, kwargs))
+        return original_save_metadata(*args, **kwargs)
+
+    monkeypatch.setattr(get_cellline_data.io, "save_metadata", _tracking_save_metadata)
+
+    exit_code = get_cellline_data.run(cfg, minimal_args)
+
+    assert exit_code == 0
+    assert metadata_calls, "save_metadata was not invoked"
+
+    _, call_kwargs = metadata_calls[-1]
+    assert call_kwargs["qc_summary"] == {"rows": 1}
+
+    artifacts = call_kwargs["artifacts"]
+    assert isinstance(artifacts, list)
+    dataset_artifact = minimal_args.output_csv
+    expected_artifact_names = {
+        dataset_artifact.name,
+        f"{dataset_artifact.stem}_quality_report_table.csv",
+        f"{dataset_artifact.stem}_data_correlation_report_table.csv",
+    }
+    assert {Path(path).name for path in artifacts} == expected_artifact_names
+
+    table_name = str(call_kwargs["table_name"])
+    date_tag = str(call_kwargs["date_tag"])
+    meta_path = dataset_artifact.parent / f"output.{table_name}_{date_tag}.meta.yaml"
+    assert meta_path.exists()
 
 
 def test_main__limit_zero_short_circuits(
