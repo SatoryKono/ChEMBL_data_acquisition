@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Iterable, Iterator, Sequence
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 import pandas as pd

@@ -36,9 +36,6 @@ except ModuleNotFoundError as exc:  # pragma: no cover - import guard
 ensure_project_root(__file__)
 
 from library.config import DEFAULT_CONFIG_PATH, load_config  # noqa: E402
-from library.config.env import (
-    _default_base_path as _config_default_base_path,
-)  # noqa: E402
 
 
 def _guard_cli_module() -> None:

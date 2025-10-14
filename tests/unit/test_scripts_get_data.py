@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-
 if "library.cli.commands.get_data" not in sys.modules:
     sys.modules["library.cli.commands.get_data"] = types.ModuleType(
         "library.cli.commands.get_data"
