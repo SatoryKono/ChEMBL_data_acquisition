@@ -5,7 +5,8 @@ import tracemalloc
 from itertools import cycle, islice
 
 import pytest
-from hypothesis import HealthCheck, given, seed, settings, strategies as st
+from hypothesis import HealthCheck, given, seed, settings
+from hypothesis import strategies as st
 
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 from library.config import RetryCfg

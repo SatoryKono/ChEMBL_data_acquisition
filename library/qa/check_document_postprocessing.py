@@ -337,6 +337,48 @@ def _collect_key_sample(index: pd.Index, limit: int = 5) -> list[Mapping[str, st
     return sample
 
 
+def _load_metadata_stats(csv_path: Path | str | None) -> dict[str, int]:
+    """Return selected metadata statistics from the pipeline sidecar file."""
+
+    if not csv_path:
+        return {}
+
+    resolved = Path(csv_path)
+    meta_path = resolved.with_name(resolved.name + ".meta.yaml")
+    if not meta_path.exists():
+        return {}
+
+    try:
+        payload = yaml.safe_load(meta_path.read_text(encoding=UTF8_ENCODING))
+    except (OSError, yaml.YAMLError):
+        return {}
+
+    stats_section = {}
+    if isinstance(payload, Mapping):
+        stats_section = payload.get("stats") or {}
+    if not isinstance(stats_section, Mapping):
+        return {}
+
+    keys = (
+        "openalex_total",
+        "openalex_unique",
+        "openalex_cache_hits",
+        "crossref_total",
+        "crossref_unique",
+        "crossref_cache_hits",
+    )
+    result: dict[str, int] = {}
+    for key in keys:
+        value = stats_section.get(key)
+        if value is None:
+            continue
+        try:
+            result[key] = int(value)
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
 # ===== Dataset contexts ======================================================
 class DatasetContext:
     """Base class exposing helper utilities for builder functions."""
@@ -831,6 +873,7 @@ def run_document_postprocessing_check(
     diff_limit: int,
     date_code: str,
     report_dir: Path,
+    python_csv_path: Path | None = None,
 ) -> Mapping[str, Any]:
     python_projection = _build_projection(python_frame, crosswalk, side="python")
     m_projection = _build_projection(m_frame, crosswalk, side="m")
@@ -943,6 +986,8 @@ def run_document_postprocessing_check(
 
     status_label = "PASS" if not issues else "FAIL"
 
+    metadata_stats = _load_metadata_stats(python_csv_path)
+
     metrics = {
         "status": status_label,
         "date_code": date_code,
@@ -961,6 +1006,9 @@ def run_document_postprocessing_check(
         "top_mismatch_reasons": top_reasons,
         "diff_rows": len(diff_records),
     }
+
+    if metadata_stats:
+        metrics["metadata_stats"] = metadata_stats
 
     report_dir.mkdir(parents=True, exist_ok=True)
     json_path = report_dir / f"{REPORT_PREFIX}{date_code}{REPORT_JSON_SUFFIX}"
@@ -1035,6 +1083,7 @@ def main() -> None:
         diff_limit=args.diff_limit,
         date_code=date_code,
         report_dir=report_dir,
+        python_csv_path=python_path,
     )
 
     print(

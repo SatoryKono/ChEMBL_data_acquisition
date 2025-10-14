@@ -13,7 +13,7 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import import_module
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 # NOTE:
 #   ``python scripts/get_data.py`` executed from Windows adds ``scripts``
@@ -33,6 +33,8 @@ except ModuleNotFoundError as exc:  # pragma: no cover - import guard
     sys.modules.pop("scripts", None)
     from scripts._bootstrap import ensure_project_root
 
+ensure_project_root(__file__)
+
 from library.config import DEFAULT_CONFIG_PATH, load_config  # noqa: E402
 from library.config.env import (
     _default_base_path as _config_default_base_path,
@@ -41,6 +43,8 @@ from library.config.env import (
 
 def _guard_cli_module() -> None:
     """Ensure the core ``library.cli.commands.get_data`` module imports cleanly."""
+
+    ensure_project_root(__file__)
 
     try:
         import_module("library.cli.commands.get_data")
@@ -70,6 +74,7 @@ class ForwardArgs:
     tokens: tuple[str, ...]
     extras_start: int
     extra_len: int
+    output_dir: Path
 
     @property
     def extras_end(self) -> int:
@@ -113,6 +118,8 @@ LOGS_DIR = DATA_DIR / "logs"
 _PUBCHEM_ENV_VAR = "CHEMBL_DA_PUBCHEM_ENABLE"
 _BASE_PATH_ENV_VAR = "CHEMBL_DA_BASE_PATH"
 
+_EXPECTED_CSV_COUNT = 15
+
 _CLEANUP_FILE_PATTERNS: tuple[str, ...] = (
     "*.lock",
     "*.pkl.lock",
@@ -152,6 +159,40 @@ def _extract_option_value(args: Sequence[str], option: str) -> str | None:
         if token.startswith(prefixed):
             return token[len(prefixed) :]
     return None
+
+
+def _normalise_cli_path(value: str) -> Path:
+    """Return a :class:`Path` handling Windows-style separators on POSIX hosts."""
+
+    stripped = value.strip()
+    if os.name != "nt" and "\\" in stripped:
+        windows_path = PureWindowsPath(stripped)
+        return Path(windows_path.as_posix())
+    return Path(stripped)
+
+
+def _resolve_forward_output_dir(tokens: Sequence[str]) -> Path:
+    """Return the absolute output directory encoded within ``tokens``."""
+
+    raw_output = _extract_option_value(tokens, "--output-dir")
+    if not raw_output:
+        raw_output = os.fspath(DEFAULT_OUTPUT_DIR)
+    output_candidate = _normalise_cli_path(raw_output).expanduser()
+
+    if output_candidate.is_absolute():
+        return output_candidate.resolve()
+
+    raw_base = _extract_option_value(tokens, "--base-path")
+    if raw_base:
+        base_candidate = _normalise_cli_path(raw_base).expanduser()
+        if not base_candidate.is_absolute():
+            base_candidate = (Path.cwd() / base_candidate).resolve()
+        else:
+            base_candidate = base_candidate.resolve()
+    else:
+        base_candidate = PROJECT_ROOT.resolve()
+
+    return (base_candidate / output_candidate).resolve()
 
 
 def _has_flag(tokens: Sequence[str], option: str) -> bool:
@@ -410,7 +451,13 @@ def _coerce_forward_args(
 ) -> ForwardArgs:
     if isinstance(forward_args, ForwardArgs):
         return forward_args
-    return ForwardArgs(tuple(forward_args), extras_start=len(forward_args), extra_len=0)
+    tokens = tuple(forward_args)
+    return ForwardArgs(
+        tokens,
+        extras_start=len(tokens),
+        extra_len=0,
+        output_dir=_resolve_forward_output_dir(tokens),
+    )
 
 
 def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
@@ -422,7 +469,13 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
     forward = _coerce_forward_args(forward_args)
 
     if not isinstance(forward_args, ForwardArgs):
-        forward_args = ForwardArgs(tuple(forward_args), 0, len(forward_args))
+        tokens = tuple(forward_args)
+        forward_args = ForwardArgs(
+            tokens,
+            extras_start=0,
+            extra_len=len(tokens),
+            output_dir=_resolve_forward_output_dir(tokens),
+        )
 
     if stage.name == "target":
         stage_args = forward.with_default_subcommand(
@@ -495,7 +548,10 @@ def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> Forwar
         forward.extend(["--input-dir", os.fspath(DEFAULT_INPUT_DIR)])
     if not _has_option("--output-dir"):
         forward.extend(["--output-dir", os.fspath(DEFAULT_OUTPUT_DIR)])
-    return ForwardArgs(tuple(forward), extras_start, extra_len)
+
+    tokens = tuple(forward)
+    output_dir = _resolve_forward_output_dir(tokens)
+    return ForwardArgs(tokens, extras_start, extra_len, output_dir)
 
 
 def log_summary(durations: list[tuple[str, float]]) -> None:
@@ -633,8 +689,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     resolved_output_dir = _resolve_output_directory(args, forward_args)
 
     durations: list[tuple[str, float]] = []
+    skipped_stages = set(args.skip)
+
     for stage in STAGES:
-        if stage.name in args.skip:
+        if stage.name in skipped_stages:
             logging.info("⏭ Пропуск этапа %s по флагу --skip", stage.name)
             continue
         duration = run_stage(stage, forward_args)
@@ -649,9 +707,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         resolved_output_dir,
     )
 
-    if csv_count != 15:
+    if not skipped_stages and csv_count != _EXPECTED_CSV_COUNT:
         logging.warning(
-            "Ожидалось получить 15 CSV-файлов, фактически найдено %d.",
+            "Ожидалось получить %d CSV-файлов, фактически найдено %d.",
+            _EXPECTED_CSV_COUNT,
             csv_count,
         )
 

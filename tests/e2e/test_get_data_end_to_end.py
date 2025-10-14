@@ -217,6 +217,13 @@ def test_get_data_end_to_end__miniature_pipeline(
     input_dir.mkdir()
     output_dir.mkdir()
 
+    cleanup_artifact = output_dir / "sentinel__cleanup.tmp"
+    cleanup_artifact.write_text("cleanup", encoding="utf-8")
+    external_dir = base_path / "external"
+    external_dir.mkdir()
+    external_artifact = external_dir / "sentinel__external.tmp"
+    external_artifact.write_text("outside", encoding="utf-8")
+
     fixture_dir = Path(__file__).resolve().parents[1] / "resources" / "pipeline_inputs"
     for stem in ("document", "target", "assay", "testitem", "activity"):
         shutil.copy(fixture_dir / f"{stem}.csv", input_dir / f"{stem}.csv")
@@ -513,6 +520,9 @@ def test_get_data_end_to_end__miniature_pipeline(
             quality_columns = ["assay_strain", "assay_group", "year", "accession"]
             completeness = 1.0 - actual[quality_columns].isna().mean()
             assert (completeness >= ASSAY_ENRICHMENT_MIN_RATIO).all(), completeness
+
+    actual_csv_files = sorted(output_dir.glob("*.csv"))
+    assert reported_csv_count == len(actual_csv_files)
 
     hashes_before = {name: sha256_file(path) for name, path in output_paths.items()}
 

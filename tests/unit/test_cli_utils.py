@@ -13,8 +13,8 @@ import pandas.testing as tm
 import pytest
 
 from library import cli_utils
-from library.cli.pipeline_definition import PipelineDefinition
 from library.cli import LoggerConfig
+from library.cli.pipeline_definition import PipelineDefinition
 
 
 @pytest.mark.unit

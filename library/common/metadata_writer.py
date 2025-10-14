@@ -59,6 +59,12 @@ class Stats(_StatsRequired, total=False):
     chunk_fetch_failure_ids: list[str]
     chunk_fetch_failure_ids_total: int
     chunk_fetch_failure_ids_truncated: bool
+    openalex_total: int
+    openalex_unique: int
+    openalex_cache_hits: int
+    crossref_total: int
+    crossref_unique: int
+    crossref_cache_hits: int
 
 
 def _load_metadata(meta_path: Path) -> dict[str, Any]:
@@ -156,7 +162,7 @@ def write_meta_yaml(
         existing_invocation = existing.get("invocation")
         if isinstance(existing_invocation, Sequence) and not isinstance(
             existing_invocation,
-            (str, bytes),
+            str | bytes,
         ):
             invocation_for_seed = list(existing_invocation)
         else:

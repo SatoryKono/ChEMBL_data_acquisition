@@ -47,7 +47,7 @@ id==1.5.0
     # via twine
 identify==2.6.15
     # via pre-commit
-idna==3.10
+idna==3.11
     # via requests
 iniconfig==2.1.0
     # via pytest
@@ -93,11 +93,6 @@ numpy==2.1.3 ; python_version >= "3.13"
     #   chembl-data-acquisition (pyproject.toml)
     #   pandas
     #   pandera
-numpy==1.26.4 ; python_version < "3.13"
-    # via
-    #   chembl-data-acquisition (pyproject.toml)
-    #   pandas
-    #   pandera
 openpyxl==3.1.5
     # via chembl-data-acquisition (pyproject.toml)
 packaging==25.0
@@ -108,10 +103,6 @@ packaging==25.0
     #   pytest
     #   twine
 pandas==2.2.3 ; python_version >= "3.13"
-    # via
-    #   chembl-data-acquisition (pyproject.toml)
-    #   pandera
-pandas==2.1.4 ; python_version < "3.13"
     # via
     #   chembl-data-acquisition (pyproject.toml)
     #   pandera
@@ -137,8 +128,6 @@ psutil==7.1.0
     # via chembl-data-acquisition (pyproject.toml)
 pycparser==2.23
     # via cffi
-pyarrow==18.1.0 ; python_version < "3.13"
-    # via chembl-data-acquisition (pyproject.toml)
 pydantic==2.8.2
     # via
     #   chembl-data-acquisition (pyproject.toml)
@@ -177,7 +166,7 @@ pyyaml==6.0.2
     #   responses
 readme-renderer==44.0
     # via twine
-referencing==0.36.2
+referencing==0.37.0
     # via
     #   jsonschema
     #   jsonschema-specifications
