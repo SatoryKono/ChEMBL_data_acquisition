@@ -16,7 +16,6 @@ BOOLEAN_COLUMNS: Sequence[str] = (
     "oral",
     "parenteral",
     "topical",
-    pandera_schema=TestitemSchema,
 )
 
 
@@ -106,6 +105,7 @@ TESTITEM_SCHEMA = DataFrameSchema(
         "timestamp_utc",
         "pipeline_version",
     ),
+    pandera_schema=TestitemSchema,
 )
 
 
