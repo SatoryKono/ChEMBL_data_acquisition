@@ -29,6 +29,7 @@ data/cache/*.tmp
 data/cache/*.bak
 data/cache/*.pkl
 uniprot/
+# Python bytecode caches
 **/__pycache__/
 .hypothesis/
 
