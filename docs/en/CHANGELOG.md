@@ -4,13 +4,20 @@
 
 All notable changes to this project will be documented in this file.
 
+
 ## [0.1.6] - 2025-10-18
   Added structured logging utilities with run identifiers and stage duration
   tracking, plus resilient HTTP retry wrappers adopted by the Chembl, PubChem,
   UniProt, and Crossref clients.
+- Enforced Pandera-based validation for activity, assay, document, target, and
+  test item postprocessing pipelines with structured logging on failures.
+- Restored the `list_output_files` helper used by the orchestrator summary to
+  avoid runtime failures after successful pipeline executions.
+
 
 ## [0.1.5] - 2025-10-18
 - Hardened the orchestrator by exiting with a detailed error when CSV artefacts are missing, listing the discovered files for faster triage.
+- Normalised byte-valued dictionary resource paths before ``Path`` conversion so type checking accepts manifest references provided as bytes.
 
 ## [0.1.4] - 2025-10-17
 - Regenerated the bilingual documentation set after the October audit: README pairs

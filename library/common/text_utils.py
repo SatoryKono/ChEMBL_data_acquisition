@@ -30,7 +30,7 @@ def to_text(value: Any, *, encoding: str = UTF8_ENCODING) -> str:
         if numeric.is_integer():
             return str(int(numeric))
         return str(numeric)
-    if pd.isna(cast(object, value)):
+    if pd.isna(cast(Any, value)):
         return ""
     return str(value)
 
