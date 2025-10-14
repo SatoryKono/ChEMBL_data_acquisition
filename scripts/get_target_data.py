@@ -9,6 +9,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+if __package__ in {None, ""}:
+    repo_root = Path(__file__).resolve().parents[1]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+
 from library.io.config_loader import load_config
 from library.io.metadata_writer import save_metadata
 from library.io.output_writer import save_standard_outputs
