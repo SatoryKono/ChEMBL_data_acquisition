@@ -583,11 +583,20 @@ def log_summary(durations: list[tuple[str, float]]) -> None:
         logging.info(" • %s: %.1f сек.", name, value)
 
 
-def count_output_files(output_dir: Path) -> int:
+def list_output_files(output_dir: Path) -> list[Path]:
+    """Return a sorted list of CSV artefacts present in ``output_dir``."""
+
     resolved = output_dir.expanduser().resolve()
     if not resolved.exists():
-        return 0
-    return sum(1 for path in resolved.glob("*.csv"))
+        return []
+    return sorted(
+        (path.resolve() for path in resolved.glob("*.csv") if path.is_file()),
+        key=os.fspath,
+    )
+
+
+def count_output_files(output_dir: Path) -> int:
+    return len(list_output_files(output_dir))
 
 
 def _resolve_output_directory(
@@ -705,7 +714,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     log_summary(durations)
 
-    csv_count = count_output_files(resolved_output_dir)
+    csv_files = list_output_files(resolved_output_dir)
+    csv_count = len(csv_files)
     logging.info(
         "🎉 Все выбранные этапы завершены. Найдено %d CSV-файлов в %s.",
         csv_count,
@@ -713,12 +723,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     if not skipped_stages and csv_count != _EXPECTED_CSV_COUNT:
-        logging.warning(
-            "Ожидалось получить %d CSV-файлов (по 3 на этап: %s), фактически найдено %d.",
+        discovered = ", ".join(
+            _relative_to_output(path, resolved_output_dir) for path in csv_files
+        )
+        if not discovered:
+            discovered = "нет CSV-файлов"
+        message = (
+            "Ожидалось получить %d CSV-файлов (по 3 на этап: %s), "
+            "фактически найдено %d. Обнаруженные файлы: %s."
+        ) % (
             _EXPECTED_CSV_COUNT,
             STAGE_SEQUENCE_LABEL,
             csv_count,
+            discovered,
         )
+        logging.error(message)
+        raise SystemExit(message)
 
     if _should_run_cleanup(forward_args):
         removed = cleanup_intermediate_files(resolved_output_dir)
