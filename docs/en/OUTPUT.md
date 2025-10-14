@@ -5,6 +5,8 @@ tables described below. This document summarises those CSV schemas, column
 meanings, data types and the optional legacy artefacts that can be emitted for
 deeper diagnostics.
 
+All pipeline commands should be executed with `--emit-legacy-artifacts` when provenance is required so that the `.meta.yaml` sidecar is emitted alongside the deterministic CSV trio.
+
 ## Canonical CSV bundle
 
 For an output named `output.targets_20250228.csv` the default artefacts are:
@@ -512,3 +514,6 @@ The CSV quality report contains the following columns:
 
 The JSON summary reproduces the same metrics and adds severity tags (`info`,
 `warn`, `error`) reflecting threshold breaches configured in `system.doc_quality`.
+
+
+_Updated for the standard CSV + metadata bundle on 2025-10-19._
