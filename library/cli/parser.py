@@ -159,10 +159,7 @@ def add_common_arguments(
     base_default: Path | None | object = None if defaults else argparse.SUPPRESS
     input_dir_default: Path | None | object = None if defaults else argparse.SUPPRESS
     output_dir_default: Path | None | object = None if defaults else argparse.SUPPRESS
-    if defaults:
-        date_tag_default: str | object = datetime.now(UTC).strftime("%Y%m%d")
-    else:
-        date_tag_default = argparse.SUPPRESS
+    date_tag_default: str | object = argparse.SUPPRESS
     date_default: str | None | object = None if defaults else argparse.SUPPRESS
     force_default: bool | object = False if defaults else argparse.SUPPRESS
     skip_default: bool | object = False if defaults else argparse.SUPPRESS
@@ -921,9 +918,27 @@ def prepare_io_paths(
         base=base_path,
     )
 
-    explicit_date_tag = _normalize_date_token(getattr(args, "date_tag", None))
-    legacy_date_value = _normalize_date_token(getattr(args, "date", None))
-    resolved_date_tag = explicit_date_tag or legacy_date_value
+    _missing = argparse.SUPPRESS
+
+    raw_date_tag = getattr(args, "date_tag", _missing)
+    has_explicit_date_tag = raw_date_tag is not _missing
+    explicit_date_tag = (
+        _normalize_date_token(raw_date_tag) if has_explicit_date_tag else None
+    )
+
+    raw_legacy_date = getattr(args, "date", _missing)
+    legacy_date_value = (
+        _normalize_date_token(raw_legacy_date)
+        if raw_legacy_date is not _missing
+        else None
+    )
+
+    if explicit_date_tag is not None:
+        resolved_date_tag = explicit_date_tag
+    elif legacy_date_value is not None:
+        resolved_date_tag = legacy_date_value
+    else:
+        resolved_date_tag = datetime.now(UTC).strftime("%Y%m%d")
     if resolved_date_tag is not None:
         args.date_tag = resolved_date_tag
         args.date = resolved_date_tag
