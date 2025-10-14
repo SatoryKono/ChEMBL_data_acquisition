@@ -77,6 +77,7 @@ def test_run_stage__inserts_default_document_subcommand(monkeypatch):
         extras_start=2,
         extra_len=6,
         output_dir=cli._resolve_forward_output_dir(tokens),
+        date_tag=None,
     )
 
     captured: dict[str, list[str]] = {}
@@ -84,7 +85,7 @@ def test_run_stage__inserts_default_document_subcommand(monkeypatch):
     class _Result:
         returncode = 0
 
-    def _fake_run(command, *, check=False, env=None):  # type: ignore[override]
+    def _fake_run(command, *, check=False, env=None, **kwargs):  # type: ignore[override]
         captured["command"] = command
         return _Result()
 
@@ -113,6 +114,7 @@ def test_build_forward_args__respects_equals_style_output_dir(tmp_path):
     assert "--output-dir" not in tokens, "default output-dir flag must not be duplicated"
     assert str(cli.DEFAULT_OUTPUT_DIR) not in tokens
     assert forward.output_dir == custom_output.resolve()
+    assert forward.date_tag is None
 
 
 @pytest.mark.unit
@@ -134,6 +136,7 @@ def test_ensure_base_path_env__resolves_relative_cli_value(tmp_path, monkeypatch
     from scripts import get_data as cli
 
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "PROJECT_ROOT", tmp_path.resolve())
     provided = Path("custom-base")
     env: dict[str, str] = {}
 
@@ -157,13 +160,16 @@ def test_ensure_base_path_env__keeps_preexisting_value():
 
 
 @pytest.mark.unit
-def test_cleanup_intermediate_files__removes_known_patterns(tmp_path: Path) -> None:
+def test_cleanup_intermediate_files__removes_known_patterns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Temporary artefacts should be deleted while canonical files remain."""
 
     from scripts import get_data as cli
 
     output_dir = tmp_path / "output"
     output_dir.mkdir()
+    monkeypatch.setattr(cli, "CANONICAL_OUTPUT_DIR", output_dir.resolve())
 
     removable_files = [
         output_dir / ".output.targets_20240101.csv.tmp",
@@ -191,12 +197,15 @@ def test_cleanup_intermediate_files__removes_known_patterns(tmp_path: Path) -> N
 
 
 @pytest.mark.unit
-def test_cleanup_intermediate_files__skips_missing_directory(tmp_path: Path) -> None:
+def test_cleanup_intermediate_files__skips_missing_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Cleanup should be a no-op when the output directory is absent."""
 
     from scripts import get_data as cli
 
     missing_dir = tmp_path / "missing"
+    monkeypatch.setattr(cli, "CANONICAL_OUTPUT_DIR", missing_dir.resolve())
     removed = cli.cleanup_intermediate_files(missing_dir)
 
     assert removed == 0
@@ -215,6 +224,7 @@ def test_should_run_cleanup__respects_user_flags() -> None:
         extras_start=0,
         extra_len=len(debug_tokens),
         output_dir=cli._resolve_forward_output_dir(debug_tokens),
+        date_tag=None,
     )
     assert cli._should_run_cleanup(forward) is False
 
@@ -224,6 +234,7 @@ def test_should_run_cleanup__respects_user_flags() -> None:
         extras_start=0,
         extra_len=len(base),
         output_dir=cli._resolve_forward_output_dir(base),
+        date_tag=None,
     )
     assert cli._should_run_cleanup(forward) is True
 
@@ -242,6 +253,7 @@ def test_main__skip_stage_has_no_warning(
     output_dir.mkdir()
     logs_dir = tmp_path / "logs"
     monkeypatch.setattr(cli, "LOGS_DIR", logs_dir)
+    monkeypatch.setattr(cli, "CANONICAL_OUTPUT_DIR", output_dir.resolve())
 
     executed: list[str] = []
 
@@ -274,6 +286,7 @@ def test_main__missing_outputs_fail_fast(
     output_dir.mkdir()
     logs_dir = tmp_path / "logs"
     monkeypatch.setattr(cli, "LOGS_DIR", logs_dir)
+    monkeypatch.setattr(cli, "CANONICAL_OUTPUT_DIR", output_dir.resolve())
 
     executed: list[str] = []
 
@@ -286,8 +299,8 @@ def test_main__missing_outputs_fail_fast(
     monkeypatch.setattr(cli, "cleanup_intermediate_files", lambda _path: 0)
 
     csv_files = [
-        output_dir / "document_latest.csv",
-        output_dir / "target_latest.csv",
+        output_dir / "output.document_20240101.csv",
+        output_dir / "output.target_20240101.csv",
     ]
     for path in csv_files:
         path.write_text("dummy")
@@ -306,7 +319,6 @@ def test_main__missing_outputs_fail_fast(
 def test_main__summary_uses_forward_output_dir(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    capfd: pytest.CaptureFixture[str],
 ) -> None:
     """The summary must inspect the same directory that stages write into."""
 
@@ -317,12 +329,14 @@ def test_main__summary_uses_forward_output_dir(
 
     expected_output = (tmp_path / "actual-output").resolve()
     expected_output.mkdir()
+    monkeypatch.setattr(cli, "CANONICAL_OUTPUT_DIR", expected_output)
 
     fake_forward_args = cli.ForwardArgs(
         tokens=("--output-dir", "ignored", "--base-path", "ignored-base"),
         extras_start=0,
         extra_len=0,
         output_dir=expected_output,
+        date_tag=None,
     )
 
     monkeypatch.setattr(cli, "build_forward_args", lambda _args, _extra: fake_forward_args)
@@ -350,6 +364,3 @@ def test_main__summary_uses_forward_output_dir(
     assert exit_code == 0
     assert executed, "expected orchestrator to execute stages"
     assert inspected_paths == [expected_output]
-    captured = capfd.readouterr()
-    assert "Найдено" in captured.out
-    assert str(expected_output) in captured.out

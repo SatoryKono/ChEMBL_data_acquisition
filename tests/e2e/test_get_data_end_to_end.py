@@ -948,7 +948,9 @@ def test_get_data_end_to_end__pubchem_disable_flag(
     )
     monkeypatch.setattr(get_data, "STAGES", custom_stages)
     monkeypatch.setattr(get_data, "LOGS_DIR", tmp_path / "logs")
-    monkeypatch.setattr(get_data, "OUTPUT_DIR", tmp_path / "output")
+    output_dir = (tmp_path / "output").resolve()
+    monkeypatch.setattr(get_data, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(get_data, "CANONICAL_OUTPUT_DIR", output_dir)
 
     argv = [
         "--skip",
