@@ -245,6 +245,31 @@ def test_emit_completion_message__streamed_metrics(
 
 
 @pytest.mark.unit
+def test_emit_completion_message__prefers_processed_rows_over_zero_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    logger = _StubLogger()
+    monkeypatch.setattr(activity, "logger", logger)
+
+    activity._emit_completion_message(
+        output_path=Path("output.csv"),
+        processed_rows=5,
+        duration_s=1.0,
+        mode="run",
+        streamed_metrics={"rows": 0, "null_fraction": 0.5},
+    )
+
+    assert len(logger.calls) == 1
+    event, payload = logger.calls[0]
+    assert event == "activity_pipeline_completion"
+    assert payload["rows"] == 5
+    assert payload["processed_rows"] == 5
+    metrics = payload["streamed_metrics"]
+    assert metrics["rows"] == 0
+    assert metrics["null_fraction"] == pytest.approx(0.5)
+
+
+@pytest.mark.unit
 def test_resolve_completion_rows__prefers_pipeline_stats_when_summary_zero() -> None:
     result = activity._resolve_completion_rows(
         processed_ids=10,

@@ -727,12 +727,14 @@ def _emit_completion_message(
 
     if streamed_metrics:
         rows_value = streamed_metrics.get("rows")
-        if isinstance(rows_value, numbers.Integral):
-            resolved_rows = int(rows_value)
-        elif isinstance(rows_value, numbers.Real):
-            rows_float = float(rows_value)
-            if not math.isnan(rows_float):
-                resolved_rows = int(rows_float)
+        metrics_rows = _extract_metric_count(rows_value)
+        if metrics_rows is not None:
+            if processed_rows is None:
+                resolved_rows = metrics_rows
+            elif metrics_rows > resolved_rows:
+                resolved_rows = metrics_rows
+            elif resolved_rows <= 0 < metrics_rows:
+                resolved_rows = metrics_rows
 
         null_fraction = streamed_metrics.get("null_fraction")
         if isinstance(null_fraction, numbers.Real):
