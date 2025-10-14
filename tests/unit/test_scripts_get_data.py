@@ -203,6 +203,24 @@ def test_cleanup_intermediate_files__skips_missing_directory(tmp_path: Path) -> 
 
 
 @pytest.mark.unit
+def test_resolve_output_directory__mirrors_forward_args(monkeypatch):
+    """The orchestrator must inspect the same output dir as subprocesses."""
+
+    from scripts import get_data as cli
+
+    monkeypatch.delenv(cli._BASE_PATH_ENV_VAR, raising=False)
+
+    args, extras = cli.parse_args([])
+    forward = cli.build_forward_args(args, extras)
+
+    resolved = cli._resolve_output_directory(args, forward)
+
+    expected = (cli.PROJECT_ROOT / cli.DEFAULT_OUTPUT_DIR).resolve()
+    assert forward.output_dir == expected
+    assert resolved == expected
+
+
+@pytest.mark.unit
 def test_should_run_cleanup__respects_user_flags() -> None:
     """Diagnostic flags should disable the orchestrator cleanup."""
 

@@ -421,6 +421,9 @@ def configure_logging(level_name: str | None) -> Path:
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     log_file = LOGS_DIR / f"get_data_{timestamp}.log"
 
+    root_logger = logging.getLogger()
+    preserved_handlers = list(root_logger.handlers)
+
     handlers: list[logging.Handler] = [
         logging.StreamHandler(sys.stdout),
         logging.FileHandler(log_file, encoding="utf-8"),
@@ -432,6 +435,11 @@ def configure_logging(level_name: str | None) -> Path:
         handlers=handlers,
         force=True,
     )
+
+    for handler in preserved_handlers:
+        if handler not in handlers:
+            root_logger.addHandler(handler)
+
     logging.getLogger(__name__).debug("Логирование настроено на уровень %s", level)
     return log_file
 
@@ -573,25 +581,12 @@ def _resolve_output_directory(
 ) -> Path:
     """Return the absolute output directory referenced by the orchestrator."""
 
-    raw_value = _extract_option_value(forward_args.tokens, "--output-dir")
-    candidate = Path(raw_value).expanduser() if raw_value else DEFAULT_OUTPUT_DIR
-    if candidate.is_absolute():
-        return candidate.resolve()
-
-    base_value = _extract_option_value(forward_args.tokens, "--base-path")
-    if base_value:
-        base_path = Path(base_value).expanduser()
-        if not base_path.is_absolute():
-            base_path = (Path.cwd() / base_path).resolve()
-        else:
-            base_path = base_path.resolve()
-    else:
-        extras = forward_args.tokens[
-            forward_args.extras_start : forward_args.extras_end
-        ]
-        base_path = _resolve_forward_base_path(args, extras, fallback=PROJECT_ROOT)
-
-    return (base_path / candidate).resolve()
+    # ``ForwardArgs`` stores the fully resolved output directory that will be
+    # forwarded to pipeline stages.  Reuse this value directly so the
+    # orchestrator inspects the same location where subprocesses emit their
+    # artefacts instead of re-deriving a path from configuration defaults that
+    # may point to ``~/.local/share/chembl-da``.
+    return forward_args.output_dir
 
 
 def _is_cleanup_directory(path: Path) -> bool:
