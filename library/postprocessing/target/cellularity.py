@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
@@ -17,6 +17,32 @@ from .helpers import first_element_text, normalize_text
 ADD_CELLULARITY_SMART_FIELD_NAME = "AddCellularitySmart "
 
 FetchLineageCallable = Callable[[Any, str | None], Sequence[str]]
+
+
+def _is_missing(value: Any) -> bool:
+    """Return ``True`` when *value* should be treated as missing."""
+
+    try:
+        evaluation = pd.isna(cast(Any, value))
+    except Exception:
+        return False
+
+    if isinstance(evaluation, (bool, np.bool_)):
+        return bool(evaluation)
+    if evaluation is pd.NA:
+        return True
+
+    all_method = getattr(evaluation, "all", None)
+    if callable(all_method):
+        try:
+            reduced = all_method()
+        except TypeError:
+            return False
+        if isinstance(reduced, (bool, np.bool_)):
+            return bool(reduced)
+        if reduced is pd.NA:
+            return True
+    return False
 
 
 @dataclass
@@ -118,39 +144,12 @@ class Cellularity:
         return "ambiguous"
 
     def get_lineage_names(self, tax_id: Any, email: str | None = None) -> list[str]:
-        missing_value: Any = False
-        try:
-            if bool(pd.isna(tax_id)):
-                return []
-            missing_value = pd.isna(tax_id)
-        except (TypeError, ValueError):
-            # ``pd.isna`` may return array-like objects for non-scalar inputs;
-            # those should simply fall back to the fetcher.
-            missing_value = pd.isna(tax_id)
-        except Exception:
-            missing_value = False
-
         if tax_id is None:
             return []
 
-        if isinstance(missing_value, bool | np.bool_) and missing_value:
+        if _is_missing(tax_id):
             return []
 
-        if getattr(missing_value, "all", None) is not None:
-            try:
-                all_missing = missing_value.all()
-            except TypeError:
-                all_missing = False
-            if isinstance(all_missing, bool | np.bool_) and all_missing:
-                return []
-            if all_missing is pd.NA:
-                return []
-
-        if tax_id is pd.NA:
-            return []
-
-        if isinstance(tax_id, float | np.floating) and pd.isna(tax_id):
-            return []
         fetcher = self.fetcher or self._fetch_lineage_default
         values = list(fetcher(tax_id, email))
         return values
@@ -231,9 +230,7 @@ class Cellularity:
     def _lower_token(value: Any) -> str:
         if value is None:
             return ""
-        if isinstance(value, float) and pd.isna(value):
-            return ""
-        if value is pd.NA:
+        if _is_missing(value):
             return ""
         return str(value).lower()
 
