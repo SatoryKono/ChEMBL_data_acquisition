@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from scripts import get_target_data
 
 from library.postprocessing.target.steps import TargetData
@@ -58,3 +59,26 @@ def test_get_target_data_cli(tmp_path, monkeypatch) -> None:
     assert quality_path.exists()
     assert correlation_path.exists()
     assert metadata_path.exists()
+
+
+def test_parse_args_accepts_logging_and_input_dir(tmp_path) -> None:
+    namespace, parsed = get_target_data.parse_args(
+        [
+            "--limit",
+            "5",
+            "--log-level",
+            "debug",
+            "--input-dir",
+            str(tmp_path),
+        ]
+    )
+
+    assert parsed.log_level == "DEBUG"
+    assert parsed.input_dir == tmp_path
+    assert namespace.log_level == "DEBUG"
+    assert namespace.input_dir == tmp_path
+
+
+def test_parse_args_rejects_unknown_log_level() -> None:
+    with pytest.raises(SystemExit):
+        get_target_data.parse_args(["--log-level", "verbose"])

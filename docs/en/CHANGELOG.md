@@ -1,6 +1,11 @@
 # Changelog
 
 > **Languages:** [English](./CHANGELOG.md) · [Русский](../ru/CHANGELOG.md)
+## [0.1.9] - 2025-10-21
+- Extended `scripts/get_target_data.py` with CLI options for `--log-level` and
+  `--input-dir`, aligning the metadata output with orchestrator expectations and
+  normalising UTC defaults.
+
 ## [0.1.8] - 2025-10-20
 - Restored CLI bootstrapping for `scripts/get_target_data.py` so direct Windows
   invocations resolve internal modules without manual `PYTHONPATH` tweaks.

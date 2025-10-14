@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -40,6 +41,8 @@ class PipelineArgs:
     date_tag: str
     output_dir: Path
     config: Path | None
+    log_level: str
+    input_dir: Path
 
 
 def _positive_int(value: str) -> int:
@@ -47,6 +50,24 @@ def _positive_int(value: str) -> int:
     if parsed <= 0:
         raise argparse.ArgumentTypeError("limit must be positive")
     return parsed
+
+
+def _log_level(value: str) -> str:
+    """Return a normalised logging level name."""
+
+    levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+    candidate = value.strip().upper()
+    if candidate not in levels:
+        options = ", ".join(sorted(levels))
+        raise argparse.ArgumentTypeError(f"log level must be one of: {options}")
+    return candidate
+
+
+def _configure_logging(level_name: str) -> None:
+    """Apply the requested log level to the root logger."""
+
+    level = getattr(logging, level_name, logging.INFO)
+    logging.getLogger().setLevel(level)
 
 
 def _date_tag(value: str) -> str:
@@ -65,7 +86,7 @@ def parse_args(argv: Sequence[str] | None = None) -> tuple[argparse.Namespace, P
     parser.add_argument(
         "--date-tag",
         type=_date_tag,
-        default=datetime.utcnow().strftime("%Y%m%d"),
+        default=datetime.now(UTC).strftime("%Y%m%d"),
         help="Execution date token in YYYYMMDD format",
     )
     parser.add_argument(
@@ -80,6 +101,18 @@ def parse_args(argv: Sequence[str] | None = None) -> tuple[argparse.Namespace, P
         default=None,
         help="Path to configuration file (defaults to config/config.yaml)",
     )
+    parser.add_argument(
+        "--log-level",
+        type=_log_level,
+        default="INFO",
+        help="Root logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
+    parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=Path("data/input"),
+        help="Directory containing auxiliary input artefacts",
+    )
     namespace = parser.parse_args(argv)
     config_path = Path(namespace.config) if namespace.config is not None else None
     pipeline_args = PipelineArgs(
@@ -87,6 +120,8 @@ def parse_args(argv: Sequence[str] | None = None) -> tuple[argparse.Namespace, P
         date_tag=namespace.date_tag,
         output_dir=Path(namespace.output_dir),
         config=config_path,
+        log_level=namespace.log_level,
+        input_dir=Path(namespace.input_dir),
     )
     return namespace, pipeline_args
 
@@ -95,6 +130,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Execute the target pipeline."""
 
     namespace, args = parse_args(argv)
+    _configure_logging(args.log_level)
     logger = get_logger(__name__)
 
     try:
@@ -104,6 +140,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    args.input_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         dataset = target_steps.fetch_normalize_target(args.limit)
