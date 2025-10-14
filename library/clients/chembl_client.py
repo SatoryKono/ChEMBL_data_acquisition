@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -47,6 +47,36 @@ class ChemblClient:
             log_event="chembl_request",
         )(self._request_json)
         return request(endpoint=endpoint, params=params, timeout=effective_timeout)
+
+    def list_targets(
+        self,
+        *,
+        limit: int,
+        offset: int = 0,
+        fields: Sequence[str] | None = None,
+        params: Mapping[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """Return a page of targets with optional field selection."""
+
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+
+        effective_params: dict[str, Any] = {"limit": limit, "offset": offset}
+        if fields:
+            effective_params["fields"] = ",".join(fields)
+        if params:
+            effective_params.update(params)
+
+        endpoint = "target.json"
+        effective_timeout = timeout or self.timeout
+        request = with_retry(
+            max_tries=self.max_tries,
+            timeout=effective_timeout,
+            logger=self._logger,
+            log_event="chembl_request",
+        )(self._request_json)
+        return request(endpoint=endpoint, params=effective_params, timeout=effective_timeout)
 
     def _request_json(
         self,
