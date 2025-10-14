@@ -17,26 +17,35 @@ __all__ = ["open_atomic", "robust_replace"]
 _REPLACE_RETRYABLE_ERRNOS = {errno.EACCES, errno.EPERM}
 _REPLACE_RETRYABLE_WINERRORS = {5, 32, 33}
 
+
+class _PortalockerLockFallback(AbstractContextManager[Any]):  # pragma: no cover - helper
+    ...
+
+
 if TYPE_CHECKING:  # pragma: no cover - typing helpers only
+    try:
+        from portalocker import Lock as _PortalockerLock  # type: ignore[import-not-found, unused-ignore]  # pragma: no cover
+    except ModuleNotFoundError:  # pragma: no cover - typing fallback
+        _PortalockerLock = _PortalockerLockFallback
+else:  # pragma: no cover - runtime helper
+    _PortalockerLock = _PortalockerLockFallback
 
-    class _PortalockerModule(Protocol):
-        def Lock(
-            self,
-            path: str,
-            *,
-            mode: str = ...,
-            timeout: float = ...,
-        ) -> AbstractContextManager[Any]: ...
 
-else:  # pragma: no cover - runtime branch
-    _PortalockerModule = ModuleType
+class _PortalockerModule(Protocol):
+    def Lock(
+        self,
+        path: str,
+        *,
+        mode: str = ...,
+        timeout: float = ...,
+    ) -> _PortalockerLock: ...
 
 try:  # pragma: no cover - optional dependency
-    import portalocker as _portalocker
+    import portalocker as _portalocker  # type: ignore[import-not-found, unused-ignore]
 except ModuleNotFoundError:  # pragma: no cover - fallback path
     portalocker: _PortalockerModule | None = None
 else:
-    portalocker = cast("_PortalockerModule", _portalocker)
+    portalocker = cast(_PortalockerModule, _portalocker)
 
 if TYPE_CHECKING:  # pragma: no cover - typing helpers only
 

@@ -7,6 +7,7 @@ from collections.abc import Sequence
 import pandas as pd
 
 from library.postprocessing.common import DataFrameSchema, validate_schema
+from library.schemas.testitem import TestitemSchema
 
 BOOLEAN_COLUMNS: Sequence[str] = (
     "natural_product",
@@ -104,6 +105,7 @@ TESTITEM_SCHEMA = DataFrameSchema(
         "timestamp_utc",
         "pipeline_version",
     ),
+    pandera_schema=TestitemSchema,
 )
 
 

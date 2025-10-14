@@ -95,7 +95,9 @@ def read_csv_pyarrow(
         return cast(pd.DataFrame, read_csv(*args, **kwargs))
 
 
-def merge_series_prefer_left(left: pd.Series, right: pd.Series) -> pd.Series:
+def merge_series_prefer_left(
+    left: pd.Series[Any], right: pd.Series[Any]
+) -> pd.Series[Any]:
     """Return ``left`` with missing entries populated from ``right``.
 
     The function mirrors :meth:`pandas.Series.combine_first` for the subset of
@@ -148,7 +150,9 @@ def merge_series_prefer_left(left: pd.Series, right: pd.Series) -> pd.Series:
     return result
 
 
-def _ensure_unique_index(series: pd.Series, *, always_multi: bool = False) -> pd.Series:
+def _ensure_unique_index(
+    series: pd.Series[Any], *, always_multi: bool = False
+) -> pd.Series[Any]:
     """Return ``series`` with a unique index preserving order.
 
     Pandas disallows :meth:`Series.reindex` when the axis contains duplicate
