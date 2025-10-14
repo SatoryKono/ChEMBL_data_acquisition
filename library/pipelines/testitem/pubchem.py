@@ -690,12 +690,15 @@ def _merge_pubchem_properties(
 
     properties_records: dict[str, dict[str, object]] = {}
 
-    lookup_order = sorted(lookup_cids)
+    cid_series = cid_series.astype("string").replace({"": pd.NA})
+
+    lookup_order = sorted({str(cid) for cid in lookup_cids if cid})
     if lookup_order:
         configured_batch_size = max(int(getattr(cfg, "batch_size", 1)), 1)
+        configured_batch_size = min(configured_batch_size, 200)
         rps_limit = int(getattr(cfg, "rps", configured_batch_size))
         max_workers = max(1, min(configured_batch_size, rps_limit))
-        batch_size = max_workers
+        batch_size = min(max_workers, 200)
 
         pubchem_lib = _load_pubchem_library()
 
@@ -783,9 +786,14 @@ def _merge_pubchem_properties(
             logger.warning("pubchem_properties_unavailable", **log_payload)
 
     properties_df = pd.DataFrame.from_dict(properties_records, orient="index")
-    pubchem_df = cid_series.to_frame("pubchem_cid").join(
-        properties_df, on="pubchem_cid"
+    if not properties_df.empty:
+        properties_df.index = properties_df.index.astype("string")
+
+    pubchem_df = cid_series.to_frame("pubchem_cid")
+    pubchem_df["pubchem_cid"] = pubchem_df["pubchem_cid"].astype("string").replace(
+        {"": pd.NA}
     )
+    pubchem_df = pubchem_df.join(properties_df, on="pubchem_cid")
     pubchem_df = pubchem_df.reindex(frame.index)
 
     preserve_mask = skip_mask | prefer_local_mask
@@ -793,34 +801,33 @@ def _merge_pubchem_properties(
     prefer_local_values = bool(getattr(cfg, "prefer_local_values", False))
 
     if existing_columns:
-        original_existing = frame[existing_columns].astype("string")
+        original_existing = (
+            frame[existing_columns].astype("string").replace({"": pd.NA})
+        )
         for column in existing_columns:
             if column not in pubchem_df.columns:
                 pubchem_df[column] = pd.Series(
                     pd.NA, index=pubchem_df.index, dtype="string"
                 )
 
-        updated = pubchem_df[existing_columns].astype("string")
+        updated = (
+            pubchem_df[existing_columns].astype("string").replace({"": pd.NA})
+        )
 
         if prefer_local_values:
-            for column in existing_columns:
-                new_col = updated[column]
-                original_col = original_existing[column]
-                new_missing = new_col.isna() | (new_col.fillna("").str.len() == 0)
-                original_present = ~original_col.isna() & (
-                    original_col.fillna("").str.len() > 0
-                )
-                replace_mask = new_missing & original_present
-                if replace_mask.any():
-                    updated[column] = new_col.mask(replace_mask, original_col)
+            combined = original_existing.combine_first(updated)
+        else:
+            combined = updated.combine_first(original_existing)
+
+        if "pubchem_cid" in combined.columns:
+            combined.loc[:, "pubchem_cid"] = (
+                updated["pubchem_cid"].combine_first(original_existing["pubchem_cid"])
+            )
 
         if preserve_mask.any():
-            for column in existing_columns:
-                updated[column] = updated[column].mask(
-                    preserve_mask, original_existing[column]
-                )
+            combined.loc[preserve_mask, :] = original_existing.loc[preserve_mask, :]
 
-        pubchem_df[existing_columns] = updated
+        pubchem_df[existing_columns] = combined.astype("string")
 
     return pubchem_df.convert_dtypes()
 
@@ -872,9 +879,10 @@ def add_pubchem_data(
         return df
 
     result = df.reset_index(drop=True).copy()
-    prefer_local = getattr(cfg, "prefer_local_smiles", False)
+    prefer_local_smiles = getattr(cfg, "prefer_local_smiles", False)
+    prefer_local_values = bool(getattr(cfg, "prefer_local_values", False))
     existing_cols = [col for col in PUBCHEM_COLUMNS if col in result.columns]
-    if prefer_local and existing_cols:
+    if prefer_local_smiles and existing_cols:
         normalised = pd.DataFrame(
             {
                 col: result[col].astype("string").replace("", pd.NA)
@@ -996,21 +1004,18 @@ def add_pubchem_data(
     for column in pubchem_df.columns:
         replacement = pubchem_df[column]
         if column in result.columns:
+            existing_series = result[column].astype("string").replace({"": pd.NA})
+            replacement_series = replacement.astype("string").replace({"": pd.NA})
+
+            prefer_local_column = prefer_local_values and column != "pubchem_cid"
+
+            if prefer_local_column:
+                combined_series = existing_series.combine_first(replacement_series)
+            else:
+                combined_series = replacement_series.combine_first(existing_series)
+
+            result[column] = combined_series
             _normalise_pubchem_column_dtype(result, column)
-
-            if replacement.empty:
-                continue
-
-            replacement_non_null = replacement.dropna()
-            if replacement_non_null.empty:
-                continue
-
-            # ``Series.combine_first`` internally concatenates the operands and
-            # currently issues a ``FutureWarning`` when one of them is empty.
-            # Assigning only the non-null values preserves the existing
-            # behaviour without triggering the warning while still favouring the
-            # PubChem values over the ChEMBL fallbacks.
-            result.loc[replacement_non_null.index, column] = replacement_non_null
         else:
             result[column] = replacement
 

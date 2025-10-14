@@ -217,7 +217,7 @@ def test_make_request__caches_server_error_results(
 
     url = (
         f"{cfg.base.rstrip('/')}/compound/cid/64972/property/"
-        "MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
+        "CanonicalSMILES,IsomericSMILES,InChI,InChIKey,IUPACName,MolecularFormula/JSON"
     )
 
     sleep_calls: list[float] = []
@@ -300,11 +300,11 @@ def test_make_request__short_circuits_during_retry_after(
     base = cfg.base.rstrip("/")
     url_first = (
         f"{base}/compound/cid/149790/property/"
-        "MolecularFormula,IUPACName,SMILES,ConnectivitySMILES,InChI,InChIKey/JSON"
+        "CanonicalSMILES,IsomericSMILES,InChI,InChIKey,IUPACName,MolecularFormula/JSON"
     )
     url_second = (
         f"{base}/compound/cid/20353/property/"
-        "MolecularFormula,IUPACName,SMILES,ConnectivitySMILES,InChI,InChIKey/JSON"
+        "CanonicalSMILES,IsomericSMILES,InChI,InChIKey,IUPACName,MolecularFormula/JSON"
     )
 
     time_ctrl = _TimeController()
@@ -438,7 +438,7 @@ def test_make_request__retry_after_honours_grace(
 
     url = (
         f"{cfg.base.rstrip('/')}/compound/cid/64972/property/"
-        "MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
+        "CanonicalSMILES,IsomericSMILES,InChI,InChIKey,IUPACName,MolecularFormula/JSON"
     )
 
     sleep_calls: list[float] = []
@@ -495,7 +495,7 @@ def test_make_request__retry_after_grace_disabled_causes_timeout(
 
     url = (
         f"{cfg.base.rstrip('/')}/compound/cid/64972/property/"
-        "MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
+        "CanonicalSMILES,IsomericSMILES,InChI,InChIKey,IUPACName,MolecularFormula/JSON"
     )
 
     sleep_calls: list[float] = []
@@ -555,7 +555,7 @@ def test_make_request__applies_jitter_without_retry_after(
 
     url = (
         f"{cfg.base.rstrip('/')}/compound/cid/64972/property/"
-        "MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
+        "CanonicalSMILES,IsomericSMILES,InChI,InChIKey,IUPACName,MolecularFormula/JSON"
     )
 
     limiter = _DummyLimiter()
@@ -595,7 +595,7 @@ def test_make_request__timeout_cache_uses_config_backoff(
 
     url = (
         f"{cfg.base.rstrip('/')}/compound/cid/64972/property/"
-        "MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
+        "CanonicalSMILES,IsomericSMILES,InChI,InChIKey,IUPACName,MolecularFormula/JSON"
     )
 
     sleep_calls: list[float] = []
