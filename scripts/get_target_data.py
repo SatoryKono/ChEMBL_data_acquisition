@@ -8,14 +8,25 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+# ruff: noqa: E402 - bootstrap adjusts import order for direct execution
+if TYPE_CHECKING:
+    from . import _bootstrap as _bootstrap_module
+elif __package__ in {None, ""}:
+    import _bootstrap as _bootstrap_module  # pragma: no cover - CLI fallback
+else:  # pragma: no cover - executed when imported as a package module
+    from . import _bootstrap as _bootstrap_module
+
+bootstrap_cli = _bootstrap_module.bootstrap_cli
+bootstrap_cli(__package__, __file__)
+del bootstrap_cli
+del _bootstrap_module
 
 from library.io.config_loader import load_config
 from library.io.metadata_writer import save_metadata
 from library.io.output_writer import save_standard_outputs
-from library.postprocessing.target.steps import (
-    fetch_normalize_target,
-    generate_target_reports,
-)
+from library.postprocessing.target import steps as target_steps
 from library.utils.logging import get_logger
 
 TABLE_NAME = "target"
@@ -95,8 +106,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        dataset = fetch_normalize_target(args.limit)
-        target_data = generate_target_reports(dataset)
+        dataset = target_steps.fetch_normalize_target(args.limit)
+        target_data = target_steps.generate_target_reports(dataset)
         artifacts = save_standard_outputs(
             target_data.dataset,
             target_data.correlation_report,

@@ -49,7 +49,7 @@ def test_get_target_data_cli(tmp_path, monkeypatch) -> None:
     assert exit_code == 0
 
     expected_stem = tmp_path / "output.target_20250101"
-    dataset_path = expected_stem.with_suffix(".csv")
+    dataset_path = Path(f"{expected_stem}.csv")
     quality_path = Path(f"{expected_stem}_quality_report_table.csv")
     correlation_path = Path(f"{expected_stem}_data_correlation_report_table.csv")
     metadata_path = Path(f"{expected_stem}.meta.yaml")
