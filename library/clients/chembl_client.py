@@ -78,6 +78,36 @@ class ChemblClient:
         )(self._request_json)
         return request(endpoint=endpoint, params=effective_params, timeout=effective_timeout)
 
+    def list_activities(
+        self,
+        *,
+        limit: int,
+        offset: int = 0,
+        fields: Sequence[str] | None = None,
+        params: Mapping[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """Return a page of activities with optional field selection."""
+
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+
+        effective_params: dict[str, Any] = {"limit": limit, "offset": offset}
+        if fields:
+            effective_params["fields"] = ",".join(fields)
+        if params:
+            effective_params.update(params)
+
+        endpoint = "activity.json"
+        effective_timeout = timeout or self.timeout
+        request = with_retry(
+            max_tries=self.max_tries,
+            timeout=effective_timeout,
+            logger=self._logger,
+            log_event="chembl_request",
+        )(self._request_json)
+        return request(endpoint=endpoint, params=effective_params, timeout=effective_timeout)
+
     def _request_json(
         self,
         endpoint: str,
