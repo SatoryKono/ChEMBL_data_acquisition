@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
-PYTHON ?= python3
+PYTHON ?= python3.11
 VENV := .venv
 PYTHON_BIN := $(VENV)/bin/python
 PIP := $(VENV)/bin/pip
@@ -16,13 +16,14 @@ ifneq ($(ENV_FILES),)
   export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' $(ENV_FILES))
 endif
 
-.PHONY: init lint test smoke test-report get-activities build release clean
+.PHONY: init lint test smoke test-report get-activities build release clean clean-artifacts clean-venv
 
 init: $(PYTHON_BIN)
 
 $(PYTHON_BIN): requirements.txt pyproject.toml
 	@if [ -f .python-version ]; then \
-		$(PYTHON) -c "import pathlib, sys; expected = pathlib.Path('.python-version').read_text().strip(); actual = '.'.join(map(str, sys.version_info[:3])); assert actual == expected, f'Python {expected} required, but {actual} found'"; \
+	$(PYTHON) -c "import pathlib, sys; version = pathlib.Path('.python-version').read_text().strip(); expected = tuple(int(part) for part in version.split('.')); actual = sys.version_info[:len(expected)]; actual_str = '.'.join(map(str, sys.version_info[:len(expected)]));\
+	assert actual == expected, f\"Python {version} required, but {actual_str} found\""; \
 	fi
 	$(PYTHON) -m venv $(VENV)
 	$(PIP) install --upgrade pip
@@ -61,10 +62,13 @@ build: $(PYTHON_BIN)
 release: build
 	$(PYTHON_BIN) -m twine check dist/*
 
-clean:
-	rm -rf $(VENV) build dist .pytest_cache
-	find . -name '.mypy_cache' -prune -exec rm -rf {} +
-	find . -type d -name '__pycache__' -prune -exec rm -rf {} +
+clean: clean-artifacts clean-venv
+
+clean-artifacts:
+	$(PYTHON) scripts/cleanup_project.py --all
+
+clean-venv:
+	rm -rf $(VENV) $(DEV_SENTINEL)
 
 .PHONY: protocol-docx
 protocol-docx: $(PYTHON_BIN)
