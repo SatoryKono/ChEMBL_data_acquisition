@@ -18,7 +18,10 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for minimal environme
                     yield delay
                     delay = delay * 2 if delay else 1.0
 
-            return _generator()
+            def _factory() -> Iterator[float]:
+                return _generator()
+
+            return _factory
 
         @staticmethod
         def on_exception(
@@ -33,7 +36,8 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for minimal environme
                 @functools.wraps(func)
                 def wrapper(*args: Any, **kwargs: Any) -> Any:
                     tries = 0
-                    waits = wait_gen()
+                    waits_candidate = wait_gen()
+                    waits = waits_candidate() if callable(waits_candidate) else waits_candidate
                     while True:
                         try:
                             return func(*args, **kwargs)
