@@ -5,19 +5,25 @@ from __future__ import annotations
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from importlib.abc import Traversable
 from importlib.resources import files
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import IO, Any, cast
 
 import yaml
 
 from config.paths import SCHEMA_DIR
 
 try:  # pragma: no cover - optional import for backwards compatibility
-    from config.schema import DOCUMENT_SCHEMA_RESOURCE
+    from config.schema import DOCUMENT_SCHEMA_RESOURCE as _DOCUMENT_SCHEMA_RESOURCE
 except Exception:  # pragma: no cover - fallback if package not initialised
-    DOCUMENT_SCHEMA_RESOURCE = None
+    DOCUMENT_SCHEMA_RESOURCE: Traversable | None = None
+else:
+    resource_obj = _DOCUMENT_SCHEMA_RESOURCE
+    if isinstance(resource_obj, str):
+        resource_obj = Path(resource_obj)
+    DOCUMENT_SCHEMA_RESOURCE = cast(Traversable | None, resource_obj)
 from library._compat.pandera import pa
 
 
@@ -138,21 +144,21 @@ def load_document_declaration(path: str | Path | None = None) -> DocumentDeclara
 
 def _load_schema_mapping(path: str | Path | None) -> Mapping[str, Any]:
     schema_path = _resolve_schema_path(path)
-    if hasattr(schema_path, "open") and not isinstance(schema_path, Path):
-        with schema_path.open("r", encoding="utf-8") as handle:
-            return yaml.safe_load(handle) or {}
-    try:
-        with Path(schema_path).open(encoding="utf-8") as handle:
-            return yaml.safe_load(handle) or {}
-    except FileNotFoundError:
-        if path is not None:
-            raise
-        resource = _get_packaged_schema_resource()
-        with resource.open("r", encoding="utf-8") as handle:
-            return yaml.safe_load(handle) or {}
+    if isinstance(schema_path, Path):
+        try:
+            with schema_path.open(encoding="utf-8") as handle:
+                return _read_schema_mapping(handle)
+        except FileNotFoundError:
+            if path is not None:
+                raise
+            resource = _get_packaged_schema_resource()
+            with resource.open("r", encoding="utf-8") as handle:
+                return _read_schema_mapping(handle)
+    with schema_path.open("r", encoding="utf-8") as handle:
+        return _read_schema_mapping(handle)
 
 
-def _resolve_schema_path(path: str | Path | None):
+def _resolve_schema_path(path: str | Path | None) -> Path | Traversable:
     if path is None:
         default_path = SCHEMA_DIR / "document.yaml"
         if default_path.exists():
@@ -195,11 +201,18 @@ def _parse_export_columns(export_data: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(resolved)
 
 
-def _get_packaged_schema_resource():
+def _get_packaged_schema_resource() -> Traversable:
     resource = DOCUMENT_SCHEMA_RESOURCE
     if resource is None:
         resource = files("config.schema").joinpath("document.yaml")
     return resource
+
+
+def _read_schema_mapping(handle: IO[str]) -> Mapping[str, Any]:
+    loaded = yaml.safe_load(handle) or {}
+    if not isinstance(loaded, Mapping):
+        raise TypeError("document schema declaration must be a mapping")
+    return cast(Mapping[str, Any], loaded)
 
 
 _DECLARATION = load_document_declaration()
