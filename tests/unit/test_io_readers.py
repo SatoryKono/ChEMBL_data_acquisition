@@ -8,9 +8,9 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+from scripts import make_activity_postprocessing as activity_cli
 
 from library import io
-from scripts import make_activity_postprocessing as activity_cli
 
 
 @pytest.mark.unit

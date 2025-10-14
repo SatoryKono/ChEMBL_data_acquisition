@@ -1,10 +1,9 @@
-"""PubChem API helper with deterministic retries."""
+"""Minimal client for Guide to Pharmacology (GtoPdb) services."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Mapping
 
 import requests
 
@@ -17,34 +16,34 @@ def _build_url(base_url: str, endpoint: str) -> str:
 
 
 @dataclass(slots=True)
-class PubChemClient:
-    """HTTP client exposing the PubChem compound endpoint."""
+class GtoPdbClient:
+    """HTTP client retrieving GtoPdb target annotations."""
 
-    base_url: str = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+    base_url: str = "https://www.guidetopharmacology.org/services"
     timeout: float = DEFAULT_TIMEOUT
     max_tries: int = DEFAULT_MAX_TRIES
     session: requests.Session = field(default_factory=requests.Session)
     _logger: Logger = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        self._logger = get_logger(__name__).bind(client="pubchem", base_url=self.base_url)
+        self._logger = get_logger(__name__).bind(client="gtopdb", base_url=self.base_url)
 
-    def get_compound(
+    def get_target_by_uniprot(
         self,
-        cid: str,
+        accession: str,
         *,
         params: Mapping[str, Any] | None = None,
         timeout: float | None = None,
-    ) -> dict[str, Any]:
-        """Fetch compound properties for ``cid``."""
+    ) -> Any:
+        """Fetch target annotations mapped to ``accession``."""
 
-        endpoint = f"compound/cid/{cid}/JSON"
+        endpoint = f"targets/uniprot/{accession}"
         effective_timeout = timeout or self.timeout
         request = with_retry(
             max_tries=self.max_tries,
             timeout=effective_timeout,
             logger=self._logger,
-            log_event="pubchem_request",
+            log_event="gtopdb_request",
         )(self._request_json)
         return request(endpoint=endpoint, params=params, timeout=effective_timeout)
 
@@ -54,14 +53,14 @@ class PubChemClient:
         *,
         params: Mapping[str, Any] | None,
         timeout: float,
-    ) -> dict[str, Any]:
+    ) -> Any:
         url = _build_url(self.base_url, endpoint)
-        self._logger.info("pubchem_request_start", endpoint=endpoint, url=url)
+        self._logger.info("gtopdb_request_start", endpoint=endpoint, url=url)
         response = self.session.get(url, params=params, timeout=timeout)
         response.raise_for_status()
         payload = response.json()
-        self._logger.info("pubchem_request_success", endpoint=endpoint, url=url)
+        self._logger.info("gtopdb_request_success", endpoint=endpoint, url=url)
         return payload
 
 
-__all__ = ["PubChemClient"]
+__all__ = ["GtoPdbClient"]

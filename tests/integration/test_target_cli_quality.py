@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+from tests.helpers import ensure_normalizer_stub
 
 from library.config import Config
-from tests.helpers import ensure_normalizer_stub
 
 ensure_normalizer_stub()
 

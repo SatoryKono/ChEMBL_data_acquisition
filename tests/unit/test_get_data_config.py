@@ -7,9 +7,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from scripts import get_data as compat_get_data
 
 from library.cli.commands import get_data
-from scripts import get_data as compat_get_data
 
 
 @pytest.mark.unit

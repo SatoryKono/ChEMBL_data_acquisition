@@ -6,7 +6,6 @@ from pathlib import Path
 from re import Pattern
 
 import pytest
-
 from tools.merge_conflict import (
     MERGE_CONFLICT_PATTERNS,
     has_merge_conflict_markers,

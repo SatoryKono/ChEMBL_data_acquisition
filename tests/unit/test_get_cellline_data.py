@@ -5,10 +5,10 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+from scripts import get_cellline_data
 
 from library.config import Config
 from library.pipelines.cellline import CellLinePipelineOptions, CellLinePipelineResult
-from scripts import get_cellline_data
 
 
 class _MemoryLogger:

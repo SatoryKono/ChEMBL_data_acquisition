@@ -12,6 +12,7 @@ from typing import Any
 import pandas as pd
 import pytest
 import requests
+from scripts import get_assay_data
 
 from library.cli_utils import PipelineExecutionResult
 from library.cli_utils import run_pipeline as cli_run_pipeline
@@ -19,7 +20,6 @@ from library.config import Config
 from library.io import StandardOutputArtifacts
 from library.pipelines.assay.chembl_assay import MAX_ASSAY_CHUNK_SIZE
 from library.schemas import AssaysSchema
-from scripts import get_assay_data
 
 
 class _MemoryLogger:

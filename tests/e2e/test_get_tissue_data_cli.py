@@ -17,10 +17,10 @@ import pandas as pd
 import pytest
 import yaml
 from freezegun import freeze_time
+from scripts import get_tissue_data
 
 from library.common.run_context import RunContext, set_current
 from library.pipelines.tissue import TISSUE_COLUMN_ORDER
-from scripts import get_tissue_data
 
 
 class MemoryLogger:

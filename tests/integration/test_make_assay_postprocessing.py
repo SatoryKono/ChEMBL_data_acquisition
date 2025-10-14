@@ -4,9 +4,9 @@ import json
 from datetime import UTC, datetime
 
 import pandas as pd
+from scripts import make_assay_postprocessing as cli
 
 from library.postprocessing.assays.schema import ASSAY_SCHEMA
-from scripts import make_assay_postprocessing as cli
 
 
 def test_make_assay_postprocessing__end_to_end(tmp_path, monkeypatch):

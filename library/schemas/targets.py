@@ -6,7 +6,7 @@ from typing import cast
 
 from pandera.dtypes import DataType
 
-from library._compat.pandera import _PanderaModule, pa as _pa
+from library._compat.pandera import Column, DataFrameSchema, _PanderaModule, pa as _pa
 
 pa: _PanderaModule = _pa
 

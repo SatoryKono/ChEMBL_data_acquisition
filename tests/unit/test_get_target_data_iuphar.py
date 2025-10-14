@@ -1,6 +1,5 @@
 import pandas as pd
 import pytest
-
 from scripts.get_target_data import _prepare_iuphar_merge_frames
 
 

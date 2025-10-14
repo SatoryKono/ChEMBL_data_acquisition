@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from scripts import get_target_data
 
 from library.postprocessing import target as target_module
 from library.postprocessing import targets as targets_pipeline
 from library.postprocessing.target import isoform
-from scripts import get_target_data
 
 
 @pytest.mark.unit

@@ -14,12 +14,12 @@ import numpy as np
 import pandas as pd
 import pytest
 import requests
+from scripts import get_activity_data
 
 from config.paths import DICTIONARY_DIR
 from library.cli.commands import get_activity_data as command_activity
 from library.config import Config
 from library.resources.dictionaries import get_resource
-from scripts import get_activity_data
 
 
 class _DummyChemblClient:

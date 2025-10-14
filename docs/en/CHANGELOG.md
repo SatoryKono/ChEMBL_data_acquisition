@@ -1,6 +1,9 @@
 # Changelog
 
 > **Languages:** [English](./CHANGELOG.md) · [Русский](../ru/CHANGELOG.md)
+## [0.1.7] - 2025-10-19
+- Documentation and protocol refresh covering PR-0 through PR-8: updated pipeline diagrams, CLI examples with `--emit-legacy-artifacts`, refreshed configuration notes and regenerated the bilingual protocol DOCX.
+
 
 All notable changes to this project will be documented in this file.
 
@@ -10,6 +13,16 @@ All notable changes to this project will be documented in this file.
   planned deletions and skip fresh files by default.
 - Aligned the orchestration summary with the canonical ``data/output`` directory and
   logged per-date_tag CSV inventories to guarantee the expected 15 artefacts.
+- Standardised the target postprocessing pipeline with a thin CLI that writes
+  deterministic CSV artefacts and metadata sidecars.
+- Added a dedicated Pandera schema together with UniProt and GtoPdb enrichment
+  using resilient HTTP clients and structured logging.
+- Extended automated coverage with merge, integration, and CLI tests to keep
+  the target export reproducible.
+- Added a focused assay postprocessing module deriving UTC timestamps and year
+  attributes directly from ChEMBL metadata.
+- Introduced a dedicated Pandera schema for the streamlined assay export and
+  regression tests covering timestamp handling and dictionary enrichment.
 
 ## [0.1.6] - 2025-10-18
   Added structured logging utilities with run identifiers and stage duration

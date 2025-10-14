@@ -15,11 +15,11 @@ from typing import Any
 
 import pandas as pd
 import pytest
+from scripts import get_activity_data
 
 from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS
 from library.pipelines.common import PipelineRunResult
 from library.postprocessing import activity_extended
-from scripts import get_activity_data
 
 
 def test_command_module_run_chembl__delegates_to_entrypoint(monkeypatch):
