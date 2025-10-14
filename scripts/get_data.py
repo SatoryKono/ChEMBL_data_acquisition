@@ -668,17 +668,9 @@ def log_summary(durations: list[tuple[str, float]]) -> None:
 
 
 def list_output_files(output_dir: Path | None = None) -> list[Path]:
-    """Return sorted CSV artefacts stored in the canonical output directory."""
+    """Return sorted CSV artefacts stored in ``output_dir``."""
 
-    base = CANONICAL_OUTPUT_DIR
-    if output_dir is not None:
-        candidate = output_dir.resolve()
-        if candidate != base:
-            logging.debug(
-                "[CLEANUP] Игнорируется каталог %s, используется %s для поиска CSV",
-                candidate,
-                base,
-            )
+    base = CANONICAL_OUTPUT_DIR if output_dir is None else output_dir.resolve()
     if not base.exists():
         return []
 
@@ -726,18 +718,17 @@ def _resolve_output_directory(
 ) -> Path:
     """Return the absolute output directory referenced by the orchestrator."""
 
-    # ``ForwardArgs`` carries the directory requested by the CLI, however the
-    # orchestrator only inspects artefacts generated under the canonical
-    # ``data/output`` tree inside the repository.
     canonical = CANONICAL_OUTPUT_DIR
     resolved_forward = forward_args.output_dir.resolve()
-    if resolved_forward != canonical:
-        logging.info(
-            "Артефакты проверяются в %s (переданный путь %s проигнорирован)",
-            canonical,
-            resolved_forward,
-        )
-    return canonical
+    if resolved_forward == canonical:
+        return canonical
+
+    logging.info(
+        "Артефакты проверяются в пользовательском каталоге %s (канонический путь: %s)",
+        resolved_forward,
+        canonical,
+    )
+    return resolved_forward
 
 
 def _is_cleanup_directory(path: Path) -> bool:
@@ -781,14 +772,7 @@ def _remove_directory(path: Path, *, output_dir: Path) -> bool:
 def cleanup_intermediate_files(output_dir: Path) -> int:
     """Remove temporary and diagnostic artefacts from ``output_dir``."""
 
-    resolved = CANONICAL_OUTPUT_DIR
-    candidate = output_dir.resolve()
-    if candidate != resolved:
-        logging.debug(
-            "[CLEANUP] Игнорируется каталог %s, используется %s для удаления артефактов",
-            candidate,
-            resolved,
-        )
+    resolved = output_dir.resolve()
     if not resolved.exists():
         logging.debug(
             "[CLEANUP] Пропуск очистки: каталог %s не найден",
