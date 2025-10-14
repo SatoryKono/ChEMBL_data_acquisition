@@ -1,25 +1,40 @@
-"""Project-wide cleanup utility.
+"""Project-wide cleanup utility for the ChEMBL data acquisition pipeline.
 
-This helper consolidates the maintenance sweep that removes build artefacts,
-pytest leftovers and transient CSV exports created by the local pipelines.
-It replaces the ad-hoc shell commands previously embedded in the Makefile and
-exposes a `--dry-run` flag so developers can preview the actions before they are
-executed.
+The script removes transient artefacts while preserving the canonical ETL
+outputs and caches required for deterministic runs.  It is safe to execute in
+dry-run mode to preview changes prior to deleting any files.
 """
+
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-# Directories that must never be traversed or removed by pattern-based sweeps.
 EXCLUDED_DIR_NAMES = {".git", ".venv"}
+
+CACHE_RETENTION_DAYS = 7
+LOG_RETENTION_DAYS = 14
+
+OUTPUT_PURGE_PATTERNS = (
+    "*.tmp",
+    "*.lock",
+    "*_intermediate*",
+    "*_debug*",
+    "output.*_raw.csv",
+)
+QC_KEYWORDS = ("qc", "quality", "correlation")
+PERSISTENT_CACHE_KEYWORDS = ("chembl", "pubchem", "molecule_parent_catalog")
+PIPELINE_TMP_DIRS = ("tmp", "raw", "interim")
+TEST_GOLDEN_PREFIX = "expected_"
+TEST_GOLDEN_SUFFIX = ".csv"
 
 
 def _is_under_excluded(path: Path) -> bool:
@@ -33,11 +48,7 @@ def _is_under_excluded(path: Path) -> bool:
 
 
 def _load_tracked_paths(root: Path) -> set[str]:
-    """Return Git-tracked paths relative to *root*.
-
-    The Git CLI is optional – if it is missing or the command fails the helper
-    simply treats every file as untracked and proceeds with best-effort cleanup.
-    """
+    """Return Git-tracked paths relative to *root*."""
 
     try:
         result = subprocess.run(
@@ -91,7 +102,7 @@ class CleanupContext:
             if path.is_dir() and not path.is_symlink():
                 shutil.rmtree(path)
             else:
-                path.unlink(missing_ok=True)  # Python 3.8+: guard symlink races.
+                path.unlink(missing_ok=True)
         except OSError as exc:
             self.skipped.append((path, f"failed to remove ({exc})"))
             return
@@ -112,11 +123,11 @@ class CleanupContext:
         for child in sorted(directory.iterdir(), key=lambda item: item.name):
             self.remove_path(child)
         if remove_root and directory.exists():
-            # Attempt to remove the now-empty directory; skip if tracked.
             self.remove_path(directory)
 
-    def remove_glob(self, pattern: str, *, files_only: bool = False) -> None:
-        for candidate in PROJECT_ROOT.rglob(pattern):
+    def remove_glob(self, pattern: str, *, base: Path | None = None, files_only: bool = False) -> None:
+        search_root = base or PROJECT_ROOT
+        for candidate in search_root.rglob(pattern):
             if files_only and candidate.is_dir():
                 continue
             self.remove_path(candidate)
@@ -125,7 +136,7 @@ class CleanupContext:
 CleanupTask = Callable[[CleanupContext], None]
 
 
-def _cleanup_build(ctx: CleanupContext) -> None:
+def _cleanup_build_artifacts(ctx: CleanupContext) -> None:
     targets = [PROJECT_ROOT / "build", PROJECT_ROOT / "dist", PROJECT_ROOT / "htmlcov"]
     targets.extend(PROJECT_ROOT.glob("*.egg-info"))
     for target in targets:
@@ -138,45 +149,141 @@ def _cleanup_python_artifacts(ctx: CleanupContext) -> None:
 
 
 def _cleanup_tool_caches(ctx: CleanupContext) -> None:
-    for name in (".pytest_cache", ".mypy_cache", ".ruff_cache", ".hypothesis", ".coverage", "coverage.xml"):
-        for path in PROJECT_ROOT.glob(name):
-            ctx.remove_path(path)
-    for cache_dir in (".pytest_cache", ".mypy_cache", ".ruff_cache", ".hypothesis", ".tox"):
-        for path in PROJECT_ROOT.rglob(cache_dir):
-            ctx.remove_path(path)
+    for name in (".pytest_cache", ".mypy_cache", ".ruff_cache", ".hypothesis", ".tox"):
+        ctx.remove_glob(name)
+    for path in (PROJECT_ROOT / ".coverage", PROJECT_ROOT / "coverage.xml"):
+        ctx.remove_path(path)
 
 
 def _cleanup_reports(ctx: CleanupContext) -> None:
-    report_files = [
-        PROJECT_ROOT / "reports" / "test_report.json",
-        PROJECT_ROOT / "reports" / "test_summary.md",
-        PROJECT_ROOT / "reports" / "pytest_raw_report.json",
-    ]
-    for path in report_files:
-        ctx.remove_path(path)
-    ctx.clean_directory(PROJECT_ROOT / "reports" / "coverage", remove_root=True)
-    ctx.clean_directory(PROJECT_ROOT / "reports" / "tests" / "artifacts", remove_root=True)
+    reports_dir = PROJECT_ROOT / "reports"
+    keep_dirs = {reports_dir / "archive"}
+    if not reports_dir.exists():
+        return
+    for entry in reports_dir.iterdir():
+        if entry in keep_dirs:
+            continue
+        if entry.is_dir():
+            ctx.clean_directory(entry, remove_root=True)
+        else:
+            ctx.remove_path(entry)
+
+
+def _cleanup_data_outputs(ctx: CleanupContext) -> None:
+    output_dir = PROJECT_ROOT / "data" / "output"
+    if not output_dir.exists():
+        return
+
+    for pattern in OUTPUT_PURGE_PATTERNS:
+        ctx.remove_glob(pattern, base=output_dir, files_only=True)
+
+    dated_outputs: list[tuple[Path, str]] = []
+    output_regex = re.compile(r"output\.[^_]+_(\d{8})")
+    for file in output_dir.rglob("output.*_*.csv"):
+        if not file.is_file():
+            continue
+        match = output_regex.search(file.name)
+        if match:
+            dated_outputs.append((file, match.group(1)))
+
+    if dated_outputs:
+        latest_date = max(date for _, date in dated_outputs)
+        for file, date in dated_outputs:
+            if date != latest_date:
+                ctx.remove_path(file)
+
+        qc_regex = re.compile(r"(\d{8})")
+        for file in output_dir.rglob("*.csv"):
+            if not file.is_file() or file in {item[0] for item in dated_outputs}:
+                continue
+            lower_name = file.name.lower()
+            if not any(keyword in lower_name for keyword in QC_KEYWORDS):
+                continue
+            match = qc_regex.search(file.stem)
+            if match and match.group(1) != latest_date:
+                ctx.remove_path(file)
+
+    # Remove stale smoke-test outputs and archived reports.
+    for extra in ("output-smoke", "reports", "logs"):
+        ctx.clean_directory(PROJECT_ROOT / "data" / extra, remove_root=True)
+
+
+def _cleanup_pipeline_caches(ctx: CleanupContext) -> None:
+    now = time.time()
+    retention_seconds = CACHE_RETENTION_DAYS * 86400
+    for base in (PROJECT_ROOT / "cache", PROJECT_ROOT / "data" / "cache"):
+        if not base.exists():
+            continue
+        for pattern in ("*.pkl", "*.json", "*.lock", "*.tmp", "*.bak"):
+            for file in base.rglob(pattern):
+                if not file.is_file():
+                    continue
+                lower_name = file.name.lower()
+                if lower_name.startswith("pubchem_") and file.suffix == ".pkl":
+                    ctx.remove_path(file)
+                    continue
+                if any(keyword in lower_name for keyword in PERSISTENT_CACHE_KEYWORDS):
+                    continue
+                if now - file.stat().st_mtime > retention_seconds:
+                    ctx.remove_path(file)
 
 
 def _cleanup_logs(ctx: CleanupContext) -> None:
     logs_dir = PROJECT_ROOT / "logs"
-    ctx.clean_directory(logs_dir)
-    for pattern in ("*.log", "*.log.json"):
-        ctx.remove_glob(pattern)
+    if not logs_dir.exists():
+        return
 
+    now = time.time()
+    retention_seconds = LOG_RETENTION_DAYS * 86400
+    run_latest = logs_dir / "run_latest.log"
 
-def _cleanup_data_outputs(ctx: CleanupContext) -> None:
-    ctx.clean_directory(PROJECT_ROOT / "data" / "output", remove_root=True)
-    ctx.clean_directory(PROJECT_ROOT / "data" / "output-smoke", remove_root=True)
-    ctx.clean_directory(PROJECT_ROOT / "data" / "reports", remove_root=True)
-    ctx.clean_directory(PROJECT_ROOT / "data" / "logs", remove_root=True)
-    ctx.remove_glob("data/**/*.tmp")
+    kept_logs: list[Path] = []
+    for path in logs_dir.glob("*.log"):
+        if path == run_latest:
+            continue
+        if now - path.stat().st_mtime > retention_seconds:
+            ctx.remove_path(path)
+        else:
+            kept_logs.append(path)
+
+    for pattern in ("*.old", "*.log.*"):
+        for path in logs_dir.glob(pattern):
+            if path.is_file():
+                ctx.remove_path(path)
+
+    if kept_logs:
+        kept_logs.sort(key=lambda item: item.stat().st_mtime)
+        rel_dest = None
+        if ctx.dry_run:
+            try:
+                rel_dest = run_latest.relative_to(PROJECT_ROOT)
+            except ValueError:
+                rel_dest = run_latest
+            print(f"[dry-run] Would consolidate {len(kept_logs)} log file(s) into {rel_dest}")
+        else:
+            run_latest.parent.mkdir(parents=True, exist_ok=True)
+            with run_latest.open("w", encoding="utf-8") as destination:
+                for index, path in enumerate(kept_logs):
+                    with path.open("r", encoding="utf-8", errors="ignore") as source:
+                        shutil.copyfileobj(source, destination)
+                    if index != len(kept_logs) - 1:
+                        destination.write("\n")
+        for path in kept_logs:
+            if path != run_latest:
+                ctx.remove_path(path)
 
 
 def _cleanup_test_outputs(ctx: CleanupContext) -> None:
-    ctx.clean_directory(PROJECT_ROOT / "tests" / "data", remove_root=True)
-    ctx.clean_directory(PROJECT_ROOT / "tests" / "output", remove_root=True)
-    ctx.clean_directory(PROJECT_ROOT / "tests" / "reports", remove_root=True)
+    test_data_dir = PROJECT_ROOT / "tests" / "data"
+    if not test_data_dir.exists():
+        return
+    for entry in test_data_dir.iterdir():
+        if entry.is_file():
+            name = entry.name
+            if not (name.startswith(TEST_GOLDEN_PREFIX) and name.endswith(TEST_GOLDEN_SUFFIX)):
+                ctx.remove_path(entry)
+        else:
+            ctx.remove_path(entry)
 
 
 def _cleanup_tmp_files(ctx: CleanupContext) -> None:
@@ -184,26 +291,40 @@ def _cleanup_tmp_files(ctx: CleanupContext) -> None:
         ctx.remove_glob(pattern, files_only=True)
 
 
+def _cleanup_tmp_directories(ctx: CleanupContext) -> None:
+    for name in PIPELINE_TMP_DIRS:
+        ctx.remove_path(PROJECT_ROOT / name)
+        ctx.remove_path(PROJECT_ROOT / "data" / name)
+
+
 def _cleanup_activity_logs_tmp(ctx: CleanupContext) -> None:
     ctx.clean_directory(PROJECT_ROOT / "scripts" / "activity_logs_tmp" / "output")
 
 
 CLEANUP_TASKS: dict[str, CleanupTask] = {
-    "build": _cleanup_build,
+    "build": _cleanup_build_artifacts,
     "python": _cleanup_python_artifacts,
-    "caches": _cleanup_tool_caches,
+    "tooling": _cleanup_tool_caches,
     "reports": _cleanup_reports,
-    "logs": _cleanup_logs,
     "data": _cleanup_data_outputs,
+    "pipeline-cache": _cleanup_pipeline_caches,
+    "logs": _cleanup_logs,
     "tests": _cleanup_test_outputs,
     "tmp": _cleanup_tmp_files,
+    "tmp-dirs": _cleanup_tmp_directories,
     "activity-logs": _cleanup_activity_logs_tmp,
 }
 
 
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Remove transient build artefacts and cache directories.")
-    parser.add_argument("--dry-run", action="store_true", help="Preview the cleanup actions without deleting anything.")
+    parser = argparse.ArgumentParser(
+        description="Remove transient build artefacts and stale pipeline caches."
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview the cleanup actions without deleting anything.",
+    )
     parser.add_argument(
         "--all",
         action="store_true",

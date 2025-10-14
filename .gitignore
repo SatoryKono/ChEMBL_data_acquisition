@@ -11,11 +11,22 @@ data/output/ChEMBL/processed/pairs_same_document.csv
 .env.local
 .env.*.local
 .cache/
+data/output/*.tmp
+data/output/*_intermediate*
+data/output/*_debug*
+data/output/output.*_raw.csv
 data/output/
 data/output-smoke/
 cache/
+cache/*.tmp
+cache/*.lock
+cache/*.bak
+cache/*.pkl
 data/cache/pubchem_cid_cache.json
 data/cache/*.lock
+data/cache/*.tmp
+data/cache/*.bak
+data/cache/*.pkl
 uniprot/
 **/__pycache__/
 .hypothesis/
@@ -58,6 +69,9 @@ mypy-report.txt
 
 dictionary/_activity/pairs.csv
 /logs
+tmp/
+raw/
+interim/
 data/logs/get_target_data_20251003.log
 data/logs/get_target_data_20251003.log
 data/logs/get_target_data_20251002.log
