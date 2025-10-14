@@ -237,7 +237,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     io.default_output_path(
                         args.input_csv,
                         cfg.io,
-                        date=getattr(args, "date", None),
+                        date=getattr(args, "date_tag", None),
                     )
                 )
                 args.final_out = output_path
@@ -948,7 +948,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 io.default_output_path(
                     args.input_csv,
                     cfg.io,
-                    date=getattr(args, "date", None),
+                    date=getattr(args, "date_tag", None),
                 )
             )
             args.final_out = output_path

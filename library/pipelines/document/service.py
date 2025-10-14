@@ -1332,6 +1332,7 @@ def run_document_service(
         date=options.date_prefix,
     )
     args.rerun_postprocess = options.rerun_postprocess
+    args.date_tag = date_tag
     args.date = date_tag
     args.date_prefix = date_tag
     args._standard_date_tag = date_tag

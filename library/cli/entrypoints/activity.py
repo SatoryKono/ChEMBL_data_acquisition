@@ -1512,7 +1512,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     io.default_output_path(
                         args.input_csv,
                         cfg.io,
-                        date=getattr(args, "date", None),
+                        date=getattr(args, "date_tag", None),
                     )
                 )
                 args.final_out = output_path
@@ -2588,7 +2588,7 @@ class ActivityPipelineCLI(PipelineCLIBase):
         current_mode = getattr(args, "output_stamp_mode", None)
         if initial_mode == current_mode:
             return
-        if current_mode == "require" and getattr(args, "date", None) in (None, ""):
+        if current_mode == "require" and getattr(args, "date_tag", None) in (None, ""):
             try:
                 from library.cli.commands import get_activity_data as _activity_commands
 

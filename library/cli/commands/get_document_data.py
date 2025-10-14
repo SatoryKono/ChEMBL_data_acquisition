@@ -1093,7 +1093,7 @@ def run_pubmed(
                 io.default_output_path(
                     args.input_csv,
                     cfg.io,
-                    date=getattr(args, "date", None),
+                    date=getattr(args, "date_tag", None),
                 )
             )
             args.final_out = output_path
@@ -1355,7 +1355,7 @@ def run_chembl(
                 io.default_output_path(
                     args.input_csv,
                     cfg.io,
-                    date=getattr(args, "date", None),
+                    date=getattr(args, "date_tag", None),
                 )
             )
             args.final_out = output_path
@@ -1595,7 +1595,7 @@ def run_all(
                 io.default_output_path(
                     args.input_csv,
                     cfg.io,
-                    date=getattr(args, "date", None),
+                    date=getattr(args, "date_tag", None),
                 )
             )
             args.final_out = output_path
@@ -1949,7 +1949,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 io.default_output_path(
                     args.input_csv,
                     cfg.io,
-                    date=getattr(args, "date", None),
+                    date=getattr(args, "date_tag", None),
                 )
             )
             args.final_out = output_path
@@ -1960,7 +1960,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     args.output_csv = output_path
     table_name, inferred_date = _resolve_table_name_and_date(output_path)
 
-    explicit_date = getattr(args, "date", None)
+    explicit_date = getattr(args, "date_tag", None)
     if isinstance(explicit_date, str):
         explicit_date = explicit_date.strip() or None
 
@@ -2430,7 +2430,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "crossref_rps": "crossref.rps",
     }
     with setup_cli_logging(
-        Path(__file__).with_suffix("").name, log_cfg, getattr(args, "date", None)
+        Path(__file__).with_suffix("").name, log_cfg, getattr(args, "date_tag", None)
     ) as logging_ctx:
         exit_code = run_cli_command(
             args=args,

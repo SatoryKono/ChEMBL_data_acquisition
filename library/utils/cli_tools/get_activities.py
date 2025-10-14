@@ -170,7 +170,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         output_path = io.default_output_path(
             fallback_input,
             cfg.io,
-            date=getattr(args, "date", None),
+            date=getattr(args, "date_tag", None),
         )
         args.output_csv = output_path
         args.final_out = output_path

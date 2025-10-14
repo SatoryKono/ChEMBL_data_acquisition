@@ -550,7 +550,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             output_path = io.default_output_path(
                 args.input_csv,
                 cfg.io,
-                date=getattr(args, "date", None),
+                date=getattr(args, "date_tag", None),
                 stamp_mode="require",
             )
             args.final_out = output_path
@@ -567,7 +567,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         offset=getattr(args, "offset", None),
         emit_legacy_artifacts=getattr(args, "emit_legacy_artifacts", False),
         pubchem_enabled=getattr(args, "pubchem_enable", None),
-        date=getattr(args, "date", None),
+        date=getattr(args, "date_tag", None),
     )
     pipeline_result = run_testitem_pipeline(cfg, options)
 
@@ -745,7 +745,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 io.default_output_path(
                     args.input_csv,
                     cfg.io,
-                    date=getattr(args, "date", None),
+                    date=getattr(args, "date_tag", None),
                 )
             )
             args.final_out = output_path
@@ -1028,7 +1028,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "offset": "testitem.offset",
     }
     with setup_cli_logging(
-        Path(__file__).with_suffix("").name, log_cfg, getattr(args, "date", None)
+        Path(__file__).with_suffix("").name, log_cfg, getattr(args, "date_tag", None)
     ) as logging_ctx:
         exit_code = run_cli_command(
             args=args,

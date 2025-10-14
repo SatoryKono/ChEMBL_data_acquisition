@@ -194,11 +194,14 @@ def test_prepare_io_paths__default_filename_without_date(tmp_path):
         output_stem=get_target_data.DEFAULT_OUTPUT_STEM,
     )
 
+    resolved_tag = getattr(args, "date_tag", None)
+    assert isinstance(resolved_tag, str)
     expected = (
-        tmp_path / f"output.{get_target_data.DEFAULT_OUTPUT_STEM}.csv"
+        tmp_path / f"output.{get_target_data.DEFAULT_OUTPUT_STEM}_{resolved_tag}.csv"
     ).resolve()
     assert args.final_out == expected
-    assert getattr(args, "date", None) is None
+    assert args.date_tag == resolved_tag
+    assert args.date == resolved_tag
 
 
 @pytest.mark.unit
@@ -224,6 +227,7 @@ def test_prepare_io_paths__respects_explicit_date(tmp_path):
         tmp_path / f"output.{get_target_data.DEFAULT_OUTPUT_STEM}_20250228.csv"
     ).resolve()
     assert args.final_out == expected
+    assert args.date_tag == "20250228"
     assert args.date == "20250228"
 
 

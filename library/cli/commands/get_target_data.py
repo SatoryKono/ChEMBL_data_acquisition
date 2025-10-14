@@ -2095,7 +2095,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
                 io.default_output_path(
                     args.input_csv,
                     cfg.io,
-                    date=getattr(args, "date", None),
+                    date=getattr(args, "date_tag", None),
                 )
             )
             args.final_out = output_path
@@ -2147,7 +2147,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         meta_path.unlink(missing_ok=True)
         meta_lock_path = meta_path.with_name(meta_path.name + ".lock")
         meta_lock_path.unlink(missing_ok=True)
-        date_hint = getattr(args, "date", None)
+        date_hint = getattr(args, "date_tag", None)
         resolved_date_hint = date_hint.strip() if isinstance(date_hint, str) else None
         table_hint = getattr(args, "_auto_output_stem", None) or DEFAULT_OUTPUT_STEM
         table_name_value, date_tag = _resolve_output_metadata(
@@ -2316,7 +2316,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 io.default_output_path(
                     args.input_csv,
                     cfg.io,
-                    date=getattr(args, "date", None),
+                    date=getattr(args, "date_tag", None),
                 )
             )
             args.final_out = base_output
@@ -2480,7 +2480,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 io.default_output_path(
                     args.input_csv,
                     cfg.io,
-                    date=getattr(args, "date", None),
+                    date=getattr(args, "date_tag", None),
                 )
             )
             args.final_out = final_output
@@ -2792,7 +2792,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             if not dataset_for_metadata.exists():
                 dataset_for_metadata = final_output
         
-            date_hint = getattr(args, "date", None)
+            date_hint = getattr(args, "date_tag", None)
             resolved_date_hint = date_hint.strip() if isinstance(date_hint, str) else None
             table_hint = getattr(args, "_auto_output_stem", None) or DEFAULT_OUTPUT_STEM
             table_name_value, date_tag = _resolve_output_metadata(
@@ -2907,7 +2907,7 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
                 io.default_output_path(
                     args.input_csv,
                     cfg.io,
-                    date=getattr(args, "date", None),
+                    date=getattr(args, "date_tag", None),
                 )
             )
             args.final_out = output_path
@@ -3000,7 +3000,7 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
 
     metadata_frame = _load_metadata_frame(output_path, cfg=cfg)
     qc_summary = _build_metadata_summary(metadata_frame)
-    date_hint = getattr(args, "date", None)
+    date_hint = getattr(args, "date_tag", None)
     resolved_date_hint = date_hint.strip() if isinstance(date_hint, str) else None
     table_hint = getattr(args, "_auto_output_stem", None) or DEFAULT_OUTPUT_STEM
     table_name_value, date_tag = _resolve_output_metadata(
@@ -4390,7 +4390,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 io.default_output_path(
                     args.input_csv,
                     cfg.io,
-                    date=getattr(args, "date", None),
+                    date=getattr(args, "date_tag", None),
                 )
             )
         else:
@@ -4446,7 +4446,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             key_columns = list(id_cols_value) or ["target_chembl_id"]
 
         table_hint = getattr(args, "_auto_output_stem", None)
-        raw_date_hint = getattr(args, "date", None)
+        raw_date_hint = getattr(args, "date_tag", None)
         date_hint = raw_date_hint.strip() if isinstance(raw_date_hint, str) else None
         resolved_table_name, resolved_date_tag = _resolve_output_metadata(
             final_output,
@@ -4567,6 +4567,7 @@ def run_target_service(
     if options.output_stem is not None:
         args._auto_output_stem = options.output_stem
     if options.date is not None:
+        args.date_tag = options.date
         args.date = options.date
 
     command = options.command
@@ -4622,7 +4623,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             io.default_output_path(
                 args.input_csv,
                 cfg.io,
-                date=getattr(args, "date", None),
+                date=getattr(args, "date_tag", None),
             )
         )
         args.final_out = final_output

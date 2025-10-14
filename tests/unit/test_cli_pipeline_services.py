@@ -285,6 +285,7 @@ def test_run_target_service__invokes_command_handler(
     assert Path(args.final_out) == output_csv
     assert args.command == "chembl"
     assert getattr(args, "_auto_output_stem", None) == options.output_stem
+    assert getattr(args, "date_tag", None) == options.date
     assert getattr(args, "date", None) == options.date
 
 

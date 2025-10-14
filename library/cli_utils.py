@@ -429,7 +429,7 @@ def run_cli_command(
                 seed_parts.append(str(program))
             seed_parts.extend(str(part) for part in sys.argv[1:])
         log_cfg.generated_at = compute_generated_at(
-            date_token=getattr(args, "date", None),
+            date_token=getattr(args, "date_tag", None),
             run_id=log_cfg.run_id,
             seed_parts=seed_parts,
         )

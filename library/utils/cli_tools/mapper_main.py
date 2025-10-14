@@ -159,7 +159,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         output = args.output_csv or io.default_output_path(
             args.input_csv,
             cfg.io,
-            date=getattr(args, "date", None),
+            date=getattr(args, "date_tag", None),
         )
         try:
             io.write_csv(

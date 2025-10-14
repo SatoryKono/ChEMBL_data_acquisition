@@ -51,6 +51,9 @@ class PipelineCLIBase:
     def get_logging_date(self, args: argparse.Namespace) -> str | None:
         """Return the date token forwarded to :func:`setup_cli_logging`."""
 
+        date_tag = getattr(args, "date_tag", None)
+        if isinstance(date_tag, str):
+            return date_tag
         return getattr(args, "date", None)
 
     def resolve_generated_at(

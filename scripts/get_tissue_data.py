@@ -91,7 +91,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         or io.default_output_path(
             args.input_csv,
             cfg.io,
-            date=getattr(args, "date", None),
+            date=getattr(args, "date_tag", None),
         )
     )
     args.output_csv = output_path
@@ -298,7 +298,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     with setup_cli_logging(
         Path(__file__).with_suffix("").name,
         log_cfg,
-        getattr(args, "date", None),
+        getattr(args, "date_tag", None),
     ) as logging_ctx:
         exit_code = run_cli_command(
             args=args,
