@@ -200,6 +200,16 @@ def test_iter_additional_checksums__merges_manifest_allowlist(tmp_path: Path) ->
 
 
 @pytest.mark.unit
+def test_as_path_decodes_bytes(tmp_path: Path) -> None:
+    """Byte-valued paths must be decoded before constructing ``Path`` objects."""
+
+    candidate = tmp_path / "data.csv"
+    encoded = str(candidate).encode("utf-8")
+
+    assert dictionaries._as_path(encoded) == candidate
+
+
+@pytest.mark.unit
 def test_parse_manifest__raises_on_checksum_mismatch(
     dictionary_bundle: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

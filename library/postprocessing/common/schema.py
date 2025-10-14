@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Any, cast
 
 import pandas as pd
 from pandera.errors import SchemaErrors
@@ -156,9 +157,11 @@ def coerce_types(df: pd.DataFrame, schema: DataFrameSchema) -> pd.DataFrame:
             continue
         try:
             if isinstance(expected_type, str):
-                coerced[column] = coerced[column].astype(expected_type)
+                dtype_name = cast(str, expected_type)
+                coerced[column] = coerced[column].astype(dtype_name)
             else:
-                coerced[column] = coerced[column].astype(expected_type)
+                dtype_object = cast(Any, expected_type)
+                coerced[column] = coerced[column].astype(dtype_object)
         except (TypeError, ValueError) as exc:
             raise SchemaValidationError(
                 column,

@@ -209,7 +209,7 @@ def compute_schema_diff(
     added = [column for column in after_columns if column not in before_columns]
     removed = [column for column in before_columns if column not in after_columns]
     type_changes: dict[str, dict[str, str]] = {}
-    for column in before_dtypes.keys() & after_dtypes.keys():
+    for column in set(before_dtypes) & set(after_dtypes):
         before_type = before_dtypes[column]
         after_type = after_dtypes[column]
         if before_type != after_type:
