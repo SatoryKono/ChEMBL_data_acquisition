@@ -149,17 +149,19 @@ def compute_multifunctional(source: pd.DataFrame) -> pd.DataFrame:
     result = trimmed.copy()
 
     if "target_chembl_id" not in result.columns:
+        fill_values = [""] * len(result.index)
         result.insert(
             0,
             "target_chembl_id",
-            pd.Series("", index=result.index, dtype="string"),
+            pd.Series(fill_values, index=result.index, dtype="string"),
         )
     else:
         result["target_chembl_id"] = result["target_chembl_id"].astype("string")
 
+    default_reaction_numbers = [pd.NA] * len(result.index)
     reaction_numbers = result.get(
         "reaction_ec_numbers",
-        pd.Series(pd.NA, index=result.index, dtype="string"),
+        pd.Series(default_reaction_numbers, index=result.index, dtype="string"),
     )
     result["reaction_ec_numbers"] = reaction_numbers
     result["reaction_ec_numbers"] = result["reaction_ec_numbers"].map(
