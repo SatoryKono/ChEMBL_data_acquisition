@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import os
 import logging
 import sys
 import types
@@ -364,3 +365,66 @@ def test_main__summary_uses_forward_output_dir(
     assert exit_code == 0
     assert executed, "expected orchestrator to execute stages"
     assert inspected_paths == [expected_output]
+
+
+@pytest.mark.unit
+def test_main__custom_output_dir_is_respected(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Overridden output directories must be used by the orchestrator."""
+
+    from scripts import get_data as cli
+
+    canonical = tmp_path / "canonical"
+    canonical.mkdir()
+    custom_output = tmp_path / "custom"
+    custom_output.mkdir()
+
+    logs_dir = tmp_path / "logs"
+    monkeypatch.setattr(cli, "LOGS_DIR", logs_dir)
+    monkeypatch.setattr(cli, "CANONICAL_OUTPUT_DIR", canonical.resolve())
+
+    forward_args = cli.ForwardArgs(
+        tokens=("--output-dir", os.fspath(custom_output)),
+        extras_start=0,
+        extra_len=0,
+        output_dir=custom_output.resolve(),
+        date_tag=None,
+    )
+
+    monkeypatch.setattr(cli, "build_forward_args", lambda _args, _extra: forward_args)
+
+    executed: list[str] = []
+
+    def _fake_run_stage(stage: cli.Stage, forward: cli.ForwardArgs) -> float:
+        executed.append(stage.name)
+        assert forward.output_dir == custom_output.resolve()
+        return 0.0
+
+    monkeypatch.setattr(cli, "run_stage", _fake_run_stage)
+
+    inspected_paths: list[Path] = []
+
+    def _fake_list(path: Path) -> list[Path]:
+        inspected_paths.append(path)
+        return [
+            path / f"output_{idx}.csv" for idx in range(cli._EXPECTED_CSV_COUNT)
+        ]
+
+    monkeypatch.setattr(cli, "list_output_files", _fake_list)
+
+    cleaned_paths: list[Path] = []
+
+    def _fake_cleanup(path: Path) -> int:
+        cleaned_paths.append(path)
+        return 0
+
+    monkeypatch.setattr(cli, "cleanup_intermediate_files", _fake_cleanup)
+
+    exit_code = cli.main([])
+
+    assert exit_code == 0
+    assert executed, "expected orchestrator to execute stages"
+    assert inspected_paths == [custom_output.resolve()]
+    assert cleaned_paths == [custom_output.resolve()]
