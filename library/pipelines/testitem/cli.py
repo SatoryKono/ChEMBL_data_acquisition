@@ -12,11 +12,11 @@ import traceback
 import weakref
 from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from functools import lru_cache
 from itertools import chain, islice, tee
 from pathlib import Path
-from types import MappingProxyType
+from types import MappingProxyType, SimpleNamespace
 from typing import IO, Any
 
 import pandas as pd
@@ -494,7 +494,6 @@ def _write_primary_metadata(
 ) -> Path:
     """Persist the standard metadata sidecar next to ``dataset_path``."""
 
-    outputs = [dataset_path.name, quality_path.name, correlation_path.name]
     canonical = table_name.lower()
     resolved_table = _TABLE_NAME_ALIASES.get(canonical, table_name)
     if resolved_table.lower() != _DEFAULT_OUTPUT_TABLE:
@@ -506,25 +505,27 @@ def _write_primary_metadata(
         else dict(qc_summary or {"total_rows": 0})
     )
 
-    metadata_payload: dict[str, Any] = {
-        "table": resolved_table,
-        "date_tag": date_tag,
-        "parameters": dict(parameters or {}),
-        "sources": _resolve_metadata_sources(pubchem_enabled),
-        "outputs": outputs,
-        "qc_summary": qc_payload,
-    }
-    if stats:
-        metadata_payload["pipeline_stats"] = dict(stats)
+    args_payload = dict(parameters or {})
 
-    meta_path = write_meta_yaml(
-        csv_path=dataset_path,
-        stats=dict(stats) if stats is not None else None,
-        extra_metadata=metadata_payload,
-        generated_at=_metadata_generated_at(generated_at),
+    metadata_sources = _resolve_metadata_sources(pubchem_enabled)
+
+    run_context_override = None
+    resolved_generated_at = _metadata_generated_at(generated_at)
+    if resolved_generated_at is not None:
+        run_context_override = SimpleNamespace(generated_at=resolved_generated_at)
+
+    meta_path = io.save_metadata(
+        table_name=resolved_table,
+        date_tag=date_tag,
+        args=args_payload,
+        qc_summary=qc_payload,
+        output_dir=dataset_path.parent,
+        artifacts=[dataset_path, quality_path, correlation_path],
+        sources=metadata_sources,
+        run_context=run_context_override,
+        stats_extra=stats,
     )
 
-    logger.info("[META] Метаданные сохранены: %s", meta_path)
     return meta_path
 
 
@@ -2120,18 +2121,26 @@ def finalize_output(
             legacy_meta_path = desired_legacy_path
         # ``_write_primary_metadata`` overwrites the canonical path next.
 
-    primary_meta_path = _write_primary_metadata(
-        dataset_frame=None,
-        dataset_path=artifacts.dataset,
-        quality_path=artifacts.quality_report,
-        correlation_path=artifacts.correlation_report,
+    metadata_args_payload: dict[str, object] = {}
+    if options is not None:
+        metadata_args_payload.update(asdict(options))
+    metadata_args_payload.update(parameters)
+
+    metadata_sources = _resolve_metadata_sources(pubchem_augmentation_enabled)
+
+    primary_meta_path = io.save_metadata(
         table_name=table_name,
         date_tag=date_tag,
-        parameters=parameters,
-        stats=stats,
-        pubchem_enabled=pubchem_augmentation_enabled,
+        args=metadata_args_payload,
         qc_summary=qc_summary,
-        generated_at=_metadata_generated_at(),
+        output_dir=artifacts.dataset.parent,
+        artifacts=[
+            artifacts.dataset,
+            artifacts.quality_report,
+            artifacts.correlation_report,
+        ],
+        sources=metadata_sources,
+        stats_extra=stats,
     )
 
     if not emit_legacy_artifacts:

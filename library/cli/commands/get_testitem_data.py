@@ -29,7 +29,6 @@ from library.cli.metadata import prepare_option
 from library.cli_utils import run_cli_command
 from library.clients import pubchem as pc  # noqa: F401 - patched in tests
 from library.common.log import logger
-from library.common.run_context import get_current
 from library.config import (
     ApiCfg,
     Config,
@@ -591,7 +590,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             dataset_candidate = Path(dataset_candidate)
 
         if isinstance(dataset_candidate, Path) and dataset_candidate.exists():
-            artifacts = _build_standard_outputs_from_path(cfg, dataset_candidate)
+            artifacts = _build_standard_outputs_from_path(cfg, dataset_candidate, args)
         elif dataset_candidate is not None:
             logger.debug(
                 "testitem_standard_outputs_missing", path=str(dataset_candidate)
@@ -604,7 +603,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def _build_standard_outputs_from_path(
-    cfg: Config, dataset_path: Path
+    cfg: Config, dataset_path: Path, args: argparse.Namespace
 ) -> io.StandardOutputArtifacts | None:
     """Generate and persist standard artefacts for ``dataset_path``."""
 
@@ -704,26 +703,28 @@ def _build_standard_outputs_from_path(
         emit_legacy_artifacts=False,
         pubchem_enabled=pubchem_enabled,
     )
-    context = get_current()
-    generated_at = None
-    if context is not None:
-        ctx_generated = getattr(context, "generated_at", None)
-        if isinstance(ctx_generated, str) and ctx_generated.strip():
-            generated_at = ctx_generated
 
-    pipeline._write_primary_metadata(  # type: ignore[attr-defined]
-        dataset_frame=dataset_frame,
-        dataset_path=artifacts.dataset,
-        quality_path=artifacts.quality_report,
-        correlation_path=artifacts.correlation_report,
+    args_payload: dict[str, object] = dict(vars(args))
+    args_payload.update(parameters)
+
+    qc_summary_payload = pipeline._build_qc_summary(dataset_frame)  # type: ignore[attr-defined]
+    metadata_sources = pipeline._resolve_metadata_sources(  # type: ignore[attr-defined]
+        bool(pubchem_enabled) if pubchem_enabled is not None else None
+    )
+
+    io.save_metadata(
         table_name=table_name,
         date_tag=date_tag,
-        parameters=parameters,
-        stats=None,
-        pubchem_enabled=bool(pubchem_enabled)
-        if pubchem_enabled is not None
-        else None,
-        generated_at=generated_at,
+        args=args_payload,
+        qc_summary=qc_summary_payload,
+        output_dir=artifacts.dataset.parent,
+        artifacts=[
+            artifacts.dataset,
+            artifacts.quality_report,
+            artifacts.correlation_report,
+        ],
+        sources=metadata_sources,
+        stats_extra=None,
     )
 
     return artifacts
