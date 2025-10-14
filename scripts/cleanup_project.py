@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import time
+from collections import defaultdict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -177,30 +178,37 @@ def _cleanup_data_outputs(ctx: CleanupContext) -> None:
     for pattern in OUTPUT_PURGE_PATTERNS:
         ctx.remove_glob(pattern, base=output_dir, files_only=True)
 
-    dated_outputs: list[tuple[Path, str]] = []
-    output_regex = re.compile(r"output\.[^_]+_(\d{8})")
+    dataset_outputs: dict[str, list[tuple[Path, str]]] = defaultdict(list)
+    output_regex = re.compile(r"^output\.(?P<dataset>.+)_(?P<date>\d{8})\.csv$")
     for file in output_dir.rglob("output.*_*.csv"):
         if not file.is_file():
             continue
-        match = output_regex.search(file.name)
-        if match:
-            dated_outputs.append((file, match.group(1)))
+        match = output_regex.match(file.name)
+        if not match:
+            continue
+        dataset_outputs[match.group("dataset")].append((file, match.group("date")))
 
-    if dated_outputs:
-        latest_date = max(date for _, date in dated_outputs)
-        for file, date in dated_outputs:
-            if date != latest_date:
+    kept_output_files: set[Path] = set()
+    latest_dates: set[str] = set()
+    for dataset, entries in dataset_outputs.items():
+        latest_date = max(date for _, date in entries)
+        latest_dates.add(latest_date)
+        for file, date in entries:
+            if date == latest_date:
+                kept_output_files.add(file)
+            else:
                 ctx.remove_path(file)
 
+    if dataset_outputs:
         qc_regex = re.compile(r"(\d{8})")
         for file in output_dir.rglob("*.csv"):
-            if not file.is_file() or file in {item[0] for item in dated_outputs}:
+            if not file.is_file() or file in kept_output_files:
                 continue
             lower_name = file.name.lower()
             if not any(keyword in lower_name for keyword in QC_KEYWORDS):
                 continue
             match = qc_regex.search(file.stem)
-            if match and match.group(1) != latest_date:
+            if match and match.group(1) not in latest_dates:
                 ctx.remove_path(file)
 
     # Remove stale smoke-test outputs and archived reports.
