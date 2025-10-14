@@ -15,7 +15,28 @@ def validate_schema(
 ) -> pd.DataFrame:
     """Validate ``df`` using the Pandera-backed ``schema``."""
 
-    return validate_with_pandera(df, schema, context=context)
+    validated = validate_with_pandera(df, schema, context=context)
+
+    ordered = validated.copy(deep=True)
+
+    if schema.column_order:
+        ordered_columns = [
+            column for column in schema.column_order if column in ordered.columns
+        ]
+        remaining = sorted(
+            column for column in ordered.columns if column not in ordered_columns
+        )
+        ordered = ordered.loc[:, [*ordered_columns, *remaining]].copy(deep=True)
+
+    if schema.sort_by:
+        sort_columns = [column for column in schema.sort_by if column in ordered.columns]
+        if sort_columns:
+            ordered = ordered.sort_values(
+                sort_columns,
+                kind="mergesort",
+            ).reset_index(drop=True)
+
+    return ordered
 
 
 def coerce_types(df: pd.DataFrame, schema: DataFrameSchema) -> pd.DataFrame:
