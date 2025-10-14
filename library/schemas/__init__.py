@@ -7,7 +7,7 @@ from .assay_schema import AssayDataSchema
 from .assay_postprocessing import AssayPostprocessSchema
 from .assays import AssaysSchema
 from .celllines import CellLinesSchema
-from .document import DocumentSchema
+from .document_schema import DocumentSchema, validate_document_frame
 from .documents import DocumentsSchema
 from .meta import CsvMetaSchema
 from .normalize import (
@@ -49,4 +49,5 @@ __all__ = [
     "normalize_targets",
     "normalize_testitems",
     "configure_activity_schema",
+    "validate_document_frame",
 ]

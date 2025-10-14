@@ -1,6 +1,9 @@
 # Changelog
 
 > **Languages:** [English](./CHANGELOG.md) · [Русский](../ru/CHANGELOG.md)
+## [0.1.7] - 2025-10-19
+- Documentation and protocol refresh covering PR-0 through PR-8: updated pipeline diagrams, CLI examples with `--emit-legacy-artifacts`, refreshed configuration notes and regenerated the bilingual protocol DOCX.
+- Added a dedicated `document_schema` module exposing `DocumentSchema` and `validate_document_frame` for enriched CrossRef/OpenAlex metadata validation with strict typing.
 ## [0.1.9] - 2025-10-20
 - Added legacy-compatible options to `scripts/get_target_data.py`, accepting
   positional commands and `--log-level`/`--input-dir` flags so orchestration
