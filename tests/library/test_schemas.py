@@ -38,6 +38,32 @@ def test_validate_schema_success_logs(caplog: pytest.LogCaptureFixture) -> None:
     assert "Schema validation succeeded" in caplog.text
 
 
+def test_validate_schema_enforces_ordering() -> None:
+    """Validation should reorder columns and rows according to schema hints."""
+
+    frame = pd.DataFrame(
+        {
+            "confidence_score": [0.5, 0.8],
+            "assay_type": ["BINDING", "FUNCTIONAL"],
+            "description": ["desc-b", "desc-a"],
+            "assay_chembl_id": ["CHEMBL2", "CHEMBL1"],
+            "assay_test_type": ["PRIMARY", "CONFIRMATORY"],
+            "extra_column": ["x", "y"],
+        }
+    )
+
+    validated = validate_schema(frame, ASSAY_SCHEMA, context="assay_ordering_test")
+
+    expected_order = [
+        column
+        for column in ASSAY_SCHEMA.column_order or ()
+        if column in frame.columns
+    ]
+    assert list(validated.columns[: len(expected_order)]) == expected_order
+    assert list(validated.columns[-1:]) == ["extra_column"]
+    assert list(validated["assay_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
+
+
 def test_validate_schema_failure_raises(caplog: pytest.LogCaptureFixture) -> None:
     """Pandera validation errors must propagate as SchemaValidationError."""
 
