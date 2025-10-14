@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from library.common.metadata_writer import write_meta_yaml
-from library.common.run_context import RunContext
+from library.common.run_context import RunContext, get_current
 
 logger = logging.getLogger(__name__)
 
@@ -109,10 +109,8 @@ def save_metadata(
     parameters = _serialise_parameters(args)
     outputs = _resolve_outputs(table_name, date_tag, artifacts=artifacts)
 
-    generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace(
-        "+00:00",
-        "Z",
-    )
+    context = run_context if run_context is not None else get_current()
+    generated_at = _resolve_generated_at(context)
 
     csv_stub_path = resolved_output_dir / f"output.{table_name}_{date_tag}"
 

@@ -2,42 +2,40 @@
 # Install the hooks with `pre-commit install` and run them with `pre-commit run --all-files`.
 
 default_language_version:
-  python: python
+  python: python3
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.0
+    rev: v0.7.3
     hooks:
       - id: ruff
         args: ["--fix"]
-  - repo: https://github.com/psf/black
-    rev: 25.9.0
-    hooks:
-      - id: black
+      - id: ruff-format
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.18.2
     hooks:
       - id: mypy
-        args: []
+        args: ["--config-file", "pyproject.toml"]
         pass_filenames: false
         additional_dependencies:
           - pandas-stubs==2.1.4.231227
-          - types-requests==2.31.0.20240406
-          - types-pyyaml==6.0.12.20240311
-          - types-jsonschema==4.23.0.20240712
-          - types-python-dateutil==2.9.0.20240316
-          - types-openpyxl==3.1.0.20240425
-          - types-cachetools==5.3.0.0
-          - types-urllib3==1.26.25.6
-          - types-tabulate==0.9.0.20240106
-          - pytest==8.4.2
-          - pydantic==2.8.2
           - pandera==0.20.3
+          - pydantic==2.8.2
+          - pytest==8.4.2
+          - types-cachetools==5.3.0.0
+          - types-jsonschema==4.23.0.20240712
+          - types-openpyxl==3.1.0.20240425
+          - types-PyYAML==6.0.12.20240311
+          - types-python-dateutil==2.9.0.20240316
+          - types-pytz==2025.2.0.20250809
+          - types-requests==2.31.0.20240406
+          - types-tabulate==0.9.0.20240106
+          - types-urllib3==1.26.25.6
   - repo: local
     hooks:
       - id: pytest
         name: pytest
-        entry: pytest
+        entry: pytest --maxfail=1 --disable-warnings
         language: python
         additional_dependencies: [".[dev]"]
         pass_filenames: false

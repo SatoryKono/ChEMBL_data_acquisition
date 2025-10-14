@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import logging
 import os
 import shlex
@@ -10,6 +11,7 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Collection, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import import_module
@@ -35,6 +37,8 @@ except ModuleNotFoundError as exc:  # pragma: no cover - import guard
 
 ensure_project_root(__file__)
 
+from library.cli import configure_logger, create_logger_config, setup_cli_logging  # noqa: E402
+from library.cli.logging import CLILoggingContext  # noqa: E402
 from library.config import DEFAULT_CONFIG_PATH, load_config  # noqa: E402
 
 
@@ -98,11 +102,23 @@ class ForwardArgs:
 
 
 STAGES: tuple[Stage, ...] = (
-    Stage("testitem", "get_testitem_data.py"),
-    Stage("target", "get_target_data.py"),
     Stage("document", "get_document_data.py"),
+    Stage("target", "get_target_data.py"),
     Stage("assay", "get_assay_data.py"),
+    Stage("testitem", "get_testitem_data.py"),
     Stage("activity", "get_activity_data.py"),
+)
+
+STAGE_DISPLAY_NAMES: dict[str, str] = {
+    "document": "Document",
+    "target": "Target",
+    "assay": "Assay",
+    "testitem": "Test item",
+    "activity": "Activity",
+}
+
+STAGE_SEQUENCE_LABEL = " → ".join(
+    STAGE_DISPLAY_NAMES[stage.name] for stage in STAGES
 )
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -115,7 +131,21 @@ LOGS_DIR = DATA_DIR / "logs"
 _PUBCHEM_ENV_VAR = "CHEMBL_DA_PUBCHEM_ENABLE"
 _BASE_PATH_ENV_VAR = "CHEMBL_DA_BASE_PATH"
 
-_EXPECTED_CSV_COUNT = 15
+_LOGGING_CONTEXT_MANAGER: AbstractContextManager[CLILoggingContext] | None = None
+_LOGGING_CONTEXT: CLILoggingContext | None = None
+_LOGGING_SHUTDOWN_REGISTERED = False
+
+_STAGE_EXPECTED_OUTPUTS: dict[str, int] = {
+    "document": 3,
+    "target": 3,
+    "assay": 3,
+    "testitem": 3,
+    "activity": 3,
+}
+
+_EXPECTED_CSV_COUNT = sum(
+    _STAGE_EXPECTED_OUTPUTS[stage.name] for stage in STAGES
+)
 
 _CLEANUP_FILE_PATTERNS: tuple[str, ...] = (
     "*.lock",
@@ -413,27 +443,63 @@ def _parse_log_level(value: str) -> str:
     return normalized
 
 
+def _shutdown_logging_context() -> None:
+    """Release resources allocated by :func:`configure_logging`."""
+
+    global _LOGGING_CONTEXT_MANAGER, _LOGGING_CONTEXT, _LOGGING_SHUTDOWN_REGISTERED
+
+    manager = _LOGGING_CONTEXT_MANAGER
+    context = _LOGGING_CONTEXT
+    _LOGGING_CONTEXT_MANAGER = None
+    _LOGGING_SHUTDOWN_REGISTERED = False
+    _LOGGING_CONTEXT = None
+    if manager is None:
+        return
+    try:
+        manager.__exit__(None, None, None)
+    except Exception:  # pragma: no cover - defensive cleanup
+        logging.getLogger(__name__).exception(
+            "Не удалось корректно закрыть контекст логирования"
+        )
+    else:
+        if context is not None:
+            logging.getLogger(__name__).debug(
+                "Логирование завершено для файла %s", context.log_path
+            )
+
+
 def configure_logging(level_name: str | None) -> Path:
-    level = logging.INFO
+    """Initialise structured logging for the orchestration wrapper."""
+
+    global _LOGGING_CONTEXT_MANAGER, _LOGGING_CONTEXT, _LOGGING_SHUTDOWN_REGISTERED
+
+    level_token = "INFO"
     if level_name is not None:
-        level = logging._nameToLevel.get(level_name, logging.INFO)
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        candidate = level_name.upper()
+        if candidate in logging._nameToLevel:
+            level_token = candidate
+
+    log_cfg = create_logger_config(level_token)
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-    log_file = LOGS_DIR / f"get_data_{timestamp}.log"
 
-    handlers: list[logging.Handler] = [
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(log_file, encoding="utf-8"),
-    ]
-
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s | %(levelname)s | %(message)s",
-        handlers=handlers,
-        force=True,
+    manager = setup_cli_logging(
+        Path(__file__),
+        log_cfg,
+        date_str=timestamp,
+        log_dir=LOGS_DIR,
     )
-    logging.getLogger(__name__).debug("Логирование настроено на уровень %s", level)
-    return log_file
+    context = manager.__enter__()
+    _LOGGING_CONTEXT_MANAGER = manager
+    _LOGGING_CONTEXT = context
+    if not _LOGGING_SHUTDOWN_REGISTERED:
+        atexit.register(_shutdown_logging_context)
+        _LOGGING_SHUTDOWN_REGISTERED = True
+
+    configure_logger(context.log_cfg)
+    logging.getLogger(__name__).debug(
+        "Логирование настроено на уровень %s", context.log_cfg.level
+    )
+    return context.log_path
 
 
 TARGET_SUBCOMMANDS: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
@@ -561,11 +627,20 @@ def log_summary(durations: list[tuple[str, float]]) -> None:
         logging.info(" • %s: %.1f сек.", name, value)
 
 
-def count_output_files(output_dir: Path) -> int:
+def list_output_files(output_dir: Path) -> list[Path]:
+    """Return a sorted list of CSV artefacts present in ``output_dir``."""
+
     resolved = output_dir.expanduser().resolve()
     if not resolved.exists():
-        return 0
-    return sum(1 for path in resolved.glob("*.csv"))
+        return []
+    return sorted(
+        (path.resolve() for path in resolved.glob("*.csv") if path.is_file()),
+        key=os.fspath,
+    )
+
+
+def count_output_files(output_dir: Path) -> int:
+    return len(list_output_files(output_dir))
 
 
 def _resolve_output_directory(
@@ -666,6 +741,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args, unknown = parse_args(argv)
     log_file = configure_logging(args.log_level)
     logging.info("Логи сохраняются в %s", log_file)
+    logging.info("Последовательность этапов: %s", STAGE_SEQUENCE_LABEL)
 
     forward_args = build_forward_args(args, unknown)
     resolved_output_dir = _resolve_output_directory(args, forward_args)
@@ -682,7 +758,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     log_summary(durations)
 
-    csv_count = count_output_files(resolved_output_dir)
+    csv_files = list_output_files(resolved_output_dir)
+    csv_count = len(csv_files)
     logging.info(
         "🎉 Все выбранные этапы завершены. Найдено %d CSV-файлов в %s.",
         csv_count,
@@ -690,11 +767,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     if not skipped_stages and csv_count != _EXPECTED_CSV_COUNT:
-        logging.warning(
-            "Ожидалось получить %d CSV-файлов, фактически найдено %d.",
-            _EXPECTED_CSV_COUNT,
-            csv_count,
+        discovered = ", ".join(
+            _relative_to_output(path, resolved_output_dir) for path in csv_files
         )
+        if not discovered:
+            discovered = "нет CSV-файлов"
+        message = (
+            "Ожидалось получить %d CSV-файлов (по 3 на этап: %s), "
+            "фактически найдено %d. Обнаруженные файлы: %s."
+        ) % (
+            _EXPECTED_CSV_COUNT,
+            STAGE_SEQUENCE_LABEL,
+            csv_count,
+            discovered,
+        )
+        logging.error(message)
+        raise SystemExit(message)
 
     if _should_run_cleanup(forward_args):
         removed = cleanup_intermediate_files(resolved_output_dir)

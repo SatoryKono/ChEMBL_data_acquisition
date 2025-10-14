@@ -1,3 +1,17 @@
+# General cache and temporary artefacts
+.cache/
+.mypy_cache/
+.pytest_cache/
+**/__pycache__/
+tmp/
+tmp/**/*
+logs/**/*.log
+*.tmp
+*.log
+*.lock
+!poetry.lock
+!requirements-lock.txt
+
 *.xlsx
 data/input/pairs.csv
 data/input/pairs_independent.csv
@@ -10,7 +24,6 @@ data/output/ChEMBL/processed/pairs_same_document.csv
 *.env
 .env.local
 .env.*.local
-.cache/
 .coverage
 data/output/*.tmp
 data/output/*_intermediate*
@@ -29,8 +42,7 @@ data/cache/*.tmp
 data/cache/*.bak
 data/cache/*.pkl
 uniprot/
-# Python bytecode caches
-**/__pycache__/
+# Hypothesis state directory
 .hypothesis/
 
 # Local development files
