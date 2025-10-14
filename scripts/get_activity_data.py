@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Sequence
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:  # pragma: no cover - environment-dependent guard
+    sys.path.insert(0, str(ROOT))
+
+from library.cli.commands import get_activity_data as _command_module
 from library.io.config_loader import Config, load_config
 from library.io.output_writer import save_standard_outputs
 from library.postprocessing.activity.steps import (
@@ -17,9 +23,10 @@ from library.postprocessing.activity.steps import (
 )
 from library.utils.logging import Logger, get_logger
 
-ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "output"
 DEFAULT_CONFIG_PATH = Path("config/config.yaml")
+
+__all__ = ("run_pipeline", "main", "run_chembl", "_emit_completion_message")
 
 
 @dataclass(frozen=True)
@@ -156,6 +163,18 @@ def run_pipeline(pipeline_args: PipelineArgs, *, logger: Logger | None = None) -
 def main(argv: Sequence[str] | None = None) -> int:
     pipeline_args = parse_args(argv)
     return run_pipeline(pipeline_args)
+
+
+def run_chembl(*args, **kwargs) -> int:
+    """Compatibility shim delegating to the legacy command module."""
+
+    return _command_module.run_chembl(*args, **kwargs)
+
+
+def _emit_completion_message(*args, **kwargs) -> None:
+    """Compatibility shim delegating to the legacy command module."""
+
+    return _command_module._emit_completion_message(*args, **kwargs)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
