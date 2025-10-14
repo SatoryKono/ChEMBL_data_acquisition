@@ -1,6 +1,11 @@
 # Changelog
 
 > **Languages:** [English](./CHANGELOG.md) · [Русский](../ru/CHANGELOG.md)
+## [0.1.9] - 2025-10-20
+- Added legacy-compatible options to `scripts/get_target_data.py`, accepting
+  positional commands and `--log-level`/`--input-dir` flags so orchestration
+  runners continue to work without wrapper scripts.
+
 ## [0.1.8] - 2025-10-20
 - Restored CLI bootstrapping for `scripts/get_target_data.py` so direct Windows
   invocations resolve internal modules without manual `PYTHONPATH` tweaks.

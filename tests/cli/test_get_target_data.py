@@ -43,7 +43,19 @@ def test_get_target_data_cli(tmp_path, monkeypatch) -> None:
     )
 
     exit_code = get_target_data.main(
-        ["--limit", "10", "--date-tag", "20250101", "--output-dir", str(tmp_path)]
+        [
+            "all",
+            "--limit",
+            "10",
+            "--date-tag",
+            "20250101",
+            "--output-dir",
+            str(tmp_path),
+            "--log-level",
+            "debug",
+            "--input-dir",
+            str(tmp_path / "input"),
+        ]
     )
 
     assert exit_code == 0
@@ -58,3 +70,9 @@ def test_get_target_data_cli(tmp_path, monkeypatch) -> None:
     assert quality_path.exists()
     assert correlation_path.exists()
     assert metadata_path.exists()
+
+
+def test_get_target_data_unknown_command() -> None:
+    exit_code = get_target_data.main(["chembl"])
+
+    assert exit_code == 2
