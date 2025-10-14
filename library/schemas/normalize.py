@@ -8,13 +8,16 @@ consistent relation operators, unify units and trim identifier values.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 import pandas as pd
 
 _RELATION_MAP: dict[str, str] = {"<": "<=", ">": ">=", "=": "=", "<=": "<=", ">=": ">="}
 
 
-def _apply_if_string(series: pd.Series, func: Callable[[str], str]) -> pd.Series:
+def _apply_if_string(
+    series: pd.Series[Any], func: Callable[[str], str]
+) -> pd.Series[Any]:
     """Apply ``func`` to string elements of ``series``.
 
     Non-string values are returned unchanged.
