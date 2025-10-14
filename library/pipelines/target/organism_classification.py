@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Any, cast
 
 import pandas as pd
 
@@ -123,7 +124,7 @@ def normalize(
     if value is None:
         return EMPTY_VALUE
     try:
-        if pd.isna(value):
+        if pd.isna(cast(Any, value)):
             return EMPTY_VALUE
     except TypeError:
         pass
