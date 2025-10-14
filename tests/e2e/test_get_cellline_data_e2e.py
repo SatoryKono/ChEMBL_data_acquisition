@@ -112,6 +112,15 @@ def test_get_cellline_data_main_success(
     logger_stub = _MemoryLogger()
     monkeypatch.setattr(get_cellline_data, "logger", logger_stub)
 
+    metadata_calls: list[dict[str, object]] = []
+    original_save_metadata = get_cellline_data.io.save_metadata
+
+    def _tracking_save_metadata(*args: object, **kwargs: object):
+        metadata_calls.append({"args": args, "kwargs": kwargs})
+        return original_save_metadata(*args, **kwargs)
+
+    monkeypatch.setattr(get_cellline_data.io, "save_metadata", _tracking_save_metadata)
+
     original_pipeline = run_cellline_pipeline
 
     def fake_run_pipeline(cfg: Config, options: CellLinePipelineOptions):
@@ -157,6 +166,11 @@ def test_get_cellline_data_main_success(
     assert exit_code == 0
     assert output_csv.exists()
 
+    assert metadata_calls, "save_metadata should be invoked"
+
+    first_call_kwargs = metadata_calls[0]["kwargs"]
+    assert first_call_kwargs["qc_summary"] == {"rows": 2}
+
     df = pd.read_csv(
         output_csv,
         dtype=str,
@@ -171,6 +185,9 @@ def test_get_cellline_data_main_success(
     meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
     assert meta["generated_at"] == first_timestamp
     assert get_timestamp_utc() == first_timestamp
+    assert meta.get("qc_summary") == {"rows": 2}
+    expected_outputs = sorted(Path(path).name for path in first_call_kwargs["artifacts"])
+    assert sorted(meta.get("outputs", [])) == expected_outputs
 
     expected = pd.DataFrame(
         [
@@ -244,6 +261,15 @@ def test_get_cellline_data_main_success(
     second_meta = yaml.safe_load(second_meta_path.read_text(encoding="utf-8"))
     assert second_meta["generated_at"] == second_timestamp
     assert get_timestamp_utc() == second_timestamp
+    assert second_meta.get("qc_summary") == {"rows": 2}
+
+    assert len(metadata_calls) == 2
+    second_call_kwargs = metadata_calls[1]["kwargs"]
+    assert second_call_kwargs["qc_summary"] == {"rows": 2}
+    expected_second_outputs = sorted(
+        Path(path).name for path in second_call_kwargs["artifacts"]
+    )
+    assert sorted(second_meta.get("outputs", [])) == expected_second_outputs
 
     pd.testing.assert_frame_equal(
         second_df.drop(columns=["timestamp_utc"]).astype("string"),

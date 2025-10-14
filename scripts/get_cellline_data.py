@@ -244,6 +244,32 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 args._cellline_artifacts = artifacts
                 output_path = artifacts.dataset
 
+                try:
+                    metadata_path = io.save_metadata(
+                        table_name=table_name,
+                        date_tag=date_tag,
+                        args=args,
+                        qc_summary={"rows": int(len(dataset_frame))},
+                        output_dir=artifacts.dataset.parent,
+                        artifacts=[
+                            artifacts.dataset,
+                            artifacts.quality_report,
+                            artifacts.correlation_report,
+                        ],
+                    )
+                except (OSError, ValueError) as exc:
+                    logger.error(
+                        "cellline_metadata_persist_failed",
+                        error=str(exc),
+                        output_dir=str(artifacts.dataset.parent),
+                    )
+                    exit_code = 1
+                else:
+                    logger.info(
+                        "cellline_metadata_written",
+                        metadata=str(metadata_path),
+                    )
+
     preserve_intermediate = any(
         bool(getattr(args, flag, False))
         for flag in ("debug", "keep_intermediate", "emit_legacy_artifacts")
