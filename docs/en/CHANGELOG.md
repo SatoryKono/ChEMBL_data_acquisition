@@ -5,6 +5,12 @@
 All notable changes to this project will be documented in this file.
 
 
+## [0.1.7] - 2025-10-19
+- Added a focused assay postprocessing module deriving UTC timestamps and year
+  attributes directly from ChEMBL metadata.
+- Introduced a dedicated Pandera schema for the streamlined assay export and
+  regression tests covering timestamp handling and dictionary enrichment.
+
 ## [0.1.6] - 2025-10-18
   Added structured logging utilities with run identifiers and stage duration
   tracking, plus resilient HTTP retry wrappers adopted by the Chembl, PubChem,
