@@ -534,6 +534,21 @@ def _load_manifest_document(base_dir: Path | None = None) -> Mapping[str, object
     return data
 
 
+@lru_cache(maxsize=None)
+def _manifest_text_encoding(base_dir: Path | None = None) -> str:
+    """Return the declared manifest encoding or UTF-8 by default."""
+
+    try:
+        document = _load_manifest_document(base_dir)
+    except DictionaryManifestError:
+        return "utf-8"
+
+    encoding_value = document.get("encoding")
+    if isinstance(encoding_value, str):
+        return encoding_value
+    return "utf-8"
+
+
 def _parse_manifest(base_dir: Path | None = None) -> Mapping[str, DictionaryResource]:
     manifest_path = _manifest_path(base_dir)
     data = _load_manifest_document(base_dir)
@@ -707,7 +722,12 @@ def _as_path(value: object) -> Path | None:
     if isinstance(value, os.PathLike):
         return Path(os.fspath(value))
     if isinstance(value, bytes):
-        return Path(os.fspath(value))
+        encoding = _manifest_text_encoding()
+        try:
+            text = value.decode(encoding)
+        except UnicodeDecodeError:
+            text = value.decode("utf-8", errors="surrogateescape")
+        return Path(text)
     return None
 
 

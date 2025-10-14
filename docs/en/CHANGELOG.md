@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ## [0.1.5] - 2025-10-18
 - Hardened the orchestrator by exiting with a detailed error when CSV artefacts are missing, listing the discovered files for faster triage.
+- Normalised byte-valued dictionary resource paths before ``Path`` conversion so type checking accepts manifest references provided as bytes.
 
 ## [0.1.4] - 2025-10-17
 - Regenerated the bilingual documentation set after the October audit: README pairs
