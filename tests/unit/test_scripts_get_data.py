@@ -262,12 +262,12 @@ def test_main__skip_stage_has_no_warning(
 
 
 @pytest.mark.unit
-def test_main__missing_outputs_emit_warning(
+def test_main__missing_outputs_raise_error(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Full runs with missing CSV files should surface a warning."""
+    """Full runs with missing CSV files should terminate with an error."""
 
     from scripts import get_data as cli
 
@@ -285,16 +285,20 @@ def test_main__missing_outputs_emit_warning(
 
     monkeypatch.setattr(cli, "run_stage", _fake_run_stage)
     monkeypatch.setattr(cli, "cleanup_intermediate_files", lambda _path: 0)
-    monkeypatch.setattr(cli, "count_output_files", lambda _path: 12)
 
-    with caplog.at_level(logging.INFO):
-        exit_code = cli.main(["--output-dir", str(output_dir)])
+    (output_dir / "activity.csv").touch()
+    (output_dir / "assay.csv").touch()
 
-    assert exit_code == 0
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(SystemExit) as excinfo:
+            cli.main(["--output-dir", str(output_dir)])
+
     assert executed, "expected at least one stage to execute"
-    warnings = [record for record in caplog.records if record.levelno >= logging.WARNING]
-    assert warnings, "expected warning about missing CSV files"
-    assert any("Ожидалось получить" in record.getMessage() for record in warnings)
+    message = str(excinfo.value)
+    assert "Ожидалось получить" in message
+    assert "Обнаружены файлы" in message
+    assert "activity.csv" in message
+    assert "assay.csv" in message
 
 
 @pytest.mark.unit
@@ -334,11 +338,13 @@ def test_main__summary_uses_forward_output_dir(
 
     inspected_paths: list[Path] = []
 
-    def _fake_count(path: Path) -> int:
+    def _fake_list(path: Path) -> list[Path]:
         inspected_paths.append(path)
-        return 5
+        return [
+            path / f"output_{index}.csv" for index in range(cli._EXPECTED_CSV_COUNT)
+        ]
 
-    monkeypatch.setattr(cli, "count_output_files", _fake_count)
+    monkeypatch.setattr(cli, "list_output_files", _fake_list)
 
     exit_code = cli.main([])
 

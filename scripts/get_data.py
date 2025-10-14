@@ -561,11 +561,17 @@ def log_summary(durations: list[tuple[str, float]]) -> None:
         logging.info(" • %s: %.1f сек.", name, value)
 
 
-def count_output_files(output_dir: Path) -> int:
+def list_output_files(output_dir: Path) -> list[Path]:
+    """Return a sorted list of CSV artefacts produced by the pipeline."""
+
     resolved = output_dir.expanduser().resolve()
     if not resolved.exists():
-        return 0
-    return sum(1 for path in resolved.glob("*.csv"))
+        return []
+    return sorted(path.resolve() for path in resolved.glob("*.csv"))
+
+
+def count_output_files(output_dir: Path) -> int:
+    return len(list_output_files(output_dir))
 
 
 def _resolve_output_directory(
@@ -682,7 +688,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     log_summary(durations)
 
-    csv_count = count_output_files(resolved_output_dir)
+    discovered_files = list_output_files(resolved_output_dir)
+    csv_count = len(discovered_files)
     logging.info(
         "🎉 Все выбранные этапы завершены. Найдено %d CSV-файлов в %s.",
         csv_count,
@@ -690,11 +697,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     if not skipped_stages and csv_count != _EXPECTED_CSV_COUNT:
-        logging.warning(
-            "Ожидалось получить %d CSV-файлов, фактически найдено %d.",
-            _EXPECTED_CSV_COUNT,
-            csv_count,
-        )
+        relative_files = [
+            _relative_to_output(path, resolved_output_dir) for path in discovered_files
+        ]
+        files_listing = ", ".join(relative_files) if relative_files else "<нет>"
+        message = (
+            "Ожидалось получить %d CSV-файлов, фактически найдено %d. "
+            "Обнаружены файлы: %s"
+        ) % (_EXPECTED_CSV_COUNT, csv_count, files_listing)
+        logging.error(message)
+        raise SystemExit(message)
 
     if _should_run_cleanup(forward_args):
         removed = cleanup_intermediate_files(resolved_output_dir)
