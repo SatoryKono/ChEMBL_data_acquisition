@@ -15,14 +15,18 @@ try:  # pragma: no cover - prefer real backoff when available
 except ModuleNotFoundError:  # pragma: no cover - fallback for minimal environments
     class _FallbackBackoff:
         @staticmethod
-        def expo(base: float = 1.0, factor: float = 2.0, max_value: float | None = None):
+        def expo(
+            base: float = 1.0,
+            factor: float = 2.0,
+            max_value: float | None = None,
+        ) -> Callable[[], Iterator[float]]:
             def _generator() -> Iterator[float]:
                 delay = base
                 while True:
                     yield delay if max_value is None else min(delay, max_value)
                     delay *= factor
 
-            return _generator()
+            return _generator
 
         @staticmethod
         def full_jitter(value: float) -> float:
@@ -30,7 +34,7 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for minimal environme
 
         @staticmethod
         def on_exception(
-            wait_gen: Callable[..., Iterator[float]],
+            wait_gen: Callable[..., Callable[[], Iterator[float]] | Iterator[float]],
             exception: type[BaseException] | tuple[type[BaseException], ...],
             *,
             max_tries: int = 1,
@@ -41,7 +45,12 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for minimal environme
             def decorator(func: Callable[P, R]) -> Callable[P, R]:
                 def wrapped(*args: P.args, **kwargs: P.kwargs) -> R:
                     tries = 0
-                    delays = wait_gen()
+                    delays_candidate = wait_gen()
+                    delays = (
+                        delays_candidate()
+                        if callable(delays_candidate)
+                        else delays_candidate
+                    )
                     while True:
                         try:
                             return func(*args, **kwargs)
