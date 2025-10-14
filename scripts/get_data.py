@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import logging
 import os
 import shlex
@@ -10,6 +11,7 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Collection, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import import_module
@@ -35,6 +37,8 @@ except ModuleNotFoundError as exc:  # pragma: no cover - import guard
 
 ensure_project_root(__file__)
 
+from library.cli import configure_logger, create_logger_config, setup_cli_logging  # noqa: E402
+from library.cli.logging import CLILoggingContext  # noqa: E402
 from library.config import DEFAULT_CONFIG_PATH, load_config  # noqa: E402
 
 
@@ -126,6 +130,10 @@ OUTPUT_DIR = PROJECT_ROOT / DEFAULT_OUTPUT_DIR
 LOGS_DIR = DATA_DIR / "logs"
 _PUBCHEM_ENV_VAR = "CHEMBL_DA_PUBCHEM_ENABLE"
 _BASE_PATH_ENV_VAR = "CHEMBL_DA_BASE_PATH"
+
+_LOGGING_CONTEXT_MANAGER: AbstractContextManager[CLILoggingContext] | None = None
+_LOGGING_CONTEXT: CLILoggingContext | None = None
+_LOGGING_SHUTDOWN_REGISTERED = False
 
 _STAGE_EXPECTED_OUTPUTS: dict[str, int] = {
     "document": 3,
@@ -435,27 +443,63 @@ def _parse_log_level(value: str) -> str:
     return normalized
 
 
+def _shutdown_logging_context() -> None:
+    """Release resources allocated by :func:`configure_logging`."""
+
+    global _LOGGING_CONTEXT_MANAGER, _LOGGING_CONTEXT, _LOGGING_SHUTDOWN_REGISTERED
+
+    manager = _LOGGING_CONTEXT_MANAGER
+    context = _LOGGING_CONTEXT
+    _LOGGING_CONTEXT_MANAGER = None
+    _LOGGING_SHUTDOWN_REGISTERED = False
+    _LOGGING_CONTEXT = None
+    if manager is None:
+        return
+    try:
+        manager.__exit__(None, None, None)
+    except Exception:  # pragma: no cover - defensive cleanup
+        logging.getLogger(__name__).exception(
+            "Не удалось корректно закрыть контекст логирования"
+        )
+    else:
+        if context is not None:
+            logging.getLogger(__name__).debug(
+                "Логирование завершено для файла %s", context.log_path
+            )
+
+
 def configure_logging(level_name: str | None) -> Path:
-    level = logging.INFO
+    """Initialise structured logging for the orchestration wrapper."""
+
+    global _LOGGING_CONTEXT_MANAGER, _LOGGING_CONTEXT, _LOGGING_SHUTDOWN_REGISTERED
+
+    level_token = "INFO"
     if level_name is not None:
-        level = logging._nameToLevel.get(level_name, logging.INFO)
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        candidate = level_name.upper()
+        if candidate in logging._nameToLevel:
+            level_token = candidate
+
+    log_cfg = create_logger_config(level_token)
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-    log_file = LOGS_DIR / f"get_data_{timestamp}.log"
 
-    handlers: list[logging.Handler] = [
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(log_file, encoding="utf-8"),
-    ]
-
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s | %(levelname)s | %(message)s",
-        handlers=handlers,
-        force=True,
+    manager = setup_cli_logging(
+        Path(__file__),
+        log_cfg,
+        date_str=timestamp,
+        log_dir=LOGS_DIR,
     )
-    logging.getLogger(__name__).debug("Логирование настроено на уровень %s", level)
-    return log_file
+    context = manager.__enter__()
+    _LOGGING_CONTEXT_MANAGER = manager
+    _LOGGING_CONTEXT = context
+    if not _LOGGING_SHUTDOWN_REGISTERED:
+        atexit.register(_shutdown_logging_context)
+        _LOGGING_SHUTDOWN_REGISTERED = True
+
+    configure_logger(context.log_cfg)
+    logging.getLogger(__name__).debug(
+        "Логирование настроено на уровень %s", context.log_cfg.level
+    )
+    return context.log_path
 
 
 TARGET_SUBCOMMANDS: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
