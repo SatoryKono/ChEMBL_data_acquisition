@@ -475,6 +475,73 @@ def _safe_int(value: object, default: int = 0) -> int:
         return default
 
 
+def _extract_metric_count(value: object | None) -> int | None:
+    """Return a non-negative integer derived from ``value`` when possible."""
+
+    if value is None:
+        return None
+
+    if isinstance(value, numbers.Integral):
+        candidate = int(value)
+    elif isinstance(value, numbers.Real):
+        float_value = float(value)
+        if math.isnan(float_value):
+            return None
+        candidate = int(float_value)
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            candidate = int(text)
+        except ValueError:
+            try:
+                candidate = int(float(text))
+            except ValueError:
+                return None
+    else:
+        return None
+
+    return candidate if candidate >= 0 else None
+
+
+def _resolve_completion_rows(
+    *,
+    processed_ids: int,
+    summary_snapshot: Mapping[str, object] | None,
+    pipeline_stats: Mapping[str, object] | None,
+) -> int:
+    """Resolve the most reliable completion row count for logging."""
+
+    processed = max(0, int(processed_ids))
+
+    summary_rows: int | None = None
+    if summary_snapshot is not None:
+        summary_rows = _extract_metric_count(summary_snapshot.get("rows"))
+
+    stats_rows: int | None = None
+    if pipeline_stats:
+        stats_rows = _extract_metric_count(pipeline_stats.get("rows_kept"))
+        if stats_rows is None:
+            stats_rows = _extract_metric_count(pipeline_stats.get("rows_total"))
+
+    if summary_rows is not None:
+        resolved = summary_rows
+        if stats_rows is not None:
+            if stats_rows > resolved:
+                resolved = stats_rows
+            elif resolved <= 0 < stats_rows:
+                resolved = stats_rows
+        elif resolved <= 0 < processed:
+            resolved = processed
+        return resolved
+
+    if stats_rows is not None:
+        return stats_rows
+
+    return processed
+
+
 def _extract_adapter_retry_metadata(
     session: requests.Session, base_url: str
 ) -> dict[str, object]:
@@ -2093,31 +2160,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
         
         if exit_code == 0:
-            completion_rows = processed_ids
-            summary_rows = summary_snapshot.get("rows") if summary_snapshot else None
-            if isinstance(summary_rows, int | float):
-                try:
-                    completion_rows = int(summary_rows)
-                except Exception:
-                    # Fallback in case of any unexpected type or value
-                    completion_rows = processed_ids
-            elif pipeline_stats is not None:
-                try:
-                    # Try to get from pipeline_stats if available
-                    rows_kept = pipeline_stats.get("rows_kept")
-                    if rows_kept is not None and isinstance(rows_kept, int | float):
-                        completion_rows = int(rows_kept)
-                    else:
-                        rows_total = pipeline_stats.get("rows_total", processed_ids)
-                        if isinstance(rows_total, int | float):
-                            completion_rows = int(rows_total)
-                        else:
-                            completion_rows = processed_ids
-                except Exception:
-                    # Fallback in case of any unexpected type or value
-                    completion_rows = processed_ids
-            else:
-                completion_rows = processed_ids
+            completion_rows = _resolve_completion_rows(
+                processed_ids=processed_ids,
+                summary_snapshot=summary_snapshot,
+                pipeline_stats=pipeline_stats,
+            )
         
             pipeline_version_value = (
                 getattr(postprocess_metrics, "pipeline_version", None)
