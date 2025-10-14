@@ -2,6 +2,11 @@
 
 from .activities import ActivitiesSchema, configure_activity_schema
 from .activity import ActivitySchema
+from .activity_schema import (
+    ACTIVITY_COLUMN_ORDER,
+    ACTIVITY_SCHEMA,
+    validate_activity_records,
+)
 from .assay import AssaySchema
 from .assay_postprocessing import AssayPostprocessSchema
 from .assays import AssaysSchema
@@ -30,6 +35,9 @@ __all__ = [
     "AssaysSchema",
     "AssayPostprocessSchema",
     "ActivitySchema",
+    "ACTIVITY_SCHEMA",
+    "ACTIVITY_COLUMN_ORDER",
+    "validate_activity_records",
     "DocumentsSchema",
     "DocumentSchema",
     "CellLinesSchema",

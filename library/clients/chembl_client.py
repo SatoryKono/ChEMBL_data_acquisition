@@ -47,6 +47,23 @@ class ChemblClient:
         )(self._request_json)
         return request(endpoint=endpoint, params=params, timeout=effective_timeout)
 
+    def list_activities(
+        self,
+        *,
+        params: Mapping[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """Return activity payloads using the public ChEMBL API."""
+
+        effective_timeout = timeout or self.timeout
+        request = with_retry(
+            max_tries=self.max_tries,
+            timeout=effective_timeout,
+            logger=self._logger,
+            log_event="chembl_request",
+        )(self._request_json)
+        return request(endpoint="activity", params=params, timeout=effective_timeout)
+
     def _request_json(
         self,
         endpoint: str,

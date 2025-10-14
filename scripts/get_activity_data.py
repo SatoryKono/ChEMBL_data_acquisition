@@ -1,138 +1,162 @@
-"""Compatibility wrapper exposing the activity pipeline CLI entry point."""
+"""CLI entry point producing normalized ChEMBL activity exports."""
 
 from __future__ import annotations
 
-import sys
-from collections.abc import Iterable
-from importlib import import_module
-from types import ModuleType
-from typing import TYPE_CHECKING
+import argparse
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Sequence
 
-# ruff: noqa: E402  # bootstrap alters import order for script compatibility
-if TYPE_CHECKING:
-    from . import _bootstrap as _bootstrap_module
-elif __package__ in {None, ""}:
-    import _bootstrap as _bootstrap_module  # pragma: no cover - CLI fallback
-else:  # pragma: no cover - executed when imported as a module
-    from . import _bootstrap as _bootstrap_module
+from library.io.config_loader import Config, load_config
+from library.io.output_writer import save_standard_outputs
+from library.postprocessing.activity.steps import (
+    ACTIVITY_COLUMN_ORDER,
+    ACTIVITY_SORT_COLUMNS,
+    run_activity_pipeline,
+)
+from library.utils.logging import Logger, get_logger
 
-bootstrap_cli = _bootstrap_module.bootstrap_cli
-
-bootstrap_cli(__package__, __file__)
-del bootstrap_cli
-del _bootstrap_module
-
-
-def _export_module_api(
-    module: ModuleType, *, extra: Iterable[str] = ()
-) -> tuple[str, ...]:
-    """Expose ``module`` attributes in the wrapper namespace."""
-
-    exported: dict[str, object] = {}
-    for name, value in module.__dict__.items():
-        if name.startswith("__"):
-            continue
-        exported[name] = value
-
-    for name in extra:
-        if hasattr(module, name):
-            exported[name] = getattr(module, name)
-
-    globals().update(exported)
-
-    module_all = tuple(getattr(module, "__all__", ()))
-    if module_all:
-        ordered = list(module_all)
-        for name in exported:
-            if name not in ordered:
-                ordered.append(name)
-    else:
-        ordered = list(exported)
-    return tuple(ordered)
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_OUTPUT_DIR = ROOT / "data" / "output"
+DEFAULT_CONFIG_PATH = Path("config/config.yaml")
 
 
-def _augment_activity_module(module: ModuleType) -> tuple[str, ...]:
-    """Install backwards compatible exports on the activity CLI module."""
+@dataclass(frozen=True)
+class PipelineArgs:
+    """Container describing the normalized activity pipeline invocation."""
 
-    extra_exports: dict[str, object] = {}
-
-    try:  # pragma: no cover - defensive guard for optional dependencies
-        from library.pipelines.activity import runner as activity_runner
-    except Exception:  # pragma: no cover - ensure import failures do not break CLI
-        activity_runner = None
-    else:
-        extra_exports.update(
-            {
-                "MAX_ACTIVITY_CHUNK_SIZE": activity_runner.MAX_ACTIVITY_CHUNK_SIZE,
-                "register_activity_pipeline_hooks": activity_runner.register_activity_pipeline_hooks,
-            }
-        )
-
-    try:  # pragma: no cover - defensive guard for optional dependencies
-        from library.cli.entrypoints import activity as activity_entrypoint
-    except (
-        Exception
-    ):  # pragma: no cover - the entrypoint may not be importable during tests
-        activity_entrypoint = None
-    else:
-        emit_completion = getattr(activity_entrypoint, "_emit_completion_message", None)
-        if emit_completion is not None:
-            extra_exports.setdefault("_emit_completion_message", emit_completion)
-
-    for name, value in extra_exports.items():
-        setattr(module, name, value)
-
-    existing_all = tuple(getattr(module, "__all__", ()))
-    missing = tuple(name for name in extra_exports if name not in existing_all)
-    if missing:
-        module.__all__ = existing_all + missing  # type: ignore[attr-defined]
-    return tuple(extra_exports)
+    limit: int | None
+    date_tag: str
+    output_dir: Path
+    config_path: Path
 
 
-def _load_activity_module() -> ModuleType:
-    module = import_module("library.cli.commands.get_activity_data")
-    return module
+def _default_date_tag() -> str:
+    return datetime.now(tz=UTC).strftime("%Y%m%d")
 
 
-_MODULE = _load_activity_module()
-_EXTRA_EXPORTS = _augment_activity_module(_MODULE)
-_MODULE._synchronise_wrapper_module()
-__all__ = _export_module_api(_MODULE, extra=_EXTRA_EXPORTS)
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--limit", type=int, default=None, help="Maximum number of rows to fetch")
+    parser.add_argument(
+        "--date-tag",
+        dest="date_tag",
+        default=None,
+        help="Date token used in output artefact names (YYYYMMDD)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        dest="output_dir",
+        default=str(DEFAULT_OUTPUT_DIR),
+        help="Destination directory for generated artefacts",
+    )
+    parser.add_argument(
+        "--config",
+        dest="config_path",
+        default=str(DEFAULT_CONFIG_PATH),
+        help="Configuration file controlling API parameters",
+    )
+    return parser
 
 
-def __getattr__(name: str) -> object:
-    """Proxy attribute access to :mod:`library.cli.commands.get_activity_data`."""
+def _normalize_output_dir(value: str | Path) -> Path:
+    candidate = Path(value)
+    if candidate.is_absolute():
+        return candidate
+    return (ROOT / candidate).resolve()
 
+
+def _normalize_config_path(value: str | Path) -> Path:
+    candidate = Path(value)
+    if candidate.is_absolute():
+        return candidate
+    return ROOT / candidate
+
+
+def parse_args(argv: Sequence[str] | None = None) -> PipelineArgs:
+    parser = build_parser()
+    namespace = parser.parse_args(list(argv) if argv is not None else None)
+    limit = namespace.limit
+    if limit is not None and limit < 0:
+        parser.error("--limit must be non-negative")
+    date_tag = namespace.date_tag or _default_date_tag()
+    output_dir = _normalize_output_dir(namespace.output_dir)
+    config_path = _normalize_config_path(namespace.config_path)
+    return PipelineArgs(limit=limit, date_tag=date_tag, output_dir=output_dir, config_path=config_path)
+
+
+def _resolve_chembl_base(cfg: Config) -> str | None:
+    data = cfg.to_dict()
+    sources = data.get("sources")
+    if not isinstance(sources, dict):
+        return None
+    chembl_cfg = sources.get("chembl")
+    if not isinstance(chembl_cfg, dict):
+        return None
+    api_cfg = chembl_cfg.get("api")
+    if not isinstance(api_cfg, dict):
+        return None
+    base = api_cfg.get("chembl_base")
+    if isinstance(base, str) and base.strip():
+        return base.strip()
+    return None
+
+
+def _prepare_logger(pipeline_args: PipelineArgs) -> Logger:
+    logger = get_logger(__name__)
+    return logger.bind(
+        limit=pipeline_args.limit,
+        output_dir=str(pipeline_args.output_dir),
+        date_tag=pipeline_args.date_tag,
+    )
+
+
+def run_pipeline(pipeline_args: PipelineArgs, *, logger: Logger | None = None) -> int:
+    log = logger or _prepare_logger(pipeline_args)
+    log.info("activity_pipeline_start")
     try:
-        return getattr(_MODULE, name)
-    except AttributeError as exc:  # pragma: no cover - passthrough for missing attrs
-        raise AttributeError(name) from exc
+        cfg = load_config(pipeline_args.config_path)
+    except Exception as exc:  # pragma: no cover - configuration errors are fatal
+        log.error(
+            "activity_config_load_failed",
+            error=str(exc),
+            config=str(pipeline_args.config_path),
+        )
+        return 1
+
+    base_url = _resolve_chembl_base(cfg)
+    dataset, correlation, quality = run_activity_pipeline(
+        limit=pipeline_args.limit,
+        base_url=base_url,
+        logger=log.bind(stage="activity_pipeline"),
+    )
+
+    artifacts = save_standard_outputs(
+        dataset,
+        correlation,
+        quality,
+        table_name="activity",
+        date_tag=pipeline_args.date_tag,
+        key_columns=ACTIVITY_SORT_COLUMNS,
+        column_order=ACTIVITY_COLUMN_ORDER,
+        output_dir=pipeline_args.output_dir,
+    )
+
+    log.info(
+        "activity_pipeline_complete",
+        rows=int(dataset.shape[0]),
+        dataset=str(artifacts.dataset),
+        quality=str(artifacts.quality_report),
+        correlation=str(artifacts.correlation_report),
+    )
+    return 0
 
 
-def __dir__() -> list[str]:  # pragma: no cover - passthrough helper
-    return sorted({*globals().keys(), *dir(_MODULE)})
-
-
-class _Adapter(ModuleType):
-    """Proxy module syncing attribute writes back to ``_MODULE``."""
-
-    def __getattr__(self, name: str) -> object:  # pragma: no cover - passthrough helper
-        return __getattr__(name)
-
-    def __setattr__(
-        self, name: str, value: object
-    ) -> None:  # pragma: no cover - passthrough helper
-        setattr(_MODULE, name, value)
-        super().__setattr__(name, value)
-
-    def __dir__(self) -> list[str]:  # pragma: no cover - passthrough helper
-        return __dir__()
-
-
-module_proxy = sys.modules[__name__]
-if module_proxy is not _MODULE:
-    module_proxy.__class__ = _Adapter
+def main(argv: Sequence[str] | None = None) -> int:
+    pipeline_args = parse_args(argv)
+    return run_pipeline(pipeline_args)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
-    raise SystemExit(_MODULE.main())
+    raise SystemExit(main())

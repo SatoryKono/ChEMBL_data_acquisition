@@ -5,6 +5,10 @@
 All notable changes to this project will be documented in this file.
 
 
+## [0.1.7] - 2025-10-19
+- Added a standalone activity normalization pipeline producing deterministic CSV/QC artefacts
+  with strict Pandera validation and a lightweight CLI wrapper.
+
 ## [0.1.6] - 2025-10-18
   Added structured logging utilities with run identifiers and stage duration
   tracking, plus resilient HTTP retry wrappers adopted by the Chembl, PubChem,
