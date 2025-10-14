@@ -4,6 +4,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.6] - 2025-10-18
+- Restored the `list_output_files` helper used by the orchestrator summary to
+  avoid runtime failures after successful pipeline executions.
+
 ## [0.1.5] - 2025-10-18
 - Hardened the orchestrator by exiting with a detailed error when CSV artefacts are missing, listing the discovered files for faster triage.
 

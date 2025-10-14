@@ -644,11 +644,13 @@ def log_summary(durations: list[tuple[str, float]]) -> None:
 
 
 
-def count_output_files(output_dir: Path) -> int:
-    resolved = output_dir.resolve()
+def list_output_files(output_dir: Path) -> list[Path]:
+    """Return sorted CSV artefacts located inside ``output_dir``."""
 
+    resolved = output_dir.resolve()
     if not resolved.exists():
         return []
+
     return sorted(
         (path.resolve() for path in resolved.glob("*.csv") if path.is_file()),
         key=os.fspath,
@@ -656,6 +658,8 @@ def count_output_files(output_dir: Path) -> int:
 
 
 def count_output_files(output_dir: Path) -> int:
+    """Return the number of CSV artefacts produced in ``output_dir``."""
+
     return len(list_output_files(output_dir))
 
 
