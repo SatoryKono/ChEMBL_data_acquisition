@@ -15,16 +15,19 @@ a single command.
 
 ```mermaid
 flowchart LR
-    A[Input identifiers\nCSV files] -->|resolve| B[Document pipeline]
-    B -->|enrich| C[Target pipeline]
-    C -->|link| D[Assay pipeline]
-    D -->|hydrate| E[Test item pipeline]
-    E -->|join| F[Activity pipeline]
-    G[[Tissue pipeline\\n(manual run)]]
-    B -.->|citations| F
-    C -.->|targets| F
-    G -.->|reference tables| F
-    style F fill:#dfeaff,stroke:#1e3a8a,stroke-width:2px
+    cfg[config/config.yaml\n+ env overrides] --> loader[load_config()]
+    loader --> orchestrator[get-data orchestrator]
+    orchestrator -->|documents| doc[Document pipeline]:::stage
+    doc -->|target hints| tar[Target pipeline]:::stage
+    tar -->|assay scope| assay[Assay pipeline]:::stage
+    assay -->|test items| testitem[Test item pipeline]:::stage
+    testitem -->|activity scope| activity[Activity pipeline]:::stage
+    orchestrator -.->|manual refresh| tissue[Tissue pipeline]:::stage
+    doc -.->|citations| activity
+    tar -.->|target set| activity
+    assay -.->|assay metadata| activity
+    testitem -.->|compound context| activity
+    classDef stage fill:#dfeaff,stroke:#1e3a8a,stroke-width:1.5px;
 ```
 
 Each pipeline is idempotent and can be executed independently. The
@@ -36,8 +39,26 @@ wrapper `python scripts/get_data.py` remains available for automation that
 expects the historical path, but it only forwards the shared stage flags (for
 example `--limit`, `--force`, `--skip-existing`, `--dry-run`) and does not
 understand the orchestrator-only overrides. When tissue lookups are needed,
+
 operators run `get_tissue_data` separately to refresh the reference tables
 before executing the activity pipeline.
+### Star schema overview
+
+```mermaid
+erDiagram
+    activity ||--o{ document : "document_chembl_id"
+    activity ||--o{ assay : "assay_chembl_id"
+    activity ||--o{ target : "target_chembl_id"
+    activity ||--o{ testitem : "molecule_chembl_id"
+    document ||--o{ document_reference : "pubmed_id"
+    testitem ||--o{ pubchem_record : "pubchem_cid"
+```
+
+The pipelines model activities as the fact table joining the document, assay,
+target and test item dimensions. Optional lookups, such as PubMed citations or
+PubChem compound metadata, hang off the relevant dimension tables without
+breaking determinism or reproducibility guarantees.
+
 
 ## Repository layout
 
@@ -287,16 +308,18 @@ events while investigating discrepancies.
 
 ### CLI quick reference
 
+All example commands below include `--emit-legacy-artifacts` so the `.meta.yaml` sidecar is written together with the three canonical CSV outputs (dataset, quality report, correlation report).
+
 | Command | Example invocation | Highlights |
 |---------|--------------------|------------|
-| Orchestrator | `get-data --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --dry-run` | Runs the full pipeline chain once, writes run manifests, and accepts orchestrator-only options such as `--pipeline-registry` and `--override-{input,output-stem,subcommand}`. The legacy `python scripts/get_data.py` wrapper only forwards the shared stage flags (`--limit`, `--force`, `--skip-existing`, `--dry-run`). |
-| Document | `python scripts/get_document_data.py --mode all --input data/input/document.csv --final-out output/documents.csv --fallback-doi-enabled --fallback-doi-path data/input/fallback.csv --openalex-rps 2` | Supports `--mode chembl|pubmed|all`, per-source batch sizing and fallback DOI overrides. |
-| Target | `python scripts/get_target_data.py all --input data/input/target.csv --final-out output/targets.csv --chembl-chunk-size 10 --uniprot-data-dir cache/uniprot --raw-out output/targets_raw.parquet --raw-format parquet` | Sub-commands (`uniprot`, `chembl`, `iuphar`, `all`) accept prefixed overrides and optional raw exports. |
-| Assay | `python scripts/get_assay_data.py --input data/input/assay.csv --final-out output/assay.csv --chunk-size 25 --timeout 45` | Requires the assay, taxonomy and target dictionaries under `config/dictionary` to enrich `assay_group`, `assay_strain`, `year` and `accession` before normalisation; shares global options plus per-request chunk size and timeout tuning. |
-| Test item | `python scripts/get_testitem_data.py --input data/input/testitem.csv --final-out output/testitems.csv --request-limit 500 --hierarchy-path config/dictionary/_testitem/molecule_hierarchy.csv` | Provides parent-molecule enrichment controls and request throttling (`--request-limit`, `--batch-size`, `--dry-run`). |
-| Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto` | Resolves tissue metadata, merges ontology cross-references and normalises synonyms for downstream joins. Run separately before `get_activity_data` when tissue lookups are required. |
-| Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --final-out output/cellline.csv --batch-size 20 --limit 100` | Retrieves ChEMBL cell line records, normalises nullable identifiers and enforces deterministic ordering. |
-| Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --column activity_id --batch-size 10 --workers 4 --dry-run` | Flags: identifier column overrides (`--column activity_id`), per-request limits (`--batch-size`, `--timeout`), range selection (`--limit`, `--offset`) and dry-run validation/workers toggles. |
+| Orchestrator | `get-data --base-path . --input-dir data/input --output-dir output --config config/config.yaml --date 20250228 --limit 100 --emit-legacy-artifacts` | Runs the full pipeline chain once, writes run manifests, and accepts orchestrator-only options such as `--pipeline-registry` and `--override-{input,output-stem,subcommand}`. The legacy `python scripts/get_data.py` wrapper only forwards the shared stage flags (`--limit`, `--force`, `--skip-existing`, `--dry-run`). |
+| Document | `python scripts/get_document_data.py --mode all --input data/input/document.csv --final-out output/documents.csv --fallback-doi-enabled --fallback-doi-path data/input/fallback.csv --openalex-rps 2 --emit-legacy-artifacts` | Supports `--mode chembl|pubmed|all`, per-source batch sizing and fallback DOI overrides. |
+| Target | `python scripts/get_target_data.py all --input data/input/target.csv --final-out output/targets.csv --chembl-chunk-size 10 --uniprot-data-dir cache/uniprot --raw-out output/targets_raw.parquet --raw-format parquet --emit-legacy-artifacts` | Sub-commands (`uniprot`, `chembl`, `iuphar`, `all`) accept prefixed overrides and optional raw exports. |
+| Assay | `python scripts/get_assay_data.py --input data/input/assay.csv --final-out output/assay.csv --chunk-size 25 --timeout 45 --emit-legacy-artifacts` | Requires the assay, taxonomy and target dictionaries under `config/dictionary` to enrich `assay_group`, `assay_strain`, `year` and `accession` before normalisation; shares global options plus per-request chunk size and timeout tuning. |
+| Test item | `python scripts/get_testitem_data.py --input data/input/testitem.csv --final-out output/testitems.csv --request-limit 500 --hierarchy-path config/dictionary/_testitem/molecule_hierarchy.csv --emit-legacy-artifacts` | Provides parent-molecule enrichment controls and request throttling (`--request-limit`, `--batch-size`, `--dry-run`). |
+| Tissue | `python scripts/get_tissue_data.py --input data/input/tissue.csv --final-out output/tissues.csv --chunk-size 50 --xref-sources uberon,efo,bto --emit-legacy-artifacts` | Resolves tissue metadata, merges ontology cross-references and normalises synonyms for downstream joins. Run separately before `get_activity_data` when tissue lookups are required. |
+| Cell line | `python scripts/get_cellline_data.py --input data/input/cellline.csv --final-out output/cellline.csv --batch-size 20 --limit 100 --emit-legacy-artifacts` | Retrieves ChEMBL cell line records, normalises nullable identifiers and enforces deterministic ordering. |
+| Activity | `python scripts/get_activity_data.py --input data/input/activity.csv --final-out output/activities.csv --column activity_id --batch-size 10 --workers 4 --emit-legacy-artifacts` | Flags: identifier column overrides (`--column activity_id`), per-request limits (`--batch-size`, `--timeout`), range selection (`--limit`, `--offset`) and dry-run validation/workers toggles. |
 | Synthetic activities | `python scripts/get_activities.py --limit 25 --dry-run` | Generates deterministic dummy rows for smoke tests, produces the canonical CSV + QA reports, and cleans temporary files; add `--emit-legacy-artifacts` to persist `.meta.yaml` sidecars. |
 
 Each pipeline writes a deterministic dataset CSV together with
@@ -353,11 +376,15 @@ files.【F:library/reporting/run_manifest.py†L75-L166】【F:library/cli_utils
 
 ```mermaid
 flowchart TD
-    A[Pipeline step\nCSV export] -->|io.save_standard_outputs| B[Canonical CSVs]
-    B -->|register artefacts| D[run_<timestamp>.json]
-    A -->|--emit-legacy-artifacts| C[Legacy bundle\n(.meta.yaml, etc.)]
-    C -->|optional merge| D
-    D -->|alias| E[reports/run_manifest.json]
+    stage[Pipeline step\nfinalise_output] --> dataset[output.<table>_<date>.csv]
+    stage --> quality[output.<table>_<date>_quality_report_table.csv]
+    stage --> corr[output.<table>_<date>_data_correlation_report_table.csv]
+    stage -->|--emit-legacy-artifacts| meta[output.<table>_<date>.meta.yaml]
+    dataset --> manifest[run_<timestamp>.json]
+    quality --> manifest
+    corr --> manifest
+    meta -.-> manifest
+    manifest --> alias[reports/run_manifest.json]
 ```
 
 Reviewing a manifest therefore provides a single, deterministic location to

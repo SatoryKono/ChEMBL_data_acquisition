@@ -8,6 +8,8 @@ the authoritative orchestrator entry point. The legacy wrapper
 forwards the shared stage flags described below and does not understand the
 orchestrator-specific overrides.
 
+All pipeline examples assume `--emit-legacy-artifacts` is set so the `.meta.yaml` sidecar is written alongside the dataset, quality and correlation CSVs.
+
 ## Common conventions
 
 | Option | Description |
@@ -196,11 +198,15 @@ optional metadata and quality paths are present in the manifest snapshot.
 
 ```mermaid
 flowchart TD
-    A[Pipeline step\nCSV export] -->|io.save_standard_outputs| B[Canonical CSVs]
-    B -->|register artefacts| D[run_<timestamp>.json]
-    A -->|--emit-legacy-artifacts| C[Legacy bundle\n(.meta.yaml, etc.)]
-    C -->|optional merge| D
-    D -->|alias| E[reports/run_manifest.json]
+    stage[Pipeline step\nfinalise_output] --> dataset[output.<table>_<date>.csv]
+    stage --> quality[output.<table>_<date>_quality_report_table.csv]
+    stage --> corr[output.<table>_<date>_data_correlation_report_table.csv]
+    stage -->|--emit-legacy-artifacts| meta[output.<table>_<date>.meta.yaml]
+    dataset --> manifest[run_<timestamp>.json]
+    quality --> manifest
+    corr --> manifest
+    meta -.-> manifest
+    manifest --> alias[reports/run_manifest.json]
 ```
 
 Automation can read `reports/run_manifest.json` to locate the most recent run
