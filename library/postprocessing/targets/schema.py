@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from library.postprocessing.common import DataFrameSchema, validate_schema
+from library.schemas.target import TargetSchema
 
 TARGET_SCHEMA = DataFrameSchema(
     required_columns=(
@@ -33,6 +34,7 @@ TARGET_SCHEMA = DataFrameSchema(
         "synonyms",
         "pipeline_version",
     ),
+    pandera_schema=TargetSchema,
 )
 
 
