@@ -12,9 +12,9 @@ import argparse
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Sequence
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -44,8 +44,7 @@ def _load_tracked_paths(root: Path) -> set[str]:
             ["git", "ls-files"],
             cwd=root,
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
         )
     except (FileNotFoundError, subprocess.CalledProcessError):

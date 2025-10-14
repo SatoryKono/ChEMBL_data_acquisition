@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
+from urllib3.util import Timeout
 
 from library.clients import pubchem
 from library.config import ApiCfg, PubChemCfg, RetryCfg
-from urllib3.util import Timeout
 
 
 @pytest.fixture(autouse=True)
