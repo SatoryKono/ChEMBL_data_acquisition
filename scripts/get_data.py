@@ -196,8 +196,10 @@ def _normalise_cli_path(value: str) -> Path:
     stripped = value.strip()
     if os.name != "nt" and "\\" in stripped:
         windows_path = PureWindowsPath(stripped)
-        return Path(windows_path.as_posix())
-    return Path(stripped)
+        candidate = Path(windows_path.as_posix())
+    else:
+        candidate = Path(stripped)
+    return candidate.expanduser()
 
 
 def _resolve_forward_output_dir(tokens: Sequence[str]) -> Path:
