@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import logging
+import os
 import sys
 import types
 from importlib.machinery import SourceFileLoader
@@ -154,6 +155,37 @@ def test_ensure_base_path_env__keeps_preexisting_value():
     cli._ensure_base_path_env([], env)
 
     assert env[cli._BASE_PATH_ENV_VAR] == existing
+
+
+@pytest.mark.unit
+def test_resolve_forward_output_dir__expands_home(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from scripts import get_data as cli
+
+    monkeypatch.setenv("HOME", os.fspath(tmp_path))
+
+    tokens = ["--output-dir", "~/custom"]
+
+    resolved = cli._resolve_forward_output_dir(tokens)
+
+    assert resolved == (tmp_path / "custom").resolve()
+
+
+@pytest.mark.unit
+def test_resolve_forward_output_dir__expands_home_base_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from scripts import get_data as cli
+
+    monkeypatch.setenv("HOME", os.fspath(tmp_path))
+
+    tokens = ["--base-path", "~/chembl", "--output-dir", "output"]
+
+    resolved = cli._resolve_forward_output_dir(tokens)
+
+    expected_base = (tmp_path / "chembl").resolve()
+    assert resolved == (expected_base / "output").resolve()
 
 
 @pytest.mark.unit
