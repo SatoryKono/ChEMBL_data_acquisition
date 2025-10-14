@@ -14,6 +14,11 @@ All notable changes to this project will be documented in this file.
 - Restored the `list_output_files` helper used by the orchestrator summary to
   avoid runtime failures after successful pipeline executions.
 
+## [0.1.7] - 2025-10-19
+- Introduced a modern document enrichment step that retrieves ChEMBL records,
+  normalises DOIs, augments metadata from CrossRef/OpenAlex, and emits QC/
+  correlation reports validated via the new `fetch_normalize_document` helper.
+
 
 ## [0.1.5] - 2025-10-18
 - Hardened the orchestrator by exiting with a detailed error when CSV artefacts are missing, listing the discovered files for faster triage.
