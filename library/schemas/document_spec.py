@@ -38,14 +38,14 @@ class ColumnSpec:
     coerce: bool
     description: str | None
 
-    def to_pandera_column(self) -> pa.Column:
+    def to_pandera_column(self) -> Column:
         """Return a :class:`pandera.Column` for the specification."""
 
         dtype = _resolve_dtype(self.dtype)
         kwargs: dict[str, Any] = {"required": self.required, "nullable": self.nullable}
         if self.coerce:
             kwargs["coerce"] = True
-        return pa.Column(dtype, **kwargs)
+        return Column(dtype, **kwargs)
 
 
 @dataclass(frozen=True)
@@ -65,7 +65,7 @@ class DocumentDeclaration:
     groups: tuple[ColumnGroup, ...]
     column_specs: Mapping[str, ColumnSpec]
     ordered_columns: tuple[str, ...]
-    schema: pa.DataFrameSchema
+    schema: DataFrameSchema
     export_columns: tuple[str, ...]
 
 
@@ -129,7 +129,7 @@ def load_document_declaration(path: str | Path | None = None) -> DocumentDeclara
     schema_columns = OrderedDict(
         (spec.name, spec.to_pandera_column()) for spec in ordered_specs
     )
-    schema = pa.DataFrameSchema(schema_columns, ordered=True)
+    schema = DataFrameSchema(schema_columns, ordered=True)
 
     export_columns = _parse_export_columns(raw_data.get("export", {}))
 

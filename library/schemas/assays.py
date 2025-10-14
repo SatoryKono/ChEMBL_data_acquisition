@@ -34,30 +34,30 @@ from __future__ import annotations
 
 from typing import Any, Final, cast
 
-from library._compat.pandera import pa
+from library._compat.pandera import Column, DataFrameSchema
 
 # ``None`` disables dtype enforcement while still allowing schema validation.
 FLEXIBLE_DTYPE: Final[Any] = cast(Any, None)
 
-AssaysSchema: pa.DataFrameSchema = pa.DataFrameSchema(
+AssaysSchema: DataFrameSchema = DataFrameSchema(
     {
-        "assay_chembl_id": pa.Column(str, required=True, nullable=True),
-        "accession": pa.Column(str, required=False, nullable=True),
-        "assay_cell_type": pa.Column(str, required=False, nullable=True),
-        "assay_subcellular_fraction": pa.Column(str, required=False, nullable=True),
-        "assay_group": pa.Column(str, required=False, nullable=True),
-        "assay_tissue": pa.Column(str, required=False, nullable=True),
-        "assay_strain": pa.Column(str, required=False, nullable=True),
-        "bao_format": pa.Column(str, required=False, nullable=True),
-        "description": pa.Column(str, required=False, nullable=True),
-        "document_chembl_id": pa.Column(str, required=False, nullable=True),
-        "isoform": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
-        "mutation": pa.Column(str, required=False, nullable=True),
-        "target_chembl_id": pa.Column(str, required=False, nullable=True),
-        "year": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
-        "pipeline_version": pa.Column(str, required=False, nullable=True),
-        "timestamp_utc": pa.Column(str, required=False, nullable=True),
+        "assay_chembl_id": Column(str, required=True, nullable=True),
+        "accession": Column(str, required=False, nullable=True),
+        "assay_cell_type": Column(str, required=False, nullable=True),
+        "assay_subcellular_fraction": Column(str, required=False, nullable=True),
+        "assay_group": Column(str, required=False, nullable=True),
+        "assay_tissue": Column(str, required=False, nullable=True),
+        "assay_strain": Column(str, required=False, nullable=True),
+        "bao_format": Column(str, required=False, nullable=True),
+        "description": Column(str, required=False, nullable=True),
+        "document_chembl_id": Column(str, required=False, nullable=True),
+        "isoform": Column(FLEXIBLE_DTYPE, required=False, nullable=True),
+        "mutation": Column(str, required=False, nullable=True),
+        "target_chembl_id": Column(str, required=False, nullable=True),
+        "year": Column(FLEXIBLE_DTYPE, required=False, nullable=True),
+        "pipeline_version": Column(str, required=False, nullable=True),
+        "timestamp_utc": Column(str, required=False, nullable=True),
     }
 )
 
-"""pa.DataFrameSchema: Validation schema for assays."""
+"""DataFrameSchema: Validation schema for assays."""

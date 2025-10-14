@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from library._compat.pandera import pa
+from library._compat.pandera import DataFrameSchema
 
 from .document_spec import DOCUMENT_DECLARATION, DOCUMENT_SCHEMA_COLUMNS
 
-DocumentsSchema: pa.DataFrameSchema = DOCUMENT_DECLARATION.schema
-"""pa.DataFrameSchema: Validation schema for documents."""
+DocumentsSchema: DataFrameSchema = DOCUMENT_DECLARATION.schema
+"""DataFrameSchema: Validation schema for documents."""
 
 __all__ = ["DocumentsSchema", "DOCUMENT_SCHEMA_COLUMNS"]

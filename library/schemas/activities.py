@@ -11,7 +11,7 @@ from typing import cast
 
 from pandera.dtypes import DataType
 
-from library._compat.pandera import pa
+from library._compat.pandera import Check, Column, DataFrameSchema
 
 PA_ANY = cast(DataType, None)
 
@@ -50,71 +50,66 @@ def _derive_standard_type_values(metrics: Mapping[str, str] | None) -> tuple[str
     return tuple(sorted(values))
 
 
-_STANDARD_TYPE_CHECKS: list[pa.Check] = []
+_STANDARD_TYPE_CHECKS: list[Check] = []
 
 
-ActivitiesSchema: pa.DataFrameSchema = pa.DataFrameSchema(
+ActivitiesSchema: DataFrameSchema = DataFrameSchema(
     {
-        "activity_id": pa.Column(PA_ANY, required=True, nullable=True),
-        "molecule_chembl_id": pa.Column(str, required=True, nullable=True),
-        "assay_chembl_id": pa.Column(str, required=True, nullable=True),
-        "activity_comment": pa.Column(str, required=False, nullable=True),
-        "assay_description": pa.Column(str, required=False, nullable=True),
-        "assay_variant_accession": pa.Column(str, required=False, nullable=True),
-        "assay_variant_mutation": pa.Column(str, required=False, nullable=True),
-        "bao_format": pa.Column(str, required=False, nullable=True),
-        "bao_label": pa.Column(str, required=False, nullable=True),
-        "data_validity_comment": pa.Column(str, required=False, nullable=True),
-        "data_validity_description": pa.Column(str, required=False, nullable=True),
-        "document_chembl_id": pa.Column(str, required=False, nullable=True),
-        "pchembl_value": pa.Column(object, required=False, nullable=True),
-        "potential_duplicate": pa.Column(PA_ANY, required=False, nullable=True),
-        "qudt_units": pa.Column(str, required=False, nullable=True),
-        "record_id": pa.Column(PA_ANY, required=False, nullable=True),
-        "relation": pa.Column(object, required=False, nullable=True),
-        "src_assay_id": pa.Column(PA_ANY, required=False, nullable=True),
-        "src_id": pa.Column(PA_ANY, required=False, nullable=True),
-        "standard_relation": pa.Column(str, required=False, nullable=True),
-        "standard_units": pa.Column(str, required=False, nullable=True),
-        "type": pa.Column(str, required=False, nullable=True),
-        "units": pa.Column(str, required=False, nullable=True),
-        "value": pa.Column(object, required=False, nullable=True),
-        "standard_type": pa.Column(
+        "activity_id": Column(PA_ANY, required=True, nullable=True),
+        "molecule_chembl_id": Column(str, required=True, nullable=True),
+        "assay_chembl_id": Column(str, required=True, nullable=True),
+        "activity_comment": Column(str, required=False, nullable=True),
+        "assay_description": Column(str, required=False, nullable=True),
+        "assay_variant_accession": Column(str, required=False, nullable=True),
+        "assay_variant_mutation": Column(str, required=False, nullable=True),
+        "bao_format": Column(str, required=False, nullable=True),
+        "bao_label": Column(str, required=False, nullable=True),
+        "data_validity_comment": Column(str, required=False, nullable=True),
+        "data_validity_description": Column(str, required=False, nullable=True),
+        "document_chembl_id": Column(str, required=False, nullable=True),
+        "pchembl_value": Column(object, required=False, nullable=True),
+        "potential_duplicate": Column(PA_ANY, required=False, nullable=True),
+        "qudt_units": Column(str, required=False, nullable=True),
+        "record_id": Column(PA_ANY, required=False, nullable=True),
+        "relation": Column(object, required=False, nullable=True),
+        "src_assay_id": Column(PA_ANY, required=False, nullable=True),
+        "src_id": Column(PA_ANY, required=False, nullable=True),
+        "standard_relation": Column(str, required=False, nullable=True),
+        "standard_units": Column(str, required=False, nullable=True),
+        "standard_type": Column(
             str,
             checks=_STANDARD_TYPE_CHECKS,
             required=False,
             nullable=True,
         ),
-        "standard_value": pa.Column(
-            float, pa.Check.ge(0), required=True, nullable=True, coerce=True
-        ),
-        "lower_value": pa.Column(float, required=False, nullable=True, coerce=True),
-        "upper_value": pa.Column(float, required=False, nullable=True, coerce=True),
-        "activity_properties": pa.Column(str, required=False, nullable=True),
-        "action_type": pa.Column(
+        "standard_value": Column(float, Check.ge(0), required=True, nullable=True, coerce=True),
+        "lower_value": Column(float, required=False, nullable=True, coerce=True),
+        "upper_value": Column(float, required=False, nullable=True, coerce=True),
+        "activity_properties": Column(str, required=False, nullable=True),
+        "action_type": Column(
             str,
-            pa.Check.isin(sorted(_ALLOWED_ACTION_TYPES)),
+            Check.isin(sorted(_ALLOWED_ACTION_TYPES)),
             required=False,
             nullable=True,
         ),
-        "properties_hash": pa.Column(str, required=False, nullable=True),
-        "pipeline_version": pa.Column(str, required=False, nullable=True),
-        "timestamp_utc": pa.Column(str, required=False, nullable=True),
-        #    "pA_value": pa.Column(float, pa.Check.in_range(-14, 14), required=False),
+        "properties_hash": Column(str, required=False, nullable=True),
+        "pipeline_version": Column(str, required=False, nullable=True),
+        "timestamp_utc": Column(str, required=False, nullable=True),
+        #    "pA_value": Column(float, Check.in_range(-14, 14), required=False),
     }
 )
 
-"""pa.DataFrameSchema: Validation schema for activities."""
+"""DataFrameSchema: Validation schema for activities."""
 
 
-def configure_activity_schema(metrics: Mapping[str, str] | None) -> pa.DataFrameSchema:
+def configure_activity_schema(metrics: Mapping[str, str] | None) -> DataFrameSchema:
     """Update :data:`ActivitiesSchema` based on *metrics* configuration."""
 
     values = _derive_standard_type_values(metrics)
 
     _STANDARD_TYPE_CHECKS.clear()
     if values:
-        _STANDARD_TYPE_CHECKS.append(pa.Check.isin(sorted(values)))
+        _STANDARD_TYPE_CHECKS.append(Check.isin(sorted(values)))
 
     # ``DataFrameSchema`` stores a shallow copy of the provided list, therefore
     # we synchronise the column checks explicitly to reflect runtime changes.

@@ -15,15 +15,38 @@ import sys
 import types
 from importlib import import_module
 from types import ModuleType
+from typing import TYPE_CHECKING, Protocol, cast
 
-__all__ = ["load_pandera_pandas", "pa"]
+if TYPE_CHECKING:
+    from pandera.api.pandas.model import (  # type: ignore[attr-defined]
+        Check as PanderaCheck,
+        Column as PanderaColumn,
+        DataFrameModel as PanderaDataFrameModel,
+        DataFrameSchema as PanderaDataFrameSchema,
+    )
 
 
-def load_pandera_pandas() -> ModuleType:
+class _PanderaModule(Protocol):
+    Column: type["PanderaColumn"]
+    Check: type["PanderaCheck"]
+    DataFrameSchema: type["PanderaDataFrameSchema"]
+    DataFrameModel: type["PanderaDataFrameModel"]
+
+__all__ = [
+    "load_pandera_pandas",
+    "pa",
+    "Column",
+    "Check",
+    "DataFrameSchema",
+    "DataFrameModel",
+]
+
+
+def load_pandera_pandas() -> _PanderaModule:
     """Return the ``pandera.pandas`` module, installing a shim when required."""
 
     try:
-        return import_module("pandera.pandas")
+        return cast(_PanderaModule, import_module("pandera.pandas"))
     except ModuleNotFoundError as exc:
         if exc.name != "pandera.pandas":
             raise
@@ -36,7 +59,12 @@ def load_pandera_pandas() -> ModuleType:
             setattr(shim, attr, getattr(pandas_model, attr))
 
         sys.modules.setdefault("pandera.pandas", shim)
-        return shim
+        return cast(_PanderaModule, shim)
 
 
-pa = load_pandera_pandas()
+pa: _PanderaModule = load_pandera_pandas()
+
+Column = pa.Column
+Check = pa.Check
+DataFrameSchema = pa.DataFrameSchema
+DataFrameModel = pa.DataFrameModel

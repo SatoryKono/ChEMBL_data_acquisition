@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from library._compat.pandera import pa
+from library._compat.pandera import Column, DataFrameSchema
 
-AssayPostprocessSchema: pa.DataFrameSchema = pa.DataFrameSchema(
+AssayPostprocessSchema: DataFrameSchema = DataFrameSchema(
     {
-        "document_chembl_id": pa.Column(str, required=True),
-        "target_chembl_id": pa.Column(str, required=True),
+        "document_chembl_id": Column(str, required=True),
+        "target_chembl_id": Column(str, required=True),
     }
 )
-"""pa.DataFrameSchema: Required columns for assay post-processing."""
+"""DataFrameSchema: Required columns for assay post-processing."""
