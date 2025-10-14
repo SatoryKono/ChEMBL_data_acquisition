@@ -121,7 +121,7 @@ pandas==2.1.4 ; python_version < "3.13"
     # via
     #   chembl-data-acquisition (pyproject.toml)
     #   pandera
-pandas-stubs==2.1.4.231227
+pandas-stubs==2.2.3.250527
     # via chembl-data-acquisition (pyproject.toml)
 pandera==0.20.3
     # via chembl-data-acquisition (pyproject.toml)
