@@ -45,13 +45,15 @@ dev = [
   "pytest-json-report==1.5.0",
   "pytest-cov==7.0.0",
   "responses==0.25.8",
-  "ruff==0.6.9",
+  "ruff==0.7.3",
+  "backoff==2.2.1",
   "twine==6.2.0",
   "types-cachetools==5.3.0.0",
   "types-jsonschema==4.23.0.20240712",
   "types-openpyxl==3.1.0.20240425",
   "types-PyYAML==6.0.12.20240311",
   "types-python-dateutil==2.9.0.20240316",
+  "types-pytz==2025.2.0.20250809",
   "types-requests==2.31.0.20240406",
   "types-tabulate==0.9.0.20240106",
   "types-urllib3==1.26.25.6",
@@ -112,10 +114,17 @@ target-version = ["py311"]
 [tool.ruff]
 line-length = 88
 target-version = "py311"
+src = ["library", "scripts", "tests", "config"]
+extend-exclude = ["data/output", "reports"]
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 88
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 ignore = ["E501"]
+fixable = ["ALL"]
 
 [tool.mypy]
 files = ["library", "scripts", "config"]
@@ -125,6 +134,9 @@ warn_unused_configs = true
 exclude = ["tests"]
 plugins = ["pydantic.mypy"]
 mypy_path = "typings"
+show_error_codes = true
+pretty = true
+warn_unreachable = true
 
 [[tool.mypy.overrides]]
 module = ["pandas", "pandas.*"]
@@ -135,6 +147,10 @@ module = ["yaml", "yaml.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-addopts = "-ra -q"
+addopts = "-ra --strict-config --strict-markers --disable-warnings"
 testpaths = ["tests"]
 pythonpath = ["."]
+filterwarnings = [
+  "error::DeprecationWarning",
+  "ignore:distutils Version classes are deprecated:DeprecationWarning",
+]
