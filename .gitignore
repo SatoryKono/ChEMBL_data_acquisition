@@ -11,6 +11,7 @@ data/output/ChEMBL/processed/pairs_same_document.csv
 .env.local
 .env.*.local
 .cache/
+.coverage
 data/output/*.tmp
 data/output/*_intermediate*
 data/output/*_debug*
