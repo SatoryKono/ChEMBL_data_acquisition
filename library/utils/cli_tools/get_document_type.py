@@ -385,7 +385,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     output = args.output_csv or io.default_output_path(
         args.input_csv,
         cfg.io,
-        date=getattr(args, "date", None),
+        date=getattr(args, "date_tag", None),
     )
     output_path = io.write_csv(
         df_out,

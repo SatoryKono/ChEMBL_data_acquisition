@@ -72,7 +72,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             or default_output_path(
                 args.input_csv,
                 cfg.io,
-                date=getattr(args, "date", None),
+                date=getattr(args, "date_tag", None),
             )
         )
         parent = output.parent

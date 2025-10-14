@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import os
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path, PureWindowsPath
 from typing import Any, cast
 
@@ -158,6 +159,10 @@ def add_common_arguments(
     base_default: Path | None | object = None if defaults else argparse.SUPPRESS
     input_dir_default: Path | None | object = None if defaults else argparse.SUPPRESS
     output_dir_default: Path | None | object = None if defaults else argparse.SUPPRESS
+    if defaults:
+        date_tag_default: str | object = datetime.now(UTC).strftime("%Y%m%d")
+    else:
+        date_tag_default = argparse.SUPPRESS
     date_default: str | None | object = None if defaults else argparse.SUPPRESS
     force_default: bool | object = False if defaults else argparse.SUPPRESS
     skip_default: bool | object = False if defaults else argparse.SUPPRESS
@@ -227,6 +232,12 @@ def add_common_arguments(
         type=path_argument,
         default=output_dir_default,
         help="Directory receiving generated artefacts",
+    )
+    _add_optional_argument(
+        "--date-tag",
+        dest="date_tag",
+        default=date_tag_default,
+        help="Date token used when constructing default outputs",
     )
     _add_optional_argument(
         "--date",
@@ -726,10 +737,10 @@ def apply_config_overrides(
         effective_mode = normalized_config_mode
     args.output_stamp_mode = effective_mode
     if effective_mode == "require" and explicit_flag:
-        date_value = getattr(args, "date", None)
+        date_value = getattr(args, "date_tag", None)
         if not isinstance(date_value, str) or not date_value.strip():
             raise ValueError(
-                "--date is required when io.output_stamp_mode is 'require'"
+                "--date-tag is required when io.output_stamp_mode is 'require'"
             )
 
     metadata.cli_paths = {
@@ -831,6 +842,16 @@ def _normalize_stamp_mode(value: object) -> str | None:
     return None
 
 
+def _normalize_date_token(value: object) -> str | None:
+    """Return a trimmed date token when ``value`` is a non-empty string."""
+
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate:
+            return candidate
+    return None
+
+
 def prepare_io_paths(
     args: argparse.Namespace,
     *,
@@ -900,11 +921,17 @@ def prepare_io_paths(
         base=base_path,
     )
 
-    date_value = getattr(args, "date", None)
-    if isinstance(date_value, str):
-        date_str: str | None = date_value
+    explicit_date_tag = _normalize_date_token(getattr(args, "date_tag", None))
+    legacy_date_value = _normalize_date_token(getattr(args, "date", None))
+    resolved_date_tag = explicit_date_tag or legacy_date_value
+    if resolved_date_tag is not None:
+        args.date_tag = resolved_date_tag
+        args.date = resolved_date_tag
     else:
-        date_str = None
+        if hasattr(args, "date_tag"):
+            args.date_tag = None
+        if hasattr(args, "date"):
+            args.date = None
 
     auto_output = False
     if resolved_output is None and output_stem is not None:
@@ -912,9 +939,12 @@ def prepare_io_paths(
         if target_dir is None and resolved_input is not None:
             target_dir = resolved_input.parent
         if target_dir is not None:
-            effective_date = (date_str or "").strip() or None
+            effective_date = resolved_date_tag
             if effective_date is None and stamp_mode == "require":
-                msg = "--date must be provided when io.output_stamp_mode is 'require'"
+                msg = (
+                    "--date-tag (or legacy --date) must be provided when "
+                    "io.output_stamp_mode is 'require'"
+                )
                 raise ValueError(msg)
             normalized_stem = output_stem.strip()
             prefix = "output."
@@ -943,7 +973,7 @@ def prepare_io_paths(
                 filename = f"output.{normalized_stem}{suffix}"
             resolved_output = (target_dir / filename).resolve()
             if effective_date is not None:
-                date_str = effective_date
+                resolved_date_tag = effective_date
             auto_output = True
 
     if resolved_output is not None:
@@ -1014,8 +1044,9 @@ def prepare_io_paths(
     else:
         args.checkpoint = None
 
-    if date_str is not None:
-        args.date = date_str
+    if resolved_date_tag is not None:
+        args.date_tag = resolved_date_tag
+        args.date = resolved_date_tag
 
     args.force = bool(getattr(args, "force", False))
     args.skip_existing = bool(getattr(args, "skip_existing", False))

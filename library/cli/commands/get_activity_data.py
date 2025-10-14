@@ -115,24 +115,31 @@ def _resolve_stamp_mode(cfg: Config, args: argparse.Namespace) -> str | None:
 
 
 def _ensure_default_date(cfg: Config, args: argparse.Namespace) -> str | None:
-    """Populate ``args.date`` honouring configuration defaults."""
+    """Populate ``args.date_tag`` honouring configuration defaults."""
 
-    explicit = _normalise_date_token(getattr(args, "date", None))
+    explicit = _normalise_date_token(getattr(args, "date_tag", None))
+    if explicit is None:
+        explicit = _normalise_date_token(getattr(args, "date", None))
     if explicit is not None:
+        args.date_tag = explicit
         args.date = explicit
         return explicit
 
     configured = _resolve_configured_prefix(cfg)
     if configured is not None:
+        args.date_tag = configured
         args.date = configured
         return configured
 
     stamp_mode = _resolve_stamp_mode(cfg, args)
     if stamp_mode == "require":
         fallback = cli_logging._current_date_str()
+        args.date_tag = fallback
         args.date = fallback
         return fallback
 
+    if hasattr(args, "date_tag"):
+        args.date_tag = None
     if hasattr(args, "date"):
         args.date = None
     return None

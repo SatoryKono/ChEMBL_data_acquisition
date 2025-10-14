@@ -62,7 +62,7 @@ def test_activity_cli__require_stamp_mode_without_date(
         captured["output_csv_name"] = (
             Path(output_csv).name if isinstance(output_csv, Path) else str(output_csv)
         )
-        captured["date"] = getattr(args, "date", None)
+        captured["date_tag"] = getattr(args, "date_tag", None)
         captured["stamp_mode"] = getattr(args, "output_stamp_mode", None)
         return 0
 
@@ -92,6 +92,6 @@ def test_activity_cli__require_stamp_mode_without_date(
 
     assert exit_code == 0
     assert captured["stamp_mode"] == "require"
-    assert captured["date"] == "20240101"
+    assert captured["date_tag"] == "20240101"
     assert captured["final_out_name"] == "output.activity_20240101.csv"
     assert captured["output_csv_name"] == "output.activity_20240101.csv"
