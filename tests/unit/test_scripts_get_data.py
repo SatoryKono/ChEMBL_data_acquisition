@@ -5,6 +5,7 @@ import importlib.util
 import logging
 import sys
 import types
+from datetime import datetime as dt
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
@@ -348,3 +349,43 @@ def test_main__summary_uses_forward_output_dir(
     captured = capfd.readouterr()
     assert "Найдено" in captured.out
     assert str(expected_output) in captured.out
+
+
+@pytest.mark.unit
+def test_configure_logging__creates_log_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The orchestrator should configure logging through the shared CLI helper."""
+
+    from scripts import get_data as cli
+
+    fixed_moment = dt(2024, 2, 3, 4, 5, 6)
+
+    class _FixedDatetime:
+        @classmethod
+        def now(cls, tz: object | None = None) -> dt:
+            if tz is None:
+                return fixed_moment
+            return fixed_moment.replace(tzinfo=tz)  # type: ignore[arg-type]
+
+    captured: dict[str, str | None] = {}
+
+    original_create = cli.create_logger_config
+
+    def _capture(level: str, *, run_id: str | None = None):
+        captured["level"] = level
+        captured["run_id"] = run_id
+        return original_create(level, run_id=run_id)
+
+    logs_dir = tmp_path / "logs"
+
+    monkeypatch.setattr(cli, "LOGS_DIR", logs_dir)
+    monkeypatch.setattr(cli, "datetime", _FixedDatetime)
+    monkeypatch.setattr(cli, "create_logger_config", _capture)
+
+    with cli.configure_logging("debug") as log_path:
+        assert log_path == logs_dir / "get_data_20240203_040506.log"
+        logging.getLogger("scripts.get_data").info("test message")
+
+    assert log_path.exists()
+    contents = log_path.read_text(encoding="utf-8")
+    assert "test message" in contents
+    assert captured == {"level": "DEBUG", "run_id": "20240203_040506"}

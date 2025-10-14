@@ -257,7 +257,11 @@ where `<program>` matches the script name (for example,
 `CHEMBL_DA_BASE_PATH` environment variable relocates the directory to
 `<base>/logs` while keeping the `<program>_<YYYYMMDD>.log` naming scheme.
 Tests and operational runbooks rely on this pattern to locate artefacts, so the
-file stem must not be renamed or rotated differently.
+file stem must not be renamed or rotated differently. The legacy
+`python scripts/get_data.py` wrapper reuses the same helper while preserving
+its historical per-run suffix: each invocation produces
+`logs/get_data_<YYYYMMDD_HHMMSS>.log` and forwards the timestamp as the run
+identifier for downstream manifests.
 
 ### Determinism verification order
 

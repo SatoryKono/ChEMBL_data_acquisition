@@ -9,7 +9,8 @@ import shlex
 import shutil
 import subprocess
 import sys
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import import_module
@@ -35,6 +36,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - import guard
 
 ensure_project_root(__file__)
 
+from library.cli import configure_logger, create_logger_config, setup_cli_logging  # noqa: E402
 from library.config import DEFAULT_CONFIG_PATH, load_config  # noqa: E402
 
 
@@ -413,27 +415,60 @@ def _parse_log_level(value: str) -> str:
     return normalized
 
 
-def configure_logging(level_name: str | None) -> Path:
-    level = logging.INFO
-    if level_name is not None:
-        level = logging._nameToLevel.get(level_name, logging.INFO)
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+@contextmanager
+def configure_logging(level_name: str | None) -> Iterator[Path]:
+    """Configure structured logging for the orchestration script."""
+
+    resolved_level = (level_name or "INFO").upper()
+    level_no = logging._nameToLevel.get(resolved_level, logging.INFO)
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-    log_file = LOGS_DIR / f"get_data_{timestamp}.log"
 
-    handlers: list[logging.Handler] = [
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(log_file, encoding="utf-8"),
-    ]
+    log_cfg = create_logger_config(resolved_level, run_id=timestamp)
 
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s | %(levelname)s | %(message)s",
-        handlers=handlers,
-        force=True,
-    )
-    logging.getLogger(__name__).debug("Логирование настроено на уровень %s", level)
-    return log_file
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+
+    with setup_cli_logging(
+        Path(__file__),
+        log_cfg,
+        date_str=timestamp,
+        log_dir=LOGS_DIR,
+        log_file_stem="get_data",
+    ) as logging_ctx:
+        configure_logger(logging_ctx.log_cfg)
+
+        root_logger = logging.getLogger()
+        original_level = root_logger.level
+        original_handlers = list(root_logger.handlers)
+        for handler in original_handlers:
+            root_logger.removeHandler(handler)
+
+        stream_handler = logging.StreamHandler(logging_ctx.console_stream)
+        stream_handler.setLevel(level_no)
+        stream_handler.setFormatter(formatter)
+
+        file_handlers = [*logging_ctx.log_cfg.handlers]
+        for handler in file_handlers:
+            handler.setLevel(level_no)
+            handler.setFormatter(formatter)
+
+        for handler in (stream_handler, *file_handlers):
+            root_logger.addHandler(handler)
+
+        root_logger.setLevel(level_no)
+        logging.getLogger(__name__).debug(
+            "Логирование настроено на уровень %s", resolved_level
+        )
+
+        try:
+            yield logging_ctx.log_path
+        finally:
+            for handler in (stream_handler, *file_handlers):
+                root_logger.removeHandler(handler)
+                if handler is not stream_handler:
+                    handler.flush()
+            for handler in original_handlers:
+                root_logger.addHandler(handler)
+            root_logger.setLevel(original_level)
 
 
 TARGET_SUBCOMMANDS: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
@@ -664,47 +699,48 @@ def _should_run_cleanup(forward_args: ForwardArgs) -> bool:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args, unknown = parse_args(argv)
-    log_file = configure_logging(args.log_level)
-    logging.info("Логи сохраняются в %s", log_file)
 
-    forward_args = build_forward_args(args, unknown)
-    resolved_output_dir = _resolve_output_directory(args, forward_args)
+    with configure_logging(args.log_level) as log_file:
+        logging.info("Логи сохраняются в %s", log_file)
 
-    durations: list[tuple[str, float]] = []
-    skipped_stages = set(args.skip)
+        forward_args = build_forward_args(args, unknown)
+        resolved_output_dir = _resolve_output_directory(args, forward_args)
 
-    for stage in STAGES:
-        if stage.name in skipped_stages:
-            logging.info("⏭ Пропуск этапа %s по флагу --skip", stage.name)
-            continue
-        duration = run_stage(stage, forward_args)
-        durations.append((stage.name, duration))
+        durations: list[tuple[str, float]] = []
+        skipped_stages = set(args.skip)
 
-    log_summary(durations)
+        for stage in STAGES:
+            if stage.name in skipped_stages:
+                logging.info("⏭ Пропуск этапа %s по флагу --skip", stage.name)
+                continue
+            duration = run_stage(stage, forward_args)
+            durations.append((stage.name, duration))
 
-    csv_count = count_output_files(resolved_output_dir)
-    logging.info(
-        "🎉 Все выбранные этапы завершены. Найдено %d CSV-файлов в %s.",
-        csv_count,
-        resolved_output_dir,
-    )
+        log_summary(durations)
 
-    if not skipped_stages and csv_count != _EXPECTED_CSV_COUNT:
-        logging.warning(
-            "Ожидалось получить %d CSV-файлов, фактически найдено %d.",
-            _EXPECTED_CSV_COUNT,
-            csv_count,
-        )
-
-    if _should_run_cleanup(forward_args):
-        removed = cleanup_intermediate_files(resolved_output_dir)
-        logging.info("[CLEANUP] Завершено: удалено %d артефакт(ов)", removed)
-    else:
+        csv_count = count_output_files(resolved_output_dir)
         logging.info(
-            "[CLEANUP] Пропущено: сохранение промежуточных файлов запрошено пользователем"
+            "🎉 Все выбранные этапы завершены. Найдено %d CSV-файлов в %s.",
+            csv_count,
+            resolved_output_dir,
         )
 
-    return 0
+        if not skipped_stages and csv_count != _EXPECTED_CSV_COUNT:
+            logging.warning(
+                "Ожидалось получить %d CSV-файлов, фактически найдено %d.",
+                _EXPECTED_CSV_COUNT,
+                csv_count,
+            )
+
+        if _should_run_cleanup(forward_args):
+            removed = cleanup_intermediate_files(resolved_output_dir)
+            logging.info("[CLEANUP] Завершено: удалено %d артефакт(ов)", removed)
+        else:
+            logging.info(
+                "[CLEANUP] Пропущено: сохранение промежуточных файлов запрошено пользователем"
+            )
+
+        return 0
 
 
 if __name__ == "__main__":

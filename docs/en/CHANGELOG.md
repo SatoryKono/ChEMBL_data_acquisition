@@ -4,6 +4,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+- Updated the legacy `python scripts/get_data.py` wrapper to reuse the shared CLI
+  logging helpers, emit timestamped run identifiers, and keep writing logs under
+  `logs/get_data_<YYYYMMDD_HHMMSS>.log`.
+
 ## [0.1.4] - 2025-10-17
 - Regenerated the bilingual documentation set after the October audit: README pairs
   now stay in lockstep, the protocol DOCX export is reproducible via
