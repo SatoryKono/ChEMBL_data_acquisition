@@ -24,7 +24,7 @@ else:
     if isinstance(resource_obj, str):
         resource_obj = Path(resource_obj)
     DOCUMENT_SCHEMA_RESOURCE = cast(Traversable | None, resource_obj)
-from library._compat.pandera import pa
+from library._compat.pandera import Column, DataFrameSchema, pa
 
 
 @dataclass(frozen=True)
