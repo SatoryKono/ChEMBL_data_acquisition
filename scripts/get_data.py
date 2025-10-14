@@ -6,6 +6,7 @@ import argparse
 import atexit
 import logging
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -78,6 +79,7 @@ class ForwardArgs:
     extras_start: int
     extra_len: int
     output_dir: Path
+    date_tag: str | None = None
 
     @property
     def extras_end(self) -> int:
@@ -129,6 +131,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 DEFAULT_INPUT_DIR = Path("data") / "input"
 DEFAULT_OUTPUT_DIR = Path("data") / "output"
 OUTPUT_DIR = LIB_OUTPUT_DIR
+CANONICAL_OUTPUT_DIR = OUTPUT_DIR.resolve()
 LOGS_DIR = DATA_DIR / "logs"
 _PUBCHEM_ENV_VAR = "CHEMBL_DA_PUBCHEM_ENABLE"
 _BASE_PATH_ENV_VAR = "CHEMBL_DA_BASE_PATH"
@@ -165,6 +168,8 @@ _CLEANUP_DIRECTORY_NAMES: frozenset[str] = frozenset({
     "interim",
     "cache",
 })
+
+DATE_TAG_PATTERN = re.compile(r"^\d{8}$")
 
 
 def _has_explicit_pubchem_flag(tokens: Sequence[str]) -> bool:
@@ -411,6 +416,12 @@ def parse_args(
         default=None,
         help="Путь до пользовательского конфигурационного файла.",
     )
+    parser.add_argument(
+        "--date-tag",
+        type=_parse_date_tag,
+        default=None,
+        help="Явное значение date_tag (формат YYYYMMDD) для всех этапов.",
+    )
 
     args, unknown = parser.parse_known_args(argv)
 
@@ -457,6 +468,14 @@ def _parse_log_level(value: str) -> str:
             f"Недопустимый уровень логирования '{value}'. Доступные значения: {valid}"
         )
     return normalized
+
+
+def _parse_date_tag(value: str) -> str:
+    if not DATE_TAG_PATTERN.fullmatch(value):
+        raise argparse.ArgumentTypeError(
+            "date_tag должен соответствовать формату YYYYMMDD"
+        )
+    return value
 
 
 def _shutdown_logging_context() -> None:
@@ -536,6 +555,7 @@ def _coerce_forward_args(
         extras_start=len(tokens),
         extra_len=0,
         output_dir=_resolve_forward_output_dir(tokens),
+        date_tag=None,
     )
 
 
@@ -554,6 +574,7 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
             extras_start=0,
             extra_len=len(tokens),
             output_dir=_resolve_forward_output_dir(tokens),
+            date_tag=None,
         )
 
     if stage.name == "target":
@@ -609,6 +630,8 @@ def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> Forwar
         forward.extend(["--log-level", args.log_level])
     if args.config is not None:
         forward.extend(["--config", str(args.config)])
+    if args.date_tag is not None:
+        forward.extend(["--date-tag", args.date_tag])
     extras_start = len(forward)
     forward.extend(forwarded_extras)
     extra_len = len(forwarded_extras)
@@ -630,7 +653,7 @@ def build_forward_args(args: argparse.Namespace, extra: Sequence[str]) -> Forwar
 
     tokens = tuple(forward)
     output_dir = _resolve_forward_output_dir(tokens)
-    return ForwardArgs(tokens, extras_start, extra_len, output_dir)
+    return ForwardArgs(tokens, extras_start, extra_len, output_dir, args.date_tag)
 
 
 def log_summary(durations: list[tuple[str, float]]) -> None:
@@ -644,23 +667,58 @@ def log_summary(durations: list[tuple[str, float]]) -> None:
 
 
 
-def list_output_files(output_dir: Path) -> list[Path]:
-    """Return sorted CSV artefacts located inside ``output_dir``."""
+def list_output_files(output_dir: Path | None = None) -> list[Path]:
+    """Return sorted CSV artefacts stored in the canonical output directory."""
 
-    resolved = output_dir.resolve()
-    if not resolved.exists():
+    base = CANONICAL_OUTPUT_DIR
+    if output_dir is not None:
+        candidate = output_dir.resolve()
+        if candidate != base:
+            logging.debug(
+                "[CLEANUP] Игнорируется каталог %s, используется %s для поиска CSV",
+                candidate,
+                base,
+            )
+    if not base.exists():
         return []
 
     return sorted(
-        (path.resolve() for path in resolved.glob("*.csv") if path.is_file()),
+        (path.resolve() for path in base.glob("output.*.csv") if path.is_file()),
         key=os.fspath,
     )
 
 
-def count_output_files(output_dir: Path) -> int:
+def count_output_files(output_dir: Path | None = None) -> int:
     """Return the number of CSV artefacts produced in ``output_dir``."""
 
     return len(list_output_files(output_dir))
+
+
+def _select_csv_by_date_tag(
+    csv_files: Sequence[Path], date_tag: str | None
+) -> list[Path]:
+    if date_tag is None:
+        return list(csv_files)
+    pattern = re.compile(rf"_{re.escape(date_tag)}(?:_|$)")
+    return [path for path in csv_files if pattern.search(path.stem)]
+
+
+def _log_csv_inventory(
+    csv_files: Sequence[Path], *, date_tag: str | None, output_dir: Path
+) -> list[Path]:
+    matched = _select_csv_by_date_tag(csv_files, date_tag)
+    if date_tag is not None:
+        logging.info(
+            "📦 CSV-артефакты для date_tag=%s: найдено %d из %d",
+            date_tag,
+            len(matched),
+            len(csv_files),
+        )
+    else:
+        logging.info("📦 CSV-артефакты: найдено %d", len(matched))
+    for path in matched:
+        logging.info(" • %s", _relative_to_output(path, output_dir))
+    return matched
 
 
 def _resolve_output_directory(
@@ -668,10 +726,18 @@ def _resolve_output_directory(
 ) -> Path:
     """Return the absolute output directory referenced by the orchestrator."""
 
-    # ``ForwardArgs`` already carries a normalised output directory derived from
-    # the forwarded command line tokens.  Rely on this value directly to avoid
-    # drifting away from the paths that the pipeline stages actually use.
-    return forward_args.output_dir.resolve()
+    # ``ForwardArgs`` carries the directory requested by the CLI, however the
+    # orchestrator only inspects artefacts generated under the canonical
+    # ``data/output`` tree inside the repository.
+    canonical = CANONICAL_OUTPUT_DIR
+    resolved_forward = forward_args.output_dir.resolve()
+    if resolved_forward != canonical:
+        logging.info(
+            "Артефакты проверяются в %s (переданный путь %s проигнорирован)",
+            canonical,
+            resolved_forward,
+        )
+    return canonical
 
 
 def _is_cleanup_directory(path: Path) -> bool:
@@ -715,7 +781,14 @@ def _remove_directory(path: Path, *, output_dir: Path) -> bool:
 def cleanup_intermediate_files(output_dir: Path) -> int:
     """Remove temporary and diagnostic artefacts from ``output_dir``."""
 
-    resolved = output_dir.resolve()
+    resolved = CANONICAL_OUTPUT_DIR
+    candidate = output_dir.resolve()
+    if candidate != resolved:
+        logging.debug(
+            "[CLEANUP] Игнорируется каталог %s, используется %s для удаления артефактов",
+            candidate,
+            resolved,
+        )
     if not resolved.exists():
         logging.debug(
             "[CLEANUP] Пропуск очистки: каталог %s не найден",
@@ -779,7 +852,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     log_summary(durations)
 
     csv_files = list_output_files(resolved_output_dir)
-    csv_count = len(csv_files)
+    matching_csv = _log_csv_inventory(
+        csv_files, date_tag=args.date_tag, output_dir=resolved_output_dir
+    )
+    csv_count = len(matching_csv)
     logging.info(
         "🎉 Все выбранные этапы завершены. Найдено %d CSV-файлов в %s.",
         csv_count,
@@ -788,7 +864,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if not skipped_stages and csv_count != _EXPECTED_CSV_COUNT:
         discovered = ", ".join(
-            _relative_to_output(path, resolved_output_dir) for path in csv_files
+            _relative_to_output(path, resolved_output_dir) for path in matching_csv
         )
         if not discovered:
             discovered = "нет CSV-файлов"
@@ -801,6 +877,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             csv_count,
             discovered,
         )
+        if args.date_tag:
+            message += f" (date_tag={args.date_tag})"
         logging.error(message)
         raise SystemExit(message)
 

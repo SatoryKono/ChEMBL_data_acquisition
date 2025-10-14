@@ -12,20 +12,21 @@ import re
 import shutil
 import subprocess
 import sys
-import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 EXCLUDED_DIR_NAMES = {".git", ".venv"}
 
-CACHE_RETENTION_DAYS = 7
+DEFAULT_RETENTION_DAYS = 3
 LOG_RETENTION_DAYS = 14
 
 OUTPUT_PURGE_PATTERNS = (
     "*.tmp",
     "*.lock",
+    "*.bak",
     "*_intermediate*",
     "*_debug*",
     "output.*_raw.csv",
@@ -66,12 +67,32 @@ def _load_tracked_paths(root: Path) -> set[str]:
 @dataclass
 class CleanupContext:
     dry_run: bool
+    check_mode: bool
     tracked_paths: set[str]
+    retention_days: int
     removed: list[Path] = field(default_factory=list)
     skipped: list[tuple[Path, str]] = field(default_factory=list)
+    now: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def _relative(self, path: Path) -> Path:
         return path.relative_to(PROJECT_ROOT)
+
+    @property
+    def retention_seconds(self) -> float:
+        return float(self.retention_days * 86400)
+
+    def _is_recent(self, path: Path) -> bool:
+        if self.retention_days <= 0:
+            return False
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            return False
+        except OSError as exc:  # pragma: no cover - filesystem variance
+            self.skipped.append((path, f"stat failed ({exc})"))
+            return False
+        age_seconds = self.now.timestamp() - stat.st_mtime
+        return age_seconds < self.retention_seconds
 
     def _is_tracked(self, path: Path) -> bool:
         rel = self._relative(path).as_posix()
@@ -80,7 +101,7 @@ class CleanupContext:
         prefix = rel + "/"
         return any(candidate.startswith(prefix) for candidate in self.tracked_paths)
 
-    def remove_path(self, path: Path) -> None:
+    def remove_path(self, path: Path, *, ignore_age: bool = False) -> None:
         if _is_under_excluded(path):
             return
         if not path.exists() and not path.is_symlink():
@@ -92,6 +113,14 @@ class CleanupContext:
             return
         if self._is_tracked(path):
             self.skipped.append((path, "tracked by git"))
+            return
+        if not ignore_age and path.is_file() and self._is_recent(path):
+            self.skipped.append(
+                (
+                    path,
+                    f"modified less than {self.retention_days} day(s) ago",
+                )
+            )
             return
         description = f"{rel}{'/' if path.is_dir() and not path.is_symlink() else ''}"
         if self.dry_run:
@@ -109,7 +138,9 @@ class CleanupContext:
         print(f"Removed {description}")
         self.removed.append(path)
 
-    def clean_directory(self, directory: Path, *, remove_root: bool = False) -> None:
+    def clean_directory(
+        self, directory: Path, *, remove_root: bool = False, ignore_age: bool = False
+    ) -> None:
         if _is_under_excluded(directory) or not directory.exists():
             return
         try:
@@ -118,19 +149,26 @@ class CleanupContext:
             self.skipped.append((directory, "outside project root"))
             return
         if not directory.is_dir():
-            self.remove_path(directory)
+            self.remove_path(directory, ignore_age=ignore_age)
             return
         for child in sorted(directory.iterdir(), key=lambda item: item.name):
-            self.remove_path(child)
+            self.remove_path(child, ignore_age=ignore_age)
         if remove_root and directory.exists():
-            self.remove_path(directory)
+            self.remove_path(directory, ignore_age=ignore_age)
 
-    def remove_glob(self, pattern: str, *, base: Path | None = None, files_only: bool = False) -> None:
+    def remove_glob(
+        self,
+        pattern: str,
+        *,
+        base: Path | None = None,
+        files_only: bool = False,
+        ignore_age: bool = False,
+    ) -> None:
         search_root = base or PROJECT_ROOT
         for candidate in search_root.rglob(pattern):
             if files_only and candidate.is_dir():
                 continue
-            self.remove_path(candidate)
+            self.remove_path(candidate, ignore_age=ignore_age)
 
 
 CleanupTask = Callable[[CleanupContext], None]
@@ -140,19 +178,19 @@ def _cleanup_build_artifacts(ctx: CleanupContext) -> None:
     targets = [PROJECT_ROOT / "build", PROJECT_ROOT / "dist", PROJECT_ROOT / "htmlcov"]
     targets.extend(PROJECT_ROOT.glob("*.egg-info"))
     for target in targets:
-        ctx.remove_path(target)
+        ctx.remove_path(target, ignore_age=True)
 
 
 def _cleanup_python_artifacts(ctx: CleanupContext) -> None:
     for pattern in ("__pycache__", "*.pyc", "*.pyo", "*.pyd"):
-        ctx.remove_glob(pattern)
+        ctx.remove_glob(pattern, ignore_age=True)
 
 
 def _cleanup_tool_caches(ctx: CleanupContext) -> None:
     for name in (".pytest_cache", ".mypy_cache", ".ruff_cache", ".hypothesis", ".tox"):
-        ctx.remove_glob(name)
+        ctx.remove_glob(name, ignore_age=True)
     for path in (PROJECT_ROOT / ".coverage", PROJECT_ROOT / "coverage.xml"):
-        ctx.remove_path(path)
+        ctx.remove_path(path, ignore_age=True)
 
 
 def _cleanup_reports(ctx: CleanupContext) -> None:
@@ -164,9 +202,9 @@ def _cleanup_reports(ctx: CleanupContext) -> None:
         if entry in keep_dirs:
             continue
         if entry.is_dir():
-            ctx.clean_directory(entry, remove_root=True)
+            ctx.clean_directory(entry, remove_root=True, ignore_age=True)
         else:
-            ctx.remove_path(entry)
+            ctx.remove_path(entry, ignore_age=True)
 
 
 def _cleanup_data_outputs(ctx: CleanupContext) -> None:
@@ -205,12 +243,14 @@ def _cleanup_data_outputs(ctx: CleanupContext) -> None:
 
     # Remove stale smoke-test outputs and archived reports.
     for extra in ("output-smoke", "reports", "logs"):
-        ctx.clean_directory(PROJECT_ROOT / "data" / extra, remove_root=True)
+        ctx.clean_directory(
+            PROJECT_ROOT / "data" / extra, remove_root=True, ignore_age=True
+        )
 
 
 def _cleanup_pipeline_caches(ctx: CleanupContext) -> None:
-    now = time.time()
-    retention_seconds = CACHE_RETENTION_DAYS * 86400
+    now = ctx.now.timestamp()
+    retention_seconds = ctx.retention_seconds
     for base in (PROJECT_ROOT / "cache", PROJECT_ROOT / "data" / "cache"):
         if not base.exists():
             continue
@@ -233,7 +273,7 @@ def _cleanup_logs(ctx: CleanupContext) -> None:
     if not logs_dir.exists():
         return
 
-    now = time.time()
+    now = ctx.now.timestamp()
     retention_seconds = LOG_RETENTION_DAYS * 86400
     run_latest = logs_dir / "run_latest.log"
 
@@ -249,7 +289,7 @@ def _cleanup_logs(ctx: CleanupContext) -> None:
     for pattern in ("*.old", "*.log.*"):
         for path in logs_dir.glob(pattern):
             if path.is_file():
-                ctx.remove_path(path)
+                ctx.remove_path(path, ignore_age=True)
 
     if kept_logs:
         kept_logs.sort(key=lambda item: item.stat().st_mtime)
@@ -270,7 +310,7 @@ def _cleanup_logs(ctx: CleanupContext) -> None:
                         destination.write("\n")
         for path in kept_logs:
             if path != run_latest:
-                ctx.remove_path(path)
+                ctx.remove_path(path, ignore_age=True)
 
 
 def _cleanup_test_outputs(ctx: CleanupContext) -> None:
@@ -281,9 +321,9 @@ def _cleanup_test_outputs(ctx: CleanupContext) -> None:
         if entry.is_file():
             name = entry.name
             if not (name.startswith(TEST_GOLDEN_PREFIX) and name.endswith(TEST_GOLDEN_SUFFIX)):
-                ctx.remove_path(entry)
+                ctx.remove_path(entry, ignore_age=True)
         else:
-            ctx.remove_path(entry)
+            ctx.remove_path(entry, ignore_age=True)
 
 
 def _cleanup_tmp_files(ctx: CleanupContext) -> None:
@@ -293,12 +333,15 @@ def _cleanup_tmp_files(ctx: CleanupContext) -> None:
 
 def _cleanup_tmp_directories(ctx: CleanupContext) -> None:
     for name in PIPELINE_TMP_DIRS:
-        ctx.remove_path(PROJECT_ROOT / name)
-        ctx.remove_path(PROJECT_ROOT / "data" / name)
+        ctx.remove_path(PROJECT_ROOT / name, ignore_age=True)
+        ctx.remove_path(PROJECT_ROOT / "data" / name, ignore_age=True)
 
 
 def _cleanup_activity_logs_tmp(ctx: CleanupContext) -> None:
-    ctx.clean_directory(PROJECT_ROOT / "scripts" / "activity_logs_tmp" / "output")
+    ctx.clean_directory(
+        PROJECT_ROOT / "scripts" / "activity_logs_tmp" / "output",
+        ignore_age=True,
+    )
 
 
 CLEANUP_TASKS: dict[str, CleanupTask] = {
@@ -316,6 +359,16 @@ CLEANUP_TASKS: dict[str, CleanupTask] = {
 }
 
 
+def _non_negative_int(value: str) -> int:
+    try:
+        parsed = int(value, 10)
+    except ValueError as exc:  # pragma: no cover - argparse already handles format
+        raise argparse.ArgumentTypeError("retention days must be an integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("retention days must be >= 0")
+    return parsed
+
+
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Remove transient build artefacts and stale pipeline caches."
@@ -324,6 +377,20 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Preview the cleanup actions without deleting anything.",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Report paths that would be removed; exits with 1 if any are found.",
+    )
+    parser.add_argument(
+        "--days",
+        type=_non_negative_int,
+        default=DEFAULT_RETENTION_DAYS,
+        help=(
+            "Minimum age in days before matching temporary files are deleted. "
+            "Defaults to %(default)s."
+        ),
     )
     parser.add_argument(
         "--all",
@@ -358,16 +425,38 @@ def _resolve_categories(args: argparse.Namespace) -> list[str]:
 
 def _print_summary(ctx: CleanupContext) -> None:
     print()
-    unique_removed = {path.resolve() for path in ctx.removed}
-    print(f"Cleanup complete: {len(unique_removed)} paths targeted.")
+    seen: set[str] = set()
+    unique_removed: list[Path] = []
+    for path in ctx.removed:
+        resolved = path.resolve()
+        marker = resolved.as_posix()
+        if marker in seen:
+            continue
+        seen.add(marker)
+        unique_removed.append(resolved)
+
+    header = "Planned removals" if ctx.dry_run else "Removed paths"
+    if unique_removed:
+        print(f"{header} ({len(unique_removed)}):")
+        for resolved in sorted(unique_removed, key=lambda item: item.as_posix()):
+            try:
+                rel = resolved.relative_to(PROJECT_ROOT)
+            except ValueError:
+                rel = resolved
+            print(f"  - {rel}")
+    else:
+        print("No matching files scheduled for removal.")
+
     if ctx.skipped:
-        print("Skipped:")
+        print("Skipped paths:")
         for path, reason in ctx.skipped:
             try:
                 rel = path.relative_to(PROJECT_ROOT)
             except ValueError:
                 rel = path
             print(f"  - {rel}: {reason}")
+    else:
+        print("No paths were skipped.")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -379,14 +468,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("No cleanup categories selected.")
         return 0
     tracked = _load_tracked_paths(PROJECT_ROOT)
-    context = CleanupContext(dry_run=args.dry_run, tracked_paths=tracked)
+    dry_run = args.dry_run or args.check
+    context = CleanupContext(
+        dry_run=dry_run,
+        check_mode=args.check,
+        tracked_paths=tracked,
+        retention_days=args.days,
+    )
     for name in categories:
         task = CLEANUP_TASKS[name]
         print(f"Running cleanup category: {name}")
         task(context)
     _print_summary(context)
     failed = any("failed" in reason for _, reason in context.skipped)
-    return 1 if failed else 0
+    exit_code = 1 if failed else 0
+    if args.check and context.removed:
+        exit_code = 1
+    return exit_code
 
 
 if __name__ == "__main__":

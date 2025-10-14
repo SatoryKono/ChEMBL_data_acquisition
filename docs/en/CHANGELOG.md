@@ -5,6 +5,12 @@
 All notable changes to this project will be documented in this file.
 
 
+## [0.1.7] - 2025-10-19
+- Added retention-aware project cleanup with ``--check``/``--days`` flags that track
+  planned deletions and skip fresh files by default.
+- Aligned the orchestration summary with the canonical ``data/output`` directory and
+  logged per-date_tag CSV inventories to guarantee the expected 15 artefacts.
+
 ## [0.1.6] - 2025-10-18
   Added structured logging utilities with run identifiers and stage duration
   tracking, plus resilient HTTP retry wrappers adopted by the Chembl, PubChem,
