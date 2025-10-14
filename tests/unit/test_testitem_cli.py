@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -38,30 +39,28 @@ def _stub_parent_stats() -> ParentLookupStats:
 
 
 @pytest.mark.unit
-def test_requested_ids_snapshot_cleanup__retries_on_permission_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_requested_ids_snapshot_cleanup__defers_permission_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Windows ``PermissionError`` should not leak during temporary cleanup."""
+    """Cleanup should defer removal gracefully when files are locked."""
 
-    target = tmp_path / "snapshot.txt"
-    target.write_text("demo", encoding="utf-8")
+    target = tmp_path / "chembl_requested_ids_locked"
+    target.write_text("data", encoding="utf-8")
 
-    attempts = {"count": 0}
-    original_remove = testitem_cli.os.remove
+    registered: list[Path] = []
 
-    def _flaky_remove(path: Path) -> None:
-        attempts["count"] += 1
-        if attempts["count"] < 3:
-            raise PermissionError("locked")
-        original_remove(path)
+    def _fake_remove(path: str | os.PathLike[str]) -> None:
+        raise PermissionError("locked")
 
-    monkeypatch.setattr(testitem_cli.os, "remove", _flaky_remove)
-    monkeypatch.setattr(testitem_cli.time, "sleep", lambda *_: None)
+    def _fake_register_retry(path: Path) -> None:
+        registered.append(path)
+
+    monkeypatch.setattr(testitem_cli.os, "remove", _fake_remove)
+    monkeypatch.setattr(testitem_cli, "_register_cleanup_retry", _fake_register_retry)
 
     testitem_cli.RequestedIdsSnapshot._cleanup_path(target)
 
-    assert attempts["count"] == 3
-    assert not target.exists()
+    assert registered == [target]
 
 
 @pytest.mark.unit

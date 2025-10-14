@@ -9,6 +9,7 @@ import pytest
 
 from library.clients import pubchem
 from library.config import ApiCfg, PubChemCfg, RetryCfg
+from urllib3.util import Timeout
 
 
 @pytest.fixture(autouse=True)
@@ -97,6 +98,37 @@ class _DummyLimiter:
         self.acquires += 1
 
 
+_TIMEOUT_DEFAULT = object()
+
+
+def _assert_session_call(
+    call: tuple[str, str, dict[str, Any]],
+    *,
+    expected_url: str,
+    cfg: PubChemCfg,
+    method: str = "GET",
+    expected_total: float | None | object = _TIMEOUT_DEFAULT,
+) -> dict[str, Any]:
+    seen_method, url, kwargs = call
+    assert seen_method == method
+    assert url == expected_url
+    assert "timeout" in kwargs
+    timeout = kwargs["timeout"]
+    assert isinstance(timeout, Timeout)
+    assert timeout.connect_timeout == pytest.approx(cfg.timeout_connect)
+    assert timeout.read_timeout == pytest.approx(cfg.timeout_read)
+    total_expected: float | None
+    if expected_total is _TIMEOUT_DEFAULT:
+        total_expected = cfg.timeout_seconds if cfg.timeout_seconds > 0 else None
+    else:
+        total_expected = expected_total  # type: ignore[assignment]
+    if total_expected is None:
+        assert timeout.total is None
+    else:
+        assert timeout.total == pytest.approx(total_expected)
+    return kwargs
+
+
 def test_make_request__applies_verify_setting(monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = PubChemCfg(verify="/tmp/custom-ca.pem")
     cfg.retries = 0
@@ -118,14 +150,48 @@ def test_make_request__applies_verify_setting(monkeypatch: pytest.MonkeyPatch) -
 
     assert result == payload
     assert session.verify == cfg.verify  # type: ignore[attr-defined]
-    assert session.calls == [
-        (
-            "GET",
-            url,
-            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
-        )
-    ]
+    assert len(session.calls) == 1
+    method, call_url, kwargs = session.calls[0]
+    assert method == "GET"
+    assert call_url == url
+    assert set(kwargs) == {"timeout"}
+    timeout = kwargs["timeout"]
+    assert isinstance(timeout, Timeout)
+    assert timeout.connect_timeout == pytest.approx(cfg.timeout_connect)
+    assert timeout.read_timeout == pytest.approx(cfg.timeout_read)
+    assert timeout.total == pytest.approx(cfg.timeout_seconds)
     assert limiter.acquires == 1
+
+
+def test_make_request__omits_total_timeout_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = PubChemCfg(timeout_seconds=0)
+    cfg.retries = 0
+
+    payload = {"status": "ok"}
+    url = f"{cfg.base.rstrip('/')}/compound/cid/999/property/Foo/JSON"
+
+    limiter = _DummyLimiter()
+    monkeypatch.setattr(pubchem, "get_limiter", lambda *_args, **_kwargs: limiter)
+
+    session = _DummySession(lambda: _DummyResponse(200, {}, payload))
+    session.verify = True  # type: ignore[attr-defined]
+    monkeypatch.setattr(pubchem, "get_session", lambda *_args, **_kwargs: session)
+    monkeypatch.setattr(pubchem, "_CACHE", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_UNTIL", None)
+    monkeypatch.setattr(pubchem, "_SERVICE_UNAVAILABLE_DETAILS", None)
+
+    result = pubchem.make_request(url, cfg)
+
+    assert result == payload
+    assert len(session.calls) == 1
+    _assert_session_call(
+        session.calls[0],
+        expected_url=url,
+        cfg=cfg,
+        expected_total=None,
+    )
 
 
 class _TimeController:
@@ -174,13 +240,15 @@ def test_make_request__caches_server_error_results(
     first_result = pubchem.make_request(url, cfg)
 
     assert first_result is None
-    assert session.calls == [
-        (
-            "GET",
-            url,
-            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
-        )
-    ]
+    assert len(session.calls) == 1
+    method, call_url, kwargs = session.calls[0]
+    assert method == "GET"
+    assert call_url == url
+    timeout = kwargs["timeout"]
+    assert isinstance(timeout, Timeout)
+    assert timeout.connect_timeout == pytest.approx(cfg.timeout_connect)
+    assert timeout.read_timeout == pytest.approx(cfg.timeout_read)
+    assert timeout.total == pytest.approx(cfg.timeout_seconds)
     assert sleep_calls == []
     assert limiter.acquires == 1
     outcome, details = pubchem.last_request_outcome()
@@ -277,13 +345,8 @@ def test_make_request__short_circuits_during_retry_after(
     first = pubchem.make_request(url_first, cfg)
 
     assert first is None
-    assert session.calls == [
-        (
-            "GET",
-            url_first,
-            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
-        )
-    ]
+    assert len(session.calls) == 1
+    _assert_session_call(session.calls[0], expected_url=url_first, cfg=cfg)
     assert limiter.acquires == 1
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "server_error"
@@ -293,13 +356,8 @@ def test_make_request__short_circuits_during_retry_after(
     second = pubchem.make_request(url_second, cfg)
 
     assert second is None
-    assert session.calls == [
-        (
-            "GET",
-            url_first,
-            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
-        )
-    ]
+    assert len(session.calls) == 1
+    _assert_session_call(session.calls[0], expected_url=url_first, cfg=cfg)
     assert limiter.acquires == 1
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "server_error"
@@ -313,18 +371,9 @@ def test_make_request__short_circuits_during_retry_after(
     third = pubchem.make_request(url_second, cfg)
 
     assert third == success_payload
-    assert session.calls == [
-        (
-            "GET",
-            url_first,
-            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
-        ),
-        (
-            "GET",
-            url_second,
-            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
-        ),
-    ]
+    assert len(session.calls) == 2
+    _assert_session_call(session.calls[0], expected_url=url_first, cfg=cfg)
+    _assert_session_call(session.calls[1], expected_url=url_second, cfg=cfg)
     assert limiter.acquires == 2
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "hit"
@@ -352,13 +401,8 @@ def test_make_request__invalid_identifier_cached(
     result = pubchem.make_request(url, cfg)
 
     assert result is None
-    assert session.calls == [
-        (
-            "GET",
-            url,
-            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
-        )
-    ]
+    assert len(session.calls) == 1
+    _assert_session_call(session.calls[0], expected_url=url, cfg=cfg)
     assert limiter.acquires == 1
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "invalid_identifier"
@@ -373,13 +417,8 @@ def test_make_request__invalid_identifier_cached(
     second = pubchem.make_request(url, cfg)
 
     assert second is None
-    assert session.calls == [
-        (
-            "GET",
-            url,
-            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
-        )
-    ]
+    assert len(session.calls) == 1
+    _assert_session_call(session.calls[0], expected_url=url, cfg=cfg)
     assert limiter.acquires == 1
     outcome, details = pubchem.last_request_outcome()
     assert outcome == "invalid_identifier"
@@ -419,13 +458,8 @@ def test_make_request__retry_after_honours_grace(
     result = pubchem.make_request(url, cfg)
 
     assert result is None
-    assert session.calls == [
-        (
-            "GET",
-            url,
-            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
-        )
-    ]
+    assert len(session.calls) == 1
+    _assert_session_call(session.calls[0], expected_url=url, cfg=cfg)
     assert sleep_calls == []
     assert limiter.acquires == 1
     outcome, details = pubchem.last_request_outcome()
@@ -481,13 +515,8 @@ def test_make_request__retry_after_grace_disabled_causes_timeout(
     result = pubchem.make_request(url, cfg)
 
     assert result is None
-    assert session.calls == [
-        (
-            "GET",
-            url,
-            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
-        )
-    ]
+    assert len(session.calls) == 1
+    _assert_session_call(session.calls[0], expected_url=url, cfg=cfg)
     assert sleep_calls == []
     assert limiter.acquires == 1
     outcome, details = pubchem.last_request_outcome()
@@ -583,13 +612,8 @@ def test_make_request__timeout_cache_uses_config_backoff(
     result = pubchem.make_request(url, cfg)
 
     assert result is None
-    assert session.calls == [
-        (
-            "GET",
-            url,
-            {"timeout": (cfg.timeout_connect, cfg.timeout_read)},
-        )
-    ]
+    assert len(session.calls) == 1
+    _assert_session_call(session.calls[0], expected_url=url, cfg=cfg)
     assert sleep_calls == []
     assert limiter.acquires == 1
     cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
@@ -657,16 +681,14 @@ def test_get_cid_from_smiles__uses_post_for_stereochemistry(
     result = pubchem.get_cid_from_smiles(smiles, cfg)
 
     assert result == "123|456"
-    assert session.calls == [
-        (
-            "POST",
-            f"{cfg.base.rstrip('/')}/compound/smiles/cids/JSON",
-            {
-                "timeout": (cfg.timeout_connect, cfg.timeout_read),
-                "data": {"smiles": smiles},
-            },
-        )
-    ]
+    assert len(session.calls) == 1
+    kwargs = _assert_session_call(
+        session.calls[0],
+        expected_url=f"{cfg.base.rstrip('/')}/compound/smiles/cids/JSON",
+        cfg=cfg,
+        method="POST",
+    )
+    assert kwargs["data"] == {"smiles": smiles}
     assert limiter.acquires == 1
 
     cache = pubchem._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)

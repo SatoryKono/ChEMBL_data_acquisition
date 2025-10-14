@@ -17,6 +17,7 @@ from urllib.parse import quote
 import requests
 from cachetools import TTLCache
 from requests import Session
+from urllib3.util import Timeout
 
 from ..common.log import logger
 from ..common.rate_limiter import get_limiter, sleep
@@ -695,8 +696,17 @@ def make_request(
             session = get_session(api_cfg)
             if getattr(session, "verify", True) != cfg.verify:
                 session.verify = cfg.verify
+            total_timeout: float | None
+            if cfg.timeout_seconds > 0:
+                total_timeout = float(cfg.timeout_seconds)
+            else:
+                total_timeout = None
             request_kwargs: dict[str, Any] = {
-                "timeout": (cfg.timeout_connect, cfg.timeout_read),
+                "timeout": Timeout(
+                    connect=float(cfg.timeout_connect),
+                    read=float(cfg.timeout_read),
+                    total=total_timeout,
+                ),
             }
             if method_upper != "GET" and payload is not None:
                 request_kwargs["data"] = payload
