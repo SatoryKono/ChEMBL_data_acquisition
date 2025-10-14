@@ -98,11 +98,23 @@ class ForwardArgs:
 
 
 STAGES: tuple[Stage, ...] = (
-    Stage("testitem", "get_testitem_data.py"),
-    Stage("target", "get_target_data.py"),
     Stage("document", "get_document_data.py"),
+    Stage("target", "get_target_data.py"),
     Stage("assay", "get_assay_data.py"),
+    Stage("testitem", "get_testitem_data.py"),
     Stage("activity", "get_activity_data.py"),
+)
+
+STAGE_DISPLAY_NAMES: dict[str, str] = {
+    "document": "Document",
+    "target": "Target",
+    "assay": "Assay",
+    "testitem": "Test item",
+    "activity": "Activity",
+}
+
+STAGE_SEQUENCE_LABEL = " → ".join(
+    STAGE_DISPLAY_NAMES[stage.name] for stage in STAGES
 )
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -115,7 +127,17 @@ LOGS_DIR = DATA_DIR / "logs"
 _PUBCHEM_ENV_VAR = "CHEMBL_DA_PUBCHEM_ENABLE"
 _BASE_PATH_ENV_VAR = "CHEMBL_DA_BASE_PATH"
 
-_EXPECTED_CSV_COUNT = 15
+_STAGE_EXPECTED_OUTPUTS: dict[str, int] = {
+    "document": 3,
+    "target": 3,
+    "assay": 3,
+    "testitem": 3,
+    "activity": 3,
+}
+
+_EXPECTED_CSV_COUNT = sum(
+    _STAGE_EXPECTED_OUTPUTS[stage.name] for stage in STAGES
+)
 
 _CLEANUP_FILE_PATTERNS: tuple[str, ...] = (
     "*.lock",
@@ -666,6 +688,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args, unknown = parse_args(argv)
     log_file = configure_logging(args.log_level)
     logging.info("Логи сохраняются в %s", log_file)
+    logging.info("Последовательность этапов: %s", STAGE_SEQUENCE_LABEL)
 
     forward_args = build_forward_args(args, unknown)
     resolved_output_dir = _resolve_output_directory(args, forward_args)
@@ -691,8 +714,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if not skipped_stages and csv_count != _EXPECTED_CSV_COUNT:
         logging.warning(
-            "Ожидалось получить %d CSV-файлов, фактически найдено %d.",
+            "Ожидалось получить %d CSV-файлов (по 3 на этап: %s), фактически найдено %d.",
             _EXPECTED_CSV_COUNT,
+            STAGE_SEQUENCE_LABEL,
             csv_count,
         )
 
