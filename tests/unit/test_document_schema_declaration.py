@@ -3,10 +3,10 @@ from scripts import get_document_data
 
 from library.pipelines.document import pipeline as document_pipeline
 from library.schemas import DocumentsSchema
-from library.schemas.document_spec import (
+from library.schemas.document_schema import (
     DOCUMENT_COLUMN_GROUPS,
-    DOCUMENT_COLUMN_SPECS,
     DOCUMENT_EXPORT_COLUMNS,
+    DOCUMENT_SCHEMA,
     DOCUMENT_SCHEMA_COLUMNS,
 )
 
@@ -48,13 +48,12 @@ def test_document_schema_columns__attributes(
     nullable: bool,
     coerce: bool,
 ) -> None:
-    spec = DOCUMENT_COLUMN_SPECS[column_name]
-    assert spec.name == column_name
-    assert spec.required is required
-    assert spec.nullable is nullable
-    assert spec.coerce is coerce
-    column = DocumentsSchema.columns[column_name]
-    assert str(column.dtype).lower().startswith(expected_dtype.__name__)
-    assert column.required is required
-    assert column.nullable is nullable
+    column = DOCUMENT_SCHEMA.columns[column_name]
+    assert getattr(column, "required", False) is required
+    assert getattr(column, "nullable", True) is nullable
     assert getattr(column, "coerce", False) is coerce
+    dtype = getattr(column, "dtype", None)
+    assert dtype is not None
+    assert str(dtype).lower().startswith(expected_dtype.__name__)
+    documents_column = DocumentsSchema.columns[column_name]
+    assert documents_column is column

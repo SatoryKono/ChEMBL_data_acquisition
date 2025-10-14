@@ -6,7 +6,15 @@ from .assay import AssaySchema
 from .assay_postprocessing import AssayPostprocessSchema
 from .assays import AssaysSchema
 from .celllines import CellLinesSchema
-from .document import DocumentSchema
+from .document import DocumentPostprocessSchema
+from .document_schema import (
+    DOCUMENT_COLUMN_GROUPS,
+    DOCUMENT_EXPORT_COLUMNS,
+    DOCUMENT_SCHEMA,
+    DOCUMENT_SCHEMA_COLUMNS,
+    DocumentSchema,
+    validate_document_frame,
+)
 from .documents import DocumentsSchema
 from .meta import CsvMetaSchema
 from .normalize import (
@@ -32,6 +40,7 @@ __all__ = [
     "ActivitySchema",
     "DocumentsSchema",
     "DocumentSchema",
+    "DocumentPostprocessSchema",
     "CellLinesSchema",
     "TissuesSchema",
     "TargetSchema",
@@ -47,4 +56,9 @@ __all__ = [
     "normalize_targets",
     "normalize_testitems",
     "configure_activity_schema",
+    "DOCUMENT_SCHEMA",
+    "DOCUMENT_SCHEMA_COLUMNS",
+    "DOCUMENT_COLUMN_GROUPS",
+    "DOCUMENT_EXPORT_COLUMNS",
+    "validate_document_frame",
 ]

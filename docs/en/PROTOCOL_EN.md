@@ -72,7 +72,7 @@ Key schema definitions are enforced by Pandera models:
 - `library/schemas/assays.py` — assay exports.【F:library/schemas/assays.py†L33-L59】
 - `library/schemas/targets.py` — target exports with legacy Power Query ordering.【F:library/schemas/targets.py†L18-L124】
 - `library/schemas/testitems.py` — molecule/test item exports.【F:library/schemas/testitems.py†L12-L44】
-- `config/schema/document.yaml` — declarative schema for document exports consumed by `DocumentsSchema`.【F:library/schemas/document_spec.py†L13-L118】
+- `library/schemas/document_schema.py` — typed Pandera schema for document exports consumed by `DocumentsSchema`.【F:library/schemas/document_schema.py†L1-L213】
 
 ---
 

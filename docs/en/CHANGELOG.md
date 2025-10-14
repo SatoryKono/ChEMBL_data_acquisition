@@ -13,6 +13,8 @@ All notable changes to this project will be documented in this file.
   test item postprocessing pipelines with structured logging on failures.
 - Restored the `list_output_files` helper used by the orchestrator summary to
   avoid runtime failures after successful pipeline executions.
+- Replaced the declarative document schema loader with the typed `DocumentSchema`
+  class and shared validator, keeping CLI exports and pipeline constants in sync.
 
 
 ## [0.1.5] - 2025-10-18

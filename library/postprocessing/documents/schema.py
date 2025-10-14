@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from library.postprocessing.common import DataFrameSchema, validate_schema
-from library.schemas.document import DocumentSchema
+from library.schemas.document import DocumentPostprocessSchema
 
 DOCUMENT_SCHEMA = DataFrameSchema(
     required_columns=(
@@ -37,7 +37,7 @@ DOCUMENT_SCHEMA = DataFrameSchema(
         "abstract",
         "pipeline_version",
     ),
-    pandera_schema=DocumentSchema,
+    pandera_schema=DocumentPostprocessSchema,
 )
 
 

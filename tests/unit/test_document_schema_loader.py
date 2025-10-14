@@ -1,62 +1,42 @@
-"""Tests for resilient loading of the document schema declaration."""
+"""Tests for :mod:`library.schemas.document_schema`."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
+import pandas as pd
 import pytest
 
-from library.schemas import document_spec
+from library.schemas.document_schema import DOCUMENT_SCHEMA, DocumentSchema, validate_document_frame
 
 
 @pytest.mark.unit
-def test_load_document_declaration__packaged_resource(monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr(document_spec, "SCHEMA_DIR", tmp_path)
-
-    declaration = document_spec.load_document_declaration()
-
-    assert declaration.ordered_columns
-    assert any(group.columns for group in declaration.groups)
+def test_document_schema_instance_is_pandera_schema() -> None:
+    assert isinstance(DOCUMENT_SCHEMA, DocumentSchema)
+    assert DOCUMENT_SCHEMA.columns
 
 
 @pytest.mark.unit
-def test_load_document_declaration__missing_default_file(monkeypatch, tmp_path) -> None:
-    schema_dir = tmp_path / "schema"
-    schema_dir.mkdir()
-    expected_path = schema_dir / "document.yaml"
+def test_validate_document_frame_preserves_columns() -> None:
+    frame = pd.DataFrame(
+        [
+            {
+                "document_chembl_id": "DOC1",
+                "title": "title",
+                "abstract": "",
+                "doi": "10.1000/example",
+                "year": "2024",
+                "journal": "Nature",
+                "journal_abbrev": "Nat",
+                "volume": "10",
+                "issue": "1",
+                "first_page": "1",
+                "last_page": "12",
+                "pubmed_id": "1234",
+                "extra_column": "value",
+            }
+        ]
+    )
 
-    monkeypatch.setattr(document_spec, "SCHEMA_DIR", schema_dir)
+    validated = validate_document_frame(frame)
 
-    original_exists = Path.exists
-    original_open = Path.open
-
-    def fake_exists(self: Path) -> bool:  # pragma: no cover - thin shim
-        if self == expected_path:
-            return True
-        return original_exists(self)
-
-    def fake_open(self: Path, *args, **kwargs):  # pragma: no cover - thin shim
-        if self == expected_path:
-            raise FileNotFoundError(self)
-        return original_open(self, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "exists", fake_exists)
-    monkeypatch.setattr(Path, "open", fake_open)
-
-    declaration = document_spec.load_document_declaration()
-
-    assert declaration.ordered_columns
-    assert any(group.columns for group in declaration.groups)
-
-
-@pytest.mark.unit
-def test_load_document_declaration__explicit_path(tmp_path) -> None:
-    schema_dir = tmp_path / "schema"
-    schema_dir.mkdir()
-    schema_path = schema_dir / "document.yaml"
-    schema_path.write_text("groups: []\n", encoding="utf-8")
-
-    declaration = document_spec.load_document_declaration(schema_dir)
-
-    assert declaration.groups == tuple()
-    assert declaration.ordered_columns == tuple()
+    assert "extra_column" in validated.columns
+    assert validated.loc[0, "document_chembl_id"] == "DOC1"

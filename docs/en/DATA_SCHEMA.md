@@ -219,7 +219,7 @@ The following sections are generated directly from the Pandera schemas and there
 
 ### documents.csv (processed export)
 - **Purpose:** Consolidated bibliographic metadata across ChEMBL, PubMed, Semantic Scholar, OpenAlex and CrossRef.
-- **Schema source:** Declarative YAML at `config/schema/document.yaml`, materialised through `DOCUMENT_DECLARATION` and exposed as `DocumentsSchema`.
+- **Schema source:** `DocumentSchema` defined in `library/schemas/document_schema.py` and exposed as `DocumentsSchema`.
 
-`document.yaml` currently lists 71 ordered columns grouped by provider. The CLI exporters honour the `export.columns` projection defined in the same file, ensuring that documentation, schemas and runtime outputs remain aligned.【F:library/schemas/document_spec.py†L13-L118】【F:config/schema/document.yaml†L1-L200】 Run `python -m library.schemas.document_spec` to dump the effective column order if required for audits.
+`DocumentSchema` enumerates 72 ordered columns grouped by provider. The CLI exporters honour the `DOCUMENT_EXPORT_COLUMNS` projection from the same module, ensuring that documentation, schemas and runtime outputs remain aligned.【F:library/schemas/document_schema.py†L1-L213】 Run `python -m library.schemas.document_schema` to display the effective column order if required for audits.
 

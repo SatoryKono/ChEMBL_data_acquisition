@@ -6,10 +6,10 @@ from library._compat.pandera import pa
 
 from .common import int_column, string_column
 
-__all__ = ["DocumentSchema"]
+__all__ = ["DocumentPostprocessSchema"]
 
 
-DocumentSchema: pa.DataFrameSchema = pa.DataFrameSchema(
+DocumentPostprocessSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
         "document_chembl_id": string_column(required=True, nullable=False),
         "title": string_column(required=True, nullable=False),

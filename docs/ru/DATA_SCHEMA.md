@@ -219,7 +219,7 @@
 
 ### documents.csv (финальный экспорт)
 - **Назначение:** единая библиографическая запись на основе ChEMBL, PubMed, Semantic Scholar, OpenAlex и CrossRef.
-- **Схема:** декларативный YAML `config/schema/document.yaml`, материализованный через `DOCUMENT_DECLARATION` (`DocumentsSchema`).
+- **Схема:** `DocumentSchema` из `library/schemas/document_schema.py`, экспортируется как `DocumentsSchema`.
 
-`document.yaml` содержит 71 колонку, разбитую по группам источников. CLI использует секцию `export.columns`, поэтому порядок колонок в документации, схеме и выгрузке совпадает.【F:library/schemas/document_spec.py†L13-L118】【F:config/schema/document.yaml†L1-L200】 Для проверки можно выполнить `python -m library.schemas.document_spec` и вывести актуальный перечень.
+`DocumentSchema` описывает 72 колонки, сгруппированные по источникам. CLI использует проекцию `DOCUMENT_EXPORT_COLUMNS` из того же модуля, поэтому порядок колонок в документации, схеме и выгрузке совпадает.【F:library/schemas/document_schema.py†L1-L213】 Для проверки можно выполнить `python -m library.schemas.document_schema` и вывести актуальный перечень.
 

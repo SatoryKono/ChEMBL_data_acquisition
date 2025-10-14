@@ -19,10 +19,8 @@ from typing import TYPE_CHECKING, Any, TypeAlias, cast
 import pandas as pd
 
 from ...common.pandas_utils import merge_series_prefer_left
-from ...schemas.document_spec import (
+from ...schemas.document_schema import (
     DOCUMENT_COLUMN_GROUPS,
-)
-from ...schemas.document_spec import (
     DOCUMENT_SCHEMA_COLUMNS as _DECLARED_SCHEMA_COLUMNS,
 )
 from .type_classifier import compute_scores, decide_label

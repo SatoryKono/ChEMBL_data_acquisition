@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from library._compat.pandera import DataFrameSchema
+from .document_schema import DOCUMENT_SCHEMA, DOCUMENT_SCHEMA_COLUMNS as _ORDERED_COLUMNS
+from .document_schema import DocumentSchema
 
-from .document_spec import DOCUMENT_DECLARATION, DOCUMENT_SCHEMA_COLUMNS
+DocumentsSchema: DocumentSchema = DOCUMENT_SCHEMA
+"""DataFrame schema used to validate document metadata tables."""
 
-DocumentsSchema: DataFrameSchema = DOCUMENT_DECLARATION.schema
-"""DataFrameSchema: Validation schema for documents."""
+DOCUMENT_SCHEMA_COLUMNS = _ORDERED_COLUMNS
+"""Ordered column names provided by :class:`~library.schemas.document_schema.DocumentSchema`."""
 
 __all__ = ["DocumentsSchema", "DOCUMENT_SCHEMA_COLUMNS"]

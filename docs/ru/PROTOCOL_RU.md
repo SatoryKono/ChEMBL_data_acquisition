@@ -72,7 +72,7 @@ flowchart LR
 - `library/schemas/assays.py` — экспорт анализов.【F:library/schemas/assays.py†L33-L59】
 - `library/schemas/targets.py` — экспорт целей с порядком для Power Query.【F:library/schemas/targets.py†L18-L124】
 - `library/schemas/testitems.py` — экспорт молекул/тестовых объектов.【F:library/schemas/testitems.py†L12-L44】
-- `config/schema/document.yaml` — декларативная схема документов для `DocumentsSchema`.【F:library/schemas/document_spec.py†L13-L118】
+- `library/schemas/document_schema.py` — типизированная Pandera-схема документов для `DocumentsSchema`.【F:library/schemas/document_schema.py†L1-L213】
 
 ---
 

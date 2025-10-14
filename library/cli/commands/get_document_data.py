@@ -101,7 +101,7 @@ from library.reporting.run_manifest import (
     finalise_csv_output,
 )
 from library.schemas import DocumentsSchema, normalize_documents
-from library.schemas.document_spec import DOCUMENT_EXPORT_COLUMNS
+from library.schemas.document_schema import DOCUMENT_EXPORT_COLUMNS
 from library.utils.data_correlation import generate_correlation_report
 from library.utils.qc_report import generate_qc_report
 from library.validation import validate_documents
