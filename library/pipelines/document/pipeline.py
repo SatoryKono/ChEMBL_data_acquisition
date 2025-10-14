@@ -14,7 +14,7 @@ import json
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
 import pandas as pd
 
@@ -59,6 +59,14 @@ if _EXPECTED_ORDER != DOCUMENT_SCHEMA_COLUMNS:  # pragma: no cover - config erro
 # Remove accidental duplicates while preserving declaration order. Downstream
 # code assumes a one-to-one mapping between column name and position.
 DOCUMENT_SCHEMA_COLUMNS = list(dict.fromkeys(DOCUMENT_SCHEMA_COLUMNS))
+
+
+if TYPE_CHECKING:
+    from pandas import Series as _PandasSeries
+
+    SeriesAny: TypeAlias = _PandasSeries[Any]
+else:  # pragma: no cover - runtime helper for casts
+    SeriesAny = pd.Series
 
 
 # ---------------------------------------------------------------------------
@@ -313,9 +321,10 @@ class DocumentQualityAccumulator:
             self._doi_total += len(doi_series)
 
         publication_class = frame.get("publication_class")
-        if publication_class is not None:
+        if isinstance(publication_class, pd.Series):
+            publication_series = cast(SeriesAny, publication_class)
             cleaned = (
-                publication_class.fillna("unknown")
+                publication_series.fillna("unknown")
                 .astype(str)
                 .str.strip()
                 .replace("", "unknown")
@@ -329,26 +338,29 @@ class DocumentQualityAccumulator:
             ("crossref.Error", "crossref"),
         ):
             series = frame.get(column)
-            if series is None:
+            if not isinstance(series, pd.Series):
                 continue
-            truthy = series.astype(str).str.strip().astype(bool)
+            error_series = cast(SeriesAny, series)
+            truthy = error_series.astype(str).str.strip().astype(bool)
             self._error_counts[key] += int(truthy.sum())
 
         status = frame.get("fetch_status")
-        if status is not None:
-            status_strings = status.astype("string").fillna("")
+        if isinstance(status, pd.Series):
+            status_series = cast(SeriesAny, status)
+            status_strings = status_series.astype("string").fillna("")
             is_error = status_strings.str.strip().str.lower() == "error"
             if bool(is_error.any()):
                 sources = frame.get("error_source")
-                if sources is None:
+                if not isinstance(sources, pd.Series):
                     source_strings = pd.Series(
                         ["unknown"] * len(frame),
                         index=status_strings.index,
                         dtype="string",
                     )
                 else:
+                    source_series = cast(SeriesAny, sources)
                     source_strings = (
-                        sources.astype("string")
+                        source_series.astype("string")
                         .fillna("unknown")
                         .str.strip()
                         .str.lower()
