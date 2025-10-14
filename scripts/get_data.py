@@ -295,7 +295,10 @@ def _ensure_base_path_env(args: Sequence[str], env: dict[str, str]) -> None:
 
 
 def _resolve_forward_base_path(
-    args: argparse.Namespace, forwarded_extras: Sequence[str]
+    args: argparse.Namespace,
+    forwarded_extras: Sequence[str],
+    *,
+    fallback: Path | str | None = None,
 ) -> Path:
     """Return the base path propagated to pipeline subprocesses."""
 
@@ -307,6 +310,15 @@ def _resolve_forward_base_path(
     config_path, cli_base_path = _resolve_config_location(tokens)
     if cli_base_path is not None:
         return cli_base_path
+
+    if fallback is None:
+        default_base_path = PROJECT_ROOT.resolve()
+    else:
+        default_base_path = Path(fallback).expanduser()
+        if not default_base_path.is_absolute():
+            default_base_path = (Path.cwd() / default_base_path).resolve()
+        else:
+            default_base_path = default_base_path.resolve()
 
     try:
         config = load_config(config_path, base_path=None)
@@ -321,7 +333,7 @@ def _resolve_forward_base_path(
             if output_path.is_absolute():
                 return output_path.resolve().parent
 
-    return _config_default_base_path()
+    return default_base_path
 
 
 def parse_args(
@@ -553,10 +565,36 @@ def log_summary(durations: list[tuple[str, float]]) -> None:
 
 
 def count_output_files(output_dir: Path) -> int:
-    resolved = output_dir.expanduser()
+    resolved = output_dir.expanduser().resolve()
     if not resolved.exists():
         return 0
     return sum(1 for path in resolved.glob("*.csv"))
+
+
+def _resolve_output_directory(
+    args: argparse.Namespace, forward_args: ForwardArgs
+) -> Path:
+    """Return the absolute output directory referenced by the orchestrator."""
+
+    raw_value = _extract_option_value(forward_args.tokens, "--output-dir")
+    candidate = Path(raw_value).expanduser() if raw_value else DEFAULT_OUTPUT_DIR
+    if candidate.is_absolute():
+        return candidate.resolve()
+
+    base_value = _extract_option_value(forward_args.tokens, "--base-path")
+    if base_value:
+        base_path = Path(base_value).expanduser()
+        if not base_path.is_absolute():
+            base_path = (Path.cwd() / base_path).resolve()
+        else:
+            base_path = base_path.resolve()
+    else:
+        extras = forward_args.tokens[
+            forward_args.extras_start : forward_args.extras_end
+        ]
+        base_path = _resolve_forward_base_path(args, extras, fallback=PROJECT_ROOT)
+
+    return (base_path / candidate).resolve()
 
 
 def _is_cleanup_directory(path: Path) -> bool:
@@ -573,7 +611,7 @@ def _relative_to_output(path: Path, output_dir: Path) -> str:
         return os.fspath(path)
 
 
-def _remove_file(path: Path, *, root: Path) -> bool:
+def _remove_file(path: Path, *, output_dir: Path) -> bool:
     try:
         path.unlink()
     except FileNotFoundError:
@@ -581,11 +619,11 @@ def _remove_file(path: Path, *, root: Path) -> bool:
     except OSError as exc:  # pragma: no cover - filesystem variance
         logging.warning("[CLEANUP] Не удалось удалить %s: %s", path, exc)
         return False
-    logging.info("[CLEANUP] Удалён файл %s", _relative_to_output(path, root))
+    logging.info("[CLEANUP] Удалён файл %s", _relative_to_output(path, output_dir))
     return True
 
 
-def _remove_directory(path: Path, *, root: Path) -> bool:
+def _remove_directory(path: Path, *, output_dir: Path) -> bool:
     try:
         shutil.rmtree(path)
     except FileNotFoundError:
@@ -593,7 +631,7 @@ def _remove_directory(path: Path, *, root: Path) -> bool:
     except OSError as exc:  # pragma: no cover - filesystem variance
         logging.warning("[CLEANUP] Не удалось удалить каталог %s: %s", path, exc)
         return False
-    logging.info("[CLEANUP] Удалён каталог %s", _relative_to_output(path, root))
+    logging.info("[CLEANUP] Удалён каталог %s", _relative_to_output(path, output_dir))
     return True
 
 
@@ -615,7 +653,7 @@ def cleanup_intermediate_files(output_dir: Path) -> int:
             candidate = candidate.resolve()
             if candidate in seen_files or not candidate.is_file():
                 continue
-            if _remove_file(candidate, root=resolved):
+            if _remove_file(candidate, output_dir=resolved):
                 removed += 1
             seen_files.add(candidate)
 
@@ -626,7 +664,7 @@ def cleanup_intermediate_files(output_dir: Path) -> int:
 
     # Remove deepest directories first to avoid orphaned parents lingering.
     for directory in sorted(directories, key=lambda item: len(item.parts), reverse=True):
-        if _remove_directory(directory, root=resolved):
+        if _remove_directory(directory, output_dir=resolved):
             removed += 1
 
     return removed
@@ -648,6 +686,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     logging.info("Логи сохраняются в %s", log_file)
 
     forward_args = build_forward_args(args, unknown)
+    resolved_output_dir = _resolve_output_directory(args, forward_args)
 
     durations: list[tuple[str, float]] = []
     skipped_stages = set(args.skip)
@@ -661,12 +700,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     log_summary(durations)
 
-    output_dir = forward_args.output_dir
-    csv_count = count_output_files(output_dir)
+    csv_count = count_output_files(resolved_output_dir)
     logging.info(
         "🎉 Все выбранные этапы завершены. Найдено %d CSV-файлов в %s.",
         csv_count,
-        output_dir,
+        resolved_output_dir,
     )
 
     if not skipped_stages and csv_count != _EXPECTED_CSV_COUNT:
@@ -677,7 +715,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     if _should_run_cleanup(forward_args):
-        removed = cleanup_intermediate_files(output_dir)
+        removed = cleanup_intermediate_files(resolved_output_dir)
         logging.info("[CLEANUP] Завершено: удалено %d артефакт(ов)", removed)
     else:
         logging.info(
