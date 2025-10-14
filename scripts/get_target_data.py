@@ -53,6 +53,24 @@ def _positive_int(value: str) -> int:
     return parsed
 
 
+def _log_level(value: str) -> str:
+    """Return a normalised logging level name."""
+
+    levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+    candidate = value.strip().upper()
+    if candidate not in levels:
+        options = ", ".join(sorted(levels))
+        raise argparse.ArgumentTypeError(f"log level must be one of: {options}")
+    return candidate
+
+
+def _configure_logging(level_name: str) -> None:
+    """Apply the requested log level to the root logger."""
+
+    level = getattr(logging, level_name, logging.INFO)
+    logging.getLogger().setLevel(level)
+
+
 def _date_tag(value: str) -> str:
     """Validate that ``value`` is formatted as ``YYYYMMDD``."""
 
@@ -138,6 +156,18 @@ def parse_args(argv: Sequence[str] | None = None) -> tuple[argparse.Namespace, P
         default=None,
         help="Path to configuration file (defaults to config/config.yaml)",
     )
+    parser.add_argument(
+        "--log-level",
+        type=_log_level,
+        default="INFO",
+        help="Root logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
+    parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=Path("data/input"),
+        help="Directory containing auxiliary input artefacts",
+    )
     namespace = parser.parse_args(argv)
     config_path = Path(namespace.config) if namespace.config is not None else None
     pipeline_args = PipelineArgs(
@@ -170,6 +200,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    args.input_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         dataset = target_steps.fetch_normalize_target(args.limit)
