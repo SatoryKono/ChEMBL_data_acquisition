@@ -6,7 +6,7 @@ import sys
 from collections.abc import Iterable
 from importlib import import_module
 from types import ModuleType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 # ruff: noqa: E402  # bootstrap alters import order for script compatibility
 if TYPE_CHECKING:
@@ -56,6 +56,20 @@ def _augment_activity_module(module: ModuleType) -> tuple[str, ...]:
 
     extra_exports: dict[str, object] = {}
 
+    if hasattr(module, "run_chembl"):
+        extra_exports.setdefault("run_chembl", getattr(module, "run_chembl"))
+    else:
+        run_activity = getattr(module, "run_activity_pipeline", None)
+
+        if callable(run_activity):
+
+            def run_chembl(*args: Any, **kwargs: Any) -> int:
+                """Fallback run helper delegating to ``run_activity_pipeline``."""
+
+                return run_activity(*args, **kwargs)
+
+            extra_exports.setdefault("run_chembl", run_chembl)
+
     try:  # pragma: no cover - defensive guard for optional dependencies
         from library.pipelines.activity import runner as activity_runner
     except Exception:  # pragma: no cover - ensure import failures do not break CLI
@@ -78,6 +92,17 @@ def _augment_activity_module(module: ModuleType) -> tuple[str, ...]:
         emit_completion = getattr(activity_entrypoint, "_emit_completion_message", None)
         if emit_completion is not None:
             extra_exports.setdefault("_emit_completion_message", emit_completion)
+
+    if "_emit_completion_message" not in extra_exports:
+
+        def _emit_completion_message(*args: Any, **kwargs: Any) -> None:
+            """Lazy proxy resolving the entrypoint completion handler on demand."""
+
+            entrypoint = import_module("library.cli.entrypoints.activity")
+            handler = getattr(entrypoint, "_emit_completion_message")
+            handler(*args, **kwargs)
+
+        extra_exports["_emit_completion_message"] = _emit_completion_message
 
     for name, value in extra_exports.items():
         setattr(module, name, value)

@@ -4,9 +4,21 @@
 ## [0.1.7] - 2025-10-19
 - Documentation and protocol refresh covering PR-0 through PR-8: updated pipeline diagrams, CLI examples with `--emit-legacy-artifacts`, refreshed configuration notes and regenerated the bilingual protocol DOCX.
 - Added a dedicated `document_schema` module exposing `DocumentSchema` and `validate_document_frame` for enriched CrossRef/OpenAlex metadata validation with strict typing.
+## [0.1.9] - 2025-10-20
+- Added legacy-compatible options to `scripts/get_target_data.py`, accepting
+  positional commands and `--log-level`/`--input-dir` flags so orchestration
+  runners continue to work without wrapper scripts.
+
+## [0.1.8] - 2025-10-20
+- Restored CLI bootstrapping for `scripts/get_target_data.py` so direct Windows
+  invocations resolve internal modules without manual `PYTHONPATH` tweaks.
 
 
 All notable changes to this project will be documented in this file.
+
+
+## [0.1.7] - 2025-10-19
+- Documentation and protocol refresh covering PR-0 through PR-8: updated pipeline diagrams, CLI examples with `--emit-legacy-artifacts`, refreshed configuration notes and regenerated the bilingual protocol DOCX.
 
 
 ## [0.1.7] - 2025-10-19
