@@ -245,6 +245,64 @@ def test_emit_completion_message__streamed_metrics(
 
 
 @pytest.mark.unit
+def test_emit_completion_message__prefers_processed_rows_over_zero_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    logger = _StubLogger()
+    monkeypatch.setattr(activity, "logger", logger)
+
+    activity._emit_completion_message(
+        output_path=Path("output.csv"),
+        processed_rows=5,
+        duration_s=1.0,
+        mode="run",
+        streamed_metrics={"rows": 0, "null_fraction": 0.5},
+    )
+
+    assert len(logger.calls) == 1
+    event, payload = logger.calls[0]
+    assert event == "activity_pipeline_completion"
+    assert payload["rows"] == 5
+    assert payload["processed_rows"] == 5
+    metrics = payload["streamed_metrics"]
+    assert metrics["rows"] == 0
+    assert metrics["null_fraction"] == pytest.approx(0.5)
+
+
+@pytest.mark.unit
+def test_resolve_completion_rows__prefers_pipeline_stats_when_summary_zero() -> None:
+    result = activity._resolve_completion_rows(
+        processed_ids=10,
+        summary_snapshot={"rows": 0},
+        pipeline_stats={"rows_kept": 10, "rows_total": 10},
+    )
+
+    assert result == 10
+
+
+@pytest.mark.unit
+def test_resolve_completion_rows__falls_back_to_summary_when_stats_missing() -> None:
+    result = activity._resolve_completion_rows(
+        processed_ids=8,
+        summary_snapshot={"rows": 5},
+        pipeline_stats=None,
+    )
+
+    assert result == 5
+
+
+@pytest.mark.unit
+def test_resolve_completion_rows__falls_back_to_processed_when_metrics_absent() -> None:
+    result = activity._resolve_completion_rows(
+        processed_ids=7,
+        summary_snapshot=None,
+        pipeline_stats=None,
+    )
+
+    assert result == 7
+
+
+@pytest.mark.unit
 def test_load_assay_src_lookup__coerces_numeric_values(tmp_path: Path) -> None:
     dictionary_dir = tmp_path / "dictionary"
     assay_dir = dictionary_dir / "_assay"
