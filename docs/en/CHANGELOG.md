@@ -1,8 +1,9 @@
 # Changelog
 
 > **Languages:** [English](./CHANGELOG.md) · [Русский](../ru/CHANGELOG.md)
-## [0.1.7] - 2025-10-19
-- Documentation and protocol refresh covering PR-0 through PR-8: updated pipeline diagrams, CLI examples with `--emit-legacy-artifacts`, refreshed configuration notes and regenerated the bilingual protocol DOCX.
+## [0.1.8] - 2025-10-20
+- Added a streamlined activity normalisation pipeline with deterministic fetching, Pandera validation, and QC report generation.
+- Introduced a simplified activity CLI wrapper producing canonical CSV artefacts and metadata alongside smoke tests.
 
 
 All notable changes to this project will be documented in this file.

@@ -2,6 +2,7 @@
 
 from .activities import ActivitiesSchema, configure_activity_schema
 from .activity import ActivitySchema
+from .activity_schema import ACTIVITY_SCHEMA, validate_activity
 from .assay import AssaySchema
 from .assay_schema import AssayDataSchema
 from .assay_postprocessing import AssayPostprocessSchema
@@ -32,6 +33,7 @@ __all__ = [
     "AssayDataSchema",
     "AssayPostprocessSchema",
     "ActivitySchema",
+    "ACTIVITY_SCHEMA",
     "DocumentsSchema",
     "DocumentSchema",
     "CellLinesSchema",
@@ -49,4 +51,5 @@ __all__ = [
     "normalize_targets",
     "normalize_testitems",
     "configure_activity_schema",
+    "validate_activity",
 ]
