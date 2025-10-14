@@ -162,6 +162,10 @@ def postprocess_target_table(
         how="left",
         sort=False,
     )
+    if "multifunctional_enzyme" in joined.columns:
+        joined["multifunctional_enzyme"] = (
+            joined["multifunctional_enzyme"].map({True: "True", False: "False"}).fillna("")
+        )
 
     base = normalise_export_basename(path)
     if not missing_columns:
@@ -177,7 +181,11 @@ def postprocess_target_table(
         key_cols=["target_chembl_id"],
         col_order=_OUTPUT_COLUMN_ORDER,
     )
-    print(f"Postprocessed target table saved to: {output_path.name}")
+    logger.info(
+        "target_postprocess_complete",
+        path=str(output_path),
+        rowcount=int(joined.shape[0]),
+    )
     return str(output_path)
 
 
