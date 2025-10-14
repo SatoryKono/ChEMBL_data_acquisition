@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from scripts import get_assay_data, get_document_data, get_target_data
 
 from library.config import Config
 from library.pipelines.assay import AssayPipelineOptions
@@ -18,7 +19,6 @@ from library.pipelines.document import service as document_service
 from library.pipelines.document.service import DocumentPipeline
 from library.pipelines.target import TargetPipelineOptions
 from library.pipelines.target import run_pipeline as run_target_pipeline
-from scripts import get_assay_data, get_document_data, get_target_data
 
 
 @pytest.fixture()

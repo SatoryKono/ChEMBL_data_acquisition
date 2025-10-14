@@ -9,10 +9,10 @@ from pathlib import Path
 import pandas as pd
 import pandas.testing as pdt
 import pytest
+from scripts import get_testitem_data
 
 from library.config import Config
 from library.io import StandardOutputArtifacts
-from scripts import get_testitem_data
 
 
 class _MemoryLogger:

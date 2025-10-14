@@ -8,10 +8,10 @@ from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
 import pytest
+from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO, ensure_normalizer_stub
 
 from library.config import Config
 from library.pipelines.assay.chembl_assay import MAX_ASSAY_CHUNK_SIZE
-from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO, ensure_normalizer_stub
 
 ensure_normalizer_stub()
 

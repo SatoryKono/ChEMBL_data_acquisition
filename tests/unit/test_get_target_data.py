@@ -10,10 +10,10 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+from scripts import get_target_data
 
 from library.config import Config
 from library.postprocess.common import PostprocessingPipelineResult
-from scripts import get_target_data
 
 
 class _MemoryLogger:

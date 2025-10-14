@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from scripts.check_test_success_rate import _extract_success_rate
 
 

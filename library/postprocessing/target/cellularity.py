@@ -27,7 +27,7 @@ def _is_missing(value: Any) -> bool:
     except Exception:
         return False
 
-    if isinstance(evaluation, (bool, np.bool_)):
+    if isinstance(evaluation, bool | np.bool_):
         return bool(evaluation)
     if evaluation is pd.NA:
         return True
@@ -38,7 +38,7 @@ def _is_missing(value: Any) -> bool:
             reduced = all_method()
         except TypeError:
             return False
-        if isinstance(reduced, (bool, np.bool_)):
+        if isinstance(reduced, bool | np.bool_):
             return bool(reduced)
         if reduced is pd.NA:
             return True

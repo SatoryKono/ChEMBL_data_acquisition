@@ -12,6 +12,10 @@ All notable changes to this project will be documented in this file.
   using resilient HTTP clients and structured logging.
 - Extended automated coverage with merge, integration, and CLI tests to keep
   the target export reproducible.
+- Added a focused assay postprocessing module deriving UTC timestamps and year
+  attributes directly from ChEMBL metadata.
+- Introduced a dedicated Pandera schema for the streamlined assay export and
+  regression tests covering timestamp handling and dictionary enrichment.
 
 ## [0.1.6] - 2025-10-18
   Added structured logging utilities with run identifiers and stage duration

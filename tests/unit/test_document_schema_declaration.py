@@ -1,4 +1,5 @@
 import pytest
+from scripts import get_document_data
 
 from library.pipelines.document import pipeline as document_pipeline
 from library.schemas import DocumentsSchema
@@ -8,7 +9,6 @@ from library.schemas.document_spec import (
     DOCUMENT_EXPORT_COLUMNS,
     DOCUMENT_SCHEMA_COLUMNS,
 )
-from scripts import get_document_data
 
 
 @pytest.mark.unit

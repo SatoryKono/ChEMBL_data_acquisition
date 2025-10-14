@@ -24,7 +24,9 @@ class _PortalockerLockFallback(AbstractContextManager[Any]):  # pragma: no cover
 
 if TYPE_CHECKING:  # pragma: no cover - typing helpers only
     try:
-        from portalocker import Lock as _PortalockerLock  # type: ignore[import-not-found, unused-ignore]  # pragma: no cover
+        from portalocker import (
+            Lock as _PortalockerLock,  # type: ignore[import-not-found, unused-ignore]  # pragma: no cover
+        )
     except ModuleNotFoundError:  # pragma: no cover - typing fallback
         _PortalockerLock = _PortalockerLockFallback
 else:  # pragma: no cover - runtime helper

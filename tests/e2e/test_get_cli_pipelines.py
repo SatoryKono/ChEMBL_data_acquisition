@@ -10,6 +10,15 @@ from pathlib import Path
 import pandas as pd
 import pytest
 import requests
+from scripts import (
+    get_activity_data,
+    get_assay_data,
+    get_data,
+    get_document_data,
+    get_target_data,
+    get_testitem_data,
+)
+from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 
 from library import cli_utils
 from library.cli import LoggerConfig
@@ -20,15 +29,6 @@ from library.maintenance.legacy_outputs import SENTINEL_FILENAME
 from library.pipelines.common import PipelineRunResult
 from library.reporting.run_manifest import PipelineOutputReport
 from library.utils.cli_tools import get_document_type
-from scripts import (
-    get_activity_data,
-    get_assay_data,
-    get_data,
-    get_document_data,
-    get_target_data,
-    get_testitem_data,
-)
-from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 
 
 @pytest.fixture()

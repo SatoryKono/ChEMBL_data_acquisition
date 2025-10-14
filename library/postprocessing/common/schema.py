@@ -133,10 +133,13 @@ def validate_schema(
         ordered_columns = [
             col for col in schema.column_order if col in ordered_df.columns
         ]
-        remaining = sorted(
+        remaining = [
             col for col in ordered_df.columns if col not in ordered_columns
-        )
-        ordered_df = ordered_df.loc[:, ordered_columns + remaining]
+        ]
+        if ordered_columns:
+            ordered_df = ordered_df.loc[:, ordered_columns + remaining]
+        elif remaining:
+            ordered_df = ordered_df.loc[:, remaining]
 
     if schema.sort_by:
         sort_cols = [col for col in schema.sort_by if col in ordered_df.columns]

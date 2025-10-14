@@ -7,10 +7,10 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 import yaml
+from scripts import get_document_data
 
 from library.config import Config, _serialize_paths
 from library.pipelines.document.service import DocumentPipeline
-from scripts import get_document_data
 
 
 class _MemoryLogger:

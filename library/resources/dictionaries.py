@@ -534,7 +534,7 @@ def _load_manifest_document(base_dir: Path | None = None) -> Mapping[str, object
     return data
 
 
-@lru_cache(maxsize=None)
+@cache
 def _manifest_text_encoding(base_dir: Path | None = None) -> str:
     """Return the declared manifest encoding or UTF-8 by default."""
 

@@ -8,9 +8,9 @@ from types import SimpleNamespace
 
 import pytest
 import yaml
+from scripts import get_document_data
 
 from library.config import Config, _serialize_paths
-from scripts import get_document_data
 
 
 class _RunRecorder:

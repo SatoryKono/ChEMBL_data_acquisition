@@ -13,12 +13,12 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-
-from library.common.csv_utils import sha256_file
-from library.project_version import get_pipeline_version
 from scripts import get_data
 from tests.helpers import ASSAY_ENRICHMENT_MIN_RATIO
 from tests.helpers.logs import parse_log_file, parse_log_lines
+
+from library.common.csv_utils import sha256_file
+from library.project_version import get_pipeline_version
 
 PipelineFunc = Callable[[list[str]], int]
 

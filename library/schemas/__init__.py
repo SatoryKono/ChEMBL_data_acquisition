@@ -3,6 +3,7 @@
 from .activities import ActivitiesSchema, configure_activity_schema
 from .activity import ActivitySchema
 from .assay import AssaySchema
+from .assay_schema import AssayDataSchema
 from .assay_postprocessing import AssayPostprocessSchema
 from .assays import AssaysSchema
 from .celllines import CellLinesSchema
@@ -28,6 +29,7 @@ __all__ = [
     "ActivitiesSchema",
     "AssaySchema",
     "AssaysSchema",
+    "AssayDataSchema",
     "AssayPostprocessSchema",
     "ActivitySchema",
     "DocumentsSchema",

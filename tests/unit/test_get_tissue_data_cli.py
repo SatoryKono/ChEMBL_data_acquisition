@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-
 from scripts import get_tissue_data
+
 from library.config import Config
 from library.pipelines.tissue.pipeline import TissuePipelineResult
 
