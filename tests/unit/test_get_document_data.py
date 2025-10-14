@@ -10,9 +10,9 @@ from typing import Any
 
 import pandas as pd
 import pytest
+from scripts import get_document_data
 
 from library.config import Config
-from scripts import get_document_data
 
 
 class _MemoryLogger:

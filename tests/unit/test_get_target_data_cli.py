@@ -7,12 +7,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from scripts import get_target_data
+from scripts.get_target_data import ParameterLogEntry
 
 from library.cli import parser as cli_parser
 from library.config import ConfigMetadata
 from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS
-from scripts import get_target_data
-from scripts.get_target_data import ParameterLogEntry
 
 
 class _ConfigStub(SimpleNamespace):

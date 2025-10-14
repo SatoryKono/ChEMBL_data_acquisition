@@ -4,9 +4,9 @@ import json
 from datetime import UTC, datetime
 
 import pandas as pd
+from scripts import make_target_postprocessing as cli
 
 from library.postprocessing.targets.schema import TARGET_SCHEMA
-from scripts import make_target_postprocessing as cli
 
 
 def test_make_target_postprocessing__end_to_end(tmp_path, monkeypatch):

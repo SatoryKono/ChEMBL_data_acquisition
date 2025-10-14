@@ -6,13 +6,13 @@ import logging
 
 import pandas as pd
 import pytest
-
-from library.schemas.assays import AssaysSchema
 from scripts.get_assay_data import (
     ASSAY_OUTPUT_DROP_COLUMNS,
     _drop_assay_output_columns,
     remove_assay_output_columns,
 )
+
+from library.schemas.assays import AssaysSchema
 
 
 @pytest.mark.unit

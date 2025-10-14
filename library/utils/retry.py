@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import functools
-from typing import Any, Callable, Iterator, ParamSpec, TypeVar
+from collections.abc import Callable, Iterator
+from typing import Any, ParamSpec, TypeVar
 
 import requests
 

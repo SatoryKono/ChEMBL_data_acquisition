@@ -5,13 +5,13 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 import yaml
+from scripts import get_cellline_data
 
 from library.common import run_context as run_context_module
 from library.config import Config
 from library.pipelines.cellline import CellLinePipelineOptions, run_cellline_pipeline
 from library.pipelines.cellline.chembl import CELL_LINE_COLUMN_ORDER
 from library.pipelines.common.metadata import get_pipeline_version, get_timestamp_utc
-from scripts import get_cellline_data
 
 
 class _MemoryLogger:

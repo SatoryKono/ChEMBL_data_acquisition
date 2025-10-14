@@ -1,6 +1,5 @@
 import pandas as pd
 import pytest
-
 from scripts import get_document_data
 
 

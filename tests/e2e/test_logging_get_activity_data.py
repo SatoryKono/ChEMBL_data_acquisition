@@ -4,7 +4,6 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-
 from scripts import get_activity_data
 
 

@@ -7,8 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
-from library.cli.base import PipelineCLIBase
 from scripts import (
     get_activity_data,
     get_assay_data,
@@ -17,6 +15,8 @@ from scripts import (
     get_testitem_data,
 )
 from tests.helpers.logs import parse_log_file
+
+from library.cli.base import PipelineCLIBase
 
 
 def _program_name_from_module(module: Any) -> str:

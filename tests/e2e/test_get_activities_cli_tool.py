@@ -11,9 +11,9 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 import yaml
+from scripts import get_activities as scripts_get_activities
 
 from library.pipelines.activity import get_activities
-from scripts import get_activities as scripts_get_activities
 
 
 @pytest.mark.e2e

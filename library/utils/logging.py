@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from time import perf_counter
-from typing import Any, Iterator
+from typing import Any
 
 _HANDLER_INSTALLED: bool = False
 
@@ -80,7 +81,7 @@ class Logger(logging.LoggerAdapter):
     def __init__(self, logger: logging.Logger, extra: dict[str, Any] | None = None) -> None:
         super().__init__(logger, extra or {})
 
-    def bind(self, **extra: Any) -> "Logger":
+    def bind(self, **extra: Any) -> Logger:
         """Return a new logger with ``extra`` context attached."""
 
         merged = {**self.extra, **extra}
@@ -118,7 +119,7 @@ class Logger(logging.LoggerAdapter):
         return msg, kwargs
 
     @contextmanager
-    def stage(self, name: str, **extra: Any) -> Iterator["Logger"]:
+    def stage(self, name: str, **extra: Any) -> Iterator[Logger]:
         """Bind ``stage`` for the lifetime of the context manager."""
 
         with log_context(stage=name, **extra):

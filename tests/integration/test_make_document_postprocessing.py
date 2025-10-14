@@ -5,9 +5,9 @@ from datetime import UTC, datetime
 from textwrap import dedent
 
 import pandas as pd
+from scripts import make_document_postprocessing as cli
 
 from library.postprocessing.documents.schema import DOCUMENT_SCHEMA
-from scripts import make_document_postprocessing as cli
 
 
 def test_make_document_postprocessing__end_to_end(tmp_path, monkeypatch):

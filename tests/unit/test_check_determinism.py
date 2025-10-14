@@ -9,9 +9,9 @@ from subprocess import CompletedProcess
 
 import pytest
 import yaml
+from scripts import check_determinism
 
 from library.utils.cli_tools import check_determinism as cli_check_determinism
-from scripts import check_determinism
 
 
 def test_default_input_csv__matches_activity_column(tmp_path: Path) -> None:

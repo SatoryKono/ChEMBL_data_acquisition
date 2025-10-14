@@ -7,10 +7,10 @@ from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
+from scripts import get_testitem_data
 
 from library.config import MoleculeCatalogCfg
 from library.pipelines.testitem import catalog
-from scripts import get_testitem_data
 
 
 @pytest.fixture()

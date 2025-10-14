@@ -4,11 +4,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from scripts import get_data
+from tests.helpers.manifests import list_manifest_files, load_latest_manifest
 
 from library.pipelines.common import PipelineRunResult
 from library.project_version import get_pipeline_version
-from scripts import get_data
-from tests.helpers.manifests import list_manifest_files, load_latest_manifest
 
 _TEST_GIT_SHA = "scheduler-test-sha"
 

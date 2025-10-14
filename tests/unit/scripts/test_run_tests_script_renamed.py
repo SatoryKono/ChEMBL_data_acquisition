@@ -12,9 +12,9 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from scripts import run_tests
 
 from library.cli import LoggerConfig
-from scripts import run_tests
 
 
 @pytest.mark.unit
