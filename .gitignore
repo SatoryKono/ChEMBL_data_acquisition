@@ -48,6 +48,7 @@ config/dictionary/**/output*.data_correlation_report_table.csv
 config/dictionary/**/*.lock
 
 # Top-level pipeline artefacts
+/\.coverage
 /output*.csv
 /out*.csv
 /*.meta.yaml
