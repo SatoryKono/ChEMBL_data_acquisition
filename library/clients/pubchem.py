@@ -118,6 +118,7 @@ _USER_AGENT_ERROR = (
     "PubChem client requires a custom User-Agent; "
     "set sources.pubchem.user_agent to include valid contact details before making requests."
 )
+_MIN_SLEEP_SECONDS = 0.25
 
 _THREAD_STATE = local()
 
@@ -153,8 +154,10 @@ def _compute_retry_sleep(delay: float, cfg: PubChemCfg) -> tuple[float, float | 
     """Return the sleep duration and applied jitter for retry back-offs."""
 
     jitter_max = getattr(cfg, "retry_jitter_seconds", 0.0) or 0.0
-    if delay <= 0 or jitter_max <= 0:
-        return delay, None
+    if delay <= 0:
+        return 0.0, None
+    if jitter_max <= 0:
+        return max(delay, _MIN_SLEEP_SECONDS), None
     seed = getattr(cfg, "retry_jitter_seed", 0)
     if seed is None:
         jitter = random.uniform(0.0, jitter_max)
@@ -166,9 +169,17 @@ def _compute_retry_sleep(delay: float, cfg: PubChemCfg) -> tuple[float, float | 
                 _JITTER_GENERATORS[seed] = rng
             jitter = rng.uniform(0.0, jitter_max)
     applied = delay + jitter
-    if applied < 0:
-        applied = 0.0
+    if applied < _MIN_SLEEP_SECONDS:
+        applied = _MIN_SLEEP_SECONDS
     return applied, jitter
+
+
+def _sleep_with_minimum(delay: float) -> None:
+    """Sleep for at least :data:`_MIN_SLEEP_SECONDS` when delaying."""
+
+    if delay <= 0:
+        return
+    sleep(max(delay, _MIN_SLEEP_SECONDS))
 
 
 def _service_outage_remaining(
@@ -996,7 +1007,7 @@ def make_request(
                             timeout_info["reason"] = "timeout"
                             _set_last_outcome("timeout", timeout_info)
                             return None
-                    sleep(sleep_delay)
+                    _sleep_with_minimum(sleep_delay)
                     continue
                 if status >= 400:
                     if status == 400:
@@ -1095,7 +1106,7 @@ def make_request(
                                 jitter=jitter_value,
                                 applied_delay=sleep_delay,
                             )
-                        sleep(sleep_delay)
+                        _sleep_with_minimum(sleep_delay)
                     continue
                 except ValueError:
                     last_failure_details = {
@@ -1182,7 +1193,7 @@ def make_request(
                         jitter=jitter_value,
                         applied_delay=sleep_delay,
                     )
-                sleep(sleep_delay)
+                _sleep_with_minimum(sleep_delay)
             continue
 
     outcome_name = (last_failure_details or {}).get("reason")
@@ -1434,17 +1445,24 @@ def get_properties(cid: str, cfg: PubChemCfg) -> Properties:
         return Properties(None, None, None, None, None, None)
     base = cfg.base.rstrip("/")
     url = (
-        f"{base}/compound/cid/{validated}/property/MolecularFormula,IUPACName,"
-        "IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
+        f"{base}/compound/cid/{validated}/property/CanonicalSMILES,IsomericSMILES,"
+        "InChI,InChIKey,IUPACName,MolecularFormula/JSON"
     )
     response = make_request(url, cfg)
     if not response:
         _raise_for_service_unavailable()
         return Properties(None, None, None, None, None, None)
-    props = response.get("PropertyTable", {}).get("Properties", [])
-    if not props:
+    property_table = response.get("PropertyTable")
+    properties_payload: list[Mapping[str, Any]] | None = None
+    if isinstance(property_table, Mapping):
+        props_candidate = property_table.get("Properties")
+        if isinstance(props_candidate, list):
+            properties_payload = [
+                item for item in props_candidate if isinstance(item, Mapping)
+            ]
+    if not properties_payload:
         return Properties(None, None, None, None, None, None)
-    item = props[0]
+    item = properties_payload[0]
 
     def _first_available(*keys: str) -> str | None:
         for key in keys:

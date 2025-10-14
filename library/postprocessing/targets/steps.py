@@ -598,8 +598,26 @@ def enrich_target_metadata(df: pd.DataFrame, **_: object) -> pd.DataFrame:
     )
     enriched["_normalized_target_chembl_id"] = normalized_ids
 
+    types_lookup_frame = types_lookup.rename(
+        columns={"target_chembl_id": "_lookup_target_chembl_id"}
+    ).copy()
+    types_lookup_frame["_lookup_target_chembl_id"] = (
+        types_lookup_frame["_lookup_target_chembl_id"]
+        .astype("string")
+        .str.strip()
+        .str.upper()
+        .replace({"": pd.NA})
+    )
+    if "iuphar_target_id_lookup" in types_lookup_frame.columns:
+        types_lookup_frame["iuphar_target_id_lookup"] = (
+            types_lookup_frame["iuphar_target_id_lookup"]
+            .astype("string")
+            .str.strip()
+            .replace({"": pd.NA})
+        )
+
     joined = enriched.merge(
-        types_lookup.rename(columns={"target_chembl_id": "_lookup_target_chembl_id"}),
+        types_lookup_frame,
         left_on="_normalized_target_chembl_id",
         right_on="_lookup_target_chembl_id",
         how="left",
@@ -608,6 +626,20 @@ def enrich_target_metadata(df: pd.DataFrame, **_: object) -> pd.DataFrame:
 
     iuphar_lookup = _get_iuphar_targets_frame()
     if not iuphar_lookup.empty:
+        iuphar_lookup = iuphar_lookup.copy()
+        iuphar_lookup["iuphar_target_id_lookup"] = (
+            iuphar_lookup["iuphar_target_id_lookup"]
+            .astype("string")
+            .str.strip()
+            .replace({"": pd.NA})
+        )
+        if "iuphar_target_id_lookup" in joined.columns:
+            joined["iuphar_target_id_lookup"] = (
+                joined["iuphar_target_id_lookup"]
+                .astype("string")
+                .str.strip()
+                .replace({"": pd.NA})
+            )
         joined = joined.merge(
             iuphar_lookup,
             on="iuphar_target_id_lookup",
