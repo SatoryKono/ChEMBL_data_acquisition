@@ -5,6 +5,14 @@
 All notable changes to this project will be documented in this file.
 
 
+## [0.1.7] - 2025-10-19
+- Standardised the target postprocessing pipeline with a thin CLI that writes
+  deterministic CSV artefacts and metadata sidecars.
+- Added a dedicated Pandera schema together with UniProt and GtoPdb enrichment
+  using resilient HTTP clients and structured logging.
+- Extended automated coverage with merge, integration, and CLI tests to keep
+  the target export reproducible.
+
 ## [0.1.6] - 2025-10-18
   Added structured logging utilities with run identifiers and stage duration
   tracking, plus resilient HTTP retry wrappers adopted by the Chembl, PubChem,
