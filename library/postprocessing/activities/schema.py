@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from library.postprocessing.common import DataFrameSchema, validate_schema
+from library.schemas.activity import ActivitySchema
 
 ACTIVITY_SCHEMA = DataFrameSchema(
     required_columns=(
@@ -42,6 +43,7 @@ ACTIVITY_SCHEMA = DataFrameSchema(
         "quality_flag",
         "pipeline_version",
     ),
+    pandera_schema=ActivitySchema,
 )
 
 

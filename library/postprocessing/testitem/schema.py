@@ -7,6 +7,7 @@ from collections.abc import Sequence
 import pandas as pd
 
 from library.postprocessing.common import DataFrameSchema, validate_schema
+from library.schemas.testitem import TestitemSchema
 
 BOOLEAN_COLUMNS: Sequence[str] = (
     "natural_product",
@@ -15,6 +16,7 @@ BOOLEAN_COLUMNS: Sequence[str] = (
     "oral",
     "parenteral",
     "topical",
+    pandera_schema=TestitemSchema,
 )
 
 

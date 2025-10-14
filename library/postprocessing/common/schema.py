@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, cast
 
 import pandas as pd
+from pandera.errors import SchemaErrors
+
+from library._compat.pandera import pa
 
 from .types import SchemaValidationError
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -20,6 +26,7 @@ class DataFrameSchema:
     dtypes: Mapping[str, str | type] = field(default_factory=dict)
     sort_by: Sequence[str] | None = None
     column_order: Sequence[str] | None = None
+    pandera_schema: pa.DataFrameSchema | None = None
 
     def all_columns(self) -> Sequence[str]:
         ordered = list(self.required_columns) + list(self.optional_columns)
@@ -38,6 +45,15 @@ def _missing_columns(df: pd.DataFrame, expected: Iterable[str]) -> list[str]:
     return [col for col in expected if col not in df.columns]
 
 
+def _summarise_failure_cases(cases: pd.DataFrame) -> str:
+    """Return a short textual summary of pandera failure cases."""
+
+    if cases.empty:
+        return "no failure cases recorded"
+    preview = cases.head(5).to_dict("records")
+    return f"{len(cases)} failure(s): {preview}"
+
+
 def validate_schema(
     df: pd.DataFrame, schema: DataFrameSchema, *, context: str
 ) -> pd.DataFrame:
@@ -50,12 +66,48 @@ def validate_schema(
             f"missing required columns: {', '.join(sorted(missing_required))}",
         )
 
+    current = df.copy(deep=True)
+
+    if schema.pandera_schema is not None:
+        schema_name = (
+            getattr(schema.pandera_schema, "name", None)
+            or schema.pandera_schema.__class__.__name__
+        )
+        _LOGGER.info(
+            "Schema validation started",
+            extra={"context": context, "schema": schema_name, "rows": len(current)},
+        )
+        try:
+            current = schema.pandera_schema.validate(current, lazy=True)
+        except SchemaErrors as exc:
+            failure_cases = exc.failure_cases.copy()
+            _LOGGER.error(
+                "Schema validation failed",
+                extra={
+                    "context": context,
+                    "schema": schema_name,
+                    "error_count": len(failure_cases),
+                    "errors_preview": failure_cases.head(5).to_dict("records"),
+                },
+            )
+            message = _summarise_failure_cases(failure_cases)
+            raise SchemaValidationError(context, message, cause=exc) from exc
+        else:
+            _LOGGER.info(
+                "Schema validation succeeded",
+                extra={
+                    "context": context,
+                    "schema": schema_name,
+                    "rows": len(current),
+                },
+            )
+
     if schema.dtypes:
         mismatched: list[str] = []
         for column, expected_type in schema.dtypes.items():
-            if column not in df.columns:
+            if column not in current.columns:
                 continue
-            dtype = df[column].dtype
+            dtype = current[column].dtype
             if isinstance(expected_type, str):
                 expected_name = expected_type
                 if dtype.name != expected_type:
@@ -75,7 +127,7 @@ def validate_schema(
                 "; ".join(mismatched),
             )
 
-    ordered_df = df.copy(deep=True)
+    ordered_df = current.copy(deep=True)
 
     if schema.column_order:
         ordered_columns = [

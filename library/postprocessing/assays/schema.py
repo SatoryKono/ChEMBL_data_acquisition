@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from library.postprocessing.common import DataFrameSchema, validate_schema
+from library.schemas.assay import AssaySchema
 
 ASSAY_SCHEMA = DataFrameSchema(
     required_columns=(
@@ -36,6 +37,7 @@ ASSAY_SCHEMA = DataFrameSchema(
         "is_confirmatory",
         "pipeline_version",
     ),
+    pandera_schema=AssaySchema,
 )
 
 

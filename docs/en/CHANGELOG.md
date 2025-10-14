@@ -4,7 +4,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.6] - 2025-10-18
+## [0.1.6] - 2025-10-19
+- Enforced Pandera-based validation for activity, assay, document, target, and
+  test item postprocessing pipelines with structured logging on failures.
 - Restored the `list_output_files` helper used by the orchestrator summary to
   avoid runtime failures after successful pipeline executions.
 
