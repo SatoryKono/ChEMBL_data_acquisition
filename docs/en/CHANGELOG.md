@@ -1,6 +1,10 @@
 # Changelog
 
 > **Languages:** [English](./CHANGELOG.md) · [Русский](../ru/CHANGELOG.md)
+## [0.1.10] - 2025-10-14
+- Fixed the duplicate registration of `--log-level` and `--input-dir` in
+  `scripts/get_target_data.py`, restoring CLI execution on Windows
+  orchestrations that rely on those flags.
 ## [0.1.9] - 2025-10-21
 - Extended `scripts/get_target_data.py` with CLI options for `--log-level` and
   `--input-dir`, aligning the metadata output with orchestrator expectations and
