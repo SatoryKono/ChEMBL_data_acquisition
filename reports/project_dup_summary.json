@@ -1,0 +1,27 @@
+{
+  "total_files": 3880,
+  "match_type_counts": {
+    "unique": 23,
+    "content_match": 1,
+    "exact_path_content": 3856
+  },
+  "match_type_sizes": {
+    "unique": 461505,
+    "content_match": 0,
+    "exact_path_content": 455817935
+  },
+  "dir_counts": {
+    "bin": 15,
+    "chembl_data_acquisition-0.1.3.dist-info": 9,
+    "config": 3564,
+    "library": 268,
+    "scripts": 24
+  },
+  "dir_sizes": {
+    "bin": 3737,
+    "chembl_data_acquisition-0.1.3.dist-info": 457768,
+    "config": 452997315,
+    "library": 2608959,
+    "scripts": 211661
+  }
+}
