@@ -78,6 +78,8 @@ reports/*.md
 !reports/archive/
 !reports/archive/**
 !reports/archive/REPORT_activity_log_missing.md
+!reports/project_dup_map.csv
+!reports/project_dup_summary.json
 
 # Static analysis reports
 mypy-report.txt
