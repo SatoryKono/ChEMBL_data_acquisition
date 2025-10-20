@@ -2052,8 +2052,8 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             return 0
     if hasattr(args, "func") and getattr(args, "func", None) is None:
         logger.error(
-            "missing_subcommand_handler",
-            command=getattr(args, "command", None),
+            "missing_mode_handler",
+            mode=mode,
         )
         return 1
     handler = MODE_HANDLERS.get(str(mode))
@@ -2137,15 +2137,8 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     pipeline_group.add_argument(
         "--mode",
         choices=("chembl", "pubmed", "all"),
-        required=False,
-        default=None,
-        help="Document pipeline to execute",
-    )
-    parser.add_argument(
-        "command",
-        nargs="?",
-        choices=("chembl", "pubmed", "all"),
-        help=argparse.SUPPRESS,
+        default="all",
+        help="Document pipeline to execute (default: all)",
     )
     pipeline_group.add_argument(
         "--column",

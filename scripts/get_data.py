@@ -104,6 +104,26 @@ class ForwardArgs:
         tokens.insert(self.extras_start, default_command)
         return tokens
 
+    def with_default_mode(
+        self, default_mode: str, *, choices: Collection[str]
+    ) -> list[str]:
+        """Ensure a recognised --mode flag is present in the extras slice."""
+
+        tokens = self.as_list()
+        extras = tokens[self.extras_start : self.extras_end]
+        
+        # Check if --mode is already present
+        for i, token in enumerate(extras):
+            if token == "--mode" and i + 1 < len(extras):
+                mode_value = extras[i + 1]
+                if mode_value in choices:
+                    return tokens
+        
+        # Add --mode with default value
+        tokens.insert(self.extras_start, "--mode")
+        tokens.insert(self.extras_start + 1, default_mode)
+        return tokens
+
 
 STAGES: tuple[Stage, ...] = (
     Stage("document", "get_document_data.py"),
@@ -578,11 +598,11 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
         )
 
     if stage.name == "target":
-        stage_args = forward.with_default_subcommand(
+        stage_args = forward.with_default_mode(
             _DEFAULT_TARGET_SUBCOMMAND, choices=TARGET_SUBCOMMANDS
         )
     elif stage.name == "document":
-        stage_args = forward.with_default_subcommand(
+        stage_args = forward.with_default_mode(
             _DEFAULT_DOCUMENT_SUBCOMMAND, choices=DOCUMENT_SUBCOMMANDS
         )
     else:

@@ -1594,7 +1594,13 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             action="store_true",
             help="Use cached fixtures instead of contacting remote APIs",
         )
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    # Add mode argument instead of subcommands
+    parser.add_argument(
+        "--mode",
+        choices=["chembl", "uniprot", "iuphar", "all"],
+        default="all",
+        help="Data source to query (default: all)"
+    )
 
     def _add_common_cli_options(
         parser_obj: argparse.ArgumentParser,
@@ -1653,22 +1659,15 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             help="Enable target postprocessing after the main pipeline",
         )
 
-    # ----------------------------
-    # UniProt sub-command
-    # ----------------------------
-    uniprot = subparsers.add_parser(
-        "uniprot",
-        parents=[shared],
-        help="Extract information for UniProt accessions",
-        aliases=list(COMMAND_KEYBOARD_ALIASES.get("uniprot", ())),
-    )
+    # Add common CLI options to main parser
     _add_common_cli_options(
-        uniprot,
-        defaults=TARGET_MODE_DEFAULTS["uniprot"],
-        column_help="Column in the input CSV containing UniProt accessions",
-        column_choices=["uniprot_id", "mapping_uniprot_id"],
+        parser,
+        defaults=TARGET_MODE_DEFAULTS["all"],
+        column_help="Column containing ChEMBL target identifiers",
     )
-    uniprot_sources = uniprot.add_argument_group("Data sources")
+    
+    # Add mode-specific arguments
+    uniprot_sources = parser.add_argument_group("UniProt data sources")
     uniprot_sources.add_argument(
         "--data-dir",
         dest="data_dir",
@@ -1680,7 +1679,6 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             "(default: config target.uniprot.data_dir)"
         ),
     )
-    uniprot.set_defaults(func=run_uniprot)
     uniprot.set_defaults(disable_gtop=False)
 
     uniprot_network = uniprot.add_argument_group("Network controls")
@@ -1694,39 +1692,10 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         ),
     )
 
-    # ----------------------------
-    # ChEMBL sub-command
-    # ----------------------------
-    chembl = subparsers.add_parser(
-        "chembl",
-        parents=[shared],
-        help="Retrieve target information from ChEMBL",
-        conflict_handler="resolve",
-        aliases=list(COMMAND_KEYBOARD_ALIASES.get("chembl", ())),
-    )
-    chembl.set_defaults(normalize_at_export=True)
-    _add_common_cli_options(
-        chembl,
-        defaults=TARGET_MODE_DEFAULTS["chembl"],
-        column_help="Column name in the input CSV containing ChEMBL identifiers",
-    )
-    chembl.set_defaults(func=run_chembl)
+    # ChEMBL-specific arguments are handled by mode selection
 
-    # ----------------------------
-    # IUPHAR sub-command
-    # ----------------------------
-    iuphar = subparsers.add_parser(
-        "iuphar",
-        parents=[shared],
-        help="Map UniProt accessions to IUPHAR classifications",
-        aliases=list(COMMAND_KEYBOARD_ALIASES.get("iuphar", ())),
-    )
-    _add_common_cli_options(
-        iuphar,
-        defaults=TARGET_MODE_DEFAULTS["iuphar"],
-        column_help="Column in the input CSV containing UniProt accessions",
-    )
-    iuphar_sources = iuphar.add_argument_group("Data sources")
+    # IUPHAR-specific arguments
+    iuphar_sources = parser.add_argument_group("IUPHAR data sources")
     iuphar_sources.add_argument(
         "--target-csv",
         dest="target_csv",
@@ -1749,23 +1718,9 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             "(default: config target.iuphar.family_csv)"
         ),
     )
-    iuphar.set_defaults(func=run_iuphar)
 
-    # ----------------------------
-    # Combined pipeline
-    # ----------------------------
-    all_cmd = subparsers.add_parser(
-        "all",
-        parents=[shared],
-        help="Run ChEMBL, UniProt and IUPHAR pipelines and merge results",
-        aliases=list(COMMAND_KEYBOARD_ALIASES.get("all", ())),
-    )
-    _add_common_cli_options(
-        all_cmd,
-        defaults=TARGET_MODE_DEFAULTS["all"],
-        column_help="Column containing ChEMBL target identifiers",
-    )
-    outputs_group = all_cmd.add_argument_group("Intermediate outputs")
+    # Combined pipeline arguments (for --mode all)
+    outputs_group = parser.add_argument_group("Intermediate outputs")
     outputs_group.add_argument(
         "--chembl-out",
         dest="chembl_out",
@@ -1784,7 +1739,7 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=path_argument,
         help="Optional path to save intermediate IUPHAR data",
     )
-    network_group = all_cmd.add_argument_group("Network controls")
+    network_group = parser.add_argument_group("Network controls")
     network_group.add_argument(
         "--disable-gtop",
         dest="disable_gtop",
@@ -1794,7 +1749,7 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             "pipeline to avoid external HTTP requests"
         ),
     )
-    all_sources = all_cmd.add_argument_group("Data sources")
+    all_sources = parser.add_argument_group("Data sources")
     all_sources.add_argument(
         "--data-dir",
         dest="data_dir",
@@ -1828,7 +1783,7 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             "(default: config target.all.family_csv)"
         ),
     )
-    merge_group = all_cmd.add_argument_group("Merge behaviour")
+    merge_group = parser.add_argument_group("Merge behaviour")
     merge_group.add_argument(
         "--uniprot-column",
         dest="uniprot_column",
@@ -1840,7 +1795,7 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             "(default: config target.all.uniprot_column)"
         ),
     )
-    overrides_chembl = all_cmd.add_argument_group("ChEMBL overrides")
+    overrides_chembl = parser.add_argument_group("ChEMBL overrides")
     overrides_chembl.add_argument(
         "--chembl-column",
         dest="chembl_column",
@@ -1892,7 +1847,7 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             f"(default: {TARGET_MODE_DEFAULTS['chembl'].offset})"
         ),
     )
-    overrides_uniprot = all_cmd.add_argument_group("UniProt overrides")
+    overrides_uniprot = parser.add_argument_group("UniProt overrides")
     overrides_uniprot.add_argument(
         "--uniprot-chunk-size",
         dest="uniprot_chunk_size",
@@ -1934,7 +1889,7 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             f"(default: {TARGET_MODE_DEFAULTS['uniprot'].offset})"
         ),
     )
-    overrides_iuphar = all_cmd.add_argument_group("IUPHAR overrides")
+    overrides_iuphar = parser.add_argument_group("IUPHAR overrides")
     overrides_iuphar.add_argument(
         "--iuphar-column",
         dest="iuphar_column",
@@ -1986,15 +1941,10 @@ def _build_parser_impl() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             f"(default: {TARGET_MODE_DEFAULTS['iuphar'].offset})"
         ),
     )
-    all_cmd.set_defaults(func=run_all)
-    all_cmd.set_defaults(disable_gtop=False)
+    # Set default values
+    parser.set_defaults(disable_gtop=False)
 
-    parser.subparsers_map = {  # type: ignore[attr-defined]
-        "uniprot": uniprot,
-        "chembl": chembl,
-        "iuphar": iuphar,
-        "all": all_cmd,
-    }
+    # No longer using subparsers_map since we use --mode instead
 
     return parser, log_cfg
 
@@ -4633,10 +4583,20 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     if args.skip_existing and final_output.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(final_output))
         return 0
-    func = getattr(args, "func", None)
-    if func is None:
-        logger.error("missing_subcommand_handler", command=getattr(args, "command", ""))
+    # Set function based on mode/command
+    mode = getattr(args, "mode", getattr(args, "command", "all"))
+    if mode == "uniprot":
+        func = run_uniprot
+    elif mode == "chembl":
+        func = run_chembl
+    elif mode == "iuphar":
+        func = run_iuphar
+    elif mode == "all":
+        func = run_all
+    else:
+        logger.error("unknown_mode", mode=mode)
         return 1
+    
     result = func(cfg, args)
     return int(result)
 
@@ -4654,10 +4614,9 @@ class TargetPipelineCLI(PipelineCLIBase):
         argv: Sequence[str] = None,
     ) -> argparse.Namespace:
         del argv
-        command_alias = COMMAND_ALIAS_TO_CANONICAL.get(getattr(args, "command", ""))
-        if command_alias is not None:
-            args._command_keyboard_alias = args.command
-            args.command = command_alias
+        # Handle mode instead of command
+        mode = getattr(args, "mode", "all")
+        args.command = mode  # Set command for backward compatibility
         prepare_io_paths(
             args,
             input_default=DEFAULT_INPUT_NAME,
@@ -4682,8 +4641,8 @@ class TargetPipelineCLI(PipelineCLIBase):
         exit_code = 0
         try:
             limit_value = getattr(args, "limit", None)
-            subparser_map = getattr(parser, "subparsers_map", {})
-            subparser = subparser_map.get(getattr(args, "command", None), parser)
+            # Use main parser since we no longer have subparsers
+            subparser = parser
             if limit_value is not None and limit_value < 1:
                 subparser.error("--limit must be a positive integer")
             offset_value = getattr(args, "offset", 0)

@@ -1,5 +1,0 @@
-"""Lightweight stub of the pytest-json-report plugin for test isolation."""
-
-__all__ = ["__version__"]
-
-__version__ = "0.0"
