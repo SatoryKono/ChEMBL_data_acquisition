@@ -1,4 +1,4 @@
-﻿target_chembl_id,isoform_ids,isoform_names,isoforms,organism,pH_dependence,primaryAccession,target_names,target_uniprot_id
+target_chembl_id,isoform_ids,isoform_names,isoforms,organism,pH_dependence,primaryAccession,target_names,target_uniprot_id
 CHEMBL2343,O00141-1|O00141-2|O00141-3|O00141-4|O00141-5,1|2|3|4|5,5,Homo sapiens,,O00141,SGK | SGK1 | Serine/threonine-protein kinase Sgk1 | Serum/glucocorticoid-regulated kinase 1,O00141
 CHEMBL4580,O00142-1|O00142-2|O00142-3|O00142-4|O00142-5|O00142-6,1|2|3|4|5|6,6,Homo sapiens,,O00142,Mt-TK | Thymidine kinase 2 | Deoxycytidine kinase TK2 | mitochondrial | TK2 | 2'-deoxyuridine kinase TK2,O00142
 CHEMBL5255,O00206-1|O00206-2|O00206-3,1|2|3,3,Homo sapiens,,O00206, | hToll | TLR4 | Toll-like receptor 4,O00206

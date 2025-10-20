@@ -415,7 +415,7 @@ def merge_document_metadata(
         merged["doi_key"] = merged["doi"].astype("string")
 
     if crossref_df is not None and not crossref_df.empty:
-        deduplicated_crossref = crossref_df.drop_duplicates(subset=["doi_key"])  # type: ignore[arg-type]
+        deduplicated_crossref = crossref_df.drop_duplicates(subset=["doi_key"])
         merged = merged.merge(
             deduplicated_crossref,
             how="left",
@@ -426,7 +426,7 @@ def merge_document_metadata(
             merged[column] = pd.NA
 
     if openalex_df is not None and not openalex_df.empty:
-        deduplicated_openalex = openalex_df.drop_duplicates(subset=["doi_key"])  # type: ignore[arg-type]
+        deduplicated_openalex = openalex_df.drop_duplicates(subset=["doi_key"])
         merged = merged.merge(
             deduplicated_openalex,
             how="left",

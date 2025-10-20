@@ -54,7 +54,7 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for minimal environme
                     while True:
                         try:
                             return func(*args, **kwargs)
-                        except exception as exc:  # type: ignore[misc]
+                        except exception as exc:
                             tries += 1
                             details = {
                                 "target": func,

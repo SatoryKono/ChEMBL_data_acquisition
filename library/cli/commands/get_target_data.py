@@ -4370,13 +4370,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         offending step is logged in the ``pipeline_step_failed`` event.
     """
 
-    limit = cfg.target.all.limit
+    # Приоритет CLI аргументу:
+    limit = args.limit if hasattr(args, 'limit') and args.limit is not None else cfg.target.all.limit
     if limit is not None and limit < 1:
-        logger.error(
-            "invalid_limit",
-            section="target.all.limit",
-            limit=limit,
-        )
+        logger.error("invalid_limit", limit=limit)
         return 1
 
     disable_gtop_cli = bool(getattr(args, "disable_gtop", False))

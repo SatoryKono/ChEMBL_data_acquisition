@@ -79,6 +79,10 @@ from library.orchestration import ETLContext
 from library.pipelines.common import add_pipeline_metadata
 from library.pipelines.common.metadata import get_pipeline_version
 from library.pipelines.document import postprocessing as dp
+from library.postprocessing.document.steps import (
+    fetch_crossref_metadata,
+    merge_document_metadata,
+)
 from library.pipelines.document.pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
     DocumentQualityAccumulator,
@@ -1723,11 +1727,49 @@ def run_all(
             pmid_column="pubmed_id",
         )
     if doc_df.empty or "pubmed_id" not in doc_df:
-        processed = dp.postprocess_documents(doc_df)
-        extra_cols = [c for c in doc_df.columns if c not in processed.columns]
+        # Обогатить документы без PMID через Crossref по DOI
+        enriched_df = doc_df
+        if not doc_df.empty and "doi" in doc_df.columns:
+            dois = doc_df["doi"].dropna().unique().tolist()
+            if dois:
+                logger.info(
+                    "document_enriching_no_pmid",
+                    total_docs=len(doc_df),
+                    unique_dois=len(dois),
+                )
+                try:
+                    crossref_df = fetch_crossref_metadata(
+                        dois, 
+                        config=cfg, 
+                        logger=logger
+                    )
+                    if not crossref_df.empty:
+                        # Нормализовать doi для merge
+                        if "doi" in enriched_df.columns:
+                            enriched_df = enriched_df.copy()
+                            enriched_df["doi_key"] = enriched_df["doi"].map(normalise_doi)
+                        enriched_df = merge_document_metadata(
+                            enriched_df,
+                            crossref_df=crossref_df,
+                            openalex_df=None,
+                        )
+                        logger.info(
+                            "document_enriched_crossref",
+                            enriched_count=len(crossref_df),
+                            total_docs=len(enriched_df),
+                        )
+                except Exception as exc:
+                    logger.warning(
+                        "document_enrichment_failed",
+                        error=str(exc),
+                        exc_info=exc,
+                    )
+        
+        processed = dp.postprocess_documents(enriched_df)
+        extra_cols = [c for c in enriched_df.columns if c not in processed.columns]
         if extra_cols:
             processed = processed.merge(
-                doc_df[["document_chembl_id"] + extra_cols],
+                enriched_df[["document_chembl_id"] + extra_cols],
                 on="document_chembl_id",
                 how="left",
             )

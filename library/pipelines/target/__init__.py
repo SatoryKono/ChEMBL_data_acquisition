@@ -47,7 +47,7 @@ class TargetPipelineOptions:
 def run_pipeline(config: Config, options: TargetPipelineOptions) -> PipelineRunResult:
     """Execute the target pipeline for the selected command."""
 
-    from scripts import get_target_data as target_cli  # Lazy import to avoid cycles
+    from library.cli.commands import get_target_data as target_cli
 
     return target_cli.run_target_service(config, options)
 

@@ -40,12 +40,15 @@ jobs:
         run: mypy --config-file pyproject.toml
 
       - name: pytest
-        run: pytest --cov=library --cov=scripts --cov-report=xml --cov-report=term-missing
+        run: python scripts/run_tests.py
 
-      - name: Upload coverage
+      - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-xml
-          path: coverage.xml
+          name: test-reports
+          path: |
+            reports/test_report.json
+            reports/test_summary.md
+            reports/coverage/
           if-no-files-found: warn

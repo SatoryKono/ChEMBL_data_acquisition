@@ -12,6 +12,12 @@ logs/**/*.log
 !poetry.lock
 !requirements-lock.txt
 
+# Test outputs and temporary files
+data/output_test/
+*.debug.log
+*_tmp/
+Test.*.yml
+
 *.xlsx
 data/input/pairs.csv
 data/input/pairs_independent.csv

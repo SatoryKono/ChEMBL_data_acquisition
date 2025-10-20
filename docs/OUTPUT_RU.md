@@ -1,1 +1,0 @@
-ru/OUTPUT.md

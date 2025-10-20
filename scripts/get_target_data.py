@@ -3,18 +3,12 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
-from collections.abc import Sequence
-from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Sequence
 
 # ruff: noqa: E402 - bootstrap adjusts import order for direct execution
-if TYPE_CHECKING:
-    from . import _bootstrap as _bootstrap_module
-elif __package__ in {None, ""}:
+if __package__ in {None, ""}:
     import _bootstrap as _bootstrap_module  # pragma: no cover - CLI fallback
 else:  # pragma: no cover - executed when imported as a package module
     from . import _bootstrap as _bootstrap_module
@@ -24,94 +18,75 @@ bootstrap_cli(__package__, __file__)
 del bootstrap_cli
 del _bootstrap_module
 
-from library.io.config_loader import load_config
-from library.io.metadata_writer import save_metadata
-from library.io.output_writer import save_standard_outputs
-from library.postprocessing.target import steps as target_steps
+from library.config import load_config
+from library.cli.commands.get_target_data import run_all
 from library.utils.logging import get_logger
 
-TABLE_NAME = "target"
+
+def _cleanup_intermediate_files(output_dir: Path, final_output: Path) -> None:
+    """Удалить промежуточные файлы, оставив только основные результаты."""
+    logger = get_logger(__name__)
+    
+    # Паттерны файлов для удаления
+    patterns_to_remove = [
+        "*_chembl*.csv",
+        "*_chembl*.yaml", 
+        "*_chembl*.lock",
+        "*_uniprot*.csv",
+        "*_uniprot*.yaml",
+        "*_uniprot*.lock", 
+        "*_iuphar*.csv",
+        "*_iuphar*.yaml",
+        "*_iuphar*.lock",
+        "*_raw*.csv",
+        "*_raw*.yaml",
+        "*_raw*.lock",
+        "output.targets_*.yaml",
+        "output.targets_*.lock",
+    ]
+    
+    # Файлы для сохранения
+    keep_files = {
+        final_output.name,  # Основная таблица
+        final_output.with_suffix('.meta.yaml').name,  # Метаданные основной таблицы
+        final_output.with_suffix('.meta.yaml.lock').name,  # Lock файл метаданных
+        final_output.stem + "_quality_report_table.csv",  # Отчет о качестве
+        final_output.stem + "_quality_report_table.csv.meta.yaml",  # Метаданные отчета о качестве
+        final_output.stem + "_quality_report_table.csv.meta.yaml.lock",  # Lock файл отчета о качестве
+        final_output.stem + "_data_correlation_report_table.csv",  # Отчет о корреляциях
+        final_output.stem + "_data_correlation_report_table.csv.meta.yaml",  # Метаданные отчета о корреляциях
+        final_output.stem + "_data_correlation_report_table.csv.meta.yaml.lock",  # Lock файл отчета о корреляциях
+    }
+    
+    removed_count = 0
+    for pattern in patterns_to_remove:
+        for file_path in output_dir.glob(pattern):
+            if file_path.name not in keep_files:
+                try:
+                    file_path.unlink()
+                    removed_count += 1
+                    logger.debug("removed_intermediate_file", path=str(file_path))
+                except OSError as exc:
+                    logger.warning("failed_to_remove_file", path=str(file_path), error=str(exc))
+    
+    logger.info("cleanup_completed", removed_files=removed_count, output_dir=str(output_dir))
 
 
-@dataclass(frozen=True)
-class PipelineArgs:
-    """Normalised CLI arguments for the target pipeline."""
-
-    command: str
-    limit: int
-    date_tag: str
-    output_dir: Path
-    config: Path | None
-    log_level: str
-    input_dir: Path
-
-
-def _positive_int(value: str) -> int:
-    parsed = int(value)
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("limit must be positive")
-    return parsed
-
-
-def _date_tag(value: str) -> str:
-    """Validate that ``value`` is formatted as ``YYYYMMDD``."""
-
-    try:
-        datetime.strptime(value, "%Y%m%d")
-    except ValueError as exc:  # noqa: TRY003 - convert into argparse error
-        raise argparse.ArgumentTypeError("date tag must be formatted as YYYYMMDD") from exc
-    return value
-
-
-def _log_level(value: str) -> str:
-    """Ensure ``value`` resolves to a valid logging level name or number."""
-
-    candidate = value.strip()
-    if not candidate:
-        raise argparse.ArgumentTypeError("log level must not be empty")
-    try:
-        _resolve_log_level(candidate)
-    except ValueError as exc:  # noqa: TRY003 - convert into argparse error
-        raise argparse.ArgumentTypeError(str(exc)) from exc
-    return candidate
-
-
-def _resolve_log_level(value: str) -> int:
-    """Return the numeric logging level represented by ``value``."""
-
-    normalised = value.strip()
-    if normalised.isdigit():
-        numeric = int(normalised)
-        if numeric < 0:
-            raise ValueError("log level must be non-negative")
-        return numeric
-    resolved = logging.getLevelName(normalised.upper())
-    if isinstance(resolved, int):
-        return resolved
-    raise ValueError(f"unknown log level: {value}")
-
-
-def _configure_logging(value: str) -> None:
-    """Configure the root logger using ``value`` parsed from CLI arguments."""
-
-    logging.getLogger().setLevel(_resolve_log_level(value))
-
-
-def parse_args(argv: Sequence[str] | None = None) -> tuple[argparse.Namespace, PipelineArgs]:
-    """Parse CLI arguments returning both the raw namespace and dataclass view."""
-
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments."""
     parser = argparse.ArgumentParser(description="Fetch and enrich ChEMBL target data")
     parser.add_argument(
         "command",
         nargs="?",
         default="all",
-        help="Execution mode compatible with legacy target pipelines",
+        help="Execution mode (default: all)",
     )
-    parser.add_argument("--limit", type=_positive_int, default=1000, help="Number of targets to fetch")
+    parser.add_argument("--limit", type=int, default=1000, help="Number of targets to fetch")
+    parser.add_argument("--offset", type=int, default=0, help="Number of targets to skip")
     parser.add_argument(
         "--date-tag",
-        type=_date_tag,
-        default=datetime.now(UTC).strftime("%Y%m%d"),
+        type=str,
+        default="20250119",
         help="Execution date token in YYYYMMDD format",
     )
     parser.add_argument(
@@ -124,39 +99,32 @@ def parse_args(argv: Sequence[str] | None = None) -> tuple[argparse.Namespace, P
         "--input-dir",
         type=Path,
         default=Path("data/input"),
-        help="Directory containing cached inputs for compatibility",
+        help="Directory containing cached inputs",
     )
     parser.add_argument(
         "--log-level",
-        type=_log_level,
+        type=str,
         default="INFO",
-        help="Logging level (numeric or name)",
+        help="Logging level",
     )
     parser.add_argument(
         "--config",
         type=str,
         default=None,
-        help="Path to configuration file (defaults to config/config.yaml)",
+        help="Path to configuration file",
     )
-    namespace = parser.parse_args(argv)
-    config_path = Path(namespace.config) if namespace.config is not None else None
-    pipeline_args = PipelineArgs(
-        command=namespace.command,
-        limit=namespace.limit,
-        date_tag=namespace.date_tag,
-        output_dir=Path(namespace.output_dir),
-        config=config_path,
-        log_level=namespace.log_level,
-        input_dir=Path(namespace.input_dir),
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=None,
+        help="Input CSV file containing target identifiers",
     )
-    return namespace, pipeline_args
+    return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Execute the target pipeline."""
-
-    namespace, args = parse_args(argv)
-    _configure_logging(args.log_level)
+    """Execute the target pipeline using the full pipeline."""
+    args = parse_args(argv)
     logger = get_logger(__name__)
 
     if args.command != "all":
@@ -165,7 +133,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         config = load_config(args.config) if args.config is not None else load_config(None)
-    except Exception as exc:  # noqa: BLE001 - surface configuration failures
+        logger.info("config_loaded", config_type=type(config).__name__)
+    except Exception as exc:
         logger.error("target_config_error", error=str(exc))
         return 1
 
@@ -173,32 +142,45 @@ def main(argv: Sequence[str] | None = None) -> int:
     args.input_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        dataset = target_steps.fetch_normalize_target(args.limit)
-        target_data = target_steps.generate_target_reports(dataset)
-        artifacts = save_standard_outputs(
-            target_data.dataset,
-            target_data.correlation_report,
-            target_data.quality_report,
-            TABLE_NAME,
-            args.date_tag,
-            output_dir=args.output_dir,
+        # Create namespace with required parameters for run_all()
+        namespace = argparse.Namespace(
+            input_csv=args.input if args.input else Path("data/input/target.csv"),
+            final_out=args.output_dir / f"output.target_{args.date_tag}.csv",
+            output_csv=args.output_dir / f"output.target_{args.date_tag}.csv",
+            limit=args.limit,
+            offset=args.offset,
+            command="all",
+            chembl_out=None,  # Не сохранять промежуточный ChEMBL файл
+            uniprot_out=None,  # Не сохранять промежуточный UniProt файл
+            iuphar_out=None,   # Не сохранять промежуточный IUPHAR файл
+            raw_out=None,      # Не сохранять raw файл
+            raw_format="csv",
+            no_reindex_raw=False,
+            id_cols=["target_chembl_id"],
+            date_tag=args.date_tag,
+            disable_gtop=False,
+            emit_legacy_artifacts=False,  # Не создавать legacy артефакты
         )
-        artifact_paths = [artifacts.dataset, artifacts.correlation_report, artifacts.quality_report]
-        save_metadata(
-            TABLE_NAME,
-            args.date_tag,
-            namespace,
-            qc_summary=target_data.qc_summary,
-            output_dir=args.output_dir,
-            artifacts=artifact_paths,
-            sources=[config.path.name],
-        )
-    except Exception as exc:  # noqa: BLE001 - top-level failure boundary
+        
+        logger.info("target_using_full_pipeline", 
+                   input_file=str(namespace.input_csv), 
+                   output_file=str(namespace.final_out))
+        
+        # Run the complete target pipeline
+        exit_code = run_all(config, namespace)
+        
+        if exit_code == 0:
+            logger.info("target_pipeline_success", output_file=str(namespace.final_out))
+            
+            # Очистка промежуточных файлов - оставляем только основные файлы
+            _cleanup_intermediate_files(args.output_dir, namespace.final_out)
+        else:
+            logger.error("target_pipeline_failed", exit_code=exit_code)
+        
+        return exit_code
+    except Exception as exc:
         logger.exception("target_pipeline_failed", error=str(exc))
         return 1
-
-    logger.info("target_pipeline_success", rows=target_data.dataset.shape[0])
-    return 0
 
 
 if __name__ == "__main__":
