@@ -1,8 +1,22 @@
-# ETL data flow for `get_*_data.py`
+# ETL Data Flow Overview
 
-This document summarises the inputs, external data sources, processing steps and outputs for each
-`get_*_data.py` command-line utility. Use it as a map for onboarding to the ChEMBL data acquisition
-pipelines.
+> **Languages:** English · [Русский](../ru/ETL_DATA_FLOW.md)
+
+This document provides a high-level overview of the ETL data flow for ChEMBL data acquisition pipelines. For detailed flow diagrams and technical specifications, see the [ETL Data Flow Reference](./architecture/ETL_DATA_FLOW.md).
+
+## Quick Navigation
+
+- **[Pipeline Overview](#pipeline-overview)** - Summary of all pipelines
+- **[Cross-Pipeline Relationships](#cross-pipeline-relationships)** - How pipelines connect
+- **[Data Sources](#data-sources)** - External services and APIs
+
+## Detailed Documentation
+
+For comprehensive flow diagrams and technical details, refer to:
+
+- **[ETL Data Flow Reference](./architecture/ETL_DATA_FLOW.md)** - Detailed flow diagrams and sequences
+- **[ETL Process Reference](./architecture/ETL_PROCESS.md)** - Step-by-step process documentation
+- **[Architecture Overview](./ARCHITECTURE.md)** - System architecture overview
 
 ## `scripts/get_activity_data.py`
 
@@ -76,3 +90,11 @@ graph TD
 *Targets pipeline* merges ChEMBL, UniProt and IUPHAR attributes, producing IDs referenced by assays and downstream activity analysis.
 
 *Test item pipeline* enriches molecules with PubChem properties and surfaces parent-child relationships via the local catalogue, enabling contextualised joins to activity results through `molecule_chembl_id` and `parent_molecule_chembl_id` keys.
+
+## See also
+
+- **[ETL Data Flow Reference](./architecture/ETL_DATA_FLOW.md)** - Detailed flow diagrams and sequences
+- **[ETL Process Reference](./architecture/ETL_PROCESS.md)** - Step-by-step process documentation
+- **[Architecture Overview](./ARCHITECTURE.md)** - System architecture overview
+- **[Usage Guide](./guides/USAGE.md)** - How to run the pipelines
+- **[Configuration Guide](./CONFIG.md)** - Pipeline configuration options

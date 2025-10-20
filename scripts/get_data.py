@@ -598,7 +598,7 @@ def run_stage(stage: Stage, forward_args: ForwardArgs | Sequence[str]) -> float:
         )
 
     if stage.name == "target":
-        stage_args = forward.with_default_mode(
+        stage_args = forward.with_default_subcommand(
             _DEFAULT_TARGET_SUBCOMMAND, choices=TARGET_SUBCOMMANDS
         )
     elif stage.name == "document":

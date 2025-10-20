@@ -1,4 +1,23 @@
-# Analytical Report on the ETL Workflow
+# ETL Process Overview
+
+> **Languages:** English · [Русский](../ru/ETL_PROCESS.md)
+
+This document provides a high-level overview of the ETL workflow for ChEMBL data acquisition. For detailed step-by-step process documentation, see the [ETL Process Reference](./architecture/ETL_PROCESS.md).
+
+## Quick Navigation
+
+- **[ETL Overview](#etl-overview)** - High-level workflow summary
+- **[Data Sources](#data-sources)** - External services and APIs
+- **[Data Transformation](#data-transformation)** - Processing stages
+- **[Pipeline Details](#pipeline-details)** - Entity-specific processes
+
+## Detailed Documentation
+
+For comprehensive process documentation, refer to:
+
+- **[ETL Process Reference](./architecture/ETL_PROCESS.md)** - Detailed step-by-step processes
+- **[ETL Data Flow Reference](./architecture/ETL_DATA_FLOW.md)** - Flow diagrams and sequences
+- **[Architecture Overview](./ARCHITECTURE.md)** - System architecture overview
 
 ## ETL Overview
 
@@ -100,3 +119,11 @@ Each script produces a bundle of artifacts: a primary CSV with deterministic row
 * **`docs/`** — Documentation for configuration, execution, and outputs; this report extends it with an end-to-end ETL description.
 
 The report covers the entire cycle—from data sources through normalization, post-processing, and export—highlighting quality controls and entity relationships. It equips newcomers to quickly understand, extend, or troubleshoot existing pipelines without compromising data integrity.
+
+## See also
+
+- **[ETL Process Reference](./architecture/ETL_PROCESS.md)** - Detailed step-by-step processes
+- **[ETL Data Flow Reference](./architecture/ETL_DATA_FLOW.md)** - Flow diagrams and sequences
+- **[Architecture Overview](./ARCHITECTURE.md)** - System architecture overview
+- **[Usage Guide](./guides/USAGE.md)** - How to run the pipelines
+- **[Configuration Guide](./CONFIG.md)** - Pipeline configuration options

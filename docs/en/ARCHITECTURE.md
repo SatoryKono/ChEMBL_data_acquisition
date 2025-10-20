@@ -1,6 +1,25 @@
-# Architecture overview
+# Architecture Overview
 
-This reference maps the shared architecture behind the ChEMBL data acquisition utilities. It complements the per-pipeline walkthroughs documented in [ETL data flow](./architecture/ETL_DATA_FLOW.md).
+> **Languages:** English · [Русский](../ru/ARCHITECTURE.md)
+
+This document provides a high-level overview of the ChEMBL data acquisition system architecture. For detailed technical documentation, see the [Architecture Reference](./architecture/ARCHITECTURE.md).
+
+## Quick Navigation
+
+- **[System Context](#system-context)** - High-level system overview
+- **[Dependency Relationships](#dependency-relationships)** - How components interact
+- **[Pipeline Collaboration](#how-pipelines-collaborate)** - Cross-pipeline data flow
+- **[Design Guidelines](#design-implications-for-contributors)** - For developers
+
+## Detailed Documentation
+
+For comprehensive technical details, refer to:
+
+- **[Architecture Reference](./architecture/ARCHITECTURE.md)** - Detailed system architecture
+- **[ETL Data Flow](./architecture/ETL_DATA_FLOW.md)** - Pipeline data flow diagrams
+- **[ETL Process](./architecture/ETL_PROCESS.md)** - Step-by-step process documentation
+- **[Data Model](./architecture/DATA_MODEL.md)** - Database schema and relationships
+- **[Architecture Improvements](./architecture/ARCHITECTURE_IMPROVEMENTS.md)** - Planned enhancements
 
 ## System context
 
@@ -128,3 +147,12 @@ For a cross-pipeline view of identifiers and downstream consumers, refer to the 
 * Implement new pipelines by composing the existing helper layers rather than building standalone scripts. Doing so guarantees deterministic exports, consistent metadata, and QA artefacts.
 * When adjusting dependencies (for example, adding a new client or post-processing helper), document the change in this diagram so reviewers can quickly assess blast radius.
 * Shared helpers are safe extension points: implement new API adapters under `library.clients`, new local file mappers under `library.integration`, and new validators under `library.validation` to keep orchestration modules slim.
+
+## See also
+
+- **[Architecture Reference](./architecture/ARCHITECTURE.md)** - Detailed technical architecture
+- **[ETL Data Flow](./architecture/ETL_DATA_FLOW.md)** - Pipeline flow diagrams and sequences
+- **[ETL Process](./architecture/ETL_PROCESS.md)** - Step-by-step execution details
+- **[Data Model](./architecture/DATA_MODEL.md)** - Schema and data relationships
+- **[Advanced Scenarios](./guides/ADVANCED_SCENARIOS.md)** - Complex usage patterns
+- **[Configuration Guide](./CONFIG.md)** - System configuration options

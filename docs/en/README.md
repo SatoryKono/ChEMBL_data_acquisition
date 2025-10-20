@@ -74,11 +74,13 @@ below to navigate the canonical English sources:
 | Target helper exports | [`OUTPUT_TARGETS.md`](./OUTPUT_TARGETS.md) | [`../ru/OUTPUT_TARGETS.md`](../ru/OUTPUT_TARGETS.md) |
 | Quality controls | [`QA_PROCESS.md`](./QA_PROCESS.md) | [`../ru/QA_PROCESS.md`](../ru/QA_PROCESS.md) |
 | Architecture | [`architecture/ARCHITECTURE.md`](./architecture/ARCHITECTURE.md) | [`../ru/architecture/ARCHITECTURE.md`](../ru/architecture/ARCHITECTURE.md) |
-| Architecture improvements | [`architecture/IMPROVEMENT_PROPOSALS.md`](./architecture/IMPROVEMENT_PROPOSALS.md) | [`../ru/architecture/IMPROVEMENT_PROPOSALS.md`](../ru/architecture/IMPROVEMENT_PROPOSALS.md) |
+| Architecture improvements | [`architecture/ARCHITECTURE_IMPROVEMENTS.md`](./architecture/ARCHITECTURE_IMPROVEMENTS.md) | [`../ru/architecture/ARCHITECTURE_IMPROVEMENTS.md`](../ru/architecture/ARCHITECTURE_IMPROVEMENTS.md) |
 | Data model | [`architecture/DATA_MODEL.md`](./architecture/DATA_MODEL.md) | [`../ru/architecture/DATA_MODEL.md`](../ru/architecture/DATA_MODEL.md) |
 | Development | [`development/README.md`](./development/README.md) | [`../ru/development/README.md`](../ru/development/README.md) |
 | Dictionaries & glossary | [`reference/DICTIONARIES.md`](./reference/DICTIONARIES.md) | [`../ru/reference/DICTIONARIES.md`](../ru/reference/DICTIONARIES.md) |
 | Post-processing runbook | [`guides/POSTPROCESSING_RUNBOOK.md`](./guides/POSTPROCESSING_RUNBOOK.md) | [`../ru/guides/POSTPROCESSING_RUNBOOK.md`](../ru/guides/POSTPROCESSING_RUNBOOK.md) |
+| Quality status | [`reference/QUALITY_STATUS.md`](./reference/QUALITY_STATUS.md) | [`../ru/reference/QUALITY_STATUS.md`](../ru/reference/QUALITY_STATUS.md) |
+| Pipeline config schema | [`architecture/PIPELINE_CONFIG_SCHEMA.md`](./architecture/PIPELINE_CONFIG_SCHEMA.md) | [`../ru/architecture/PIPELINE_CONFIG_SCHEMA.md`](../ru/architecture/PIPELINE_CONFIG_SCHEMA.md) |
 
 For a description of the current Variant 1 modular post-processing pipeline,
 refer to [`../postprocessing_variant1_tasks.md`](../postprocessing_variant1_tasks.md).

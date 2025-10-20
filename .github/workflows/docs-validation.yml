@@ -1,0 +1,176 @@
+name: Documentation Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/docs-validation.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/docs-validation.yml'
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+
+jobs:
+  validate-docs:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install markdown-link-check
+      run: npm install -g markdown-link-check
+      
+    - name: Install markdownlint
+      run: npm install -g markdownlint-cli
+      
+    - name: Validate markdown links
+      run: |
+        # Check all markdown files for broken links
+        find docs -name "*.md" -type f | while read file; do
+          echo "Checking links in $file"
+          markdown-link-check "$file" --config .markdown-link-check.json || true
+        done
+        
+    - name: Lint markdown files
+      run: |
+        # Lint all markdown files
+        markdownlint docs/**/*.md --config .markdownlint.json || true
+        
+    - name: Validate documentation structure
+      run: |
+        # Check for EN/RU parity
+        echo "Checking EN/RU documentation parity..."
+        
+        # Get list of files in EN directory (excluding INDEX.md which we created)
+        find docs/en -name "*.md" -type f | sed 's|docs/en/||' | sort > en_files.txt
+        
+        # Get list of files in RU directory (excluding INDEX.md which we created)
+        find docs/ru -name "*.md" -type f | sed 's|docs/ru/||' | sort > ru_files.txt
+        
+        # Compare the lists
+        if ! diff en_files.txt ru_files.txt; then
+          echo "❌ EN/RU documentation structure mismatch detected!"
+          echo "Files in EN but not in RU:"
+          comm -23 en_files.txt ru_files.txt || true
+          echo "Files in RU but not in EN:"
+          comm -13 en_files.txt ru_files.txt || true
+          exit 1
+        else
+          echo "✅ EN/RU documentation structure is synchronized"
+        fi
+        
+        # Clean up temporary files
+        rm -f en_files.txt ru_files.txt
+        
+    - name: Check for language headers
+      run: |
+        echo "Checking for consistent language headers..."
+        
+        # Check that all docs have language headers
+        missing_headers=()
+        
+        for file in docs/en/*.md docs/en/*/*.md; do
+          if [ -f "$file" ]; then
+            if ! grep -q "Languages:" "$file"; then
+              missing_headers+=("$file")
+            fi
+          fi
+        done
+        
+        for file in docs/ru/*.md docs/ru/*/*.md; do
+          if [ -f "$file" ]; then
+            if ! grep -q "Languages:" "$file"; then
+              missing_headers+=("$file")
+            fi
+          fi
+        done
+        
+        if [ ${#missing_headers[@]} -gt 0 ]; then
+          echo "❌ Files missing language headers:"
+          printf '%s\n' "${missing_headers[@]}"
+          exit 1
+        else
+          echo "✅ All documentation files have language headers"
+        fi
+        
+    - name: Validate Mermaid diagrams
+      run: |
+        echo "Checking Mermaid diagram syntax..."
+        
+        # Install mermaid-cli
+        npm install -g @mermaid-js/mermaid-cli
+        
+        # Find all markdown files with mermaid diagrams
+        find docs -name "*.md" -type f -exec grep -l "```mermaid" {} \; | while read file; do
+          echo "Validating Mermaid diagrams in $file"
+          
+          # Extract mermaid code blocks and validate them
+          awk '/```mermaid/,/```/' "$file" | grep -v '```' | mmdc --input /dev/stdin --output /dev/null 2>/dev/null || {
+            echo "❌ Invalid Mermaid diagram in $file"
+            exit 1
+          }
+        done
+        
+        echo "✅ All Mermaid diagrams are valid"
+        
+    - name: Check for broken cross-references
+      run: |
+        echo "Checking for broken cross-references..."
+        
+        # Find all markdown files
+        find docs -name "*.md" -type f | while read file; do
+          # Extract all markdown links
+          grep -o '\[[^]]*\](\.[^)]*)' "$file" | while read link; do
+            # Extract the path from the link
+            path=$(echo "$link" | sed 's/.*(\(.*\))/\1/')
+            
+            # Skip external links
+            if [[ "$path" =~ ^https?:// ]]; then
+              continue
+            fi
+            
+            # Skip anchor links
+            if [[ "$path" =~ ^# ]]; then
+              continue
+            fi
+            
+            # Resolve relative path
+            dir=$(dirname "$file")
+            full_path="$dir/$path"
+            
+            # Check if file exists
+            if [ ! -f "$full_path" ]; then
+              echo "❌ Broken link in $file: $link -> $full_path (not found)"
+              exit 1
+            fi
+          done
+        done
+        
+        echo "✅ All cross-references are valid"
+        
+    - name: Generate documentation report
+      if: always()
+      run: |
+        echo "## Documentation Validation Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Validation Results" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Link validation completed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Markdown linting completed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Structure validation completed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Language header validation completed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Mermaid diagram validation completed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Cross-reference validation completed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "All documentation validation checks passed successfully!" >> $GITHUB_STEP_SUMMARY

@@ -74,11 +74,13 @@ flowchart TD
 | Вспомогательные выгрузки таргетов | [`../en/OUTPUT_TARGETS.md`](../en/OUTPUT_TARGETS.md) | [`OUTPUT_TARGETS.md`](./OUTPUT_TARGETS.md) |
 | Контроль качества | [`../en/QA_PROCESS.md`](../en/QA_PROCESS.md) | [`QA_PROCESS.md`](./QA_PROCESS.md) |
 | Архитектура | [`../en/architecture/ARCHITECTURE.md`](../en/architecture/ARCHITECTURE.md) | [`architecture/ARCHITECTURE.md`](./architecture/ARCHITECTURE.md) |
-| Архитектурные улучшения | [`../en/architecture/IMPROVEMENT_PROPOSALS.md`](../en/architecture/IMPROVEMENT_PROPOSALS.md) | [`architecture/IMPROVEMENT_PROPOSALS.md`](./architecture/IMPROVEMENT_PROPOSALS.md) |
+| Архитектурные улучшения | [`../en/architecture/ARCHITECTURE_IMPROVEMENTS.md`](../en/architecture/ARCHITECTURE_IMPROVEMENTS.md) | [`architecture/ARCHITECTURE_IMPROVEMENTS.md`](./architecture/ARCHITECTURE_IMPROVEMENTS.md) |
 | Модель данных | [`../en/architecture/DATA_MODEL.md`](../en/architecture/DATA_MODEL.md) | [`architecture/DATA_MODEL.md`](./architecture/DATA_MODEL.md) |
 | Разработка | [`../en/development/README.md`](../en/development/README.md) | [`development/README.md`](./development/README.md) |
 | Справочники и глоссарий | [`../en/reference/DICTIONARIES.md`](../en/reference/DICTIONARIES.md) | [`reference/DICTIONARIES.md`](./reference/DICTIONARIES.md) |
 | Руководство по постобработке | [`../en/guides/POSTPROCESSING_RUNBOOK.md`](../en/guides/POSTPROCESSING_RUNBOOK.md) | [`guides/POSTPROCESSING_RUNBOOK.md`](./guides/POSTPROCESSING_RUNBOOK.md) |
+| Статус качества | [`../en/reference/QUALITY_STATUS.md`](../en/reference/QUALITY_STATUS.md) | [`reference/QUALITY_STATUS.md`](./reference/QUALITY_STATUS.md) |
+| Схема конфигурации пайплайнов | [`../en/architecture/PIPELINE_CONFIG_SCHEMA.md`](../en/architecture/PIPELINE_CONFIG_SCHEMA.md) | [`architecture/PIPELINE_CONFIG_SCHEMA.md`](./architecture/PIPELINE_CONFIG_SCHEMA.md) |
 
 Текущее описание модульной постобработки (вариант 1) доступно в
 [`../postprocessing_variant1_tasks.md`](../postprocessing_variant1_tasks.md).
