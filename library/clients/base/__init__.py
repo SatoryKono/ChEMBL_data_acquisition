@@ -1,15 +1,53 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 import requests
 
-from ..common.log import logger
-from ..common.rate_limiter import RateLimiter, get_limiter
-from .pubmed import _do_request
+from ...common.log import logger
+from ...common.rate_limiter import RateLimiter, get_limiter
+from ..pubmed import _do_request
+
+__all__ = [
+    "BasePaginatedClient",
+    "ClientConfig",
+    "ClientError",
+    "ClientPayload",
+    "ClientProtocol",
+    "RateLimitedRequestMixin",
+]
+
+
+@dataclass(slots=True)
+class ClientConfig:
+    """Common configuration options for HTTP-like service clients."""
+
+    base_url: str
+    headers: Mapping[str, str]
+    timeout_seconds: float
+
+
+@dataclass(slots=True)
+class ClientPayload:
+    """Normalized response payload shared by client implementations."""
+
+    data: Sequence[MutableMapping[str, Any]]
+
+
+class ClientError(RuntimeError):
+    """Raised when a client encounters an unrecoverable error."""
+
+
+class ClientProtocol(Protocol):
+    """Skeleton protocol for strongly typed service clients."""
+
+    config: ClientConfig
+
+    def fetch(self, *, params: Mapping[str, Any] | None = None) -> ClientPayload:
+        """Retrieve data from the upstream service."""
 
 
 @dataclass(slots=True)
@@ -142,4 +180,3 @@ class RateLimitedRequestMixin:
         stage = "request_ok" if not error else "request_fail"
         logger.debug(stage, extra={"stage": stage, "url": url})
         return data, error
-

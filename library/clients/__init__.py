@@ -17,11 +17,14 @@ Import rules for higher layers:
 
 from __future__ import annotations
 
-from collections.abc import Mapping, MutableMapping, Sequence
-from dataclasses import dataclass
-from typing import Any, Protocol
-
-from .base import BasePaginatedClient
+from .base import (
+    BasePaginatedClient,
+    ClientConfig,
+    ClientError,
+    ClientPayload,
+    ClientProtocol,
+    RateLimitedRequestMixin,
+)
 from .chembl import ChemblClient, _chunked
 from .crossref import fetch_crossref
 from .iuphar import (
@@ -54,6 +57,7 @@ __all__ = [
     "ClientPayload",
     "ClientProtocol",
     "BasePaginatedClient",
+    "RateLimitedRequestMixin",
     "PubMedClient",
     "download_gtp_to_hgnc_mapping",
     "download_gtp_to_uniprot_mapping",
@@ -69,30 +73,3 @@ __all__ = [
 ]
 
 
-@dataclass(slots=True)
-class ClientConfig:
-    """Common configuration options for HTTP-like service clients."""
-
-    base_url: str
-    headers: Mapping[str, str]
-    timeout_seconds: float
-
-
-@dataclass(slots=True)
-class ClientPayload:
-    """Normalized response payload shared by client implementations."""
-
-    data: Sequence[MutableMapping[str, Any]]
-
-
-class ClientError(RuntimeError):
-    """Raised when a client encounters an unrecoverable error."""
-
-
-class ClientProtocol(Protocol):
-    """Skeleton protocol for strongly typed service clients."""
-
-    config: ClientConfig
-
-    def fetch(self, *, params: Mapping[str, Any] | None = None) -> ClientPayload:
-        """Retrieve data from the upstream service."""
