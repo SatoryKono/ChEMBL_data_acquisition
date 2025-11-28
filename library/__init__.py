@@ -1,64 +1,23 @@
-"""Utility libraries for data acquisition and processing.
-
-This package exposes commonly used helper functions and submodules. The
-original implementation used absolute imports which fail when the package is
-executed as part of a larger project.  The imports are now explicitly relative
-so that ``python`` can resolve them correctly regardless of the working
-directory.
-"""
+"""Top-level re-exports for the :mod:`library` package."""
 
 from __future__ import annotations
 
 from importlib import import_module
 from typing import Any
 
-try:
-    from .common.csv_utils import (
-        sha256_file,
-        write_csv_chunks_deterministic,
-        write_csv_deterministic,
-    )
-    from .common.logging_setup import Logger, LoggerConfig, configure_logger
-    from .common.timing import log_duration
-    from .config import Config, load_config
-    from .parser_schema import CSVExportArgs
-except ModuleNotFoundError as exc:  # pragma: no cover - import guard
-    missing = exc.name or "dependency"
-    raise ModuleNotFoundError(
-        "library package requires additional dependencies. "
-        f"Missing module: '{missing}'. Install project requirements, e.g.\n"
-        "  pip install -r requirements.txt\n"
-        "  # or\n"
-        "  pip install -e .[dev]"
-    ) from exc
-
 _LAZY_SUBMODULES = {
+    "cli",
+    "cli_utils",
     "io",
+    "offline",
     "postprocess",
     "qa",
     "schemas",
+    "testitem_pipeline",
     "validation",
 }
 
 _EXPORTS: dict[str, str] = {
-    "parse_terms": "library.pipelines.document.type_terms:parse_terms",
-    "REVIEW_TERMS": "library.pipelines.document.type_terms:REVIEW_TERMS",
-    "EXPERIMENTAL_TERMS": "library.pipelines.document.type_terms:EXPERIMENTAL_TERMS",
-    "UNKNOWN_TERMS": "library.pipelines.document.type_terms:UNKNOWN_TERMS",
-    "compute_scores": "library.pipelines.document.type_classifier:compute_scores",
-    "decide_label": "library.pipelines.document.type_classifier:decide_label",
-    "organism_classification": "library.pipelines.target:organism_classification",
-    "protein_classification": "library.pipelines.target:protein_classification",
-    "testitem_enrichment": "library.pipelines.testitem.enrichment",
-    "OrganismClassificationRules": "library.pipelines.target.organism_classification:OrganismClassificationRules",
-    "add_cellularity": "library.pipelines.target.organism_classification:add_cellularity",
-    "add_cellularity_smart": "library.pipelines.target.organism_classification:add_cellularity_smart",
-    "classify_by_lineage": "library.pipelines.target.organism_classification:classify_by_lineage",
-    "classify_record": "library.pipelines.target.organism_classification:classify_record",
-    "normalize": "library.pipelines.target.organism_classification:normalize",
-    "TYPE_MULTICELLULAR": "library.pipelines.target.organism_classification:TYPE_MULTICELLULAR",
-    "TYPE_UNICELLULAR": "library.pipelines.target.organism_classification:TYPE_UNICELLULAR",
-    "TYPE_VIRAL": "library.pipelines.target.organism_classification:TYPE_VIRAL",
     "SidecarErrors": "library.sidecar:SidecarErrors",
     "resolve_failure_chunk_size": "library.sidecar:resolve_failure_chunk_size",
 }
@@ -81,43 +40,7 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
-__all__ = [
-    "parse_terms",
-    "REVIEW_TERMS",
-    "EXPERIMENTAL_TERMS",
-    "UNKNOWN_TERMS",
-    "compute_scores",
-    "decide_label",
-    "postprocess",
-    "io",
-    "qa",
-    "schemas",
-    "validation",
-    "Config",
-    "load_config",
-    "SidecarErrors",
-    "resolve_failure_chunk_size",
-    "write_csv_deterministic",
-    "write_csv_chunks_deterministic",
-    "sha256_file",
-    "Logger",
-    "LoggerConfig",
-    "configure_logger",
-    "CSVExportArgs",
-    "log_duration",
-    "organism_classification",
-    "protein_classification",
-    "testitem_enrichment",
-    "OrganismClassificationRules",
-    "add_cellularity",
-    "add_cellularity_smart",
-    "classify_by_lineage",
-    "classify_record",
-    "normalize",
-    "TYPE_MULTICELLULAR",
-    "TYPE_UNICELLULAR",
-    "TYPE_VIRAL",
-]
+__all__ = sorted((*_LAZY_SUBMODULES, *_EXPORTS))
 
 
 def __dir__() -> list[str]:
