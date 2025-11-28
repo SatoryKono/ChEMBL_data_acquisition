@@ -14,9 +14,9 @@ from typing import Any
 
 import requests
 
-from ..common.rate_limiter import RateLimiter, get_limiter
+from ..common.rate_limiter import RateLimiter
 from ..config.models import RetryCfg, SemanticScholarCfg
-from .pubmed import _do_request
+from .base import RateLimitedRequestMixin
 
 __all__ = [
     "fetch_semantic_scholar",
@@ -25,6 +25,8 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+_REQUESTER = RateLimitedRequestMixin("semantic_scholar")
 
 _SEMANTIC_SCHOLAR_FIELDS = "publicationTypes,externalIds,paperId,venue"
 _SEMANTIC_SCHOLAR_HEADERS = {"Accept": "application/json"}
@@ -61,14 +63,6 @@ def _build_headers(cfg: SemanticScholarCfg) -> dict[str, str]:
     return headers
 
 
-def _resolve_base_delay(cfg: SemanticScholarCfg) -> float:
-    """Return the base retry delay derived from ``cfg``."""
-
-    if cfg.rps:
-        return 1.0 / cfg.rps
-    return cfg.delay
-
-
 def fetch_semantic_scholar(
     session: requests.Session,
     pmid: str,
@@ -80,27 +74,17 @@ def fetch_semantic_scholar(
     """Retrieve Semantic Scholar metadata for ``pmid``."""
 
     cfg = cfg or SemanticScholarCfg()
-    effective_limiter = limiter
-    if effective_limiter is None:
-        rps = cfg.rps
-        if rps is not None and rps > 0:
-            effective_limiter = get_limiter("semantic_scholar", rps, cfg.burst)
-    if effective_limiter is not None:
-        effective_limiter.acquire()
 
     base = cfg.base.rstrip("/")
     url = f"{base}/paper/PMID:{pmid}"
-    timeout = (cfg.timeout_connect, cfg.timeout_read)
-    delay = _resolve_base_delay(cfg)
-    data, error = _do_request(
+    data, error = _REQUESTER.perform_request(
         session,
         url,
-        delay,
+        cfg,
+        limiter=limiter,
+        retry_cfg=retry_cfg,
         headers=_build_headers(cfg),
         params={"fields": _SEMANTIC_SCHOLAR_FIELDS},
-        retries=cfg.retries,
-        timeout=timeout,
-        retry_cfg=retry_cfg,
     )
     formatted_error = _format_error_message(error) if error else ""
     if error:
@@ -160,29 +144,19 @@ def fetch_semantic_scholar_batch(
         return []
 
     cfg = cfg or SemanticScholarCfg()
-    effective_limiter = limiter
-    if effective_limiter is None:
-        rps = cfg.rps
-        if rps is not None and rps > 0:
-            effective_limiter = get_limiter("semantic_scholar", rps, cfg.burst)
-    if effective_limiter is not None:
-        effective_limiter.acquire()
 
     base = cfg.base.rstrip("/")
     url = f"{base}/paper/batch"
-    timeout = (cfg.timeout_connect, cfg.timeout_read)
-    delay = _resolve_base_delay(cfg)
-    data, error = _do_request(
+    data, error = _REQUESTER.perform_request(
         session,
         url,
-        delay,
+        cfg,
+        limiter=limiter,
+        retry_cfg=retry_cfg,
         headers=_build_headers(cfg),
         json={"ids": [f"PMID:{pmid}" for pmid in pmids]},
         method="POST",
         params={"fields": _SEMANTIC_SCHOLAR_FIELDS},
-        retries=cfg.retries,
-        timeout=timeout,
-        retry_cfg=retry_cfg,
     )
     if error:
         if is_access_denied_error(error):
