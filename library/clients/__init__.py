@@ -21,6 +21,7 @@ from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from .base import BasePaginatedClient
 from .chembl import ChemblClient, _chunked
 from .crossref import fetch_crossref
 from .iuphar import (
@@ -52,6 +53,7 @@ __all__ = [
     "ClientError",
     "ClientPayload",
     "ClientProtocol",
+    "BasePaginatedClient",
     "PubMedClient",
     "download_gtp_to_hgnc_mapping",
     "download_gtp_to_uniprot_mapping",
