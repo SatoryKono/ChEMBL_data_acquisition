@@ -5,6 +5,12 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+import requests
+
+from ..common.log import logger
+from ..common.rate_limiter import RateLimiter, get_limiter
+from .pubmed import _do_request
+
 
 @dataclass(slots=True)
 class BasePaginatedClient(ABC):
@@ -73,4 +79,70 @@ class BasePaginatedClient(ABC):
         **kwargs: Any,
     ) -> Mapping[str, Any]:
         """Perform a JSON request and return a response payload."""
+
+
+class RateLimitedRequestMixin:
+    """Provide a reusable rate-limited HTTP request helper."""
+
+    limiter_name: str | None = None
+
+    def __init__(self, limiter_name: str | None = None) -> None:
+        if limiter_name is not None:
+            self.limiter_name = limiter_name
+
+    def _resolve_limiter_name(self, cfg: Any) -> str:
+        if self.limiter_name:
+            return self.limiter_name
+        return cfg.__class__.__name__.lower()
+
+    def _resolve_delay(self, cfg: Any) -> float:
+        rps = getattr(cfg, "rps", None)
+        if rps:
+            return 1.0 / rps
+        return float(getattr(cfg, "delay", 0.0) or 0.0)
+
+    def perform_request(
+        self,
+        session: requests.Session,
+        url: str,
+        cfg: Any,
+        *,
+        limiter: RateLimiter | None = None,
+        retry_cfg: Any | None = None,
+        headers: Mapping[str, str] | None = None,
+        params: Mapping[str, Any] | None = None,
+        json: Any | None = None,
+        method: str = "GET",
+    ) -> tuple[dict[str, Any] | str | None, str]:
+        """Execute a rate-limited request using ``cfg`` settings."""
+
+        effective_limiter = limiter
+        rps = getattr(cfg, "rps", None)
+        burst = getattr(cfg, "burst", None)
+        if effective_limiter is None and rps:
+            effective_limiter = get_limiter(self._resolve_limiter_name(cfg), rps, burst)
+        if effective_limiter is not None:
+            effective_limiter.acquire()
+
+        delay = self._resolve_delay(cfg)
+        timeout = (getattr(cfg, "timeout_connect", 10.0), getattr(cfg, "timeout_read", 10.0))
+        retries = getattr(cfg, "retries", 0)
+
+        data, error = _do_request(
+            session,
+            url,
+            delay,
+            headers=headers,
+            params=params,
+            json=json,
+            method=method,
+            retries=retries,
+            timeout=timeout,
+            retry_cfg=retry_cfg,
+        )
+        if error:
+            logger.debug("request_fail", extra={"stage": "request_fail", "url": url})
+        else:
+            logger.debug("request_ok", extra={"stage": "request_ok", "url": url})
+        return data, error
 
