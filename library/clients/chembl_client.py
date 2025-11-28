@@ -8,6 +8,7 @@ from typing import Any
 
 import requests
 
+from library.clients.base import BasePaginatedClient
 from library.utils.logging import Logger, get_logger
 from library.utils.retry import DEFAULT_MAX_TRIES, DEFAULT_TIMEOUT, with_retry
 
@@ -17,7 +18,7 @@ def _build_url(base_url: str, endpoint: str) -> str:
 
 
 @dataclass(slots=True)
-class ChemblClient:
+class ChemblClient(BasePaginatedClient):
     """HTTP client providing minimal Chembl read access."""
 
     base_url: str = "https://www.ebi.ac.uk/chembl/api/data"
@@ -27,6 +28,7 @@ class ChemblClient:
     _logger: Logger = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
+        super().__post_init__()
         self._logger = get_logger(__name__).bind(client="chembl", base_url=self.base_url)
 
     def get_molecule(
@@ -40,13 +42,9 @@ class ChemblClient:
 
         endpoint = f"molecule/{chembl_id}"
         effective_timeout = timeout or self.timeout
-        request = with_retry(
-            max_tries=self.max_tries,
-            timeout=effective_timeout,
-            logger=self._logger,
-            log_event="chembl_request",
-        )(self._request_json)
-        return request(endpoint=endpoint, params=params, timeout=effective_timeout)
+        return self.request_json(
+            endpoint=endpoint, params=params, timeout=effective_timeout
+        )
 
     def list_targets(
         self,
@@ -59,16 +57,25 @@ class ChemblClient:
     ) -> dict[str, Any]:
         """Return a page of targets with optional field selection."""
 
-        if limit <= 0:
-            raise ValueError("limit must be positive")
-
-        effective_params: dict[str, Any] = {"limit": limit, "offset": offset}
+        effective_params = self._build_pagination_params(
+            params=params, limit=limit, offset=offset
+        )
         if fields:
             effective_params["fields"] = ",".join(fields)
-        if params:
-            effective_params.update(params)
 
         endpoint = "target.json"
+        effective_timeout = timeout or self.timeout
+        return self.request_json(
+            endpoint=endpoint, params=effective_params, timeout=effective_timeout
+        )
+
+    def request_json(
+        self,
+        endpoint: str,
+        *,
+        params: Mapping[str, Any] | None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
         effective_timeout = timeout or self.timeout
         request = with_retry(
             max_tries=self.max_tries,
@@ -76,7 +83,7 @@ class ChemblClient:
             logger=self._logger,
             log_event="chembl_request",
         )(self._request_json)
-        return request(endpoint=endpoint, params=effective_params, timeout=effective_timeout)
+        return request(endpoint=endpoint, params=params, timeout=effective_timeout)
 
     def _request_json(
         self,
