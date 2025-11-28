@@ -37,6 +37,9 @@ _ACCESS_DENIED_HINT = (
 )
 
 
+_REQUEST_HELPER = RateLimitedRequestMixin(limiter_name="semantic_scholar")
+
+
 def is_access_denied_error(error: str | None) -> bool:
     """Return ``True`` when ``error`` represents an access denial response."""
 
@@ -74,10 +77,9 @@ def fetch_semantic_scholar(
     """Retrieve Semantic Scholar metadata for ``pmid``."""
 
     cfg = cfg or SemanticScholarCfg()
-
     base = cfg.base.rstrip("/")
     url = f"{base}/paper/PMID:{pmid}"
-    data, error = _REQUESTER.perform_request(
+    data, error = _REQUEST_HELPER.perform_request(
         session,
         url,
         cfg,
@@ -144,10 +146,9 @@ def fetch_semantic_scholar_batch(
         return []
 
     cfg = cfg or SemanticScholarCfg()
-
     base = cfg.base.rstrip("/")
     url = f"{base}/paper/batch"
-    data, error = _REQUESTER.perform_request(
+    data, error = _REQUEST_HELPER.perform_request(
         session,
         url,
         cfg,

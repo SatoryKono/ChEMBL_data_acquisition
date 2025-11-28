@@ -82,12 +82,14 @@ class BasePaginatedClient(ABC):
 
 
 class RateLimitedRequestMixin:
+    """Provide a reusable rate-limited HTTP request helper."""
     """Mixin providing a helper for rate limited HTTP requests."""
 
     limiter_name: str | None = None
 
     def __init__(self, limiter_name: str | None = None) -> None:
-        self.limiter_name = limiter_name or self.limiter_name
+        if limiter_name is not None:
+            self.limiter_name = limiter_name
 
     def _resolve_limiter_name(self, cfg: Any) -> str:
         if self.limiter_name:
@@ -97,8 +99,8 @@ class RateLimitedRequestMixin:
     def _resolve_delay(self, cfg: Any) -> float:
         rps = getattr(cfg, "rps", None)
         if rps:
-            return 1.0 / float(rps)
-        return float(getattr(cfg, "delay", 0.0))
+            return 1.0 / rps
+        return float(getattr(cfg, "delay", 0.0) or 0.0)
 
     def perform_request(
         self,
@@ -110,22 +112,23 @@ class RateLimitedRequestMixin:
         retry_cfg: Any | None = None,
         headers: Mapping[str, str] | None = None,
         params: Mapping[str, Any] | None = None,
-        json: Any = None,
+        json: Any | None = None,
         method: str = "GET",
     ) -> tuple[dict[str, Any] | str | None, str]:
-        """Execute an HTTP request with shared rate limiting and logging."""
+        """Execute a rate-limited request using ``cfg`` settings."""
 
+        effective_limiter = limiter
         rps = getattr(cfg, "rps", None)
         burst = getattr(cfg, "burst", None)
-        effective_limiter = limiter
         if effective_limiter is None and rps:
             effective_limiter = get_limiter(self._resolve_limiter_name(cfg), rps, burst)
-
         if effective_limiter is not None:
             effective_limiter.acquire()
 
         delay = self._resolve_delay(cfg)
-        timeout = (cfg.timeout_connect, cfg.timeout_read)
+        timeout = (getattr(cfg, "timeout_connect", 10.0), getattr(cfg, "timeout_read", 10.0))
+        retries = getattr(cfg, "retries", 0)
+
         data, error = _do_request(
             session,
             url,
@@ -134,12 +137,13 @@ class RateLimitedRequestMixin:
             params=params,
             json=json,
             method=method,
-            retries=cfg.retries,
+            retries=retries,
             timeout=timeout,
             retry_cfg=retry_cfg,
         )
-
-        stage = "request_ok" if not error else "request_fail"
-        logger.debug(stage, extra={"stage": stage, "url": url})
+        if error:
+            logger.debug("request_fail", extra={"stage": "request_fail", "url": url})
+        else:
+            logger.debug("request_ok", extra={"stage": "request_ok", "url": url})
         return data, error
 

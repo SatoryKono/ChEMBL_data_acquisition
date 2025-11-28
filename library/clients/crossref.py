@@ -14,7 +14,7 @@ from .base import RateLimitedRequestMixin
 __all__ = ["fetch_crossref"]
 
 
-_REQUESTER = RateLimitedRequestMixin("crossref")
+_REQUEST_HELPER = RateLimitedRequestMixin(limiter_name="crossref")
 
 
 def fetch_crossref(
@@ -26,9 +26,10 @@ def fetch_crossref(
     retry_cfg: RetryCfg | None = None,
 ) -> tuple[dict[str, Any] | str | None, str]:
     """Request Crossref metadata for ``doi``."""
+
     base = cfg.base.rstrip("/")
     url = f"{base}/works/{quote(doi, safe='')}?mailto={quote(cfg.mailto)}"
-    return _REQUESTER.perform_request(
+    return _REQUEST_HELPER.perform_request(
         session,
         url,
         cfg,

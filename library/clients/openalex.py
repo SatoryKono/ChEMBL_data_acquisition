@@ -14,7 +14,7 @@ from .base import RateLimitedRequestMixin
 __all__ = ["fetch_openalex"]
 
 
-_REQUESTER = RateLimitedRequestMixin("openalex")
+_REQUEST_HELPER = RateLimitedRequestMixin(limiter_name="openalex")
 
 
 def fetch_openalex(
@@ -26,9 +26,10 @@ def fetch_openalex(
     retry_cfg: RetryCfg | None = None,
 ) -> tuple[dict[str, Any] | str | None, str]:
     """Request OpenAlex metadata for ``pmid``."""
+
     base = cfg.base.rstrip("/")
     url = f"{base}/works/pmid:{pmid}?mailto={quote(cfg.mailto)}"
-    return _REQUESTER.perform_request(
+    return _REQUEST_HELPER.perform_request(
         session,
         url,
         cfg,
