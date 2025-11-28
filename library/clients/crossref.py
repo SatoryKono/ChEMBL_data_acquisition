@@ -7,9 +7,9 @@ from urllib.parse import quote
 
 import requests
 
-from ..common.rate_limiter import RateLimiter, get_limiter
+from ..common.rate_limiter import RateLimiter
 from ..config.models import CrossRefCfg, RetryCfg
-from .pubmed import _do_request
+from .base import RateLimitedRequestMixin
 
 __all__ = ["fetch_crossref"]
 
@@ -24,21 +24,12 @@ def fetch_crossref(
 ) -> tuple[dict[str, Any] | str | None, str]:
     """Request Crossref metadata for ``doi``."""
 
-    if limiter is None:
-        limiter = get_limiter("crossref", cfg.rps, cfg.burst)
-    limiter.acquire()
-
-    delay = 1 / cfg.rps if cfg.rps else 0
     base = cfg.base.rstrip("/")
     url = f"{base}/works/{quote(doi, safe='')}?mailto={quote(cfg.mailto)}"
-    timeout = (cfg.timeout_connect, cfg.timeout_read)
-
-    data, error = _do_request(
+    return RateLimitedRequestMixin.perform_request(
         session,
         url,
-        delay,
-        retries=cfg.retries,
-        timeout=timeout,
+        cfg,
+        limiter=limiter,
         retry_cfg=retry_cfg,
     )
-    return data, error
