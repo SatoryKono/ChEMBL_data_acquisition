@@ -83,6 +83,7 @@ class BasePaginatedClient(ABC):
 
 class RateLimitedRequestMixin:
     """Provide a reusable rate-limited HTTP request helper."""
+    """Mixin providing a helper for rate limited HTTP requests."""
 
     limiter_name: str | None = None
 

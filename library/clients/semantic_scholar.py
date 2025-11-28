@@ -26,6 +26,8 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
+_REQUESTER = RateLimitedRequestMixin("semantic_scholar")
+
 _SEMANTIC_SCHOLAR_FIELDS = "publicationTypes,externalIds,paperId,venue"
 _SEMANTIC_SCHOLAR_HEADERS = {"Accept": "application/json"}
 
