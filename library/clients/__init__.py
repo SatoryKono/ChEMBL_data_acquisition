@@ -22,27 +22,27 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from .base import BasePaginatedClient
-from .chembl import ChemblClient, _chunked
-from .crossref import fetch_crossref
-from .iuphar import (
+from library.chembl.clients.chembl import ChemblClient, _chunked
+from library.crossref.clients.crossref import fetch_crossref
+from library.iuphar.clients.iuphar import (
     download_gtp_to_hgnc_mapping,
     download_gtp_to_uniprot_mapping,
 )
-from .iuphar import (
+from library.iuphar.clients.iuphar import (
     init_session as init_iuphar_session,
 )
-from .iuphar import (
+from library.iuphar.clients.iuphar import (
     load_families as load_iuphar_families,
 )
-from .iuphar import (
+from library.iuphar.clients.iuphar import (
     load_targets as load_iuphar_targets,
 )
-from .iuphar import (
+from library.iuphar.clients.iuphar import (
     query_gene_symbol as query_iuphar_gene_symbol,
 )
-from .openalex import fetch_openalex
-from .pubmed import PubMedClient
-from .semantic_scholar import (
+from library.openalex.clients.openalex import fetch_openalex
+from library.pubmed.clients.pubmed import PubMedClient
+from library.semantic_scholar.clients.semantic_scholar import (
     fetch_semantic_scholar,
     fetch_semantic_scholar_batch,
 )

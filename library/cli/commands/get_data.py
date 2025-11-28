@@ -2061,7 +2061,7 @@ def _cleanup_failed_step(
 def _warm_parent_catalog(cfg: PipelineRunConfig, base_config: Config) -> None:
     """Ensure the molecule parent catalogue cache exists before test item runs."""
 
-    from library.integration.molecule_catalog import load_parent_catalog
+    from library.chembl.integration.molecule_catalog import load_parent_catalog
 
     start_time = time.perf_counter()
     chembl_sources = base_config.sources.chembl

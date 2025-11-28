@@ -14,9 +14,9 @@ import requests
 
 from library.common.log import logger
 from library.config import ApiCfg, IoCfg, MoleculeCatalogCfg
-from library.integration import molecule_catalog
-from library.integration.chembl_client import ChemblClient
-from library.integration.molecule_catalog import (
+from library.chembl.integration import molecule_catalog
+from library.chembl.integration.chembl_client import ChemblClient
+from library.chembl.integration.molecule_catalog import (
     load_parent_catalog,
     query_parent_catalog,
     update_parent_catalog_cache,

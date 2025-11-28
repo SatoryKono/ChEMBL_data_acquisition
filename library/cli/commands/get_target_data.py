@@ -61,8 +61,8 @@ from library.config import (
     Config,
     _serialize_paths,
 )
-from library.integration import chembl_library as cl
-from library.integration import iuphar_library as ii
+from library.chembl.integration import chembl_library as cl
+from library.iuphar.integration import iuphar_library as ii
 from library.integration import uniprot_library as uu
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.orchestration import ETLContext
@@ -3801,7 +3801,7 @@ def merge_results(
         ``uniprot_id``.
     cfg : Config
         Application configuration providing classifier settings.
-    classifier : library.integration.iuphar_library.IUPHARClassifier, optional
+    classifier : library.iuphar.integration.iuphar_library.IUPHARClassifier, optional
         Pre-initialised classifier. When ``None`` a classifier is created from
         ``cfg``.
 

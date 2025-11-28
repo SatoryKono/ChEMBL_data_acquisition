@@ -14,18 +14,10 @@ from xml.etree import ElementTree as ET
 import pandas as pd
 import requests
 
-from ..clients import (
-    crossref as crossref_client,
-)
-from ..clients import (
-    openalex as openalex_client,
-)
-from ..clients import (
-    pubmed as pubmed_client,
-)
-from ..clients import (
-    semantic_scholar as semantic_client,
-)
+from library.crossref.clients import crossref as crossref_client
+from library.openalex.clients import openalex as openalex_client
+from library.semantic_scholar.clients import semantic_scholar as semantic_client
+from .clients import pubmed as pubmed_client
 from ..config import (
     CrossRefCfg,
     OpenAlexCfg,

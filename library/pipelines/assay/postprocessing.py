@@ -31,7 +31,7 @@ def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:
     Parameters
     ----------
     df:
-        DataFrame produced by :func:`library.integration.chembl_library.get_assays`.
+        DataFrame produced by :func:`library.chembl.integration.chembl_library.get_assays`.
 
     Returns
     -------

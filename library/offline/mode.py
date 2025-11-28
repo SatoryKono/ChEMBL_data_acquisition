@@ -176,7 +176,7 @@ class OfflineFixtures:
 
 @contextlib.contextmanager
 def patch_activity(fixtures: OfflineFixtures) -> Iterator[None]:
-    from library.integration import chembl_library as cl
+    from library.chembl.integration import chembl_library as cl
 
     def _offline_get_activities(ids: Iterable[str], **_: object) -> pd.DataFrame:
         return fixtures.activities(ids)
@@ -196,7 +196,7 @@ def patch_activity(fixtures: OfflineFixtures) -> Iterator[None]:
 
 @contextlib.contextmanager
 def patch_assay(fixtures: OfflineFixtures) -> Iterator[None]:
-    from library.integration import chembl_library as cl
+    from library.chembl.integration import chembl_library as cl
 
     def _offline_get_assays(ids: Iterable[str], **_: object) -> pd.DataFrame:
         return fixtures.assays(ids)
@@ -207,7 +207,7 @@ def patch_assay(fixtures: OfflineFixtures) -> Iterator[None]:
 
 @contextlib.contextmanager
 def patch_target(fixtures: OfflineFixtures) -> Iterator[None]:
-    from library.integration import chembl_library as cl
+    from library.chembl.integration import chembl_library as cl
 
     def _offline_iter_batches(
         ids: Iterable[str],

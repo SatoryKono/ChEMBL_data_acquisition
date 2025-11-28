@@ -44,7 +44,7 @@ from library.config import (
     TestitemMoleculeEnrichmentCfg,
     _serialize_paths,
 )
-from library.integration.chembl_client import ChemblClient
+from library.chembl.integration.chembl_client import ChemblClient
 from library.orchestration import ETLContext
 from library.pipelines.assay.chembl_assay import TESTITEM_STRUCTURE_COLUMNS
 from library.qa.reporting import build_table_quality_hook
@@ -71,7 +71,7 @@ except ImportError:  # pragma: no cover - fallback for partial initialisation
 def _chembl_library() -> Any:
     """Return the lazily imported ChEMBL integration module."""
 
-    from library.integration import chembl_library
+    from library.chembl.integration import chembl_library
 
     return chembl_library
 
@@ -882,7 +882,7 @@ class StageWatchdog:
 def _load_chembl_library():
     """Return the ChemBL integration module without creating import cycles."""
 
-    from library.integration import chembl_library as chembl_lib
+    from library.chembl.integration import chembl_library as chembl_lib
 
     return chembl_lib
 

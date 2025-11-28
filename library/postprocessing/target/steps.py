@@ -9,8 +9,8 @@ from typing import Any
 import pandas as pd
 import requests
 
-from library.clients.chembl_client import ChemblClient
-from library.clients.gtopdb_client import GtoPdbClient
+from library.chembl.clients.chembl_client import ChemblClient
+from library.gtopdb.clients.gtopdb_client import GtoPdbClient
 from library.clients.uniprot_client import UniProtClient
 from library.schemas.target_schema import TargetSchema
 from library.utils.logging import get_logger

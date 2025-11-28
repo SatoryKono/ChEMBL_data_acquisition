@@ -1,7 +1,7 @@
 """Semantic Scholar query utilities.
 
 This module provides a thin processing wrapper around
-``library.clients.semantic_scholar``.  The client encapsulates HTTP concerns,
+``library.semantic_scholar.clients.semantic_scholar``.  The client encapsulates HTTP concerns,
 while this module offers a semantic namespace for higher-level pipelines.
 """
 

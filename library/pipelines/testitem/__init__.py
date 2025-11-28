@@ -21,8 +21,8 @@ from library.common.csv_utils import (
 )
 from library.common.log import logger  # noqa: F401
 from library.config import Config
-from library.integration import pubchem_library as pl  # noqa: F401
-from library.integration.chembl_client import ChemblClient  # noqa: F401
+from library.pubchem.integration import pubchem_library as pl  # noqa: F401
+from library.chembl.integration.chembl_client import ChemblClient  # noqa: F401
 from library.metadata import file_sha256, write_meta_yaml  # noqa: F401
 from library.pipelines.assay.chembl_assay import TESTITEM_PUBCHEM_COLUMNS  # noqa: F401
 from library.pipelines.common import PipelineRunResult

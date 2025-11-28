@@ -1,6 +1,6 @@
 """PubMed related helper modules."""
 
-from ..clients.pubmed import PubMedClient
+from .clients.pubmed import PubMedClient
 from .aggregation import merge_records, print_results
 from .parsing import (
     EMPTY_PUBMED,

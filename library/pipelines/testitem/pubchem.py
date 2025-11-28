@@ -30,11 +30,11 @@ from pandas.api import types as pd_types
 
 from library.common.log import logger
 from library.config import ApiCfg, PubChemCfg, RetryCfg
-from library.integration.chembl_client import ChemblClient
+from library.chembl.integration.chembl_client import ChemblClient
 from library.utils.atomic import open_atomic
 
 if TYPE_CHECKING:
-    from library.integration.pubchem_library import Properties, PubChemResolution
+    from library.pubchem.integration.pubchem_library import Properties, PubChemResolution
 
 UTC = timezone.utc  # noqa: UP017
 ENCODING_UTF8 = "utf-8"
@@ -117,7 +117,7 @@ def _service_unavailable_log_context(
 def _load_chembl_library():
     """Return the ChemBL integration module without triggering circular imports."""
 
-    from library.integration import chembl_library as chembl_lib
+    from library.chembl.integration import chembl_library as chembl_lib
 
     return chembl_lib
 
@@ -126,13 +126,13 @@ def _load_chembl_library():
 def _load_pubchem_library():
     """Return the PubChem integration module without triggering circular imports."""
 
-    from library.integration import pubchem_library as pubchem_lib
+    from library.pubchem.integration import pubchem_library as pubchem_lib
 
     return pubchem_lib
 
 
 class _PubChemLibraryProxy:
-    """Proxy exposing ``library.integration.pubchem_library`` lazily."""
+    """Proxy exposing ``library.pubchem.integration.pubchem_library`` lazily."""
 
     def __getattr__(self, name: str) -> Any:
         return getattr(_load_pubchem_library(), name)

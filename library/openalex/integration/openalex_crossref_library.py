@@ -1,6 +1,6 @@
 """OpenAlex and CrossRef query helpers.
 
-These functions proxy to implementations in :mod:`library.integration.pubmed_library` but
+These functions proxy to implementations in :mod:`library.pubmed.integration.pubmed_library` but
 are exposed in a separate module to provide a clear separation of concerns.
 """
 
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import requests
 
-from ..clients import crossref as crossref_client
+from library.crossref.clients import crossref as crossref_client
 from ..clients import openalex as openalex_client
 from ..common.rate_limiter import RateLimiter
 from ..config import CrossRefCfg, OpenAlexCfg, RetryCfg

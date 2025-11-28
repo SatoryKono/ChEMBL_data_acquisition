@@ -38,7 +38,7 @@ from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_dela
 from library.common.log import logger
 from library.common.run_context import get_current as get_run_context
 from library.config import Config, _serialize_paths
-from library.integration import chembl_library as cl
+from library.chembl.integration import chembl_library as cl
 from library.orchestration import ETLContext
 from library.pipelines.assay import AssayPipelineOptions
 from library.pipelines.assay.chembl_assay import ASSAY_COLUMNS, MAX_ASSAY_CHUNK_SIZE

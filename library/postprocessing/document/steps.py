@@ -13,7 +13,7 @@ import pandas as pd
 from requests import Session
 
 from library.clients import ChemblClient
-from library.clients import crossref as crossref_client
+from library.crossref.clients import crossref as crossref_client
 from library.clients import openalex as openalex_client
 from library.common.rate_limiter import RateLimiter, get_limiter
 from library.config import Config, crossref_session, openalex_session

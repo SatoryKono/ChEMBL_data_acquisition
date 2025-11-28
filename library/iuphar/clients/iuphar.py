@@ -3,7 +3,7 @@
 The helpers in this module provide a thin client layer that encapsulates all
 network and CSV loading concerns for the rest of the IUPHAR integration.  They
 mirror the retry, rate limiting and column validation behaviour from the
-original :mod:`library.integration.iuphar_library` implementation while keeping the data
+original :mod:`library.iuphar.integration.iuphar_library` implementation while keeping the data
 transformation logic decoupled from IO primitives.
 """
 

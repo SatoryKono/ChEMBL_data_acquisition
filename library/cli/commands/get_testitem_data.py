@@ -36,9 +36,9 @@ from library.config import (
     MoleculeCatalogCfg,
     PubChemCfg,
 )
-from library.integration import molecule_catalog
-from library.integration import pubchem_library as pl
-from library.integration.chembl_client import ChemblClient
+from library.chembl.integration import molecule_catalog
+from library.pubchem.integration import pubchem_library as pl
+from library.chembl.integration.chembl_client import ChemblClient
 from library.pipelines import testitem as pipeline
 from library.pipelines.testitem import (
     _DEFAULT_CATALOG_CFG,
@@ -502,7 +502,7 @@ def add_pubchem_data(
 
     Delegates to :func:`library.pipelines.testitem.add_pubchem_data` while
     relaxing the ``resolution_cache`` type to align with
-    :func:`library.integration.pubchem_library.resolve_pubchem_record`.
+    :func:`library.pubchem.integration.pubchem_library.resolve_pubchem_record`.
     """
 
     return pipeline.add_pubchem_data(

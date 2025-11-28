@@ -1,7 +1,7 @@
 """Command line interface for retrieving document metadata from external sources.
 
-The tool integrates :mod:`library.integration.pubmed_library` and
-:mod:`library.integration.chembl_library` to collect information about publications from
+The tool integrates :mod:`library.pubmed.integration.pubmed_library` and
+:mod:`library.chembl.integration.chembl_library` to collect information about publications from
 several public APIs.  The interface mirrors :mod:`scripts.get_target_data` and exposes a
 single entry point configured via ``--mode``:
 
@@ -74,7 +74,7 @@ from library.config import (
     _serialize_paths,
 )
 from library.document_defaults import ALL_DEFAULTS, CHEMBL_DEFAULTS, PUBMED_DEFAULTS
-from library.integration import chembl_library as cl
+from library.chembl.integration import chembl_library as cl
 from library.orchestration import ETLContext
 from library.pipelines.common import add_pipeline_metadata
 from library.pipelines.common.metadata import get_pipeline_version

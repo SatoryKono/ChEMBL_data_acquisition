@@ -54,13 +54,13 @@ from library.cli.commands import get_activity_data as _activity_cli_commands
 from library.cli.logging import CLILoggingContext
 from library.cli_utils import PipelineError, resolve_invocation
 from library.cli_utils import run_cli_command as _run_cli_command
-from library.clients.chembl import ChemblClient
+from library.chembl.clients.chembl import ChemblClient
 from library.common.csv_utils import write_csv_chunks_deterministic
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 from library.common.log import logger
 from library.common.run_context import get_current as get_run_context
 from library.config import Config, _serialize_paths
-from library.integration import chembl_library as cl
+from library.chembl.integration import chembl_library as cl
 from library.metadata import (
     file_sha256 as _metadata_file_sha256,
 )

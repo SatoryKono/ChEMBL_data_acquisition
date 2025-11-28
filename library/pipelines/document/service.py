@@ -22,7 +22,9 @@ import pandas as pd
 import requests
 
 from library.clients import _chunked
-from library.clients.semantic_scholar import is_access_denied_error
+from library.semantic_scholar.clients.semantic_scholar import (
+    is_access_denied_error,
+)
 from library.common.log import logger
 from library.common.rate_limiter import RateLimiter, get_global_limiter, get_limiter
 from library.config import (
@@ -35,9 +37,9 @@ from library.config import (
     openalex_session,
     session_with_retry,
 )
-from library.integration import openalex_crossref_library as ocl
-from library.integration import pubmed_library as pl
-from library.integration import semantic_scholar_library as ssl
+from library.openalex.integration import openalex_crossref_library as ocl
+from library.pubmed.integration import pubmed_library as pl
+from library.semantic_scholar.integration import semantic_scholar_library as ssl
 from library.pipelines.common import PipelineRunResult
 from library.pipelines.document.pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,

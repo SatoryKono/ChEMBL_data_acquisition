@@ -1,4 +1,4 @@
-"""Backward-compatible wrapper for :mod:`library.clients.chembl`."""
+"""Backward-compatible wrapper for :mod:`library.chembl.clients.chembl`."""
 
 from __future__ import annotations
 
