@@ -1,8 +1,5 @@
-from .enricher_base import OptionsAwareApiClientImpl
-from .providers import BaseDataProviderABC, PagedDataProviderABC
+"""Унифицированные клиенты внешних источников данных."""
 
-__all__ = [
-    "BaseDataProviderABC",
-    "OptionsAwareApiClientImpl",
-    "PagedDataProviderABC",
-]
+from bioetl.clients.factory import create_client
+
+__all__ = ["create_client"]

@@ -1,0 +1,8 @@
+base_url: "https://api.openalex.org"
+routes:
+  works: "/works"
+  authors: "/authors"
+pagination:
+  page_key: "results"
+  next_key: "next"
+  page_param: "page"

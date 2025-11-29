@@ -1,0 +1,8 @@
+base_url: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+routes:
+  search: "/esearch.fcgi"
+  fetch: "/efetch.fcgi"
+pagination:
+  page_key: "result"
+  next_key: "next"
+  page_param: "page"

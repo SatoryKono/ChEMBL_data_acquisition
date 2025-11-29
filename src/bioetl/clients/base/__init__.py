@@ -1,32 +1,29 @@
-from .client import ClientRequest, ExternalDataClient, Page, Pagination, Record, RequestContext
-from .http import BaseHttpClientABC
-from .interfaces import (
-    BaseApiClient,
-    DataProviderError,
-    DataProviderProtocol,
-    LoggingTransportAdapter,
-    PaginationParams,
-    TransportError,
+"""Базовые абстракции клиентской подсистемы."""
+
+from bioetl.clients.base.client_abc import (
+    BaseExternalDataClient,
+    ClientRequest,
+    ConfiguredExternalDataClient,
+    ExternalDataClient,
+    Page,
+    Record,
+    RequestContext,
 )
-from .normalizers import INormalizer, IdentityNormalizerImpl
-from .pagination import PaginationStrategyABC, TransportPaginationStrategyImpl
+from bioetl.clients.base.http_backend import BaseHttpBackend, RequestsHttpBackend
+from bioetl.clients.base.types import LoggingTransportAdapter, PaginationConfig, DataProviderError, TransportError
 
 __all__ = [
+    "BaseExternalDataClient",
     "ClientRequest",
-    "BaseApiClient",
-    "BaseHttpClientABC",
+    "ConfiguredExternalDataClient",
     "DataProviderError",
-    "DataProviderProtocol",
     "ExternalDataClient",
     "LoggingTransportAdapter",
-    "INormalizer",
-    "IdentityNormalizerImpl",
-    "Pagination",
     "Page",
-    "PaginationParams",
-    "PaginationStrategyABC",
-    "RequestContext",
+    "PaginationConfig",
     "Record",
-    "TransportPaginationStrategyImpl",
+    "RequestContext",
+    "RequestsHttpBackend",
+    "BaseHttpBackend",
     "TransportError",
 ]
