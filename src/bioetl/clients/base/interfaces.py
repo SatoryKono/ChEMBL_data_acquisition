@@ -8,11 +8,34 @@ class TransportError(RuntimeError):
     """Error raised when an HTTP transport operation fails."""
 
 
+class DataProviderError(RuntimeError):
+    """Error raised when data provider operations fail."""
+
+
 @dataclass(slots=True)
 class RequestContext:
     """Contextual data propagated through transport calls."""
 
     options: Mapping[str, Any] | None = None
+
+
+@dataclass(slots=True)
+class Page:
+    """Page payload produced by paginated providers."""
+
+    items: list[Any]
+    next_cursor: str | None = None
+    raw: Any | None = None
+
+
+@dataclass(slots=True)
+class PaginationParams:
+    """Pagination configuration passed to provider implementations."""
+
+    page_size: int | None = None
+    page_key: str | None = "items"
+    next_key: str | None = "next"
+    page_param: str | None = "page"
 
 
 class LoggingTransportAdapter:
