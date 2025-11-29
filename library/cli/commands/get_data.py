@@ -68,10 +68,15 @@ from library.config import (
 )
 from library.io.paths import derive_output_labels
 from library.orchestration import ETLContext
+from library.orchestration.runner import (
+    failure_sentinel_path,
+    prepare_step_paths,
+    resolve_consumed_artifact_path,
+    run_prepared_steps,
+)
 from library.orchestration.workflow import (
     PreparedPipelineStep,
     StepExecutionResult,
-    execute_workflow,
     temporary_output_path,
 )
 from library.pipelines.activity import (
@@ -697,17 +702,6 @@ def _flag_to_bool(value: object) -> bool:
     return text in _TRUE_FLAG_VALUES
 
 
-def _resolve_consumed_artifact_path(cfg: PipelineRunConfig, artefact: str) -> Path:
-    """Return the filesystem path associated with a consumed artefact name."""
-
-    candidate = Path(artefact)
-    if candidate.is_absolute():
-        return candidate
-    if candidate.suffix:
-        return cfg.output_dir / candidate
-    return cfg.output_dir / f"output.{candidate.name}_{cfg.date_prefix}.csv"
-
-
 def _parse_overrides(
     values: Sequence[str] | None,
     *,
@@ -1183,13 +1177,6 @@ def _prepare_config(
         force_pubchem=_flag_to_bool(getattr(args, "force_pubchem", False)),
     )
 
-
-def _failure_sentinel_path(output_path: Path) -> Path:
-    """Return the sentinel path recorded when a pipeline step fails."""
-
-    return output_path.with_name(f"{output_path.name}.failed")
-
-
 def _coerce_exit_code(value: object) -> int:
     """Translate ``SystemExit.code`` values into integer exit codes."""
 
@@ -1225,7 +1212,7 @@ def _discover_sidecars(
 
     final_dir = final_output.parent
     working_dir = working_output.parent
-    sentinel_name = _failure_sentinel_path(final_output).name
+    sentinel_name = failure_sentinel_path(final_output).name
     patterns = {
         final_output.name,
         final_output.with_suffix("").name,
@@ -2263,8 +2250,7 @@ def _pending_manifest_entry(
 ) -> dict[str, Any]:
     """Return a manifest entry for ``step`` that has not been executed."""
 
-    final_output = step.expected_output(cfg)
-    working_output = temporary_output_path(final_output)
+    paths = prepare_step_paths(step, cfg)
     entry: dict[str, Any] = {
         "name": step.name,
         "status": "pending",
@@ -2274,8 +2260,8 @@ def _pending_manifest_entry(
         "started_at": None,
         "completed_at": None,
         "duration_sec": None,
-        "output": _describe_file(final_output),
-        "sidecars": _describe_sidecars(final_output, working_output),
+        "output": _describe_file(paths.final_output),
+        "sidecars": _describe_sidecars(paths.final_output, paths.working_output),
     }
     return entry
 
@@ -2572,7 +2558,7 @@ def run_pipeline(
         ) -> StepExecutionResult:
             nonlocal overall_status, failed_index, last_executed_index
 
-            sentinel_path = _failure_sentinel_path(final_output)
+            sentinel_path = failure_sentinel_path(final_output)
             entry["started_at"] = datetime.now(UTC).isoformat()
             step_started_clock = time.perf_counter()
             _LOGGER.info("step_start", step=step.name)
@@ -2606,7 +2592,7 @@ def run_pipeline(
             required_external = external_requirements.get(step.name, ())
             if required_external:
                 for artefact in required_external:
-                    candidate = _resolve_consumed_artifact_path(current_cfg, artefact)
+                    candidate = resolve_consumed_artifact_path(current_cfg, artefact)
                     if not candidate.exists():
                         missing_external.append((artefact, candidate))
             if missing_external:
@@ -2931,7 +2917,7 @@ def run_pipeline(
         manifest_entries.append(entry)
         prepared_steps.append(_prepare_step(step, entry, index))
 
-    for _ in execute_workflow(cfg, prepared_steps):
+    for _ in run_prepared_steps(cfg, prepared_steps):
         pass
 
     if failed_index is not None:
