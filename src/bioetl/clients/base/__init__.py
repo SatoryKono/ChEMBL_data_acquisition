@@ -8,6 +8,7 @@ from .interfaces import (
     RequestContext,
     TransportError,
 )
+from .normalizers import INormalizer, IdentityNormalizerImpl
 from .pagination import PaginationStrategyABC, TransportPaginationStrategyImpl
 
 __all__ = [
@@ -15,6 +16,8 @@ __all__ = [
     "BaseHttpClientABC",
     "DataProviderError",
     "LoggingTransportAdapter",
+    "INormalizer",
+    "IdentityNormalizerImpl",
     "Page",
     "PaginationParams",
     "PaginationStrategyABC",
