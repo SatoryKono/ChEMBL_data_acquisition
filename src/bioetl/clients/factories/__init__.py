@@ -7,6 +7,11 @@ from .pubmed_client_factory_impl import PubMedClientFactoryImpl
 __all__ = [
     "ClientFactory",
     "PubMedClientFactoryImpl",
+from .openalex_client_factory_impl import OpenAlexClientFactoryImpl
+
+__all__ = [
+    "ClientFactory",
+    "OpenAlexClientFactoryImpl",
     "build_normalizer",
     "build_transport",
 ]
