@@ -3,6 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterator, Mapping, Protocol
 
+from bioetl.clients.base.client import (
+    ClientRequest,
+    ExternalDataClient,
+    Page,
+    Record,
+    RequestContext,
+)
+
 
 class TransportError(RuntimeError):
     """Error raised when an HTTP transport operation fails."""
@@ -10,22 +18,6 @@ class TransportError(RuntimeError):
 
 class DataProviderError(RuntimeError):
     """Error raised when data provider operations fail."""
-
-
-@dataclass(slots=True)
-class RequestContext:
-    """Contextual data propagated through transport calls."""
-
-    options: Mapping[str, Any] | None = None
-
-
-@dataclass(slots=True)
-class Page:
-    """Page payload produced by paginated providers."""
-
-    items: list[Any]
-    next_cursor: str | None = None
-    raw: Any | None = None
 
 
 @dataclass(slots=True)
@@ -76,6 +68,25 @@ class DataProviderProtocol(Protocol):
         page_size: int | None = None,
         context: RequestContext | None = None,
     ) -> Iterator[Mapping[str, Any]]:
+        ...
+
+    def metadata(self) -> Mapping[str, Any]:
+        ...
+
+    def close(self) -> None:
+        ...
+
+
+class ClientProtocol(ExternalDataClient, Protocol):
+    """Backward-compatible alias for the unified ExternalDataClient contract."""
+
+    def fetch_one(self, request: ClientRequest) -> Record | None:
+        ...
+
+    def fetch_many(self, request: ClientRequest) -> Iterator[Record]:
+        ...
+
+    def iter_pages(self, request: ClientRequest) -> Iterator[Page]:
         ...
 
     def metadata(self) -> Mapping[str, Any]:
