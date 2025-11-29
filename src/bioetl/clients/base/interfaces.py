@@ -48,6 +48,43 @@ class LoggingTransportAdapter:
         self.current_context = context
 
 
+class DataProviderProtocol(Protocol):
+    """Protocol describing the expected data provider surface."""
+
+    def fetch_one(
+        self,
+        identifier: str | Mapping[str, Any],
+        *,
+        params: Mapping[str, Any] | None = None,
+        context: RequestContext | None = None,
+    ) -> Iterator[Mapping[str, Any]]:
+        ...
+
+    def iter_pages(
+        self,
+        *,
+        params: Mapping[str, Any] | None = None,
+        page_size: int | None = None,
+        context: RequestContext | None = None,
+    ) -> Iterator[Page]:
+        ...
+
+    def fetch_many(
+        self,
+        *,
+        params: Mapping[str, Any] | None = None,
+        page_size: int | None = None,
+        context: RequestContext | None = None,
+    ) -> Iterator[Mapping[str, Any]]:
+        ...
+
+    def metadata(self) -> Mapping[str, Any]:
+        ...
+
+    def close(self) -> None:
+        ...
+
+
 class BaseApiClient(Protocol):
     """Protocol describing the expected Base API client surface."""
 

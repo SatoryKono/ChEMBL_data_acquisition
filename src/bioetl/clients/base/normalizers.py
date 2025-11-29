@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, Iterator, Mapping, Protocol
+from typing import Any, Iterable, Iterator, Mapping, Protocol, runtime_checkable
 
 
+@runtime_checkable
 class INormalizer(Protocol):
     """Интерфейс нормализаторов записей."""
 

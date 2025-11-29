@@ -2,6 +2,7 @@ from .http import BaseHttpClientABC
 from .interfaces import (
     BaseApiClient,
     DataProviderError,
+    DataProviderProtocol,
     LoggingTransportAdapter,
     Page,
     PaginationParams,
@@ -15,6 +16,7 @@ __all__ = [
     "BaseApiClient",
     "BaseHttpClientABC",
     "DataProviderError",
+    "DataProviderProtocol",
     "LoggingTransportAdapter",
     "INormalizer",
     "IdentityNormalizerImpl",
