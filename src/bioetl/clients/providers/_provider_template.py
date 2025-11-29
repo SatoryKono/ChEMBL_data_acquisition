@@ -12,7 +12,7 @@ from bioetl.clients.base import (
     RequestContext,
     TransportPaginationStrategyImpl,
 )
-from bioetl.clients.providers import PagedDataProviderABC
+from bioetl.clients.providers.base_provider import PagedDataProviderABC
 
 
 class DataProviderProtocol(Protocol):
