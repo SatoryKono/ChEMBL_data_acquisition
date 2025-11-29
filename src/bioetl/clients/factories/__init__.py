@@ -2,6 +2,7 @@
 
 from .client_factory import ClientFactory
 from .helpers import build_normalizer, build_transport
+from .uniprot_client_factory_impl import UniprotClientFactoryImpl
 from .semantic_scholar_client_factory_impl import SemanticScholarClientFactoryImpl
 from .pubmed_client_factory_impl import PubMedClientFactoryImpl
 from .pubchem_client_factory_impl import PubChemClientFactoryImpl
@@ -13,6 +14,7 @@ __all__ = [
     "PubMedClientFactoryImpl",  
     "build_normalizer",
     "build_transport",
+    "UniprotClientFactoryImpl",
     "SemanticScholarClientFactoryImpl",
     "PubChemClientFactoryImpl",
 ]

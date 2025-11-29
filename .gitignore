@@ -48,6 +48,8 @@ data/cache/*.tmp
 data/cache/*.bak
 data/cache/*.pkl
 uniprot/
+!src/bioetl/clients/providers/uniprot/
+!src/bioetl/clients/providers/uniprot/**
 # Hypothesis state directory
 .hypothesis/
 
