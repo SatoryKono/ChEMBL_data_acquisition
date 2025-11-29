@@ -9,6 +9,7 @@ from .interfaces import (
     TransportError,
 )
 from .normalizers import INormalizer, IdentityNormalizerImpl
+from .pagination import PaginationStrategyABC, TransportPaginationStrategyImpl
 
 __all__ = [
     "BaseApiClient",
@@ -19,6 +20,8 @@ __all__ = [
     "IdentityNormalizerImpl",
     "Page",
     "PaginationParams",
+    "PaginationStrategyABC",
     "RequestContext",
+    "TransportPaginationStrategyImpl",
     "TransportError",
 ]
