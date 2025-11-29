@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
+
 import unicodedata
 from collections.abc import Iterable
 
@@ -74,6 +76,86 @@ def harmonize_document_titles(
     if canonical_column in harmonized.columns and canonical_column != canonical_key:
         harmonized = harmonized.drop(columns=[canonical_column])
     return harmonized
+
+
+_DOC_TYPE_CANDIDATE_COLUMNS = (
+    "doc_type",
+    "publication_class",
+    "crossref.type",
+    "crossref.type_crossref",
+    "openalex.typecrossref",
+    "openalex.type_crossref",
+    "openalex.type",
+    "pubmed.publicationtype",
+    "pubmed.publication_type",
+    "pubmed.publication_type_list",
+)
+
+NAType = type(pd.NA)
+
+
+def _normalise_doc_type_value(value: object) -> str | NAType:
+    """Return the first non-empty textual representation for ``value``."""
+
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned or pd.NA
+
+    if value is None:
+        return pd.NA
+
+    if isinstance(value, dict):
+        for item in value.values():
+            candidate = _normalise_doc_type_value(item)
+            if candidate is not pd.NA:
+                return candidate
+        return pd.NA
+
+    if isinstance(value, Iterable) and not isinstance(
+        value, (bytes, bytearray)
+    ):
+        for item in value:
+            candidate = _normalise_doc_type_value(item)
+            if candidate is not pd.NA:
+                return candidate
+        return pd.NA
+
+    if pd.isna(value):  # type: ignore[arg-type]
+        return pd.NA
+
+    text = str(value).strip()
+    return text or pd.NA
+
+
+def derive_document_type(
+    df: pd.DataFrame,
+    *,
+    candidate_columns: Sequence[str] | None = None,
+) -> pd.DataFrame:
+    """Populate ``doc_type`` by coalescing values from provider-specific fields."""
+
+    candidates = tuple(candidate_columns or _DOC_TYPE_CANDIDATE_COLUMNS)
+    derived = df.copy(deep=True)
+
+    doc_type = pd.Series(pd.NA, index=derived.index, dtype="string")
+    for column in candidates:
+        if column not in derived.columns:
+            continue
+        source = derived[column]
+        if isinstance(source, pd.DataFrame):
+            continue
+
+        coerced = pd.Series(
+            (_normalise_doc_type_value(value) for value in source),
+            index=source.index,
+            dtype="string",
+        )
+        doc_type = doc_type.fillna(coerced)
+        if not doc_type.isna().any():
+            break
+
+    derived["doc_type"] = doc_type
+    return derived
 
 
 def normalize_document_fields(
@@ -315,6 +397,7 @@ def _resolve_pipeline_version(override: str | None) -> str:
 __all__ = [
     "PIPELINE_CONFIG",
     "PIPELINE_STEPS",
+    "derive_document_type",
     "finalize_document_records",
     "harmonize_document_titles",
     "normalize_document_fields",

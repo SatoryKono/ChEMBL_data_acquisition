@@ -214,3 +214,43 @@ def test_make_document_postprocessing__resolves_pipeline_version_from_defaults(
     report_path = output_path.parent / "documents.postprocess.report.json"
     payload = json.loads(report_path.read_text(encoding="utf-8"))
     assert payload["metrics"]["pipeline_version"] == "defaults-override"
+
+
+def test_make_document_postprocessing__populates_doc_type_from_candidates(
+    tmp_path, monkeypatch
+):
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("CHEMBL_POSTPROCESS_LOG_DIR", str(log_dir))
+
+    input_path = tmp_path / "documents_raw.csv"
+    df = pd.DataFrame(
+        {
+            "document_chembl_id": [
+                "CHEMBL_DOC10",
+                "CHEMBL_DOC11",
+                "CHEMBL_DOC12",
+            ],
+            "title": [
+                "From Publication Class",
+                "From Crossref",
+                "From OpenAlex",
+            ],
+            "publication_class": ["Journal Article", pd.NA, pd.NA],
+            "crossref.type": [pd.NA, "proceedings-article", pd.NA],
+            "openalex.typecrossref": [pd.NA, pd.NA, "dataset"],
+            "pubmed.publicationtype": [pd.NA, pd.NA, pd.NA],
+            "year": [2022, 2021, 2020],
+        }
+    )
+    df.to_csv(input_path, index=False)
+
+    output_path = tmp_path / "documents_processed.csv"
+    exit_code = cli.main(["--input", str(input_path), "--output", str(output_path)])
+    assert exit_code == 0
+
+    result = pd.read_csv(output_path)
+    assert result["doc_type"].tolist() == [
+        "Journal Article",
+        "proceedings-article",
+        "dataset",
+    ]
