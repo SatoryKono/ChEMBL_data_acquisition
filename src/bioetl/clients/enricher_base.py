@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# NOTE: removed legacy route/adapters
+
 from typing import Any, Iterator, Mapping
 
 from .base.http import BaseHttpClientABC
