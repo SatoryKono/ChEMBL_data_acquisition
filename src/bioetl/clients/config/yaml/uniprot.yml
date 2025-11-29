@@ -1,0 +1,7 @@
+base_url: "https://rest.uniprot.org"
+routes:
+  search: "/uniprotkb/search"
+pagination:
+  page_key: "results"
+  next_key: "next"
+  page_param: "cursor"

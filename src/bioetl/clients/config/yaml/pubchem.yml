@@ -1,0 +1,8 @@
+base_url: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+routes:
+  search: "/compound/name/{query}/JSON"
+  fetch: "/compound/cid/{cid}/JSON"
+pagination:
+  page_key: "PC_Compounds"
+  next_key: null
+  page_param: null

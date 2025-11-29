@@ -1,0 +1,8 @@
+base_url: "https://www.ebi.ac.uk/chembl/api/data"
+routes:
+  search: "/{route}"
+params: {}
+pagination:
+  page_key: "page"
+  next_key: "next"
+  page_param: "page"

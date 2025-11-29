@@ -1,0 +1,7 @@
+base_url: "https://api.semanticscholar.org/graph/v1"
+routes:
+  papers: "/paper/search"
+pagination:
+  page_key: "data"
+  next_key: "next"
+  page_param: "offset"

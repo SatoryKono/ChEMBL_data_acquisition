@@ -1,0 +1,7 @@
+base_url: "https://api.crossref.org"
+routes:
+  works: "/works"
+pagination:
+  page_key: "message.items"
+  next_key: "message.next"
+  page_param: "cursor"
