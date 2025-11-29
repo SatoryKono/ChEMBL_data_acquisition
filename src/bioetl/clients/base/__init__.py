@@ -8,6 +8,7 @@ from .interfaces import (
     RequestContext,
     TransportError,
 )
+from .pagination import PaginationStrategyABC, TransportPaginationStrategyImpl
 
 __all__ = [
     "BaseApiClient",
@@ -16,6 +17,8 @@ __all__ = [
     "LoggingTransportAdapter",
     "Page",
     "PaginationParams",
+    "PaginationStrategyABC",
     "RequestContext",
+    "TransportPaginationStrategyImpl",
     "TransportError",
 ]
