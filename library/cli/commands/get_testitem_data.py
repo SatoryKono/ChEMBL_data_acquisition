@@ -57,6 +57,10 @@ from library.pipelines.testitem import (
 )
 from library.pipelines.testitem import catalog as pipeline_catalog
 from library.pipelines.testitem import pubchem as pipeline_pubchem
+from library.pipelines.testitem.catalog import (
+    _resolve_catalog_load_source,
+    load_molecule_hierarchy_lookup,
+)
 from library.utils.data_correlation import generate_correlation_report
 from library.utils.qc_report import generate_qc_report
 
@@ -78,89 +82,11 @@ resolve_pubchem_cid = pipeline_pubchem.resolve_pubchem_cid
 configure_logger = cli.configure_logger
 
 
-def _resolve_catalog_load_source(
-    before: tuple[bool, float | None], after: tuple[bool, float | None]
-) -> str:
-    """Determine the lookup source after invoking ``load_parent_catalog``."""
-
-    before_exists, before_mtime = before
-    after_exists, after_mtime = after
-
-    if after_exists and before_exists and after_mtime == before_mtime:
-        return PARENT_LOOKUP_SOURCE_CACHE
-    if after_exists:
-        return PARENT_LOOKUP_SOURCE_SYNC
-    if before_exists and not after_exists:
-        return PARENT_LOOKUP_SOURCE_SYNC
-    return PARENT_LOOKUP_SOURCE_SYNC
-
-
 def _normalise_chembl_ids(series: pd.Series) -> pd.Series:
     """Return ``series`` normalised to upper-case ChEMBL identifiers."""
 
     normalised = series.astype("string").fillna("").str.strip().str.upper()
     return normalised
-
-
-def load_molecule_hierarchy_lookup(
-    path: Path | None,
-    *,
-    io_cfg: IoCfg,
-    encoding: str | None = None,
-    delimiter: str | None = None,
-    catalog_cfg: MoleculeCatalogCfg | None = None,
-) -> dict[str, str | None]:
-    """Return child → parent mapping loaded from a local hierarchy file.
-
-    The returned mapping mirrors
-    :func:`library.pipelines.testitem.load_molecule_hierarchy_lookup` where
-    values may be ``None`` when no parent is listed in the hierarchy.
-    """
-
-    cfg_source = catalog_cfg or _DEFAULT_CATALOG_CFG
-    resolved_path_value = path or cfg_source.hierarchy_lookup_path
-    if resolved_path_value is None:
-        return {}
-
-    resolved_path = Path(resolved_path_value)
-    resolved_encoding = (
-        encoding
-        or getattr(cfg_source, "hierarchy_lookup_encoding", None)
-        or io_cfg.csv_encoding
-    )
-    resolved_delimiter = (
-        delimiter
-        or getattr(cfg_source, "hierarchy_lookup_delimiter", None)
-        or io_cfg.csv_sep
-    )
-
-    try:
-        raw_lookup = _load_molecule_hierarchy_mapping(
-            str(resolved_path),
-            resolved_encoding,
-            resolved_delimiter,
-        )
-    except FileNotFoundError:
-        logger.info("molecule_hierarchy_lookup_missing", path=str(resolved_path))
-        return {}
-    except ValueError as exc:
-        raise ValueError(f"invalid hierarchy lookup: {exc}") from exc
-
-    lookup = {
-        child_id: _normalise_parent_identifier(parent_id, child_id=child_id)
-        for child_id, parent_id in raw_lookup.items()
-    }
-    if not lookup:
-        return {}
-
-    attached_rows = sum(1 for value in lookup.values() if value is not None)
-
-    logger.info(
-        "molecule_hierarchy_lookup_loaded",
-        path=str(resolved_path),
-        rows=attached_rows,
-    )
-    return lookup
 
 
 class ParentLookupPreparedData(NamedTuple):
@@ -303,35 +229,28 @@ def attach_parent_molecule_ids(
 
     fetched: dict[str, str] = {}
     if missing_ids and catalog is None:
-        if parentless_filtered:
-            logger.info(
-                "parent_lookup_partial_fetch_skipped_parentless",
-                missing=len(missing_ids),
-                identifiers=missing_ids,
+        try:
+            fetched = molecule_catalog.fetch_parent_catalog_for(
+                missing_ids,
+                client=client,
+                api_cfg=api_cfg,
+                timeout=timeout,
+                catalog_cfg=catalog_cfg,
             )
-        else:
-            try:
-                fetched = molecule_catalog.fetch_parent_catalog_for(
-                    missing_ids,
-                    client=client,
-                    api_cfg=api_cfg,
-                    timeout=timeout,
-                    catalog_cfg=catalog_cfg,
-                )
-            except (requests.RequestException, ValueError) as exc:
-                logger.warning("parent_lookup_partial_fetch_failed", error=str(exc))
-                fetched = {}
-            if fetched:
-                partial_fetch_used = True
-                catalog_data.update(fetched)
-                parent_map.update(fetched)
-                missing_ids = [key for key in unique_children if key not in parent_map]
-                uncovered_children = len(missing_ids)
-                if used_partial_cache:
-                    update_cache_fn(fetched, catalog_cfg)
-                else:
-                    write_cache_fn(catalog_data, catalog_cfg)
-                    used_partial_cache = True
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning("parent_lookup_partial_fetch_failed", error=str(exc))
+            fetched = {}
+        if fetched:
+            partial_fetch_used = True
+            catalog_data.update(fetched)
+            parent_map.update(fetched)
+            missing_ids = [key for key in unique_children if key not in parent_map]
+            uncovered_children = len(missing_ids)
+            if used_partial_cache:
+                update_cache_fn(fetched, catalog_cfg)
+            else:
+                write_cache_fn(catalog_data, catalog_cfg)
+                used_partial_cache = True
 
     needs_full_sync = catalog is None and uncovered_children > 0
 
@@ -348,28 +267,16 @@ def attach_parent_molecule_ids(
     )
 
     if skip_full_sync:
+        identifiers, truncated = _summarise_identifiers(missing_ids)
         logger.info(
             "parent_lookup_full_sync_skipped_parentless",
             count=len(missing_ids),
-            identifiers=missing_ids,
+            identifiers=identifiers,
+            truncated=truncated,
         )
-        needs_full_sync = False
         source_resolved = PARENT_LOOKUP_SOURCE_SKIPPED
-    elif needs_full_sync and parentless_filtered:
-        needs_full_sync = False
-        logger.info(
-            "parent_lookup_skip_full_sync",
-            missing=len(missing_ids),
-            parentless_filtered=True,
-        )
-        if source_resolved is None and not partial_fetch_used:
-            source_resolved = (
-                PARENT_LOOKUP_SOURCE_CACHE
-                if used_partial_cache
-                else PARENT_LOOKUP_SOURCE_SKIPPED
-            )
 
-    if missing_ids and catalog is None and needs_full_sync:
+    elif missing_ids and catalog is None and needs_full_sync:
         cache_before_load = pipeline_catalog._cache_state(catalog_cfg.cache_path)
         cache_after_load = cache_before_load
         try:
@@ -399,12 +306,14 @@ def attach_parent_molecule_ids(
             uncovered_children = len(missing_ids)
 
     if missing_ids:
+        identifiers, truncated = _summarise_identifiers(missing_ids)
         severity = "info" if parentless_filtered else "warning"
         log_missing = logger.info if severity == "info" else logger.warning
         log_missing(
             "parent_lookup_missing_parents",
             count=len(missing_ids),
-            identifiers=missing_ids,
+            identifiers=identifiers,
+            truncated=truncated,
             severity=severity,
         )
 
@@ -482,7 +391,7 @@ def attach_parent_molecule_ids(
 
 
 _normalise_parent_identifier = pipeline_catalog._normalise_parent_identifier
-_load_molecule_hierarchy_mapping = pipeline_catalog._load_molecule_hierarchy_mapping
+_summarise_identifiers = pipeline_catalog._summarise_identifiers
 
 
 def add_pubchem_data(

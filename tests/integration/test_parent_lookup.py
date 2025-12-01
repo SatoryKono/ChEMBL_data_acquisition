@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 from scripts import get_testitem_data
 
+from library.cli.commands import get_testitem_data
 from library.config import MoleculeCatalogCfg
 from library.pipelines.testitem import catalog
 
@@ -93,34 +94,40 @@ def test_load_molecule_hierarchy_lookup__cli_pipeline_parity(
 def _stub_parent_catalog_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace parent catalog I/O helpers with deterministic stubs."""
 
-    monkeypatch.setattr(catalog, "query_parent_catalog", lambda *args, **kwargs: {})
-    monkeypatch.setattr(catalog, "load_parent_catalog", lambda *args, **kwargs: {})
-    monkeypatch.setattr(
-        catalog, "update_parent_catalog_cache", lambda *args, **kwargs: None
-    )
-    monkeypatch.setattr(
-        catalog, "write_parent_catalog_cache", lambda *args, **kwargs: None
-    )
-    monkeypatch.setattr(
-        catalog.molecule_catalog,
-        "fetch_parent_catalog_for",
-        lambda *args, **kwargs: {},
-    )
-    monkeypatch.setattr(
-        catalog.molecule_catalog,
-        "fetch_parent_catalog",
-        lambda *args, **kwargs: {},
-    )
-    monkeypatch.setattr(
-        catalog.molecule_catalog,
-        "load_parent_catalog",
-        lambda *args, **kwargs: {},
-    )
-    monkeypatch.setattr(
-        catalog.molecule_catalog,
-        "query_parent_catalog",
-        lambda *args, **kwargs: {},
-    )
+    from library import testitem_pipeline as pipeline_module
+
+    targets = (catalog, pipeline_module)
+
+    for module in targets:
+        monkeypatch.setattr(module, "query_parent_catalog", lambda *args, **kwargs: {})
+        monkeypatch.setattr(module, "load_parent_catalog", lambda *args, **kwargs: {})
+        monkeypatch.setattr(
+            module, "update_parent_catalog_cache", lambda *args, **kwargs: None
+        )
+        monkeypatch.setattr(
+            module, "write_parent_catalog_cache", lambda *args, **kwargs: None
+        )
+    for module in targets:
+        monkeypatch.setattr(
+            module.molecule_catalog,
+            "fetch_parent_catalog_for",
+            lambda *args, **kwargs: {},
+        )
+        monkeypatch.setattr(
+            module.molecule_catalog,
+            "fetch_parent_catalog",
+            lambda *args, **kwargs: {},
+        )
+        monkeypatch.setattr(
+            module.molecule_catalog,
+            "load_parent_catalog",
+            lambda *args, **kwargs: {},
+        )
+        monkeypatch.setattr(
+            module.molecule_catalog,
+            "query_parent_catalog",
+            lambda *args, **kwargs: {},
+        )
 
 
 def _build_catalog_cfg(tmp_path: Path) -> MoleculeCatalogCfg:
@@ -141,8 +148,9 @@ def _capture_events(
 
         return _record
 
-    monkeypatch.setattr(catalog.logger, "warning", _capture("warning"))
-    monkeypatch.setattr(catalog.logger, "info", _capture("info"))
+    for target in (catalog.logger, get_testitem_data.logger):
+        monkeypatch.setattr(target, "warning", _capture("warning"))
+        monkeypatch.setattr(target, "info", _capture("info"))
     return events
 
 
@@ -152,14 +160,15 @@ def _run_parent_lookup(
     cfg: MoleculeCatalogCfg,
     api_cfg,
     monkeypatch: pytest.MonkeyPatch,
-) -> list[tuple[str, dict[str, object]]]:
+    module,
+) -> tuple[list[tuple[str, str, dict[str, object]]], catalog.ParentLookupStats]:
     _stub_parent_catalog_calls(monkeypatch)
     events = _capture_events(monkeypatch)
 
     client = MagicMock(spec=catalog.ChemblClient)
     frame = pd.DataFrame({"molecule_chembl_id": child_ids})
 
-    catalog.attach_parent_molecule_ids(
+    _, stats = module.attach_parent_molecule_ids(
         frame,
         client=client,
         api_cfg=api_cfg,
@@ -168,7 +177,7 @@ def _run_parent_lookup(
         catalog=None,
     )
 
-    return events
+    return events, stats
 
 
 @pytest.mark.integration
@@ -220,12 +229,25 @@ def test_attach_parent_molecule_ids__summarises_identifier_payload(
     catalog_cfg = _build_catalog_cfg(tmp_path)
     if catalog_filters is not None:
         catalog_cfg.filters = catalog_filters
-    events = _run_parent_lookup(
+    pipeline_events, pipeline_stats = _run_parent_lookup(
         child_ids,
         cfg=catalog_cfg,
         api_cfg=cfg.api,
         monkeypatch=monkeypatch,
+        module=catalog,
     )
+    cli_events, cli_stats = _run_parent_lookup(
+        child_ids,
+        cfg=catalog_cfg,
+        api_cfg=cfg.api,
+        monkeypatch=monkeypatch,
+        module=get_testitem_data,
+    )
+
+    assert cli_stats.source == pipeline_stats.source
+    assert cli_events == pipeline_events
+
+    events = pipeline_events
 
     expected_identifiers = sorted(child_ids)
     if truncated:
