@@ -124,6 +124,106 @@ def _prepare_dictionary(dictionary_root: Path) -> None:
 
 
 @pytest.mark.integration
+def test_process_activity_extended__propagates_pubchem_columns(tmp_path, caplog):
+    """Ensure PubChem annotations from the testitem lookup flow into the output."""
+
+    _fix_seed()
+
+    activity_dir = tmp_path / "input"
+    dictionary_root = tmp_path / "dictionary"
+    activity_dir.mkdir()
+
+    _prepare_dictionary(dictionary_root)
+
+    testitem_path = dictionary_root / "_testitem" / "testitem.csv"
+    with testitem_path.open("w", newline="", encoding="utf-8") as handle:
+        fieldnames = [
+            "molecule_chembl_id",
+            "standard_inchi_skeleton",
+            "pubchem_canonical_smiles",
+            "pubchem_cid",
+            "pubchem_inchi",
+            "pubchem_inchikey",
+            "pubchem_isomeric_smiles",
+            "pubchem_iupac_name",
+            "pubchem_molecular_formula",
+        ]
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "molecule_chembl_id": "CHEMBL1",
+                "standard_inchi_skeleton": "InChI=1",
+                "pubchem_canonical_smiles": "C",
+                "pubchem_cid": "CID1",
+                "pubchem_inchi": "InChI=1S/C",
+                "pubchem_inchikey": "XLYOFNOQVPJJNP-UHFFFAOYSA-N",
+                "pubchem_isomeric_smiles": "C",
+                "pubchem_iupac_name": "methane",
+                "pubchem_molecular_formula": "CH4",
+            }
+        )
+
+    hierarchy_path = dictionary_root / "_testitem" / "molecule_hierarchy.csv"
+    with hierarchy_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle, fieldnames=["molecule_chembl_id", "parent_molecule_chembl_id"]
+        )
+        writer.writeheader()
+        writer.writerow(
+            {"molecule_chembl_id": "CHEMBL1", "parent_molecule_chembl_id": "CHEMBL1"}
+        )
+
+    activity_path = activity_dir / "output.activity_20240105.csv"
+    activity_columns = [
+        "activity_id",
+        "molecule_chembl_id",
+        "target_chembl_id",
+        "assay_chembl_id",
+        "document_chembl_id",
+        "bao_endpoint",
+        "standard_type",
+        "standard_value",
+        "bao_format",
+        "molecule_pref_name",
+        "pchembl_value",
+    ]
+    with activity_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=activity_columns)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "activity_id": "401",
+                "molecule_chembl_id": "CHEMBL1",
+                "target_chembl_id": "CHEMBLT1",
+                "assay_chembl_id": "ASSAY1",
+                "document_chembl_id": "DOC1",
+                "bao_endpoint": "endpoint",
+                "standard_type": "IC50",
+                "standard_value": "5.0",
+                "bao_format": "format",
+                "molecule_pref_name": "Compound",
+                "pchembl_value": "6.0",
+            }
+        )
+
+    with caplog.at_level(logging.INFO):
+        output_path = process_activity_extended(
+            input_path=activity_path,
+            dictionary_dir=dictionary_root,
+        )
+
+    assert output_path.exists()
+    result = pd.read_csv(output_path)
+    assert result.loc[0, "pubchem_cid"] == "CID1"
+    assert result.loc[0, "pubchem_canonical_smiles"] == "C"
+    assert result.loc[0, "pubchem_inchi"] == "InChI=1S/C"
+    assert result.loc[0, "pubchem_inchikey"] == "XLYOFNOQVPJJNP-UHFFFAOYSA-N"
+    assert result.loc[0, "pubchem_iupac_name"] == "methane"
+    assert result.loc[0, "pubchem_molecular_formula"] == "CH4"
+
+
+@pytest.mark.integration
 def test_process_activity_extended__fills_missing_optional_columns(tmp_path, caplog):
     """Process minimal export missing optional columns and emit backfill warning."""
 
