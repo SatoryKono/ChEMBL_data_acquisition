@@ -41,7 +41,6 @@ from library.integration import pubchem_library as pl
 from library.integration.chembl_client import ChemblClient
 from library.pipelines import testitem as pipeline
 from library.pipelines.testitem import (
-    _DEFAULT_CATALOG_CFG,
     PARENT_LOOKUP_SOURCE_CACHE,
     PARENT_LOOKUP_SOURCE_LOOKUP,
     PARENT_LOOKUP_SOURCE_PARTIAL,
@@ -117,50 +116,18 @@ def load_molecule_hierarchy_lookup(
     values may be ``None`` when no parent is listed in the hierarchy.
     """
 
-    cfg_source = catalog_cfg or _DEFAULT_CATALOG_CFG
-    resolved_path_value = path or cfg_source.hierarchy_lookup_path
-    if resolved_path_value is None:
-        return {}
-
-    resolved_path = Path(resolved_path_value)
-    resolved_encoding = (
-        encoding
-        or getattr(cfg_source, "hierarchy_lookup_encoding", None)
-        or io_cfg.csv_encoding
-    )
-    resolved_delimiter = (
-        delimiter
-        or getattr(cfg_source, "hierarchy_lookup_delimiter", None)
-        or io_cfg.csv_sep
-    )
+    resolved_path = Path(path) if path is not None else None
 
     try:
-        raw_lookup = _load_molecule_hierarchy_mapping(
-            str(resolved_path),
-            resolved_encoding,
-            resolved_delimiter,
+        return pipeline_catalog.load_molecule_hierarchy_lookup(
+            resolved_path,
+            io_cfg=io_cfg,
+            encoding=encoding,
+            delimiter=delimiter,
+            catalog_cfg=catalog_cfg,
         )
-    except FileNotFoundError:
-        logger.info("molecule_hierarchy_lookup_missing", path=str(resolved_path))
-        return {}
     except ValueError as exc:
-        raise ValueError(f"invalid hierarchy lookup: {exc}") from exc
-
-    lookup = {
-        child_id: _normalise_parent_identifier(parent_id, child_id=child_id)
-        for child_id, parent_id in raw_lookup.items()
-    }
-    if not lookup:
-        return {}
-
-    attached_rows = sum(1 for value in lookup.values() if value is not None)
-
-    logger.info(
-        "molecule_hierarchy_lookup_loaded",
-        path=str(resolved_path),
-        rows=attached_rows,
-    )
-    return lookup
+        raise ValueError(str(exc)) from exc
 
 
 class ParentLookupPreparedData(NamedTuple):
@@ -482,9 +449,6 @@ def attach_parent_molecule_ids(
 
 
 _normalise_parent_identifier = pipeline_catalog._normalise_parent_identifier
-_load_molecule_hierarchy_mapping = pipeline_catalog._load_molecule_hierarchy_mapping
-
-
 def add_pubchem_data(
     df: pd.DataFrame,
     cfg: PubChemCfg,

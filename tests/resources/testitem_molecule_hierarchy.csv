@@ -1,0 +1,5 @@
+molecule_chembl_id,parent_molecule_chembl_id
+chembl1, chembl_parent
+CHEMBL2,
+ChEmBl3,CHEMBL30
+CHEMBL4, 

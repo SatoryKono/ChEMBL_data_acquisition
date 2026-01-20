@@ -11,7 +11,7 @@ import pandas.testing as pdt
 import pytest
 from scripts import get_testitem_data
 
-from library.config import Config
+from library.config import Config, IoCfg, MoleculeCatalogCfg
 from library.io import StandardOutputArtifacts
 
 
@@ -65,35 +65,38 @@ def test_load_molecule_hierarchy_lookup__delegates_and_logs(
     logger_stub: _MemoryLogger,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    mapping = {"chembl1": "chembl_parent", "chembl2": None}
-    normalised: list[tuple[str, str | None]] = []
+    mapping = {"chembl1": "CHEMBL_PARENT", "chembl2": None}
 
-    def fake_loader(path: str, encoding: str, delimiter: str) -> dict[str, str | None]:
-        assert path.endswith("hierarchy.csv")
-        assert encoding == cfg.io.csv_encoding
-        assert delimiter == cfg.io.csv_sep
+    def fake_loader(
+        path: Path | None,
+        *,
+        io_cfg: IoCfg,
+        encoding: str | None,
+        delimiter: str | None,
+        catalog_cfg: MoleculeCatalogCfg | None,
+    ) -> dict[str, str | None]:
+        assert isinstance(path, Path)
+        assert str(path).endswith("hierarchy.csv")
+        assert io_cfg is cfg.io
+        assert encoding is None
+        assert delimiter is None
+        assert catalog_cfg is None
+        get_testitem_data.logger.info(
+            "molecule_hierarchy_lookup_loaded", path=str(path), rows=1
+        )
         return mapping
 
-    def fake_normalise(value: str | None, *, child_id: str) -> str | None:
-        normalised.append((child_id, value))
-        return value.upper() if value else None
-
     monkeypatch.setattr(
-        get_testitem_data, "_load_molecule_hierarchy_mapping", fake_loader
-    )
-    monkeypatch.setattr(
-        get_testitem_data, "_normalise_parent_identifier", fake_normalise
+        get_testitem_data.pipeline_catalog,
+        "load_molecule_hierarchy_lookup",
+        fake_loader,
     )
 
     lookup = get_testitem_data.load_molecule_hierarchy_lookup(
         Path("hierarchy.csv"), io_cfg=cfg.io
     )
 
-    assert lookup == {"chembl1": "CHEMBL_PARENT", "chembl2": None}
-    assert normalised == [
-        ("chembl1", "chembl_parent"),
-        ("chembl2", None),
-    ]
+    assert lookup == mapping
     assert (
         "info",
         "molecule_hierarchy_lookup_loaded",
@@ -106,11 +109,25 @@ def test_load_molecule_hierarchy_lookup__missing_file_returns_empty(
     logger_stub: _MemoryLogger,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_loader(path: str, encoding: str, delimiter: str) -> dict[str, str | None]:
-        raise FileNotFoundError(path)
+    def fake_loader(
+        path: Path | None,
+        *,
+        io_cfg: IoCfg,
+        encoding: str | None,
+        delimiter: str | None,
+        catalog_cfg: MoleculeCatalogCfg | None,
+    ) -> dict[str, str | None]:
+        assert isinstance(path, Path)
+        assert io_cfg is cfg.io
+        get_testitem_data.logger.info(
+            "molecule_hierarchy_lookup_missing", path=str(path)
+        )
+        return {}
 
     monkeypatch.setattr(
-        get_testitem_data, "_load_molecule_hierarchy_mapping", fake_loader
+        get_testitem_data.pipeline_catalog,
+        "load_molecule_hierarchy_lookup",
+        fake_loader,
     )
 
     lookup = get_testitem_data.load_molecule_hierarchy_lookup(
@@ -129,11 +146,22 @@ def test_load_molecule_hierarchy_lookup__invalid_data_raises(
     cfg: Config,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_loader(path: str, encoding: str, delimiter: str) -> dict[str, str | None]:
-        raise ValueError("bad delimiter")
+    def fake_loader(
+        path: Path | None,
+        *,
+        io_cfg: IoCfg,
+        encoding: str | None,
+        delimiter: str | None,
+        catalog_cfg: MoleculeCatalogCfg | None,
+    ) -> dict[str, str | None]:
+        assert isinstance(path, Path)
+        assert io_cfg is cfg.io
+        raise ValueError("invalid hierarchy lookup: bad delimiter")
 
     monkeypatch.setattr(
-        get_testitem_data, "_load_molecule_hierarchy_mapping", fake_loader
+        get_testitem_data.pipeline_catalog,
+        "load_molecule_hierarchy_lookup",
+        fake_loader,
     )
 
     with pytest.raises(ValueError, match="invalid hierarchy lookup: bad delimiter"):
