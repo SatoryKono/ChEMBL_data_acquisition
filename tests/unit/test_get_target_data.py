@@ -91,6 +91,7 @@ def test_keyboard_aliases__cases(command: str) -> None:
         (".output.targets_20251005.csv_normalized.tmp", True),
         ("output.targets_uniprot.csv", True),
         ("targets.csv", True),
+        ("targets_custom_export.csv", True),
         ("out.csv", False),
         ("out_chembl.csv", False),
         ("out_uniprot.csv", False),
