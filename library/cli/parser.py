@@ -387,9 +387,9 @@ def build_parser(
     return parser, log_cfg
 
 
-def build_root_parser() -> (
-    tuple[argparse.ArgumentParser, argparse.ArgumentParser, LoggerConfig]
-):
+def build_root_parser() -> tuple[
+    argparse.ArgumentParser, argparse.ArgumentParser, LoggerConfig
+]:
     """Return parsers containing root-level options and logging config.
 
     Two parsers are produced:
